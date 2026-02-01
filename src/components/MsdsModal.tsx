@@ -128,7 +128,7 @@ const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors text-left"
             >
-                <h3 className="font-bold text-slate-800 dark:text-slate-200 text-lg">
+                <h3 className="font-bold text-slate-800 dark:text-slate-200 text-base">
                     {section.title}
                 </h3>
                 {isExpanded ? (
@@ -142,7 +142,7 @@ const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
                 <div className="p-5 bg-white dark:bg-slate-900 border-t border-gray-100 dark:border-slate-700 space-y-3">
                     {section.content.length > 0 ? (
                         section.content.map((item, i) => (
-                            <div key={i} className="flex flex-col sm:flex-row sm:gap-4 text-sm border-b last:border-0 border-gray-50 dark:border-slate-800/50 pb-2 last:pb-0">
+                            <div key={i} className="flex flex-col sm:flex-row sm:gap-4 text-xs border-b last:border-0 border-gray-50 dark:border-slate-800/50 pb-2 last:pb-0">
                                 <div className="sm:w-1/3 text-slate-500 dark:text-slate-400 font-medium whitespace-pre-wrap sm:text-right">
                                     {item.label}
                                 </div>
