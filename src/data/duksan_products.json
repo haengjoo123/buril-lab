@@ -1,0 +1,1215 @@
+[
+  {
+    "id": "4afccdc7-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1-Methoxy-2-Propyl Acetate PGMEA",
+    "product_numbers": [
+      "4328",
+      "4630"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afccdc7-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afccdc7-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42ee-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 99.9 PE",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42ee-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42ee-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb818-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Paraffin Liquid",
+    "product_numbers": [
+      "2270",
+      "2271"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb818-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb818-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb824-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Petroleum Ether 40 60",
+    "product_numbers": [
+      "4117",
+      "4142",
+      "4162"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb824-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb824-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf1f-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Styrene Monomer",
+    "product_numbers": [
+      "270"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf1f-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf1f-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42dc-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 70-75",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42dc-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42dc-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4b0-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1 4-Butanediol",
+    "product_numbers": [
+      "2862"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4b0-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4b0-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4b3-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1 4-Dioxane",
+    "product_numbers": [
+      "1355",
+      "3490"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4b3-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4b3-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf16-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "sec-Butyl Alcohol",
+    "product_numbers": [
+      "3832",
+      "5259"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf16-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf16-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf19-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Sodium Lauryl Sulfate for molecular biology 99",
+    "product_numbers": [
+      "BS008-1",
+      "BS008-100",
+      "BS008-25"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf19-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf19-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf46-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Tris Buffer for molecular biology 99.9",
+    "product_numbers": [
+      "BT001-1",
+      "BT001-5"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf46-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf46-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a28-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Propyl Alcohol 70",
+    "product_numbers": [
+      "1190"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a28-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a28-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd911e-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Butyl Alcohol",
+    "product_numbers": [
+      "1043",
+      "1045",
+      "1046",
+      "1047",
+      "3611",
+      "3875"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd911e-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd911e-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bc6-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Butyl Carbitol Acetate",
+    "product_numbers": [
+      "4316"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bc6-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bc6-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42eb-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 99.9",
+    "product_numbers": [
+      "3463",
+      "4",
+      "4295",
+      "5",
+      "76"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42eb-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42eb-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9118-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Amyl Alcohol",
+    "product_numbers": [
+      "796"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9118-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9118-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd911b-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Butyl Acetate",
+    "product_numbers": [
+      "1036",
+      "1037",
+      "1038"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd911b-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd911b-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bc3-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Butyl Carbitol",
+    "product_numbers": [
+      "1056",
+      "6732"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bc3-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bc3-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf10-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Propylene Glycol Monomethyl Ether",
+    "product_numbers": [
+      "4329",
+      "4629"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf10-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf10-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb80f-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Propyl Alcohol",
+    "product_numbers": [
+      "620",
+      "621",
+      "623"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb80f-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb80f-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42d0-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Dimethyl Carbonate",
+    "product_numbers": [
+      "5143"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42d0-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42d0-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9127-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Heptane",
+    "product_numbers": [
+      "2055",
+      "3029",
+      "3551",
+      "4342",
+      "5484",
+      "807"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9127-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9127-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf2e-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Tetrabutylammonium hydroxide 40 in water",
+    "product_numbers": [
+      "6149"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf2e-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf2e-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42e5-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 95 변성",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42e5-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42e5-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4c2-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Acetic Anhydride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4c2-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4c2-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf22-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Sucrose for molecular biology",
+    "product_numbers": [
+      "BS006-1",
+      "BS006-5"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf22-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf22-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd910f-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methylene Chloride",
+    "product_numbers": [
+      "2965",
+      "2972",
+      "3957",
+      "577"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd910f-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd910f-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb80c-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Pentane",
+    "product_numbers": [
+      "1574",
+      "1575",
+      "3836",
+      "4688"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb80c-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb80c-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf1c-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Sodium Methoxide 30 sodution in methanol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf1c-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf1c-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb821-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Petroleum Ether 35 60",
+    "product_numbers": [
+      "1591",
+      "1654",
+      "2299",
+      "2940",
+      "2981",
+      "4208"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb821-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb821-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb81e-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Petroleum Benzine",
+    "product_numbers": [
+      "1587"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb81e-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb81e-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb803-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Hexane 95",
+    "product_numbers": [
+      "1647",
+      "2061",
+      "2939",
+      "2944",
+      "3871",
+      "5006",
+      "819",
+      "820"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb803-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb803-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a25-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Propyl Alcohol",
+    "product_numbers": [
+      "2378",
+      "3375",
+      "3462",
+      "3714",
+      "4067",
+      "4614",
+      "855",
+      "856",
+      "858",
+      "861"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a25-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a25-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf3d-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "TriButyl phosphate",
+    "product_numbers": [
+      "171"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf3d-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf3d-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf13-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Pyridine",
+    "product_numbers": [
+      "2394",
+      "876"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf13-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf13-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4cb-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "AcetylAcetone",
+    "product_numbers": [
+      "4076"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4cb-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4cb-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf31-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Tetraethyl o-silicate Ethyl Silicate 28",
+    "product_numbers": [
+      "3928"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf31-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf31-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69e9-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Ether",
+    "product_numbers": [
+      "2943",
+      "3874",
+      "4327",
+      "548",
+      "550",
+      "551",
+      "558"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69e9-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69e9-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf37-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Tetrahydrofuran Stabilized with 250ppm BHT",
+    "product_numbers": [
+      "215",
+      "216",
+      "219",
+      "2941",
+      "5383"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf37-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf37-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afccdcd-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1 2-Dimethoxyethane",
+    "product_numbers": [
+      "2970"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afccdcd-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afccdcd-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb800-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "n-Heptane 99",
+    "product_numbers": [
+      "2703"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb800-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb800-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69e3-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Carbitol",
+    "product_numbers": [
+      "17",
+      "18"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69e3-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69e3-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9112-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Monochlorobenzene",
+    "product_numbers": [
+      "2229",
+      "4247",
+      "5241"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9112-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9112-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69fb-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Formic acid",
+    "product_numbers": [
+      "4197"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69fb-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69fb-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bea-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Diethylene glycol dimethyl ether",
+    "product_numbers": [
+      "3844",
+      "3845"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bea-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bea-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf2b-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "tert-Butylamine",
+    "product_numbers": [
+      "6220"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf2b-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf2b-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a16-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Butyl Alcohol",
+    "product_numbers": [
+      "1053"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a16-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a16-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf34-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Tetrahydrofuran",
+    "product_numbers": [
+      "218",
+      "4953"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf34-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf34-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb809-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "N-Octyl alcohol",
+    "product_numbers": [
+      "1557",
+      "2257"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb809-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb809-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd90f1-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Isopropyl-B-D-Thiogalactoside IPTG dioxane-free for MB 99",
+    "product_numbers": [
+      "BI012-1",
+      "BI012-10"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd90f1-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd90f1-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42df-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 70 sterile",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42df-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42df-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afccdc4-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1-Decanol",
+    "product_numbers": [
+      "5136"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afccdc4-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afccdc4-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd90f4-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "MES Hydrate Buffer extrapure 99",
+    "product_numbers": [
+      "BM007-100",
+      "BM007-25",
+      "BM007-500"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd90f4-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd90f4-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb827-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "PIPES Buffer for molecular biology 99",
+    "product_numbers": [
+      "BP009-100",
+      "BP009-500"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb827-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb827-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf28-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "tert-Butyl Methyl Ether",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf28-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf28-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afddf43-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Trifluoroacetic Acid",
+    "product_numbers": [
+      "4362"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afddf43-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afddf43-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9109-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methyl Methacrylate",
+    "product_numbers": [
+      "640"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9109-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9109-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a04-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Guanidine Thiocyanate for Biochemistry 99",
+    "product_numbers": [
+      "BG004-1"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a04-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a04-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bd5-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Cyclohexanone",
+    "product_numbers": [
+      "1325",
+      "1326",
+      "3058",
+      "3833"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bd5-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bd5-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb81b-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Perchloric Acid 70",
+    "product_numbers": [
+      "3718"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb81b-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb81b-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afccdd3-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1 3-Dioxolane",
+    "product_numbers": [
+      "1973"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afccdd3-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afccdd3-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42e2-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 70 75",
+    "product_numbers": [
+      "7"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42e2-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42e2-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb82a-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Propionic acid",
+    "product_numbers": [
+      "5792"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb82a-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb82a-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a19-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Octane",
+    "product_numbers": [
+      "1184",
+      "1185",
+      "1186",
+      "4339"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a19-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a19-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9106-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methyl Isobutyl Ketone",
+    "product_numbers": [
+      "1744",
+      "626",
+      "631",
+      "634"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9106-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9106-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9115-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "MOPS Buffer extrapure 99",
+    "product_numbers": [
+      "BM011-1",
+      "BM011-25",
+      "BM011-500"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9115-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9115-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a07-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "HEPES Buffer for molecular biology 99.5",
+    "product_numbers": [
+      "BH010-25",
+      "BH010-500"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a07-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a07-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afdb815-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Oleic Acid",
+    "product_numbers": [
+      "2261"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afdb815-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afdb815-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1be1-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Diethyl Carbonate",
+    "product_numbers": [
+      "5140"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1be1-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1be1-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4dd-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Anisole",
+    "product_numbers": [
+      "5110"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4dd-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4dd-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42d3-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Dimethyl Sulfoxide",
+    "product_numbers": [
+      "4297"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42d3-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42d3-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42f7-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 함수",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42f7-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42f7-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a01-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Guanidine Hydrochloride for Biochemistry 99",
+    "product_numbers": [
+      "BG003-1"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a01-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a01-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afccdca-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1-Methylimidazole 99",
+    "product_numbers": [
+      "BM002-1"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afccdca-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afccdca-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69ef-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethylene Glycol monoethyl ether Acetate",
+    "product_numbers": [
+      "299"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69ef-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69ef-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd90f7-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methyl Acetate",
+    "product_numbers": [
+      "511",
+      "514"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd90f7-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd90f7-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a0a-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Hexanes",
+    "product_numbers": [
+      "2707",
+      "4085",
+      "827"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a0a-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a0a-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a13-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Amyl Alcohol",
+    "product_numbers": [
+      "3840"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a13-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a13-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9121-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "N-Butylamine",
+    "product_numbers": [
+      "5122"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9121-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9121-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69fe-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Glycerine",
+    "product_numbers": [
+      "3572",
+      "3834"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69fe-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69fe-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a1f-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Octanol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a1f-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a1f-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4bf-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Acetic Acid glacial",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4bf-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4bf-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4d4-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Amberlite IR-120",
+    "product_numbers": [
+      "671"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4d4-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4d4-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a22-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Propyl Acetate",
+    "product_numbers": [
+      "869"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a22-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a22-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4e6-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Benzaldehyde",
+    "product_numbers": [
+      "4287"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4e6-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4e6-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1be7-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Diethylamine",
+    "product_numbers": [
+      "1346",
+      "1349"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1be7-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1be7-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bcf-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Chloroform stabilized with Ethanol",
+    "product_numbers": [
+      "1272",
+      "3062"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bcf-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bcf-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9100-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methyl Cyclohexane",
+    "product_numbers": [
+      "2198"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9100-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9100-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bc9-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Butyric Acid",
+    "product_numbers": [
+      "3846"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bc9-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bc9-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69ec-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethylene Glycol monobutyl ether",
+    "product_numbers": [
+      "1063",
+      "1064"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69ec-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69ec-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4d7-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Amberlite IRA-410",
+    "product_numbers": [
+      "672"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4d7-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4d7-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afccdd0-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1 2 4-Trichlorobenzene",
+    "product_numbers": [
+      "4578"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afccdd0-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afccdd0-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4b9-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "2-Dimethylaminoethanol",
+    "product_numbers": [
+      "5145"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4b9-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4b9-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd90fd-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methyl Alcohol - Dried",
+    "product_numbers": [
+      "49",
+      "5506"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd90fd-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd90fd-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69e0-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol absolute denatured",
+    "product_numbers": [
+      "6976"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69e0-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69e0-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a1c-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso-Octanol",
+    "product_numbers": [
+      "1555",
+      "1556"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a1c-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a1c-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69f8-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Formamide",
+    "product_numbers": [
+      "3954"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69f8-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69f8-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bdb-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Diacetone Alcohol",
+    "product_numbers": [
+      "1950"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bdb-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bdb-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4b6-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "1 4-Dioxane BHT",
+    "product_numbers": [
+      "4187"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4b6-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4b6-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4c8-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Acetonitrile",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4c8-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4c8-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42f1-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 무수",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42f1-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42f1-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd910c-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methylamine Solution 40",
+    "product_numbers": [
+      "5181"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd910c-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd910c-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42e8-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 99.5 변성",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42e8-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42e8-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd69e6-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Chloroformate",
+    "product_numbers": [
+      "5830"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd69e6-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd69e6-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd90fa-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Methyl Alcohol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd90fa-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd90fa-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4c5-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Acetone",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4c5-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4c5-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bcc-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "CHAPS Buffer for molecular biology 99.5",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bcc-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bcc-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd9124-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "N-Ethyldiisopropylamine",
+    "product_numbers": [
+      "3697"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd9124-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd9124-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4bc-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "5-Bromo-4-chloro-3-indolyl-b-D-galactopyranoside X-Gal formolecular biology 98",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4bc-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4bc-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd1bd2-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Cyclohexane",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd1bd2-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd1bd2-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42fa-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 함수 PE",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42fa-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42fa-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd42f4-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Ethyl Alcohol 무수 PE",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd42f4-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd42f4-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afd6a10-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "Iso Amyl Acetate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afd6a10-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afd6a10-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4e0-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "AP-Acetone",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4e0-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4e0-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "4afcf4e3-d07a-11e9-99b3-3791bdd3db49",
+    "brand": "Duksan",
+    "product_name": "AP-Ethanol 99.9",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/4afcf4e3-d07a-11e9-99b3-3791bdd3db49.png",
+    "url_slug": "4afcf4e3-d07a-11e9-99b3-3791bdd3db49"
+  },
+  {
+    "id": "543be4d0-d8f2-11ed-8665-d56de43ddf8d",
+    "brand": "Duksan",
+    "product_name": "Dimethyl Sulfoxide 99.9",
+    "product_numbers": [
+      "2762 "
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/duksan/543be4d0-d8f2-11ed-8665-d56de43ddf8d.png",
+    "url_slug": "543be4d0-d8f2-11ed-8665-d56de43ddf8d"
+  }
+]

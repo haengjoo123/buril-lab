@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 export const SafetyDisclaimer: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
+    const [isClosing, setIsClosing] = useState(false);
     const { t, i18n } = useTranslation();
 
     useEffect(() => {
@@ -14,8 +15,11 @@ export const SafetyDisclaimer: React.FC = () => {
     }, []);
 
     const handleAcknowledge = () => {
-        localStorage.setItem('buril-safety-acknowledged', 'true');
-        setIsOpen(false);
+        setIsClosing(true);
+        setTimeout(() => {
+            localStorage.setItem('buril-safety-acknowledged', 'true');
+            setIsOpen(false);
+        }, 300); // Wait for animation
     };
 
     if (!isOpen) return null;
@@ -38,8 +42,8 @@ export const SafetyDisclaimer: React.FC = () => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="w-full max-w-[400px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden p-6 animate-in zoom-in-95 duration-300">
+        <div className={`fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/70 backdrop-blur-sm duration-300 ${isClosing ? 'animate-out fade-out opacity-0' : 'animate-in fade-in'}`}>
+            <div className={`w-full max-w-[400px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden p-6 duration-300 ${isClosing ? 'animate-out zoom-out-95 scale-95 opacity-0' : 'animate-in zoom-in-95'}`}>
 
                 <div className="flex flex-col items-center text-center mb-6">
                     <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
@@ -62,9 +66,9 @@ export const SafetyDisclaimer: React.FC = () => {
 
                 <button
                     onClick={handleAcknowledge}
-                    className="w-full py-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20"
+                    className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 active:scale-95 text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 break-keep leading-snug"
                 >
-                    <Check className="w-5 h-5" />
+                    <Check className="w-5 h-5 flex-shrink-0" />
                     {t('disclaimer_confirm')}
                 </button>
 

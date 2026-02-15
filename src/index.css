@@ -1,1 +1,22 @@
 @import "tailwindcss";
+
+/* Custom Fonts */
+:root {
+  --font-sans: "Pretendard Variable", "Pretendard", "Outfit", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", sans-serif;
+}
+
+* {
+  font-family: var(--font-sans);
+}
+
+/* Smooth font rendering */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Form elements */
+input, select, button, textarea {
+  font-family: inherit;
+}

@@ -1,20 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { MainLayout } from './components/MainLayout';
 import { ResultCard } from './components/ResultCard';
+import { MediaProductCard } from './components/MediaProductCard';
+import { MediaProductFilter } from './components/MediaProductFilter';
 import { Scanner } from './components/Scanner';
 import { CartView } from './components/CartView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
 import { searchChemical } from './services/searchService';
+import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from './services/mediaProductService';
 import { analyzeChemical } from './utils/chemicalAnalyzer';
 import { useWasteStore } from './store/useWasteStore';
-import { useTranslation } from 'react-i18next'; // 변경된 부분
+import { useTranslation } from 'react-i18next';
 import type { AnalysisResult } from './types';
-import { Search, Camera, Loader2, AlertCircle, ShoppingBag } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
 
 function App() {
-  const { t } = useTranslation(); // useLanguage 대신 useTranslation 사용
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
+  const [lastSearchQuery, setLastSearchQuery] = useState('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [mediaProducts, setMediaProducts] = useState<MediaProduct[]>([]);
+  const [mediaBrands, setMediaBrands] = useState<string[]>([]);
+  const [mediaCount, setMediaCount] = useState(0);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState('all');
+  const [sortBy, setSortBy] = useState<SortOption>('relevance');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -23,22 +33,45 @@ function App() {
   const cart = useWasteStore((state) => state.cart);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory } = useWasteStore();
 
-  const performSearch = async (searchQuery: string) => {
+  const performSearch = useCallback(async (searchQuery: string, brand: string = 'all', sort: SortOption = 'relevance') => {
     if (!searchQuery.trim()) return;
 
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setMediaProducts([]);
+    setMediaBrands([]);
+    setMediaCount(0);
+    setLastSearchQuery(searchQuery);
 
     try {
-      const chemicalData = await searchChemical(searchQuery);
+      // Parallel search: chemicals + media products
+      const [chemicalData, mediaSearchResult] = await Promise.all([
+        searchChemical(searchQuery),
+        searchMediaProductsAdvanced({
+          query: searchQuery,
+          limit: 50,
+          brandFilter: brand,
+          sortBy: sort
+        })
+      ]);
 
-      if (!chemicalData) {
-        setError(`'${searchQuery}'${t('search_not_found')}`);
-      } else {
+      if (chemicalData) {
         const analysis = analyzeChemical(chemicalData);
         setResult(analysis);
-        addSearchHistory(searchQuery); // Save user's input (e.g. "Peptone") not the resolved name
+      }
+
+      if (mediaSearchResult.products.length > 0) {
+        setMediaProducts(mediaSearchResult.products);
+        setMediaBrands(mediaSearchResult.brands);
+        setMediaCount(mediaSearchResult.totalCount);
+      }
+
+      // Show error only if both searches returned nothing
+      if (!chemicalData && mediaSearchResult.products.length === 0) {
+        setError(`'${searchQuery}'${t('search_not_found')}`);
+      } else {
+        addSearchHistory(searchQuery);
       }
     } catch (err) {
       setError(t('search_error'));
@@ -46,21 +79,57 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  }, [t, addSearchHistory]);
+
+  // Re-search when filter/sort changes
+  const handleBrandChange = (brand: string) => {
+    setSelectedBrand(brand);
+    setShowAllProducts(false);
+    if (lastSearchQuery) {
+      performSearch(lastSearchQuery, brand, sortBy);
+    }
+  };
+
+  const handleSortChange = (sort: SortOption) => {
+    setSortBy(sort);
+    setShowAllProducts(false);
+    if (lastSearchQuery) {
+      performSearch(lastSearchQuery, selectedBrand, sort);
+    }
+  };
+
+  const handleClearFilters = () => {
+    setSelectedBrand('all');
+    setSortBy('relevance');
+    if (lastSearchQuery) {
+      performSearch(lastSearchQuery, 'all', 'relevance');
+    }
   };
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    setSelectedBrand('all');
+    setSortBy('relevance');
     performSearch(query);
   };
 
   const handleScan = (scannedText: string) => {
     setIsScanning(false);
     setQuery(scannedText);
+    setSelectedBrand('all');
+    setSortBy('relevance');
     performSearch(scannedText);
   };
 
   const handleReset = () => {
     setResult(null);
+    setMediaProducts([]);
+    setMediaBrands([]);
+    setMediaCount(0);
+    setShowAllProducts(false);
+    setSelectedBrand('all');
+    setSortBy('relevance');
+    setLastSearchQuery('');
     setQuery('');
     setError(null);
   };
@@ -105,7 +174,7 @@ function App() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className={`block w-full pl-10 pr-12 py-4 border rounded-xl leading-5 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 shadow-sm transition-all ${error
+              className={`block w-full pl-10 pr-12 py-4 border rounded-xl leading-5 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 placeholder:text-sm focus:outline-none focus:ring-2 shadow-sm transition-all ${error
                 ? 'border-red-300 dark:border-red-900/50 focus:ring-red-500 focus:border-red-500'
                 : 'border-gray-200 dark:border-slate-700 focus:ring-blue-500 focus:border-transparent'
                 }`}
@@ -116,7 +185,7 @@ function App() {
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
               {isLoading ? (
                 <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-              ) : result ? (
+              ) : (result || mediaProducts.length > 0) ? (
                 <button type="button" onClick={handleReset} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
                   <span className="sr-only">Reset</span>
                   X
@@ -134,8 +203,66 @@ function App() {
           )}
 
           {/* Main Content Area */}
-          {result ? (
-            <ResultCard result={result} onReset={handleReset} />
+          {(result || mediaProducts.length > 0) ? (
+            <div className="flex flex-col gap-4">
+              {/* Chemical Result */}
+              {result && (
+                <div>
+                  {mediaProducts.length > 0 && (
+                    <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">
+                      {t('search_results_chemical')}
+                    </h3>
+                  )}
+                  <ResultCard result={result} onReset={handleReset} />
+                </div>
+              )}
+
+              {/* Media Products Results */}
+              {mediaProducts.length > 0 && (
+                <div>
+                  {result && (
+                    <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 mt-4">
+                      {t('search_results_product')}
+                    </h3>
+                  )}
+
+                  {/* Filter Controls */}
+                  <MediaProductFilter
+                    brands={mediaBrands}
+                    selectedBrand={selectedBrand}
+                    onBrandChange={handleBrandChange}
+                    sortBy={sortBy}
+                    onSortChange={handleSortChange}
+                    totalCount={mediaCount}
+                    onClearFilters={handleClearFilters}
+                  />
+
+                  <div className="flex flex-col gap-3">
+                    {(showAllProducts ? mediaProducts : mediaProducts.slice(0, 5)).map((product) => (
+                      <MediaProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                  {mediaProducts.length > 5 && (
+                    <button
+                      onClick={() => setShowAllProducts(!showAllProducts)}
+                      className="w-full mt-3 py-2 px-4 flex items-center justify-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
+                    >
+                      {showAllProducts ? (
+                        <>
+                          <ChevronUp className="w-4 h-4" />
+                          접기
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-4 h-4" />
+                          +{mediaProducts.length - 5}개 더 보기
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             /* Default View: Buttons & Tips */
             <div className={`flex flex-col gap-6 transition-opacity duration-300 ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>

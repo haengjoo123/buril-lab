@@ -51,9 +51,9 @@ export const translations = {
         settings_language: "언어 설정 (Language)",
 
         // Scanner
-        scanner_guide: "라벨의 CAS 번호(예: 67-64-1)가 잘 보이도록 맞춰주세요.",
+        scanner_guide: "라벨의 제품명 또는 CAS 번호가 잘 보이도록 맞춰주세요.",
         scanner_analyzing: "분석 중...",
-        scanner_error_cas: "식별 가능한 CAS 번호를 찾지 못했습니다. 다시 시도하거나 직접 검색해주세요.",
+        scanner_error_cas: "식별 가능한 텍스트나 CAS 번호를 찾지 못했습니다. 다시 시도하거나 직접 검색해주세요.",
         scanner_error_cam: "이미지 처리 중 오류가 발생했습니다.",
         scanner_capture_guide: "촬영 버튼을 눌러 스캔",
 
@@ -98,7 +98,25 @@ export const translations = {
         // Disposal Methods (Cases)
         disposal_method_case1: "수용성 + 중화 가능: 희석 후 중화(pH 6-8)하여 산/알칼리 수계 폐액으로 배출하세요.",
         disposal_method_case2: "수용성 + 중화 불가: 중화하지 마세요. '반응성 유기 혼합 폐액'으로 별도 위탁 처리하세요.",
-        disposal_method_case3: "불용성: 중화 금지. 층 분리된 상태 그대로 '유기 혼합 폐액'으로 밀폐하여 위탁 처리하세요."
+        disposal_method_case3: "불용성: 중화 금지. 층 분리된 상태 그대로 '유기 혼합 폐액'으로 밀폐하여 위탁 처리하세요.",
+
+        // Media Products
+        media_product_label: "배지/시약 제품",
+        view_product: "제품 보기",
+        search_results_chemical: "화학물질 검색 결과",
+        search_results_product: "배지/시약 제품 검색 결과",
+
+        // Filters
+        filter_options: "필터 옵션",
+        clear_filters: "초기화",
+        brand: "브랜드",
+        all_brands: "전체 브랜드",
+        sort_by: "정렬",
+        sort_relevance: "관련도순",
+        sort_name_asc: "이름 (오름차순)",
+        sort_name_desc: "이름 (내림차순)",
+        sort_brand_asc: "브랜드 (오름차순)",
+        sort_brand_desc: "브랜드 (내림차순)"
     },
     en: {
         app_title: "Buril-rab",
@@ -149,9 +167,9 @@ export const translations = {
         settings_language: "Language",
 
         // Scanner
-        scanner_guide: "Align the CAS No. (e.g. 67-64-1) within the frame.",
+        scanner_guide: "Align the Product Name or CAS No. within the frame.",
         scanner_analyzing: "Analyzing...",
-        scanner_error_cas: "No identifiable CAS number found. Please retry or search manually.",
+        scanner_error_cas: "No identifiable text or CAS No. found. Please retry or search manually.",
         scanner_error_cam: "Error processing image.",
         scanner_capture_guide: "Tap button to scan",
 
@@ -196,6 +214,24 @@ export const translations = {
         // Disposal Methods (Cases)
         disposal_method_case1: "Soluble + Neutralizable: Dilute & Neutralize (pH 6-8), then dispose as Aqueous Waste.",
         disposal_method_case2: "Soluble + Prohibited: DO NOT Neutralize. Dispose as 'Reactive Organic Waste'.",
-        disposal_method_case3: "Insoluble: DO NOT Neutralize. Seal and label as 'Mixed Organic Waste'."
+        disposal_method_case3: "Insoluble: DO NOT Neutralize. Seal and label as 'Mixed Organic Waste'.",
+
+        // Media Products
+        media_product_label: "Media/Reagent Product",
+        view_product: "View Product",
+        search_results_chemical: "Chemical Results",
+        search_results_product: "Media/Reagent Products",
+
+        // Filters
+        filter_options: "Filter Options",
+        clear_filters: "Clear",
+        brand: "Brand",
+        all_brands: "All Brands",
+        sort_by: "Sort",
+        sort_relevance: "Relevance",
+        sort_name_asc: "Name (A-Z)",
+        sort_name_desc: "Name (Z-A)",
+        sort_brand_asc: "Brand (A-Z)",
+        sort_brand_desc: "Brand (Z-A)"
     }
 };
