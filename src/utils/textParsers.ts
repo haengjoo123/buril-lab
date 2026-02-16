@@ -6,11 +6,6 @@ export const extractCasNumber = (text: string): string | null => {
     return matches ? matches[0] : null;
 };
 
-export const sanitizeOcrText = (text: string): string => {
-    // Remove special characters that might be OCR noise, keep alphanumeric, spaces, hyphens
-    return text.replace(/[^a-zA-Z0-9\s-]/g, ' ').trim();
-};
-
 export const sanitizeSearchTerm = (text: string): string => {
     // Remove common OCR noise, keep Korean, English, numbers, spaces
     return text

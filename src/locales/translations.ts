@@ -25,7 +25,7 @@ export const translations = {
         input_molarity: "몰농도 (M) (선택)",
         msg_input_required: "부피를 입력해주세요.",
 
-        guide_example: "최근 검색 기록,",
+        guide_example: "최근 검색 기록",
         recent_clear: "지우기",
 
         // Result Card
@@ -116,7 +116,57 @@ export const translations = {
         sort_name_asc: "이름 (오름차순)",
         sort_name_desc: "이름 (내림차순)",
         sort_brand_asc: "브랜드 (오름차순)",
-        sort_brand_desc: "브랜드 (내림차순)"
+        sort_brand_desc: "브랜드 (내림차순)",
+
+        // PWA
+        pwa_offline_ready: "오프라인에서 사용할 수 있습니다.",
+        pwa_new_content: "새 버전이 있습니다. 새로고침하세요.",
+        pwa_reload: "새로고침",
+        pwa_close: "닫기",
+
+        // Compatibility Warnings
+        compat_title: "호환성 경고",
+        compat_danger: "위험",
+        compat_warning: "주의",
+        compat_oxidizer_flammable: "산화제와 인화성 물질을 혼합하면 화재/폭발 위험이 있습니다.",
+        compat_oxidizer_organic: "산화제와 유기물을 혼합하면 발화 위험이 있습니다.",
+        compat_water_reactive: "물 반응성 물질이 수용액과 접촉하면 유독 가스가 발생할 수 있습니다.",
+        compat_pyrophoric: "자연발화성 물질이 포함되어 있습니다. 특별 취급이 필요합니다.",
+        compat_self_reactive: "자기반응성/폭발성 물질이 포함되어 있습니다. 혼합을 피하세요.",
+        compat_acid_organic: "부식성 산과 유기물을 혼합하면 발열 반응 위험이 있습니다.",
+        compat_explosive: "폭발성 물질이 포함되어 있습니다. 분리 보관이 필요합니다.",
+        compat_acid_cyanide: "산과 시안화물을 혼합하면 치명적인 시안화수소(HCN) 가스가 발생합니다.",
+        compat_acid_sulfide: "산과 황화물을 혼합하면 유독성 황화수소(H₂S) 가스가 발생합니다.",
+        compat_acid_metal: "산과 반응성 금속을 혼합하면 인화성 수소(H₂) 가스가 발생합니다.",
+        compat_acid_base: "강산과 강염기를 혼합하면 갑작스러운 발열 반응이 일어날 수 있습니다.",
+
+        // Waste Log
+        btn_dispose_complete: "폐기 완료",
+        dispose_confirm: "폐기를 기록하시겠습니까?",
+        dispose_success: "폐기 기록이 저장되었습니다.",
+        dispose_error: "기록 저장에 실패했습니다.",
+        input_handler: "처리자 이름 (선택)",
+        input_memo: "메모 (선택)",
+        tab_search: "검색",
+        tab_logs: "기록",
+        log_title: "폐기 기록",
+        log_empty: "아직 폐기 기록이 없습니다.",
+        log_chemicals_count: "{{count}}종 시약",
+        log_delete_confirm: "이 기록을 삭제하시겠습니까?",
+        log_delete: "삭제",
+
+        // Auth
+        auth_login: "로그인",
+        auth_signup: "회원가입",
+        auth_email: "이메일",
+        auth_password: "비밀번호",
+        auth_password_confirm: "비밀번호 확인",
+        auth_logout: "로그아웃",
+        auth_subtitle: "실험실 폐기물 관리 시스템",
+        auth_error_empty: "이메일과 비밀번호를 입력해주세요.",
+        auth_error_password_mismatch: "비밀번호가 일치하지 않습니다.",
+        auth_error_password_short: "비밀번호는 6자 이상이어야 합니다.",
+        auth_error_generic: "인증 중 오류가 발생했습니다."
     },
     en: {
         app_title: "Buril-rab",
@@ -232,6 +282,56 @@ export const translations = {
         sort_name_asc: "Name (A-Z)",
         sort_name_desc: "Name (Z-A)",
         sort_brand_asc: "Brand (A-Z)",
-        sort_brand_desc: "Brand (Z-A)"
+        sort_brand_desc: "Brand (Z-A)",
+
+        // PWA
+        pwa_offline_ready: "App ready to work offline.",
+        pwa_new_content: "New version available. Click reload.",
+        pwa_reload: "Reload",
+        pwa_close: "Close",
+
+        // Compatibility Warnings
+        compat_title: "Compatibility Warnings",
+        compat_danger: "DANGER",
+        compat_warning: "WARNING",
+        compat_oxidizer_flammable: "Mixing oxidizer with flammable material may cause fire/explosion.",
+        compat_oxidizer_organic: "Mixing oxidizer with organic material may cause ignition.",
+        compat_water_reactive: "Water-reactive substance may generate toxic gas on contact with aqueous solution.",
+        compat_pyrophoric: "Contains pyrophoric material. Requires special handling.",
+        compat_self_reactive: "Contains self-reactive/explosive material. Avoid mixing.",
+        compat_acid_organic: "Mixing corrosive acid with organic material may cause exothermic reaction.",
+        compat_explosive: "Contains explosive material. Isolation required.",
+        compat_acid_cyanide: "Mixing acid with cyanide generates lethal hydrogen cyanide (HCN) gas.",
+        compat_acid_sulfide: "Mixing acid with sulfide generates toxic hydrogen sulfide (H\u2082S) gas.",
+        compat_acid_metal: "Mixing acid with reactive metal generates flammable hydrogen (H\u2082) gas.",
+        compat_acid_base: "Mixing strong acid with strong base may cause sudden exothermic reaction.",
+
+        // Waste Log
+        btn_dispose_complete: "Dispose Complete",
+        dispose_confirm: "Record this disposal?",
+        dispose_success: "Disposal record saved.",
+        dispose_error: "Failed to save record.",
+        input_handler: "Handler Name (Optional)",
+        input_memo: "Memo (Optional)",
+        tab_search: "Search",
+        tab_logs: "Records",
+        log_title: "Disposal Records",
+        log_empty: "No disposal records yet.",
+        log_chemicals_count: "{{count}} chemicals",
+        log_delete_confirm: "Delete this record?",
+        log_delete: "Delete",
+
+        // Auth
+        auth_login: "Log In",
+        auth_signup: "Sign Up",
+        auth_email: "Email",
+        auth_password: "Password",
+        auth_password_confirm: "Confirm Password",
+        auth_logout: "Log Out",
+        auth_subtitle: "Lab Waste Management System",
+        auth_error_empty: "Please enter email and password.",
+        auth_error_password_mismatch: "Passwords do not match.",
+        auth_error_password_short: "Password must be at least 6 characters.",
+        auth_error_generic: "An error occurred during authentication."
     }
 };

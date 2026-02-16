@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { FlaskConical } from 'lucide-react';
+import { FlaskConical, LogOut } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { useTranslation } from 'react-i18next';
 
 interface MainLayoutProps {
     children: React.ReactNode;
     onLogoClick?: () => void;
+    userEmail?: string;
+    onSignOut?: () => void;
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ children, onLogoClick }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ children, onLogoClick, userEmail, onSignOut }) => {
     const { t } = useTranslation();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -28,13 +30,23 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, onLogoClick })
                         </div>
                         <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white">{t('app_title')}</h1>
                     </button>
-                    {/* Settings/Menu Placeholder */}
-                    <button
-                        onClick={() => setIsSettingsOpen(true)}
-                        className="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
-                    >
-                        {t('btn_settings')}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                        >
+                            {t('btn_settings')}
+                        </button>
+                        {userEmail && onSignOut && (
+                            <button
+                                onClick={onSignOut}
+                                className="p-2 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                                title={t('auth_logout')}
+                            >
+                                <LogOut className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                 </header>
 
                 {/* Scrollable Content Area */}

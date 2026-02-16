@@ -106,3 +106,23 @@ export const translateGHS = (text: string, lang: 'ko' | 'en'): string => {
 
     return text;
 };
+
+export const GHS_PICTOGRAMS: Record<string, string> = {
+    "GHS01": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS01.svg", // Exploding Bomb
+    "GHS02": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS02.svg", // Flame
+    "GHS03": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS03.svg", // Flame over Circle
+    "GHS04": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS04.svg", // Gas Cylinder
+    "GHS05": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS05.svg", // Corrosion
+    "GHS06": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS06.svg", // Skull and Crossbones
+    "GHS07": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS07.svg", // Exclamation Mark
+    "GHS08": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS08.svg", // Health Hazard
+    "GHS09": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS09.svg", // Environment
+};
+
+export const getPictogramUrl = (code: string): string | undefined => {
+    // Input format: "GHS01" or "GHS01.gif" or full URL
+    if (code.startsWith('http') || code.startsWith('data:image')) return code;
+
+    const cleanCode = code.replace(/\.(gif|svg|png|jpg)$/i, '').trim();
+    return GHS_PICTOGRAMS[cleanCode];
+};

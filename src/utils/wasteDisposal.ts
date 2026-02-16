@@ -27,11 +27,11 @@ export const assessSolubility = (chemical: Chemical): 'SOLUBLE' | 'INSOLUBLE' =>
 
     // 3.2.1 Chemical Family Check (Heuristic based on name)
     const name = chemical.name.toUpperCase();
-    if (name.includes('OL') || name.includes('AMINE') || name.includes('KETONE') || name.includes('ACETONE')) {
-        return 'SOLUBLE';
-    }
     if (name.includes('BENZENE') || name.includes('TOLUENE') || name.includes('HEXANE') || name.includes('ETHER') || name.includes('CHLORO')) {
         return 'INSOLUBLE';
+    }
+    if (name.includes('OL') || name.includes('AMINE') || name.includes('KETONE') || name.includes('ACETONE')) {
+        return 'SOLUBLE';
     }
 
     // 3.2.2 Log Kow

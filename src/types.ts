@@ -52,3 +52,13 @@ export interface MsdsSection {
     title: string;
     content: { label: string; value: string }[];
 }
+
+export interface WasteLog {
+    id: string;
+    created_at: string;
+    chemicals: CartItem[];
+    disposal_category: string;
+    total_volume_ml?: number;
+    handler_name?: string;
+    memo?: string;
+}

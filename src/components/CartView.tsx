@@ -1,18 +1,66 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useWasteStore } from '../store/useWasteStore';
 import { analyzeMixture } from '../utils/mixtureLogic';
-import { X, Trash2, AlertTriangle } from 'lucide-react';
+import { checkCompatibility } from '../utils/compatibilityChecker';
+import { saveWasteLog } from '../services/wasteLogService';
+import { X, Trash2, AlertTriangle, AlertOctagon, CheckCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface CartViewProps {
     onClose: () => void;
+    onDisposed?: () => void;
 }
 
-export const CartView: React.FC<CartViewProps> = ({ onClose }) => {
+export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
     const { cart, removeFromCart, clearCart } = useWasteStore();
     const { t } = useTranslation();
 
     const mixtureResult = useMemo(() => analyzeMixture(cart), [cart]);
+    const compatWarnings = useMemo(() => checkCompatibility(cart), [cart]);
+
+    // Dispose flow state
+    const [showDisposeModal, setShowDisposeModal] = useState(false);
+    const [handlerName, setHandlerName] = useState('');
+    const [memo, setMemo] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null);
+
+    const handleDispose = async () => {
+        setIsSaving(true);
+        setSaveResult(null);
+        try {
+            // Calculate total volume from cart items
+            const totalVol = cart.reduce((sum, item) => {
+                if (item.volume) {
+                    const num = parseFloat(item.volume.replace(/[^0-9.]/g, ''));
+                    return sum + (isNaN(num) ? 0 : num);
+                }
+                return sum;
+            }, 0);
+
+            await saveWasteLog({
+                chemicals: cart,
+                disposal_category: t(mixtureResult.label as any) || mixtureResult.label,
+                total_volume_ml: totalVol > 0 ? totalVol : undefined,
+                handler_name: handlerName || undefined,
+                memo: memo || undefined,
+            });
+
+            setSaveResult('success');
+            // After a brief success message, clear cart and close
+            setTimeout(() => {
+                clearCart();
+                setShowDisposeModal(false);
+                setSaveResult(null);
+                onClose();
+                onDisposed?.();
+            }, 1200);
+        } catch {
+            setSaveResult('error');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none">
@@ -65,6 +113,40 @@ export const CartView: React.FC<CartViewProps> = ({ onClose }) => {
                             </div>
                         ))
                     )}
+
+                    {/* ── Compatibility Warnings ── */}
+                    {compatWarnings.length > 0 && (
+                        <div className="space-y-2 pt-1">
+                            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
+                                {t('compat_title')}
+                            </div>
+                            {compatWarnings.map((w, idx) => {
+                                const isDanger = w.severity === 'DANGER';
+                                return (
+                                    <div
+                                        key={`${w.ruleId}-${idx}`}
+                                        className={`p-3 rounded-xl border text-sm flex items-start gap-2.5 ${isDanger
+                                            ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-300'
+                                            : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-300'
+                                            }`}
+                                    >
+                                        {isDanger
+                                            ? <AlertOctagon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                            : <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                        }
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-xs mb-0.5">
+                                                {isDanger ? t('compat_danger') : t('compat_warning')}: {w.chemicalA} ↔ {w.chemicalB}
+                                            </div>
+                                            <div className="text-xs leading-snug opacity-90">
+                                                {t(w.messageKey as any)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* Mixture Analysis Result Footer */}
@@ -98,6 +180,14 @@ export const CartView: React.FC<CartViewProps> = ({ onClose }) => {
                             </div>
                         )}
 
+                        {/* ── Dispose Complete Button ── */}
+                        <button
+                            onClick={() => setShowDisposeModal(true)}
+                            className="w-full py-3 bg-blue-600 dark:bg-blue-500 text-white rounded-xl hover:bg-blue-700 dark:hover:bg-blue-600 text-sm font-semibold transition-colors shadow-md mb-2"
+                        >
+                            {t('btn_dispose_complete')}
+                        </button>
+
                         <button
                             onClick={() => {
                                 if (confirm(t('cart_confirm_clear'))) clearCart();
@@ -109,6 +199,86 @@ export const CartView: React.FC<CartViewProps> = ({ onClose }) => {
                     </div>
                 )}
             </div>
+
+            {/* ── Dispose Confirmation Modal ── */}
+            {showDisposeModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => !isSaving && setShowDisposeModal(false)} />
+                    <div
+                        className="relative z-10 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-[90%] max-w-[360px] p-6 animate-in fade-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {saveResult === 'success' ? (
+                            <div className="text-center py-4">
+                                <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                                <p className="font-semibold text-slate-800 dark:text-white">
+                                    {t('dispose_success')}
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-1">
+                                    {t('btn_dispose_complete')}
+                                </h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                                    {t('dispose_confirm')}
+                                </p>
+
+                                {/* Handler Name */}
+                                <div className="mb-3">
+                                    <input
+                                        type="text"
+                                        value={handlerName}
+                                        onChange={(e) => setHandlerName(e.target.value)}
+                                        placeholder={t('input_handler')}
+                                        className="w-full px-3 py-2.5 border border-gray-200 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700 text-slate-800 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                {/* Memo */}
+                                <div className="mb-4">
+                                    <textarea
+                                        value={memo}
+                                        onChange={(e) => setMemo(e.target.value)}
+                                        placeholder={t('input_memo')}
+                                        rows={2}
+                                        className="w-full px-3 py-2.5 border border-gray-200 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700 text-slate-800 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                    />
+                                </div>
+
+                                {/* Error Message */}
+                                {saveResult === 'error' && (
+                                    <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-xs rounded-lg flex items-center gap-2">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                        {t('dispose_error')}
+                                    </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setShowDisposeModal(false)}
+                                        disabled={isSaving}
+                                        className="flex-1 py-2.5 border border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+                                    >
+                                        {t('btn_cancel')}
+                                    </button>
+                                    <button
+                                        onClick={handleDispose}
+                                        disabled={isSaving}
+                                        className="flex-1 py-2.5 bg-blue-600 dark:bg-blue-500 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5"
+                                    >
+                                        {isSaving
+                                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                                            : t('btn_confirm')
+                                        }
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

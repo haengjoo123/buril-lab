@@ -34,6 +34,7 @@ const fetchGHSData = async (cid: string | number): Promise<Chemical['ghs'] | und
 
         let signal = '';
         const hazardStatements: string[] = [];
+        const pictograms: string[] = [];
 
         // Helper to traverse and extract
         const traverse = (node: any) => {
@@ -50,6 +51,18 @@ const fetchGHSData = async (cid: string | number): Promise<Chemical['ghs'] | und
                             });
                         }
                     }
+                    if (info.Name === 'Pictogram(s)') {
+                        if (info.Value?.StringWithMarkup) {
+                            info.Value.StringWithMarkup.forEach((s: any) => {
+                                // Extract from Markup -> URL
+                                if (s.Markup) {
+                                    s.Markup.forEach((m: any) => {
+                                        if (m.URL) pictograms.push(m.URL);
+                                    });
+                                }
+                            });
+                        }
+                    }
                 }
             }
             if (node.Section) {
@@ -59,11 +72,12 @@ const fetchGHSData = async (cid: string | number): Promise<Chemical['ghs'] | und
 
         traverse(data.Record);
 
-        if (!signal && hazardStatements.length === 0) return undefined;
+        // if (!signal && hazardStatements.length === 0) return undefined; // Let's return even if only pictograms found, though unlikely
 
         return {
             signal: signal || 'Warning', // Default if found statements but no signal
-            hazardStatements: [...new Set(hazardStatements)] // Dedupe
+            hazardStatements: [...new Set(hazardStatements)], // Dedupe
+            pictograms: [...new Set(pictograms)]
         };
 
     } catch (e) {
@@ -306,10 +320,28 @@ export const fetchPubChemMsds = async (cid: string | number): Promise<MsdsSectio
                     const label = info.Name || info.Description || 'Info';
                     let value = '';
 
-                    if (info.Value?.StringWithMarkup) {
-                        value = info.Value.StringWithMarkup.map((s: any) => s.String).join('\n');
-                    } else if (info.Value?.Number) {
-                        value = String(info.Value.Number);
+                    // Special handling for Pictograms to get image URLs
+                    if (label === 'Pictogram(s)' && info.Value?.StringWithMarkup) {
+                        const urls: string[] = [];
+                        info.Value.StringWithMarkup.forEach((s: any) => {
+                            if (s.Markup) {
+                                s.Markup.forEach((m: any) => {
+                                    if (m.URL) urls.push(m.URL);
+                                });
+                            }
+                        });
+                        if (urls.length > 0) {
+                            value = urls.join('|');
+                        }
+                    }
+
+                    // Standard text fallback if value not set yet
+                    if (!value) {
+                        if (info.Value?.StringWithMarkup) {
+                            value = info.Value.StringWithMarkup.map((s: any) => s.String).join('\n');
+                        } else if (info.Value?.Number) {
+                            value = String(info.Value.Number);
+                        }
                     }
 
                     if (value) {

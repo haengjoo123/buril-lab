@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#0f172a"/>
+  
+  <!-- Flask body -->
+  <path d="M200 120 L200 240 L140 360 Q130 380 145 395 Q155 405 175 405 L337 405 Q357 405 367 395 Q382 380 372 360 L312 240 L312 120" 
+        fill="none" stroke="#06b6d4" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Flask neck ring -->
+  <rect x="190" y="110" width="132" height="12" rx="6" fill="#06b6d4"/>
+  
+  <!-- Liquid in flask -->
+  <path d="M170 340 L342 340 L372 360 Q382 380 367 395 Q357 405 337 405 L175 405 Q155 405 145 395 Q130 380 140 360 Z" 
+        fill="#06b6d4" opacity="0.3"/>
+  
+  <!-- Bubbles -->
+  <circle cx="230" cy="360" r="10" fill="#06b6d4" opacity="0.6"/>
+  <circle cx="280" cy="345" r="7" fill="#06b6d4" opacity="0.5"/>
+  <circle cx="260" cy="375" r="12" fill="#06b6d4" opacity="0.4"/>
+  
+  <!-- Recycling arrows (simplified) -->
+  <g transform="translate(256, 280) scale(0.5)" fill="none" stroke="#22d3ee" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 -40 L25 -10 L-25 -10 Z" fill="#22d3ee"/>
+    <path d="M0 -40 Q40 -40 35 0"/>
+    <path d="M35 0 Q30 40 0 40"/>
+    <path d="M60 5 L35 0 L45 -25" fill="#22d3ee"/>
+    <path d="M0 40 Q-40 40 -35 0"/>
+    <path d="M-60 5 L-35 0 L-45 -25" fill="#22d3ee"/>
+    <path d="M-35 0 Q-30 -40 0 -40"/>
+  </g>
+</svg>

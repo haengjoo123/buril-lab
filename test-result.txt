@@ -1,0 +1,88 @@
+﻿
+ RUN  v4.0.18 C:/Users/gudwn/OneDrive/문서/buril-lab
+
+System.Management.Automation.RemoteException
+⎯⎯⎯⎯⎯⎯ Failed Suites 4 ⎯⎯⎯⎯⎯⎯⎯
+System.Management.Automation.RemoteException
+ FAIL  src/__tests__/chemicalAnalyzer.test.ts [ src/__tests__/chemicalAnalyzer.test.ts ]
+Error: Failed to resolve import "../../utils/chemicalAnalyzer" from "src/__tests__/chemicalAnalyzer.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: C:/Users/gudwn/OneDrive/문서/buril-lab/src/__tests__/chemicalAnalyzer.test.ts:2:46
+  1  |  import { describe, it, expect } from "vitest";
+  2  |  import { parseFormula, analyzeChemical } from "../../utils/chemicalAnalyzer";
+     |                                                 ^
+  3  |  const makeChemical = (overrides = {}) => ({
+  4  |    id: "test-id",
+ ❯ TransformPluginContext._formatLog ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28998:43
+ ❯ TransformPluginContext.error ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28995:14
+ ❯ normalizeUrl ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27118:18
+ ❯ ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27176:32
+ ❯ TransformPluginContext.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27144:4
+ ❯ EnvironmentPluginContainer.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28796:14
+ ❯ loadAndTransform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:22669:26
+System.Management.Automation.RemoteException
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+System.Management.Automation.RemoteException
+ FAIL  src/__tests__/compatibilityChecker.test.ts [ src/__tests__/compatibilityChecker.test.ts ]
+Error: Failed to resolve import "../../utils/compatibilityChecker" from "src/__tests__/compatibilityChecker.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: C:/Users/gudwn/OneDrive/문서/buril-lab/src/__tests__/compatibilityChecker.test.ts:2:35
+  1  |  import { describe, it, expect } from "vitest";
+  2  |  import { checkCompatibility } from "../../utils/compatibilityChecker";
+     |                                      ^
+  3  |  const makeChemical = (overrides = {}) => ({
+  4  |    id: "test-id",
+ ❯ TransformPluginContext._formatLog ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28998:43
+ ❯ TransformPluginContext.error ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28995:14
+ ❯ normalizeUrl ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27118:18
+ ❯ ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27176:32
+ ❯ TransformPluginContext.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27144:4
+ ❯ EnvironmentPluginContainer.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28796:14
+ ❯ loadAndTransform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:22669:26
+System.Management.Automation.RemoteException
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+System.Management.Automation.RemoteException
+ FAIL  src/__tests__/mixtureLogic.test.ts [ src/__tests__/mixtureLogic.test.ts ]
+Error: Failed to resolve import "../../utils/mixtureLogic" from "src/__tests__/mixtureLogic.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: C:/Users/gudwn/OneDrive/문서/buril-lab/src/__tests__/mixtureLogic.test.ts:2:31
+  1  |  import { describe, it, expect } from "vitest";
+  2  |  import { analyzeMixture } from "../../utils/mixtureLogic";
+     |                                  ^
+  3  |  const makeChemical = (overrides = {}) => ({
+  4  |    id: "test-id",
+ ❯ TransformPluginContext._formatLog ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28998:43
+ ❯ TransformPluginContext.error ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28995:14
+ ❯ normalizeUrl ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27118:18
+ ❯ ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27176:32
+ ❯ TransformPluginContext.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27144:4
+ ❯ EnvironmentPluginContainer.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28796:14
+ ❯ loadAndTransform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:22669:26
+System.Management.Automation.RemoteException
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+System.Management.Automation.RemoteException
+ FAIL  src/__tests__/wasteDisposal.test.ts [ src/__tests__/wasteDisposal.test.ts ]
+Error: Failed to resolve import "../../utils/wasteDisposal" from "src/__tests__/wasteDisposal.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: C:/Users/gudwn/OneDrive/문서/buril-lab/src/__tests__/wasteDisposal.test.ts:2:74
+  1  |  import { describe, it, expect } from "vitest";
+  2  |  import { assessSolubility, assessNeutralization, determineDisposal } from "../../utils/wasteDisposal";
+     |                                                                             ^
+  3  |  const makeChemical = (overrides = {}) => ({
+  4  |    id: "test-id",
+ ❯ TransformPluginContext._formatLog ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28998:43
+ ❯ TransformPluginContext.error ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28995:14
+ ❯ normalizeUrl ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27118:18
+ ❯ ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27176:32
+ ❯ TransformPluginContext.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:27144:4
+ ❯ EnvironmentPluginContainer.transform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:28796:14
+ ❯ loadAndTransform ../../%EB%AC%B8%EC%84%9C/buril-lab/node_modules/vite/dist/node/chunks/config.js:22669:26
+System.Management.Automation.RemoteException
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+System.Management.Automation.RemoteException
+
+ Test Files  4 failed (4)
+      Tests  no tests
+   Start at  02:31:43
+   Duration  2.18s (transform 63ms, setup 896ms, import 0ms, tests 0ms, environment 6.68s)
+

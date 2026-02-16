@@ -119,8 +119,55 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
     );
 };
 
+import { getPictogramUrl } from '../data/ghsCodes';
+
 const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+
+    const renderValue = (label: string, value: string) => {
+        // Detect Pictogram fields (KOSHA: "그림문자", PubChem: "Pictogram(s)")
+        if (label === '그림문자' || label.toLowerCase().includes('pictogram')) {
+            // Split by pipe (KOSHA) or newlines/commas
+            const codes = value.split(/[|\n,]+/).map(s => s.trim()).filter(Boolean);
+
+            // Map to URLs
+            const images = codes.map(code => {
+                const url = getPictogramUrl(code);
+                return { code, url };
+            }).filter(item => item.url);
+
+            if (images.length > 0) {
+                return (
+                    <div className="flex flex-wrap gap-4 mt-1">
+                        {images.map((img, idx) => (
+                            <div key={idx} className="flex flex-col items-center group">
+                                <div className="w-20 h-20 bg-white border border-gray-200 rounded-lg shadow-sm flex items-center justify-center p-2 transition-transform hover:scale-105">
+                                    <img
+                                        src={img.url}
+                                        alt={img.code}
+                                        className="w-full h-full object-contain"
+                                    />
+                                </div>
+                                <span className="text-xs text-slate-400 mt-1">{img.code.replace(/\.(gif|jpg|png|svg)$/i, '')}</span>
+                            </div>
+                        ))}
+                    </div>
+                );
+            }
+        }
+        // Handle pipe separators with newlines for better readability
+        if (value && value.includes('|')) {
+            return (
+                <div className="flex flex-col gap-1">
+                    {value.split('|').map((part, index) => (
+                        <span key={index}>{part.trim()}</span>
+                    ))}
+                </div>
+            );
+        }
+
+        return value || '-';
+    };
 
     return (
         <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
@@ -143,11 +190,11 @@ const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
                     {section.content.length > 0 ? (
                         section.content.map((item, i) => (
                             <div key={i} className="flex flex-col sm:flex-row sm:gap-4 text-xs border-b last:border-0 border-gray-50 dark:border-slate-800/50 pb-2 last:pb-0">
-                                <div className="sm:w-1/3 text-slate-500 dark:text-slate-400 font-medium whitespace-pre-wrap sm:text-right">
+                                <div className="sm:w-1/3 text-slate-500 dark:text-slate-400 font-medium whitespace-pre-wrap sm:text-right flex-shrink-0">
                                     {item.label}
                                 </div>
                                 <div className="sm:w-2/3 text-slate-800 dark:text-slate-300 font-normal whitespace-pre-wrap break-words">
-                                    {item.value || '-'}
+                                    {renderValue(item.label, item.value)}
                                 </div>
                             </div>
                         ))

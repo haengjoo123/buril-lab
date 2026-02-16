@@ -38,14 +38,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
     };
 
     const handleConfirm = () => {
-        if (!volume.trim()) {
-            setError(t('msg_input_required'));
-            return;
-        }
-
         addToCart({
             ...result,
-            volume: `${volume.trim()} mL`,
+            volume: volume.trim() ? `${volume.trim()} mL` : undefined,
             molarity: molarity.trim()
         });
 
@@ -171,7 +166,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
                         <div className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                    {t('input_volume')} <span className="text-red-500">*</span>
+                                    {t('input_volume')}
                                 </label>
                                 <div className="relative">
                                     <input
