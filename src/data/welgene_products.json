@@ -1,0 +1,1106 @@
+[
+  {
+    "id": "281a9132-d7c1-4929-98ec-0ad6a28b72eb",
+    "brand": "WELGENE",
+    "product_name": "Cello, RU011-01 Cell Dissociation Solution",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-90c28cdbbfeccd3a161a3a0a6e6bb896.jpg",
+    "url_slug": "welgene-cello--ru011-01"
+  },
+  {
+    "id": "d3ad21b4-a25b-48f5-b231-d7d4cdf9c17d",
+    "brand": "WELGENE",
+    "product_name": "GenGro medium, LM023-01 General medium covering various cell culture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-793fbc7435c8201a9625275ec89f1809.jpg",
+    "url_slug": "welgene-gengro-medium--lm023-01"
+  },
+  {
+    "id": "2954579d-85af-4859-98bd-7d0710b76aba",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-01 High Glucose, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c67bff5c768c50ef656b990edce43d17.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-01"
+  },
+  {
+    "id": "aea479a5-17fd-423f-911e-e1499bad6378",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-02 Low Glucose, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2_bd9c6983101a5b94e7e0b94679d25813_1742535316.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-02"
+  },
+  {
+    "id": "a377431c-6c11-49d0-9477-387ee8079bdf",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-03 High Glucose, With HEPES, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2_20815743689bcfc22a86b4626d4c2c77_1742535229.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-03"
+  },
+  {
+    "id": "505bc135-ec25-4b7a-86c1-d00584780a38",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-04 Low Glucose, Without L-glutamine, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-619abe38adfea0a2155d59d1dc2853f5.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-04"
+  },
+  {
+    "id": "076fb5d1-bb2e-4b07-8990-9b28a31999de",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-05 High Glucose, With L-glutamine, With sodium pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-55dd4e7061c231c3fb23fd1d70744dbe.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-05"
+  },
+  {
+    "id": "3c24c915-9ca8-407e-9da8-cb1f9110c9ca",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-06 Low Glucose, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-003d24e80475f88961b94d36c5103777.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-06"
+  },
+  {
+    "id": "5dcf37e0-96c2-4155-8158-0d4275501d55",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-07 High Glucose, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-68f050fb75e0a7457092c98bfcc84d3b.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-07"
+  },
+  {
+    "id": "f0ebf5b4-9ae6-4385-9558-113f259e1f21",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-08 High Glucose, With L-glutamine, Without sodium pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-527dd06a84139a0b951a2d83662e68e4.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-08"
+  },
+  {
+    "id": "b83a3cf7-9904-46bc-8e49-c5f9672279a9",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-09 High Glucose, With L-glutamine, With HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ebf498512c992cab7d724457a775d83d.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-09"
+  },
+  {
+    "id": "2fcdc542-e4c0-423f-82c9-d2fbb0862766",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-10 High Glucose, With L-glutamine, With HEPES, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-afb79747ad3d19c56b1b3b49d992161c.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-10"
+  },
+  {
+    "id": "9a983e5e-8734-471a-84d7-7aa88a6d8cfc",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-11 Low Glucose, With L-glutamine, With sodium pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f023df4b72b398ab3eeec8c458b9c8a1.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-11"
+  },
+  {
+    "id": "79b9833f-c102-46aa-a363-3f695c441125",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-12 Low Glucose, With L-glutamine, With HEPES, With sodium pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-dc8fe466664734f1b0b338d0911efd7c.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-12"
+  },
+  {
+    "id": "c3c6792f-bf46-4a96-9a30-447fa0cbd0a3",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-13 Low Glucose, Without L-glutamine, With HEPES, With sodium pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a10c7cb0cf0a24d71e0bc511f4f1c928.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-13"
+  },
+  {
+    "id": "e9dccac3-f657-4bb5-a02e-62e83aa9ded3",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-14 Low Glucose, Without L-glutamine, With sodium pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-205770e8d1ff702b0220d8c71e85d630.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-14"
+  },
+  {
+    "id": "7bf2c1e5-035a-470d-9c5e-f2f888e83e76",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-15A Low Glucose, Without L-glutamine, With sodium pyruvate, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e4fc448d72dcbe3c778587d0d65bfdee.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-15a"
+  },
+  {
+    "id": "6d53cf74-94e0-4be4-b49b-f6d6cd26cbb7",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-17 Low Glucose, With L-glutamine, With sodium pyruvate, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-af9a15b1bf2a79f862eaaff29d82e345.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-17"
+  },
+  {
+    "id": "f5626484-12c1-4ceb-b6ed-02082f4cebea",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-51 High Glucose, With L-glutamine, With sodium pyruvate, With 1500.00 mg/L sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-994d0f16ae97622ed89874acdea7a220.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-51"
+  },
+  {
+    "id": "186b0dae-ad9f-4afd-8d54-b1367181e81e",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-52 High Glucose, With L-glutamine, With sodium pyruvate, With HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c92dee8c2390be6f90eefdc88aab5bb8.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-52"
+  },
+  {
+    "id": "c0e0edc6-1ea1-4cd8-950e-bb5791466039",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-56 High Glucose, With L-glutamine, Without D-glucose",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-00356791330784631005ce553d906801.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-56"
+  },
+  {
+    "id": "249c45d3-d03f-4a12-95d9-333e812cd722",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-59 High Glucose, With L-glutamine, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-09a627b7c3ee3d192f871cf1c65f5878.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-59"
+  },
+  {
+    "id": "4eb81aa7-8fb7-46f9-904f-02688898e2c0",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-60 High Glucose, With L-glutamine, With 1500.00 mg/L sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-4e101b46797dfa4dc39aa060665d0e7f.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-60"
+  },
+  {
+    "id": "da453260-9aec-4055-b08c-b94a10005b1f",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-70 High Glucose, With L-glutamine, With sodium pyruvate, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0a5278a9edf768f98e1baa2759927e82.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-70"
+  },
+  {
+    "id": "72d464f8-f8cf-48a0-9351-629830b22ceb",
+    "brand": "WELGENE",
+    "product_name": "DMEM(1X), LM001-79 High Glucose, With L-glutamine, With sodium pyruvate, Without D-glucose",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-09f59a0b56adf2ac61b264ae33cb621c.jpg",
+    "url_slug": "welgene-dmem-1x---lm001-79"
+  },
+  {
+    "id": "cad12569-f983-472e-88ea-ce84aff12812",
+    "brand": "WELGENE",
+    "product_name": "DMEM / F-12 1:1 Mixture(1X),LM002-01 With HEPES, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-84400ea113c7480ef1fc807ae3df89c6.jpg",
+    "url_slug": "welgene-dmem---f-12-1-1-mixture-1x--lm002-01"
+  },
+  {
+    "id": "6f9fba0d-7dc7-4e07-b111-112a5bd75734",
+    "brand": "WELGENE",
+    "product_name": "DMEM / F-12 1:1 Mixture(1X),LM002-02 With HEPES, Without L-glutamine, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6fac425749f29c5b7f96824339711e26.jpg",
+    "url_slug": "welgene-dmem---f-12-1-1-mixture-1x--lm002-02"
+  },
+  {
+    "id": "0ed4702d-0964-4b94-a0ed-e9b5f66267b5",
+    "brand": "WELGENE",
+    "product_name": "DMEM / F-12 1:1 Mixture(1X),LM002-04 With HEPES, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-febcd285518eaa78646be0c444b4ae3c.jpg",
+    "url_slug": "welgene-dmem---f-12-1-1-mixture-1x--lm002-04"
+  },
+  {
+    "id": "5c19ba7a-f27b-4705-b2f8-988e490c7c30",
+    "brand": "WELGENE",
+    "product_name": "DMEM / F-12 1:1 Mixture(1X),LM002-05 With HEPES, With L-glutamine, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1b4ed556cb976eed1b102a7a1dbae01f.jpg",
+    "url_slug": "welgene-dmem---f-12-1-1-mixture-1x--lm002-05"
+  },
+  {
+    "id": "b94645a8-3db6-4af1-8cf2-76d2b47f58e5",
+    "brand": "WELGENE",
+    "product_name": "DMEM / F-12 1:1 Mixture(1X),LM002-06 With HEPES, With L-glutamine, Without sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ff6ce0b468483ced06b2852c7e029017.jpg",
+    "url_slug": "welgene-dmem---f-12-1-1-mixture-1x--lm002-06"
+  },
+  {
+    "id": "36427de8-cc2c-45bc-8e02-01766b6ae66b",
+    "brand": "WELGENE",
+    "product_name": "DMEM / F-12 1:1 Mixture(1X),LM002-08 With L-glutamine, Without HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b1c02d724c9dc166fc64ed26f5be1652.jpg",
+    "url_slug": "welgene-dmem---f-12-1-1-mixture-1x--lm002-08"
+  },
+  {
+    "id": "83b200e2-6355-4fae-af8e-69c4f89d9e89",
+    "brand": "WELGENE",
+    "product_name": "L-15 Leibovitz’s L-15 Medium(1X), LM003-01 With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0656b7bc37519b73b15ac5a84af88995.jpg",
+    "url_slug": "welgene-l-15-leibovitz-s-l-15-medium-1x---lm003-01"
+  },
+  {
+    "id": "e3045385-3c66-4869-b87d-094ecdda23e7",
+    "brand": "WELGENE",
+    "product_name": "IMDM(1X), LM004-01 With HEPES, With L-glutamine, Without α-thioglycerol,Without 2-mercaptoethanol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-18c189ef4e8d88fc9032c601807e05ee.jpg",
+    "url_slug": "welgene-imdm-1x---lm004-01"
+  },
+  {
+    "id": "c286a2f6-8a01-4615-ab3a-ee9fd7059094",
+    "brand": "WELGENE",
+    "product_name": "IMDM(1X), LM004-02 With HEPES, Without L-glutamine, Without α-thioglycerol, Without 2-mercaptoethanol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6f87c96cb02df806e970f15b33bd41bd.jpg",
+    "url_slug": "welgene-imdm-1x---lm004-02"
+  },
+  {
+    "id": "900442ea-c3b6-4cb7-8bdc-a772d20829e5",
+    "brand": "WELGENE",
+    "product_name": "IMDM(1X), LM004-51 With HEPES, With L-glutamine, Without α-thioglycerol,Without 2-mercaptoethanol,With 1500.00 mg/L sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c4fea328cbf7626935eff621fa57a10e.jpg",
+    "url_slug": "welgene-imdm-1x---lm004-51"
+  },
+  {
+    "id": "f7abce69-0a9f-459a-9a42-ab83e471a6b0",
+    "brand": "WELGENE",
+    "product_name": "McCoy’s 5A Medium(1X), LM005-01 With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1bc214ff29537bc71fdae6bc7ca6ebcd.jpg",
+    "url_slug": "welgene-mccoy-s-5a-medium-1x---lm005-01"
+  },
+  {
+    "id": "36d1d9fe-b30c-4383-a1d0-7ec27a524c5e",
+    "brand": "WELGENE",
+    "product_name": "McCoy’s 5A Medium(1X), LM005-02 With L-glutamine, With HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f8d83b16bae781b899a14f0b0894f585.jpg",
+    "url_slug": "welgene-mccoy-s-5a-medium-1x---lm005-02"
+  },
+  {
+    "id": "32805796-71f2-40ec-9093-501f3cbf3fca",
+    "brand": "WELGENE",
+    "product_name": "M199 Meidum 199(1X), LM006-01 With Earle’s salts, With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0a3da37b572c8b0fe3f01c0a73c51f05.jpg",
+    "url_slug": "welgene-m199-meidum-199-1x---lm006-01"
+  },
+  {
+    "id": "f77bd940-cc09-4ec0-84a5-e7a496af1cd8",
+    "brand": "WELGENE",
+    "product_name": "M199 Meidum 199(1X), LM006-03 With Earle’s salts, Without L-glutamine, With HEPES, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-fa80021a2dd26804bc017d07eecf63b1.jpg",
+    "url_slug": "welgene-m199-meidum-199-1x---lm006-03"
+  },
+  {
+    "id": "3f4df754-c453-4997-91a0-5c62863ff874",
+    "brand": "WELGENE",
+    "product_name": "M199 Meidum 199(1X), LM006-04 With Earle’s salts, With L-glutamine, With HEPES, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e5d8b961ab7965e98a87db765256a561.jpg",
+    "url_slug": "welgene-m199-meidum-199-1x---lm006-04"
+  },
+  {
+    "id": "80a7be11-16b3-4bbc-bc68-76113a117f39",
+    "brand": "WELGENE",
+    "product_name": "M199 Meidum 199(1X), LM006-05 With Earle’s salts, With L-glutamine, With sodium bicarbonate, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-fd44895a3b4450264601ab2412bd7574.jpg",
+    "url_slug": "welgene-m199-meidum-199-1x---lm006-05"
+  },
+  {
+    "id": "e82e8cbe-ce77-4277-bf70-e23923f8f1e1",
+    "brand": "WELGENE",
+    "product_name": "M199 Meidum 199(1X), LM006-06 With Hanks’ salts, With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-7d5a81a84320573fd19e9394296246dd.jpg",
+    "url_slug": "welgene-m199-meidum-199-1x---lm006-06"
+  },
+  {
+    "id": "c62af158-d2d5-4343-bc29-9d567619eeb9",
+    "brand": "WELGENE",
+    "product_name": "M199 Meidum 199(1X), LM006-07 With Hanks’ salts, With L-glutamine, With HEPES, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1fb78b385b6ac6427cbd5729a49ba4bf.jpg",
+    "url_slug": "welgene-m199-meidum-199-1x---lm006-07"
+  },
+  {
+    "id": "3deea5a6-cd74-48ca-b39d-6f0a1bcbe5bc",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-01 With Earle’s salts, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-140c8ed8f0ad7cd9ba46a1842ce14397.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-01"
+  },
+  {
+    "id": "fb0d60e2-2bc9-4982-a2fb-9c8b066c1cb3",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-02 With Earle’s salts, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d14441e4ad03e68bbb6bcc3bebfa26fe.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-02"
+  },
+  {
+    "id": "97c7938c-3223-409a-949c-3420cebab5e7",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-03 Modified for suspension cultures, With Earle’s salts, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-95cd36583e040ed5093a0a3ff8c3abd7.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-03"
+  },
+  {
+    "id": "1c21a8ad-e92d-4ba1-8d26-903487e86180",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-04 With Earle’s salts, With L-glutamine, Without L-Methionine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-dc3eb9518b6eafd0d90f047b867f93a8.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-04"
+  },
+  {
+    "id": "e15ace76-f3da-42c2-8766-06c7b0c8823d",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-05 With Hanks’ salts, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c0dca9db25865f97d7d097e8a70a7ef1.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-05"
+  },
+  {
+    "id": "c0927cb5-b128-4383-9b9c-0915468f5f38",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-06 With Hanks’ salts, With L-glutamine, With 25 mM HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-68643cfbb116589f480d3f66dab02609.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-06"
+  },
+  {
+    "id": "9bfd1cd9-866c-4e9a-9d22-f051bb053d5c",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-07 With Earle’s salts, With non-essential amino acids, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a6d295ac2c8e36046545b1c124b16642.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-07"
+  },
+  {
+    "id": "f094ec4c-c34d-4296-b51b-2ce100b7731b",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-08 With Earle’s salts, With non-essential amino acids, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-40da8cd6876849d950dacae603b1118e.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-08"
+  },
+  {
+    "id": "58bbb85a-3af6-450c-b835-bfed7240d6b7",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-09 With Earle’s salts, With 25 mM HEPES, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0fbd3b402ed451ae3b0481be2ac25c14.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-09"
+  },
+  {
+    "id": "e9b5b433-64e1-4ed9-9034-4713f3e79da4",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-10 With Earle’s salts, With 25 mM HEPES, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3cecc8f40037d88e30fdbbba13017eaa.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-10"
+  },
+  {
+    "id": "24131247-77e9-46a8-8ffc-07112746dd68",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-11 With Earle’s salts, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-665fb079667ec106fbcf5a8996088763.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-11"
+  },
+  {
+    "id": "6969c5dd-4317-4abb-a124-9810d55865aa",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-12 With Earle’s salts, Without L-glutamine, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8b89c07f0e36a8740f4c78cfe1cf204f.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-12"
+  },
+  {
+    "id": "dddaa8bc-bbfd-489e-a740-8b79b0bf1543",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-13 With Earle’s salts, With 10 mM HEPES, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-abd9872bd51154fa6e6198cf78bee4cc.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-13"
+  },
+  {
+    "id": "4664b960-4c70-4688-b756-20dac657756f",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-14 With Earle’s salts, With 1500 mg/L sodium bicarbonate, Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3dd5fb11513dfc40506c5be9a07fccfc.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-14"
+  },
+  {
+    "id": "f33610cd-235f-49ce-821b-350e0ff54e9e",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-50 With Earle’s salts, Without L-glutamine, Without sodium bicarbonate, Sterilized by autoclaving",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e88566fc019dc6a9897ad583a7fad334.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-50"
+  },
+  {
+    "id": "214ef121-5905-49ef-883a-3fcd64e344a4",
+    "brand": "WELGENE",
+    "product_name": "Minimum Essential Medium Eagle(1X), LM007-54 With Earle’s salts, With non-essential amino acids, With L-glutamine, With Sodium pyruvate 1mM, with Sodium bicarbonate 1,500 mg/L",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2d16c56bdf003f14849e015eeacbb5d2.jpg",
+    "url_slug": "welgene-minimum-essential-medium-eagle-1x---lm007-54"
+  },
+  {
+    "id": "5325d958-e4fa-4e4f-8421-9468627450e6",
+    "brand": "WELGENE",
+    "product_name": "Ham's F-10(1X), LM009-01 With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-53b1d27e7d426217a0a8115d6dea9d58.jpg",
+    "url_slug": "welgene-ham-s-f-10-1x---lm009-01"
+  },
+  {
+    "id": "f6b6d2b9-0092-48b5-87e1-d1e0db49d204",
+    "brand": "WELGENE",
+    "product_name": "Ham's F-10(1X), LM009-02 With L-glutamine, With HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d88ea5db6b2c5a688249e30163d0643c.jpg",
+    "url_slug": "welgene-ham-s-f-10-1x---lm009-02"
+  },
+  {
+    "id": "edee6f32-e9e9-4381-b28c-2337a6247233",
+    "brand": "WELGENE",
+    "product_name": "Alpha MEM(1X), LM008-01 With L-glutamine, With deoxyribonucleosides, With ribonucleosides",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-768d7d2fc243a66b54fb3c93180859aa.jpg",
+    "url_slug": "welgene-alpha-mem-1x---lm008-01"
+  },
+  {
+    "id": "4dc0f539-3d8f-4881-a5ed-f65db57b2169",
+    "brand": "WELGENE",
+    "product_name": "Alpha MEM(1X), LM008-02 With L-glutamine, Without deoxyribonucleosides,Without ribonucleosides",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b22e581c4cd29a17885543e9b69d39fc.jpg",
+    "url_slug": "welgene-alpha-mem-1x---lm008-02"
+  },
+  {
+    "id": "f3a7f3b5-eb05-4307-921e-bac6dd4b9877",
+    "brand": "WELGENE",
+    "product_name": "Alpha MEM(1X), LM008-53 With L-glutamine, With deoxyribonucleosides, With ribonucleosides,Without L-ascorbic acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ebe4b2765bd9a73e65a05dbc78d8037e.jpg",
+    "url_slug": "welgene-alpha-mem-1x---lm008-53"
+  },
+  {
+    "id": "04decd31-eeb5-4560-93c3-705449c80aa3",
+    "brand": "WELGENE",
+    "product_name": "Alpha MEM(1X), LM008-56 With L-glutamine, With deoxyribonucleosides, With ribonucleosides, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1d65114d034aa4d077f7e2f3675124a7.jpg",
+    "url_slug": "welgene-alpha-mem-1x---lm008-56"
+  },
+  {
+    "id": "ef562ff0-aa64-442e-b75a-dcbe15c863d8",
+    "brand": "WELGENE",
+    "product_name": "Ham's F-12(1X), LM010-01 With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-359ce966fa2d4b0c3bb50d73137a8bcb.jpg",
+    "url_slug": "welgene-ham-s-f-12-1x---lm010-01"
+  },
+  {
+    "id": "9feb245e-672e-48bd-b473-9eb61a41c3e7",
+    "brand": "WELGENE",
+    "product_name": "Ham's F-12(1X), LM010-02 With L-glutamine, With HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e46b7b0a77291a3690df5c77c127c833.jpg",
+    "url_slug": "welgene-ham-s-f-12-1x---lm010-02"
+  },
+  {
+    "id": "1cf4aa8c-b003-4aec-81aa-3941eb4614af",
+    "brand": "WELGENE",
+    "product_name": "Ham's F-12K(1X), LM010-03 Kaighn’s Modification, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-22de9e014b293baf7fc832f732f9f4c1.jpg",
+    "url_slug": "welgene-ham-s-f-12k-1x---lm010-03"
+  },
+  {
+    "id": "e91984c4-bc4a-4d67-b1b8-f0da24ef61c7",
+    "brand": "WELGENE",
+    "product_name": "Ham's F-12(1X), LM010-51 With 2 mM L-glutamine, With 1500 mg/L sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-7421222b5e08cd07443f388b85ae4b14.jpg",
+    "url_slug": "welgene-ham-s-f-12-1x---lm010-51"
+  },
+  {
+    "id": "f73cc165-02b1-41fd-a624-0a3f25ba1fd4",
+    "brand": "WELGENE",
+    "product_name": "Ham's F-12K(1X), LM010-52 Kaighn’s Modification,With 2 mM L-glutamine,With 1500 mg/L sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-18710b80c96820f4ab3ff342600c2433.jpg",
+    "url_slug": "welgene-ham-s-f-12k-1x---lm010-52"
+  },
+  {
+    "id": "0e0ed203-81ea-4477-a3f5-d6a1c3235930",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-01 With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-cf1590741af4ec6f3ff828dea6d92b40.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-01"
+  },
+  {
+    "id": "72c19ac7-9b3a-4ea4-b44a-7546549e49ec",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-02A With L-glutamine, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-138a941925ec4d6b2de49bdad7b328f7.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-02a"
+  },
+  {
+    "id": "364b9c67-0976-4417-b079-4d0c3e4f3e50",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-03 With L-glutamine, With 25 mM HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ddc1d06d596fdf1a56374367080c40a6.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-03"
+  },
+  {
+    "id": "77afa242-c4ab-4f06-ae0c-91f6bed86e89",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-04 With L-glutamine, With L-Methionline",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c4fa834e67c23090993e7aa1249aa4f7.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-04"
+  },
+  {
+    "id": "fb0df0e0-2a4f-4ab4-8043-e7caacf916db",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-05 Without L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1f062dfe1a321ed4b46c96ff4880dc05.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-05"
+  },
+  {
+    "id": "410de43a-6b80-4241-8a4c-9b91b9e82578",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-06 With 20 mM HEPES, With L-glutamine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-57bd9f09f3d8f5654dcfbc59cf07bad7.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-06"
+  },
+  {
+    "id": "62111ae1-7d22-4ea9-ac38-1ecdc12cda76",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-07 With L-glutamine, With 20 mM HEPES, With 1000 mg/L sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d9d13c8d7f3d4978fb3819e41ae3c7c7.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-07"
+  },
+  {
+    "id": "2489e132-5cbf-47df-8f44-c15e825eea7d",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-51 With 4500 mg/L D-glucose, 10 mM HEPES, 2mM L-glutamine, 1 mM sodium pyruvate, and 1500 mg/L sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5ed70041618bdd7f73e073eda7516fcf.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-51"
+  },
+  {
+    "id": "3f251695-d2d1-4f9b-88b6-9f7fdc7baaec",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(1X), LM011-60 With L-glutamine, Without D- glucose",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b428b745c391655e5fa66b338d31d169.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-1x---lm011-60"
+  },
+  {
+    "id": "a5c611f6-34eb-48e9-9abd-8313138cf903",
+    "brand": "WELGENE",
+    "product_name": "BME Basal Media Eagle, LM012-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a83eee041a112e73e1027aeaa13af8c4.jpg",
+    "url_slug": "welgene-bme-basal-media-eagle--lm012-01"
+  },
+  {
+    "id": "afa722f1-043a-4ef2-bb93-ae9f00f0c28d",
+    "brand": "WELGENE",
+    "product_name": "CMRL1066 Medium, LM013-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2e03f3e73892e622a12d89fb9483d4ab.jpg",
+    "url_slug": "welgene-cmrl1066-medium--lm013-01"
+  },
+  {
+    "id": "68de2164-b8e8-4f9f-90e4-59eb7a908e1b",
+    "brand": "WELGENE",
+    "product_name": "Fischer's medium, LM014-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b2ed4b79456053c42852e85a20e87f3b.jpg",
+    "url_slug": "welgene-fischer-s-medium--lm014-01"
+  },
+  {
+    "id": "0cf7bb79-8405-447e-8ab3-99cf3be5bd6c",
+    "brand": "WELGENE",
+    "product_name": "Waymouth MB 752/1 Medium, Liquid, LM015-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-363af2e78411f4b1d135648c7126cdc9.jpg",
+    "url_slug": "welgene-waymouth-mb-752-1-medium--liquid--lm015-01"
+  },
+  {
+    "id": "d8d18020-2c2c-487f-a094-28e6feebbc3e",
+    "brand": "WELGENE",
+    "product_name": "MCDB 105, LM016-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8c99b50717f3913d798618f66aa902bf.jpg",
+    "url_slug": "welgene-mcdb-105--lm016-01"
+  },
+  {
+    "id": "1d913282-29b7-458f-830c-64974cf09281",
+    "brand": "WELGENE",
+    "product_name": "MCDB 131, LM016-03",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-29b92966d46af576c9de1b11b824dee7.jpg",
+    "url_slug": "welgene-mcdb-131--lm016-03"
+  },
+  {
+    "id": "79356b3b-c840-497f-9787-5594f2eee6be",
+    "brand": "WELGENE",
+    "product_name": "MCDB 153, LM016-05",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-7db327cdd7150d0a428fbba960f97c89.jpg",
+    "url_slug": "welgene-mcdb-153--lm016-05"
+  },
+  {
+    "id": "f2d0892e-98dd-4959-81cb-fb7bd77010cd",
+    "brand": "WELGENE",
+    "product_name": "MCDB 201, LM016-06",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-229d761e3afbe71ddb7cf414e94e5b34.jpg",
+    "url_slug": "welgene-mcdb-201--lm016-06"
+  },
+  {
+    "id": "c621d78f-87d3-43e0-92ab-e53935430aa8",
+    "brand": "WELGENE",
+    "product_name": "MCDB 302, LM016-07",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-70cbc6657df950f7fde36ad013644f66.webp",
+    "url_slug": "welgene-mcdb-302--lm016-07"
+  },
+  {
+    "id": "68f641e8-ba44-4d90-9c13-74c6d8a66ddb",
+    "brand": "WELGENE",
+    "product_name": "William's medium, LM017-02",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e58a18739a8f7e3eb4472dc6ed8b9bf4.jpg",
+    "url_slug": "welgene-william-s-medium--lm017-02"
+  },
+  {
+    "id": "6aca82b6-0742-4649-9309-43a73c96cca8",
+    "brand": "WELGENE",
+    "product_name": "DMEM / F-12 3:1 Mixture, LM030-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ab4ca0c2279be7896274517087afb18d.jpg",
+    "url_slug": "welgene-dmem---f-12-3-1-mixture--lm030-01"
+  },
+  {
+    "id": "bb0923b2-b228-4e35-b4b8-3a01cf9ef48f",
+    "brand": "WELGENE",
+    "product_name": "DMEM(2X), LM201-50 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-990bf597689aeb6b8c97bad375388afd.jpg",
+    "url_slug": "welgene-dmem-2x---lm201-50"
+  },
+  {
+    "id": "a0e15ac6-a091-4ba6-8d18-d30dec5bb7d1",
+    "brand": "WELGENE",
+    "product_name": "DMEM(2X), LM201-51 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-18bd197c471b2aaf6b732df8c6df47f0.jpg",
+    "url_slug": "welgene-dmem-2x---lm201-51"
+  },
+  {
+    "id": "12bfbce2-5648-42d7-a461-d57b851678fd",
+    "brand": "WELGENE",
+    "product_name": "M199(2X), LM202-50 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1a6233c1b329aa7954c9e32d30c4bc35.jpg",
+    "url_slug": "welgene-m199-2x---lm202-50"
+  },
+  {
+    "id": "444c23d6-474f-43a7-b3ad-396da4ceea75",
+    "brand": "WELGENE",
+    "product_name": "M199(2X), LM202-51 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d5805a0ad76d6f52fe96c0ab829e0941.jpg",
+    "url_slug": "welgene-m199-2x---lm202-51"
+  },
+  {
+    "id": "97650330-73ce-49ae-bdaf-5b321c31c128",
+    "brand": "WELGENE",
+    "product_name": "MEM Minimum Essential Medium Eagle(2X), LM203-50 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b84f371797d3374d42321a44e30649ed.jpg",
+    "url_slug": "welgene-mem-minimum-essential-medium-eagle-2x---lm203-50"
+  },
+  {
+    "id": "1f527641-cd07-4eb6-a330-cda46dfe49e0",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium (2X), Liquid (LM204-01)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a41f4a7b3471a386f136e3a952a2f35c.jpg",
+    "url_slug": "welgene-rpmi-1640-medium--2x---liquid--lm204-01-"
+  },
+  {
+    "id": "588e2a0d-390e-478b-82c4-b59c4a4f10d0",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(2X), LM204-50 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1da0c40b5174083305ccccf63032a9c0.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-2x---lm204-50"
+  },
+  {
+    "id": "259b4497-39d9-4fce-b511-594d394057f0",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Medium(2X), LM204-51 With L-glutamine, Without sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d62969c73620336c3e849e4479041216.jpg",
+    "url_slug": "welgene-rpmi-1640-medium-2x---lm204-51"
+  },
+  {
+    "id": "e7821304-782b-4326-8ff5-1e22c1c2cee3",
+    "brand": "WELGENE",
+    "product_name": "Protein-Free CHO Medium, PF486A Animal Componet-Free, Culture of CHO cell",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-fd1f78dd01ac5c3da1b3f8cc192506cd.jpg",
+    "url_slug": "welgene-protein-free-cho-medium--pf486a"
+  },
+  {
+    "id": "4a89166c-e499-4cbc-a72e-0f659b3205e2",
+    "brand": "WELGENE",
+    "product_name": "Serum-Free Hybridoma Medium, SF401 Culture of Hybridoma cell",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-47f6215927d491ce06e613adb0faedab.jpg",
+    "url_slug": "welgene-serum-free-hybridoma-medium--sf401"
+  },
+  {
+    "id": "c5f8dde0-ad7e-4c21-baff-40f15774a918",
+    "brand": "WELGENE",
+    "product_name": "Serum-Free CHO Medium, SF486 Culture of CHO cell",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-77212c9538481ac7a4d77347e2e79c91.jpg",
+    "url_slug": "welgene-serum-free-cho-medium--sf486"
+  },
+  {
+    "id": "f2c43a18-5fc8-46aa-877d-75bab5cee204",
+    "brand": "WELGENE",
+    "product_name": "Grace’s Insect Medium(1X), LM501-01 With L-glutamine,  With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-fcfe6ce06a443ac32b6ff2c1cee91b91.jpg",
+    "url_slug": "welgene-grace-s-insect-medium-1x---lm501-01"
+  },
+  {
+    "id": "ad7a69fb-e941-4dc6-a5f2-5fce14784357",
+    "brand": "WELGENE",
+    "product_name": "IPL-41 Insect Medium(1X), LM502-01 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e0f88126a3b4a63ccc2dc7a31c154295.jpg",
+    "url_slug": "welgene-ipl-41-insect-medium-1x---lm502-01"
+  },
+  {
+    "id": "1354713f-c310-479f-a761-1814f180707c",
+    "brand": "WELGENE",
+    "product_name": "Schneider’s Insect Medium(1X), LM503-01 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8f2d0c2438b66dd6f98200a65874a3a6.jpg",
+    "url_slug": "welgene-schneider-s-insect-medium-1x---lm503-01"
+  },
+  {
+    "id": "bf8ede43-f32b-4745-b083-7f942e3324a6",
+    "brand": "WELGENE",
+    "product_name": "Shields and Sang M3 Insect Medium(1X), LM504-01 With L-glutamine, With potassium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ee891e4c403db5f9436a5580dc919ba8.jpg",
+    "url_slug": "welgene-shields-and-sang-m3-insect-medium-1x---lm504-01"
+  },
+  {
+    "id": "7a8bb52f-e89e-4e0e-8d82-a662ec6e679c",
+    "brand": "WELGENE",
+    "product_name": "TC-100 Insect Medium(1X), LM505-01 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-589234d9ee664a9f9d8c162b136d0c68.jpg",
+    "url_slug": "welgene-tc-100-insect-medium-1x---lm505-01"
+  },
+  {
+    "id": "a11852c7-eafd-4737-851e-b35c65b2740b",
+    "brand": "WELGENE",
+    "product_name": "TNM-FH Insect Medium(1X), LM506-01 With L-glutamine, With sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2fc2672d205b882e29daf3022ef5454a.jpg",
+    "url_slug": "welgene-tnm-fh-insect-medium-1x---lm506-01"
+  },
+  {
+    "id": "4a39147f-62e5-43f1-9f3a-16dbffd120a5",
+    "brand": "WELGENE",
+    "product_name": "LB Broth, MM001-01 Lennox' LB(Luria-Bertani) Medium",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-28b6df99a979bd101f06527358c78db7.jpg",
+    "url_slug": "welgene-lb-broth--mm001-01"
+  },
+  {
+    "id": "fee6a32f-9a16-435c-a1e8-fc739e524dc2",
+    "brand": "WELGENE",
+    "product_name": "Miller's LB Broth, MM002-01 Miller’s LB(Luria-Bertani) Medium",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a5e18b7315b12b3a05b2e9456f06f6ef.jpg",
+    "url_slug": "welgene-miller-s-lb-broth--mm002-01"
+  },
+  {
+    "id": "649ae73a-9a30-4595-9358-7c59da28ef63",
+    "brand": "WELGENE",
+    "product_name": "5X M9 Minimal Salt, MM003-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6cc7f63729f3cf7ea08d30cbdf888b03.jpg",
+    "url_slug": "welgene-5x-m9-minimal-salt--mm003-01"
+  },
+  {
+    "id": "c49c1bd1-4155-49d4-b306-d727db302d37",
+    "brand": "WELGENE",
+    "product_name": "M9 Minimal Medium, MM004-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f7e2d78138acf4658d626647c1c361cd.jpg",
+    "url_slug": "welgene-m9-minimal-medium--mm004-01"
+  },
+  {
+    "id": "d4836aaa-c9c1-4aeb-8eee-bb6908aff061",
+    "brand": "WELGENE",
+    "product_name": "NZCYM Broth, MM005-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-eec601f926c6347f9718b85667181110.jpg",
+    "url_slug": "welgene-nzcym-broth--mm005-01"
+  },
+  {
+    "id": "8d3412c7-bd22-4e06-baad-9d4946f08e6e",
+    "brand": "WELGENE",
+    "product_name": "SOC Medium, MM006-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8afa68e07a11a11acace460246140e80.jpg",
+    "url_slug": "welgene-soc-medium--mm006-01"
+  },
+  {
+    "id": "ba8c54af-75cd-46ce-b7bc-dd2862560586",
+    "brand": "WELGENE",
+    "product_name": "2X YT, MM008-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-513f1d81cd4c5178116a59746afe5228.jpg",
+    "url_slug": "welgene-2x-yt--mm008-01"
+  },
+  {
+    "id": "f30cd863-38a6-4ffc-9685-73b2b834ee68",
+    "brand": "WELGENE",
+    "product_name": "GYT Medium, MM009-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c11889032194bbf791029cd2e5a91039.jpg",
+    "url_slug": "welgene-gyt-medium--mm009-01"
+  },
+  {
+    "id": "1e04fe2f-6dc6-4545-b138-3002727e6e18",
+    "brand": "WELGENE",
+    "product_name": "NZYM Medium, MM010-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0e2d098245ecd0a0e01493dfc90ba6fe.jpg",
+    "url_slug": "welgene-nzym-medium--mm010-01"
+  },
+  {
+    "id": "dbfddb80-6daa-4377-98fb-4e28258531d2",
+    "brand": "WELGENE",
+    "product_name": "NZM Medium, MM011-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e9561b7f92d9e33f09031acfa3ede9f4.jpg",
+    "url_slug": "welgene-nzm-medium--mm011-01"
+  },
+  {
+    "id": "840e2fe6-875b-465a-89e1-e4b16e82e4c6",
+    "brand": "WELGENE",
+    "product_name": "Terrific Broth (TB), MM012-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-fb88b7094d33bf1cab60203a6f5c587e.jpg",
+    "url_slug": "welgene-terrific-broth--tb---mm012-01"
+  },
+  {
+    "id": "ca3685f5-9cc2-469f-b38d-dca44738c6cb",
+    "brand": "WELGENE",
+    "product_name": "Cell Freezing Medium-DMSO(1X), FM001-01 MEM Base with 10% DMSO and 10% FBS",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2a895930bbd5d4e2467ae3a7e1c51fd6.jpg",
+    "url_slug": "welgene-cell-freezing-medium-dmso-1x---fm001-01"
+  },
+  {
+    "id": "a8c5dd60-0e37-4b4a-b78c-6ef3a508abb7",
+    "brand": "WELGENE",
+    "product_name": "Cell Freezing Medium-DMSO(1X), FM001-02 MEM Base with 10% DMSO and 10% BCS",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b4b3975d31ca654466a33d38d600c6c0.jpg",
+    "url_slug": "welgene-cell-freezing-medium-dmso-1x---fm001-02"
+  },
+  {
+    "id": "2467c38f-47e2-4808-91d6-81d938d7d0c5",
+    "brand": "WELGENE",
+    "product_name": "Cell culture Freezing Medium, FM001-04 MEM Base with 10% Glycerol and 10% BCS",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d58d4e68348a345a95290b3b84bddaba.jpg",
+    "url_slug": "welgene-cell-culture-freezing-medium--fm001-04"
+  },
+  {
+    "id": "a5081a86-68b6-448c-afbc-ea801e616fe4",
+    "brand": "WELGENE",
+    "product_name": "Freezel, RU010-01 Cell Freezing medium",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f4385c04fd00d42a9a3ef23bfb560262.jpg",
+    "url_slug": "welgene-freezel--ru010-01"
+  },
+  {
+    "id": "3c3b923b-9893-4f0b-91f3-0b7dc455fa14",
+    "brand": "WELGENE",
+    "product_name": "Gentamicin Solution, LS201-01 Gentamicin Sulfate 10 mg/mL",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-460e7f3af29c4a9e2b7961e229c95a35.jpg",
+    "url_slug": "welgene-gentamicin-solution--ls201-01"
+  },
+  {
+    "id": "98f2a86d-813b-408b-a0d1-3ac587a99f7f",
+    "brand": "WELGENE",
+    "product_name": "Penicillin-Streptomycin(50X),LS202-01 penicillin 5,000 units/mL, streptomycin 5,000 μg/mL",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-eca963fbb4ae494e2283375d12d09e4a.jpg",
+    "url_slug": "welgene-penicillin-streptomycin-50x--ls202-01"
+  },
+  {
+    "id": "ed93d387-3f8d-494a-9903-76c9630883cf",
+    "brand": "WELGENE",
+    "product_name": "Penicillin-Streptomycin(100X),LS202-02 penicillin 10,000 units/mL, streptomycin 10,000 μg/mL",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d85ff2914222f5fa373aef2212262d60.jpg",
+    "url_slug": "welgene-penicillin-streptomycin-100x--ls202-02"
+  },
+  {
+    "id": "8d82a716-2adc-44f0-ace8-b89784308525",
+    "brand": "WELGENE",
+    "product_name": "Antibiotic Antimycotic (100X),LS203-01 Penicillin 10,000 units/mL, Streptomycin Sulfate 10 mg/mL, Amphotericin B 25 μg/mL",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-bacb3650dd0284ea31fa01ec42e6d287.jpg",
+    "url_slug": "welgene-antibiotic-antimycotic--100x--ls203-01"
+  },
+  {
+    "id": "1b8421e6-11dc-48d4-8acd-87dd4f8b4a83",
+    "brand": "WELGENE",
+    "product_name": "Antimycotic (0.25 mg/ml), LS204-01 Amphotericin B 0.25 mg/mL, Sodium Desoxycholate 0.194 mg/mL",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1bd5fa71b1c13d2db42f9ad149b8d759.jpg",
+    "url_slug": "welgene-antimycotic--0-25-mg-ml---ls204-01"
+  },
+  {
+    "id": "51262c59-3dc6-4b8b-bad4-775eeaf75464",
+    "brand": "WELGENE",
+    "product_name": "Geneticin Solution, LS205-01 G418 Sulfate (Geneticin®) Solution 50 mg/mL",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6b319418027598670fe2152e3bd628b1.jpg",
+    "url_slug": "welgene-geneticin-solution--ls205-01"
+  },
+  {
+    "id": "57fabadc-7d12-4b8d-95d1-9f164d3c36b2",
+    "brand": "WELGENE",
+    "product_name": "Kanamycin Solution, LS206-01 Kanamycin 50 mg/mL",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-89d1fc1d9e9f37810a6ad65b7a1a19a5.jpg",
+    "url_slug": "welgene-kanamycin-solution--ls206-01"
+  },
+  {
+    "id": "1306370d-ef25-424f-b164-44a8b11d6590",
+    "brand": "WELGENE",
+    "product_name": "Trypsin-EDTA (1X), LS015-01 0.05%, 0.53 mM EDTA, HBSS, With phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b375cbd3ddaf4d7cdd5de29bf323f19b.jpg",
+    "url_slug": "welgene-trypsin-edta--1x---ls015-01"
+  },
+  {
+    "id": "33aea263-4689-46fd-a87e-84dbd41be1ce",
+    "brand": "WELGENE",
+    "product_name": "Trypsin-EDTA (10X), LS015-02 0.5%, 5.3 mM EDTA, 0.9% NaCl, With phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e4497cd3eb51ab37deedac2dd943bad7.jpg",
+    "url_slug": "welgene-trypsin-edta--10x---ls015-02"
+  },
+  {
+    "id": "dfec1bce-0e6c-419c-ade9-4e651c11cd52",
+    "brand": "WELGENE",
+    "product_name": "Trypsin (1X), LS015-03 0.25%, HBSS, With phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-476938abe899d6f16667b7842cb32dd5.jpg",
+    "url_slug": "welgene-trypsin--1x---ls015-03"
+  },
+  {
+    "id": "9a07ca9c-9b08-4aa9-aa04-13867e6c767d",
+    "brand": "WELGENE",
+    "product_name": "Trypsin (10X), LS015-04 2.5%, HBSS, With phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3da47670c9843bafc0e2d7bdebc23e05.jpg",
+    "url_slug": "welgene-trypsin--10x---ls015-04"
+  },
+  {
+    "id": "6523eca6-ec35-4843-a259-272d090cb673",
+    "brand": "WELGENE",
+    "product_name": "EDTA Solution, LS015-06 0.53 mM EDTA, DPBS, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-383d78ab5579c26754ca691e88ab01da.jpg",
+    "url_slug": "welgene-edta-solution--ls015-06"
+  },
+  {
+    "id": "d3baf748-94ea-4aee-a22c-6766dd967eb8",
+    "brand": "WELGENE",
+    "product_name": "Trypsin (10X), LS015-07 2.5%, 0.9% NaCl, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-9a57219dede4797bdcc66f4fae71d160.jpg",
+    "url_slug": "welgene-trypsin--10x---ls015-07"
+  },
+  {
+    "id": "9447cc89-8fb5-49e8-99fb-293d3beca72b",
+    "brand": "WELGENE",
+    "product_name": "Trypsin-EDTA (10X), LS015-08 0.5%, 5.3 mM EDTA, 0.9% NaCl, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d08653563c3762fd9d168b0536200a93.jpg",
+    "url_slug": "welgene-trypsin-edta--10x---ls015-08"
+  },
+  {
+    "id": "cd708c16-1ecf-443f-8b18-fb6fe01949c1",
+    "brand": "WELGENE",
+    "product_name": "Trypsin-EDTA (1X), LS015-09 0.05%, 0.53 mM EDTA, HBSS, Without phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0b55f59f8662013e603cc5738c98e0d2.jpg",
+    "url_slug": "welgene-trypsin-edta--1x---ls015-09"
+  },
+  {
+    "id": "d374019a-fc5a-4e77-864c-f2a91d81e5a1",
+    "brand": "WELGENE",
+    "product_name": "Trypsin-EDTA (1X), LS015-10 0.25%, 1 mM EDTA, HBSS, With phenol red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f143d8114b5f6c8c0bdbc6f72a5bc03c.jpg",
+    "url_slug": "welgene-trypsin-edta--1x---ls015-10"
+  }
+]

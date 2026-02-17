@@ -16,6 +16,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",
     "axios": "^1.13.2",
+    "cheerio": "^1.2.0",
     "fast-xml-parser": "^5.3.3",
     "i18next": "^25.8.0",
     "i18next-browser-languagedetector": "^8.2.0",

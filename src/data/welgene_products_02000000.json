@@ -1,0 +1,106 @@
+[
+  {
+    "id": "51042478-f9f5-4fd6-bee6-c6e439d16a08",
+    "brand": "WELGENE",
+    "product_name": "FBS Premium, S001-01 Fetal Bovine Serum",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0702417c7088536074b0cb3cacacc9d7.jpg",
+    "url_slug": "welgene-fbs-premium--s001-01"
+  },
+  {
+    "id": "27e7d9d1-fa9f-4ebd-83da-26aeb2e5ab26",
+    "brand": "WELGENE",
+    "product_name": "FBS, Stem Cell, S001-04 Fetal Bovine Serum, Stem Cell Qualified",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2e94fd7d8f52ea32a60737a6b38622a3.jpg",
+    "url_slug": "welgene-fbs--stem-cell--s001-04"
+  },
+  {
+    "id": "bd485400-876b-4fe4-a560-3d7c0b7f0182",
+    "brand": "WELGENE",
+    "product_name": "FBS, Dialyzed, S001-05 Fetal Bovine Serum, Dialyzed",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-11e8324f977210d9397e659659699796.jpg",
+    "url_slug": "welgene-fbs--dialyzed--s001-05"
+  },
+  {
+    "id": "33132aa6-67e5-4210-aaf3-9b2dd34f60dd",
+    "brand": "WELGENE",
+    "product_name": "FBS Certified, S001-07 Fetal Bovine Serum",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c5d0df291e2f203ff2b55d8a6488c6fc.jpg",
+    "url_slug": "welgene-fbs-certified--s001-07"
+  },
+  {
+    "id": "69a9ae14-1b8b-4fa0-925a-37e70692e830",
+    "brand": "WELGENE",
+    "product_name": "FBS, IgG Depleted, S001-09 Fetal Bovine Serum, IgG Depleted",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b0d56d498357e07211e0b75873df1dfa.jpg",
+    "url_slug": "welgene-fbs--igg-depleted--s001-09"
+  },
+  {
+    "id": "e9cd0dd9-db1e-42cf-943f-6ad135a994c5",
+    "brand": "WELGENE",
+    "product_name": "FBS Premium, Heat, S101-01 Fetal Bovine Serum, Heat-Inactivated",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ff8e8daff8b55f5042efff33141a5b22.jpg",
+    "url_slug": "welgene-fbs-premium--heat--s101-01"
+  },
+  {
+    "id": "f8a50452-81e6-432a-a1c7-5dffb090795e",
+    "brand": "WELGENE",
+    "product_name": "FBS, Stem Cell, Heat, S101-04 Fetal Bovine Serum, Stem Cell-Qualified, Heat-Inactivated",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b1589d9028131972640c93c80504462f.jpg",
+    "url_slug": "welgene-fbs--stem-cell--heat--s101-04"
+  },
+  {
+    "id": "bf6969cd-f670-44e3-8fdf-484052359c94",
+    "brand": "WELGENE",
+    "product_name": "FBS, Dialyzed, Heat, S101-05 Fetal Bovine Serum, Dialyzed,Heat-Inactivated",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-4c795057a63585f4547658aa7c1902a9.jpg",
+    "url_slug": "welgene-fbs--dialyzed--heat--s101-05"
+  },
+  {
+    "id": "0b54a58a-dd2d-456f-9e2d-3a90c70ce679",
+    "brand": "WELGENE",
+    "product_name": "FBS Certified, Heat, S101-07 Fetal Bovine Serum, Heat-Inactivated",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8dc4be33cdd68ec126955af80f1f6057.jpg",
+    "url_slug": "welgene-fbs-certified--heat--s101-07"
+  },
+  {
+    "id": "9a740773-048f-4264-9a4a-e1964fac97db",
+    "brand": "WELGENE",
+    "product_name": "FBS, IgG Depleted, Heat, S101-09 Fetal Bovine Serum, IgG Depleted,Heat-Inactivated",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-74a019a5efe436ea149b2fda3f97bfff.jpg",
+    "url_slug": "welgene-fbs--igg-depleted--heat--s101-09"
+  },
+  {
+    "id": "47fa2bb7-53b1-4d40-a8b4-8d9fd7b9c4e9",
+    "brand": "WELGENE",
+    "product_name": "BCS, S003-01 Bovine Calf Serum",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5aa44624d0d13a89cc06f348e149a3b0.jpg",
+    "url_slug": "welgene-bcs--s003-01"
+  },
+  {
+    "id": "2a8c1e31-26e9-46a1-84ab-44d2bbff05d5",
+    "brand": "WELGENE",
+    "product_name": "BCS, Heat, S103-01 Bovine Calf Serum, Heat-Inactivated",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-81338698dd0e31f364db56cfd6d03dd0.jpg",
+    "url_slug": "welgene-bcs--heat--s103-01"
+  },
+  {
+    "id": "5ed617c1-bddd-417d-89f7-757846bf29b2",
+    "brand": "WELGENE",
+    "product_name": "Fetalgro EX, S007-01 Bovine Growth Serum",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-289e55b71cb8aac00bc1f343acc94296.jpg",
+    "url_slug": "welgene-fetalgro-ex--s007-01"
+  }
+]
