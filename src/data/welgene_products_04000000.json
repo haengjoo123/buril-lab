@@ -1,0 +1,1218 @@
+[
+  {
+    "id": "3aeed943-34e5-4610-a8f4-0a2de6e8ffbd",
+    "brand": "WELGENE",
+    "product_name": "DPBS (1X), LB001-01 With Calcium chloride, Magnesium chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ceacb975426c92d6c72a9f993ab43043.jpg",
+    "url_slug": "welgene-dpbs--1x---lb001-01"
+  },
+  {
+    "id": "750f03e2-b09c-43a5-a6b6-db5c1a7065f7",
+    "brand": "WELGENE",
+    "product_name": "DPBS (1X), LB001-02 Without Calcium chloride, Magnesium chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-95c811bd255efdaff12e56e5b3eb5991.jpg",
+    "url_slug": "welgene-dpbs--1x---lb001-02"
+  },
+  {
+    "id": "7011190e-702f-408b-b2db-bfd59da02724",
+    "brand": "WELGENE",
+    "product_name": "DPBS (1X), LB001-03 With calciumchloride, magnesium chloride, Phenol Red, Sodium Pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c1c431619235ff01b2df233bb6e54d34.jpg",
+    "url_slug": "welgene-dpbs--1x---lb001-03"
+  },
+  {
+    "id": "5f6dc897-a87f-4c16-a2c8-2162ea792f99",
+    "brand": "WELGENE",
+    "product_name": "DPBS (1X), LB001-04 With calcium, magnesium, D-Glucose, Sodium Pyruvate/ Without Phenol Red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5584a58407dd30394a6021fd5a00764b.jpg",
+    "url_slug": "welgene-dpbs--1x---lb001-04"
+  },
+  {
+    "id": "17586416-e727-45ae-94cb-3a6d4cc7aef5",
+    "brand": "WELGENE",
+    "product_name": "DPBS (10X), LB201-01 With Calcium chloride, Magnesium chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b891c324ef3ae1d95f19549819ff81b7.jpg",
+    "url_slug": "welgene-dpbs--10x---lb201-01"
+  },
+  {
+    "id": "aab36d46-ece9-4771-9fb0-bcd1f49c3347",
+    "brand": "WELGENE",
+    "product_name": "DPBS (10X), LB201-02 Without Calcium chloride, Magnesium chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a5d5ac52b131cf2496ec5ca28cf4ba2b.jpg",
+    "url_slug": "welgene-dpbs--10x---lb201-02"
+  },
+  {
+    "id": "fdd0aced-8599-4177-ad9c-c521e0546dbe",
+    "brand": "WELGENE",
+    "product_name": "EBSS (1X), LB002-01 With Calcium Chloride, Magnesium Sulfate, Phenol Red, sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2bc4ab1a2783b2abed26b8a511ce9178.jpg",
+    "url_slug": "welgene-ebss--1x---lb002-01"
+  },
+  {
+    "id": "2c1f29fb-448b-49ac-a19f-ce35cef96e76",
+    "brand": "WELGENE",
+    "product_name": "EBSS (1X), LB002-02 Without Calcium Chloride, Magnesium Sulfate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-65b8468f16dc492c5d8d7c1517a0f0e7.jpg",
+    "url_slug": "welgene-ebss--1x---lb002-02"
+  },
+  {
+    "id": "90cfd93d-99ec-45c4-a3e0-ef74f151452f",
+    "brand": "WELGENE",
+    "product_name": "EBSS (1X), LB002-03 Without Phenol Red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-520f6baf840c466f84254668f55efc7e.jpg",
+    "url_slug": "welgene-ebss--1x---lb002-03"
+  },
+  {
+    "id": "30025e7b-a27b-44a2-b873-419c547f0f17",
+    "brand": "WELGENE",
+    "product_name": "EBSS (1X), LB002-04 Without Phenol Red, Calcium Chloride, Magnesium Sulfate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1c910b1bd4757335832ff51f5f6d43a5.jpg",
+    "url_slug": "welgene-ebss--1x---lb002-04"
+  },
+  {
+    "id": "048b1e53-dceb-46f6-8fed-3705314ee3f1",
+    "brand": "WELGENE",
+    "product_name": "EBSS (10X), LB202-03 Without Sodium Bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-9d4bd9ddf321c7583d8a6292039e1b85.jpg",
+    "url_slug": "welgene-ebss--10x---lb202-03"
+  },
+  {
+    "id": "fa5a226b-b2b7-43ec-93a7-4c2befd67f98",
+    "brand": "WELGENE",
+    "product_name": "EBSS (10X), LB202-04 Without Calcium Chloride, Magnesium Sulfate, Sodium Bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ea10313c74f44b51a83ed949c161c7bc.jpg",
+    "url_slug": "welgene-ebss--10x---lb202-04"
+  },
+  {
+    "id": "809650f5-9105-4cf3-9c51-209b859074ca",
+    "brand": "WELGENE",
+    "product_name": "HBSS (1X), LB003-01 With Phenol Red, calcium chloride, magnesium sulfate, sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5795073b5c5d4daaef66a036424977e4.jpg",
+    "url_slug": "welgene-hbss--1x---lb003-01"
+  },
+  {
+    "id": "686f3ffb-b808-4d67-b766-dd475a44092b",
+    "brand": "WELGENE",
+    "product_name": "HBSS (1X), LB003-02 Without Phenol Red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-52a3ea9a61639f3d8fa5e024f146dfd2.jpg",
+    "url_slug": "welgene-hbss--1x---lb003-02"
+  },
+  {
+    "id": "3c11c877-b51b-4c3b-858a-bc98d7403e7b",
+    "brand": "WELGENE",
+    "product_name": "HBSS (1X), LB003-03 Without Calcium Chloride, Magnesium Sulfate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ac6ec11cacd986f6efea9f22afb0eb05.jpg",
+    "url_slug": "welgene-hbss--1x---lb003-03"
+  },
+  {
+    "id": "91241c6f-3cce-46df-8ef4-46a92f2e21de",
+    "brand": "WELGENE",
+    "product_name": "HBSS (1X), LB003-04 Without Phenol Red, Calcium Chloride, Magnesium Chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-286812b574ea71d31cc0048691398326.jpg",
+    "url_slug": "welgene-hbss--1x---lb003-04"
+  },
+  {
+    "id": "7bf50931-7d47-4e75-b7a2-4d0e6a7dcf32",
+    "brand": "WELGENE",
+    "product_name": "HBSS (10X), LB203-03 Without Sodium Bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a9d9cc3406a1bf3d8b8ec2123549917b.jpg",
+    "url_slug": "welgene-hbss--10x---lb203-03"
+  },
+  {
+    "id": "1768d9eb-a4cf-4038-8020-6efa00385c8c",
+    "brand": "WELGENE",
+    "product_name": "HBSS (10X), LB203-04 Without Phenol Red, Sodium Bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-53c87299bf410a6fd6eff9931511119d.jpg",
+    "url_slug": "welgene-hbss--10x---lb203-04"
+  },
+  {
+    "id": "319c40cf-2beb-4b26-96b3-5bbd65777cb5",
+    "brand": "WELGENE",
+    "product_name": "HBSS (10X), LB203-05 Without Calcium Chloride, Magnesium Sulfate, Sodium bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e4629411b034e857c5274009bcc5e028.jpg",
+    "url_slug": "welgene-hbss--10x---lb203-05"
+  },
+  {
+    "id": "8ca6340b-13b6-4e6e-b0ed-7758fcb66cec",
+    "brand": "WELGENE",
+    "product_name": "HBSS (10X), LB203-06 Without Phenol Red, Calcium Chloride, Magnesium Sulfate, Sodium Bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c0026311be79ad13c1e974c175b758f9.jpg",
+    "url_slug": "welgene-hbss--10x---lb203-06"
+  },
+  {
+    "id": "0c878c3e-982e-4992-a0cb-c22bd19d571d",
+    "brand": "WELGENE",
+    "product_name": "PBS (1X), LB004-01 pH7.2, For cell culture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f3297d02c54b2de925d3be7874fb9f7f.jpg",
+    "url_slug": "welgene-pbs--1x---lb004-01"
+  },
+  {
+    "id": "62574005-41d3-40af-b38a-5626f4036134",
+    "brand": "WELGENE",
+    "product_name": "PBS (1X), LB004-02 pH7.4, For cell culture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ad7fb07607fb5f795826a354a72a426a.jpg",
+    "url_slug": "welgene-pbs--1x---lb004-02"
+  },
+  {
+    "id": "35548b26-4ebf-4293-aaaa-d60f2801334d",
+    "brand": "WELGENE",
+    "product_name": "PBS (10X), LB204-01 pH7.2, For cell culture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1d5a0a0e80969f7818885c7e3bf1509b.jpg",
+    "url_slug": "welgene-pbs--10x---lb204-01"
+  },
+  {
+    "id": "1a6948df-ae4b-47e1-853d-c4f5076d78da",
+    "brand": "WELGENE",
+    "product_name": "PBS (10X), LB204-02 pH7.4, For cell culture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d4a23d3d24242610fd1652d4e572f789.jpg",
+    "url_slug": "welgene-pbs--10x---lb204-02"
+  },
+  {
+    "id": "9b193ea0-f7b6-4c4e-9ab3-74d27c662b03",
+    "brand": "WELGENE",
+    "product_name": "Poly-D-Lysine, LS301-01 Cell Adhesion Coating Solution",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-424d312df332626c550a4a886fa4960a.jpg",
+    "url_slug": "welgene-poly-d-lysine--ls301-01"
+  },
+  {
+    "id": "759bd53b-3eb1-4c7f-8c2a-d8c06f3dd598",
+    "brand": "WELGENE",
+    "product_name": "HEPES buffer solution (1 M), BB001-01 238.3 g/L HEPES",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-973cb38c289bd377ddfe0d3973c50211.jpg",
+    "url_slug": "welgene-hepes-buffer-solution--1-m---bb001-01"
+  },
+  {
+    "id": "6ccd485a-14ac-478c-8e82-32dde2f401ee",
+    "brand": "WELGENE",
+    "product_name": "Sodium Bicarbonate (7.5%), BB002-01 75 g/L Sodium Bicarbonate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6e7512cb18b30230bc4b9d16bf3aaaac.jpg",
+    "url_slug": "welgene-sodium-bicarbonate--7-5----bb002-01"
+  },
+  {
+    "id": "0e2aec44-f487-47c7-8801-6319fd96651f",
+    "brand": "WELGENE",
+    "product_name": "D-glucose Solution (10%), LS001-01 100 g/L D-glucose",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-de1d1a1528a0fc5ab1ef087fabd85e29.jpg",
+    "url_slug": "welgene-d-glucose-solution--10----ls001-01"
+  },
+  {
+    "id": "612f6f9b-aeff-41b6-a128-b1d12a58694e",
+    "brand": "WELGENE",
+    "product_name": "D-glucose Solution (45%), LS001-02 450 g/L D-glucose",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-734fbd274f2e7273d4381ad0f31bc836.jpg",
+    "url_slug": "welgene-d-glucose-solution--45----ls001-02"
+  },
+  {
+    "id": "842de47f-b0f4-4139-ab39-e45f407b2d9e",
+    "brand": "WELGENE",
+    "product_name": "L-glutamine Solution (200 mM), LS002-01 29.2 mg/mL L-glutamine in 0.85% NaCl Solution",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a192f85755781a1b7e9c873415a2ff62.jpg",
+    "url_slug": "welgene-l-glutamine-solution--200-mm---ls002-01"
+  },
+  {
+    "id": "266b9f97-d725-4eec-8365-a11129b5c81c",
+    "brand": "WELGENE",
+    "product_name": "Hydrochloric Acid Solution (1 N), LS003-02 pH Control",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d3d8ae858a9b86a04293fb023e3db51d.jpg",
+    "url_slug": "welgene-hydrochloric-acid-solution--1-n---ls003-02"
+  },
+  {
+    "id": "719f57aa-4ca1-4d43-8802-d10b24abe57d",
+    "brand": "WELGENE",
+    "product_name": "MEM Amino Acid Solution, LS004-01 Essential Amino Acids Mixtures",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a7b968b397071d30e53d62aa1e4bd098.jpg",
+    "url_slug": "welgene-mem-amino-acid-solution--ls004-01"
+  },
+  {
+    "id": "632c1645-1965-48fa-8d6a-31dc5019f87f",
+    "brand": "WELGENE",
+    "product_name": "MEM (NEAA Solution), LS005-01 Non-Eessential Amino Acids Mixture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-7a9ddd173fe51513dd0ba616adb40b5b.jpg",
+    "url_slug": "welgene-mem--neaa-solution---ls005-01"
+  },
+  {
+    "id": "073ffc78-e7b4-469e-b27a-7cea748f9860",
+    "brand": "WELGENE",
+    "product_name": "MEM Vitamin Solution (100X),LS006-01 Cell Culture Additive",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-7d9930ea27c77d01cc2c3865388d69b4.jpg",
+    "url_slug": "welgene-mem-vitamin-solution--100x--ls006-01"
+  },
+  {
+    "id": "6150e8fd-56cc-42e5-890b-cf7f4ea7fb31",
+    "brand": "WELGENE",
+    "product_name": "Phenol Red Solution (0.5%), LS008-01 pH Indicator",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-4f5d851cabb27acc128cdcf0255a0c59.jpg",
+    "url_slug": "welgene-phenol-red-solution--0-5----ls008-01"
+  },
+  {
+    "id": "f10bbb1d-38b3-4e30-82c7-0769fa40fc2f",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Amino Acid Soluton, LS009-01 Essential Amino Acids Mixtures",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b5d60310328533432954c5448c9377f8.jpg",
+    "url_slug": "welgene-rpmi-1640-amino-acid-soluton--ls009-01"
+  },
+  {
+    "id": "e9412a17-10a5-4ac9-b48c-fe66d871c2d5",
+    "brand": "WELGENE",
+    "product_name": "RPMI 1640 Vitamins, LS010-01 Cell Culture Additive",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8fc6b0a236e976eac16e95c6a3057844.jpg",
+    "url_slug": "welgene-rpmi-1640-vitamins--ls010-01"
+  },
+  {
+    "id": "4c5ddd1b-aa18-4573-a0d3-70381912c0de",
+    "brand": "WELGENE",
+    "product_name": "Sodium Chloride Soluton (0.9%), LS011-01 9 g/L Sodium Chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-83d05272ad7ac5a8f36b43ffb17d022c.jpg",
+    "url_slug": "welgene-sodium-chloride-soluton--0-9----ls011-01"
+  },
+  {
+    "id": "c22bbe8e-ff09-42cc-a0a7-55d8aa531551",
+    "brand": "WELGENE",
+    "product_name": "Sodium Hydroxide Solution (0.5 N), LS012-01 20 g/L Sodium Hydroxide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c5006ec0fc5fcec49577aeb7ee58e955.jpg",
+    "url_slug": "welgene-sodium-hydroxide-solution--0-5-n---ls012-01"
+  },
+  {
+    "id": "4fc6a6ee-b168-4748-b2b8-a12840b334a0",
+    "brand": "WELGENE",
+    "product_name": "Sodium Hydroxide Solution (1 N), LS012-02 40 g/L Sodium Hydroxide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-179e2148648f00bfdc2a38e51996606e.jpg",
+    "url_slug": "welgene-sodium-hydroxide-solution--1-n---ls012-02"
+  },
+  {
+    "id": "c1f4534e-45d7-48f4-9969-b654cc86f802",
+    "brand": "WELGENE",
+    "product_name": "Sodium Pyruvate (100 mM), LS013-01 11 mg/ml Sodium Pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3ca15cbc81dc04d4f5a0e57d09f59cd7.jpg",
+    "url_slug": "welgene-sodium-pyruvate--100-mm---ls013-01"
+  },
+  {
+    "id": "f5b1c7b6-54e3-4fc8-808c-a9f2b4846444",
+    "brand": "WELGENE",
+    "product_name": "Trypan Blue Solution (0.4%), LS014-01 Dye Exclusion Staining Solution",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e21ad2826b80c3ca9da1bb99b4c90d7b.jpg",
+    "url_slug": "welgene-trypan-blue-solution--0-4----ls014-01"
+  },
+  {
+    "id": "5d78e8c2-0ef4-4333-b035-6a80e6c43922",
+    "brand": "WELGENE",
+    "product_name": "Calcium Chloride, LS019-01 40 g/L Calcium Chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5b61ee547da486e4ccc2d2158acf3013.jpg",
+    "url_slug": "welgene-calcium-chloride--ls019-01"
+  },
+  {
+    "id": "29255a33-3ed9-4869-8455-7c2a1fee803e",
+    "brand": "WELGENE",
+    "product_name": "Calcium Chloride (1 M), LS019-02 140.7 g/L Calcium Chloride Dihydrate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5f69e3e90f25a1380d40b44586e8d699.jpg",
+    "url_slug": "welgene-calcium-chloride--1-m---ls019-02"
+  },
+  {
+    "id": "534e8515-13b2-4eba-a49c-7cd8cd5bfb55",
+    "brand": "WELGENE",
+    "product_name": "Magnesium Sulfate , LS020-01 19.534 g/L Magnesium Sulfate Anhydrous",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a55e76905734c6930a9e0f8848c26ece.jpg",
+    "url_slug": "welgene-magnesium-sulfate---ls020-01"
+  },
+  {
+    "id": "3f090d72-6d92-4162-8ce7-e2e067fbd557",
+    "brand": "WELGENE",
+    "product_name": "Magnesium Sulfate (1 M), LS020-02 120.4 g/L Magnesium Sulfate Anhydrous",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f2704e3aaa487f93618e9760e1054b22.jpg",
+    "url_slug": "welgene-magnesium-sulfate--1-m---ls020-02"
+  },
+  {
+    "id": "94610c58-ff15-44ed-8045-c9653f21ea89",
+    "brand": "WELGENE",
+    "product_name": "BSA (7.5%), LS021-01 75 g/L Albumin and Bovine Fraction V",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2a4c1b4b7b6deea09b067be2dfcac0d3.jpg",
+    "url_slug": "welgene-bsa--7-5----ls021-01"
+  },
+  {
+    "id": "4ce7a443-7c7a-4aa5-9d12-3a8bef659b32",
+    "brand": "WELGENE",
+    "product_name": "Gelatin Solution (0.1%), LS023-01 Cell Adhesion Coating Solution",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-315de502db4dc10f84702ee434443f1d.jpg",
+    "url_slug": "welgene-gelatin-solution--0-1----ls023-01"
+  },
+  {
+    "id": "fde9d298-9301-4fba-bd33-cf47261111ce",
+    "brand": "WELGENE",
+    "product_name": "ITSP (100X), LS030-01 With 1 g/L Insulin, 0.55 g/L Transferrin, 0.67 mg/L Selenium, 11 g/L Pyruvate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a35b2a95b4c1c6c1549dfe91f75cc2f8.jpg",
+    "url_slug": "welgene-itsp--100x---ls030-01"
+  },
+  {
+    "id": "15e14a13-c516-4ce5-8b90-87ae96b8b185",
+    "brand": "WELGENE",
+    "product_name": "Soy Protein Solution (5%),LS031-01 50 g/L Soy Protein",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-9ba5c71e23050b75103e235dea1980a1.jpg",
+    "url_slug": "welgene-soy-protein-solution--5---ls031-01"
+  },
+  {
+    "id": "2c51784a-4633-46a9-8209-140ae714d3b1",
+    "brand": "WELGENE",
+    "product_name": "Peptone Solution (5%), LS032-01 50 g/L Peptone",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b4c4993d066308383da833093d43ab48.jpg",
+    "url_slug": "welgene-peptone-solution--5----ls032-01"
+  },
+  {
+    "id": "15e1568e-bac5-47e8-8ce9-74ddcc06735c",
+    "brand": "WELGENE",
+    "product_name": "Sodium Butyrate (1 M), LS033-01 Histone Deacetylase (HDAC) Inhibitor, 110.1 g/L Sodium Butyrate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e30da4f949c63edaf6b386202dff26c0.jpg",
+    "url_slug": "welgene-sodium-butyrate--1-m---ls033-01"
+  },
+  {
+    "id": "088e432e-b46f-4fdb-b4ee-d5ec50fc703a",
+    "brand": "WELGENE",
+    "product_name": "Sodium Propionate (2 M), LS036-01 Preservative, 192.1 g/L Sodium Propionate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ef927a8793b5336a22a75d2fe7a36252.jpg",
+    "url_slug": "welgene-sodium-propionate--2-m---ls036-01"
+  },
+  {
+    "id": "ef3697c4-da84-4a30-8457-098a22c1c23d",
+    "brand": "WELGENE",
+    "product_name": "Insulin Solution, LS038-01 10 mg/ml Insulin in 10 mM HCl",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-bcb8ba8e77f20a455101d4500a57c08e.jpg",
+    "url_slug": "welgene-insulin-solution--ls038-01"
+  },
+  {
+    "id": "dac62c6e-ca6a-4c95-a5c7-1fa1cee0a390",
+    "brand": "WELGENE",
+    "product_name": "Poloxamer 188 Solution,LS105-02 Nonionic Surfactants, 100 g/L Poloxamers 188",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-538794734462d6628f2f65a9ccc97d59.webp",
+    "url_slug": "welgene-poloxamer-188-solution-ls105-02"
+  },
+  {
+    "id": "f8985010-0d7c-4f57-8252-89716d577492",
+    "brand": "WELGENE",
+    "product_name": "Yeast Extract Soluton (50X),LS107-01 166.66 g/L Yeast Extract",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-31f788d5c27397e5482392321439d746.jpg",
+    "url_slug": "welgene-yeast-extract-soluton--50x--ls107-01"
+  },
+  {
+    "id": "d4d566c9-d35c-42cd-866a-370746a4f2bc",
+    "brand": "WELGENE",
+    "product_name": "Yeast Extract Ultrafiltrate Solution (50X),LS107-02 200 g/L Yeast Extract",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-197eb42a99c857e29528eecfaf995641.jpg",
+    "url_slug": "welgene-yeast-extract-ultrafiltrate-solution--50x--ls107-02"
+  },
+  {
+    "id": "39906e0f-5ce2-4fbb-8cce-d5c94bc15e4f",
+    "brand": "WELGENE",
+    "product_name": "L-Alanyl-L-Glutamine,LS045-01 Stabilized Dipeptide Form (200 mM)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-991d11114a0e13759ef157e558e9fed9.jpg",
+    "url_slug": "welgene-l-alanyl-l-glutamine-ls045-01"
+  },
+  {
+    "id": "a2043ceb-c81e-49e1-846b-a02d93faa7fd",
+    "brand": "WELGENE",
+    "product_name": "Polyamine Supplement (1,000X), LS018-01 Promotes Cell Growth and Proliferation",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-142327ca2a0e67458e8771235e190e84.jpg",
+    "url_slug": "welgene-polyamine-supplement--1-000x---ls018-01"
+  },
+  {
+    "id": "44b38336-0d2a-434a-8f06-b248ff674a40",
+    "brand": "WELGENE",
+    "product_name": "TOM™ Medium, TR004-01 Transfection Optimized Medium",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-34fb7f2d402fe8bc6ddaacaefbbf49b9.jpg",
+    "url_slug": "welgene-tom--medium--tr004-01"
+  },
+  {
+    "id": "e3ae5953-bea0-49d0-9c4e-6c57c9acf638",
+    "brand": "WELGENE",
+    "product_name": "WelFect, TR006-01 Transfection Reagent",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6c6db7afa737133c4578e65df133ec84.jpg",
+    "url_slug": "welgene-welfect--tr006-01"
+  },
+  {
+    "id": "cc74c04e-4ab7-4d89-9ac7-65d05c9e1248",
+    "brand": "WELGENE",
+    "product_name": "WelFect-siRNA, TR019-01 (1 ml) Transfection Reagent",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f54bcdc18f23a7811dd6baf9bd365cbd.jpg",
+    "url_slug": "welgene-welfect-sirna--tr019-01--1-ml-"
+  },
+  {
+    "id": "5a5683f2-d937-486b-91b3-a0c1ce7a2a0b",
+    "brand": "WELGENE",
+    "product_name": "WelPrep Plasmid Miniprep Kit,PR001-02 Plasmid DNA Extraction",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b96a5bf431941682a8effb7ee01450ae.jpg",
+    "url_slug": "welgene-welprep-plasmid-miniprep-kit-pr001-02"
+  },
+  {
+    "id": "45b3af06-9fff-4be0-ac57-c82c6ffad531",
+    "brand": "WELGENE",
+    "product_name": "WelPrep Total RNA,PR101-01 Total RNA Extraction (200 ml)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ebe6fef2c208d8bf2fc289dff7a21d16.jpg",
+    "url_slug": "welgene-welprep-total-rna-pr101-01"
+  },
+  {
+    "id": "8e87af46-25fd-4654-aa93-09bae8b55cbb",
+    "brand": "WELGENE",
+    "product_name": "WelPrep Total RNA,PR101-02 Total RNA Extraction (200 ml X 4)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-23748c7aa87c451cc612e56c2a88cd12.jpg",
+    "url_slug": "welgene-welprep-total-rna-pr101-02"
+  },
+  {
+    "id": "e5e65ea3-299c-4aef-afca-fda4da5a791e",
+    "brand": "WELGENE",
+    "product_name": "2X Taq Master Mix,ME001-01V Ready-To-Use PCR Mixture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6e4d6cd02f5fbcfc6d9ae3b2f194653e.jpg",
+    "url_slug": "welgene-2x-taq-master-mix-me001-01v"
+  },
+  {
+    "id": "b8fc1b9c-7f06-4e1e-b9a6-0baae6aeb695",
+    "brand": "WELGENE",
+    "product_name": "2X Taq Master Mix,ME001-02V Ready-To-Use PCR Mixture (With Dye)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-457bac6248c827e191a90e6032a0654f.jpg",
+    "url_slug": "welgene-2x-taq-master-mix-me001-02v"
+  },
+  {
+    "id": "f179f416-27d9-4f06-a013-bc0b3e6034d2",
+    "brand": "WELGENE",
+    "product_name": "2X Taq Master Mix,ME001-11V Ready-To-Use PCR Mixture (With Super Ultra Pure Water)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3fab74fa7943583de89afffae57ace9a.jpg",
+    "url_slug": "welgene-2x-taq-master-mix-me001-11v"
+  },
+  {
+    "id": "180a35cc-1455-4d86-9140-dd52ddac3154",
+    "brand": "WELGENE",
+    "product_name": "2X Taq Master Mix,ME001-12V Ready-To-Use PCR Mixture (With Dye + Super Ultra Pure Water)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-bfa48166c64930cdcd68538394d9d607.jpg",
+    "url_slug": "welgene-2x-taq-master-mix-me001-12v"
+  },
+  {
+    "id": "c2c16206-907a-4293-96c8-225c29686916",
+    "brand": "WELGENE",
+    "product_name": "2X Phanta Max Master Mix,ME002-01V High-Fidelity DNA Polymerase Mixture",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d945d5c672d048bae3ca1df13d9a1868.jpg",
+    "url_slug": "welgene-2x-phanta-max-master-mix-me002-01v"
+  },
+  {
+    "id": "d195c8ce-a09e-42fe-a883-3851b0d63ba7",
+    "brand": "WELGENE",
+    "product_name": "2X Phanta Max Master Mix,ME002-02V High-Fidelity DNA Polymerase Mixture (With Dye)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1b4f1bd4c12b0ca65fe663b701ed555f.jpg",
+    "url_slug": "welgene-2x-phanta-max-master-mix-me002-02v"
+  },
+  {
+    "id": "f4e29df2-3d25-43be-87df-64e06dc0e7bb",
+    "brand": "WELGENE",
+    "product_name": "2X Phanta Max Master Mix,ME002-11V High-Fidelity DNA Polymerase Mixture (With Super Ultra Pure Water)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ca958684c0714f76d887fd3eb4583fb2.jpg",
+    "url_slug": "welgene-2x-phanta-max-master-mix-me002-11v"
+  },
+  {
+    "id": "efc9b94b-b20a-4f9f-af83-c059a303b0c2",
+    "brand": "WELGENE",
+    "product_name": "2X Phanta Max Master Mix,ME002-12V High-Fidelity DNA Polymerase Mixture (With Dye + Super Ultra Pure Water)",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3160b9e640f4d2462a3dffcd68b44e7a.jpg",
+    "url_slug": "welgene-2x-phanta-max-master-mix-me002-12v"
+  },
+  {
+    "id": "685750cb-e3b7-4460-ae06-bed988c3f927",
+    "brand": "WELGENE",
+    "product_name": "100 bp DNA Marker,ME003-01V DNA Ladder",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5848a91cb8df461d446ca770e5710f6c.jpg",
+    "url_slug": "welgene-100-bp-dna-marker-me003-01v"
+  },
+  {
+    "id": "2eee3148-f603-4910-bdea-ff68d7037cdc",
+    "brand": "WELGENE",
+    "product_name": "DL5000 DNA Ladder,ME003-02V DNA Ladder",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-69549bf6b2cca2f1f09cf95356ba3d95.jpg",
+    "url_slug": "welgene-dl5000-dna-ladder-me003-02v"
+  },
+  {
+    "id": "12cc1536-877b-4dd4-b011-cf389a8f2536",
+    "brand": "WELGENE",
+    "product_name": "DL15000 DNA Ladder,ME003-03V DNA Ladder",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-247fb5de5cad9e6a5618332fffe495aa.jpg",
+    "url_slug": "welgene-dl15000-dna-ladder-me003-03v"
+  },
+  {
+    "id": "a807e446-7173-4e5c-8213-b7b778cf98d6",
+    "brand": "WELGENE",
+    "product_name": "Pyrophosphatase, MR001-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2_4d454d5651dc637ff29a44da349b4cef_1756111169.jpg",
+    "url_slug": "welgene-pyrophosphatase--mr001-01"
+  },
+  {
+    "id": "30a9cc21-0881-4d8a-af61-c419cb8efb68",
+    "brand": "WELGENE",
+    "product_name": "Murine RNase Inhibitor, MR002-01",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6a842f8b1db90ca4fc6badb1b6141848.jpg",
+    "url_slug": "welgene-murine-rnase-inhibitor--mr002-01"
+  },
+  {
+    "id": "2be854be-8216-4f90-8438-2880a28ac611",
+    "brand": "WELGENE",
+    "product_name": "WelCount Cell Proliferation Assay Kit,TR005-01 XTT-based Cell Count Assay",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-dd4c400c10fd8e1ebfa6ce82d7cf132d.jpg",
+    "url_slug": "welgene-welcount-cell-proliferation-assay-kit-tr005-01"
+  },
+  {
+    "id": "ab6a0599-35c2-434a-88e0-146a05f61872",
+    "brand": "WELGENE",
+    "product_name": "WST-8, TR005-02 Cell Viability Assay Reagent",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-0a9052c09ca1183ae29429b0a2d05016.jpg",
+    "url_slug": "welgene-wst-8--tr005-02"
+  },
+  {
+    "id": "5df58ac4-61dd-4048-921c-c11c618abfaf",
+    "brand": "WELGENE",
+    "product_name": "180 kDa Plus Prestained Protein Marker,ME004-01V Protein Size Marker",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-4a4c9a629272758f0624af74a8d23da2.jpg",
+    "url_slug": "welgene-180-kda-plus-prestained-protein-marker-me004-01v"
+  },
+  {
+    "id": "3f846a18-c91a-436a-88eb-163bc7896441",
+    "brand": "WELGENE",
+    "product_name": "SuperPico ECL Chemiluminescence Kit,ME005-01V Luminol-based Enhanced Chemiluminescent Substrate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-15cee0ac92480f5710f0ffee089e0f9e.jpg",
+    "url_slug": "welgene-superpico-ecl-chemiluminescence-kit-me005-01v"
+  },
+  {
+    "id": "190b9bf2-764d-4671-959a-7709a9d89359",
+    "brand": "WELGENE",
+    "product_name": "250 kDa Plus Prestained Protein Marker,ME004-02V Protein Size Marker",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-62a3a55c28ff8c0d6923d20b6c19f76e.jpg",
+    "url_slug": "welgene-250-kda-plus-prestained-protein-marker-me004-02v"
+  },
+  {
+    "id": "d7e4900b-2310-4ffb-b6a9-0563b592fc29",
+    "brand": "WELGENE",
+    "product_name": "40% Acrylamide Solution, ML001-01 400 g/L Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8404f662b3faa4eb0c7965e7e4d60f1b.jpg",
+    "url_slug": "welgene-40--acrylamide-solution--ml001-01"
+  },
+  {
+    "id": "1c54edc4-070c-4aff-b7e9-bbcbe5b0e7ab",
+    "brand": "WELGENE",
+    "product_name": "45% Acrylamide Solution, ML001-02 450 g/L Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8ef63a3c144be70697620e50e2691ce0.jpg",
+    "url_slug": "welgene-45--acrylamide-solution--ml001-02"
+  },
+  {
+    "id": "eebd3942-9d37-4e98-ac12-72a7db303f7c",
+    "brand": "WELGENE",
+    "product_name": "30% Acrylamide (19:1 Ratio),ML002-01 285 g/L Acrylamide and 15 g/L Bis-Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d90813832de1c3d102ef3df6f788b101.jpg",
+    "url_slug": "welgene-30--acrylamide--19-1-ratio--ml002-01"
+  },
+  {
+    "id": "caf7e05e-dca1-490c-8d45-05fa5ce179aa",
+    "brand": "WELGENE",
+    "product_name": "30% Acrylamide (29:1 Ratio),ML002-02 290.1 g/L Acrylamide and 9.9 g/L Bis-Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-da7ec8222d5619951087abb517b1d981.jpg",
+    "url_slug": "welgene-30--acrylamide--29-1-ratio--ml002-02"
+  },
+  {
+    "id": "fad25c56-2676-4844-8f0f-bf9bfd6dd65f",
+    "brand": "WELGENE",
+    "product_name": "30% Acrylamide (37.5:1 Ratio), ML002-03 292.2 g/L Acrylamide and 7.8 g/L Bis-Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a342e192d3806c0ee7ac2e4920db5959.jpg",
+    "url_slug": "welgene-30--acrylamide--37-5-1-ratio---ml002-03"
+  },
+  {
+    "id": "838a9ad4-3c96-4f10-bcb8-c4819cd48ef5",
+    "brand": "WELGENE",
+    "product_name": "40% Acrylamide (19:1 Ratio),ML002-04 380 g/L Acrylamide and 20 g/L Bis-Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a5465f7ca832b15ef067a1962e5c1757.jpg",
+    "url_slug": "welgene-40--acrylamide--19-1-ratio--ml002-04"
+  },
+  {
+    "id": "f11c67b4-696b-4e02-a42a-d220fd24c18b",
+    "brand": "WELGENE",
+    "product_name": "40% Acrylamide (29:1 Ratio),ML002-05 386.8 g/L Acrylamide and 13.2 g/L Bis-Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-20b2f62fff471d24db9e66e50ebec902.jpg",
+    "url_slug": "welgene-40--acrylamide--29-1-ratio--ml002-05"
+  },
+  {
+    "id": "ec7e7f00-7e41-40af-b4e1-f80af94c8116",
+    "brand": "WELGENE",
+    "product_name": "40% Acrylamide (37.5:1 Ratio), ML002-06 389.6 g/L Acrylamide and 10.4 g/L Bis-Acrylamide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c373ec946cc776f1ecca8d62d2c5c3b9.jpg",
+    "url_slug": "welgene-40--acrylamide--37-5-1-ratio---ml002-06"
+  },
+  {
+    "id": "9ab123b9-5675-44b6-a770-9633e1e0fe09",
+    "brand": "WELGENE",
+    "product_name": "Tetracycline, ML003-07 10 mg/ml Tetracycline Hydrochloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-95c9ddc0e60c68d9c9685223e98a4cd1.jpg",
+    "url_slug": "welgene-tetracycline--ml003-07"
+  },
+  {
+    "id": "39c0b0ba-28ec-483d-b9ce-70c1c3df2304",
+    "brand": "WELGENE",
+    "product_name": "Streptomycin, ML003-06 50 mg/ml Streptomycin Sulfate Salt",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-e9bd40d1b7825f82fd56a8d432832cc2.jpg",
+    "url_slug": "welgene-streptomycin--ml003-06"
+  },
+  {
+    "id": "88577634-92d5-4319-9c48-61dd447ad391",
+    "brand": "WELGENE",
+    "product_name": "Rifampicin (Rifamycin AMP),ML003-05 25 mg/ml Rifampicin",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-86973b904efbad0dbcd0e71a61536ec8.jpg",
+    "url_slug": "welgene-rifampicin--rifamycin-amp--ml003-05"
+  },
+  {
+    "id": "89ab4c63-587a-490a-bbe1-0cdb0affda7b",
+    "brand": "WELGENE",
+    "product_name": "Kanamycin, ML003-04 10 mg/ml Kanamycin Sulfate Salt",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-872390ad1eb52eea87a7065b452a3b13.jpg",
+    "url_slug": "welgene-kanamycin--ml003-04"
+  },
+  {
+    "id": "d561c773-5c37-45de-a799-fb02705353c5",
+    "brand": "WELGENE",
+    "product_name": "Gentamicin, ML003-03 10 mg/ml Gentamicin Sulfate Salt",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-cc3e106c9a6e0a608f9dfb85f53b2c07.jpg",
+    "url_slug": "welgene-gentamicin--ml003-03"
+  },
+  {
+    "id": "893d83be-6ec7-4c02-a155-f330a5c720c9",
+    "brand": "WELGENE",
+    "product_name": "Chloramphenicol, ML003-02 10 mg/ml Chloramphenicol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a747a178dbd1a71d737c4463c576db69.jpg",
+    "url_slug": "welgene-chloramphenicol--ml003-02"
+  },
+  {
+    "id": "cb91f89a-116c-4784-8551-8b2f806c7523",
+    "brand": "WELGENE",
+    "product_name": "Ampicillin, ML003-01 50 mg/ml Ampicillin Sodium Salt",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-025b2e8fc8d218f7e6b8773064fe5498.jpg",
+    "url_slug": "welgene-ampicillin--ml003-01"
+  },
+  {
+    "id": "958e7041-e20f-4ff2-808f-2400bbde2435",
+    "brand": "WELGENE",
+    "product_name": "0.5 M EDTA, ML005-01 186.1 g/L EDTA·2Na·2H2O",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5a158588f4596b5c17ca585353ad3dd4.jpg",
+    "url_slug": "welgene-0-5-m-edta--ml005-01"
+  },
+  {
+    "id": "6a5f5a02-a73d-4009-aaef-bc9fdff55b00",
+    "brand": "WELGENE",
+    "product_name": "1 N HCl Solution, ML007-02 36.46 g/L Hydrochloric Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-640c2cc23a9a5484a95328658cacc10d.jpg",
+    "url_slug": "welgene-1-n-hcl-solution--ml007-02"
+  },
+  {
+    "id": "4bb78578-01e3-4feb-a4f6-242bdd0d0cdc",
+    "brand": "WELGENE",
+    "product_name": "PBS (1X, pH7.4), ML008-01 With NaCl/KCl/Na2HPO4/KH2PO4, For molecular biology",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-4c37f8d91c9b69824bbff754c7dc4ca7.jpg",
+    "url_slug": "welgene-pbs--1x--ph7-4---ml008-01"
+  },
+  {
+    "id": "f47fd12f-9a61-42a5-8020-2b77c7ee5e12",
+    "brand": "WELGENE",
+    "product_name": "PBS (10X, pH7.4), ML008-02 With NaCl/KCl/Na2HPO4/KH2PO4, For molecular biology",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5bb5537363d2f9c08e6a078d20403dd1.jpg",
+    "url_slug": "welgene-pbs--10x--ph7-4---ml008-02"
+  },
+  {
+    "id": "ae30a737-a568-4ccb-88dc-c4febe3fa022",
+    "brand": "WELGENE",
+    "product_name": "PBS (10X, pH6.8), ML008-04 With NaCl/KCl/Na2HPO4/KH2PO4, For molecular biology",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-da75a5cb087bd1e42ded669be7140fc8.jpg",
+    "url_slug": "welgene-pbs--10x--ph6-8---ml008-04"
+  },
+  {
+    "id": "7902e979-d75e-4572-bf6b-31b08b45fcd3",
+    "brand": "WELGENE",
+    "product_name": "PBS (1X, pH7.3), ML008-50 With NaCl/KCl/Na2HPO4/KH2PO4, For molecular biology",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-811ba3c1d63a85fb28f35ca2dadcae7b.jpg",
+    "url_slug": "welgene-pbs--1x--ph7-3---ml008-50"
+  },
+  {
+    "id": "349e23bc-6b02-48a4-8b74-48f3281d16ba",
+    "brand": "WELGENE",
+    "product_name": "10% SDS Solution, ML009-01 10% Lauryl Sulfate Sodium Salt",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d7d62ac346914789d1ac1c14243b5a82.jpg",
+    "url_slug": "welgene-10--sds-solution--ml009-01"
+  },
+  {
+    "id": "932c3dd4-e149-4c74-88de-fdb190cf82e5",
+    "brand": "WELGENE",
+    "product_name": "3 M Sodium Acetate (pH5.2),ML010-01 246.09 g/L Sodium Acetate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f99b3f61e24d2ce1c7c6d8031c2adf6c.jpg",
+    "url_slug": "welgene-3-m-sodium-acetate--ph5-2--ml010-01"
+  },
+  {
+    "id": "3893793a-c4a5-4ebf-bb4b-fddaaa3a7f22",
+    "brand": "WELGENE",
+    "product_name": "3 M Sodium Acetate (pH7.0),ML010-02 246.09 g/L Sodium Acetate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-357f07d5221a139f0b84cac127c3a873.jpg",
+    "url_slug": "welgene-3-m-sodium-acetate--ph7-0--ml010-02"
+  },
+  {
+    "id": "eb7919f3-d3e1-4e93-b397-ed31ab0b689c",
+    "brand": "WELGENE",
+    "product_name": "5 M Sodium Chloride, ML011-01 292.2 g/L Sodium Chloride",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c8ca81acc101b58211339be72e714192.jpg",
+    "url_slug": "welgene-5-m-sodium-chloride--ml011-01"
+  },
+  {
+    "id": "0e86a068-3d2c-4911-9f6a-3341c9c24642",
+    "brand": "WELGENE",
+    "product_name": "20X SSC Buffer (pH7.0), ML012-01 With 3 M Sodium Chloride/0.3 M Sodium Citrate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3366394a82fc8d501b854db11578c699.jpg",
+    "url_slug": "welgene-20x-ssc-buffer--ph7-0---ml012-01"
+  },
+  {
+    "id": "6d68854e-b0d2-40a0-9eb1-dd916e7db49f",
+    "brand": "WELGENE",
+    "product_name": "1X SSC Buffer (pH7.0), ML057-01 With 150 mM Sodium Chloride/15 mM Sodium Citrate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b69a9683edccbcf8e3a374441bc5f913.jpg",
+    "url_slug": "welgene-1x-ssc-buffer--ph7-0---ml057-01"
+  },
+  {
+    "id": "60976c82-982e-4e18-b4ca-a2f1921e5580",
+    "brand": "WELGENE",
+    "product_name": "20X SSPE Buffer (pH7.4), ML013-01 With Sodium Phosphate/Sodium Chloride/EDTA",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-58a549dcb6b696bf7a09f1e66f425db7.jpg",
+    "url_slug": "welgene-20x-sspe-buffer--ph7-4---ml013-01"
+  },
+  {
+    "id": "2e5c2b45-426e-4123-948b-b521c8d6cc0c",
+    "brand": "WELGENE",
+    "product_name": "TE Buffer (pH7.4), ML014-74 10 mM Tris-HCl and 1 mM EDTA",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-a0d29ddfcb67eb699ff26b6b5debb5fc.jpg",
+    "url_slug": "welgene-te-buffer--ph7-4---ml014-74"
+  },
+  {
+    "id": "df69c905-c45a-4ef7-b8c5-05cbab56b88e",
+    "brand": "WELGENE",
+    "product_name": "TE Buffer (pH7.6), ML014-76 10 mM Tris-HCl and 1 mM EDTA",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5e943441deadc2e9a9b03aaafedc88cd.jpg",
+    "url_slug": "welgene-te-buffer--ph7-6---ml014-76"
+  },
+  {
+    "id": "7d449afb-c8ee-4185-96d0-cacb38ea2527",
+    "brand": "WELGENE",
+    "product_name": "TE Buffer (pH8.0), ML014-80 10 mM Tris-HCl and 1 mM EDTA",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-b704c421fee8999d9502d5cae9841516.jpg",
+    "url_slug": "welgene-te-buffer--ph8-0---ml014-80"
+  },
+  {
+    "id": "a8e01f72-f1ed-4328-a78d-97ccff953cfe",
+    "brand": "WELGENE",
+    "product_name": "10X TAE (pH8.3), ML015-01 With Tris Base/Glacial Acetic Acid/EDTA·2Na·2H2O",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5d287b1f3ead9437019d623f83175435.jpg",
+    "url_slug": "welgene-10x-tae--ph8-3---ml015-01"
+  },
+  {
+    "id": "2d4b732d-70a1-45c7-893a-2fb7de9b1d18",
+    "brand": "WELGENE",
+    "product_name": "50X TAE (pH8.3), ML015-02 With Tris Base/Glacial Acetic Acid/EDTA·2Na·2H2O",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ec7da1401cbb5c25d5ea0c0fdb56c76d.jpg",
+    "url_slug": "welgene-50x-tae--ph8-3---ml015-02"
+  },
+  {
+    "id": "5ac1130b-fa8c-4d3b-b353-922388e6e34b",
+    "brand": "WELGENE",
+    "product_name": "10X TBE (pH8.3), ML016-01 With Tris Base/Boric Acid/EDTA·2Na·2H2O",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-aacf0c1edfbe92e955acce6740c6755b.jpg",
+    "url_slug": "welgene-10x-tbe--ph8-3---ml016-01"
+  },
+  {
+    "id": "83b92886-920c-4d7d-bc34-eb870d88ddf0",
+    "brand": "WELGENE",
+    "product_name": "1 M Tris-HCl (pH7.4), ML017-74 121.1 g/L Tris Base",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8cbff9724f1201f32791bead58fffd0e.jpg",
+    "url_slug": "welgene-1-m-tris-hcl--ph7-4---ml017-74"
+  },
+  {
+    "id": "e58e4ad7-34b1-486d-afac-95d58a102dc8",
+    "brand": "WELGENE",
+    "product_name": "1 M Tris-HCl (pH7.6), ML017-76 121.1 g/L Tris Base",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-8105c49cb95cdda9b769dcd800d3f8f9.jpg",
+    "url_slug": "welgene-1-m-tris-hcl--ph7-6---ml017-76"
+  },
+  {
+    "id": "0fc719dc-bf83-499f-8fc8-a0efef23564d",
+    "brand": "WELGENE",
+    "product_name": "1 M Tris-HCl (pH8.0), ML017-80 121.1 g/L Tris Base",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-46d4f8b88db8bd4143d0358969b3764f.jpg",
+    "url_slug": "welgene-1-m-tris-hcl--ph8-0---ml017-80"
+  },
+  {
+    "id": "b6ac2b8a-9e96-4b82-969f-da310af68d64",
+    "brand": "WELGENE",
+    "product_name": "Sodium Phosphate Buffer (pH8.5), ML020-01 300 mM Sodium and 300 mM Phosphate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5cddcd79d17ca1814715db18a9998844.jpg",
+    "url_slug": "welgene-sodium-phosphate-buffer--ph8-5---ml020-01"
+  },
+  {
+    "id": "1894aa01-465d-4c6c-8631-1d4b5a9bf483",
+    "brand": "WELGENE",
+    "product_name": "Sodium Phosphate Buffer (pH7.4), ML020-02 300 mM Sodium and 300 mM Phosphate",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-dbb3b8233ba46ea577cd5253d080dd96.jpg",
+    "url_slug": "welgene-sodium-phosphate-buffer--ph7-4---ml020-02"
+  },
+  {
+    "id": "74d2f878-7353-4603-8c45-bb32a3bc1714",
+    "brand": "WELGENE",
+    "product_name": "Alkaline Lysis Solution I, ML021-01 Resuspension Buffer",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-475667c54ffb4afc4c4f7a9680a1edcc.jpg",
+    "url_slug": "welgene-alkaline-lysis-solution-i--ml021-01"
+  },
+  {
+    "id": "2dd70555-8b8e-425a-a898-62cd7a963ef8",
+    "brand": "WELGENE",
+    "product_name": "Alkaline Lysis Solution II, ML021-02 Lysis Buffer",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c817c5bf190c1130ae3f496e85288e381.jpg",
+    "url_slug": "welgene-alkaline-lysis-solution-ii--ml021-02"
+  },
+  {
+    "id": "ff8d2f7d-e6e8-4fa1-bf0b-2d9a209574db",
+    "brand": "WELGENE",
+    "product_name": "Alkaline Lysis Solution III, ML021-03 Neutralization Buffer",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c19481d5b92e138dcde23fb403eeb6e5.jpg",
+    "url_slug": "welgene-alkaline-lysis-solution-iii--ml021-03"
+  },
+  {
+    "id": "75fca169-8283-4468-aacb-b2f58224cee7",
+    "brand": "WELGENE",
+    "product_name": "NaOH Solution (1 N), ML022-01 40 g/L Sodium Hydroxide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d3462475b96a56c5ff40d4da95b1a17c.jpg",
+    "url_slug": "welgene-naoh-solution--1-n---ml022-01"
+  },
+  {
+    "id": "07ba185b-567b-428e-a892-8b2329097674",
+    "brand": "WELGENE",
+    "product_name": "NaOH Solution (10 N), ML022-02 400 g/L Sodium Hydroxide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-fe223efbfda39d2958dee79545198090.jpg",
+    "url_slug": "welgene-naoh-solution--10-n---ml022-02"
+  },
+  {
+    "id": "eb309b9b-2e16-44d9-b016-563a32b478e4",
+    "brand": "WELGENE",
+    "product_name": "TBS Solution (1X, pH7.4), ML023-01 With NaCl/KCl/Tris Base",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-598ec95e3d308fdfe2d2e20a94dd2675.jpg",
+    "url_slug": "welgene-tbs-solution--1x--ph7-4---ml023-01"
+  },
+  {
+    "id": "67747fd8-99e9-415d-a913-37204353c7cc",
+    "brand": "WELGENE",
+    "product_name": "TBS Solution(10X, pH7.4), ML023-03 With NaCl/KCl/Tris Base",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c73b96656e526e25bd45bebae8843c43.jpg",
+    "url_slug": "welgene-tbs-solution-10x--ph7-4---ml023-03"
+  },
+  {
+    "id": "25cbc2ce-e2f5-4f8e-845f-26407544fb91",
+    "brand": "WELGENE",
+    "product_name": "TBS Solution (10X, pH7.4), ML023-04 With NaCl/KCl/Tris/Phenol Red",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ccf81d3c3cee1c9ce0589a38889b123a.jpg",
+    "url_slug": "welgene-tbs-solution--10x--ph7-4---ml023-04"
+  },
+  {
+    "id": "33b7728d-512d-42c2-b409-ce34029b5434",
+    "brand": "WELGENE",
+    "product_name": "Stacking Gel Buffer (4X, pH6.8), ML025-01 With 0.5 M Tris-Cl/0.1% SDS",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f0803f2d02d0ba81c2f4d14ae86dd2e7.jpg",
+    "url_slug": "welgene-stacking-gel-buffer--4x--ph6-8---ml025-01"
+  },
+  {
+    "id": "ee03fa7b-2e2e-4dd7-9a4d-26df8c4325aa",
+    "brand": "WELGENE",
+    "product_name": "Running Buffer (1X, pH8.3), ML029-01 With Tris Base/192mM Glycine/SDS",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-dd61848fb5bcf1f9b269c40b0e623e99.jpg",
+    "url_slug": "welgene-running-buffer--1x--ph8-3---ml029-01"
+  },
+  {
+    "id": "43715462-e79a-4a13-a99b-1cca3117aa15",
+    "brand": "WELGENE",
+    "product_name": "Running Buffer (1X, pH8.3), ML030-01 With Tris Base/250mM Glycine/SDS",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-1414b9150452d9fc1a0703674e46a324.jpg",
+    "url_slug": "welgene-running-buffer--1x--ph8-3---ml030-01"
+  },
+  {
+    "id": "cb53e5eb-a523-40bd-be90-20b3d51cb12a",
+    "brand": "WELGENE",
+    "product_name": "Sample Loading Buffer (2X, pH6.8), ML034-01 With Tris-Cl/DTT/BPB/SDS/Glycerol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c3990d4eb334a6f4dbd823faac9efba411.webp",
+    "url_slug": "welgene-sample-loading-buffer--2x--ph6-8---ml034-01"
+  },
+  {
+    "id": "607a1636-1674-4b76-878c-da401b2bfbb6",
+    "brand": "WELGENE",
+    "product_name": "Sample Loading Buffer (2X, pH6.8), ML035-01 With Tris-Cl/β-mercaptoethanol/BPB/SDS/Glycerol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c3990d4eb334a6f4dbd823faac9efba41.webp",
+    "url_slug": "welgene-sample-loading-buffer--2x--ph6-8---ml035-01"
+  },
+  {
+    "id": "f99dcb1e-9fe0-4533-90cb-df9110632689",
+    "brand": "WELGENE",
+    "product_name": "Sample Loading Buffer (5X, pH6.8), ML036-01 With Tris-Cl/DTT/BPB/SDS/Glycerol",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-c3990d4eb334a6f4dbd823faac9efba4.webp",
+    "url_slug": "welgene-sample-loading-buffer--5x--ph6-8---ml036-01"
+  },
+  {
+    "id": "8e6ef6b1-ab5d-4154-8b2d-6df8093cf686",
+    "brand": "WELGENE",
+    "product_name": "Gel Staining Solution, ML038-01 With 0.25% Coomassie Blue/50% Methanol/10% Acetic Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-be05b3bb678f23e31126b1cd7e3f9979.jpg",
+    "url_slug": "welgene-gel-staining-solution--ml038-01"
+  },
+  {
+    "id": "5634a163-fc5d-439f-a3e4-a816e363a40f",
+    "brand": "WELGENE",
+    "product_name": "Gel Staining Solution, ML039-01 With 0.05% Coomassie Blue/25% Methanol/18% Acetic Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-4d3df1f5fcd16f7bd2e7b80c064a9b7e.jpg",
+    "url_slug": "welgene-gel-staining-solution--ml039-01"
+  },
+  {
+    "id": "be4230a5-96b2-4b1c-b4a1-f8134222a1e1",
+    "brand": "WELGENE",
+    "product_name": "Gel Destaining Solution, ML045-01 With 30% Methanol/10% Acetic Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d24bce89a5a5bdec095d7d45701aeecf1.jpg",
+    "url_slug": "welgene-gel-destaining-solution--ml045-01"
+  },
+  {
+    "id": "edc3ba85-440a-415e-be56-a45e302d1613",
+    "brand": "WELGENE",
+    "product_name": "Gel Destaining Solution, ML046-01 With 20% Methanol/10% Acetic Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-379316f47e2b17437bdac0d701caef93.jpg",
+    "url_slug": "welgene-gel-destaining-solution--ml046-01"
+  },
+  {
+    "id": "d2ed468c-dcf9-4265-80e2-9febbd5b258b",
+    "brand": "WELGENE",
+    "product_name": "Transfer Buffer I (pH8.3), ML047-01 With 25 mM Tris Base and 192 mM Glycine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-5708de9406ab85bf817bb0e6d122d98a.jpg",
+    "url_slug": "welgene-transfer-buffer-i--ph8-3---ml047-01"
+  },
+  {
+    "id": "5e983214-546a-4c50-a4f3-a18067904507",
+    "brand": "WELGENE",
+    "product_name": "TBS Solution (For Blocking, pH8.0), ML059-01 With 10 mM Tris-Cl and 150 mM NaCl",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-529033ad09196b990ff5c45f5fed5284.jpg",
+    "url_slug": "welgene-tbs-solution--for-blocking--ph8-0---ml059-01"
+  },
+  {
+    "id": "6f7bfb54-8bed-49cc-b046-50b8ed77f4e0",
+    "brand": "WELGENE",
+    "product_name": "Washing Buffer I (pH8.0), ML060-01 With Tris-Cl/NaCl/Tween 20",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-6f502cf525013035b371091623831477.jpg",
+    "url_slug": "welgene-washing-buffer-i--ph8-0---ml060-01"
+  },
+  {
+    "id": "36d48c1d-c57c-4e11-9f4d-a334709623af",
+    "brand": "WELGENE",
+    "product_name": "Staining Solution IV, ML080-01 With 0.1% Ponceau S and 5% Acetic Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-cf2adb5e0239dd5373f716448eb0e3cb.jpg",
+    "url_slug": "welgene-staining-solution-iv--ml080-01"
+  },
+  {
+    "id": "09265a57-0c5d-4bde-8075-0b5b4baba409",
+    "brand": "WELGENE",
+    "product_name": "Destaining Solution I, ML082-01 With 50% Methanol and 10% Acetic Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-3787c4edd8ed1e2f222232beae4a5d96.jpg",
+    "url_slug": "welgene-destaining-solution-i--ml082-01"
+  },
+  {
+    "id": "ee771bca-49fd-4286-819c-50922b6b0f17",
+    "brand": "WELGENE",
+    "product_name": "Glycine Buffer (0.1 M, pH2.5),ML135-01 With 100 mM Glycine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-f24585aaabe05025927f80a2a2bbdb0b.jpg",
+    "url_slug": "welgene-glycine-buffer--0-1-m--ph2-5--ml135-01"
+  },
+  {
+    "id": "546e0aae-380d-46a8-9307-89bc16af4ca6",
+    "brand": "WELGENE",
+    "product_name": "Glycine Buffer (0.1 M, pH9.0),ML135-02 With 100 mM Glycine",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-43d0c2e29776ab3c049606fa49fd1ea7.jpg",
+    "url_slug": "welgene-glycine-buffer--0-1-m--ph9-0--ml135-02"
+  },
+  {
+    "id": "6ee56485-29f6-4f59-9e6b-a5f21116a1ac",
+    "brand": "WELGENE",
+    "product_name": "Borate Buffer (0.1 M, pH8.5),ML145-01 With 100 mM Boric Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-217d684e93b66274747949642117e692.jpg",
+    "url_slug": "welgene-borate-buffer--0-1-m--ph8-5--ml145-01"
+  },
+  {
+    "id": "2bde0168-cdd4-47bf-a32a-4970cdbc4018",
+    "brand": "WELGENE",
+    "product_name": "MES Buffer (0.5 M, pH6.0), ML150-01 With 500 mM MES Free Acid",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-d4a63f02d83dde6e2685270bbd62d3f6.png",
+    "url_slug": "welgene-mes-buffer--0-5-m--ph6-0---ml150-01"
+  },
+  {
+    "id": "91cb7236-3847-4efb-b593-334da55e2b5b",
+    "brand": "WELGENE",
+    "product_name": "Blocking Buffer I (pH8.0), ML062-01 With Tris-Cl/NaCl/Tween 20/BSA/Sodium Azide",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-aae958252e538a1a6d0e8849ee96076c.webp",
+    "url_slug": "welgene-blocking-buffer-i--ph8-0---ml062-01"
+  },
+  {
+    "id": "82764c70-5d5d-41de-a0ee-7a75db691f7f",
+    "brand": "WELGENE",
+    "product_name": "Wel-FastBlue, ML041-01 Fast Protein Gel Staining Solution",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-ebfcc4042ee195f9a2d16461decc70fd.jpg",
+    "url_slug": "welgene-wel-fastblue--ml041-01"
+  },
+  {
+    "id": "5bd72a1c-204e-4711-b709-9d893a2d02cc",
+    "brand": "WELGENE",
+    "product_name": "DSPC, CH001-01 Helper Lipids Used in LNP Systems",
+    "product_numbers": [],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/welgene/thumb-280X280-2_bab2ad2262d1f055cafba21677beb7e1_1764059266.jpg",
+    "url_slug": "welgene-dspc--ch001-01"
+  }
+]

@@ -8,6 +8,7 @@ import { MediaProductFilter } from './components/MediaProductFilter';
 const Scanner = lazy(() => import('./components/Scanner'));
 import { CartView } from './components/CartView';
 import { WasteLogView } from './components/WasteLogView';
+import { FridgeView } from './features/fridge/FridgeView';
 import { AuthView } from './components/AuthView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
 import { searchChemical } from './services/searchService';
@@ -17,7 +18,7 @@ import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
 import { useTranslation } from 'react-i18next';
 import type { AnalysisResult } from './types';
-import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, ClipboardList } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, ClipboardList, Box } from 'lucide-react';
 
 function App() {
   const { t } = useTranslation();
@@ -35,7 +36,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'logs'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'logs' | 'cabinet'>('search');
   const [logRefreshKey, setLogRefreshKey] = useState(0);
 
   const cart = useWasteStore((state) => state.cart);
@@ -183,8 +184,45 @@ function App() {
         />
       )}
 
-      <MainLayout onLogoClick={handleReset} userEmail={user?.email} onSignOut={signOut}>
-        {activeTab === 'logs' ? (
+      <MainLayout onLogoClick={handleReset} userEmail={user?.email} onSignOut={signOut} bottomNav={
+        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 flex z-30">
+          <button
+            onClick={() => setActiveTab('search')}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'search'
+              ? 'text-blue-600 dark:text-blue-400'
+              : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+              }`}
+          >
+            <Search className="w-5 h-5" />
+            {t('tab_search')}
+          </button>
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'logs'
+              ? 'text-blue-600 dark:text-blue-400'
+              : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+              }`}
+          >
+            <ClipboardList className="w-5 h-5" />
+            {t('tab_logs')}
+          </button>
+          <button
+            onClick={() => setActiveTab('cabinet')}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'cabinet'
+              ? 'text-blue-600 dark:text-blue-400'
+              : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+              }`}
+          >
+            <Box className="w-5 h-5" />
+            {t('tab_cabinet')}
+          </button>
+        </nav>
+      }>
+        {activeTab === 'cabinet' ? (
+          <div className="h-full">
+            <FridgeView />
+          </div>
+        ) : activeTab === 'logs' ? (
           <WasteLogView key={logRefreshKey} />
         ) : (
           <div className="p-5 flex flex-col gap-6" style={{ paddingBottom: cart.length > 0 ? '100px' : undefined }}>
@@ -380,30 +418,6 @@ function App() {
             <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold border-2 border-white dark:border-slate-900 text-white">{cart.length}</span>
           </button>
         )}
-
-        {/* Bottom Tab Navigation */}
-        <nav className="sticky bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 flex z-30">
-          <button
-            onClick={() => setActiveTab('search')}
-            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'search'
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
-              }`}
-          >
-            <Search className="w-5 h-5" />
-            {t('tab_search')}
-          </button>
-          <button
-            onClick={() => setActiveTab('logs')}
-            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'logs'
-              ? 'text-blue-600 dark:text-blue-400'
-              : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
-              }`}
-          >
-            <ClipboardList className="w-5 h-5" />
-            {t('tab_logs')}
-          </button>
-        </nav>
       </MainLayout>
     </>
   );

@@ -23,10 +23,10 @@ const BASE_URL = 'https://www.welgene.com/mall';
 const LIST_URL = 'https://www.welgene.com/mall/m_mall_list.php';
 const BRAND_NAME = 'WELGENE';
 const BRAND_SLUG = 'welgene';
-const CATEGORY_ID = '02000000'; // Target Category (02000000: Molecular Biology, 01000000: Cell Culture)
+const CATEGORY_ID = '04000000'; // Target Category (04000000: Plastic Ware?)
 const OUTPUT_FILE = path.join(process.cwd(), `src/data/welgene_products_${CATEGORY_ID}.json`);
 const STORAGE_BUCKET = 'media-products';
-const MAX_PAGES = 10; // 넉넉하게
+const MAX_PAGES = 15; // User said 8 pages, set higher just in case
 
 // Supabase configuration
 const SUPABASE_URL = 'https://zafxzidbtbryiksemlwc.supabase.co';

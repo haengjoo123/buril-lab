@@ -5,19 +5,20 @@ import { useTranslation } from 'react-i18next';
 
 interface MainLayoutProps {
     children: React.ReactNode;
+    bottomNav?: React.ReactNode;
     onLogoClick?: () => void;
     userEmail?: string;
     onSignOut?: () => void;
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ children, onLogoClick, userEmail, onSignOut }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ children, bottomNav, onLogoClick, userEmail, onSignOut }) => {
     const { t } = useTranslation();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-slate-950 flex justify-center items-center font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
+        <div className="fixed inset-0 bg-gray-100 dark:bg-slate-950 flex justify-center font-sans text-slate-900 dark:text-slate-100 transition-colors duration-300">
             {/* Mobile Container: Max width 430px (e.g., iPhone Pro Max width) */}
-            <div className="w-full max-w-[430px] min-h-screen bg-white dark:bg-slate-900 shadow-xl relative flex flex-col overflow-hidden transition-colors duration-300">
+            <div className="w-full max-w-[430px] h-full bg-white dark:bg-slate-900 shadow-xl relative flex flex-col overflow-hidden transition-colors duration-300">
 
                 {/* Header */}
                 <header className="px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 transition-colors duration-300">
@@ -49,10 +50,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, onLogoClick, u
                     </div>
                 </header>
 
-                {/* Scrollable Content Area */}
-                <main className="flex-1 overflow-y-auto w-full">
+                {/* Scrollable Content Area - pb-16: fixed 하단 바 높이만큼 하단 패딩 */}
+                <main className="flex-1 overflow-y-auto w-full min-h-0 pb-16">
                     {children}
                 </main>
+
+                {/* Bottom Nav - 스크롤 영역 밖, 뷰포트 하단 고정 */}
+                {bottomNav}
 
                 {/* Settings Modal */}
                 {isSettingsOpen && (

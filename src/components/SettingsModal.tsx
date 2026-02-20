@@ -21,10 +21,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             clearCart();
             const currentLang = i18n.language;
             localStorage.clear();
-            
+
             // Restore language preference
             localStorage.setItem('i18nextLng', currentLang);
-            
+
             alert('초기화되었습니다. 페이지를 새로고침합니다.');
             window.location.reload();
         }
@@ -93,7 +93,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 </div>
 
                 <div className="p-4 bg-gray-50 dark:bg-slate-950/50 text-center text-xs text-gray-400 dark:text-gray-600">
-                    Buril-rab v1.0.0
+                    Buril-lab v1.0.0
                 </div>
             </div>
         </div>

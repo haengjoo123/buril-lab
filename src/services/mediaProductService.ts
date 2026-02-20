@@ -82,7 +82,7 @@ export async function searchMediaProductsAdvanced(options: SearchOptions): Promi
             }
         }
 
-        // Build query
+        // Build product query
         let queryBuilder = supabase.from('products').select('*', { count: 'exact' });
 
         // Search condition
@@ -116,15 +116,32 @@ export async function searchMediaProductsAdvanced(options: SearchOptions): Promi
 
         queryBuilder = queryBuilder.limit(limit);
 
-        const { data, error, count } = await queryBuilder;
+        // Build separate query to get ALL brands matching the search term
+        // This ensures the filter dropdown shows all relevant brands, not just those in the current page
+        let brandQuery = supabase.from('products').select('brand');
+        brandQuery = brandQuery.or(
+            `product_name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%`
+        );
+        brandQuery = brandQuery.not('brand', 'is', null);
+        // We do NOT apply the brandFilter or limit to this query
+
+        // Execute both queries in parallel
+        const [productResponse, brandResponse] = await Promise.all([
+            queryBuilder,
+            brandQuery
+        ]);
+
+        const { data, error, count } = productResponse;
 
         if (error) {
             console.error('[MediaProduct] Advanced search error:', error);
             return { products: [], brands: [], totalCount: 0 };
         }
 
-        // Extract unique brands from results
-        const brands = [...new Set(data?.map(p => p.brand).filter(Boolean) as string[])];
+        // Extract unique brands from the brand query (unlimited)
+        // Fallback to product results if brand query fails (though unlikely)
+        const brandSource = brandResponse.data || data || [];
+        const brands = [...new Set(brandSource.map(p => p.brand).filter(Boolean) as string[])].sort();
 
         return {
             products: data || [],

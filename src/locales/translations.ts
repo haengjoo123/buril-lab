@@ -2,7 +2,7 @@ export type Language = 'ko' | 'en';
 
 export const translations = {
     ko: {
-        app_title: "Buril-rab",
+        app_title: "Buril-lab",
         app_subtitle_1: "실험실 폐시약,",
         app_subtitle_2: "안전하게",
         app_subtitle_3: "처리하세요.",
@@ -155,6 +155,37 @@ export const translations = {
         log_delete_confirm: "이 기록을 삭제하시겠습니까?",
         log_delete: "삭제",
 
+        // Navigation
+        tab_cabinet: "시약장",
+        app_cabinet: "시약장 (Reagent Cabinet)",
+        cabinet_width: "가로",
+        cabinet_height: "세로",
+        cabinet_depth: "폭",
+        cabinet_ratio_lock: "비율 고정",
+        cabinet_add_shelf: "선반 추가",
+        cabinet_remove_shelf: "선반 제거",
+        cabinet_add_vertical_panel: "세로 구분 추가",
+        cabinet_remove_vertical_panel: "세로 구분 제거",
+        cabinet_vertical_panel_hint: "세로 구분선은 모든 선반에 적용됩니다 (50% 기준).",
+        cabinet_edit_panel_show: "편집 패널 보기",
+        cabinet_reagent_tray_show: "시약 선택창 보기",
+        cabinet_reagent_tray_hide: "시약 선택창 숨기기",
+        cabinet_sort_name: "이름순 정렬",
+        cabinet_sort_type: "종류순 정렬",
+
+        // Cabinet Edit
+        cabinet_edit_title: "시약 정보 수정",
+        cabinet_reagent_name: "시약명",
+        cabinet_notes: "메모",
+        cabinet_save: "저장",
+        cabinet_delete: "삭제",
+        cabinet_delete_confirm: "이 시약을 정말 삭제하시겠습니까?",
+        cabinet_placeholder_name: "예: 황산",
+        cabinet_placeholder_notes: "유효기간, 취급 주의사항 등...",
+        cabinet_label_type: "종류:",
+        cabinet_label_location: "위치:",
+        cabinet_shelf_level: "선반 {{level}}층",
+
         // Auth
         auth_login: "로그인",
         auth_signup: "회원가입",
@@ -169,7 +200,7 @@ export const translations = {
         auth_error_generic: "인증 중 오류가 발생했습니다."
     },
     en: {
-        app_title: "Buril-rab",
+        app_title: "Buril-lab",
         app_subtitle_1: "Lab Waste,",
         app_subtitle_2: "Dispose Safely",
         app_subtitle_3: ".",
@@ -320,6 +351,37 @@ export const translations = {
         log_chemicals_count: "{{count}} chemicals",
         log_delete_confirm: "Delete this record?",
         log_delete: "Delete",
+
+        // Navigation
+        tab_cabinet: "Cabinet",
+        app_cabinet: "Reagent Cabinet",
+        cabinet_width: "Width",
+        cabinet_height: "Height",
+        cabinet_depth: "Depth",
+        cabinet_ratio_lock: "Lock ratio",
+        cabinet_add_shelf: "Add Shelf",
+        cabinet_remove_shelf: "Remove Shelf",
+        cabinet_add_vertical_panel: "Add Vertical Panel",
+        cabinet_remove_vertical_panel: "Remove Vertical Panel",
+        cabinet_vertical_panel_hint: "Vertical dividers apply to all shelves (50% default).",
+        cabinet_edit_panel_show: "Show edit panel",
+        cabinet_reagent_tray_show: "Show reagent tray",
+        cabinet_reagent_tray_hide: "Hide reagent tray",
+        cabinet_sort_name: "Sort by Name",
+        cabinet_sort_type: "Sort by Type",
+
+        // Cabinet Edit
+        cabinet_edit_title: "Edit Reagent",
+        cabinet_reagent_name: "Reagent Name",
+        cabinet_notes: "Notes",
+        cabinet_save: "Save Changes",
+        cabinet_delete: "Delete",
+        cabinet_delete_confirm: "Are you sure you want to delete this reagent?",
+        cabinet_placeholder_name: "Ex: Sulfuric Acid",
+        cabinet_placeholder_notes: "Expiration date, handling precautions...",
+        cabinet_label_type: "Type:",
+        cabinet_label_location: "Location:",
+        cabinet_shelf_level: "Shelf {{level}}",
 
         // Auth
         auth_login: "Log In",
