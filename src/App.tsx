@@ -9,13 +9,17 @@ const Scanner = lazy(() => import('./components/Scanner'));
 import { CartView } from './components/CartView';
 import { WasteLogView } from './components/WasteLogView';
 import { FridgeView } from './features/fridge/FridgeView';
+import { CabinetListView } from './features/fridge/CabinetListView';
 import { AuthView } from './components/AuthView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
 import { searchChemical } from './services/searchService';
+import { cabinetService, type CabinetSearchResult } from './services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from './services/mediaProductService';
 import { analyzeChemical } from './utils/chemicalAnalyzer';
 import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
+import { useLabStore } from './store/useLabStore';
+import { useFridgeStore } from './store/fridgeStore';
 import { useTranslation } from 'react-i18next';
 import type { AnalysisResult } from './types';
 import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, ClipboardList, Box } from 'lucide-react';
@@ -29,6 +33,7 @@ function App() {
   const [mediaProducts, setMediaProducts] = useState<MediaProduct[]>([]);
   const [mediaBrands, setMediaBrands] = useState<string[]>([]);
   const [mediaCount, setMediaCount] = useState(0);
+  const [cabinetResults, setCabinetResults] = useState<CabinetSearchResult[]>([]);
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('relevance');
@@ -37,6 +42,7 @@ function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'search' | 'logs' | 'cabinet'>('search');
+  const [activeCabinetId, setActiveCabinetId] = useState<string | null>(null);
   const [logRefreshKey, setLogRefreshKey] = useState(0);
 
   const cart = useWasteStore((state) => state.cart);
@@ -51,18 +57,20 @@ function App() {
     setMediaProducts([]);
     setMediaBrands([]);
     setMediaCount(0);
+    setCabinetResults([]);
     setLastSearchQuery(searchQuery);
 
     try {
-      // Parallel search: chemicals + media products
-      const [chemicalData, mediaSearchResult] = await Promise.all([
+      // Parallel search: chemicals + media products + cabinet items
+      const [chemicalData, mediaSearchResult, cabinetSearchResult] = await Promise.all([
         searchChemical(searchQuery),
         searchMediaProductsAdvanced({
           query: searchQuery,
           limit: 50,
           brandFilter: brand,
           sortBy: sort
-        })
+        }),
+        cabinetService.searchCabinetItems(searchQuery)
       ]);
 
       if (chemicalData) {
@@ -76,8 +84,12 @@ function App() {
         setMediaCount(mediaSearchResult.totalCount);
       }
 
-      // Show error only if both searches returned nothing
-      if (!chemicalData && mediaSearchResult.products.length === 0) {
+      if (cabinetSearchResult.length > 0) {
+        setCabinetResults(cabinetSearchResult);
+      }
+
+      // Show error only if all searches returned nothing
+      if (!chemicalData && mediaSearchResult.products.length === 0 && cabinetSearchResult.length === 0) {
         setError(`'${searchQuery}'${t('search_not_found')}`);
       } else {
         addSearchHistory(searchQuery);
@@ -131,10 +143,13 @@ function App() {
   };
 
   const handleReset = () => {
+    setActiveTab('search');
+    setActiveCabinetId(null);
     setResult(null);
     setMediaProducts([]);
     setMediaBrands([]);
     setMediaCount(0);
+    setCabinetResults([]);
     setShowAllProducts(false);
     setSelectedBrand('all');
     setSortBy('relevance');
@@ -154,6 +169,9 @@ function App() {
 
   // Auth Gate
   if (!session) {
+    if (useLabStore.getState().currentLabId !== null) {
+      useLabStore.getState().clearLabState();
+    }
     return <AuthView onSignIn={signIn} onSignUp={signUp} />;
   }
 
@@ -220,7 +238,11 @@ function App() {
       }>
         {activeTab === 'cabinet' ? (
           <div className="h-full">
-            <FridgeView />
+            {activeCabinetId ? (
+              <FridgeView cabinetId={activeCabinetId} onBack={() => setActiveCabinetId(null)} />
+            ) : (
+              <CabinetListView onSelectCabinet={(id) => setActiveCabinetId(id)} />
+            )}
           </div>
         ) : activeTab === 'logs' ? (
           <WasteLogView key={logRefreshKey} />
@@ -260,7 +282,7 @@ function App() {
               <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-                ) : (result || mediaProducts.length > 0) ? (
+                ) : (result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
                   <button type="button" onClick={handleReset} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
                     <span className="sr-only">Reset</span>
                     X
@@ -278,13 +300,58 @@ function App() {
             )}
 
             {/* Main Content Area */}
-            {(result || mediaProducts.length > 0) ? (
+            {(result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
               <div className="flex flex-col gap-4">
+
+                {/* Cabinet Results */}
+                {cabinetResults.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">
+                      내 시약장 검색 결과
+                    </h3>
+                    <div className="flex flex-col gap-3">
+                      {cabinetResults.map(item => (
+                        <div
+                          key={item.itemId}
+                          onClick={async () => {
+                            // 1. Switch to cabinet tab and load the cabinet
+                            setActiveTab('cabinet');
+                            setActiveCabinetId(item.cabinetId);
+                            const store = useFridgeStore.getState();
+                            store.setMode('VIEW');
+
+                            // 2. Wait for the cabinet data to fully load
+                            await store.loadCabinet(item.cabinetId);
+
+                            // 3. NOW set focus and highlight (shelves are loaded)
+                            useFridgeStore.getState().setFocusedShelfId(item.shelfId);
+                            useFridgeStore.getState().setHighlightedItemId(item.itemId);
+                          }}
+                          className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-emerald-100 dark:border-emerald-900/50 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex flex-col gap-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-emerald-800 dark:text-emerald-300">
+                              {item.itemName}
+                            </span>
+                            <span className="text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-md">
+                              {item.cabinetName}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                            <Box className="w-3 h-3" />
+                            {item.shelfLevel === 0 ? '바닥면' : `${item.shelfLevel}번째 선반`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Chemical Result */}
                 {result && (
                   <div>
-                    {mediaProducts.length > 0 && (
-                      <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">
+                    {(mediaProducts.length > 0 || cabinetResults.length > 0) && (
+                      <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 mt-2">
                         {t('search_results_chemical')}
                       </h3>
                     )}

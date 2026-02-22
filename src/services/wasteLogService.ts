@@ -5,6 +5,7 @@
 
 import { supabase } from './supabaseClient';
 import type { CartItem, WasteLog } from '../types';
+import { useLabStore } from '../store/useLabStore';
 
 interface SaveWasteLogParams {
     chemicals: CartItem[];
@@ -26,10 +27,13 @@ export async function saveWasteLog(params: SaveWasteLogParams): Promise<WasteLog
         throw new Error('User must be authenticated to save waste logs');
     }
 
+    const { currentLabId } = useLabStore.getState();
+
     const { data, error } = await supabase
         .from('waste_logs')
         .insert({
             user_id: userId,
+            lab_id: currentLabId || null,
             chemicals: params.chemicals,
             disposal_category: params.disposal_category,
             total_volume_ml: params.total_volume_ml || null,
@@ -54,9 +58,18 @@ export async function fetchWasteLogs(
     limit: number = 20,
     offset: number = 0
 ): Promise<{ logs: WasteLog[]; count: number }> {
-    const { data, error, count } = await supabase
+    const { currentLabId } = useLabStore.getState();
+    const query = supabase
         .from('waste_logs')
-        .select('*', { count: 'exact' })
+        .select('*', { count: 'exact' });
+
+    if (currentLabId) {
+        query.eq('lab_id', currentLabId);
+    } else {
+        query.is('lab_id', null);
+    }
+
+    const { data, error, count } = await query
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 

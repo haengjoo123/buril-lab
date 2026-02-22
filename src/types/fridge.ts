@@ -33,6 +33,8 @@ export interface ReagentPlacement {
     notes?: string;
     casNo?: string;
     chemId?: number;
+    expiryDate?: string; // ISO date string (YYYY-MM-DD)
+    capacity?: string; // e.g. "500mL", "1kg"
 }
 
 export interface DragItem {
@@ -40,6 +42,15 @@ export interface DragItem {
     originalShelfId: string;
     originalPosition: number;
     originalDepthPosition?: number;
+}
+
+export interface PendingPlacement {
+    shelfId: string;
+    position: number;
+    depthPosition: number;
+    width: number;
+    template: ReagentTemplateType;
+    chemicalData?: Record<string, unknown>;
 }
 
 export interface ShelfData {
@@ -53,6 +64,7 @@ export interface FridgeState {
     shelves: ShelfData[];
     mode: 'VIEW' | 'EDIT' | 'PLACE';
     draggedItem: DragItem | null;
+    pendingPlacement: PendingPlacement | null;
     searchQuery: string;
 
     /** 시약장 가로 길이 (월드 유닛) */
@@ -81,6 +93,7 @@ export interface FridgeState {
     setSearchQuery: (query: string) => void;
     setDraggedTemplate: (template: ReagentTemplate | null) => void;
     setDraggedItem: (item: DragItem | null) => void;
+    setPendingPlacement: (placement: PendingPlacement | null) => void;
     draggedTemplate: ReagentTemplate | null;
     setCabinetDimensions: (width?: number, height?: number) => void;
     setCabinetDepth: (depth: number) => void;
@@ -89,6 +102,8 @@ export interface FridgeState {
 
     // Selection & Updates
     selectedReagentId: string | null;
+    highlightedItemId: string | null;
     setSelectedReagentId: (id: string | null) => void;
+    setHighlightedItemId: (id: string | null) => void;
     updateReagent: (id: string, updates: Partial<ReagentPlacement>) => void;
 }

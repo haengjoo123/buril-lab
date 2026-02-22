@@ -3,6 +3,7 @@ import { fetchWasteLogs, deleteWasteLog } from '../services/wasteLogService';
 import type { WasteLog } from '../types';
 import { useTranslation } from 'react-i18next';
 import { Trash2, ChevronDown, ChevronUp, FlaskConical, Loader2, AlertCircle } from 'lucide-react';
+import { CustomDialog } from './CustomDialog';
 
 export const WasteLogView: React.FC = () => {
     const { t } = useTranslation();
@@ -12,6 +13,7 @@ export const WasteLogView: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [page, setPage] = useState(0);
+    const [deleteId, setDeleteId] = useState<string | null>(null);
     const PAGE_SIZE = 20;
 
     const loadLogs = useCallback(async (reset: boolean = false) => {
@@ -54,14 +56,16 @@ export const WasteLogView: React.FC = () => {
             .finally(() => setIsLoading(false));
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm(t('log_delete_confirm'))) return;
+    const handleDelete = async () => {
+        if (!deleteId) return;
         try {
-            await deleteWasteLog(id);
-            setLogs(prev => prev.filter(l => l.id !== id));
+            await deleteWasteLog(deleteId);
+            setLogs(prev => prev.filter(l => l.id !== deleteId));
             setTotalCount(prev => prev - 1);
         } catch {
             setError(t('dispose_error'));
+        } finally {
+            setDeleteId(null);
         }
     };
 
@@ -201,7 +205,7 @@ export const WasteLogView: React.FC = () => {
 
                                     {/* Delete Button */}
                                     <button
-                                        onClick={() => handleDelete(log.id)}
+                                        onClick={() => setDeleteId(log.id)}
                                         className="mt-3 w-full py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
@@ -234,6 +238,16 @@ export const WasteLogView: React.FC = () => {
                     <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
                 </div>
             )}
+
+            <CustomDialog
+                isOpen={!!deleteId}
+                onClose={() => setDeleteId(null)}
+                title={t('log_delete') || '삭제'}
+                description={t('log_delete_confirm')}
+                type="confirm"
+                isDestructive={true}
+                onConfirm={handleDelete}
+            />
         </div>
     );
 };

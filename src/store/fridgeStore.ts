@@ -1,10 +1,17 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { FridgeState, ShelfData, ReagentPlacement } from '../types/fridge';
+import { cabinetService } from '../services/cabinetService';
 
 interface FridgeStore extends FridgeState {
     checkCollision: (shelfId: string, position: number, width: number, depthPosition?: number, templateType?: string, ignoreItemId?: string) => boolean;
     sortShelves: (criteria: 'name' | 'type') => void;
+    cabinetId: string | null;
+    cabinetName: string;
+    isLoadingCabinet: boolean;
+    loadCabinet: (cabinetId: string) => Promise<void>;
+    saveCabinet: () => Promise<void>;
+    clearCabinet: () => void;
 }
 
 const TEMPLATE_DEPTHS = {
@@ -15,10 +22,10 @@ const TEMPLATE_DEPTHS = {
 };
 
 const INITIAL_SHELVES: ShelfData[] = [
-    { id: 'floor', level: 0, dividers: [], items: [] },
-    { id: 'shelf-1', level: 1, dividers: [], items: [] },
-    { id: 'shelf-2', level: 2, dividers: [], items: [] },
-    { id: 'shelf-3', level: 3, dividers: [], items: [] },
+    { id: uuidv4(), level: 0, dividers: [], items: [] },
+    { id: uuidv4(), level: 1, dividers: [], items: [] },
+    { id: uuidv4(), level: 2, dividers: [], items: [] },
+    { id: uuidv4(), level: 3, dividers: [], items: [] },
 ];
 
 const DEFAULT_CABINET_WIDTH = 5;
@@ -30,6 +37,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     mode: 'VIEW',
     draggedItem: null,
     draggedTemplate: null,
+    pendingPlacement: null,
     searchQuery: '',
     cabinetWidth: DEFAULT_CABINET_WIDTH,
     cabinetHeight: DEFAULT_CABINET_HEIGHT,
@@ -39,6 +47,32 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     focusedShelfId: null as string | null,
 
     selectedReagentId: null,
+    highlightedItemId: null,
+    cabinetId: null,
+    cabinetName: '',
+    isLoadingCabinet: false,
+
+    loadCabinet: async (cabinetId: string) => {
+        set({ isLoadingCabinet: true, cabinetId, cabinetName: '', shelves: [] });
+        try {
+            const { shelves, cabinetName } = await cabinetService.getCabinetDetails(cabinetId);
+            set({ shelves: shelves.length > 0 ? shelves : INITIAL_SHELVES, cabinetName });
+        } catch (err) {
+            console.error('Failed to load cabinet', err);
+        } finally {
+            set({ isLoadingCabinet: false });
+        }
+    },
+
+    saveCabinet: async () => {
+        const state = get();
+        if (!state.cabinetId) return;
+        try {
+            await cabinetService.saveCabinetState(state.cabinetId, state.shelves);
+        } catch (err) {
+            console.error('Failed to save cabinet', err);
+        }
+    },
 
     setMode: (mode) => set(state => ({
         mode,
@@ -48,6 +82,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     setSearchQuery: (query) => set({ searchQuery: query }),
     setDraggedTemplate: (template) => set({ draggedTemplate: template }),
     setDraggedItem: (item) => set({ draggedItem: item }),
+    setPendingPlacement: (placement) => set({ pendingPlacement: placement }),
 
     setCabinetDimensions: (width, height) => {
         const state = get();
@@ -249,7 +284,15 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         }))
     })),
 
+    clearCabinet: () => set(state => ({
+        shelves: state.shelves.map(s => ({
+            ...s,
+            items: []
+        }))
+    })),
+
     setSelectedReagentId: (id) => set({ selectedReagentId: id }),
+    setHighlightedItemId: (id) => set({ highlightedItemId: id }),
 
     updateReagent: (id, updates) => set(state => ({
         shelves: state.shelves.map(s => {
@@ -279,47 +322,62 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 }
             });
 
-            // 2. Repack items (Flow layout with Row Wrapping)
-            let currentX = 2; // Start from 2% left margin
-            const GAP = 2;    // 2% gap between items
-            let row = 0;      // 0: Back (or Single), 1: Front
+            // 2. Repack items (Front-to-Back, Left-to-Right logic)
+            const state = get();
+            const cabinetDepth = state.cabinetDepth;
+            const GAP_X = 2; // 2% width gap
+            const GAP_Z = 2; // 2% depth gap
 
-            // Temporary storage for rows
-            const rows: typeof sortedItems[] = [[]];
+            const packedItems: ReagentPlacement[] = [];
 
-            // First pass: Distribute to rows
+            // Group by criteria so similar items form columns
+            const groups: { [key: string]: ReagentPlacement[] } = {};
             for (const item of sortedItems) {
-                if (currentX + item.width > 98) {
-                    // Overflow -> New Row
-                    row++;
-                    currentX = 2;
-                    rows[row] = [];
-                }
-                const newItem = { ...item, position: currentX };
-                rows[row].push(newItem);
-                currentX += item.width + GAP;
+                const key = criteria === 'name' ? item.name : `${item.template}-${item.name}`;
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(item);
             }
 
-            // Second pass: Assign Depth based on total rows
-            // If 1 row: Depth 50
-            // If 2 rows: Back 30, Front 70
-            // If 3 rows: 20, 50, 80? (Let's limit to 2 for now mostly, or dynamic)
+            let currentX = 2; // Start from 2% left margin
 
-            const totalRows = rows.length;
-            const packedItems = rows.flatMap((rowItems, rowIndex) => {
-                let depthPos = 50;
-                if (totalRows === 2) {
-                    depthPos = rowIndex === 0 ? 35 : 75; // Back, Front
-                } else if (totalRows >= 3) {
-                    // 3 rows: 25, 50, 75
-                    depthPos = 25 + (rowIndex * 25);
+            for (const key in groups) {
+                const groupItems = groups[key];
+                if (groupItems.length === 0) continue;
+
+                // Find the maximum width in this group to ensure the column is wide enough
+                const maxItemWidth = Math.max(...groupItems.map(item => item.width));
+
+                // We'll use the first item's template for physical depth estimation 
+                // (assuming items with same name have similar depth/template)
+                const template = groupItems[0].template;
+                const physicalDepth = TEMPLATE_DEPTHS[template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
+                const depthPct = (physicalDepth / cabinetDepth) * 100;
+
+                // Pack this group from Front to Back
+                const startZ = 100 - (depthPct / 2) - 2; // 2% margin at front
+                let currentZ = startZ;
+
+                for (const item of groupItems) {
+                    if (currentZ - (depthPct / 2) < 0) {
+                        // Reached the back -> Next column within the same group
+                        currentX += maxItemWidth + GAP_X;
+                        currentZ = startZ;
+                    }
+
+                    packedItems.push({
+                        ...item,
+                        // Center the item horizontally within the column if it's narrower than maxItemWidth
+                        position: currentX + (maxItemWidth - item.width) / 2,
+                        depthPosition: currentZ
+                    });
+
+                    // Move towards the back for the next item
+                    currentZ -= (depthPct + GAP_Z);
                 }
 
-                return rowItems.map(item => ({
-                    ...item,
-                    depthPosition: depthPos
-                }));
-            });
+                // Finish group -> move to next column for the next group
+                currentX += maxItemWidth + GAP_X;
+            }
 
             return { ...shelf, items: packedItems };
         })

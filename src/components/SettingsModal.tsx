@@ -2,6 +2,7 @@ import React from 'react';
 import { RotateCcw, ShieldCheck, X, Globe } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
+import { CustomDialog } from './CustomDialog';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -11,29 +12,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const clearCart = useWasteStore((state) => state.clearCart);
     const { t, i18n } = useTranslation();
 
+    const [dialogConfig, setDialogConfig] = React.useState<{
+        isOpen: boolean;
+        type: 'alert' | 'confirm';
+        title: string;
+        description: string;
+        isDestructive?: boolean;
+        onConfirm?: () => void;
+    }>({ isOpen: false, type: 'alert', title: '', description: '' });
+
+    const closeDialog = () => setDialogConfig(prev => ({ ...prev, isOpen: false }));
+
     const changeLanguage = (lng: string) => {
         i18n.changeLanguage(lng);
         localStorage.setItem('i18nextLng', lng); // Persist manually if needed, or rely on detector
     };
 
     const handleResetData = () => {
-        if (confirm('모든 데이터를 초기화하시겠습니까? (장바구니 및 검색 기록)')) {
-            clearCart();
-            const currentLang = i18n.language;
-            localStorage.clear();
+        setDialogConfig({
+            isOpen: true,
+            type: 'confirm',
+            title: '초기화',
+            description: '모든 데이터를 초기화하시겠습니까? (장바구니 및 검색 기록)',
+            isDestructive: true,
+            onConfirm: () => {
+                clearCart();
+                const currentLang = i18n.language;
+                localStorage.clear();
+                localStorage.setItem('i18nextLng', currentLang);
 
-            // Restore language preference
-            localStorage.setItem('i18nextLng', currentLang);
-
-            alert('초기화되었습니다. 페이지를 새로고침합니다.');
-            window.location.reload();
-        }
+                setDialogConfig({
+                    isOpen: true,
+                    type: 'alert',
+                    title: '초기화 완료',
+                    description: '초기화되었습니다. 페이지를 새로고침합니다.',
+                    onConfirm: () => window.location.reload()
+                });
+            }
+        });
     };
 
     const handleViewDisclaimer = () => {
-        localStorage.removeItem('buril-safety-acknowledged');
-        alert('안전 면책 동의가 초기화되었습니다. 메인 화면으로 돌아가면 다시 표시됩니다.');
-        window.location.reload();
+        setDialogConfig({
+            isOpen: true,
+            type: 'confirm',
+            title: '안전 면책 동의 초기화',
+            description: '안전 면책 동의를 초기화하시겠습니까?',
+            onConfirm: () => {
+                localStorage.removeItem('buril-safety-acknowledged');
+                setDialogConfig({
+                    isOpen: true,
+                    type: 'alert',
+                    title: '초기화 완료',
+                    description: '안전 면책 동의가 초기화되었습니다. 메인 화면으로 돌아가면 다시 표시됩니다.',
+                    onConfirm: () => window.location.reload()
+                });
+            }
+        });
     };
 
     return (
@@ -96,6 +131,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     Buril-lab v1.0.0
                 </div>
             </div>
+
+            <CustomDialog
+                isOpen={dialogConfig.isOpen}
+                onClose={closeDialog}
+                title={dialogConfig.title}
+                description={dialogConfig.description}
+                type={dialogConfig.type}
+                isDestructive={dialogConfig.isDestructive}
+                onConfirm={dialogConfig.onConfirm}
+            />
         </div>
     );
 };

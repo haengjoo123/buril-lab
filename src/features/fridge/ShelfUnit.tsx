@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ShelfData } from '../../types/fridge';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { ReagentItem, ItemGeometry } from './ReagentItem';
+import { ReagentItem, ItemGeometry, CONTAINER_BASE_WIDTHS } from './ReagentItem';
 import { Divider } from './Divider';
 import { checkCompatibility } from '../../utils/compatibilityChecker';
 import { Html } from '@react-three/drei';
+import { useTranslation } from 'react-i18next';
 
 interface ShelfUnitProps {
     shelf: ShelfData;
@@ -37,7 +38,8 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
     shelfHeight = DEFAULT_SHELF_HEIGHT,
     isDimmed = false
 }) => {
-    const { draggedTemplate, draggedItem, shelves, checkCollision, placeReagent, moveReagent, setDraggedTemplate, setDraggedItem } = useFridgeStore();
+    const { t } = useTranslation();
+    const { draggedTemplate, draggedItem, shelves, checkCollision, moveReagent, setDraggedTemplate, setDraggedItem, setPendingPlacement } = useFridgeStore();
     const [ghostPos, setGhostPos] = useState<number | null>(null);
     const [ghostDepthPos, setGhostDepthPos] = useState<number>(50);
     const [isValid, setIsValid] = useState(true);
@@ -111,8 +113,8 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
             const isBase = (chem?.properties?.ph ?? 7) > 10;
             // Also check hCodes if available?
             for (const n of neighbors) {
-                if (isAcid && n.isBasic) warnMsg = "Acid + Base Incompatible!";
-                if (isBase && n.isAcidic) warnMsg = "Base + Acid Incompatible!";
+                if (isAcid && n.isBasic) warnMsg = t('compat_acid_base');
+                if (isBase && n.isAcidic) warnMsg = t('compat_acid_base');
             }
             setWarning(warnMsg);
         } else {
@@ -136,6 +138,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
             onShelfFocus?.(position[1]);
             return;
         }
+
         // 시약 선택 상태에서도, 호버 없이 선반만 클릭한 경우 포커스 처리
         if (ghostPos === null || !isValid) {
             e.stopPropagation();
@@ -155,21 +158,15 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         if (!draggedTemplate) return;
 
         const chem = draggedTemplate.chemicalData as any;
-        placeReagent(shelf.id, {
-            id: '', // Generated in store
-            reagentId: 'new-id', // TODO: Real ID
-            name: draggedTemplate.name || 'Unknown',
+
+        // Instead of immediate placement, set pending placement to show the modal
+        setPendingPlacement({
+            shelfId: shelf.id,
             position: ghostPos,
             depthPosition: ghostDepthPos,
             width: draggedTemplate.width,
             template: draggedTemplate.type,
-            isAcidic: (chem?.properties?.ph ?? 7) < 7,
-            isBasic: (chem?.properties?.ph ?? 7) > 10,
-            hCodes: chem?.ghs?.hazardStatements || [],
-            // Extra data for editing
-            chemId: chem?.koshaId,
-            casNo: chem?.casNumber,
-            notes: ''
+            chemicalData: chem
         });
 
         setDraggedTemplate(null);
@@ -216,7 +213,12 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
                     ]}
                     onPointerUp={handlePointerUp}
                 >
-                    <ItemGeometry type={(draggedTemplate?.type ?? draggedPlacement!.template) as string} color={isValid ? (warning ? '#fbbf24' : '#4ade80') : '#ef4444'} opacity={0.6} />
+                    <ItemGeometry
+                        type={(draggedTemplate?.type ?? draggedPlacement!.template) as string}
+                        color={isValid ? (warning ? '#fbbf24' : '#4ade80') : '#ef4444'}
+                        opacity={0.6}
+                        scale={(draggedTemplate?.width ?? draggedPlacement!.width) / (CONTAINER_BASE_WIDTHS[draggedTemplate?.type ?? draggedPlacement!.template] || 10)}
+                    />
                     {warning && (
                         <Html position={[0, 1.5, 0]} center>
                             <div className="bg-red-500 text-white text-xs px-2 py-1 rounded shadow whitespace-nowrap animate-pulse">

@@ -51,16 +51,16 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-5">
             {/* Header: Chemical Info */}
-            <div className="p-5 bg-slate-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center">
-                <div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white">{chemical.name}</h3>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm font-mono mt-1">
+            <div className="p-5 bg-slate-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center gap-3">
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white truncate">{chemical.name}</h3>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm font-mono mt-1 truncate">
                         {chemical.molecularFormula} {chemical.casNumber !== chemical.name ? `• CAS: ${chemical.casNumber}` : ''}
                     </p>
                 </div>
                 <button
                     onClick={() => setIsMsdsOpen(true)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                    className="shrink-0 flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
                 >
                     <FileText className="w-3.5 h-3.5" />
                     MSDS 확인

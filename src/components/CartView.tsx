@@ -5,6 +5,7 @@ import { checkCompatibility } from '../utils/compatibilityChecker';
 import { saveWasteLog } from '../services/wasteLogService';
 import { X, Trash2, AlertTriangle, AlertOctagon, CheckCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { CustomDialog } from './CustomDialog';
 
 interface CartViewProps {
     onClose: () => void;
@@ -24,6 +25,8 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
     const [memo, setMemo] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null);
+
+    const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
     const handleDispose = async () => {
         setIsSaving(true);
@@ -189,9 +192,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                         </button>
 
                         <button
-                            onClick={() => {
-                                if (confirm(t('cart_confirm_clear'))) clearCart();
-                            }}
+                            onClick={() => setIsClearDialogOpen(true)}
                             className="w-full py-3 border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-sm font-medium transition-colors"
                         >
                             {t('btn_clear_all')}
@@ -279,6 +280,19 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                     </div>
                 </div>
             )}
+
+            <CustomDialog
+                isOpen={isClearDialogOpen}
+                onClose={() => setIsClearDialogOpen(false)}
+                title={t('btn_clear_all')}
+                description={t('cart_confirm_clear')}
+                type="confirm"
+                isDestructive={true}
+                onConfirm={() => {
+                    clearCart();
+                    setIsClearDialogOpen(false);
+                }}
+            />
         </div>
     );
 };

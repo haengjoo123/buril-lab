@@ -2,16 +2,30 @@ import React, { useState } from 'react';
 import { FridgeScene } from './FridgeScene';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, ScanLine, Ratio, SplitSquareVertical } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, ScanLine, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { CustomDialog } from '../../components/CustomDialog';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 
-export const FridgeView: React.FC = () => {
+export interface FridgeViewProps {
+    cabinetId: string;
+    onBack?: () => void;
+}
+
+export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => {
     const { t } = useTranslation();
     const [verticalPanelPos, setVerticalPanelPos] = useState(50);
     const [isEditPanelVisible, setIsEditPanelVisible] = useState(true);
     const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(true);
+    const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Naming / Size Configuration Modal State
+    const [placementName, setPlacementName] = useState('');
+    const [placementMemo, setPlacementMemo] = useState('');
+    const [placementSize, setPlacementSize] = useState<number>(1.0); // 0.8 (S), 1.0 (M), 1.2 (L)
+
     const {
         mode,
         setMode,
@@ -30,9 +44,41 @@ export const FridgeView: React.FC = () => {
         setCabinetDepth,
         setCabinetAspectRatio,
         sortShelves,
+        loadCabinet,
+        saveCabinet,
+        cabinetName,
+        isLoadingCabinet,
+        clearCabinet,
+        pendingPlacement,
+        setPendingPlacement,
+        placeReagent
     } = useFridgeStore();
 
-    const handleReagentClick = (item: typeof mockReagents[0]) => {
+    React.useEffect(() => {
+        if (cabinetId) {
+            // Skip if the store already has this cabinet loaded (e.g., from search click)
+            const currentCabinetId = useFridgeStore.getState().cabinetId;
+            if (currentCabinetId !== cabinetId || useFridgeStore.getState().shelves.length === 0) {
+                loadCabinet(cabinetId);
+            }
+        }
+    }, [cabinetId, loadCabinet]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await saveCabinet();
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleClearCabinet = () => {
+        clearCabinet();
+        setIsClearConfirmOpen(false);
+    };
+
+    const handleReagentClick = (item: typeof genericContainers[0]) => {
         // 이미 선택된 시약을 다시 클릭하면 선택 취소
         if (draggedTemplate?.name === item.name) {
             setDraggedTemplate(null);
@@ -49,64 +95,132 @@ export const FridgeView: React.FC = () => {
         });
     };
 
-    // Mock reagents for the placement tray
-    const mockReagents = [
+    const handleConfirmPlacement = () => {
+        if (!pendingPlacement) return;
+
+        placeReagent(pendingPlacement.shelfId, {
+            id: '',
+            reagentId: 'custom-' + Date.now(),
+            name: placementName.trim() || '이름 없음',
+            position: pendingPlacement.position,
+            depthPosition: pendingPlacement.depthPosition,
+            width: pendingPlacement.width * placementSize,
+            template: pendingPlacement.template,
+            isAcidic: false,
+            isBasic: false,
+            hCodes: [],
+            notes: placementMemo,
+        });
+
+        // Reset states
+        setPendingPlacement(null);
+        setPlacementName('');
+        setPlacementMemo('');
+        setPlacementSize(1.0);
+    };
+
+    const handleCancelPlacement = () => {
+        setPendingPlacement(null);
+        setPlacementName('');
+        setPlacementMemo('');
+        setPlacementSize(1.0);
+    };
+
+    // Generic containers for the placement tray
+    const genericContainers = [
         {
-            name: 'Ethanol (70%)', type: 'C', color: '#64748b', width: 10,
-            chemicalData: { name: 'Ethanol', properties: { ph: 7 }, ghs: { hazardStatements: ['H225'] } }
+            name: t('reagent_type_brown'), type: 'A', color: '#8b4513', width: 8,
+            chemicalData: { name: t('reagent_type_brown') }
         },
         {
-            name: 'Sulfuric Acid', type: 'A', color: '#dc2626', width: 8,
-            chemicalData: { name: 'Sulfuric Acid', properties: { ph: 1 }, ghs: { hazardStatements: ['H314'] } }
-        }, // Acid
+            name: t('reagent_type_plastic'), type: 'B', color: '#f8fafc', width: 10,
+            chemicalData: { name: t('reagent_type_plastic') }
+        },
         {
-            name: 'Sodium Hydroxide', type: 'B', color: '#2563eb', width: 12,
-            chemicalData: { name: 'Sodium Hydroxide', properties: { ph: 14 }, ghs: { hazardStatements: ['H314'] } }
-        }, // Base
+            name: t('reagent_type_glass'), type: 'C', color: '#e2e8f0', width: 9,
+            chemicalData: { name: t('reagent_type_glass') }
+        },
         {
-            name: 'Acetone', type: 'C', color: '#0f172a', width: 10,
-            chemicalData: { name: 'Acetone', properties: { ph: 7 }, ghs: { hazardStatements: ['H225', 'H319'] } }
+            name: t('reagent_type_box'), type: 'D', color: '#cbd5e1', width: 15,
+            chemicalData: { name: t('reagent_type_box') }
         },
     ];
 
     return (
         <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-hidden">
+            {/* Header Toolbar */}
+            <div className="flex justify-between items-center px-4 py-3 bg-white shadow-sm z-30 relative shrink-0">
+                <div className="flex items-center gap-3">
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            className="p-2 -ml-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                    )}
+                    <h2 className="text-lg font-semibold text-slate-800">
+                        {isLoadingCabinet ? (
+                            <span className="flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 animate-spin" /> Loading...
+                            </span>
+                        ) : cabinetName || t('cabinet_manage')}
+                    </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleSave}
+                        disabled={isSaving || isLoadingCabinet}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        <span className="text-sm font-medium">{t('cabinet_save')}</span>
+                    </button>
+                </div>
+            </div>
 
             {/* Main 3D Viewport */}
             <div className="flex-1 relative w-full h-full">
+                {isLoadingCabinet && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20">
+                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                    </div>
+                )}
                 <FridgeScene />
 
                 {/* Mode Switcher - Floating Pill */}
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur shadow-md border rounded-full p-1 flex items-center gap-1 z-20">
-                    <button
-                        onClick={() => setMode('VIEW')}
-                        className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
-                            }`}
-                    >
-                        <Layers size={14} /> View
-                    </button>
-                    <div className="w-px h-4 bg-gray-200" />
-                    <button
-                        onClick={() => setMode('EDIT')}
-                        className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
-                            }`}
-                    >
-                        <Box size={14} /> Edit
-                    </button>
-                    <div className="w-px h-4 bg-gray-200" />
-                    <button
-                        onClick={() => setMode('PLACE')}
-                        className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'
-                            }`}
-                    >
-                        <Plus size={14} /> Stock
-                    </button>
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
+                    <div className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border rounded-full p-1 flex items-center gap-1">
+                        <button
+                            onClick={() => setMode('VIEW')}
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                                }`}
+                        >
+                            <Layers size={14} /> View
+                        </button>
+                        <div className="w-px h-4 bg-gray-200" />
+                        <button
+                            onClick={() => setMode('EDIT')}
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                                }`}
+                        >
+                            <Box size={14} /> Edit
+                        </button>
+                        <div className="w-px h-4 bg-gray-200" />
+                        <button
+                            onClick={() => setMode('PLACE')}
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'
+                                }`}
+                        >
+                            <Plus size={14} /> Stock
+                        </button>
+                    </div>
                 </div>
 
                 {/* Edit Mode Overlay */}
                 <ReagentEditPanel />
                 {mode === 'EDIT' && (
-                    <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-2 pointer-events-none">
+                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20">
                         {isEditPanelVisible ? (
                             <div className="relative bg-white/90 backdrop-blur pointer-events-auto p-4 rounded-xl shadow-lg border flex flex-col gap-4 max-w-md w-full mx-4">
                                 {/* 접기 버튼 - 우측 상단 */}
@@ -281,7 +395,7 @@ export const FridgeView: React.FC = () => {
 
                 {/* Place Mode Reagent Tray - 편집 패널처럼 열고 닫기 */}
                 {mode === 'PLACE' && (
-                    <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-2 pointer-events-none">
+                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20">
                         {isReagentTrayVisible ? (
                             <div className="relative bg-white/90 backdrop-blur pointer-events-auto p-4 rounded-xl shadow-lg border flex flex-col gap-2 max-w-full w-full mx-4 z-20">
                                 <button
@@ -293,14 +407,38 @@ export const FridgeView: React.FC = () => {
                                 </button>
                                 <div className="flex justify-between items-center px-2 pr-8">
                                     <h3 className="text-sm font-semibold text-gray-700">Reagent Tray</h3>
-                                    <button className="text-xs text-blue-600 hover:underline">Clear Tray</button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => sortShelves('name')}
+                                            disabled={shelves.length === 0}
+                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
+                                        >
+                                            <span>AZ</span>
+                                            {t('cabinet_sort_name')}
+                                        </button>
+                                        <button
+                                            onClick={() => sortShelves('type')}
+                                            disabled={shelves.length === 0}
+                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
+                                        >
+                                            <Layers size={10} />
+                                            {t('cabinet_sort_type')}
+                                        </button>
+                                        <button
+                                            onClick={() => setIsClearConfirmOpen(true)}
+                                            disabled={shelves.every(s => s.items.length === 0)}
+                                            className="text-xs text-red-600 hover:underline ml-2 flex items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                                        >
+                                            {t('cabinet_clear_all')}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
                                     <div className="min-w-[100px] h-[120px] flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-gray-400 hover:border-blue-400 hover:text-blue-500 cursor-pointer transition-colors shrink-0">
                                         <ScanLine size={24} />
                                         <span className="text-xs font-medium">Scan Code</span>
                                     </div>
-                                    {mockReagents.map((item, idx) => (
+                                    {genericContainers.map((item, idx) => (
                                         <div
                                             key={idx}
                                             onClick={() => handleReagentClick(item)}
@@ -333,6 +471,87 @@ export const FridgeView: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            <CustomDialog
+                isOpen={isClearConfirmOpen}
+                onClose={() => setIsClearConfirmOpen(false)}
+                title={t('cabinet_clear_all')}
+                description={t('cabinet_clear_all_confirm')}
+                type="confirm"
+                isDestructive={true}
+                onConfirm={handleClearCabinet}
+                confirmText={t('cabinet_delete')}
+                cancelText={t('btn_cancel')}
+            />
+
+            {pendingPlacement && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={handleCancelPlacement} />
+                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                        <h3 className="text-xl font-bold text-slate-800">{t('reagent_info_title')}</h3>
+
+                        <div className="flex flex-col gap-1">
+                            <label className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
+                            <input
+                                autoFocus
+                                type="text"
+                                value={placementName}
+                                onChange={e => setPlacementName(e.target.value)}
+                                placeholder={t('reagent_name_placeholder')}
+                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                            <label className="text-xs font-semibold text-gray-600">{t('reagent_size_label')}</label>
+                            <div className="flex gap-2">
+                                {[
+                                    { label: t('reagent_size_small'), value: 0.8 },
+                                    { label: t('reagent_size_medium'), value: 1.0 },
+                                    { label: t('reagent_size_large'), value: 1.2 }
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => setPlacementSize(opt.value)}
+                                        className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${placementSize === opt.value
+                                            ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                            <label className="text-xs font-semibold text-gray-600">{t('reagent_memo_label')}</label>
+                            <textarea
+                                value={placementMemo}
+                                onChange={e => setPlacementMemo(e.target.value)}
+                                placeholder={t('reagent_memo_placeholder')}
+                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-20"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-3 mt-2">
+                            <button
+                                onClick={handleCancelPlacement}
+                                className="flex-1 py-2 rounded-xl text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                {t('btn_cancel')}
+                            </button>
+                            <button
+                                onClick={handleConfirmPlacement}
+                                disabled={!placementName.trim()}
+                                className="flex-1 py-2 rounded-xl text-white font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                            >
+                                {t('btn_confirm')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
