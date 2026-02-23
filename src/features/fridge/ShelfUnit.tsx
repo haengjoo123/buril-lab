@@ -39,7 +39,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
     isDimmed = false
 }) => {
     const { t } = useTranslation();
-    const { draggedTemplate, draggedItem, shelves, checkCollision, moveReagent, setDraggedTemplate, setDraggedItem, setPendingPlacement } = useFridgeStore();
+    const { draggedTemplate, draggedItem, shelves, moveReagent, setDraggedTemplate, setDraggedItem, setPendingPlacement } = useFridgeStore();
     const [ghostPos, setGhostPos] = useState<number | null>(null);
     const [ghostDepthPos, setGhostDepthPos] = useState<number>(50);
     const [isValid, setIsValid] = useState(true);
@@ -69,12 +69,11 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         setGhostPos(pct);
         setGhostDepthPos(depthClamped);
 
-        const ignoreId = isPlacedItemDrag ? draggedItem!.id : undefined;
-        const templateType = draggedTemplate?.type ?? draggedPlacement?.template;
-        const collision = checkCollision(shelf.id, pct, dragWidth, ghostDepthPos, templateType, ignoreId);
-        setIsValid(!collision);
 
-        if (!collision && draggedTemplate?.chemicalData) {
+        // Manual placement always allowed (no collision blocking)
+        setIsValid(true);
+
+        if (draggedTemplate?.chemicalData) {
             const neighbors = shelf.items.filter(i => {
                 const dist = Math.min(
                     Math.abs(i.position - (pct + draggedTemplate.width)),
@@ -140,7 +139,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         }
 
         // 시약 선택 상태에서도, 호버 없이 선반만 클릭한 경우 포커스 처리
-        if (ghostPos === null || !isValid) {
+        if (ghostPos === null) {
             e.stopPropagation();
             onShelfFocus?.(position[1]);
             return;

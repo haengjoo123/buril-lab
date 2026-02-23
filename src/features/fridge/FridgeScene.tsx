@@ -1,10 +1,13 @@
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState, useCallback } from 'react';
+import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { ShelfUnit } from './ShelfUnit';
 import { CabinetFrame } from './CabinetFrame';
 import { ResponsiveCamera } from './ResponsiveCamera';
+import { Eye, EyeOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 /** OrbitControls target가 변경될 때 동기화 (prop만으로는 갱신이 안 될 수 있음) */
 function SyncOrbitTarget({ target }: { target: [number, number, number] }) {
@@ -105,6 +108,7 @@ function useCabinetCamera(
 }
 
 export const FridgeScene: React.FC = () => {
+    const { t } = useTranslation();
     const shelves = useFridgeStore((state) => state.shelves);
     const mode = useFridgeStore((state) => state.mode);
     const draggedItem = useFridgeStore((state) => state.draggedItem);
@@ -145,18 +149,35 @@ export const FridgeScene: React.FC = () => {
     const setFocusedShelfId = useFridgeStore((state) => state.setFocusedShelfId);
     const GROUP_OFFSET_Y = -0.5;
 
+    /** 탑뷰 (90° 위에서 보기) 상태 */
+    const [isTopDownView, setIsTopDownView] = useState(false);
+
     const effectiveTarget = shelfFocusTarget ?? cameraConfig.target;
     const isPlaceMode = mode === 'PLACE';
 
-    const handleShelfFocus = (shelfId: string, localY: number) => {
+    // 포커스된 선반의 Y 좌표 계산 (탑뷰에서 위의 선반 숨김 로직에 사용)
+    const focusedShelfY = useMemo(() => {
+        if (!focusedShelfId && !shelfFocusTarget) return null;
+        if (shelfFocusTarget) return shelfFocusTarget[1] - GROUP_OFFSET_Y;
+        // fallback: ID 기반 계산
+        if (floorShelf && focusedShelfId === floorShelf.id) return SHELF_BOTTOM_Y + 0.02;
+        const idx = floatingShelves.findIndex(s => s.id === focusedShelfId);
+        if (idx !== -1) return getShelfY(idx);
+        return null;
+    }, [focusedShelfId, shelfFocusTarget, floorShelf, floatingShelves, getShelfY]);
+
+    const handleShelfFocus = useCallback((shelfId: string, localY: number) => {
         if (mode === 'PLACE' && focusedShelfId === shelfId) {
             setShelfFocusTarget(null);
             setFocusedShelfId(null);
+            setIsTopDownView(false);
         } else {
+            // 다른 선반으로 포커스 변경 시 탑뷰 해제
+            if (focusedShelfId !== shelfId) setIsTopDownView(false);
             setShelfFocusTarget([0, GROUP_OFFSET_Y + localY, 0]);
             if (mode === 'PLACE') setFocusedShelfId(shelfId);
         }
-    };
+    }, [mode, focusedShelfId, setFocusedShelfId]);
 
     // Auto-focus when navigated from search
     useEffect(() => {
@@ -172,16 +193,42 @@ export const FridgeScene: React.FC = () => {
 
     // highlightedItemId is managed externally (App.tsx sets it, user interaction clears it)
 
-    /** 선반/바닥 클릭 시 해당 타겟을 기준 정면 30도 카메라 및 줌인 (VIEW/EDIT/PLACE 공통) */
     const effectiveCameraConfig = useMemo(() => {
         if (shelfFocusTarget != null) {
-            // 특정 선반을 클릭했을 때 거리를 좁혀(dist) 자세히 보이게 조정
-            const dist = isPlaceMode ? cameraConfig.baseDistance * 0.8 : cameraConfig.baseDistance * 0.6;
             const fovFactor = 2 * Math.tan(26 * Math.PI / 180);
-            const visibleHeight = dist * fovFactor;
+            const aspect = typeof window !== 'undefined' ? window.innerWidth / Math.max(1, window.innerHeight - 112) : 0.6;
 
-            // 줌인 상태에서도 하단 UI(45%)에 가리지 않도록 
-            // 대상(shelfFocusTarget)을 화면 중앙보다 15% 위쪽에 렌더링하도록 타겟을 하향 조정
+            // 화면 비율에 따라 보정 배수 조정 (양쪽 모드 모두 적용)
+            // 데스크톱(가로 화면): frustum 기하 보정 때문에 높은 배수 필요
+            // 모바일(세로 화면): 기본 공식이 이미 좁은 화면을 충분히 보정하므로 낮은 배수
+            const widthMultiplier = aspect >= 1 ? 2.0 : 1.2;
+
+            // === 탑뷰 모드: 카메라를 선반 바로 위에 배치 ===
+            if (isTopDownView) {
+                // 선반의 폭과 깊이가 모두 보이도록 거리 계산
+                const visibleWidthNeeded = cabinetWidth + 1.5;
+                const visibleDepthNeeded = cabinetDepth + 1.5;
+                const distFromWidth = (visibleWidthNeeded / (fovFactor * aspect)) * widthMultiplier;
+                const distFromDepth = (visibleDepthNeeded / fovFactor) * 1.2; // 깊이는 화면 세로 길이에 비례하므로 기본 보정만 적용
+                const dist = Math.max(distFromWidth, distFromDepth);
+
+                const targetY = shelfFocusTarget[1];
+                return {
+                    ...cameraConfig,
+                    // 카메라를 선반 위 + 약간 앞쪽(Z=0.01)으로 배치하여 gimbal lock 방지
+                    position: [0, targetY + dist, 0.01] as [number, number, number],
+                    target: [0, targetY, 0] as [number, number, number],
+                };
+            }
+
+            // === 일반 선반 포커스 모드 ===
+            const visibleWidthNeeded = cabinetWidth + 1.0;
+            const distFromWidth = (visibleWidthNeeded / (fovFactor * aspect)) * widthMultiplier;
+
+            let dist = isPlaceMode ? cameraConfig.baseDistance * 0.8 : cameraConfig.baseDistance * 0.6;
+            dist = Math.max(dist, distFromWidth);
+
+            const visibleHeight = dist * fovFactor;
             const yOffset = visibleHeight * 0.15;
             const targetY = shelfFocusTarget[1] - yOffset;
 
@@ -195,7 +242,7 @@ export const FridgeScene: React.FC = () => {
             };
         }
         return { ...cameraConfig, target: effectiveTarget };
-    }, [shelfFocusTarget, effectiveTarget, cameraConfig, isPlaceMode]);
+    }, [shelfFocusTarget, effectiveTarget, cameraConfig, isPlaceMode, isTopDownView, cabinetWidth, cabinetDepth]);
 
     return (
         <div className="w-full bg-gray-100 relative" style={{ height: 'calc(100dvh - 7rem)' }}>
@@ -220,53 +267,82 @@ export const FridgeScene: React.FC = () => {
                             depth={cabinetDepth}
                             cabinetHeight={cabinetHeight}
                             dimmed={isPlaceMode && focusedShelfId != null}
+                            hideTop={isTopDownView}
                         />
                         {/* 바닥면 (floor shelf) */}
-                        {floorShelf && (
-                            <ShelfUnit
-                                key={floorShelf.id}
-                                shelf={floorShelf}
-                                position={[0, SHELF_BOTTOM_Y + 0.02, 0]}
-                                shelfWidth={cabinetWidth}
-                                shelfDepth={cabinetDepth}
-                                cellHeight={cellHeight} // Use unified cellHeight or separate?
-                                onShelfFocus={(localY) => handleShelfFocus(floorShelf.id, localY)}
-                                shelfHeight={0.05}
-                                isDimmed={isPlaceMode && focusedShelfId != null && floorShelf.id !== focusedShelfId}
-                            />
-                        )}
+                        {floorShelf && (() => {
+                            const floorY = SHELF_BOTTOM_Y + 0.02;
+                            // 탑뷰 시 포커스된 선반 위의 선반은 숨김
+                            const isAboveFocused = isTopDownView && focusedShelfY != null && floorY > focusedShelfY + 0.01;
+                            if (isAboveFocused) return null;
+                            return (
+                                <ShelfUnit
+                                    key={floorShelf.id}
+                                    shelf={floorShelf}
+                                    position={[0, floorY, 0]}
+                                    shelfWidth={cabinetWidth}
+                                    shelfDepth={cabinetDepth}
+                                    cellHeight={cellHeight}
+                                    onShelfFocus={(localY) => handleShelfFocus(floorShelf.id, localY)}
+                                    shelfHeight={0.05}
+                                    isDimmed={isPlaceMode && focusedShelfId != null && floorShelf.id !== focusedShelfId}
+                                />
+                            );
+                        })()}
 
                         {/* 띄워진 선반들 */}
-                        {floatingShelves.map((shelf, index) => (
-                            <ShelfUnit
-                                key={shelf.id}
-                                shelf={shelf}
-                                position={[0, getShelfY(index), 0]}
-                                shelfWidth={cabinetWidth}
-                                shelfDepth={cabinetDepth}
-                                cellHeight={cellHeight}
-                                onShelfFocus={(localY) => handleShelfFocus(shelf.id, localY)}
-                                isDimmed={isPlaceMode && focusedShelfId != null && shelf.id !== focusedShelfId}
-                            />
-                        ))}
+                        {floatingShelves.map((shelf, index) => {
+                            const shelfY = getShelfY(index);
+                            // 탑뷰 시 포커스된 선반 위의 선반은 숨김
+                            const isAboveFocused = isTopDownView && focusedShelfY != null && shelfY > focusedShelfY + 0.01;
+                            if (isAboveFocused) return null;
+                            return (
+                                <ShelfUnit
+                                    key={shelf.id}
+                                    shelf={shelf}
+                                    position={[0, shelfY, 0]}
+                                    shelfWidth={cabinetWidth}
+                                    shelfDepth={cabinetDepth}
+                                    cellHeight={cellHeight}
+                                    onShelfFocus={(localY) => handleShelfFocus(shelf.id, localY)}
+                                    isDimmed={isPlaceMode && focusedShelfId != null && shelf.id !== focusedShelfId}
+                                />
+                            );
+                        })}
 
                     </group>
 
-                    <ContactShadows position={[0, -1, 0]} opacity={0.4} scale={10} blur={2.5} far={4} />
+                    <ContactShadows position={[0, -1, 0]} opacity={0.4} scale={Math.max(10, cabinetWidth * 1.5)} blur={2.5} far={4} frames={1} />
                     <OrbitControls
                         makeDefault
-                        minPolarAngle={Math.PI / 6}
+                        minPolarAngle={isTopDownView ? 0 : Math.PI / 6}
                         maxPolarAngle={Math.PI / 2}
                         minDistance={cameraConfig.minDistance}
                         maxDistance={cameraConfig.maxDistance}
                         target={effectiveTarget}
                         enableRotate={!isPlaceMode && !draggedItem}
-                        enablePan={!isPlaceMode && !draggedItem}
+                        enablePan={!draggedItem}
                         enableZoom={true}
+                        touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
                     />
                     <SyncOrbitTarget target={effectiveTarget} />
                 </Suspense>
             </Canvas>
+
+            {/* 탑뷰 토글 버튼 - 선반 포커스 시에만 표시 */}
+            {shelfFocusTarget && (
+                <button
+                    onClick={() => setIsTopDownView(prev => !prev)}
+                    className={`absolute top-16 right-4 z-20 flex items-center gap-1.5 px-3 py-2 rounded-full shadow-lg border text-xs font-medium transition-all ${isTopDownView
+                        ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700'
+                        : 'bg-white/90 backdrop-blur text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
+                        }`}
+                    title={t('topdown_view')}
+                >
+                    {isTopDownView ? <EyeOff size={16} /> : <Eye size={16} />}
+                    <span>{t('topdown_view')}</span>
+                </button>
+            )}
         </div>
     );
 };

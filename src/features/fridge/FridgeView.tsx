@@ -325,10 +325,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                                 type="number"
                                                 min={4}
                                                 max={20}
-                                                step={0.5}
+                                                step={1}
                                                 value={cabinetWidth}
                                                 onChange={(e) => {
-                                                    const v = parseFloat(e.target.value);
+                                                    const v = parseInt(e.target.value, 10);
                                                     if (!Number.isNaN(v)) setCabinetDimensions(v, undefined);
                                                 }}
                                                 className="w-14 px-1.5 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
@@ -338,12 +338,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             <span className="text-xs font-medium text-gray-600 w-8">{t('cabinet_height')}</span>
                                             <input
                                                 type="number"
-                                                min={1.2}
+                                                min={2}
                                                 max={15}
-                                                step={0.1}
+                                                step={1}
                                                 value={cabinetHeight}
                                                 onChange={(e) => {
-                                                    const v = parseFloat(e.target.value);
+                                                    const v = parseInt(e.target.value, 10);
                                                     if (!Number.isNaN(v)) setCabinetDimensions(undefined, v);
                                                 }}
                                                 className="w-14 px-1.5 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
@@ -353,12 +353,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             <span className="text-xs font-medium text-gray-600 w-8">{t('cabinet_depth')}</span>
                                             <input
                                                 type="number"
-                                                min={0.8}
+                                                min={1}
                                                 max={4}
-                                                step={0.1}
+                                                step={1}
                                                 value={cabinetDepth}
                                                 onChange={(e) => {
-                                                    const v = parseFloat(e.target.value);
+                                                    const v = parseInt(e.target.value, 10);
                                                     if (!Number.isNaN(v)) setCabinetDepth(v);
                                                 }}
                                                 className="w-14 px-1.5 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400"

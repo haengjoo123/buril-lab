@@ -6,6 +6,8 @@ interface CabinetFrameProps {
     cabinetHeight: number;
     /** PLACE 모드에서 선반 포커스 시 테두리·패널 전체 흐리게 */
     dimmed?: boolean;
+    /** 탑뷰 모드 시 상판을 숨겨서 위에서 내려다볼 수 있게 함 */
+    hideTop?: boolean;
 }
 
 const WALL = 0.12;
@@ -18,6 +20,7 @@ export const CabinetFrame: React.FC<CabinetFrameProps> = ({
     depth,
     cabinetHeight,
     dimmed = false,
+    hideTop = false,
 }) => {
     const bottomY = BOTTOM_Y;
     const topY = bottomY + cabinetHeight;
@@ -60,11 +63,13 @@ export const CabinetFrame: React.FC<CabinetFrameProps> = ({
                 <meshStandardMaterial key={matKey} {...wallMat} />
             </mesh>
 
-            {/* 상판 */}
-            <mesh position={[0, topY + WALL / 2, sideCenterZ]} castShadow receiveShadow>
-                <boxGeometry args={[outerWidth, WALL, sideDepth]} />
-                <meshStandardMaterial key={matKey} {...innerPanelMat} />
-            </mesh>
+            {/* 상판 - 탑뷰 시 숨김 */}
+            {!hideTop && (
+                <mesh position={[0, topY + WALL / 2, sideCenterZ]} castShadow receiveShadow>
+                    <boxGeometry args={[outerWidth, WALL, sideDepth]} />
+                    <meshStandardMaterial key={matKey} {...innerPanelMat} />
+                </mesh>
+            )}
 
             {/* 하판 */}
             <mesh position={[0, bottomY - WALL / 2, sideCenterZ]} receiveShadow>
@@ -73,10 +78,12 @@ export const CabinetFrame: React.FC<CabinetFrameProps> = ({
             </mesh>
 
             {/* 전면 프레임 - 상단/하단 테두리, 좌우 기둥 */}
-            <mesh position={[0, topY + WALL / 2, framBackZ + WALL / 2]} castShadow>
-                <boxGeometry args={[outerWidth, WALL * 1.5, WALL]} />
-                <meshStandardMaterial key={matKey} {...frameMat} />
-            </mesh>
+            {!hideTop && (
+                <mesh position={[0, topY + WALL / 2, framBackZ + WALL / 2]} castShadow>
+                    <boxGeometry args={[outerWidth, WALL * 1.5, WALL]} />
+                    <meshStandardMaterial key={matKey} {...frameMat} />
+                </mesh>
+            )}
             {/* 하단 테두리 - WALL로 낮춰 아래 칸이 가려지지 않도록 */}
             <mesh position={[0, bottomY - WALL / 2, framBackZ + WALL / 2]} castShadow>
                 <boxGeometry args={[outerWidth, WALL, WALL]} />

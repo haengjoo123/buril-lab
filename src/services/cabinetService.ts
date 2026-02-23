@@ -77,7 +77,7 @@ export const cabinetService = {
         return data;
     },
 
-    async updateCabinet(id: string, updates: { name?: string; location?: string; image_url?: string }): Promise<void> {
+    async updateCabinet(id: string, updates: { name?: string; location?: string; image_url?: string; width?: number; height?: number; depth?: number; }): Promise<void> {
         const { error } = await supabase
             .from('cabinets')
             .update(updates)
@@ -125,11 +125,11 @@ export const cabinetService = {
         }
     },
 
-    async getCabinetDetails(cabinetId: string): Promise<{ shelves: ShelfData[], cabinetName: string }> {
+    async getCabinetDetails(cabinetId: string): Promise<{ shelves: ShelfData[], cabinetName: string, width: number, height: number, depth: number }> {
         // Fetch cabinet details for name
         const { data: cabinetData, error: cabinetError } = await supabase
             .from('cabinets')
-            .select('name')
+            .select('name, width, height, depth')
             .eq('id', cabinetId)
             .single();
 
@@ -176,7 +176,13 @@ export const cabinetService = {
             };
         });
 
-        return { shelves, cabinetName: cabinetData?.name || '' };
+        return {
+            shelves,
+            cabinetName: cabinetData?.name || '',
+            width: cabinetData?.width ?? 5,
+            height: cabinetData?.height ?? 9,
+            depth: cabinetData?.depth ?? 2
+        };
     },
 
     async saveCabinetState(cabinetId: string, shelves: ShelfData[]): Promise<void> {

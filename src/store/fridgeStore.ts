@@ -65,8 +65,14 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     loadCabinet: async (cabinetId: string) => {
         set({ isLoadingCabinet: true, cabinetId, cabinetName: '', shelves: [] });
         try {
-            const { shelves, cabinetName } = await cabinetService.getCabinetDetails(cabinetId);
-            set({ shelves: shelves.length > 0 ? shelves : INITIAL_SHELVES, cabinetName });
+            const { shelves, cabinetName, width, height, depth } = await cabinetService.getCabinetDetails(cabinetId);
+            set({
+                shelves: shelves.length > 0 ? shelves : INITIAL_SHELVES,
+                cabinetName,
+                cabinetWidth: width,
+                cabinetHeight: height,
+                cabinetDepth: depth
+            });
         } catch (err) {
             console.error('Failed to load cabinet', err);
         } finally {
@@ -79,6 +85,11 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         if (!state.cabinetId) return;
         try {
             await cabinetService.saveCabinetState(state.cabinetId, state.shelves);
+            await cabinetService.updateCabinet(state.cabinetId, {
+                width: state.cabinetWidth,
+                height: state.cabinetHeight,
+                depth: state.cabinetDepth
+            });
         } catch (err) {
             console.error('Failed to save cabinet', err);
         }
@@ -106,13 +117,13 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         }
 
         set({
-            cabinetWidth: Math.max(4, Math.min(20, newWidth)),
-            cabinetHeight: Math.max(1.2, Math.min(15, newHeight)),
+            cabinetWidth: Math.max(4, Math.min(20, Math.round(newWidth))),
+            cabinetHeight: Math.max(2, Math.min(15, Math.round(newHeight))),
         });
     },
 
     setCabinetDepth: (depth) => set({
-        cabinetDepth: Math.max(0.8, Math.min(4, depth)),
+        cabinetDepth: Math.max(1, Math.min(4, Math.round(depth))),
     }),
 
     setCabinetAspectRatio: (ratio) => set({ cabinetAspectRatio: ratio }),
@@ -237,10 +248,6 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     })),
 
     placeReagent: (shelfId, itemData) => {
-        const store = get();
-        if (store.checkCollision(shelfId, itemData.position, itemData.width, itemData.depthPosition, itemData.template)) {
-            return false;
-        }
 
         const newItem: ReagentPlacement = {
             ...itemData,
@@ -275,10 +282,6 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         if (!item || !oldShelfId) return false;
 
         const depthPos = newDepthPosition ?? item.depthPosition ?? 50;
-
-        if (store.checkCollision(newShelfId, newPosition, item.width, depthPos, item.template, id)) {
-            return false;
-        }
 
         set(state => ({
             shelves: state.shelves.map(s => {
@@ -328,86 +331,243 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         })
     })),
 
-    sortShelves: (criteria: 'name' | 'type') => set(state => ({
-        shelves: state.shelves.map(shelf => {
-            if (shelf.items.length === 0) return shelf;
+    sortShelves: (criteria: 'name' | 'type') => {
+        const currentState = get();
+        const cabinetDepth = currentState.cabinetDepth;
+        const cabinetWidth = currentState.cabinetWidth;
+        const GAP_X = 4; // 4% width gap
+        const GAP_Z = 4; // 4% depth gap
+        const MARGIN = 4; // 4% margin from edges
+        const DIVIDER_MARGIN = 2; // 2% margin from dividers
 
-            // 1. Sort items
-            const sortedItems = [...shelf.items].sort((a, b) => {
+        // --- Helper: get visual width percentage for an item ---
+        const getVisualWidthPct = (item: ReagentPlacement) => {
+            const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
+            const visualWidth = (MESH_BASE_WIDTHS[item.template] || 0.5) * itemScale;
+            return (visualWidth / cabinetWidth) * 100;
+        };
+
+        // --- Helper: get depth percentage for an item ---
+        const getDepthPct = (item: ReagentPlacement) => {
+            const itemPhysicalDepth = TEMPLATE_DEPTHS[item.template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
+            const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
+            return (itemPhysicalDepth * itemScale / cabinetDepth) * 100 * 1.1; // 10% safety margin
+        };
+
+        // --- Helper: build zones for a shelf from its dividers ---
+        interface Zone {
+            shelfId: string;
+            xStart: number;
+            xEnd: number;
+        }
+
+        const buildZones = (shelf: ShelfData): Zone[] => {
+            const zones: Zone[] = [];
+            const sortedDividers = [...shelf.dividers].sort((a, b) => a - b);
+            const boundaries = [0, ...sortedDividers, 100];
+            for (let i = 0; i < boundaries.length - 1; i++) {
+                const rawStart = boundaries[i];
+                const rawEnd = boundaries[i + 1];
+                const xStart = rawStart + (rawStart === 0 ? MARGIN : DIVIDER_MARGIN);
+                const xEnd = rawEnd - (rawEnd === 100 ? MARGIN : DIVIDER_MARGIN);
+                if (xEnd - xStart > 2) {
+                    zones.push({ shelfId: shelf.id, xStart, xEnd });
+                }
+            }
+            return zones;
+        };
+
+        // --- Helper: sort items by criteria ---
+        const sortItems = (items: ReagentPlacement[]) => {
+            return [...items].sort((a, b) => {
                 if (criteria === 'name') {
                     return a.name.localeCompare(b.name);
                 } else {
-                    // Type first, then Name
                     if (a.template !== b.template) return a.template.localeCompare(b.template);
                     return a.name.localeCompare(b.name);
                 }
             });
+        };
 
-            // 2. Repack items (Front-to-Back, Left-to-Right logic)
-            const state = get();
-            const cabinetDepth = state.cabinetDepth;
-            const cabinetWidth = state.cabinetWidth;
-            const GAP_X = 4; // 4% width gap for safety
-            const GAP_Z = 4; // 4% depth gap for safety
+        // --- Helper: pack items into zones, returns placed items and overflow ---
+        const packItemsIntoZones = (
+            items: ReagentPlacement[],
+            zones: Zone[],
+            targetShelfId: string
+        ): { placed: ReagentPlacement[]; overflow: ReagentPlacement[] } => {
+            const placed: ReagentPlacement[] = [];
+            const overflow: ReagentPlacement[] = [];
 
-            const packedItems: ReagentPlacement[] = [];
+            // Two-pass approach to prevent mixed-width column overlap:
+            // Pass 1: Assign items to columns (determine column membership and max widths)
+            // Pass 2: Position items centered on their column's final width
 
-            // Group by criteria so similar items form columns
-            const groups: { [key: string]: ReagentPlacement[] } = {};
-            for (const item of sortedItems) {
-                const key = criteria === 'name' ? item.name : `${item.template}-${item.name}`;
-                if (!groups[key]) groups[key] = [];
-                groups[key].push(item);
+            interface ColumnData {
+                items: ReagentPlacement[];
+                depthPcts: number[];
+                maxVisualWidth: number;
+                xStart: number;
+                zoneIdx: number;
             }
 
-            let currentX = 4; // Start from 4% left margin to prevent clipping wall
+            const columns: ColumnData[] = [];
+            let zoneIdx = 0;
+            let nextColumnX = zones.length > 0 ? zones[0].xStart : MARGIN;
+            let currentZRemaining = 100 - MARGIN;
 
-            for (const key in groups) {
-                const groupItems = groups[key];
-                if (groupItems.length === 0) continue;
+            // --- Pass 1: Assign items to columns ---
+            let currentColumn: ColumnData | null = null;
 
-                // Find the maximum TRUE visual width in this group to ensure the column is wide enough
-                const maxVisualWidthPct = Math.max(...groupItems.map(item => {
-                    const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
-                    const visualWidth = (MESH_BASE_WIDTHS[item.template] || 0.5) * itemScale;
-                    return (visualWidth / cabinetWidth) * 100;
-                }));
-
-                // Pack this group from Front to Back
-                const frontMargin = 4; // 4% margin at front
-                let currentZFront = 100 - frontMargin;
-
-                for (const item of groupItems) {
-                    const itemPhysicalDepth = TEMPLATE_DEPTHS[item.template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
-                    const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
-                    // Add a tiny safety margin to the depth percentage to prevent mesh clipping
-                    const baseItemDepthPct = (itemPhysicalDepth * itemScale / cabinetDepth) * 100;
-                    const itemDepthPct = baseItemDepthPct * 1.1;
-
-                    if (currentZFront - itemDepthPct < 0) {
-                        // Reached the back -> Next column within the same group
-                        currentX += maxVisualWidthPct + GAP_X;
-                        currentZFront = 100 - frontMargin;
-                    }
-
-                    packedItems.push({
-                        ...item,
-                        // Center the item visually within the column
-                        // To center, we assign item.position such that its visual center aligns with the column center
-                        // item.position in state is the left anchor (item.position + item.width/2 is the visual center)
-                        position: currentX + (maxVisualWidthPct / 2) - (item.width / 2),
-                        depthPosition: currentZFront - (itemDepthPct / 2)
-                    });
-
-                    // Move towards the back for the next item, plus a gap to prevent any clipping due to mesh rounding
-                    currentZFront -= (itemDepthPct + GAP_Z);
+            for (const item of items) {
+                if (zoneIdx >= zones.length) {
+                    overflow.push(item);
+                    continue;
                 }
 
-                // Finish group -> move to next column for the next group
-                currentX += maxVisualWidthPct + GAP_X;
+                const itemVisualWidth = getVisualWidthPct(item);
+                const itemDepthPct = getDepthPct(item);
+
+                // Start a new column if needed
+                if (!currentColumn) {
+                    // Check if item fits horizontally in current zone
+                    while (zoneIdx < zones.length && nextColumnX + itemVisualWidth > zones[zoneIdx].xEnd) {
+                        zoneIdx++;
+                        if (zoneIdx < zones.length) {
+                            nextColumnX = zones[zoneIdx].xStart;
+                            currentZRemaining = 100 - MARGIN;
+                        }
+                    }
+                    if (zoneIdx >= zones.length) {
+                        overflow.push(item);
+                        continue;
+                    }
+
+                    currentColumn = {
+                        items: [],
+                        depthPcts: [],
+                        maxVisualWidth: 0,
+                        xStart: nextColumnX,
+                        zoneIdx,
+                    };
+                    columns.push(currentColumn);
+                    currentZRemaining = 100 - MARGIN;
+                }
+
+                // Check if item fits in current column's depth
+                if (currentZRemaining - itemDepthPct < 0) {
+                    // Finalize current column and start a new one
+                    nextColumnX = currentColumn.xStart + currentColumn.maxVisualWidth + GAP_X;
+                    currentColumn = null;
+                    currentZRemaining = 100 - MARGIN;
+
+                    // Advance zone if needed
+                    while (zoneIdx < zones.length && nextColumnX + itemVisualWidth > zones[zoneIdx].xEnd) {
+                        zoneIdx++;
+                        if (zoneIdx < zones.length) {
+                            nextColumnX = zones[zoneIdx].xStart;
+                            currentZRemaining = 100 - MARGIN;
+                        }
+                    }
+                    if (zoneIdx >= zones.length) {
+                        overflow.push(item);
+                        continue;
+                    }
+
+                    currentColumn = {
+                        items: [],
+                        depthPcts: [],
+                        maxVisualWidth: 0,
+                        xStart: nextColumnX,
+                        zoneIdx,
+                    };
+                    columns.push(currentColumn);
+                }
+
+                currentColumn.items.push(item);
+                currentColumn.depthPcts.push(itemDepthPct);
+                currentColumn.maxVisualWidth = Math.max(currentColumn.maxVisualWidth, itemVisualWidth);
+                currentZRemaining -= (itemDepthPct + GAP_Z);
             }
 
-            return { ...shelf, items: packedItems };
-        })
-    }))
+            // --- Pass 2: Position items within their columns ---
+            for (const col of columns) {
+                let zFront = 100 - MARGIN;
+                const zone = zones[col.zoneIdx];
+
+                for (let i = 0; i < col.items.length; i++) {
+                    const item = col.items[i];
+                    const depthPct = col.depthPcts[i];
+
+                    // Center item on column's max visual width
+                    let pos = col.xStart + (col.maxVisualWidth / 2) - (item.width / 2);
+                    // Clamp to zone boundaries
+                    if (zone) {
+                        if (pos + item.width > zone.xEnd) pos = zone.xEnd - item.width;
+                        if (pos < zone.xStart) pos = zone.xStart;
+                    }
+
+                    placed.push({
+                        ...item,
+                        shelfId: targetShelfId,
+                        position: pos,
+                        depthPosition: zFront - (depthPct / 2),
+                    });
+
+                    zFront -= (depthPct + GAP_Z);
+                }
+            }
+
+            return { placed, overflow };
+        };
+
+        // =====================================================
+        // Phase 1: Sort each shelf's own items into its own zones
+        // =====================================================
+        const shelfResults: Record<string, ReagentPlacement[]> = {};
+        let allOverflow: ReagentPlacement[] = [];
+
+        for (const shelf of currentState.shelves) {
+            const zones = buildZones(shelf);
+            const sorted = sortItems(shelf.items);
+            const { placed, overflow } = packItemsIntoZones(sorted, zones, shelf.id);
+            shelfResults[shelf.id] = placed;
+            allOverflow.push(...overflow);
+        }
+
+        // =====================================================
+        // Phase 2: Try to place overflow items into any shelf with remaining space
+        // =====================================================
+        if (allOverflow.length > 0) {
+            const sortedOverflow = sortItems(allOverflow);
+
+            for (const shelf of currentState.shelves) {
+                if (sortedOverflow.length === 0) break;
+
+                // Rebuild zones for this shelf, but now accounting for already-placed items
+                const zones = buildZones(shelf);
+                if (zones.length === 0) continue;
+
+                // Try packing the overflow into this shelf
+                const { placed, overflow } = packItemsIntoZones(sortedOverflow, zones, shelf.id);
+
+                // Merge placed overflow with existing items on this shelf
+                // But we need to avoid collisions with already-placed items
+                // Simple approach: if shelf already has items, try to add overflow after them
+                if (shelfResults[shelf.id].length === 0) {
+                    // Shelf is empty (all its items overflowed elsewhere or had none) - just use placed
+                    shelfResults[shelf.id] = placed;
+                    allOverflow = overflow;
+                }
+                // If shelf already has items, skip it for overflow (items already packed tightly)
+            }
+        }
+
+        // 5. Update state
+        set({
+            shelves: currentState.shelves.map(shelf => ({
+                ...shelf,
+                items: shelfResults[shelf.id] || [],
+            })),
+        });
+    }
 }));

@@ -256,6 +256,7 @@ export const translations = {
         cabinet_manage: "시약장 관리",
         error_place_save: "배치 저장 실패",
         error_add_reagent: "시약 추가 실패",
+        topdown_view: "위에서 보기",
 
         // Auth
         auth_login: "로그인",
@@ -524,6 +525,7 @@ export const translations = {
         cabinet_manage: "Manage Cabinet",
         error_place_save: "Failed to save placement",
         error_add_reagent: "Failed to add reagent",
+        topdown_view: "Top View",
 
         // Auth
         auth_login: "Log In",
