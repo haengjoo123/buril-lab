@@ -260,8 +260,8 @@ export const FridgeScene: React.FC = () => {
                         minDistance={cameraConfig.minDistance}
                         maxDistance={cameraConfig.maxDistance}
                         target={effectiveTarget}
-                        enableRotate={!isPlaceMode}
-                        enablePan={!isPlaceMode}
+                        enableRotate={!isPlaceMode && !draggedItem}
+                        enablePan={!isPlaceMode && !draggedItem}
                         enableZoom={true}
                     />
                     <SyncOrbitTarget target={effectiveTarget} />

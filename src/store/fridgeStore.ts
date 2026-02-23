@@ -15,11 +15,21 @@ interface FridgeStore extends FridgeState {
 }
 
 const TEMPLATE_DEPTHS = {
-    A: 0.4,
-    B: 0.5,
-    C: 0.8,
-    D: 0.8,
+    A: 0.44, // 0.22 radius * 2
+    B: 0.35, // box depth
+    C: 0.7,  // 0.35 radius * 2
+    D: 0.8,  // box depth
 };
+
+// The raw THREE.js width of the base geometries before scaling
+const MESH_BASE_WIDTHS: Record<string, number> = {
+    A: 0.44, // 0.22 radius * 2
+    B: 0.5,  // box width
+    C: 0.7,  // 0.35 radius * 2
+    D: 1.2,  // box width
+};
+
+const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15 };
 
 const INITIAL_SHELVES: ShelfData[] = [
     { id: uuidv4(), level: 0, dividers: [], items: [] },
@@ -119,26 +129,37 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         const state = get();
         const cabinetDepth = state.cabinetDepth;
 
-        // Target item depth range (centered)
+        // Target item depth/width range (centered)
         const targetPhysicalDepth = TEMPLATE_DEPTHS[templateType as keyof typeof TEMPLATE_DEPTHS] || 0.5;
-        const targetDepthPct = (targetPhysicalDepth / cabinetDepth) * 100;
+        const targetScale = width / (CONTAINER_BASE_WIDTHS[templateType || 'A'] || 10);
+
+        const targetVisualWidth = (MESH_BASE_WIDTHS[templateType || 'A'] || 0.5) * targetScale;
+        const targetVisualWidthPct = (targetVisualWidth / cabinetDepth) * 100; // actually cabinetWidth, but using generic bounding
+        const startVis = position + (width / 2) - (targetVisualWidthPct / 2);
+        const endVis = position + (width / 2) + (targetVisualWidthPct / 2);
+
+        const targetDepthPct = (targetPhysicalDepth * targetScale / cabinetDepth) * 100;
         const targetZStart = depthPosition - (targetDepthPct / 2);
         const targetZEnd = depthPosition + (targetDepthPct / 2);
 
         // Check against other items
         for (const item of shelf.items) {
             if (item.id === ignoreItemId) continue;
-            const itemStart = item.position;
-            const itemEnd = item.position + item.width;
 
             // X-axis Overlap Check
-            // Overlap condition: not (end <= itemStart || start >= itemEnd)
-            const xOverlap = !(end <= itemStart || start >= itemEnd);
+            const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
+            const itemVisualWidth = (MESH_BASE_WIDTHS[item.template] || 0.5) * itemScale;
+            // Note: cabinetWidth should really be used here for X axis.
+            const itemVisualWidthPct = (itemVisualWidth / cabinetDepth) * 100;
+            const itemStartVis = item.position + (item.width / 2) - (itemVisualWidthPct / 2);
+            const itemEndVis = item.position + (item.width / 2) + (itemVisualWidthPct / 2);
+
+            const xOverlap = !(endVis <= itemStartVis || startVis >= itemEndVis);
 
             if (xOverlap) {
                 // Check Z-axis Overlap
                 const itemPhysicalDepth = TEMPLATE_DEPTHS[item.template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
-                const itemDepthPct = (itemPhysicalDepth / cabinetDepth) * 100;
+                const itemDepthPct = (itemPhysicalDepth * itemScale / cabinetDepth) * 100;
                 const itemZStart = (item.depthPosition ?? 50) - (itemDepthPct / 2);
                 const itemZEnd = (item.depthPosition ?? 50) + (itemDepthPct / 2);
 
@@ -325,8 +346,9 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             // 2. Repack items (Front-to-Back, Left-to-Right logic)
             const state = get();
             const cabinetDepth = state.cabinetDepth;
-            const GAP_X = 2; // 2% width gap
-            const GAP_Z = 2; // 2% depth gap
+            const cabinetWidth = state.cabinetWidth;
+            const GAP_X = 4; // 4% width gap for safety
+            const GAP_Z = 4; // 4% depth gap for safety
 
             const packedItems: ReagentPlacement[] = [];
 
@@ -338,45 +360,51 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 groups[key].push(item);
             }
 
-            let currentX = 2; // Start from 2% left margin
+            let currentX = 4; // Start from 4% left margin to prevent clipping wall
 
             for (const key in groups) {
                 const groupItems = groups[key];
                 if (groupItems.length === 0) continue;
 
-                // Find the maximum width in this group to ensure the column is wide enough
-                const maxItemWidth = Math.max(...groupItems.map(item => item.width));
-
-                // We'll use the first item's template for physical depth estimation 
-                // (assuming items with same name have similar depth/template)
-                const template = groupItems[0].template;
-                const physicalDepth = TEMPLATE_DEPTHS[template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
-                const depthPct = (physicalDepth / cabinetDepth) * 100;
+                // Find the maximum TRUE visual width in this group to ensure the column is wide enough
+                const maxVisualWidthPct = Math.max(...groupItems.map(item => {
+                    const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
+                    const visualWidth = (MESH_BASE_WIDTHS[item.template] || 0.5) * itemScale;
+                    return (visualWidth / cabinetWidth) * 100;
+                }));
 
                 // Pack this group from Front to Back
-                const startZ = 100 - (depthPct / 2) - 2; // 2% margin at front
-                let currentZ = startZ;
+                const frontMargin = 4; // 4% margin at front
+                let currentZFront = 100 - frontMargin;
 
                 for (const item of groupItems) {
-                    if (currentZ - (depthPct / 2) < 0) {
+                    const itemPhysicalDepth = TEMPLATE_DEPTHS[item.template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
+                    const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
+                    // Add a tiny safety margin to the depth percentage to prevent mesh clipping
+                    const baseItemDepthPct = (itemPhysicalDepth * itemScale / cabinetDepth) * 100;
+                    const itemDepthPct = baseItemDepthPct * 1.1;
+
+                    if (currentZFront - itemDepthPct < 0) {
                         // Reached the back -> Next column within the same group
-                        currentX += maxItemWidth + GAP_X;
-                        currentZ = startZ;
+                        currentX += maxVisualWidthPct + GAP_X;
+                        currentZFront = 100 - frontMargin;
                     }
 
                     packedItems.push({
                         ...item,
-                        // Center the item horizontally within the column if it's narrower than maxItemWidth
-                        position: currentX + (maxItemWidth - item.width) / 2,
-                        depthPosition: currentZ
+                        // Center the item visually within the column
+                        // To center, we assign item.position such that its visual center aligns with the column center
+                        // item.position in state is the left anchor (item.position + item.width/2 is the visual center)
+                        position: currentX + (maxVisualWidthPct / 2) - (item.width / 2),
+                        depthPosition: currentZFront - (itemDepthPct / 2)
                     });
 
-                    // Move towards the back for the next item
-                    currentZ -= (depthPct + GAP_Z);
+                    // Move towards the back for the next item, plus a gap to prevent any clipping due to mesh rounding
+                    currentZFront -= (itemDepthPct + GAP_Z);
                 }
 
                 // Finish group -> move to next column for the next group
-                currentX += maxItemWidth + GAP_X;
+                currentX += maxVisualWidthPct + GAP_X;
             }
 
             return { ...shelf, items: packedItems };

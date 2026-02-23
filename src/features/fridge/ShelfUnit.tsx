@@ -215,7 +215,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
                 >
                     <ItemGeometry
                         type={(draggedTemplate?.type ?? draggedPlacement!.template) as string}
-                        color={isValid ? (warning ? '#fbbf24' : '#4ade80') : '#ef4444'}
+                        defaultColor={isValid ? (warning ? '#fbbf24' : '#4ade80') : '#ef4444'}
                         opacity={0.6}
                         scale={(draggedTemplate?.width ?? draggedPlacement!.width) / (CONTAINER_BASE_WIDTHS[draggedTemplate?.type ?? draggedPlacement!.template] || 10)}
                     />
