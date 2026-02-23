@@ -17,11 +17,13 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const [error, setError] = useState<string | null>(null);
     const [createName, setCreateName] = useState('');
     const [createPassword, setCreatePassword] = useState('');
+    const [createNickname, setCreateNickname] = useState('');
 
     // For joining a lab
     const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
     const [selectedRole, setSelectedRole] = useState<'researcher' | 'student'>('researcher');
     const [joinPassword, setJoinPassword] = useState('');
+    const [joinNickname, setJoinNickname] = useState('');
 
     // For settings
     const [settingsName, setSettingsName] = useState('');
@@ -93,11 +95,11 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!createName.trim()) return;
+        if (!createName.trim() || !createNickname.trim()) return;
         setIsLoading(true);
         setError(null);
         try {
-            const newLab = await labService.createLab(createName, createPassword);
+            const newLab = await labService.createLab(createName, createPassword, createNickname);
             // update state
             const updatedLabs = await labService.getMyLabs();
             setMyLabs(updatedLabs);
@@ -111,11 +113,11 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     };
 
     const handleJoin = async () => {
-        if (!selectedLabId) return;
+        if (!selectedLabId || !joinNickname.trim()) return;
         setIsLoading(true);
         setError(null);
         try {
-            await labService.joinLab(selectedLabId!, selectedRole, joinPassword);
+            await labService.joinLab(selectedLabId!, selectedRole, joinPassword, joinNickname);
             const updatedLabs = await labService.getMyLabs();
             setMyLabs(updatedLabs);
             setCurrentLabId(selectedLabId);
@@ -306,6 +308,17 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 />
                             </div>
                             <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">내 닉네임 / 이름</label>
+                                <input
+                                    type="text"
+                                    value={createNickname}
+                                    onChange={e => setCreateNickname(e.target.value)}
+                                    placeholder="예: 홍길동"
+                                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+                                    required
+                                />
+                            </div>
+                            <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">입장 비밀번호 (선택)</label>
                                 <input
                                     type="password"
@@ -320,7 +333,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
                                     취소
                                 </button>
-                                <button type="submit" disabled={isLoading || !createName.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
+                                <button type="submit" disabled={isLoading || !createName.trim() || !createNickname.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '생성하기'}
                                 </button>
                             </div>
@@ -371,6 +384,17 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         </label>
                                     </div>
                                     <div className="mb-4">
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">내 닉네임 / 이름</label>
+                                        <input
+                                            type="text"
+                                            value={joinNickname}
+                                            onChange={e => setJoinNickname(e.target.value)}
+                                            placeholder="예: 홍길동"
+                                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="mb-4">
                                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">비밀번호 (해당 시)</label>
                                         <input
                                             type="password"
@@ -383,7 +407,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     </div>
                                     <button
                                         onClick={handleJoin}
-                                        disabled={isLoading}
+                                        disabled={isLoading || !joinNickname.trim()}
                                         className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center"
                                     >
                                         {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '가입하기'}
@@ -398,7 +422,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             )}
 
                             <div className="pt-2">
-                                <button type="button" onClick={() => { setView('menu'); setSelectedLabId(null); setJoinPassword(''); }} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
+                                <button type="button" onClick={() => { setView('menu'); setSelectedLabId(null); setJoinPassword(''); setJoinNickname(''); }} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
                                     뒤로 가기
                                 </button>
                             </div>
@@ -417,8 +441,17 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         <li key={member.user_id} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
                                             <div className="flex justify-between items-start mb-2">
                                                 <div className="flex flex-col">
-                                                    <span className="font-medium text-slate-800 dark:text-slate-200">{member.email || '알 수 없는 사용자'}</span>
-                                                    <span className="text-xs text-slate-500">가입일: {new Date(member.joined_at).toLocaleDateString()}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                                                            {member.nickname || member.email || '알 수 없는 사용자'}
+                                                        </span>
+                                                        {member.nickname && member.email && (
+                                                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                                                                ({member.email})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-xs text-slate-500 mt-0.5">가입일: {new Date(member.joined_at).toLocaleDateString()}</span>
                                                 </div>
                                                 <span className={`text-xs px-2 py-1 rounded font-medium ${member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
                                                     {member.role.toUpperCase()}

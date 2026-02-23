@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 import type { Lab, LabMember } from '../store/useLabStore';
 
 export const labService = {
-    async createLab(name: string, password?: string): Promise<Lab> {
+    async createLab(name: string, password?: string, nickname?: string): Promise<Lab> {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) throw new Error("Not authenticated");
 
@@ -25,7 +25,8 @@ export const labService = {
             .insert({
                 lab_id: labData.id,
                 user_id: userData.user.id,
-                role: 'admin'
+                role: 'admin',
+                nickname: nickname || null
             });
 
         if (memberError) throw memberError;
@@ -33,7 +34,7 @@ export const labService = {
         return labData as Lab;
     },
 
-    async joinLab(labId: string, role: string = 'researcher', password?: string): Promise<LabMember> {
+    async joinLab(labId: string, role: string = 'researcher', password?: string, nickname?: string): Promise<LabMember> {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) throw new Error("Not authenticated");
 
@@ -41,7 +42,8 @@ export const labService = {
             target_lab_id: labId,
             joining_user_id: userData.user.id,
             requested_role: role,
-            provided_password: password || null
+            provided_password: password || null,
+            p_nickname: nickname || null
         });
 
         if (error) {
@@ -93,7 +95,7 @@ export const labService = {
         return data as Lab[];
     },
 
-    async getLabMembers(labId: string): Promise<{ user_id: string; role: string; joined_at: string; email: string }[]> {
+    async getLabMembers(labId: string): Promise<{ user_id: string; role: string; joined_at: string; email: string; nickname?: string }[]> {
         const { data, error } = await supabase.rpc('get_lab_members', { target_lab_id: labId });
         if (error) throw error;
         return data || [];

@@ -1,0 +1,5 @@
+﻿be5fa46|Merge branch 'main' of https://github.com/haengjoo123/buril-lab
+57dc963|feat: Implement fridge management system with cabinet and reagent handling, including forms, disposal, and image capture.
+10740cf|feat: Introduce comprehensive fridge and cabinet management system with dedicated UI, state management, and services.
+2e37f88|feat: Implement initial fridge inventory management system with 3D visualization and Zustand state management.
+ade9fe3|feat: Implement Welgene product scraping script and add initial product data.

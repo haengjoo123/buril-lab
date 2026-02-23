@@ -269,10 +269,7 @@ export const cabinetService = {
 
     async getDisposalLogs(cabinetId: string): Promise<DisposalLog[]> {
         const { data, error } = await supabase
-            .from('cabinet_disposal_logs')
-            .select('*')
-            .eq('cabinet_id', cabinetId)
-            .order('disposed_at', { ascending: false });
+            .rpc('get_cabinet_disposal_logs', { target_cabinet_id: cabinetId });
 
         if (error) {
             console.error('Error fetching disposal logs:', error);
@@ -349,6 +346,8 @@ export interface DisposalLog {
     reason: string;
     memo?: string;
     disposed_by?: string;
+    disposed_by_email?: string;
+    disposed_by_nickname?: string;
     disposed_at: string;
 }
 

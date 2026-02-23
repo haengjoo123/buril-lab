@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, History, Loader2 } from 'lucide-react';
+import { X, History, Loader2, User } from 'lucide-react';
 import { cabinetService, type DisposalLog } from '../../../services/cabinetService';
 import { useTranslation } from 'react-i18next';
 
@@ -106,6 +106,12 @@ export function DisposalLogModal({ isOpen, cabinetId, cabinetName, onClose }: Di
                                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate">
                                             {log.memo}
                                         </p>
+                                    )}
+                                    {(log.disposed_by_nickname || log.disposed_by_email) && (
+                                        <div className="flex items-center gap-1 mt-1 text-xs text-slate-400 dark:text-slate-500 truncate">
+                                            <User size={12} className="shrink-0" />
+                                            <span>{log.disposed_by_nickname || log.disposed_by_email}</span>
+                                        </div>
                                     )}
                                 </div>
                                 <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">
