@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useState, useCallback } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
@@ -32,17 +32,9 @@ const PLACE_ELEVATION_RAD = PLACE_ELEVATION_DEG * (Math.PI / 180);
 function useCabinetCamera(
     cabinetWidth: number,
     cabinetHeight: number,
-    mode: 'VIEW' | 'EDIT' | 'PLACE'
+    mode: 'VIEW' | 'EDIT' | 'PLACE',
+    aspect: number
 ) {
-    const [aspect, setAspect] = useState(
-        typeof window !== 'undefined' ? window.innerWidth / Math.max(1, window.innerHeight - 112) : 0.6
-    );
-
-    useEffect(() => {
-        const onResize = () => setAspect(window.innerWidth / Math.max(1, window.innerHeight - 112));
-        window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
-    }, []);
 
     return useMemo(() => {
         // FOV = 52. Math.tan(26 * PI/180) = 0.4877
@@ -109,6 +101,33 @@ function useCabinetCamera(
 
 export const FridgeScene: React.FC = () => {
     const { t } = useTranslation();
+    // Canvas 컨테이너의 실제 크기로 aspect ratio 추적 (window 크기 대신)
+    // → F12 개발자도구, 사이드바 등으로 뷰포트가 변해도 정확한 비율 유지
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerAspect, setContainerAspect] = useState(() => {
+        if (typeof window === 'undefined') return 0.6;
+        return window.innerWidth / Math.max(1, window.innerHeight);
+    });
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { width, height } = entry.contentRect;
+                if (width > 0 && height > 0) {
+                    setContainerAspect(width / height);
+                }
+            }
+        });
+        observer.observe(el);
+        // 초기 측정
+        const w = el.clientWidth;
+        const h = el.clientHeight;
+        if (w > 0 && h > 0) setContainerAspect(w / h);
+        return () => observer.disconnect();
+    }, []);
+
     const shelves = useFridgeStore((state) => state.shelves);
     const mode = useFridgeStore((state) => state.mode);
     const draggedItem = useFridgeStore((state) => state.draggedItem);
@@ -143,7 +162,7 @@ export const FridgeScene: React.FC = () => {
         return { getShelfY: getY, cellHeight: gapHeight };
     }, [floatingShelves.length, cabinetHeight]);
 
-    const cameraConfig = useCabinetCamera(cabinetWidth, cabinetHeight, mode);
+    const cameraConfig = useCabinetCamera(cabinetWidth, cabinetHeight, mode, containerAspect);
     const [shelfFocusTarget, setShelfFocusTarget] = useState<[number, number, number] | null>(null);
     const focusedShelfId = useFridgeStore((state) => state.focusedShelfId);
     const setFocusedShelfId = useFridgeStore((state) => state.setFocusedShelfId);
@@ -196,14 +215,14 @@ export const FridgeScene: React.FC = () => {
     const effectiveCameraConfig = useMemo(() => {
         if (shelfFocusTarget != null) {
             const fovFactor = 2 * Math.tan(26 * Math.PI / 180);
-            const aspect = typeof window !== 'undefined' ? window.innerWidth / Math.max(1, window.innerHeight - 112) : 0.6;
+            const aspect = containerAspect;
 
-            // 화면 비율에 따라 보정 배수 조정 (양쪽 모드 모두 적용)
-            // 데스크톱(가로 화면): frustum 기하 보정 때문에 높은 배수 필요
-            // 모바일(세로 화면): 기본 공식이 이미 좁은 화면을 충분히 보정하므로 낮은 배수
-            const widthMultiplier = aspect >= 1 ? 2.0 : 1.2;
+            // 부드러운 보정 배수: aspect가 높을수록(가로가 넓을수록) 약간 더 여유를 줌
+            // 기존의 절벽(aspect>=1 → 2.0, <1 → 1.2)을 부드러운 보간으로 교체
+            const t = Math.min(1, Math.max(0, (aspect - 0.5) / 1.5));
+            const widthMultiplier = 1.1 + 0.3 * t;
 
-            // === 탑뷰 모드: 카메라를 선반 바로 위에 배치 ===
+            // === 탑뷰 모드: 카메라를 선반 위(80도 각도)에 배치 ===
             if (isTopDownView) {
                 // 선반의 폭과 깊이가 모두 보이도록 거리 계산
                 const visibleWidthNeeded = cabinetWidth + 1.5;
@@ -213,11 +232,22 @@ export const FridgeScene: React.FC = () => {
                 const dist = Math.max(distFromWidth, distFromDepth);
 
                 const targetY = shelfFocusTarget[1];
+
+                const angleRad = 80 * Math.PI / 180;
+                const posY = targetY + dist * Math.sin(angleRad);
+                const posZ = dist * Math.cos(angleRad);
+
+                // Y축(직교)으로만 위치를 낮추면 카메라가 대상물에 물리적으로 가까워져(줌인)버립니다.
+                // 화면상에서만 위로 올리려면 카메라의 '시선 평면과 수평인 아래쪽'으로 패닝(Pan)해야 합니다.
+                // 따라서 카메라가 바라보는 각도(80도)를 고려하여 Y와 Z 좌표를 동시에 조절합니다.
+                const panOffset = dist * fovFactor * 0.15; // 화면 높이의 약 15%만큼 위로 이동
+                const panY = -panOffset * Math.cos(angleRad); // 약간 아래로
+                const panZ = panOffset * Math.sin(angleRad);  // 꽤 뒤로 물러남
+
                 return {
                     ...cameraConfig,
-                    // 카메라를 선반 위 + 약간 앞쪽(Z=0.01)으로 배치하여 gimbal lock 방지
-                    position: [0, targetY + dist, 0.01] as [number, number, number],
-                    target: [0, targetY, 0] as [number, number, number],
+                    position: [0, posY + panY, posZ + panZ] as [number, number, number],
+                    target: [0, targetY + panY, panZ] as [number, number, number],
                 };
             }
 
@@ -242,10 +272,10 @@ export const FridgeScene: React.FC = () => {
             };
         }
         return { ...cameraConfig, target: effectiveTarget };
-    }, [shelfFocusTarget, effectiveTarget, cameraConfig, isPlaceMode, isTopDownView, cabinetWidth, cabinetDepth]);
+    }, [shelfFocusTarget, effectiveTarget, cameraConfig, isPlaceMode, isTopDownView, cabinetWidth, cabinetDepth, containerAspect]);
 
     return (
-        <div className="w-full bg-gray-100 relative" style={{ height: 'calc(100dvh - 7rem)' }}>
+        <div ref={containerRef} className="w-full bg-gray-100 relative" style={{ height: 'calc(100dvh - 7rem)' }}>
             <Canvas
                 shadows="soft"
                 camera={{ position: cameraConfig.position, fov: 52 }}

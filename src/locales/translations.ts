@@ -174,6 +174,7 @@ export const translations = {
         cabinet_sort_type: "종류순 정렬",
         cabinet_clear_all: "전체 비우기",
         cabinet_clear_all_confirm: "선택된 시약장에 있는 모든 시약을 정말 삭제하시겠습니까?",
+        cabinet_reagent_tray_title: "시약 목록",
 
         // Cabinet Edit
         cabinet_edit_title: "시약 정보 수정",
@@ -443,6 +444,7 @@ export const translations = {
         cabinet_sort_type: "Sort by Type",
         cabinet_clear_all: "Clear All",
         cabinet_clear_all_confirm: "Are you sure you want to remove all reagents from the cabinet?",
+        cabinet_reagent_tray_title: "Reagent Tray",
 
         // Cabinet Edit
         cabinet_edit_title: "Edit Reagent",

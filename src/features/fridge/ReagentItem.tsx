@@ -18,6 +18,31 @@ interface ReagentItemProps {
 
 export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15 };
 
+// --- Shared Geometries (Performance Optimization) ---
+// Type A: 갈색 병
+const GEO_A_BODY = new THREE.CylinderGeometry(0.22, 0.24, 0.7, 10);
+const GEO_A_NECK = new THREE.CylinderGeometry(0.1, 0.14, 0.18, 8);
+const GEO_A_CAP = new THREE.CylinderGeometry(0.12, 0.12, 0.1, 8);
+const GEO_A_BOTTOM = new THREE.CylinderGeometry(0.24, 0.24, 0.02, 10);
+
+// Type B: 플라스틱 용기
+const GEO_B_BODY = new THREE.BoxGeometry(0.5, 0.9, 0.35);
+const GEO_B_CAP = new THREE.BoxGeometry(0.52, 0.1, 0.37);
+const GEO_B_LABEL_FRONT = new THREE.PlaneGeometry(0.4, 0.55);
+const GEO_B_LABEL_STRIP = new THREE.PlaneGeometry(0.38, 0.08);
+
+// Type C: 솔벤트 캔
+const GEO_C_BODY = new THREE.CylinderGeometry(0.35, 0.35, 1.1, 12);
+const GEO_C_RIM = new THREE.CylinderGeometry(0.36, 0.36, 0.04, 12);
+const GEO_C_HANDLE = new THREE.TorusGeometry(0.15, 0.025, 6, 10, Math.PI);
+const GEO_C_SPOUT = new THREE.CylinderGeometry(0.05, 0.06, 0.1, 8);
+
+// Type D: 바이알 박스
+const GEO_D_BOX = new THREE.BoxGeometry(1.2, 0.5, 0.8);
+const GEO_D_DIV_VERT = new THREE.BoxGeometry(0.02, 0.44, 0.74);
+const GEO_D_DIV_HORZ = new THREE.BoxGeometry(1.14, 0.44, 0.02);
+const GEO_D_RIM = new THREE.BoxGeometry(1.22, 0.02, 0.82);
+
 export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false }) => {
 
     const materialRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -51,26 +76,22 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
         case 'A': // 갈색 병: 원기둥 몸통 + 좁은 목 + 뚜껑
             return (
                 <group scale={scale}>
-                    {/* 몸통 (갈색 원기둥) */}
-                    <mesh castShadow position={[0, 0.35, 0]}>
-                        <cylinderGeometry args={[0.22, 0.24, 0.7, 16]} />
+                    {/* 몸통 (갈색 원기둥) - 메인 그림자 캐스터 */}
+                    <mesh castShadow position={[0, 0.35, 0]} geometry={GEO_A_BODY}>
                         <meshStandardMaterial ref={materialRef} {...materialProps} />
                     </mesh>
                     {/* 목 (좁은 원기둥) */}
-                    <mesh castShadow position={[0, 0.78, 0]}>
-                        <cylinderGeometry args={[0.1, 0.14, 0.18, 12]} />
+                    <mesh position={[0, 0.78, 0]} geometry={GEO_A_NECK}>
                         <meshStandardMaterial color="#6D4C41" roughness={0.4} metalness={0.1}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
                     {/* 뚜껑 (검정 원기둥) */}
-                    <mesh castShadow position={[0, 0.92, 0]}>
-                        <cylinderGeometry args={[0.12, 0.12, 0.1, 12]} />
+                    <mesh position={[0, 0.92, 0]} geometry={GEO_A_CAP}>
                         <meshStandardMaterial color="#212121" roughness={0.6} metalness={0.2}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
                     {/* 바닥 */}
-                    <mesh position={[0, 0.01, 0]}>
-                        <cylinderGeometry args={[0.24, 0.24, 0.02, 16]} />
+                    <mesh position={[0, 0.01, 0]} geometry={GEO_A_BOTTOM}>
                         <meshStandardMaterial color="#5D4037" roughness={0.5}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
@@ -79,27 +100,23 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
         case 'B': // 플라스틱 용기: 박스 몸통 + 뚜껑 + 라벨
             return (
                 <group scale={scale}>
-                    {/* 몸통 (흰색 박스) */}
-                    <mesh castShadow position={[0, 0.45, 0]}>
-                        <boxGeometry args={[0.5, 0.9, 0.35]} />
+                    {/* 몸통 (흰색 박스) - 메인 그림자 캐스터 */}
+                    <mesh castShadow position={[0, 0.45, 0]} geometry={GEO_B_BODY}>
                         <meshStandardMaterial ref={materialRef} {...materialProps} roughness={0.8} />
                     </mesh>
                     {/* 뚜껑 (파란색) */}
-                    <mesh castShadow position={[0, 0.95, 0]}>
-                        <boxGeometry args={[0.52, 0.1, 0.37]} />
+                    <mesh position={[0, 0.95, 0]} geometry={GEO_B_CAP}>
                         <meshStandardMaterial color="#1565C0" roughness={0.7} metalness={0.05}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
                     {/* 앞면 라벨 (Plane) */}
-                    <mesh position={[0, 0.45, 0.176]}>
-                        <planeGeometry args={[0.4, 0.55]} />
+                    <mesh position={[0, 0.45, 0.176]} geometry={GEO_B_LABEL_FRONT}>
                         <meshStandardMaterial color="#FFFFFF" roughness={1} metalness={0}
                             transparent opacity={opacity * 0.92}
                             polygonOffset polygonOffsetFactor={-1} />
                     </mesh>
                     {/* 라벨 색상 띠 */}
-                    <mesh position={[0, 0.6, 0.177]}>
-                        <planeGeometry args={[0.38, 0.08]} />
+                    <mesh position={[0, 0.6, 0.177]} geometry={GEO_B_LABEL_STRIP}>
                         <meshStandardMaterial color="#E53935" roughness={1} metalness={0}
                             transparent opacity={opacity * 0.9}
                             polygonOffset polygonOffsetFactor={-2} />
@@ -109,32 +126,27 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
         case 'C': // 솔벤트 캔: 원기둥 몸통 + 손잡이
             return (
                 <group scale={scale}>
-                    {/* 캔 몸통 (금속 원기둥) */}
-                    <mesh castShadow position={[0, 0.55, 0]}>
-                        <cylinderGeometry args={[0.35, 0.35, 1.1, 20]} />
+                    {/* 캔 몸통 (금속 원기둥) - 메인 그림자 캐스터 */}
+                    <mesh castShadow position={[0, 0.55, 0]} geometry={GEO_C_BODY}>
                         <meshStandardMaterial ref={materialRef} {...materialProps} metalness={0.6} roughness={0.4} />
                     </mesh>
                     {/* 캔 상단 림 */}
-                    <mesh castShadow position={[0, 1.1, 0]}>
-                        <cylinderGeometry args={[0.36, 0.36, 0.04, 20]} />
+                    <mesh position={[0, 1.1, 0]} geometry={GEO_C_RIM}>
                         <meshStandardMaterial color="#9E9E9E" metalness={0.8} roughness={0.3}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
                     {/* 캔 하단 림 */}
-                    <mesh position={[0, 0.01, 0]}>
-                        <cylinderGeometry args={[0.36, 0.36, 0.04, 20]} />
+                    <mesh position={[0, 0.01, 0]} geometry={GEO_C_RIM}>
                         <meshStandardMaterial color="#9E9E9E" metalness={0.8} roughness={0.3}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
                     {/* 손잡이 (Torus) */}
-                    <mesh castShadow position={[0, 1.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                        <torusGeometry args={[0.15, 0.025, 8, 16, Math.PI]} />
+                    <mesh position={[0, 1.2, 0]} rotation={[Math.PI / 2, 0, 0]} geometry={GEO_C_HANDLE}>
                         <meshStandardMaterial color="#757575" metalness={0.9} roughness={0.2}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
                     {/* 주둥이 */}
-                    <mesh castShadow position={[0.15, 1.15, 0]}>
-                        <cylinderGeometry args={[0.05, 0.06, 0.1, 8]} />
+                    <mesh position={[0.15, 1.15, 0]} geometry={GEO_C_SPOUT}>
                         <meshStandardMaterial color="#BDBDBD" metalness={0.7} roughness={0.3}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>
@@ -143,38 +155,32 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
         case 'D': // 바이알 박스: 박스 + 칸막이
             return (
                 <group scale={scale}>
-                    {/* 외곽 박스 */}
-                    <mesh castShadow position={[0, 0.25, 0]}>
-                        <boxGeometry args={[1.2, 0.5, 0.8]} />
+                    {/* 외곽 박스 - 메인 그림자 캐스터 */}
+                    <mesh castShadow position={[0, 0.25, 0]} geometry={GEO_D_BOX}>
                         <meshStandardMaterial ref={materialRef} {...materialProps} />
                     </mesh>
                     {/* 칸막이 1 */}
-                    <mesh position={[-0.3, 0.26, 0]}>
-                        <boxGeometry args={[0.02, 0.44, 0.74]} />
+                    <mesh position={[-0.3, 0.26, 0]} geometry={GEO_D_DIV_VERT}>
                         <meshStandardMaterial color="#BDBDBD" roughness={0.7}
                             transparent opacity={opacity * 0.7} />
                     </mesh>
                     {/* 칸막이 2 */}
-                    <mesh position={[0, 0.26, 0]}>
-                        <boxGeometry args={[0.02, 0.44, 0.74]} />
+                    <mesh position={[0, 0.26, 0]} geometry={GEO_D_DIV_VERT}>
                         <meshStandardMaterial color="#BDBDBD" roughness={0.7}
                             transparent opacity={opacity * 0.7} />
                     </mesh>
                     {/* 칸막이 3 */}
-                    <mesh position={[0.3, 0.26, 0]}>
-                        <boxGeometry args={[0.02, 0.44, 0.74]} />
+                    <mesh position={[0.3, 0.26, 0]} geometry={GEO_D_DIV_VERT}>
                         <meshStandardMaterial color="#BDBDBD" roughness={0.7}
                             transparent opacity={opacity * 0.7} />
                     </mesh>
                     {/* 가로 칸막이 */}
-                    <mesh position={[0, 0.26, 0]}>
-                        <boxGeometry args={[1.14, 0.44, 0.02]} />
+                    <mesh position={[0, 0.26, 0]} geometry={GEO_D_DIV_HORZ}>
                         <meshStandardMaterial color="#BDBDBD" roughness={0.7}
                             transparent opacity={opacity * 0.7} />
                     </mesh>
                     {/* 상단 테두리 */}
-                    <mesh position={[0, 0.505, 0]}>
-                        <boxGeometry args={[1.22, 0.02, 0.82]} />
+                    <mesh position={[0, 0.505, 0]} geometry={GEO_D_RIM}>
                         <meshStandardMaterial color="#E0E0E0" roughness={0.5}
                             transparent={opacity < 1} opacity={opacity} />
                     </mesh>

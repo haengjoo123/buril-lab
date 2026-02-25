@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FridgeScene } from './FridgeScene';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, ScanLine, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 
@@ -406,7 +406,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     <ChevronDown size={18} />
                                 </button>
                                 <div className="flex justify-between items-center px-2 pr-8">
-                                    <h3 className="text-sm font-semibold text-gray-700">Reagent Tray</h3>
+                                    <h3 className="text-sm font-semibold text-gray-700">{t('cabinet_reagent_tray_title')}</h3>
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => sortShelves('name')}
@@ -434,10 +434,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     </div>
                                 </div>
                                 <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
-                                    <div className="min-w-[100px] h-[120px] flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-gray-400 hover:border-blue-400 hover:text-blue-500 cursor-pointer transition-colors shrink-0">
-                                        <ScanLine size={24} />
-                                        <span className="text-xs font-medium">Scan Code</span>
-                                    </div>
                                     {genericContainers.map((item, idx) => (
                                         <div
                                             key={idx}
@@ -452,7 +448,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                                 <span className="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">
                                                     {item.name}
                                                 </span>
-                                                <span className="text-[10px] text-gray-400 block mt-0.5">Type {item.type}</span>
                                             </div>
                                         </div>
                                     ))}
