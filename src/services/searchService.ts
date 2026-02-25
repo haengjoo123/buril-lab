@@ -10,6 +10,71 @@ import { resolveKoreanChemical, resolveCasChemical, fetchKoshaPH } from './kosha
 export const searchChemical = async (query: string): Promise<Chemical | null> => {
     if (!query.trim()) return null;
 
+    const trimmedQuery = query.trim();
+
+    // CAS Number pattern detection (e.g., 68990-09-0)
+    const casPattern = /^\d{2,7}-\d{2}-\d$/;
+    const isCasNumber = casPattern.test(trimmedQuery);
+
+    if (isCasNumber) {
+        console.log(`[Search] CAS Number detected: ${trimmedQuery}`);
+
+        // Try PubChem (name endpoint handles many CAS as synonyms) and KOSHA CAS search in parallel
+        const [pubchemResult, koshaResolved] = await Promise.all([
+            fetchChemicalInfo(trimmedQuery),
+            resolveCasChemical(trimmedQuery)
+        ]);
+
+        if (pubchemResult) {
+            let finalProps = pubchemResult.properties || { isOrganic: false, isHalogenated: false };
+
+            if (koshaResolved?.chemId) {
+                try {
+                    const koshaPh = await fetchKoshaPH(koshaResolved.chemId);
+                    if (koshaPh !== undefined && finalProps.ph === undefined) {
+                        finalProps = { ...finalProps, ph: koshaPh };
+                    }
+                } catch (e) {
+                    console.warn('[Search] Failed to fetch pH from KOSHA:', e);
+                }
+            }
+
+            const displayName = koshaResolved?.nameKo
+                ? `${koshaResolved.nameKo} (${pubchemResult.name})`
+                : pubchemResult.name;
+
+            return {
+                ...pubchemResult,
+                name: displayName,
+                properties: finalProps,
+                koshaId: koshaResolved?.chemId
+            };
+        }
+
+        // PubChem name search failed for this CAS - use KOSHA data if available
+        if (koshaResolved?.chemId) {
+            console.log(`[Search] PubChem failed for CAS ${trimmedQuery}, using KOSHA data (chemId: ${koshaResolved.chemId})`);
+            const koshaPh = await fetchKoshaPH(koshaResolved.chemId).catch(() => undefined);
+
+            return {
+                id: String(koshaResolved.chemId),
+                name: koshaResolved.nameKo || trimmedQuery,
+                casNumber: trimmedQuery,
+                molecularFormula: '',
+                molecularWeight: 0,
+                properties: {
+                    isOrganic: false,
+                    isHalogenated: false,
+                    ph: koshaPh
+                },
+                koshaId: koshaResolved.chemId
+            };
+        }
+
+        console.warn(`[Search] CAS ${trimmedQuery} not found in PubChem or KOSHA`);
+        return null;
+    }
+
     // Regex to detect Korean characters
     const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(query);
 
@@ -28,10 +93,6 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
             ]);
 
             if (pubchemResult) {
-                // 3. Overlay Korean Name & Merge KOSHA pH if PubChem missed it (or overwrite?)
-                // Usually local KOSHA data is good for pH. Let's merge it.
-                // If pubchemResult.properties.ph is missing, use koshaPh.
-
                 const baseProps = pubchemResult.properties || { isOrganic: false, isHalogenated: false };
                 const mergedProps = {
                     ...baseProps,
@@ -46,7 +107,7 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                 };
             }
         }
-        // Fallback: If PubChem fails or KOSHA fails, we return null (or could try direct PubChem generic search)
+        // Fallback: If PubChem fails or KOSHA fails, we return null
         return null;
 
     } else {

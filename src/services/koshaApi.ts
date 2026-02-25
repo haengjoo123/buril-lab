@@ -141,7 +141,7 @@ export const resolveKoreanChemical = async (keyword: string): Promise<{ casNo: s
 /**
  * Resolves a CAS No to KOSHA chemId
  */
-export const resolveCasChemical = async (casNo: string): Promise<{ chemId: number } | null> => {
+export const resolveCasChemical = async (casNo: string): Promise<{ chemId: number; nameKo?: string } | null> => {
     try {
         console.log(`[KOSHA] Resolving CAS: ${casNo}`);
 
@@ -163,11 +163,12 @@ export const resolveCasChemical = async (casNo: string): Promise<{ chemId: numbe
         }
 
         const firstMatch: KoshaSearchItem = Array.isArray(items) ? items[0] : items;
-        const { chemId } = firstMatch;
+        const { chemId, chemNameKor } = firstMatch;
 
         if (!chemId) return null;
 
-        return { chemId: Number(chemId) };
+        console.log(`[KOSHA] CAS Resolved: ${casNo} -> chemId: ${chemId}, name: ${chemNameKor}`);
+        return { chemId: Number(chemId), nameKo: chemNameKor || undefined };
 
     } catch (error) {
         console.error('[KOSHA] CAS Resolve Error:', error);

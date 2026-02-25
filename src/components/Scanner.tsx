@@ -1,8 +1,7 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import { X, Loader2, Image as ImageIcon, RotateCcw, Check, Search } from 'lucide-react';
-import { performVisionOcr, type TextBlock, type VisionOcrResult } from '../services/visionOcrService';
-import { extractCasNumber } from '../utils/textParsers';
+import { X, Loader2, Image as ImageIcon, RotateCcw, Check, Search, Sparkles } from 'lucide-react';
+import { performGeminiImageAnalysis } from '../services/geminiVisionService';
 import { useTranslation } from 'react-i18next';
 
 interface ScannerProps {
@@ -19,17 +18,28 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
     const [state, setState] = useState<ScannerState>('camera');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const [visionResult, setVisionResult] = useState<VisionOcrResult | null>(null);
-    const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showFlash, setShowFlash] = useState(false);
 
+    // Stop all camera tracks helper
+    const stopCamera = useCallback(() => {
+        const video = webcamRef.current?.video;
+        if (video?.srcObject) {
+            const stream = video.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+        }
+    }, []);
+
+    // Cleanup camera on unmount
+    useEffect(() => {
+        return () => stopCamera();
+    }, [stopCamera]);
+
     const resetToCamera = useCallback(() => {
         setState('camera');
         setCapturedImage(null);
-        setVisionResult(null);
-        setSelectedBlock(null);
         setSearchTerm(null);
         setError(null);
     }, []);
@@ -39,18 +49,15 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         setError(null);
 
         try {
-            const result = await performVisionOcr(imageSrc);
-            console.log(`[Scanner] Vision OCR: ${result.blocks.length} blocks detected`);
+            const result = await performGeminiImageAnalysis(imageSrc);
 
-            setVisionResult(result);
-
-            // Auto-detect CAS number from full text
-            const cas = extractCasNumber(result.text);
-            if (cas) {
-                setSearchTerm(cas);
+            if (result.success && result.searchTerm) {
+                setSearchTerm(result.searchTerm);
+                setState('result');
+            } else {
+                setError(result.error || t('scanner_error_cam'));
+                setState('result');
             }
-
-            setState('result');
         } catch (err) {
             setError(t('scanner_error_cam'));
             console.error(err);
@@ -64,14 +71,33 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         const video = webcamRef.current?.video;
         if (video) {
             const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+
+            // Limit max dimension to reduce upload size and processing time
+            const MAX_SIZE = 1024;
+            let width = video.videoWidth;
+            let height = video.videoHeight;
+
+            if (width > height) {
+                if (width > MAX_SIZE) {
+                    height = Math.round((height * MAX_SIZE) / width);
+                    width = MAX_SIZE;
+                }
+            } else {
+                if (height > MAX_SIZE) {
+                    width = Math.round((width * MAX_SIZE) / height);
+                    height = MAX_SIZE;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
             const ctx = canvas.getContext('2d');
 
             if (ctx) {
-                ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-                const imageSrc = canvas.toDataURL('image/jpeg', 1.0);
-                console.log(`[Scanner] Captured resolution: ${canvas.width}x${canvas.height}`);
+                ctx.drawImage(video, 0, 0, width, height);
+                // Compress JPEG to 80% quality
+                const imageSrc = canvas.toDataURL('image/jpeg', 0.8);
+                console.log(`[Scanner] Captured resolution: ${width}x${height}`);
 
                 setShowFlash(true);
                 setTimeout(() => setShowFlash(false), 150);
@@ -93,8 +119,38 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         const reader = new FileReader();
         reader.onloadend = () => {
             if (typeof reader.result === 'string') {
-                setCapturedImage(reader.result);
-                setState('preview');
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 1024;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_SIZE) {
+                            height = Math.round((height * MAX_SIZE) / width);
+                            width = MAX_SIZE;
+                        }
+                    } else {
+                        if (height > MAX_SIZE) {
+                            width = Math.round((width * MAX_SIZE) / height);
+                            height = MAX_SIZE;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        setCapturedImage(canvas.toDataURL('image/jpeg', 0.8));
+                    } else {
+                        // Fallback if canvas context fails
+                        setCapturedImage(reader.result as string);
+                    }
+                    setState('preview');
+                };
+                img.src = reader.result;
             }
         };
         reader.readAsDataURL(file);
@@ -106,15 +162,9 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         }
     };
 
-    const handleBlockClick = (block: TextBlock, index: number) => {
-        setSelectedBlock(index);
-        // Clean up the block text for search
-        const cleanText = block.text.replace(/\n/g, ' ').trim();
-        setSearchTerm(cleanText);
-    };
-
     const useSearchTerm = () => {
         if (searchTerm) {
+            stopCamera();
             onScan(searchTerm);
         }
     };
@@ -128,7 +178,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
             {/* Close Button */}
             <button
-                onClick={onClose}
+                onClick={() => { stopCamera(); onClose(); }}
                 className="absolute top-5 right-5 text-white/80 hover:text-white p-2 z-30"
             >
                 <X className="w-8 h-8" />
@@ -138,188 +188,96 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
             <div className="absolute top-16 text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-20">
                 {state === 'camera' && t('scanner_guide')}
                 {state === 'preview' && '촬영된 이미지를 확인하세요'}
-                {state === 'processing' && t('scanner_analyzing')}
-                {state === 'result' && '블록을 선택하여 검색하세요'}
+                {state === 'processing' && ' 인식 중입니다...'}
+                {state === 'result' && '검색어를 확인하세요'}
             </div>
 
             {/* Main View Area */}
-            {state !== 'result' ? (
-                <div className="relative w-full max-w-[430px] aspect-[3/4] bg-black overflow-hidden rounded-lg shadow-2xl">
-                    {/* Camera View */}
-                    {state === 'camera' && (
-                        <>
-                            <Webcam
-                                audio={false}
-                                ref={webcamRef}
-                                screenshotFormat="image/jpeg"
-                                screenshotQuality={1}
-                                videoConstraints={{
-                                    facingMode: 'environment',
-                                    width: { ideal: 3840 },
-                                    height: { ideal: 2160 },
-                                }}
-                                className="w-full h-full object-cover"
-                                onUserMedia={(stream) => {
-                                    const track = stream.getVideoTracks()[0];
-                                    const settings = track.getSettings();
-                                    console.log(`[Scanner] Camera initialized: ${settings.width}x${settings.height}`);
-                                }}
-                                onUserMediaError={(err) => {
-                                    console.error('[Scanner] Camera error:', err);
-                                    setError(t('scanner_error_cam'));
-                                }}
-                            />
-                            {/* Viewfinder Overlay */}
-                            <div className="absolute inset-0 border-2 border-white/30 pointer-events-none flex items-center justify-center">
-                                <div className="w-80 h-48 border-2 border-yellow-400/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
-                            </div>
-                        </>
-                    )}
-
-                    {/* Preview View */}
-                    {(state === 'preview' || state === 'processing') && capturedImage && (
-                        <img
-                            src={capturedImage}
-                            alt="Captured"
+            <div className="relative w-full max-w-[430px] aspect-[3/4] bg-black overflow-hidden rounded-lg shadow-2xl flex-shrink-0">
+                {/* Camera View */}
+                {state === 'camera' && (
+                    <>
+                        <Webcam
+                            audio={false}
+                            ref={webcamRef}
+                            screenshotFormat="image/jpeg"
+                            screenshotQuality={1}
+                            videoConstraints={{
+                                facingMode: 'environment',
+                                width: { ideal: 3840 },
+                                height: { ideal: 2160 },
+                            }}
                             className="w-full h-full object-cover"
+                            onUserMedia={(stream) => {
+                                const track = stream.getVideoTracks()[0];
+                                const settings = track.getSettings();
+                                console.log(`[Scanner] Camera initialized: ${settings.width}x${settings.height}`);
+                            }}
+                            onUserMediaError={(err) => {
+                                console.error('[Scanner] Camera error:', err);
+                                setError(t('scanner_error_cam'));
+                            }}
                         />
-                    )}
-
-                    {/* Processing Overlay */}
-                    {state === 'processing' && (
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white z-10">
-                            <Loader2 className="w-10 h-10 animate-spin mb-2" />
-                            <span>{t('scanner_analyzing')}</span>
+                        {/* Viewfinder Overlay */}
+                        <div className="absolute inset-0 border-2 border-white/30 pointer-events-none flex items-center justify-center">
+                            <div className="w-80 h-48 border-2 border-yellow-400/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
                         </div>
-                    )}
-                </div>
-            ) : (
-                /* Result: Split View — Image with overlays + clickable blocks */
-                <div className="w-full max-w-[430px] flex flex-col bg-black rounded-lg shadow-2xl overflow-hidden" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-                    {/* Top: Image with bounding box overlays */}
-                    <div className="relative flex-shrink-0 bg-slate-950" style={{ height: '35vh', minHeight: '180px' }}>
-                        {capturedImage && (
-                            <img
-                                src={capturedImage}
-                                alt="Captured"
-                                className="w-full h-full object-contain"
-                            />
-                        )}
+                    </>
+                )}
 
-                        {/* Bounding box overlays on detected blocks */}
-                        {visionResult && visionResult.imageWidth > 0 && capturedImage && (
-                            <div className="absolute inset-0 pointer-events-none">
-                                {/* We need to calculate overlay position relative to object-contain */}
-                                {visionResult.blocks.map((block, i) => {
-                                    const imgW = visionResult.imageWidth;
-                                    const imgH = visionResult.imageHeight;
+                {/* Preview / Processing / Result Image View */}
+                {(state === 'preview' || state === 'processing' || state === 'result') && capturedImage && (
+                    <img
+                        src={capturedImage}
+                        alt="Captured"
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${state === 'processing' ? 'opacity-50 blur-sm' : 'opacity-100'}`}
+                    />
+                )}
 
-                                    return (
-                                        <div
-                                            key={i}
-                                            className={`absolute border-2 transition-colors ${selectedBlock === i
-                                                ? 'border-blue-400 bg-blue-400/20'
-                                                : 'border-green-400/60 bg-green-400/10'
-                                                }`}
-                                            style={{
-                                                left: `${(block.boundingBox.x / imgW) * 100}%`,
-                                                top: `${(block.boundingBox.y / imgH) * 100}%`,
-                                                width: `${(block.boundingBox.width / imgW) * 100}%`,
-                                                height: `${(block.boundingBox.height / imgH) * 100}%`,
-                                            }}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        )}
-
-                        {/* Divider */}
-                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent"></div>
+                {/* Processing Overlay */}
+                {state === 'processing' && (
+                    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white z-10 transition-opacity">
+                        <Loader2 className="w-12 h-12 animate-spin mb-4 text-purple-400" />
+                        <div className="flex items-center gap-2 text-purple-200 font-medium">
+                            <Sparkles className="w-4 h-4" />
+                            <span>Gemini AI 분석중...</span>
+                        </div>
                     </div>
+                )}
 
-                    {/* Bottom: Clickable Blocks */}
-                    <div className="flex-1 overflow-auto bg-slate-900 text-white" style={{ minHeight: '120px' }}>
-                        {/* Header */}
-                        <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm px-4 py-2 border-b border-slate-700/50 z-10">
-                            <div className="text-xs text-slate-400 flex justify-between items-center">
-                                <span>인식된 블록 ({visionResult?.blocks.length || 0}개) — 탭하여 선택</span>
-                                {visionResult?.source && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
-                                        {visionResult.source}
-                                    </span>
-                                )}
+                {/* Result Overlay */}
+                {state === 'result' && searchTerm && (
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 pt-20 flex flex-col gap-4">
+                        <div className="bg-slate-900/80 backdrop-blur-md border border-purple-500/30 rounded-xl p-4 shadow-xl">
+                            <div className="flex items-center gap-2 text-purple-300 text-xs mb-2 uppercase tracking-wide font-semibold">
+                                <Sparkles className="w-3 h-3" />
+                                <span>인식된 검색어</span>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <div className="bg-slate-800 p-2 rounded-lg text-slate-400 border border-slate-700">
+                                    <Search className="w-5 h-5" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="flex-1 text-lg font-bold text-white bg-transparent outline-none border-b border-white/20 focus:border-purple-400 focus:ring-0 pb-1"
+                                    placeholder="검색어를 수정하세요"
+                                />
                             </div>
                         </div>
 
-                        {/* Block list */}
-                        <div className="p-3 space-y-2">
-                            {visionResult?.blocks.map((block, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => handleBlockClick(block, i)}
-                                    className={`w-full text-left p-3 rounded-lg border transition-all active:scale-[0.98] ${selectedBlock === i
-                                        ? 'bg-blue-600/30 border-blue-500/60 ring-1 ring-blue-400/40'
-                                        : 'bg-slate-800/60 border-slate-700/40 hover:bg-slate-800 hover:border-slate-600/60'
-                                        }`}
-                                >
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="flex-1">
-                                            <div className="text-[10px] text-slate-500 mb-1">Block {i + 1}</div>
-                                            <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                                                {block.text}
-                                            </div>
-                                        </div>
-                                        {selectedBlock === i && (
-                                            <Check className="w-4 h-4 text-blue-400 flex-shrink-0 mt-4" />
-                                        )}
-                                    </div>
-                                </button>
-                            ))}
-
-                            {/* CAS auto-detect notice */}
-                            {searchTerm && selectedBlock === null && (
-                                <div className="bg-green-900/30 border border-green-700/40 rounded-lg p-3">
-                                    <div className="text-xs text-green-400 mb-1">자동 감지된 CAS 번호:</div>
-                                    <div className="text-lg font-semibold text-green-300">{searchTerm}</div>
-                                </div>
-                            )}
-
-                            {(!visionResult?.blocks.length && !error) && (
-                                <div className="text-center text-slate-500 py-4 text-sm">
-                                    인식된 텍스트가 없습니다
-                                </div>
-                            )}
-
-                            {error && (
-                                <div className="bg-red-900/30 border border-red-700/40 rounded-lg p-3 text-red-400 text-sm">
-                                    {error}
-                                </div>
-                            )}
-                        </div>
+                        <button
+                            onClick={useSearchTerm}
+                            className="w-full flex justify-center items-center gap-2 py-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors font-bold shadow-lg shadow-purple-900/50"
+                        >
+                            <Check className="w-5 h-5" />
+                            <span>이 검색어로 찾기</span>
+                        </button>
                     </div>
-
-                    {/* Selected block search bar */}
-                    {searchTerm !== null && (
-                        <div className="flex-shrink-0 bg-slate-800 border-t border-slate-700/50 px-4 py-3 flex items-center gap-3">
-                            <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="flex-1 text-sm text-white bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 py-2 outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-400/30 placeholder-slate-500"
-                                placeholder="검색어를 수정하세요"
-                            />
-                            <button
-                                onClick={useSearchTerm}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-full transition-colors font-medium flex-shrink-0"
-                            >
-                                <Check className="w-4 h-4" />
-                                <span>검색</span>
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
+                )}
+            </div>
 
             {/* Footer Controls */}
             <div className="absolute bottom-10 flex flex-col items-center gap-4 w-full px-5">
@@ -361,39 +319,48 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                     </>
                 )}
 
-                {/* Preview Mode Controls */}
-                {state === 'preview' && (
+                {/* Preview / Error Mode Controls */}
+                {(state === 'preview' || (state === 'result' && error)) && (
                     <div className="flex items-center justify-center gap-6">
                         <button
                             onClick={resetToCamera}
-                            className="flex items-center gap-2 px-5 py-3 bg-slate-600 hover:bg-slate-500 text-white rounded-full transition-colors"
+                            className="flex items-center gap-2 px-5 py-3 bg-slate-600 hover:bg-slate-500 text-white rounded-full transition-colors font-medium shadow-lg"
                         >
                             <RotateCcw className="w-5 h-5" />
                             <span>다시 촬영</span>
                         </button>
-                        <button
-                            onClick={confirmAndProcess}
-                            className="flex items-center gap-2 px-5 py-3 bg-green-600 hover:bg-green-500 text-white rounded-full transition-colors"
-                        >
-                            <Check className="w-5 h-5" />
-                            <span>스캔하기</span>
-                        </button>
+                        {!error && (
+                            <button
+                                onClick={confirmAndProcess}
+                                className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-full transition-colors font-bold shadow-lg shadow-green-900/40"
+                            >
+                                <Sparkles className="w-5 h-5" />
+                                <span>AI 인식하기</span>
+                            </button>
+                        )}
                     </div>
                 )}
 
-                {/* Result Mode Controls */}
-                {state === 'result' && (
-                    <div className="flex items-center justify-center gap-4">
-                        <button
-                            onClick={resetToCamera}
-                            className="flex items-center gap-2 px-4 py-3 bg-slate-600 hover:bg-slate-500 text-white rounded-full transition-colors"
-                        >
-                            <RotateCcw className="w-5 h-5" />
-                            <span>다시 촬영</span>
-                        </button>
+                {/* Status Notice for error without preview logic handling it correctly */}
+                {state === 'result' && error && (
+                    <div className="absolute top-[-40px] bg-red-500/90 text-white px-4 py-2 rounded-lg text-sm animate-bounce w-max mx-auto left-0 right-0 text-center">
+                        {error}
                     </div>
                 )}
+
+                {/* The "다시 촬영" button for result with searchTerm is now located above the input/bottom controls natively via the flex container, but actually it's better to add a small UI for it near the top left corner */}
             </div>
+
+            {/* Top Left Retry Button for Result Mode */}
+            {state === 'result' && !error && (
+                <button
+                    onClick={resetToCamera}
+                    className="absolute top-5 left-5 text-white/80 hover:text-white p-2 z-30 bg-black/40 rounded-full backdrop-blur-md flex items-center gap-2"
+                >
+                    <RotateCcw className="w-4 h-4" />
+                    <span className="text-xs font-medium px-1">다시 촬영</span>
+                </button>
+            )}
         </div>
     );
 };
