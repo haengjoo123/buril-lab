@@ -26,7 +26,7 @@ export const parseFormula = (formula: string): Record<string, number> => {
 };
 
 // Helper: Determine disposal category details
-const getCategoryDetails = (category: DisposalCategory): { binColor: string; label: string } => {
+export const getCategoryDetails = (category: DisposalCategory): { binColor: string; label: string } => {
     switch (category) {
         case 'ACID':
             return { binColor: 'bg-red-500', label: 'label_acid' };
@@ -35,9 +35,17 @@ const getCategoryDetails = (category: DisposalCategory): { binColor: string; lab
         case 'NEUTRAL':
             return { binColor: 'bg-green-500', label: 'label_neutral' };
         case 'ORGANIC_HALOGEN':
-            return { binColor: 'bg-orange-600', label: 'label_organic' };
+            return { binColor: 'bg-orange-600', label: 'label_organic_halogen' };
         case 'ORGANIC_NON_HALOGEN':
-            return { binColor: 'bg-yellow-500', label: 'label_organic' };
+            return { binColor: 'bg-yellow-500', label: 'label_organic_non_halogen' };
+        case 'HEAVY_METAL':
+            return { binColor: 'bg-purple-600', label: 'label_heavy_metal' };
+        case 'CYANIDE':
+            return { binColor: 'bg-teal-600', label: 'label_cyanide' };
+        case 'REACTIVE':
+            return { binColor: 'bg-rose-600', label: 'label_reactive' };
+        case 'SOLID_WASTE':
+            return { binColor: 'bg-stone-500', label: 'label_solid_waste' };
         default:
             return { binColor: 'bg-gray-400', label: 'mix_label_unknown' };
     }
@@ -45,6 +53,8 @@ const getCategoryDetails = (category: DisposalCategory): { binColor: string; lab
 
 export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     const elements = parseFormula(chemical.molecularFormula || '');
+    const formulaStr = chemical.molecularFormula || '';
+    const nameUpper = chemical.name.toUpperCase();
 
     // 1. Organic detection: Presence of Carbon (C)
     const hasCarbon = !!elements['C'];
@@ -61,7 +71,33 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     let reason = '';
     let reasonParams: Record<string, string | number> | undefined;
 
-    if (hasCarbon) {
+    // --- Strict Evaluation Priority ---
+
+    // 1. Reactive / Oxidizer
+    const reactiveKeywords = ['PEROXIDE', 'NITRATE', 'CHLORATE', 'PERMANGANATE', 'AZIDE', 'PERCHLORATE', 'HYDRAZINE', 'PICRIC', 'NITRIC ACID', 'PERCHLORIC ACID'];
+    const isReactive = reactiveKeywords.some(kw => nameUpper.includes(kw)) || formulaStr.includes('HNO3') || formulaStr.includes('HClO4');
+
+    // 2. Cyanide / Sulfide
+    const isCyanide = nameUpper.includes('CYANIDE') || formulaStr.includes('CN') || formulaStr.includes('(CN)') || nameUpper.includes('SULFIDE') || formulaStr.includes('S2-');
+
+    // 3. Heavy Metals (using regex with word boundaries to avoid partial matches like "CO")
+    const heavyMetalRegex = /\b(Ag|Cd|Pb|Hg|Cr|As|Ni|Cu|Zn|Ba)\b/;
+    const isHeavyMetal = heavyMetalRegex.test(formulaStr);
+
+    // 6. Solid Waste (evaluated later but defined here)
+    const solidKeywords = ['POWDER', 'RESIN', 'SAND', 'PELLET', 'BEAD', 'LUMP', 'CRYSTAL'];
+    const isSolid = solidKeywords.some(kw => nameUpper.includes(kw));
+
+    if (isReactive) {
+        category = 'REACTIVE';
+        reason = 'reason_reactive';
+    } else if (isCyanide) {
+        category = 'CYANIDE';
+        reason = 'reason_cyanide';
+    } else if (isHeavyMetal) {
+        category = 'HEAVY_METAL';
+        reason = 'reason_heavy_metal';
+    } else if (hasCarbon) {
         // Organic Logic
         if (hasHalogen) {
             category = 'ORGANIC_HALOGEN';
@@ -72,8 +108,6 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         }
     } else {
         // Inorganic Logic
-        const nameUpper = chemical.name.toUpperCase();
-
         if (chemical.properties?.ph !== undefined) {
             if (chemical.properties.ph < 7) {
                 category = 'ACID';
@@ -84,7 +118,6 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
                 reason = 'reason_alkali_ph';
                 reasonParams = { ph: chemical.properties.ph };
             } else {
-                // pH == 7 -> NEUTRAL
                 category = 'NEUTRAL';
                 reason = 'reason_neutral_ph';
                 reasonParams = { ph: chemical.properties.ph };
@@ -95,11 +128,17 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
             if (nameUpper.includes('ACID') || nameUpper.includes('SULFURIC') || nameUpper.includes('HYDROCHLORIC') || nameUpper.includes('NITRIC')) {
                 category = 'ACID';
                 reason = 'reason_acid_keyword';
-            } else if (nameUpper.includes('HYDROXIDE') || nameUpper.includes('AMMONIA')) {
+            } else if (nameUpper.includes('HYDROXIDE') || nameUpper.includes('AMMONIA') || nameUpper.includes('BASE')) {
                 category = 'ALKALI';
                 reason = 'reason_alkali_keyword';
             }
         }
+    }
+
+    // Apply Solid fallback if category is unknown or if it specifically matches solid without being overridden by dangerous categories
+    if (category === 'UNKNOWN' && isSolid) {
+        category = 'SOLID_WASTE';
+        reason = 'reason_solid_waste';
     }
 
     const { binColor, label } = getCategoryDetails(category);
@@ -108,8 +147,8 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         chemical,
         category,
         binColor,
-        label, // Now returns a translation key
-        reason: reason || 'reason_unknown', // Now returns a translation key
+        label,
+        reason: reason || 'reason_unknown',
         reasonParams,
         isSafe: category !== 'UNKNOWN'
     };

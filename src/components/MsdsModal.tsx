@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Chemical, MsdsSection } from '../types';
 import { fetchKoshaMsds } from '../services/koshaApi';
 import { fetchPubChemMsds } from '../services/pubchemApi';
@@ -11,6 +12,7 @@ interface MsdsModalProps {
 }
 
 export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose }) => {
+    const { t, i18n } = useTranslation();
     const [loading, setLoading] = useState(true);
     const [sections, setSections] = useState<MsdsSection[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -35,26 +37,37 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
 
         try {
             let data: MsdsSection[] = [];
+            const isEnglish = i18n.language === 'en';
 
-            // 1. Try KOSHA first if ID exists (Korean context)
-            if (chemical.koshaId) {
-                console.log('Fetching from KOSHA...');
-                data = await fetchKoshaMsds(chemical.koshaId);
-            }
-
-            // 2. If no KOSHA ID or KOSHA returned empty (and we have PubChem CID), try PubChem
-            if (data.length === 0 && chemical.id) {
-                console.log('Fetching from PubChem...');
-                data = await fetchPubChemMsds(chemical.id);
+            if (isEnglish) {
+                // English: PubChem (English) first, KOSHA fallback
+                if (chemical.id) {
+                    console.log('Fetching from PubChem (EN priority)...');
+                    data = await fetchPubChemMsds(chemical.id);
+                }
+                if (data.length === 0 && chemical.koshaId) {
+                    console.log('Fallback to KOSHA...');
+                    data = await fetchKoshaMsds(chemical.koshaId);
+                }
+            } else {
+                // Korean: KOSHA (Korean) first, PubChem fallback
+                if (chemical.koshaId) {
+                    console.log('Fetching from KOSHA (KO priority)...');
+                    data = await fetchKoshaMsds(chemical.koshaId);
+                }
+                if (data.length === 0 && chemical.id) {
+                    console.log('Fallback to PubChem...');
+                    data = await fetchPubChemMsds(chemical.id);
+                }
             }
 
             if (data.length === 0) {
-                setError('MSDS 정보를 찾을 수 없습니다.');
+                setError(t('msds_not_found'));
             } else {
                 setSections(data);
             }
         } catch (err) {
-            setError('데이터를 불러오는 중 오류가 발생했습니다.');
+            setError(t('msds_load_error'));
             console.error(err);
         } finally {
             setLoading(false);
@@ -72,7 +85,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                     <div>
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <FileText className="w-5 h-5 text-blue-600" />
-                            MSDS 정보 (물질안전보건자료)
+                            {t('msds_title')}
                         </h2>
                         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                             {chemical.name} {chemical.casNumber && `• CAS: ${chemical.casNumber}`}
@@ -91,7 +104,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-full space-y-4">
                             <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-                            <p className="text-slate-500 animate-pulse">데이터를 불러오는 중입니다...</p>
+                            <p className="text-slate-500 animate-pulse">{t('msds_loading')}</p>
                         </div>
                     ) : error ? (
                         <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -103,7 +116,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                                 onClick={loadMsdsData}
                                 className="text-blue-600 hover:underline text-sm"
                             >
-                                다시 시도하기
+                                {t('msds_retry')}
                             </button>
                         </div>
                     ) : (
@@ -122,6 +135,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
 import { getPictogramUrl } from '../data/ghsCodes';
 
 const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
+    const { t } = useTranslation();
     const [isExpanded, setIsExpanded] = useState(false);
 
     const renderValue = (label: string, value: string) => {
@@ -199,7 +213,7 @@ const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
                             </div>
                         ))
                     ) : (
-                        <p className="text-sm text-gray-400 italic">내용 없음</p>
+                        <p className="text-sm text-gray-400 italic">{t('msds_no_content')}</p>
                     )}
                 </div>
             )}

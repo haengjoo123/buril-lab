@@ -1,6 +1,6 @@
 import React from 'react';
 import type { AnalysisResult } from '../types';
-import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText } from 'lucide-react';
+import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText, Sparkles } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { translateGHS } from '../data/ghsCodes';
@@ -63,7 +63,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
                     className="shrink-0 flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
                 >
                     <FileText className="w-3.5 h-3.5" />
-                    MSDS 확인
+                    {t('msds_view')}
                 </button>
             </div>
 
@@ -77,9 +77,27 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
 
                 <h4 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">{t(label as any)}</h4>
 
-                <p className="text-slate-600 dark:text-slate-300 mb-6 leading-relaxed">
+                <p className="text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
                     {t(reason as any, result.reasonParams)}
                 </p>
+
+                {/* Specific Disposal Guide */}
+                <div className="w-full bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 p-4 rounded-xl text-left mb-6 border border-blue-100 dark:border-blue-800/50 animate-in zoom-in-95 duration-300 delay-100">
+                    <p className="font-bold mb-1 text-sm">{t('cart_guide_title')}</p>
+                    <p className="text-sm leading-relaxed whitespace-pre-line">
+                        {t(`disposal_guide_${category}` as any)}
+                    </p>
+                </div>
+
+                {/* AI Badge if inferred by Gemini */}
+                {result.isAiEstimated && (
+                    <div className="flex items-center gap-1.5 justify-center w-full mb-6 animate-in fade-in duration-300 delay-200">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-200 dark:border-purple-800/50">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            {t('label_ai_classified')}
+                        </span>
+                    </div>
+                )}
 
                 {/* MSDS / GHS Information */}
                 {chemical.ghs && (

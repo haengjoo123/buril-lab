@@ -16,6 +16,7 @@ import { searchChemical } from './services/searchService';
 import { cabinetService, type CabinetSearchResult } from './services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from './services/mediaProductService';
 import { analyzeChemical } from './utils/chemicalAnalyzer';
+import { classifyChemicalWithAI } from './services/geminiClassificationService';
 import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
 import { useLabStore } from './store/useLabStore';
@@ -38,6 +39,7 @@ function App() {
   const [selectedBrand, setSelectedBrand] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('relevance');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -52,6 +54,7 @@ function App() {
     if (!searchQuery.trim()) return;
 
     setIsLoading(true);
+    setIsAiAnalyzing(false);
     setError(null);
     setResult(null);
     setMediaProducts([]);
@@ -74,7 +77,21 @@ function App() {
       ]);
 
       if (chemicalData) {
-        const analysis = analyzeChemical(chemicalData);
+        let analysis = analyzeChemical(chemicalData);
+
+        // AI Fallback for UNKNOWN chemicals
+        if (analysis.category === 'UNKNOWN') {
+          setIsAiAnalyzing(true);
+          try {
+            const aiResult = await classifyChemicalWithAI(chemicalData);
+            if (aiResult) {
+              analysis = { ...analysis, ...aiResult };
+            }
+          } finally {
+            setIsAiAnalyzing(false);
+          }
+        }
+
         setResult(analysis);
       }
 
@@ -156,6 +173,7 @@ function App() {
     setLastSearchQuery('');
     setQuery('');
     setError(null);
+    setIsAiAnalyzing(false);
   };
 
   // Auth Loading
@@ -290,6 +308,14 @@ function App() {
                 ) : null}
               </div>
             </form>
+
+            {/* AI Analysis Loading Indicator */}
+            {isAiAnalyzing && (
+              <div className="flex items-center gap-3 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl text-sm animate-in fade-in slide-in-from-top-1 border border-purple-100 dark:border-purple-900/30">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="font-medium">AI가 시약 정보를 분석하고 있습니다. 잠시만 기다려주세요...</span>
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (

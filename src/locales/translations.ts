@@ -30,9 +30,15 @@ export const translations = {
 
         // Result Card
         label_acid: "산성",
-        label_organic: "유기계",
+        label_organic_halogen: "유기계 (할로겐)",
+        label_organic_non_halogen: "유기계 (비할로겐)",
         label_alkali: "알칼리",
-        label_neutral: "중성",
+        label_neutral: "일반 수계 폐액 (Aqueous Waste)",
+        label_heavy_metal: "중금속 폐액",
+        label_cyanide: "시안/황화물계 폐액",
+        label_reactive: "반응성/산화성 물질",
+        label_solid_waste: "고체 폐기물(오염물/빈 병)",
+        label_ai_classified: "AI 추론 추정치 (반드시 검증 요망)",
         safety_ghs: "물질안전보건정보 (GHS)",
         safety_uncertain: "자동 분류가 불확실합니다. 반드시 MSDS를 확인하세요.",
 
@@ -66,10 +72,26 @@ export const translations = {
         reason_organic_non_halogen: "분자식에 탄소(C)가 포함되어 있고, 할로겐족 원소가 없습니다.",
         reason_acid_ph: "pH가 {{ph}}로 산성입니다.",
         reason_alkali_ph: "pH가 {{ph}}로 알칼리성입니다.",
-        reason_neutral_ph: "pH가 {{ph}}로 중성입니다. (배출 허용 기준 확인 필요)",
+        reason_neutral_ph: "유해 물질이 없는 순수 수용액입니다. (단, 맹독성 유기물/중금속이 포함되었다면 절대 수계 배출 금지)",
         reason_acid_keyword: "시약명에 산(Acid) 관련 키워드가 포함되어 있습니다.",
         reason_alkali_keyword: "시약명에 알칼리성 키워드(Hydroxide 등)가 포함되어 있습니다.",
+        reason_heavy_metal: "분자식에 중금속(Ag, Cd, Pb, Hg, Cr, As, Ni, Cu, Zn, Ba 등)이 포함되어 있습니다.",
+        reason_cyanide: "시안(CN) 화합물 또는 황화물(Sulfide)이 포함되어 있습니다.",
+        reason_reactive: "강한 반응성, 산화성, 폭발성 키워드(Nitrate, Peroxide 등)가 포함되어 있습니다.",
+        reason_solid_waste: "고체 상태로 추정되는 물리적 형태의 물질입니다.",
         reason_unknown: "자동 분류할 수 없습니다. 안전관리자에게 문의하세요.",
+
+        // Disposal Guides (Single Chemical)
+        disposal_guide_ACID: "산성 폐액통에 배출하세요. ⚠️ 단, 불산(HF)은 절대 유리 용기를 녹이므로 전용 플라스틱 용기에 단독 보관/배출해야 합니다.",
+        disposal_guide_ALKALI: "알칼리성 폐액통(보통 파란색 라벨)에 배출하세요. 산이나 유기용매와 섞이지 않도록 주의하세요.",
+        disposal_guide_ORGANIC_HALOGEN: "할로겐족 유기 폐액통(보통 오렌지색 라벨)에 배출하세요. 환기가 잘 되는 곳에서 작업하세요.",
+        disposal_guide_ORGANIC_NON_HALOGEN: "비할로겐족 유기 폐액통(보통 노란색 라벨)에 배출하세요. 할로겐 폐액과 섞지 마세요.",
+        disposal_guide_HEAVY_METAL: "중금속 폐액통에 별도로 배출하세요. 일반 수계 폐수나 유기 용매와 섞이면 심각한 환경 오염 및 반응을 일으킵니다.",
+        disposal_guide_CYANIDE: "시안계/황화물계 폐액통에 별도로 완전히 밀폐하여 배출하세요. 절대 산성 폐액과 섞이지 않도록 하십시오 (치명적인 맹독성 가스 발생 위험).",
+        disposal_guide_REACTIVE: "일반 폐액 라인과 섞지 말고, 폭발 및 발열 위험이 있으므로 단독으로 밀폐 포장해 '반응성/산화성 폐기물'로 안전관리자에게 인계하세요.",
+        disposal_guide_SOLID_WASTE: "고체 폐기물(오염된 초자류, 고형 시약 등)은 지정된 전용 고상 폐기물 용기봉투나 박스에 담아 배출하세요. 액체 폐액통에 넣지 마세요.",
+        disposal_guide_NEUTRAL: "유기물, 중금속, 독성이 전혀 없는 순문 수용액인 경우에만 일반 수계 폐액으로 배출 가능합니다. 조금이라도 오염되었다면 알맞은 폐액통에 버리세요.",
+        disposal_guide_UNKNOWN: "성상이 불분명하므로 절대 다른 폐기물과 혼합하지 말고 단독 무상태로 안전관리자에게 폐기 방법을 문의하세요.",
 
         // Mixture Reasons
         mix_reason_halogen: "할로겐족 유기 용매가 포함되어 있어, 전체를 '할로겐족 유기 폐액'으로 분류해야 합니다.",
@@ -81,6 +103,8 @@ export const translations = {
         // Mixture Warnings
         mix_warn_organic_inorganic: "유기용매와 무기산/알칼리를 혼합하면 폭발이나 발열 위험이 있습니다. 별도 폐기하거나 안전관리자에게 문의하세요.",
         mix_warn_acid_alkali: "산과 알칼리를 섞으면 중화열이 발생하여 끓어오를 수 있습니다. 희석 후 중화하거나 각각 별도로 폐기하세요.",
+        mix_warn_incompatible_acids: "산화성 산(질산, 과염소산 등)과 환원성 산(염산 등) 또는 유기물을 혼합하면 폭발이나 맹독성 가스(염소 가스 등) 발생 위험이 있습니다. 절대 혼합하지 마세요.",
+        mix_warn_hf: "불산(Hydrofluoric acid)은 유리가 아닌 전용 플라스틱 용기에 별도 보관/폐기해야 하며 다른 산과 혼합을 엄격히 금지합니다.",
 
         mix_label_halogen: "할로겐족 유기 폐액 (혼합)",
         mix_label_organic: "비할로겐족 유기 폐액 (혼합)",
@@ -88,6 +112,8 @@ export const translations = {
         mix_label_alkali: "알칼리 폐액 (혼합)",
         mix_label_warn_oi: "혼합 주의 (유기 + 무기)",
         mix_label_warn_aa: "발열 주의 (산 + 알칼리)",
+        mix_label_warn_incompatible_acids: "혼합 금지 (특수 산성)",
+        mix_label_warn_hf: "혼합 금지 (불산)",
         mix_label_unknown: "분류 불가 (혼합)",
         mix_label_alkali_organic: "알칼리 + 유기계 혼합 폐액",
 
@@ -270,7 +296,16 @@ export const translations = {
         auth_error_empty: "이메일과 비밀번호를 입력해주세요.",
         auth_error_password_mismatch: "비밀번호가 일치하지 않습니다.",
         auth_error_password_short: "비밀번호는 6자 이상이어야 합니다.",
-        auth_error_generic: "인증 중 오류가 발생했습니다."
+        auth_error_generic: "인증 중 오류가 발생했습니다.",
+
+        // MSDS Modal
+        msds_title: "MSDS 정보 (물질안전보건자료)",
+        msds_not_found: "MSDS 정보를 찾을 수 없습니다.",
+        msds_load_error: "데이터를 불러오는 중 오류가 발생했습니다.",
+        msds_loading: "데이터를 불러오는 중입니다...",
+        msds_retry: "다시 시도하기",
+        msds_no_content: "내용 없음",
+        msds_view: "MSDS 확인"
     },
     en: {
         app_title: "Buril-lab",
@@ -301,8 +336,15 @@ export const translations = {
 
         // Result Card
         label_acid: "Acid",
-        label_organic: "Organic",
+        label_organic_halogen: "Organic (Halogenated)",
+        label_organic_non_halogen: "Organic (Non-Halogenated)",
         label_alkali: "Alkali",
+        label_neutral: "Aqueous Waste",
+        label_heavy_metal: "Heavy Metal",
+        label_cyanide: "Cyanide/Sulfide Waste",
+        label_reactive: "Reactive/Oxidizer",
+        label_solid_waste: "Solid Waste",
+        label_ai_classified: "AI Estimated Result (Verify Carefully)",
         safety_ghs: "Safety Data (GHS)",
         safety_uncertain: "Classification uncertain. Check MSDS.",
 
@@ -336,10 +378,26 @@ export const translations = {
         reason_organic_non_halogen: "Contains Carbon (C) but no Halogens.",
         reason_acid_ph: "Acidic with pH {{ph}}.",
         reason_alkali_ph: "Alkaline with pH {{ph}}.",
-        reason_neutral_ph: "Neutral with pH {{ph}}. (Check discharge limits)",
+        reason_neutral_ph: "Pure aqueous solution. (DO NOT discharge if contaminated with organics/metals).",
         reason_acid_keyword: "Chemical name contains Acid-related keywords.",
         reason_alkali_keyword: "Chemical name contains Alkali-related keywords.",
+        reason_heavy_metal: "Formula contains Heavy Metals (Ag, Cd, Pb, Hg, Cr, As, Ni, Cu, Zn, Ba).",
+        reason_cyanide: "Contains Cyanide (CN) or Sulfide compounds.",
+        reason_reactive: "Contains strong reactive, oxidizing, or explosive keywords (Nitrate, Peroxide, etc.).",
+        reason_solid_waste: "Physical state is estimated to be solid.",
         reason_unknown: "Cannot classify automatically. Consult safety officer.",
+
+        // Disposal Guides (Single Chemical)
+        disposal_guide_ACID: "Dispose in Acidic Waste container. ⚠️ DANGER: Hydrofluoric acid (HF) dissolves glass and must be stored in specific plastic containers only.",
+        disposal_guide_ALKALI: "Dispose in the Alkaline Waste container (usually blue label). Do NOT mix with acids or organics.",
+        disposal_guide_ORGANIC_HALOGEN: "Dispose in the Halogenated Organic Waste container (usually orange label). Work in a well-ventilated area.",
+        disposal_guide_ORGANIC_NON_HALOGEN: "Dispose in the Non-Halogenated Organic Waste container (usually yellow label). Do NOT mix with halogenated waste.",
+        disposal_guide_HEAVY_METAL: "Dispose separately in Heavy Metal Waste container. Mixing with aqueous or organic waste causes severe environmental hazards.",
+        disposal_guide_CYANIDE: "Dispose separately in a tightly sealed Cyanide/Sulfide Waste container. NEVER mix with acidic waste (lethal toxic gas risk).",
+        disposal_guide_REACTIVE: "Do NOT mix with general waste lines. Isolate and package separately as 'Reactive/Oxidizing Waste' and hand over to safety officer.",
+        disposal_guide_SOLID_WASTE: "Dispose in designated solid waste bags or boxes for contaminated solids. Do NOT place in liquid waste containers.",
+        disposal_guide_NEUTRAL: "Dispose as Aqueous Waste ONLY IF absolutely free of organics, heavy metals, or toxins. Otherwise, route to appropriate waste bin.",
+        disposal_guide_UNKNOWN: "Classification unclear. DO NOT mix. Keep isolated and consult your safety officer for disposal instructions.",
 
         // Mixture Reasons
         mix_reason_halogen: "Contains Halogenated Organic Solvents. Must be treated as Halogenated Waste.",
@@ -351,6 +409,8 @@ export const translations = {
         // Mixture Warnings
         mix_warn_organic_inorganic: "Mixing Organic and Inorganic chemicals may cause explosion or heat. Dispose separately.",
         mix_warn_acid_alkali: "Mixing Acid and Alkali generates heat. Neutralize or dispose separately.",
+        mix_warn_incompatible_acids: "Mixing oxidizing acids (Nitric, Perchloric) with reducing acids (HCl) or organics can cause explosions or toxic gas. DO NOT MIX.",
+        mix_warn_hf: "Hydrofluoric acid must be stored/disposed of in dedicated plastic containers, NOT glass. Do NOT mix with other acids.",
 
         mix_label_halogen: "Halogenated Organic (Mixed)",
         mix_label_organic: "Non-Halogenated Organic (Mixed)",
@@ -358,6 +418,8 @@ export const translations = {
         mix_label_alkali: "Alkali Waste (Mixed)",
         mix_label_warn_oi: "Warning (Organic + Inorganic)",
         mix_label_warn_aa: "Warning (Acid + Alkali)",
+        mix_label_warn_incompatible_acids: "Do Not Mix (Incompatible Acids)",
+        mix_label_warn_hf: "Do Not Mix (Hydrofluoric Acid)",
         mix_label_unknown: "Unknown (Mixed)",
         mix_label_alkali_organic: "Alkali + Organic Mixture",
 
@@ -540,6 +602,15 @@ export const translations = {
         auth_error_empty: "Please enter email and password.",
         auth_error_password_mismatch: "Passwords do not match.",
         auth_error_password_short: "Password must be at least 6 characters.",
-        auth_error_generic: "An error occurred during authentication."
+        auth_error_generic: "An error occurred during authentication.",
+
+        // MSDS Modal
+        msds_title: "MSDS (Safety Data Sheet)",
+        msds_not_found: "MSDS data not found.",
+        msds_load_error: "Failed to load data.",
+        msds_loading: "Loading data...",
+        msds_retry: "Retry",
+        msds_no_content: "No content",
+        msds_view: "View MSDS"
     }
 };

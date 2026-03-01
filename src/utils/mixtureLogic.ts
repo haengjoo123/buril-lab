@@ -42,6 +42,32 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
     const hasAcid = cart.some(item => item.category === 'ACID');
     const hasAlkali = cart.some(item => item.category === 'ALKALI');
 
+    // Helper arrays for specific acids
+    const OXIDIZING_ACIDS = ['NITRIC', 'HNO3', 'PERCHLORIC', 'HCLO4'];
+    const REDUCING_HALIDE_ACIDS = ['HYDROCHLORIC', 'HCL', 'HYDROBROMIC', 'HBR'];
+    const HYDROFLUORIC_ACIDS = ['HYDROFLUORIC', 'HF'];
+
+    const hasOxidizingAcid = cart.some(item =>
+        OXIDIZING_ACIDS.some(keyword =>
+            item.chemical.name?.toUpperCase().includes(keyword) ||
+            item.chemical.molecularFormula?.toUpperCase().includes(keyword)
+        )
+    );
+
+    const hasReducingAcid = cart.some(item =>
+        REDUCING_HALIDE_ACIDS.some(keyword =>
+            item.chemical.name?.toUpperCase().includes(keyword) ||
+            item.chemical.molecularFormula?.toUpperCase().includes(keyword)
+        )
+    );
+
+    const hasHydrofluoricAcid = cart.some(item =>
+        HYDROFLUORIC_ACIDS.some(keyword =>
+            item.chemical.name?.toUpperCase().includes(keyword) ||
+            item.chemical.molecularFormula?.toUpperCase().includes(keyword)
+        )
+    );
+
     // 1. Most Strict: Halogenated Organic
     if (hasHalogenOrganic) {
         return {
@@ -154,6 +180,27 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
     }
 
     if (hasAcid) {
+        // Specific strict rules for acids
+        if (hasHydrofluoricAcid && cart.length > 1) {
+            return {
+                category: 'UNKNOWN',
+                binColor: 'bg-red-700',
+                label: 'mix_label_warn_hf',
+                reason: 'mix_warn_hf',
+                isSafe: false
+            };
+        }
+
+        if (hasOxidizingAcid && (hasReducingAcid || hasNonHalogenOrganic || hasHalogenOrganic)) {
+            return {
+                category: 'UNKNOWN',
+                binColor: 'bg-red-700',
+                label: 'mix_label_warn_incompatible_acids',
+                reason: 'mix_warn_incompatible_acids',
+                isSafe: false
+            };
+        }
+
         return {
             category: 'ACID',
             binColor: 'bg-red-500',

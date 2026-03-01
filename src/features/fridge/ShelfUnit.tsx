@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ShelfData } from '../../types/fridge';
 import { useFridgeStore } from '../../store/fridgeStore';
@@ -44,6 +44,10 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
     const [ghostDepthPos, setGhostDepthPos] = useState<number>(50);
     const [isValid, setIsValid] = useState(true);
     const [warning, setWarning] = useState<string | null>(null);
+
+    // 드래그(회전) vs 클릭 구분을 위한 pointerdown 좌표 추적
+    const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
+    const CLICK_THRESHOLD = 5; // px 이내면 클릭, 초과하면 드래그
 
     const draggedPlacement = draggedItem
         ? shelves.flatMap(s => s.items).find(i => i.id === draggedItem.id)
@@ -131,8 +135,22 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         if (!draggedTemplate && !draggedItem) document.body.style.cursor = 'pointer';
     };
 
+    const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+        pointerDownPos.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
+    };
+
     const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
+        const down = pointerDownPos.current;
+        pointerDownPos.current = null;
+
+        // 드래그(회전) 후 pointerup인 경우 → 클릭으로 처리하지 않음
+        const isDrag = !down || Math.hypot(
+            e.nativeEvent.clientX - down.x,
+            e.nativeEvent.clientY - down.y
+        ) > CLICK_THRESHOLD;
+
         if (!draggedTemplate && !draggedItem) {
+            if (isDrag) return;
             e.stopPropagation();
             onShelfFocus?.(position[1]);
             return;
@@ -140,6 +158,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
 
         // 시약 선택 상태에서도, 호버 없이 선반만 클릭한 경우 포커스 처리
         if (ghostPos === null) {
+            if (isDrag) return;
             e.stopPropagation();
             onShelfFocus?.(position[1]);
             return;
@@ -182,6 +201,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
             <mesh
                 receiveShadow
                 position={[0, -shelfHeight / 2, 0]}
+                onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerEnter={handlePointerEnter}
                 onPointerLeave={handlePointerLeave}

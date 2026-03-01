@@ -4,6 +4,10 @@ export type DisposalCategory =
     | 'NEUTRAL'
     | 'ORGANIC_HALOGEN'
     | 'ORGANIC_NON_HALOGEN'
+    | 'HEAVY_METAL'
+    | 'CYANIDE'
+    | 'REACTIVE'
+    | 'SOLID_WASTE'
     | 'UNKNOWN';
 
 export interface Chemical {
@@ -41,6 +45,7 @@ export interface AnalysisResult {
     reason: string; // Explanation key for translation
     reasonParams?: Record<string, string | number>; // Dynamic params for translation
     isSafe: boolean; // False if requires manual verification
+    isAiEstimated?: boolean; // True if the category was inferred by the Gemini API fallback
 }
 
 export interface CartItem extends AnalysisResult {
