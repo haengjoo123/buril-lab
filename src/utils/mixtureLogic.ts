@@ -22,6 +22,17 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
         };
     }
 
+    const hasSpecialHazard = cart.some(item => item.category === 'SPECIAL_HAZARD');
+    if (hasSpecialHazard) {
+        return {
+            category: 'SPECIAL_HAZARD',
+            binColor: 'bg-red-800',
+            label: 'label_special_hazard',
+            reason: 'disposal_guide_SPECIAL_HAZARD',
+            isSafe: false
+        };
+    }
+
     // Priority Level: Higher index = More Strict/Dangerous
     // 0: Unknown / Safe?
     // 1: Organic Non-Halogen (Yellow)

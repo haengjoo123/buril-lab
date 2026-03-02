@@ -48,6 +48,18 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
         onReset(); // Clear current view
     };
 
+    const isHF = React.useMemo(() => {
+        const nameUpper = chemical.name?.toUpperCase() || '';
+        const formulaUpper = chemical.molecularFormula?.toUpperCase() || '';
+        return chemical.casNumber === '7664-39-3' ||
+            nameUpper.includes('HYDROFLUORIC') ||
+            nameUpper.includes('불산') ||
+            nameUpper.includes('플루오린화 수소') ||
+            formulaUpper === 'HF';
+    }, [chemical]);
+
+    const guideKey = category === 'ACID' && isHF ? 'disposal_guide_ACID_HF' : `disposal_guide_${category}`;
+
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-5">
             {/* Header: Chemical Info */}
@@ -85,7 +97,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
                 <div className="w-full bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 p-4 rounded-xl text-left mb-6 border border-blue-100 dark:border-blue-800/50 animate-in zoom-in-95 duration-300 delay-100">
                     <p className="font-bold mb-1 text-sm">{t('cart_guide_title')}</p>
                     <p className="text-sm leading-relaxed whitespace-pre-line">
-                        {t(`disposal_guide_${category}` as any)}
+                        {t(guideKey as any)}
                     </p>
                 </div>
 

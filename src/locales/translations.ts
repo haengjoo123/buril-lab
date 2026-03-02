@@ -38,6 +38,7 @@ export const translations = {
         label_cyanide: "시안/황화물계 폐액",
         label_reactive: "반응성/산화성 물질",
         label_solid_waste: "고체 폐기물(오염물/빈 병)",
+        label_special_hazard: "법정 특수 유해 폐기물",
         label_ai_classified: "AI 추론 추정치 (반드시 검증 요망)",
         safety_ghs: "물질안전보건정보 (GHS)",
         safety_uncertain: "자동 분류가 불확실합니다. 반드시 MSDS를 확인하세요.",
@@ -79,10 +80,12 @@ export const translations = {
         reason_cyanide: "시안(CN) 화합물 또는 황화물(Sulfide)이 포함되어 있습니다.",
         reason_reactive: "강한 반응성, 산화성, 폭발성 키워드(Nitrate, Peroxide 등)가 포함되어 있습니다.",
         reason_solid_waste: "고체 상태로 추정되는 물리적 형태의 물질입니다.",
+        reason_special_hazard: "40 CFR 261.33 P/U 리스트에 등재된 맹독성/고인화성/폭발 위험 물질입니다.",
         reason_unknown: "자동 분류할 수 없습니다. 안전관리자에게 문의하세요.",
 
         // Disposal Guides (Single Chemical)
-        disposal_guide_ACID: "산성 폐액통에 배출하세요. ⚠️ 단, 불산(HF)은 절대 유리 용기를 녹이므로 전용 플라스틱 용기에 단독 보관/배출해야 합니다.",
+        disposal_guide_ACID: "산성 폐액통에 배출하세요.",
+        disposal_guide_ACID_HF: "산성 폐액통에 배출하세요. ⚠️ 단, 불산(HF)은 절대 유리 용기를 녹이므로 전용 플라스틱 용기에 단독 보관/배출해야 합니다.",
         disposal_guide_ALKALI: "알칼리성 폐액통(보통 파란색 라벨)에 배출하세요. 산이나 유기용매와 섞이지 않도록 주의하세요.",
         disposal_guide_ORGANIC_HALOGEN: "할로겐족 유기 폐액통(보통 오렌지색 라벨)에 배출하세요. 환기가 잘 되는 곳에서 작업하세요.",
         disposal_guide_ORGANIC_NON_HALOGEN: "비할로겐족 유기 폐액통(보통 노란색 라벨)에 배출하세요. 할로겐 폐액과 섞지 마세요.",
@@ -90,6 +93,7 @@ export const translations = {
         disposal_guide_CYANIDE: "시안계/황화물계 폐액통에 별도로 완전히 밀폐하여 배출하세요. 절대 산성 폐액과 섞이지 않도록 하십시오 (치명적인 맹독성 가스 발생 위험).",
         disposal_guide_REACTIVE: "일반 폐액 라인과 섞지 말고, 폭발 및 발열 위험이 있으므로 단독으로 밀폐 포장해 '반응성/산화성 폐기물'로 안전관리자에게 인계하세요.",
         disposal_guide_SOLID_WASTE: "고체 폐기물(오염된 초자류, 고형 시약 등)은 지정된 전용 고상 폐기물 용기봉투나 박스에 담아 배출하세요. 액체 폐액통에 넣지 마세요.",
+        disposal_guide_SPECIAL_HAZARD: "해당 물질은 맹독성, 고인화성, 또는 폭발 위험이 있는 '법정 특수 유해 폐기물'입니다. 일반 폐액 라인(유기/무기)에 절대 섞지 마십시오. 즉시 단독으로 밀폐 포장한 후, 안전관리자에게 인계하시기 바랍니다.",
         disposal_guide_NEUTRAL: "유기물, 중금속, 독성이 전혀 없는 순문 수용액인 경우에만 일반 수계 폐액으로 배출 가능합니다. 조금이라도 오염되었다면 알맞은 폐액통에 버리세요.",
         disposal_guide_UNKNOWN: "성상이 불분명하므로 절대 다른 폐기물과 혼합하지 말고 단독 무상태로 안전관리자에게 폐기 방법을 문의하세요.",
 
@@ -344,6 +348,7 @@ export const translations = {
         label_cyanide: "Cyanide/Sulfide Waste",
         label_reactive: "Reactive/Oxidizer",
         label_solid_waste: "Solid Waste",
+        label_special_hazard: "Special Hazardous Waste",
         label_ai_classified: "AI Estimated Result (Verify Carefully)",
         safety_ghs: "Safety Data (GHS)",
         safety_uncertain: "Classification uncertain. Check MSDS.",
@@ -385,10 +390,12 @@ export const translations = {
         reason_cyanide: "Contains Cyanide (CN) or Sulfide compounds.",
         reason_reactive: "Contains strong reactive, oxidizing, or explosive keywords (Nitrate, Peroxide, etc.).",
         reason_solid_waste: "Physical state is estimated to be solid.",
+        reason_special_hazard: "Highly toxic, flammable, or explosive substance listed in 40 CFR 261.33 P/U List.",
         reason_unknown: "Cannot classify automatically. Consult safety officer.",
 
         // Disposal Guides (Single Chemical)
-        disposal_guide_ACID: "Dispose in Acidic Waste container. ⚠️ DANGER: Hydrofluoric acid (HF) dissolves glass and must be stored in specific plastic containers only.",
+        disposal_guide_ACID: "Dispose in Acidic Waste container.",
+        disposal_guide_ACID_HF: "Dispose in Acidic Waste container. ⚠️ DANGER: Hydrofluoric acid (HF) dissolves glass and must be stored in specific plastic containers only.",
         disposal_guide_ALKALI: "Dispose in the Alkaline Waste container (usually blue label). Do NOT mix with acids or organics.",
         disposal_guide_ORGANIC_HALOGEN: "Dispose in the Halogenated Organic Waste container (usually orange label). Work in a well-ventilated area.",
         disposal_guide_ORGANIC_NON_HALOGEN: "Dispose in the Non-Halogenated Organic Waste container (usually yellow label). Do NOT mix with halogenated waste.",
@@ -396,6 +403,7 @@ export const translations = {
         disposal_guide_CYANIDE: "Dispose separately in a tightly sealed Cyanide/Sulfide Waste container. NEVER mix with acidic waste (lethal toxic gas risk).",
         disposal_guide_REACTIVE: "Do NOT mix with general waste lines. Isolate and package separately as 'Reactive/Oxidizing Waste' and hand over to safety officer.",
         disposal_guide_SOLID_WASTE: "Dispose in designated solid waste bags or boxes for contaminated solids. Do NOT place in liquid waste containers.",
+        disposal_guide_SPECIAL_HAZARD: "This substance is a highly toxic, flammable, or explosive 'Special Hazardous Waste'. Never mix with general waste lines (organic/inorganic). Immediately seal it individually and hand it over to the safety manager.",
         disposal_guide_NEUTRAL: "Dispose as Aqueous Waste ONLY IF absolutely free of organics, heavy metals, or toxins. Otherwise, route to appropriate waste bin.",
         disposal_guide_UNKNOWN: "Classification unclear. DO NOT mix. Keep isolated and consult your safety officer for disposal instructions.",
 

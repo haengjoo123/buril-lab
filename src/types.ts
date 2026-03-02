@@ -8,6 +8,7 @@ export type DisposalCategory =
     | 'CYANIDE'
     | 'REACTIVE'
     | 'SOLID_WASTE'
+    | 'SPECIAL_HAZARD'
     | 'UNKNOWN';
 
 export interface Chemical {

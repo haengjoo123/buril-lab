@@ -181,7 +181,7 @@ describe('analyzeMixture - 동일 카테고리 복수', () => {
     it('산성 2개 → ACID', () => {
         const result = analyzeMixture([
             makeAcid('HCl'),
-            makeAcid('HNO3'),
+            makeAcid('H2SO4'),
         ]);
         expect(result.category).toBe('ACID');
         expect(result.isSafe).toBe(true);

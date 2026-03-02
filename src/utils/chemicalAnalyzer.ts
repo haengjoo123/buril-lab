@@ -1,4 +1,6 @@
 import type { AnalysisResult, Chemical, DisposalCategory } from '../types';
+import pListCas from '../data/p_list_cas.json';
+import uListCas from '../data/u_list_cas.json';
 
 // Helper: Parse molecular formula into element counts
 // e.g., "C6H12O6" -> { C: 6, H: 12, O: 6 }
@@ -46,12 +48,27 @@ export const getCategoryDetails = (category: DisposalCategory): { binColor: stri
             return { binColor: 'bg-rose-600', label: 'label_reactive' };
         case 'SOLID_WASTE':
             return { binColor: 'bg-stone-500', label: 'label_solid_waste' };
+        case 'SPECIAL_HAZARD':
+            return { binColor: 'bg-red-800', label: 'label_special_hazard' };
         default:
             return { binColor: 'bg-gray-400', label: 'mix_label_unknown' };
     }
 };
 
 export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
+    // 0. P-List / U-List Check (Highest Priority)
+    if (chemical.casNumber && (pListCas.includes(chemical.casNumber) || uListCas.includes(chemical.casNumber))) {
+        const { binColor, label } = getCategoryDetails('SPECIAL_HAZARD');
+        return {
+            chemical,
+            category: 'SPECIAL_HAZARD',
+            binColor,
+            label,
+            reason: 'reason_special_hazard',
+            isSafe: true // Safety verified as "definitely dangerous and clearly classified"
+        };
+    }
+
     const elements = parseFormula(chemical.molecularFormula || '');
     const formulaStr = chemical.molecularFormula || '';
     const nameUpper = chemical.name.toUpperCase();
