@@ -365,7 +365,7 @@ function App() {
                           </div>
                           <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                             <Box className="w-3 h-3" />
-                            {item.shelfLevel === 0 ? '바닥면' : `${item.shelfLevel}번째 선반`}
+                            {`${item.shelfLevel + 1}층 선반`}
                           </div>
                         </div>
                       ))}

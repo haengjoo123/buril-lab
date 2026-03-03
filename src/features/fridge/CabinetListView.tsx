@@ -7,7 +7,7 @@ import { CustomDialog } from '../../components/CustomDialog';
 import { CabinetFormDialog } from './components/CabinetFormDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { ImageActionMenu } from './components/ImageActionMenu';
-import { DisposalLogModal } from './components/DisposalLogModal';
+import { ActivityLogModal } from './components/ActivityLogModal';
 import { useTranslation } from 'react-i18next';
 
 interface CabinetListViewProps {
@@ -349,7 +349,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 onCapture={handleCameraCapture}
             />
 
-            <DisposalLogModal
+            <ActivityLogModal
                 isOpen={disposalLogModal.isOpen}
                 cabinetId={disposalLogModal.cabinetId}
                 cabinetName={disposalLogModal.cabinetName}
@@ -395,7 +395,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                     return sortedLevels.map(level => (
                                         <div key={level}>
                                             <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
-                                                {level === 0 ? '📦 바닥면' : `📦 ${level}번째 선반`}
+                                                {`📦 ${level + 1}층 선반`}
                                             </h4>
                                             <div className="flex flex-col gap-1">
                                                 {grouped.get(level)!.map((item, idx) => (

@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import { X, Check, RotateCcw, Camera } from 'lucide-react';
+import { X, Check, RotateCcw, Camera, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface CameraCaptureModalProps {
@@ -12,6 +12,7 @@ interface CameraCaptureModalProps {
 export function CameraCaptureModal({ isOpen, onClose, onCapture }: CameraCaptureModalProps) {
     const { t } = useTranslation();
     const webcamRef = useRef<Webcam>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [showFlash, setShowFlash] = useState(false);
 
@@ -44,6 +45,18 @@ export function CameraCaptureModal({ isOpen, onClose, onCapture }: CameraCapture
             console.error('Failed to convert image:', err);
             alert(t('scanner_error_cam'));
         }
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            onCapture(file);
+            onClose();
+            // Reset for next time
+            setTimeout(() => setCapturedImage(null), 300);
+        }
+        // Reset so selecting the same file again triggers change
+        e.target.value = '';
     };
 
     if (!isOpen) return null;
@@ -83,14 +96,29 @@ export function CameraCaptureModal({ isOpen, onClose, onCapture }: CameraCapture
 
             <div className="absolute bottom-10 flex items-center justify-center gap-6 w-full px-5 z-[111]">
                 {!capturedImage ? (
-                    <button
-                        onClick={handleCapture}
-                        className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform"
-                    >
-                        <div className="w-16 h-16 bg-white border-4 border-slate-300 rounded-full flex items-center justify-center">
-                            <Camera className="w-6 h-6 text-slate-400" />
-                        </div>
-                    </button>
+                    <>
+                        {/* File Upload Button */}
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-14 h-14 bg-white/20 hover:bg-white/30 backdrop-blur rounded-full flex items-center justify-center transition-colors"
+                            title={t('scan_upload')}
+                        >
+                            <Upload className="w-6 h-6 text-white" />
+                        </button>
+
+                        {/* Camera Shutter */}
+                        <button
+                            onClick={handleCapture}
+                            className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform"
+                        >
+                            <div className="w-16 h-16 bg-white border-4 border-slate-300 rounded-full flex items-center justify-center">
+                                <Camera className="w-6 h-6 text-slate-400" />
+                            </div>
+                        </button>
+
+                        {/* Spacer for symmetry */}
+                        <div className="w-14 h-14" />
+                    </>
                 ) : (
                     <>
                         <button
@@ -110,6 +138,15 @@ export function CameraCaptureModal({ isOpen, onClose, onCapture }: CameraCapture
                     </>
                 )}
             </div>
+
+            {/* Hidden file input */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileUpload}
+            />
         </div>
     );
 }

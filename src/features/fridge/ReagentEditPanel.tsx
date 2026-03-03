@@ -61,9 +61,15 @@ export const ReagentEditPanel: React.FC = () => {
 
     if (!selectedReagentId || !selectedItem) return null;
 
-    const handleSave = () => {
+    const handleSave = async () => {
         updateReagent(selectedReagentId, { name, notes, expiryDate: expiryDate || undefined, capacity: capacity || undefined });
         setSelectedReagentId(null);
+        // 수정 내용을 DB에 즉시 반영
+        try {
+            await saveCabinet();
+        } catch (err) {
+            console.error('Failed to save reagent edits:', err);
+        }
     };
 
     // Expiry status helper
@@ -87,11 +93,13 @@ export const ReagentEditPanel: React.FC = () => {
         if (!selectedReason || !cabinetId) return;
         setIsDisposing(true);
         try {
-            // 1. Log disposal
+            // 1. 기존 폐기 로그 (하위 호환성)
             await cabinetService.logDisposal(cabinetId, selectedItem.name, selectedReason);
-            // 2. Remove from store
+            // 2. 통합 활동 로그 기록
+            await cabinetService.logActivity(cabinetId, 'remove', selectedItem.name, selectedReason);
+            // 3. Remove from store
             removeReagent(selectedReagentId);
-            // 3. Save cabinet state
+            // 4. Save cabinet state
             await saveCabinet();
             setSelectedReagentId(null);
         } catch (err) {
@@ -147,8 +155,8 @@ export const ReagentEditPanel: React.FC = () => {
                                 key={reason.key}
                                 onClick={() => setSelectedReason(reason.key)}
                                 className={`w-full px-3 py-2.5 text-sm rounded-lg border transition-all flex items-center gap-2.5 ${selectedReason === reason.key
-                                        ? 'border-red-400 bg-red-50 text-red-700 ring-1 ring-red-300'
-                                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                                    ? 'border-red-400 bg-red-50 text-red-700 ring-1 ring-red-300'
+                                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                                     }`}
                             >
                                 <span className="text-base">{reason.icon}</span>
@@ -182,7 +190,7 @@ export const ReagentEditPanel: React.FC = () => {
                                 <span>{t('cabinet_label_location')}</span>
                                 <span className="font-medium text-gray-700 flex items-center gap-1">
                                     <MapPin size={10} />
-                                    {selectedItem.shelfLevel === 0 ? '바닥면' : t('cabinet_shelf_level', { level: selectedItem.shelfLevel })}
+                                    {t('cabinet_shelf_level', { level: selectedItem.shelfLevel + 1 })}
                                     {' · '}
                                     {selectedItem.position <= 15 ? '왼쪽'
                                         : selectedItem.position <= 35 ? '중앙 왼쪽'

@@ -198,9 +198,9 @@ export const FridgeScene: React.FC = () => {
         }
     }, [mode, focusedShelfId, setFocusedShelfId]);
 
-    // Auto-focus when navigated from search
+    // Auto-focus when navigated from search, or after auto-placement in PLACE mode
     useEffect(() => {
-        if (focusedShelfId && mode === 'VIEW') {
+        if (focusedShelfId && (mode === 'VIEW' || mode === 'PLACE')) {
             const shelfIndex = floatingShelves.findIndex(s => s.id === focusedShelfId);
             if (shelfIndex !== -1) {
                 setShelfFocusTarget([0, GROUP_OFFSET_Y + getShelfY(shelfIndex), 0]);

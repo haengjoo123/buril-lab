@@ -284,6 +284,48 @@ export const cabinetService = {
         return data || [];
     },
 
+    /**
+     * 시약 활동(등록/삭제/전체비우기)을 cabinet_activity_logs에 기록합니다.
+     */
+    async logActivity(
+        cabinetId: string,
+        actionType: ActivityActionType,
+        itemName: string,
+        reason?: string,
+        memo?: string
+    ): Promise<void> {
+        const { data: userData } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('cabinet_activity_logs')
+            .insert({
+                cabinet_id: cabinetId,
+                action_type: actionType,
+                item_name: itemName,
+                reason: reason || null,
+                memo: memo || null,
+                performed_by: userData.user?.id || null
+            });
+
+        if (error) {
+            console.error('Error logging activity:', error);
+            // 로그 실패는 silent — 실제 작업을 막으면 안 됨
+        }
+    },
+
+    /**
+     * cabinet_activity_logs에서 해당 시약장의 활동 이력을 가져옵니다.
+     */
+    async getActivityLogs(cabinetId: string): Promise<ActivityLog[]> {
+        const { data, error } = await supabase
+            .rpc('get_cabinet_activity_logs', { target_cabinet_id: cabinetId });
+
+        if (error) {
+            console.error('Error fetching activity logs:', error);
+            throw error;
+        }
+        return data || [];
+    },
+
     async searchCabinetItems(query: string): Promise<CabinetSearchResult[]> {
         if (!query.trim()) return [];
 
@@ -355,5 +397,20 @@ export interface DisposalLog {
     disposed_by_email?: string;
     disposed_by_nickname?: string;
     disposed_at: string;
+}
+
+export type ActivityActionType = 'add' | 'remove' | 'clear_all';
+
+export interface ActivityLog {
+    id: string;
+    cabinet_id: string;
+    action_type: ActivityActionType;
+    item_name: string;
+    reason?: string;
+    memo?: string;
+    performed_by?: string;
+    performed_by_nickname?: string;
+    performed_by_email?: string;
+    performed_at: string;
 }
 

@@ -57,6 +57,25 @@ export const translations = {
         settings_view_guide: "안전 가이드 다시보기",
         settings_language: "언어 설정 (Language)",
 
+        // Feedback
+        feedback_btn: "앱 개선 제안하기",
+        feedback_title: "개발자에게 의견 보내기",
+        feedback_desc: "버그 제보나 개선 아이디어를 자유롭게 남겨주세요.",
+        feedback_type_label: "유형",
+        feedback_type_bug: "🐛 버그 제보",
+        feedback_type_improvement: "💡 개선 아이디어",
+        feedback_type_general: "💬 기타 의견",
+        feedback_message_label: "내용",
+        feedback_message_placeholder: "불편했던 점이나 개선 아이디어를 자유롭게 적어주세요...",
+        feedback_contact_label: "연락처 (선택사항)",
+        feedback_contact_placeholder: "이메일 또는 연락 방법 (답변을 원하시면 입력해주세요)",
+        feedback_submit: "제출하기",
+        feedback_submitting: "전송 중...",
+        feedback_success_title: "감사합니다! 🎉",
+        feedback_success_desc: "소중한 의견을 보내주셔서 감사합니다. 더 나은 앱을 만드는 데 반영하겠습니다.",
+        feedback_error: "전송에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        feedback_required: "내용을 입력해주세요.",
+
         // Scanner
         scanner_guide: "라벨의 제품명 또는 CAS 번호가 잘 보이도록 맞춰주세요.",
         scanner_analyzing: "분석 중...",
@@ -217,7 +236,7 @@ export const translations = {
         cabinet_placeholder_notes: "취급 주의사항, 보관 조건 등...",
         cabinet_label_type: "종류:",
         cabinet_label_location: "위치:",
-        cabinet_shelf_level: "선반 {{level}}층",
+        cabinet_shelf_level: "{{level}}층 선반",
 
         // Cabinet List
         cabinet_list_load_error: "시약장 목록을 불러오지 못했습니다.",
@@ -270,6 +289,15 @@ export const translations = {
         cabinet_dispose_log_btn: "폐기 이력",
         cabinet_dispose_log_count: "총 {{count}}건",
 
+        // Activity Log (통합 등록/삭제 이력)
+        activity_log_title: "활동 이력",
+        activity_log_action_add: "등록",
+        activity_log_action_remove: "삭제",
+        activity_log_action_clear_all: "전체 비우기",
+        activity_log_filter_all: "전체",
+        activity_log_empty: "활동 기록이 없습니다.",
+        activity_log_count: "총 {{count}}건",
+
         // FridgeView
         reagent_type_brown: "갈색병",
         reagent_type_plastic: "플라스틱 통",
@@ -288,6 +316,20 @@ export const translations = {
         error_place_save: "배치 저장 실패",
         error_add_reagent: "시약 추가 실패",
         topdown_view: "위에서 보기",
+
+        // Scan & Auto-Place
+        scan_reagent: "📷 스캔",
+        scan_analyzing: "AI가 시약을 분석 중...",
+        scan_failed: "스캔 실패",
+        scan_result_title: "스캔 결과",
+        reagent_cas_label: "CAS 번호",
+        reagent_capacity_label: "용량",
+        reagent_expiry_label: "유효기간",
+        reagent_container_type_label: "용기 타입",
+        reagent_auto_place: "자동 배치",
+        reagent_placed_toast: "✅ {{name}}이(가) {{level}}층 선반에 배치되었습니다",
+        reagent_no_space: "❌ 빈 공간이 없습니다. 선반을 추가하거나 정리해주세요.",
+        scan_upload: "📁 파일 업로드",
 
         // Auth
         auth_login: "로그인",
@@ -366,6 +408,25 @@ export const translations = {
         settings_reset_desc: "Clears cart, history, and consents.",
         settings_view_guide: "View Safety Guide",
         settings_language: "Language",
+
+        // Feedback
+        feedback_btn: "Suggest Improvements",
+        feedback_title: "Send Feedback",
+        feedback_desc: "Feel free to leave bug reports or improvement ideas.",
+        feedback_type_label: "Type",
+        feedback_type_bug: "🐛 Bug Report",
+        feedback_type_improvement: "💡 Improvement Idea",
+        feedback_type_general: "💬 General Feedback",
+        feedback_message_label: "Message",
+        feedback_message_placeholder: "Describe your issue or idea freely...",
+        feedback_contact_label: "Contact (Optional)",
+        feedback_contact_placeholder: "Email or contact method (if you'd like a reply)",
+        feedback_submit: "Submit",
+        feedback_submitting: "Sending...",
+        feedback_success_title: "Thank you! 🎉",
+        feedback_success_desc: "Your feedback has been received. We'll use it to improve the app.",
+        feedback_error: "Failed to submit. Please try again later.",
+        feedback_required: "Please enter your message.",
 
         // Scanner
         scanner_guide: "Align the Product Name or CAS No. within the frame.",
@@ -580,6 +641,15 @@ export const translations = {
         cabinet_dispose_log_btn: "Disposal Log",
         cabinet_dispose_log_count: "Total {{count}} records",
 
+        // Activity Log
+        activity_log_title: "Activity History",
+        activity_log_action_add: "Added",
+        activity_log_action_remove: "Removed",
+        activity_log_action_clear_all: "Cleared All",
+        activity_log_filter_all: "All",
+        activity_log_empty: "No activity records.",
+        activity_log_count: "Total {{count}} records",
+
         // FridgeView
         reagent_type_brown: "Brown Bottle",
         reagent_type_plastic: "Plastic Container",
@@ -598,6 +668,20 @@ export const translations = {
         error_place_save: "Failed to save placement",
         error_add_reagent: "Failed to add reagent",
         topdown_view: "Top View",
+
+        // Scan & Auto-Place
+        scan_reagent: "📷 Scan",
+        scan_analyzing: "AI is analyzing reagent...",
+        scan_failed: "Scan failed",
+        scan_result_title: "Scan Result",
+        reagent_cas_label: "CAS Number",
+        reagent_capacity_label: "Capacity",
+        reagent_expiry_label: "Expiry Date",
+        reagent_container_type_label: "Container Type",
+        reagent_auto_place: "Auto Place",
+        reagent_placed_toast: "✅ {{name}} placed on Shelf {{level}}",
+        reagent_no_space: "❌ No space available. Add more shelves or rearrange.",
+        scan_upload: "📁 Upload",
 
         // Auth
         auth_login: "Log In",

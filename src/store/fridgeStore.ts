@@ -3,6 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import type { FridgeState, ShelfData, ReagentPlacement } from '../types/fridge';
 import { cabinetService } from '../services/cabinetService';
 
+export interface AutoPlaceResult {
+    itemId: string;
+    shelfLevel: number;
+    reagentName: string;
+}
+
 interface FridgeStore extends FridgeState {
     checkCollision: (shelfId: string, position: number, width: number, depthPosition?: number, templateType?: string, ignoreItemId?: string) => boolean;
     sortShelves: (criteria: 'name' | 'type') => void;
@@ -12,6 +18,9 @@ interface FridgeStore extends FridgeState {
     loadCabinet: (cabinetId: string) => Promise<void>;
     saveCabinet: () => Promise<void>;
     clearCabinet: () => void;
+    autoPlaceReagent: (itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>) => AutoPlaceResult | null;
+    autoPlaceResult: AutoPlaceResult | null;
+    clearAutoPlaceResult: () => void;
 }
 
 const TEMPLATE_DEPTHS = {
@@ -61,6 +70,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     cabinetId: null,
     cabinetName: '',
     isLoadingCabinet: false,
+    autoPlaceResult: null as AutoPlaceResult | null,
 
     loadCabinet: async (cabinetId: string) => {
         set({ isLoadingCabinet: true, cabinetId, cabinetName: '', shelves: [] });
@@ -317,6 +327,71 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
     setSelectedReagentId: (id) => set({ selectedReagentId: id }),
     setHighlightedItemId: (id) => set({ highlightedItemId: id }),
+    clearAutoPlaceResult: () => set({ autoPlaceResult: null }),
+
+    autoPlaceReagent: (itemData) => {
+        const state = get();
+        const width = itemData.width;
+        const template = itemData.template;
+        const STEP = 2; // scan in 2% increments
+
+        // Try shelves from bottom (level 0) to top
+        const sortedShelves = [...state.shelves].sort((a, b) => a.level - b.level);
+
+        for (const shelf of sortedShelves) {
+            for (let pos = 2; pos <= 100 - width - 2; pos += STEP) {
+                // Try center depth first (50), then front (80), then back (20)
+                for (const depthPos of [50, 80, 20]) {
+                    const collision = state.checkCollision(shelf.id, pos, width, depthPos, template);
+                    if (!collision) {
+                        // Found a free slot!
+                        const newItem: ReagentPlacement = {
+                            ...itemData,
+                            shelfId: shelf.id,
+                            id: uuidv4(),
+                            position: pos,
+                            depthPosition: depthPos,
+                        };
+
+                        const result: AutoPlaceResult = {
+                            itemId: newItem.id,
+                            shelfLevel: shelf.level + 1,
+                            reagentName: newItem.name,
+                        };
+
+                        set(st => ({
+                            shelves: st.shelves.map(s =>
+                                s.id === shelf.id
+                                    ? { ...s, items: [...s.items, newItem] }
+                                    : s
+                            ),
+                            highlightedItemId: newItem.id,
+                            autoPlaceResult: result,
+                            focusedShelfId: null, // reset first so useEffect always re-fires
+                        }));
+
+                        // Set focusedShelfId in next microtask so FridgeScene's useEffect picks up the change
+                        queueMicrotask(() => {
+                            set({ focusedShelfId: shelf.id });
+                        });
+
+                        // Clear highlight after 4 seconds
+                        setTimeout(() => {
+                            const current = get();
+                            if (current.highlightedItemId === newItem.id) {
+                                set({ highlightedItemId: null });
+                            }
+                        }, 4000);
+
+                        return result;
+                    }
+                }
+            }
+        }
+
+        // No free slot found
+        return null;
+    },
 
     updateReagent: (id, updates) => set(state => ({
         shelves: state.shelves.map(s => {

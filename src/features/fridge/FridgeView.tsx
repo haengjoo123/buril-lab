@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FridgeScene } from './FridgeScene';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
+import { CameraCaptureModal } from './components/CameraCaptureModal';
+import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
+import { cabinetService } from '../../services/cabinetService';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 
@@ -20,11 +23,34 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(true);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    // 'idle' | 'saving' | 'saved'
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+    const savedTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Naming / Size Configuration Modal State
     const [placementName, setPlacementName] = useState('');
     const [placementMemo, setPlacementMemo] = useState('');
     const [placementSize, setPlacementSize] = useState<number>(1.0); // 0.8 (S), 1.0 (M), 1.2 (L)
+    const [placementCapacity, setPlacementCapacity] = useState('');
+    const [placementExpiry, setPlacementExpiry] = useState('');
+
+    // Scan & Auto-Place State
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanResult, setScanResult] = useState<ReagentScanResult | null>(null);
+    const [scanDialogOpen, setScanDialogOpen] = useState(false);
+
+    // Scan dialog fields
+    const [scanName, setScanName] = useState('');
+    const [scanCas, setScanCas] = useState('');
+    const [scanContainerType, setScanContainerType] = useState<ReagentTemplateType>('A');
+    const [scanSize, setScanSize] = useState<number>(1.0);
+    const [scanCapacity, setScanCapacity] = useState('');
+    const [scanExpiry, setScanExpiry] = useState('');
+    const [scanMemo, setScanMemo] = useState('');
+
+    // Toast state
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
 
     const {
         mode,
@@ -51,7 +77,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         clearCabinet,
         pendingPlacement,
         setPendingPlacement,
-        placeReagent
+        placeReagent,
+        autoPlaceReagent,
+        autoPlaceResult,
+        clearAutoPlaceResult,
     } = useFridgeStore();
 
     React.useEffect(() => {
@@ -64,18 +93,74 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         }
     }, [cabinetId, loadCabinet]);
 
+    // Auto-place result toast
+    useEffect(() => {
+        if (autoPlaceResult) {
+            setToastMessage(
+                t('reagent_placed_toast', {
+                    name: autoPlaceResult.reagentName,
+                    level: autoPlaceResult.shelfLevel,
+                })
+            );
+            const timer = setTimeout(() => {
+                setToastMessage(null);
+                clearAutoPlaceResult();
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [autoPlaceResult, clearAutoPlaceResult, t]);
+
+    // 자동저장 헬퍼 — 모든 상태 변경 후 호출
+    const autoSave = React.useCallback(async () => {
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        setSaveStatus('saving');
+        try {
+            await useFridgeStore.getState().saveCabinet();
+            setSaveStatus('saved');
+            savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
+        } catch (err) {
+            console.error('Auto-save failed:', err);
+            setSaveStatus('idle');
+        }
+    }, []);
+
+    // 수동 저장 (헤더 버튼)
     const handleSave = async () => {
         setIsSaving(true);
         try {
             await saveCabinet();
+            setSaveStatus('saved');
+            if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+            savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleClearCabinet = () => {
+    const handleClearCabinet = async () => {
+        // 전체비우기 전에 현재 아이템 목록 수집
+        const state = useFridgeStore.getState();
+        const currentCabinetId = state.cabinetId;
+        const allItems = state.shelves.flatMap(s => s.items);
+
         clearCabinet();
         setIsClearConfirmOpen(false);
+
+        // 로그 기록 (비동기, 실패해도 UI에 영향 없음)
+        if (currentCabinetId && allItems.length > 0) {
+            try {
+                await saveCabinet(); // 먼저 DB에 빈 상태 반영
+                // 전체비우기는 아이템 묶어서 1회 로그
+                const names = allItems.map(i => i.name).join(', ');
+                await cabinetService.logActivity(
+                    currentCabinetId,
+                    'clear_all',
+                    names.length > 200 ? names.slice(0, 197) + '...' : names
+                );
+            } catch (err) {
+                console.error('Failed to log clear_all activity:', err);
+            }
+        }
     };
 
     const handleReagentClick = (item: typeof genericContainers[0]) => {
@@ -95,13 +180,15 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         });
     };
 
-    const handleConfirmPlacement = () => {
+    const handleConfirmPlacement = async () => {
         if (!pendingPlacement) return;
 
+        const finalName = placementName.trim() || '이름 없음';
+        const memo = placementMemo;
         placeReagent(pendingPlacement.shelfId, {
             id: '',
             reagentId: 'custom-' + Date.now(),
-            name: placementName.trim() || '이름 없음',
+            name: finalName,
             position: pendingPlacement.position,
             depthPosition: pendingPlacement.depthPosition,
             width: pendingPlacement.width * placementSize,
@@ -109,7 +196,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             isAcidic: false,
             isBasic: false,
             hCodes: [],
-            notes: placementMemo,
+            notes: memo,
+            capacity: placementCapacity || undefined,
+            expiryDate: placementExpiry || undefined,
         });
 
         // Reset states
@@ -117,6 +206,16 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementName('');
         setPlacementMemo('');
         setPlacementSize(1.0);
+        setPlacementCapacity('');
+        setPlacementExpiry('');
+
+        // 자동저장 + 활동 로그 (병렬)
+        const currentCabinetId = useFridgeStore.getState().cabinetId;
+        autoSave();
+        if (currentCabinetId) {
+            cabinetService.logActivity(currentCabinetId, 'add', finalName, undefined, memo || undefined)
+                .catch(err => console.error('Failed to log add activity:', err));
+        }
     };
 
     const handleCancelPlacement = () => {
@@ -124,6 +223,100 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementName('');
         setPlacementMemo('');
         setPlacementSize(1.0);
+        setPlacementCapacity('');
+        setPlacementExpiry('');
+    };
+
+    // ====== Scan Flow ======
+    const handleScanCapture = async (file: File) => {
+        setIsScanning(true);
+        setScanDialogOpen(true);
+
+        try {
+            // Convert file to base64
+            const reader = new FileReader();
+            const base64 = await new Promise<string>((resolve, reject) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            const result = await scanReagentLabel(base64);
+            setScanResult(result);
+
+            if (result.success) {
+                setScanName(result.name || '');
+                setScanCas(result.casNumber || '');
+                setScanContainerType(result.suggestedContainerType);
+                setScanCapacity(result.capacity || '');
+                setScanExpiry(result.expiryDate || '');
+            }
+        } catch (err) {
+            console.error('Scan failed:', err);
+            setScanResult({ name: '', suggestedContainerType: 'A', success: false, error: String(err) });
+        } finally {
+            setIsScanning(false);
+        }
+    };
+
+    const handleScanAutoPlace = () => {
+        const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15 };
+        const baseWidth = CONTAINER_BASE_WIDTHS[scanContainerType] || 8;
+        const finalWidth = baseWidth * scanSize;
+        const finalName = scanName.trim() || '이름 없음';
+
+        const result = autoPlaceReagent({
+            id: '',
+            reagentId: 'scan-' + Date.now(),
+            name: finalName,
+            width: finalWidth,
+            template: scanContainerType,
+            isAcidic: false,
+            isBasic: false,
+            hCodes: [],
+            notes: scanMemo || undefined,
+            casNo: scanCas || undefined,
+            expiryDate: scanExpiry || undefined,
+            capacity: scanCapacity || undefined,
+        });
+
+        if (!result) {
+            // Show error toast: no space
+            setToastMessage(t('reagent_no_space'));
+        } else {
+            // 자동저장 + 스캔 등록 로그 (병렬)
+            autoSave();
+            const currentCabinetId = useFridgeStore.getState().cabinetId;
+            if (currentCabinetId) {
+                const memo = [scanCas && `CAS: ${scanCas}`, scanCapacity && `용량: ${scanCapacity}`].filter(Boolean).join(', ');
+                cabinetService.logActivity(currentCabinetId, 'add', finalName, undefined, memo || undefined)
+                    .catch(err => console.error('Failed to log scan-add activity:', err));
+            }
+        }
+
+        // Reset scan dialog
+        setScanDialogOpen(false);
+        setScanResult(null);
+        setScanName('');
+        setScanCas('');
+        setScanContainerType('A');
+        setScanSize(1.0);
+        setScanCapacity('');
+        setScanExpiry('');
+        setScanMemo('');
+    };
+
+    const handleScanCancel = () => {
+        setScanDialogOpen(false);
+        setScanResult(null);
+        setScanName('');
+        setScanCas('');
+        setScanContainerType('A');
+        setScanSize(1.0);
+        setScanCapacity('');
+        setScanExpiry('');
+        setScanMemo('');
+        setIsScanning(false);
     };
 
     // Generic containers for the placement tray
@@ -144,6 +337,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             name: t('reagent_type_box'), type: 'D', color: '#cbd5e1', width: 15,
             chemicalData: { name: t('reagent_type_box') }
         },
+    ];
+
+    const containerTypeOptions: { type: ReagentTemplateType; label: string; color: string }[] = [
+        { type: 'A', label: t('reagent_type_brown'), color: '#8b4513' },
+        { type: 'B', label: t('reagent_type_plastic'), color: '#f8fafc' },
+        { type: 'C', label: t('reagent_type_glass'), color: '#e2e8f0' },
+        { type: 'D', label: t('reagent_type_box'), color: '#cbd5e1' },
     ];
 
     return (
@@ -168,14 +368,27 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     </h2>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={handleSave}
-                        disabled={isSaving || isLoadingCabinet}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        <span className="text-sm font-medium">{t('cabinet_save')}</span>
-                    </button>
+                    {/* 저장 상태 인디케이터 */}
+                    {saveStatus === 'saving' ? (
+                        <span className="flex items-center gap-1.5 text-sm text-slate-400">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="hidden sm:inline">저장 중...</span>
+                        </span>
+                    ) : saveStatus === 'saved' ? (
+                        <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium animate-in fade-in duration-200">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">저장됨</span>
+                        </span>
+                    ) : (
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving || isLoadingCabinet}
+                            title="수동으로 저장"
+                            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                            <Save className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -235,7 +448,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     {/* 버튼 행 - flex-wrap으로 공간 부족 시 자연스럽게 줄바꿈 */}
                                     <div className="flex flex-wrap items-end justify-center gap-x-4 gap-y-3">
                                         <button
-                                            onClick={addShelf}
+                                            onClick={() => { addShelf(); autoSave(); }}
                                             className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-blue-600 transition-colors group shrink-0"
                                         >
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-blue-500 group-hover:bg-blue-50 transition-all">
@@ -244,7 +457,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             <span className="whitespace-nowrap">{t('cabinet_add_shelf')}</span>
                                         </button>
                                         <button
-                                            onClick={() => shelves.length > 0 && removeShelf(shelves[shelves.length - 1].id)}
+                                            onClick={() => { if (shelves.length > 0) { removeShelf(shelves[shelves.length - 1].id); autoSave(); } }}
                                             disabled={shelves.length === 0}
                                             className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-red-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
                                         >
@@ -256,7 +469,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         <div className="flex flex-col items-center gap-1 shrink-0">
                                             <div className="flex items-center gap-1">
                                                 <button
-                                                    onClick={() => verticalPanelPos >= 1 && verticalPanelPos <= 99 && addVerticalPanel(verticalPanelPos)}
+                                                    onClick={() => { if (verticalPanelPos >= 1 && verticalPanelPos <= 99) { addVerticalPanel(verticalPanelPos); autoSave(); } }}
                                                     disabled={shelves.length === 0}
                                                     className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-indigo-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600"
                                                 >
@@ -280,7 +493,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             </div>
                                         </div>
                                         <button
-                                            onClick={removeVerticalPanel}
+                                            onClick={() => { removeVerticalPanel(); autoSave(); }}
                                             disabled={shelves.every(s => s.dividers.length === 0)}
                                             className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-orange-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
                                         >
@@ -294,7 +507,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     {/* Sort Controls */}
                                     <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full">
                                         <button
-                                            onClick={() => sortShelves('name')}
+                                            onClick={() => { sortShelves('name'); autoSave(); }}
                                             disabled={shelves.length === 0}
                                             className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1.5"
                                         >
@@ -302,7 +515,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             {t('cabinet_sort_name')}
                                         </button>
                                         <button
-                                            onClick={() => sortShelves('type')}
+                                            onClick={() => { sortShelves('type'); autoSave(); }}
                                             disabled={shelves.length === 0}
                                             className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1.5"
                                         >
@@ -409,7 +622,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     <h3 className="text-sm font-semibold text-gray-700">{t('cabinet_reagent_tray_title')}</h3>
                                     <div className="flex items-center gap-2">
                                         <button
-                                            onClick={() => sortShelves('name')}
+                                            onClick={() => { sortShelves('name'); autoSave(); }}
                                             disabled={shelves.length === 0}
                                             className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
                                         >
@@ -417,7 +630,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             {t('cabinet_sort_name')}
                                         </button>
                                         <button
-                                            onClick={() => sortShelves('type')}
+                                            onClick={() => { sortShelves('type'); autoSave(); }}
                                             disabled={shelves.length === 0}
                                             className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
                                         >
@@ -434,6 +647,20 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     </div>
                                 </div>
                                 <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
+                                    {/* 📷 Scan Button */}
+                                    <div
+                                        onClick={() => setIsCameraOpen(true)}
+                                        className="min-w-[90px] h-[120px] flex flex-col items-center justify-between p-2 bg-gradient-to-b from-emerald-50 to-emerald-100 border-2 border-dashed border-emerald-400 rounded-lg hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all shrink-0 group"
+                                    >
+                                        <div className="w-10 h-16 rounded-md flex items-center justify-center group-hover:scale-105 transition-transform origin-bottom">
+                                            <ScanLine className="w-8 h-8 text-emerald-600" />
+                                        </div>
+                                        <div className="w-full text-center">
+                                            <span className="text-xs font-bold text-emerald-700 leading-tight">
+                                                {t('scan_reagent')}
+                                            </span>
+                                        </div>
+                                    </div>
                                     {genericContainers.map((item, idx) => (
                                         <div
                                             key={idx}
@@ -479,12 +706,14 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 cancelText={t('btn_cancel')}
             />
 
+            {/* Original manual placement dialog */}
             {pendingPlacement && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={handleCancelPlacement} />
-                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto">
                         <h3 className="text-xl font-bold text-slate-800">{t('reagent_info_title')}</h3>
 
+                        {/* 시약 이름 */}
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
                             <input
@@ -497,6 +726,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             />
                         </div>
 
+                        {/* 크기 */}
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-semibold text-gray-600">{t('reagent_size_label')}</label>
                             <div className="flex gap-2">
@@ -519,17 +749,45 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             </div>
                         </div>
 
+                        {/* 용량 + 유효기간 한 줄 */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                                    🧪 {t('reagent_capacity_label')}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={placementCapacity}
+                                    onChange={e => setPlacementCapacity(e.target.value)}
+                                    placeholder="예: 500mL, 1kg"
+                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                                    📅 {t('reagent_expiry_label')}
+                                </label>
+                                <input
+                                    type="date"
+                                    value={placementExpiry}
+                                    onChange={e => setPlacementExpiry(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* 메모 */}
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-semibold text-gray-600">{t('reagent_memo_label')}</label>
                             <textarea
                                 value={placementMemo}
                                 onChange={e => setPlacementMemo(e.target.value)}
                                 placeholder={t('reagent_memo_placeholder')}
-                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-20"
+                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-16"
                             />
                         </div>
 
-                        <div className="flex items-center gap-3 mt-2">
+                        <div className="flex items-center gap-3 mt-1">
                             <button
                                 onClick={handleCancelPlacement}
                                 className="flex-1 py-2 rounded-xl text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 transition-colors"
@@ -544,6 +802,181 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 {t('btn_confirm')}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Camera Capture Modal */}
+            <CameraCaptureModal
+                isOpen={isCameraOpen}
+                onClose={() => setIsCameraOpen(false)}
+                onCapture={handleScanCapture}
+            />
+
+            {/* Scan Result Dialog */}
+            {scanDialogOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={handleScanCancel} />
+                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden p-6 gap-3 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto">
+                        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <ScanLine className="w-5 h-5 text-emerald-600" />
+                            {isScanning ? t('scan_analyzing') : t('scan_result_title')}
+                        </h3>
+
+                        {isScanning ? (
+                            <div className="flex flex-col items-center gap-4 py-8">
+                                <div className="relative">
+                                    <Loader2 className="w-12 h-12 text-emerald-500 animate-spin" />
+                                    <ScanLine className="w-5 h-5 text-emerald-700 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                                </div>
+                                <p className="text-sm text-gray-500 animate-pulse">{t('scan_analyzing')}</p>
+                            </div>
+                        ) : scanResult && !scanResult.success ? (
+                            <div className="flex flex-col items-center gap-4 py-6">
+                                <p className="text-sm text-red-600">{t('scan_failed')}: {scanResult.error}</p>
+                                <button
+                                    onClick={handleScanCancel}
+                                    className="px-4 py-2 bg-slate-100 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors"
+                                >
+                                    {t('btn_cancel')}
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Name */}
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
+                                    <input
+                                        autoFocus
+                                        type="text"
+                                        value={scanName}
+                                        onChange={e => setScanName(e.target.value)}
+                                        placeholder={t('reagent_name_placeholder')}
+                                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    />
+                                </div>
+
+                                {/* CAS */}
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-semibold text-gray-600">{t('reagent_cas_label')}</label>
+                                    <input
+                                        type="text"
+                                        value={scanCas}
+                                        onChange={e => setScanCas(e.target.value)}
+                                        placeholder="e.g. 64-17-5"
+                                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    />
+                                </div>
+
+                                {/* Container Type */}
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-semibold text-gray-600">{t('reagent_container_type_label')}</label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {containerTypeOptions.map(opt => (
+                                            <button
+                                                key={opt.type}
+                                                onClick={() => setScanContainerType(opt.type)}
+                                                className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-[10px] font-medium transition-all ${scanContainerType === opt.type
+                                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200'
+                                                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <div
+                                                    className="w-6 h-10 rounded-sm"
+                                                    style={{ backgroundColor: opt.color, border: '1px solid #d1d5db' }}
+                                                />
+                                                <span className="text-center leading-tight">{opt.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Size */}
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-semibold text-gray-600">{t('reagent_size_label')}</label>
+                                    <div className="flex gap-2">
+                                        {[
+                                            { label: t('reagent_size_small'), value: 0.8 },
+                                            { label: t('reagent_size_medium'), value: 1.0 },
+                                            { label: t('reagent_size_large'), value: 1.2 }
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.value}
+                                                onClick={() => setScanSize(opt.value)}
+                                                className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${scanSize === opt.value
+                                                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Capacity & Expiry row */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs font-semibold text-gray-600">{t('reagent_capacity_label')}</label>
+                                        <input
+                                            type="text"
+                                            value={scanCapacity}
+                                            onChange={e => setScanCapacity(e.target.value)}
+                                            placeholder="e.g. 500mL"
+                                            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs font-semibold text-gray-600">{t('reagent_expiry_label')}</label>
+                                        <input
+                                            type="date"
+                                            value={scanExpiry}
+                                            onChange={e => setScanExpiry(e.target.value)}
+                                            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Memo */}
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-semibold text-gray-600">{t('reagent_memo_label')}</label>
+                                    <textarea
+                                        value={scanMemo}
+                                        onChange={e => setScanMemo(e.target.value)}
+                                        placeholder={t('reagent_memo_placeholder')}
+                                        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none h-16"
+                                    />
+                                </div>
+
+                                {/* Buttons */}
+                                <div className="flex items-center gap-3 mt-2">
+                                    <button
+                                        onClick={handleScanCancel}
+                                        className="flex-1 py-2.5 rounded-xl text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 transition-colors"
+                                    >
+                                        {t('btn_cancel')}
+                                    </button>
+                                    <button
+                                        onClick={handleScanAutoPlace}
+                                        disabled={!scanName.trim()}
+                                        className="flex-1 py-2.5 rounded-xl text-white font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <CheckCircle2 className="w-4 h-4" />
+                                        {t('reagent_auto_place')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Toast Notification */}
+            {toastMessage && (
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 fade-in duration-300 w-max max-w-[90vw]">
+                    <div className="bg-emerald-600 text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium text-center break-words">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        {toastMessage}
                     </div>
                 </div>
             )}
