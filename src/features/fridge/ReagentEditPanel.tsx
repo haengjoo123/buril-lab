@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2 } from 'lucide-react';
+import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cabinetService } from '../../services/cabinetService';
+import { inventoryService } from '../../services/inventoryService';
+import type { ReagentTemplateType } from '../../types/fridge';
+import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
 
 type DisposalReason = 'used' | 'expired' | 'broken' | 'other';
 
@@ -11,6 +14,13 @@ const REASONS: { key: DisposalReason; i18n: string; icon: string }[] = [
     { key: 'expired', i18n: 'cabinet_dispose_reason_expired', icon: '⏰' },
     { key: 'broken', i18n: 'cabinet_dispose_reason_broken', icon: '💔' },
     { key: 'other', i18n: 'cabinet_dispose_reason_other', icon: '📝' },
+];
+
+const CONTAINER_TYPES: { type: ReagentTemplateType; label: string; icon: string }[] = [
+    { type: 'A', label: '갈색병', icon: '🟤' },
+    { type: 'B', label: '플라스틱 통', icon: '🤍' },
+    { type: 'C', label: '솔벤트 캔', icon: '🥫' },
+    { type: 'D', label: '바이알 박스', icon: '📦' },
 ];
 
 export const ReagentEditPanel: React.FC = () => {
@@ -27,6 +37,9 @@ export const ReagentEditPanel: React.FC = () => {
     const [notes, setNotes] = useState('');
     const [expiryDate, setExpiryDate] = useState('');
     const [capacity, setCapacity] = useState('');
+    const [template, setTemplate] = useState<ReagentTemplateType>('A');
+    const [brand, setBrand] = useState('');
+    const [productNumber, setProductNumber] = useState('');
 
     // Disposal flow state
     const [showDisposalView, setShowDisposalView] = useState(false);
@@ -50,6 +63,9 @@ export const ReagentEditPanel: React.FC = () => {
             setNotes(selectedItem.notes || '');
             setExpiryDate(selectedItem.expiryDate || '');
             setCapacity(selectedItem.capacity || '');
+            setTemplate(selectedItem.template);
+            setBrand(selectedItem.brand || '');
+            setProductNumber(selectedItem.productNumber || '');
         }
     }, [selectedItem]);
 
@@ -62,7 +78,21 @@ export const ReagentEditPanel: React.FC = () => {
     if (!selectedReagentId || !selectedItem) return null;
 
     const handleSave = async () => {
-        updateReagent(selectedReagentId, { name, notes, expiryDate: expiryDate || undefined, capacity: capacity || undefined });
+        // Calculate new width if template changed
+        const newWidth = template !== selectedItem.template
+            ? (CONTAINER_BASE_WIDTHS[template] || 8)
+            : undefined;
+
+        updateReagent(selectedReagentId, {
+            name,
+            notes,
+            expiryDate: expiryDate || undefined,
+            capacity: capacity || undefined,
+            template,
+            brand: brand || undefined,
+            productNumber: productNumber || undefined,
+            ...(newWidth !== undefined && { width: newWidth }),
+        });
         setSelectedReagentId(null);
         // 수정 내용을 DB에 즉시 반영
         try {
@@ -97,9 +127,11 @@ export const ReagentEditPanel: React.FC = () => {
             await cabinetService.logDisposal(cabinetId, selectedItem.name, selectedReason);
             // 2. 통합 활동 로그 기록
             await cabinetService.logActivity(cabinetId, 'remove', selectedItem.name, selectedReason);
-            // 3. Remove from store
+            // 3. 연결된 재고 항목 삭제
+            await inventoryService.deleteLinkedInventoryByCabinetItemId(cabinetId, selectedItem.name, selectedReason);
+            // 4. Remove from store
             removeReagent(selectedReagentId);
-            // 4. Save cabinet state
+            // 5. Save cabinet state
             await saveCabinet();
             setSelectedReagentId(null);
         } catch (err) {
@@ -119,9 +151,9 @@ export const ReagentEditPanel: React.FC = () => {
     };
 
     return (
-        <div className="absolute left-1/2 -translate-x-1/2 top-16 w-[calc(100%-32px)] max-w-[320px] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200">
+        <div className="absolute left-1/2 -translate-x-1/2 top-16 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-80px-5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200">
             {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b bg-gray-50/50">
+            <div className="flex items-center justify-between p-3 border-b bg-gray-50/50 flex-shrink-0">
                 <div className="flex items-center gap-2 text-gray-800 font-semibold">
                     {showDisposalView ? (
                         <>
@@ -146,7 +178,7 @@ export const ReagentEditPanel: React.FC = () => {
             {showDisposalView ? (
                 <>
                     {/* Disposal Reason Selection */}
-                    <div className="p-3 flex flex-col gap-2">
+                    <div className="p-3 flex flex-col gap-2 overflow-y-auto">
                         <p className="text-xs text-gray-500 mb-1">
                             <span className="font-medium text-gray-700">{selectedItem.name}</span> — {t('cabinet_dispose_reason_desc')}
                         </p>
@@ -182,8 +214,8 @@ export const ReagentEditPanel: React.FC = () => {
                 </>
             ) : (
                 <>
-                    {/* Content */}
-                    <div className="p-3 flex flex-col gap-3 overflow-y-auto max-h-[calc(100vh-140px)]">
+                    {/* Scrollable Content */}
+                    <div className="p-3 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0">
                         {/* Info Read-only */}
                         <div className="text-xs text-gray-500 flex flex-col gap-1">
                             <div className="flex justify-between items-center">
@@ -213,15 +245,70 @@ export const ReagentEditPanel: React.FC = () => {
                             />
                         </div>
 
-                        {/* Notes Input */}
+                        {/* Brand & Product Number Row */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                    <Package size={11} />
+                                    브랜드
+                                </label>
+                                <input
+                                    type="text"
+                                    value={brand}
+                                    onChange={(e) => setBrand(e.target.value)}
+                                    className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                    placeholder="예: Sigma"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                    <Tag size={11} />
+                                    제품번호
+                                </label>
+                                <input
+                                    type="text"
+                                    value={productNumber}
+                                    onChange={(e) => setProductNumber(e.target.value)}
+                                    className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
+                                    placeholder="예: A1234"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Container Type Selection */}
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-gray-600">{t('cabinet_notes')}</label>
-                            <textarea
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                rows={2}
-                                className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
-                                placeholder={t('cabinet_placeholder_notes')}
+                            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                {t('cabinet_label_type')}
+                            </label>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {CONTAINER_TYPES.map((ct) => (
+                                    <button
+                                        key={ct.type}
+                                        onClick={() => setTemplate(ct.type)}
+                                        className={`flex flex-col items-center gap-0.5 px-1.5 py-2 rounded-lg border text-xs font-medium transition-all ${template === ct.type
+                                            ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300'
+                                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        <span className="text-base leading-none">{ct.icon}</span>
+                                        <span className="leading-tight text-center">{ct.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Capacity Input */}
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                <Beaker size={12} />
+                                용량(규격)
+                            </label>
+                            <input
+                                type="text"
+                                value={capacity}
+                                onChange={(e) => setCapacity(e.target.value)}
+                                className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                placeholder="예: 500mL, 1kg"
                             />
                         </div>
 
@@ -256,18 +343,15 @@ export const ReagentEditPanel: React.FC = () => {
                             )}
                         </div>
 
-                        {/* Capacity Input */}
+                        {/* Notes Input */}
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                <Beaker size={12} />
-                                용량(규격)
-                            </label>
-                            <input
-                                type="text"
-                                value={capacity}
-                                onChange={(e) => setCapacity(e.target.value)}
-                                className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                                placeholder="예: 500mL, 1kg, 50% 남음"
+                            <label className="text-xs font-medium text-gray-600">{t('cabinet_notes')}</label>
+                            <textarea
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                rows={2}
+                                className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
+                                placeholder={t('cabinet_placeholder_notes')}
                             />
                         </div>
                     </div>

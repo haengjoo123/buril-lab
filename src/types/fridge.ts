@@ -35,6 +35,10 @@ export interface ReagentPlacement {
     chemId?: number;
     expiryDate?: string; // ISO date string (YYYY-MM-DD)
     capacity?: string; // e.g. "500mL", "1kg"
+
+    // Product info (from inventory registration)
+    productNumber?: string; // e.g. "A1234-500ML"
+    brand?: string; // e.g. "Sigma-Aldrich"
 }
 
 export interface DragItem {

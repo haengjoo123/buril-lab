@@ -69,7 +69,7 @@ export async function searchMediaProductsAdvanced(options: SearchOptions): Promi
 
     try {
         // If exact product number search
-        if (exactProductNumber || /^[A-Za-z0-9\-]+$/.test(searchTerm)) {
+        if (exactProductNumber || /^[A-Za-z0-9-]+$/.test(searchTerm)) {
             const { data: numberResults, error: numberError } = await supabase
                 .from('products')
                 .select('*')

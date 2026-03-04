@@ -1,4 +1,4 @@
-import React, { useState, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { MainLayout } from './components/MainLayout';
 import { ResultCard } from './components/ResultCard';
 import { MediaProductCard } from './components/MediaProductCard';
@@ -12,6 +12,7 @@ import { FridgeView } from './features/fridge/FridgeView';
 import { CabinetListView } from './features/fridge/CabinetListView';
 import { AuthView } from './components/AuthView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
+import { InventoryListView } from './features/inventory/InventoryListView';
 import { searchChemical } from './services/searchService';
 import { cabinetService, type CabinetSearchResult } from './services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from './services/mediaProductService';
@@ -23,7 +24,7 @@ import { useLabStore } from './store/useLabStore';
 import { useFridgeStore } from './store/fridgeStore';
 import { useTranslation } from 'react-i18next';
 import type { AnalysisResult } from './types';
-import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, ClipboardList, Box } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, ClipboardList, Box, Package } from 'lucide-react';
 
 function App() {
   const { t } = useTranslation();
@@ -43,12 +44,35 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'logs' | 'cabinet'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'logs' | 'cabinet' | 'inventory'>('search');
   const [activeCabinetId, setActiveCabinetId] = useState<string | null>(null);
   const [logRefreshKey, setLogRefreshKey] = useState(0);
 
   const cart = useWasteStore((state) => state.cart);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory } = useWasteStore();
+  const currentLabId = useLabStore((state) => state.currentLabId);
+
+  useEffect(() => {
+    setActiveCabinetId(null);
+  }, [currentLabId]);
+
+  /** Navigate to a cabinet tab and highlight the placed item */
+  const handleNavigateToCabinet = useCallback((cabinetId: string, itemId: string) => {
+    // Switch to cabinet tab and load the cabinet
+    setActiveTab('cabinet');
+    setActiveCabinetId(cabinetId);
+    // Set highlight with a small delay to let the FridgeView mount
+    setTimeout(() => {
+      const store = useFridgeStore.getState();
+      store.setHighlightedItemId(itemId);
+      // Clear highlight after 6 seconds
+      setTimeout(() => {
+        if (useFridgeStore.getState().highlightedItemId === itemId) {
+          useFridgeStore.getState().setHighlightedItemId(null);
+        }
+      }, 6000);
+    }, 500);
+  }, []);
 
   const performSearch = useCallback(async (searchQuery: string, brand: string = 'all', sort: SortOption = 'relevance') => {
     if (!searchQuery.trim()) return;
@@ -252,6 +276,16 @@ function App() {
             <Box className="w-5 h-5" />
             {t('tab_cabinet')}
           </button>
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'inventory'
+              ? 'text-blue-600 dark:text-blue-400'
+              : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+              }`}
+          >
+            <Package className="w-5 h-5" />
+            {t('tab_inventory')}
+          </button>
         </nav>
       }>
         {activeTab === 'cabinet' ? (
@@ -264,6 +298,8 @@ function App() {
           </div>
         ) : activeTab === 'logs' ? (
           <WasteLogView key={logRefreshKey} />
+        ) : activeTab === 'inventory' ? (
+          <InventoryListView />
         ) : (
           <div className="p-5 flex flex-col gap-6" style={{ paddingBottom: cart.length > 0 ? '100px' : undefined }}>
 
@@ -407,7 +443,7 @@ function App() {
 
                     <div className="flex flex-col gap-3">
                       {(showAllProducts ? mediaProducts : mediaProducts.slice(0, 5)).map((product) => (
-                        <MediaProductCard key={product.id} product={product} />
+                        <MediaProductCard key={product.id} product={product} onNavigateToCabinet={handleNavigateToCabinet} />
                       ))}
                     </div>
                     {mediaProducts.length > 5 && (

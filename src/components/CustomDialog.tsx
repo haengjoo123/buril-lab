@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { AlertCircle, Check, X } from 'lucide-react';
+import { AlertCircle, Check, Loader2, X } from 'lucide-react';
 
 interface DialogProps {
     isOpen: boolean;
@@ -17,6 +17,8 @@ interface DialogProps {
     onConfirm?: () => void;
     // Styling
     isDestructive?: boolean;
+    isConfirmLoading?: boolean;
+    preventCloseWhileLoading?: boolean;
 }
 
 export function CustomDialog({
@@ -31,7 +33,9 @@ export function CustomDialog({
     confirmText = '확인',
     cancelText = '취소',
     onConfirm,
-    isDestructive = false
+    isDestructive = false,
+    isConfirmLoading = false,
+    preventCloseWhileLoading = false,
 }: DialogProps) {
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -47,8 +51,14 @@ export function CustomDialog({
     if (!isOpen) return null;
 
     const handleConfirm = () => {
+        if (isConfirmLoading) return;
         if (onConfirm) onConfirm();
         else onClose();
+    };
+
+    const handleClose = () => {
+        if (preventCloseWhileLoading && isConfirmLoading) return;
+        onClose();
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -56,7 +66,7 @@ export function CustomDialog({
             e.preventDefault();
             handleConfirm();
         } else if (e.key === 'Escape') {
-            onClose();
+            handleClose();
         }
     };
 
@@ -65,7 +75,7 @@ export function CustomDialog({
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-                onClick={onClose}
+                onClick={handleClose}
             />
 
             {/* Modal Box */}
@@ -114,6 +124,7 @@ export function CustomDialog({
                     {type !== 'alert' && (
                         <button
                             onClick={onClose}
+                            disabled={isConfirmLoading}
                             className="flex-1 px-4 py-2.5 rounded-xl font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
                         >
                             <X className="w-4 h-4" />
@@ -122,13 +133,18 @@ export function CustomDialog({
                     )}
                     <button
                         onClick={handleConfirm}
+                        disabled={isConfirmLoading}
                         className={`flex-1 px-4 py-2.5 rounded-xl font-medium text-white flex items-center justify-center gap-2 transition-transform active:scale-95 ${isDestructive
                             ? 'bg-red-600 hover:bg-red-700 shadow-md shadow-red-200 dark:shadow-red-900/20'
                             : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200 dark:shadow-blue-900/20'
-                            }`}
+                            } disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100`}
                     >
-                        {type === 'prompt' && !isDestructive && <Check className="w-4 h-4" />}
-                        {confirmText}
+                        {isConfirmLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            type === 'prompt' && !isDestructive && <Check className="w-4 h-4" />
+                        )}
+                        {isConfirmLoading ? '처리 중...' : confirmText}
                     </button>
                 </div>
             </div>

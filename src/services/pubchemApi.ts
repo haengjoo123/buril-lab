@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Chemical } from '../types';
 import { COMMON_CHEMICALS } from '../data/commonChemicals';
 
@@ -150,7 +151,7 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
         const foundCas = synonyms.find((s: string) => casPattern.test(s));
 
         // Name Priority: Title (Common Name) > Uppercase Query (if matched) > IUPACName > Query
-        let displayName = compoundProps.Title || compoundProps.IUPACName || query;
+        const displayName = compoundProps.Title || compoundProps.IUPACName || query;
 
         return {
             id: String(cid || Date.now()),

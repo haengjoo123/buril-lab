@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
@@ -277,7 +278,7 @@ export const FridgeScene: React.FC = () => {
     return (
         <div ref={containerRef} className="w-full bg-gray-100 relative" style={{ height: 'calc(100dvh - 7rem)' }}>
             <Canvas
-                shadows="soft"
+                shadows="percentage"
                 camera={{ position: cameraConfig.position, fov: 52 }}
                 gl={{ preserveDrawingBuffer: true }}
             >

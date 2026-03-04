@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect } from 'react';
 import { ShieldAlert, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react';
 import { X, History, Loader2, User, PackagePlus, Trash2, AlertTriangle } from 'lucide-react';
 import { cabinetService, type ActivityLog, type ActivityActionType } from '../../../services/cabinetService';

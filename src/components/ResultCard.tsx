@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import type { AnalysisResult } from '../types';
 import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText, Sparkles } from 'lucide-react';

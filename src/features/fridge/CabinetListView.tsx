@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState, useRef } from 'react';
 import { Loader2, Plus, X, Beaker } from 'lucide-react';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';

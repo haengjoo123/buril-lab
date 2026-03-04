@@ -1,12 +1,19 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback } from 'react';
 import { fetchWasteLogs, deleteWasteLog } from '../services/wasteLogService';
 import type { WasteLog } from '../types';
 import { useTranslation } from 'react-i18next';
-import { Trash2, ChevronDown, ChevronUp, FlaskConical, Loader2, AlertCircle } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, FlaskConical, Loader2, AlertCircle, Search } from 'lucide-react';
 import { CustomDialog } from './CustomDialog';
+import { useLabStore } from '../store/useLabStore';
+import type { WasteLogSortBy } from '../services/wasteLogService';
 
 export const WasteLogView: React.FC = () => {
     const { t } = useTranslation();
+    const currentLabId = useLabStore(state => state.currentLabId);
+    const myLabs = useLabStore(state => state.myLabs);
+    const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
+    const canDeleteLogs = !currentLabId || currentRole === 'admin';
     const [logs, setLogs] = useState<WasteLog[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -14,6 +21,10 @@ export const WasteLogView: React.FC = () => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [page, setPage] = useState(0);
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchInput, setSearchInput] = useState('');
+    const [sortBy, setSortBy] = useState<WasteLogSortBy>('created_at');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const PAGE_SIZE = 20;
 
     const loadLogs = useCallback(async (reset: boolean = false) => {
@@ -21,7 +32,11 @@ export const WasteLogView: React.FC = () => {
         setError(null);
         try {
             const offset = reset ? 0 : page * PAGE_SIZE;
-            const result = await fetchWasteLogs(PAGE_SIZE, offset);
+            const result = await fetchWasteLogs(PAGE_SIZE, offset, {
+                search: searchQuery || undefined,
+                sortBy,
+                sortOrder,
+            });
             if (reset) {
                 setLogs(result.logs);
                 setPage(0);
@@ -34,20 +49,29 @@ export const WasteLogView: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [page, t]);
+    }, [page, searchQuery, sortBy, sortOrder, t]);
 
+    // 실험실/검색/정렬 변경 시 재조회
     useEffect(() => {
         loadLogs(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [currentLabId, searchQuery, sortBy, sortOrder]);
+
+    const handleSearchSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setSearchQuery(searchInput.trim());
+    };
 
     const handleLoadMore = () => {
         const nextPage = page + 1;
         setPage(nextPage);
-        // Load with the next offset
         setIsLoading(true);
         setError(null);
-        fetchWasteLogs(PAGE_SIZE, nextPage * PAGE_SIZE)
+        fetchWasteLogs(PAGE_SIZE, nextPage * PAGE_SIZE, {
+            search: searchQuery || undefined,
+            sortBy,
+            sortOrder,
+        })
             .then(result => {
                 setLogs(prev => [...prev, ...result.logs]);
                 setTotalCount(result.count);
@@ -56,8 +80,31 @@ export const WasteLogView: React.FC = () => {
             .finally(() => setIsLoading(false));
     };
 
+    // 시약명 포함 클라이언트 필터 (서버는 분류/처리자/메모만 검색)
+    const filteredLogs = searchQuery
+        ? logs.filter(log => {
+            const q = searchQuery.toLowerCase();
+            const matchText =
+                log.disposal_category?.toLowerCase().includes(q) ||
+                log.handler_name?.toLowerCase().includes(q) ||
+                log.memo?.toLowerCase().includes(q);
+            const matchChemical = log.chemicals?.some(
+                c =>
+                    c.chemical?.name?.toLowerCase().includes(q) ||
+                    (c as any).name?.toLowerCase().includes(q) ||
+                    (c as any).deleted_location?.toLowerCase().includes(q)
+            );
+            return matchText || matchChemical;
+        })
+        : logs;
+
     const handleDelete = async () => {
         if (!deleteId) return;
+        if (!canDeleteLogs) {
+            setError(t('log_delete_admin_only'));
+            setDeleteId(null);
+            return;
+        }
         try {
             await deleteWasteLog(deleteId);
             setLogs(prev => prev.filter(l => l.id !== deleteId));
@@ -94,6 +141,30 @@ export const WasteLogView: React.FC = () => {
         return total > 0 ? `${total} mL` : null;
     };
 
+    const getPrimaryChemicalName = (log: WasteLog): string | null => {
+        const first = log.chemicals?.[0] as any;
+        return first?.chemical?.name || first?.name || null;
+    };
+
+    const getDeletedLocation = (log: WasteLog): string | null => {
+        const first = log.chemicals?.[0] as any;
+        if (first?.deleted_location) return String(first.deleted_location);
+
+        const memo = log.memo || '';
+        const match = memo.match(/삭제 위치:\s*([^|]+)/);
+        return match?.[1]?.trim() || null;
+    };
+
+    const getDeleteReason = (log: WasteLog): string | null => {
+        const memo = (log.memo || '').trim();
+        if (!memo) return null;
+
+        // 과거 데이터 호환: "사유 | 삭제 위치: ..." 형태에서 사유만 사용
+        const reasonPart = memo.split('|')[0]?.trim() || '';
+        const cleaned = reasonPart.replace(/^📝\s*/, '').trim();
+        return cleaned || null;
+    };
+
     return (
         <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
             {/* Header */}
@@ -106,6 +177,36 @@ export const WasteLogView: React.FC = () => {
                         {totalCount}건
                     </span>
                 )}
+            </div>
+
+            {/* 검색 & 정렬 */}
+            <div className="flex items-center gap-2">
+                <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                        type="text"
+                        value={searchInput}
+                        onChange={e => setSearchInput(e.target.value)}
+                        placeholder={t('log_search_placeholder')}
+                        className="w-full h-[42px] pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    />
+                </form>
+                <select
+                    value={`${sortBy}-${sortOrder}`}
+                    onChange={e => {
+                        const [by, order] = e.target.value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
+                        setSortBy(by);
+                        setSortOrder(order);
+                    }}
+                    className="flex-shrink-0 h-[42px] py-2.5 px-3 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                >
+                        <option value="created_at-desc">{t('log_sort_date_desc')}</option>
+                        <option value="created_at-asc">{t('log_sort_date_asc')}</option>
+                        <option value="disposal_category-asc">{t('log_sort_category_asc')}</option>
+                        <option value="disposal_category-desc">{t('log_sort_category_desc')}</option>
+                        <option value="handler_name-asc">{t('log_sort_handler_asc')}</option>
+                        <option value="handler_name-desc">{t('log_sort_handler_desc')}</option>
+                </select>
             </div>
 
             {/* Error */}
@@ -123,16 +224,23 @@ export const WasteLogView: React.FC = () => {
                         <FlaskConical className="w-8 h-8 text-slate-400 dark:text-slate-500" />
                     </div>
                     <p className="text-slate-500 dark:text-slate-400 text-sm">
-                        {t('log_empty')}
+                        {searchQuery ? t('log_search_empty') : t('log_empty')}
                     </p>
                 </div>
             )}
 
             {/* Log Cards */}
             <div className="space-y-3">
-                {logs.map(log => {
+                {filteredLogs.map(log => {
                     const isExpanded = expandedId === log.id;
                     const totalVol = computeTotalVolume(log);
+                    const primaryChemicalName = getPrimaryChemicalName(log);
+                    const deletedLocation = getDeletedLocation(log);
+                    const deleteReason = getDeleteReason(log);
+                    const locationBadgeClass = getLocationBadgeClass(deletedLocation);
+                    const displayTitle = log.disposal_category.startsWith('기타')
+                        ? (primaryChemicalName || log.disposal_category)
+                        : log.disposal_category;
 
                     return (
                         <div
@@ -149,9 +257,16 @@ export const WasteLogView: React.FC = () => {
 
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
-                                            {log.disposal_category}
-                                        </span>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
+                                                {displayTitle}
+                                            </span>
+                                            {deletedLocation && (
+                                                <span className={`text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap ${locationBadgeClass}`}>
+                                                    {deletedLocation}
+                                                </span>
+                                            )}
+                                        </div>
                                         <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
                                             {formatDate(log.created_at)}
                                         </span>
@@ -181,7 +296,7 @@ export const WasteLogView: React.FC = () => {
                                             >
                                                 <div>
                                                     <div className="font-medium text-slate-700 dark:text-slate-300">
-                                                        {chem.chemical?.name || 'Unknown'}
+                                                        {chem.chemical?.name || (chem as any).name || 'Unknown'}
                                                     </div>
                                                     <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                                                         {chem.label && t(chem.label as any)}
@@ -196,21 +311,27 @@ export const WasteLogView: React.FC = () => {
                                         ))}
                                     </div>
 
-                                    {/* Memo */}
-                                    {log.memo && (
-                                        <div className="mt-3 p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
-                                            📝 {log.memo}
+                                    {/* Disposal reason */}
+                                    {deleteReason && (
+                                        <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-700/30 rounded-lg text-sm text-slate-700 dark:text-slate-300">
+                                            <span className="font-medium">폐기 사유:</span> {deleteReason}
                                         </div>
                                     )}
 
-                                    {/* Delete Button */}
-                                    <button
-                                        onClick={() => setDeleteId(log.id)}
-                                        className="mt-3 w-full py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
-                                    >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                        {t('log_delete') || '삭제'}
-                                    </button>
+                                    {/* Delete Button / Permission */}
+                                    {canDeleteLogs ? (
+                                        <button
+                                            onClick={() => setDeleteId(log.id)}
+                                            className="mt-3 w-full py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            {t('log_delete') || '삭제'}
+                                        </button>
+                                    ) : (
+                                        <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 text-center py-2">
+                                            {t('log_delete_admin_only')}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -240,7 +361,7 @@ export const WasteLogView: React.FC = () => {
             )}
 
             <CustomDialog
-                isOpen={!!deleteId}
+                isOpen={canDeleteLogs && !!deleteId}
                 onClose={() => setDeleteId(null)}
                 title={t('log_delete') || '삭제'}
                 description={t('log_delete_confirm')}
@@ -261,4 +382,21 @@ function getCategoryColor(category: string): string {
     if (lower.includes('알칼리') || lower.includes('alkali')) return 'bg-blue-500';
     if (lower.includes('주의') || lower.includes('warn')) return 'bg-yellow-500';
     return 'bg-gray-400';
+}
+
+function getLocationBadgeClass(location?: string | null): string {
+    const lower = (location || '').toLowerCase();
+    if (lower.includes('시약장') || lower.includes('cabinet')) {
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
+    }
+    if (lower.includes('냉장고') || lower.includes('fridge')) {
+        return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300';
+    }
+    if (lower.includes('냉동') || lower.includes('freezer')) {
+        return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
+    }
+    if (lower.includes('후드') || lower.includes('hood')) {
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
+    }
+    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
 }

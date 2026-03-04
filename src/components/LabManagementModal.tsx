@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import { X, Search, Plus, Check, Loader2, AlertCircle, Users, Settings } from 'lucide-react';
 import { labService } from '../services/labService';

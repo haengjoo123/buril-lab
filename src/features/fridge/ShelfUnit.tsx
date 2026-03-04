@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useRef, useState } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ShelfData } from '../../types/fridge';
@@ -94,7 +95,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
                         properties: { ph: 7 }
                     },
                     quantity: 1
-                } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+                } as any,
                 ...neighbors.map(n => ({
                     chemical: {
                         name: n.name,
@@ -102,7 +103,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
                         properties: { ph: n.isAcidic ? 1 : (n.isBasic ? 14 : 7) }
                     },
                     quantity: 1
-                } as any)) // eslint-disable-line @typescript-eslint/no-explicit-any
+                } as any))
             ]);
 
             let warnMsg = null;

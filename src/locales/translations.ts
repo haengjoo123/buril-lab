@@ -99,7 +99,7 @@ export const translations = {
         reason_cyanide: "시안(CN) 화합물 또는 황화물(Sulfide)이 포함되어 있습니다.",
         reason_reactive: "강한 반응성, 산화성, 폭발성 키워드(Nitrate, Peroxide 등)가 포함되어 있습니다.",
         reason_solid_waste: "고체 상태로 추정되는 물리적 형태의 물질입니다.",
-        reason_special_hazard: "40 CFR 261.33 P/U 리스트에 등재된 맹독성/고인화성/폭발 위험 물질입니다.",
+        reason_special_hazard: "40 CFR 261.33 P 리스트에 등재된 맹독성/고인화성/폭발 위험 물질입니다.",
         reason_unknown: "자동 분류할 수 없습니다. 안전관리자에게 문의하세요.",
 
         // Disposal Guides (Single Chemical)
@@ -152,8 +152,34 @@ export const translations = {
         // Media Products
         media_product_label: "배지/시약 제품",
         view_product: "제품 보기",
+        add_to_inventory: "재고 등록",
         search_results_chemical: "화학물질 검색 결과",
         search_results_product: "배지/시약 제품 검색 결과",
+
+        // Inventory Registration
+        inventory_register_title: "재고 등록",
+        inventory_product_name: "제품명",
+        inventory_brand: "브랜드",
+        inventory_product_number: "제품번호",
+        inventory_quantity: "수량",
+        inventory_capacity: "용량",
+        inventory_capacity_placeholder: "예: 500mL, 1kg",
+        inventory_storage_type: "보관 위치",
+        inventory_storage_cabinet: "시약장에 배치",
+        inventory_storage_other: "기타 보관",
+        inventory_select_cabinet: "시약장 선택",
+        inventory_select_location: "보관 위치 선택",
+        inventory_add_location: "새 위치 추가",
+        inventory_add_location_placeholder: "위치명 입력 (예: 냉장고)",
+        inventory_memo: "메모 (선택)",
+        inventory_memo_placeholder: "추가 메모...",
+        inventory_register_btn: "등록하기",
+        inventory_registering: "등록 중...",
+        inventory_success: "재고가 등록되었습니다.",
+        inventory_error: "재고 등록에 실패했습니다.",
+        inventory_select_product_number: "제품번호 선택",
+        inventory_no_product_number: "제품번호 없음",
+        inventory_go_to_cabinet: "시약장 확인하러 가기",
 
         // Filters
         filter_options: "필터 옵션",
@@ -198,11 +224,21 @@ export const translations = {
         input_memo: "메모 (선택)",
         tab_search: "검색",
         tab_logs: "기록",
+        tab_inventory: "재고",
         log_title: "폐기 기록",
         log_empty: "아직 폐기 기록이 없습니다.",
-        log_chemicals_count: "{{count}}종 시약",
+        log_search_empty: "검색 결과가 없습니다.",
+        log_search_placeholder: "분류, 처리자, 메모, 시약명 검색",
+        log_sort_date_desc: "최신순",
+        log_sort_date_asc: "오래된순",
+        log_sort_category_asc: "분류 (가나다순)",
+        log_sort_category_desc: "분류 (역순)",
+        log_sort_handler_asc: "처리자 (가나다순)",
+        log_sort_handler_desc: "처리자 (역순)",
+        log_chemicals_count: "{{count}}개",
         log_delete_confirm: "이 기록을 삭제하시겠습니까?",
         log_delete: "삭제",
+        log_delete_admin_only: "연구실에서는 관리자만 삭제할 수 있습니다.",
 
         // Navigation
         tab_cabinet: "시약장",
@@ -223,6 +259,7 @@ export const translations = {
         cabinet_sort_type: "종류순 정렬",
         cabinet_clear_all: "전체 비우기",
         cabinet_clear_all_confirm: "선택된 시약장에 있는 모든 시약을 정말 삭제하시겠습니까?",
+        cabinet_clear_all_confirm_second: "되돌릴 수 없습니다. 정말 전체 비우기를 진행하시겠습니까?",
         cabinet_reagent_tray_title: "시약 목록",
 
         // Cabinet Edit
@@ -451,7 +488,7 @@ export const translations = {
         reason_cyanide: "Contains Cyanide (CN) or Sulfide compounds.",
         reason_reactive: "Contains strong reactive, oxidizing, or explosive keywords (Nitrate, Peroxide, etc.).",
         reason_solid_waste: "Physical state is estimated to be solid.",
-        reason_special_hazard: "Highly toxic, flammable, or explosive substance listed in 40 CFR 261.33 P/U List.",
+        reason_special_hazard: "Highly toxic, flammable, or explosive substance listed in 40 CFR 261.33 P List.",
         reason_unknown: "Cannot classify automatically. Consult safety officer.",
 
         // Disposal Guides (Single Chemical)
@@ -504,8 +541,34 @@ export const translations = {
         // Media Products
         media_product_label: "Media/Reagent Product",
         view_product: "View Product",
+        add_to_inventory: "Add to Inventory",
         search_results_chemical: "Chemical Results",
         search_results_product: "Media/Reagent Products",
+
+        // Inventory Registration
+        inventory_register_title: "Register Inventory",
+        inventory_product_name: "Product Name",
+        inventory_brand: "Brand",
+        inventory_product_number: "Product Number",
+        inventory_quantity: "Quantity",
+        inventory_capacity: "Capacity",
+        inventory_capacity_placeholder: "e.g. 500mL, 1kg",
+        inventory_storage_type: "Storage Location",
+        inventory_storage_cabinet: "Place in Cabinet",
+        inventory_storage_other: "Other Storage",
+        inventory_select_cabinet: "Select Cabinet",
+        inventory_select_location: "Select Location",
+        inventory_add_location: "Add New Location",
+        inventory_add_location_placeholder: "Location name (e.g. Refrigerator)",
+        inventory_memo: "Memo (Optional)",
+        inventory_memo_placeholder: "Additional notes...",
+        inventory_register_btn: "Register",
+        inventory_registering: "Registering...",
+        inventory_success: "Inventory registered successfully.",
+        inventory_error: "Failed to register inventory.",
+        inventory_select_product_number: "Select Product Number",
+        inventory_no_product_number: "No product number",
+        inventory_go_to_cabinet: "Go to Cabinet",
 
         // Filters
         filter_options: "Filter Options",
@@ -550,11 +613,21 @@ export const translations = {
         input_memo: "Memo (Optional)",
         tab_search: "Search",
         tab_logs: "Records",
+        tab_inventory: "Inventory",
         log_title: "Disposal Records",
         log_empty: "No disposal records yet.",
-        log_chemicals_count: "{{count}} chemicals",
+        log_search_empty: "No search results.",
+        log_search_placeholder: "Search by category, handler, memo, or chemical name",
+        log_sort_date_desc: "Newest first",
+        log_sort_date_asc: "Oldest first",
+        log_sort_category_asc: "Category (A-Z)",
+        log_sort_category_desc: "Category (Z-A)",
+        log_sort_handler_asc: "Handler (A-Z)",
+        log_sort_handler_desc: "Handler (Z-A)",
+        log_chemicals_count: "{{count}}",
         log_delete_confirm: "Delete this record?",
         log_delete: "Delete",
+        log_delete_admin_only: "Only admins can delete records in labs.",
 
         // Navigation
         tab_cabinet: "Cabinet",
@@ -575,6 +648,7 @@ export const translations = {
         cabinet_sort_type: "Sort by Type",
         cabinet_clear_all: "Clear All",
         cabinet_clear_all_confirm: "Are you sure you want to remove all reagents from the cabinet?",
+        cabinet_clear_all_confirm_second: "This cannot be undone. Do you want to clear all items?",
         cabinet_reagent_tray_title: "Reagent Tray",
 
         // Cabinet Edit

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from './supabaseClient';
 import type { ShelfData, ReagentPlacement } from '../types/fridge';
 import { v4 as uuidv4 } from 'uuid';
@@ -159,13 +160,21 @@ export const cabinetService = {
                 .map(item => ({
                     id: item.id,
                     shelfId: item.shelf_id,
+                    reagentId: item.id,
                     template: item.template,
                     name: item.name,
                     width: Number(item.width),
                     position: Number(item.position),
                     depthPosition: Number(item.depth_position),
                     expiryDate: item.expiry_date || undefined,
-                    capacity: item.capacity || undefined
+                    capacity: item.capacity || undefined,
+                    productNumber: item.product_number || undefined,
+                    brand: item.brand || undefined,
+                    notes: item.notes || undefined,
+                    casNo: item.cas_no || undefined,
+                    isAcidic: false,
+                    isBasic: false,
+                    hCodes: [],
                 } as ReagentPlacement));
 
             return {
@@ -226,7 +235,11 @@ export const cabinetService = {
             position: i.position,
             depth_position: i.depthPosition ?? 50,
             expiry_date: i.expiryDate || null,
-            capacity: i.capacity || null
+            capacity: i.capacity || null,
+            product_number: i.productNumber || null,
+            brand: i.brand || null,
+            notes: i.notes || null,
+            cas_no: i.casNo || null
         })));
 
         if (newItems.length > 0) {

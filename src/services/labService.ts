@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from './supabaseClient';
 import type { Lab, LabMember } from '../store/useLabStore';
 

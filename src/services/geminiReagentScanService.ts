@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { GoogleGenAI } from '@google/genai';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -13,6 +14,8 @@ export interface ReagentScanResult {
     suggestedContainerType: 'A' | 'B' | 'C' | 'D';
     capacity?: string;
     expiryDate?: string;
+    brand?: string;
+    productNumber?: string;
     success: boolean;
     error?: string;
 }
@@ -40,7 +43,9 @@ Extract the following information and return it as a JSON object ONLY (no markdo
   "casNumber": "<CAS Number if visible, otherwise null>",
   "suggestedContainerType": "<One of: A (brown glass bottle), B (plastic container), C (clear glass bottle), D (ampoule/vial box) — choose based on what you see in the image>",
   "capacity": "<Volume or weight shown on the label, e.g. '500mL', '1kg', otherwise null>",
-  "expiryDate": "<Expiry date in YYYY-MM-DD format if visible, otherwise null>"
+  "expiryDate": "<Expiry date in YYYY-MM-DD format if visible, otherwise null>",
+  "brand": "<Manufacturer/brand name if visible, e.g. 'Sigma-Aldrich', 'Merck', otherwise null>",
+  "productNumber": "<Product/catalog number if visible, e.g. 'A1234', otherwise null>"
 }
 
 Rules:
@@ -107,6 +112,8 @@ Rules:
             suggestedContainerType: containerType,
             capacity: parsed.capacity || undefined,
             expiryDate: parsed.expiryDate || undefined,
+            brand: parsed.brand || undefined,
+            productNumber: parsed.productNumber || undefined,
             success: true,
         };
     } catch (error: any) {

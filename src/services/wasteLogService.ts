@@ -51,26 +51,53 @@ export async function saveWasteLog(params: SaveWasteLogParams): Promise<WasteLog
     return data as WasteLog;
 }
 
+/** 정렬 기준 */
+export type WasteLogSortBy = 'created_at' | 'disposal_category' | 'handler_name';
+
+/** 검색/정렬 파라미터 */
+export interface FetchWasteLogsParams {
+    limit?: number;
+    offset?: number;
+    search?: string;
+    sortBy?: WasteLogSortBy;
+    sortOrder?: 'asc' | 'desc';
+}
+
 /**
- * Fetch waste disposal records (newest first)
+ * Fetch waste disposal records with optional search and sort
  */
 export async function fetchWasteLogs(
     limit: number = 20,
-    offset: number = 0
+    offset: number = 0,
+    params?: Partial<FetchWasteLogsParams>
 ): Promise<{ logs: WasteLog[]; count: number }> {
     const { currentLabId } = useLabStore.getState();
-    const query = supabase
+    const search = params?.search?.trim();
+    const sortBy = params?.sortBy ?? 'created_at';
+    const sortOrder = params?.sortOrder ?? 'desc';
+
+    let query = supabase
         .from('waste_logs')
         .select('*', { count: 'exact' });
 
     if (currentLabId) {
-        query.eq('lab_id', currentLabId);
+        query = query.eq('lab_id', currentLabId);
     } else {
-        query.is('lab_id', null);
+        query = query.is('lab_id', null);
+    }
+
+    // 검색: 분류, 처리자, 메모에서 검색 (대소문자 무시)
+    if (search && search.length > 0) {
+        // PostgreSQL ilike에서 %, _는 와일드카드이므로 이스케이프
+        const escaped = search.replace(/[%_\\]/g, '\\$&');
+        const pattern = `%${escaped}%`;
+        query = query.or(
+            `disposal_category.ilike.${pattern},handler_name.ilike.${pattern},memo.ilike.${pattern}`
+        );
     }
 
     const { data, error, count } = await query
-        .order('created_at', { ascending: false })
+        .order(sortBy, { ascending: sortOrder === 'asc', nullsFirst: false })
         .range(offset, offset + limit - 1);
 
     if (error) {

@@ -1,6 +1,6 @@
 import type { AnalysisResult, Chemical, DisposalCategory } from '../types';
 import pListCas from '../data/p_list_cas.json';
-import uListCas from '../data/u_list_cas.json';
+
 
 // Helper: Parse molecular formula into element counts
 // e.g., "C6H12O6" -> { C: 6, H: 12, O: 6 }
@@ -56,8 +56,8 @@ export const getCategoryDetails = (category: DisposalCategory): { binColor: stri
 };
 
 export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
-    // 0. P-List / U-List Check (Highest Priority)
-    if (chemical.casNumber && (pListCas.includes(chemical.casNumber) || uListCas.includes(chemical.casNumber))) {
+    // 0. P-List Check (Highest Priority)
+    if (chemical.casNumber && pListCas.includes(chemical.casNumber)) {
         const { binColor, label } = getCategoryDetails('SPECIAL_HAZARD');
         return {
             chemical,

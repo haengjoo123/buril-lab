@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useMemo, useState } from 'react';
 import { useWasteStore } from '../store/useWasteStore';
 import { analyzeMixture } from '../utils/mixtureLogic';

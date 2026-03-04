@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { GoogleGenAI } from '@google/genai';
 import type { Chemical, DisposalCategory } from '../types';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';

@@ -22,6 +22,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [isEditPanelVisible, setIsEditPanelVisible] = useState(true);
     const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(true);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+    const [isClearSecondConfirmOpen, setIsClearSecondConfirmOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     // 'idle' | 'saving' | 'saved'
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -33,6 +34,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [placementSize, setPlacementSize] = useState<number>(1.0); // 0.8 (S), 1.0 (M), 1.2 (L)
     const [placementCapacity, setPlacementCapacity] = useState('');
     const [placementExpiry, setPlacementExpiry] = useState('');
+    const [placementBrand, setPlacementBrand] = useState('');
+    const [placementProductNumber, setPlacementProductNumber] = useState('');
 
     // Scan & Auto-Place State
     const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -48,6 +51,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [scanCapacity, setScanCapacity] = useState('');
     const [scanExpiry, setScanExpiry] = useState('');
     const [scanMemo, setScanMemo] = useState('');
+    const [scanBrand, setScanBrand] = useState('');
+    const [scanProductNumber, setScanProductNumber] = useState('');
 
     // Toast state
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -85,11 +90,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
     React.useEffect(() => {
         if (cabinetId) {
-            // Skip if the store already has this cabinet loaded (e.g., from search click)
-            const currentCabinetId = useFridgeStore.getState().cabinetId;
-            if (currentCabinetId !== cabinetId || useFridgeStore.getState().shelves.length === 0) {
-                loadCabinet(cabinetId);
-            }
+            // 항상 최신 DB 상태를 반영해 외부(재고 목록 등) 변경과 동기화합니다.
+            loadCabinet(cabinetId);
         }
     }, [cabinetId, loadCabinet]);
 
@@ -145,6 +147,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
         clearCabinet();
         setIsClearConfirmOpen(false);
+        setIsClearSecondConfirmOpen(false);
 
         // 로그 기록 (비동기, 실패해도 UI에 영향 없음)
         if (currentCabinetId && allItems.length > 0) {
@@ -161,6 +164,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 console.error('Failed to log clear_all activity:', err);
             }
         }
+    };
+
+    const handleClearConfirmStep1 = () => {
+        setIsClearConfirmOpen(false);
+        setIsClearSecondConfirmOpen(true);
     };
 
     const handleReagentClick = (item: typeof genericContainers[0]) => {
@@ -199,6 +207,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             notes: memo,
             capacity: placementCapacity || undefined,
             expiryDate: placementExpiry || undefined,
+            brand: placementBrand || undefined,
+            productNumber: placementProductNumber || undefined,
         });
 
         // Reset states
@@ -208,6 +218,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementSize(1.0);
         setPlacementCapacity('');
         setPlacementExpiry('');
+        setPlacementBrand('');
+        setPlacementProductNumber('');
 
         // 자동저장 + 활동 로그 (병렬)
         const currentCabinetId = useFridgeStore.getState().cabinetId;
@@ -225,6 +237,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementSize(1.0);
         setPlacementCapacity('');
         setPlacementExpiry('');
+        setPlacementBrand('');
+        setPlacementProductNumber('');
     };
 
     // ====== Scan Flow ======
@@ -250,6 +264,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 setScanContainerType(result.suggestedContainerType);
                 setScanCapacity(result.capacity || '');
                 setScanExpiry(result.expiryDate || '');
+                setScanBrand(result.brand || '');
+                setScanProductNumber(result.productNumber || '');
             }
         } catch (err) {
             console.error('Scan failed:', err);
@@ -278,6 +294,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             casNo: scanCas || undefined,
             expiryDate: scanExpiry || undefined,
             capacity: scanCapacity || undefined,
+            brand: scanBrand || undefined,
+            productNumber: scanProductNumber || undefined,
         });
 
         if (!result) {
@@ -304,6 +322,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setScanCapacity('');
         setScanExpiry('');
         setScanMemo('');
+        setScanBrand('');
+        setScanProductNumber('');
     };
 
     const handleScanCancel = () => {
@@ -316,6 +336,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setScanCapacity('');
         setScanExpiry('');
         setScanMemo('');
+        setScanBrand('');
+        setScanProductNumber('');
         setIsScanning(false);
     };
 
@@ -701,6 +723,18 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 description={t('cabinet_clear_all_confirm')}
                 type="confirm"
                 isDestructive={true}
+                onConfirm={handleClearConfirmStep1}
+                confirmText={t('cabinet_delete')}
+                cancelText={t('btn_cancel')}
+            />
+
+            <CustomDialog
+                isOpen={isClearSecondConfirmOpen}
+                onClose={() => setIsClearSecondConfirmOpen(false)}
+                title={t('cabinet_clear_all')}
+                description={t('cabinet_clear_all_confirm_second')}
+                type="confirm"
+                isDestructive={true}
                 onConfirm={handleClearCabinet}
                 confirmText={t('cabinet_delete')}
                 cancelText={t('btn_cancel')}
@@ -724,6 +758,30 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 placeholder={t('reagent_name_placeholder')}
                                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             />
+                        </div>
+
+                        {/* 브랜드 + 제품번호 */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-gray-600">📦 브랜드</label>
+                                <input
+                                    type="text"
+                                    value={placementBrand}
+                                    onChange={e => setPlacementBrand(e.target.value)}
+                                    placeholder="예: Sigma"
+                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-gray-600">🏷 제품번호</label>
+                                <input
+                                    type="text"
+                                    value={placementProductNumber}
+                                    onChange={e => setPlacementProductNumber(e.target.value)}
+                                    placeholder="예: A1234"
+                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                                />
+                            </div>
                         </div>
 
                         {/* 크기 */}
@@ -866,6 +924,30 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         placeholder="e.g. 64-17-5"
                                         className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                     />
+                                </div>
+
+                                {/* Brand + Product Number */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs font-semibold text-gray-600">📦 브랜드</label>
+                                        <input
+                                            type="text"
+                                            value={scanBrand}
+                                            onChange={e => setScanBrand(e.target.value)}
+                                            placeholder="예: Sigma"
+                                            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs font-semibold text-gray-600">🏷 제품번호</label>
+                                        <input
+                                            type="text"
+                                            value={scanProductNumber}
+                                            onChange={e => setScanProductNumber(e.target.value)}
+                                            placeholder="예: A1234"
+                                            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                                        />
+                                    </div>
                                 </div>
 
                                 {/* Container Type */}
