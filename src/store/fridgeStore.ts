@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { FridgeState, ShelfData, ReagentPlacement } from '../types/fridge';
 import { cabinetService } from '../services/cabinetService';
+import { lookupGHSByCAS } from '../services/pubchemService';
 
 export interface AutoPlaceResult {
     itemId: string;
@@ -21,6 +22,8 @@ interface FridgeStore extends FridgeState {
     autoPlaceReagent: (itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>) => AutoPlaceResult | null;
     autoPlaceResult: AutoPlaceResult | null;
     clearAutoPlaceResult: () => void;
+    /** Background CAS → H-code enrichment via PubChem */
+    enrichReagentGHS: (reagentId: string) => Promise<void>;
 }
 
 const TEMPLATE_DEPTHS = {
@@ -83,6 +86,22 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 cabinetHeight: height,
                 cabinetDepth: depth
             });
+
+            // Background: enrich existing items that have CAS but no H-codes
+            const loadedShelves = shelves.length > 0 ? shelves : INITIAL_SHELVES;
+            const itemsNeedingEnrichment = loadedShelves
+                .flatMap(s => s.items)
+                .filter(item => item.casNo && (!item.hCodes || item.hCodes.length === 0));
+
+            if (itemsNeedingEnrichment.length > 0) {
+                // Enrich sequentially with small delay to respect PubChem rate limits (5 req/sec)
+                (async () => {
+                    for (const item of itemsNeedingEnrichment) {
+                        await get().enrichReagentGHS(item.id);
+                        await new Promise(r => setTimeout(r, 250)); // ~4 req/sec
+                    }
+                })();
+            }
         } catch (err) {
             console.error('Failed to load cabinet', err);
         } finally {
@@ -272,6 +291,12 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 items: [...s.items, newItem]
             } : s)
         }));
+
+        // Background: enrich with PubChem GHS data if CAS is available
+        if (newItem.casNo && newItem.hCodes.length === 0) {
+            get().enrichReagentGHS(newItem.id);
+        }
+
         return true;
     },
 
@@ -383,6 +408,11 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                             }
                         }, 4000);
 
+                        // Background: enrich with PubChem GHS data if CAS is available
+                        if (newItem.casNo && newItem.hCodes.length === 0) {
+                            get().enrichReagentGHS(newItem.id);
+                        }
+
                         return result;
                     }
                 }
@@ -391,6 +421,45 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
         // No free slot found
         return null;
+    },
+
+    enrichReagentGHS: async (reagentId: string) => {
+        // Find the reagent
+        const state = get();
+        let targetItem: ReagentPlacement | undefined;
+        for (const shelf of state.shelves) {
+            const found = shelf.items.find(i => i.id === reagentId);
+            if (found) { targetItem = found; break; }
+        }
+        if (!targetItem?.casNo) return;
+
+        try {
+            const result = await lookupGHSByCAS(targetItem.casNo);
+            if (!result.success || result.hCodes.length === 0) return;
+
+            // Update the reagent with GHS data
+            set(st => ({
+                shelves: st.shelves.map(s => ({
+                    ...s,
+                    items: s.items.map(item =>
+                        item.id === reagentId
+                            ? {
+                                ...item,
+                                hCodes: result.hCodes,
+                                isAcidic: result.isAcidic || item.isAcidic,
+                                isBasic: result.isBasic || item.isBasic,
+                            }
+                            : item
+                    ),
+                }))
+            }));
+
+            console.log(
+                `[GHS Enrich] ${targetItem.name} (CAS: ${targetItem.casNo}) → H-codes: [${result.hCodes.join(', ')}]`
+            );
+        } catch (err) {
+            console.warn('[GHS Enrich] Failed for', targetItem.casNo, err);
+        }
     },
 
     updateReagent: (id, updates) => set(state => ({

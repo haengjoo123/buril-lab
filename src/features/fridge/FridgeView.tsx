@@ -8,6 +8,7 @@ import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { cabinetService } from '../../services/cabinetService';
+import { StorageCompatBanner } from './components/StorageCompatBanner';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 
@@ -451,6 +452,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                         </button>
                     </div>
                 </div>
+
+                {/* Storage Compatibility Warning Banner */}
+                <StorageCompatBanner />
 
                 {/* Edit Mode Overlay */}
                 <ReagentEditPanel />

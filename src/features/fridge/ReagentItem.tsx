@@ -6,6 +6,7 @@ import type { ReagentPlacement } from '../../types/fridge';
 import { useSpring, animated } from '@react-spring/three';
 import { useFridgeStore } from '../../store/fridgeStore';
 import * as THREE from 'three';
+import { getExpiryStatus, type ExpiryLevel } from '../../utils/expiryStatus';
 
 interface ReagentItemProps {
     item: ReagentPlacement;
@@ -44,21 +45,42 @@ const GEO_D_DIV_VERT = new THREE.BoxGeometry(0.02, 0.44, 0.74);
 const GEO_D_DIV_HORZ = new THREE.BoxGeometry(1.14, 0.44, 0.02);
 const GEO_D_RIM = new THREE.BoxGeometry(1.22, 0.02, 0.82);
 
-export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false }) => {
+export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean; expiryLevel?: ExpiryLevel }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false, expiryLevel }) => {
 
     const materialRef = useRef<THREE.MeshStandardMaterial>(null);
     const highlightColor = useMemo(() => new THREE.Color('#ffff00'), []);
     const baseColor = useMemo(() => new THREE.Color(defaultColor), [defaultColor]);
+    const expiryExpiredColor = useMemo(() => new THREE.Color('#ef4444'), []);
+    const expiryWarningColor = useMemo(() => new THREE.Color('#f59e0b'), []);
 
     useFrame((state) => {
         if (!materialRef.current) return;
         if (isHighlighted) {
+            // Search highlight takes priority
             const t = state.clock.elapsedTime;
-            // Sine wave between 0 and 0.8 intensity for smooth pulsing
             const intensity = (Math.sin(t * 8) + 1) * 0.4;
             materialRef.current.emissive = highlightColor;
             materialRef.current.emissiveIntensity = intensity;
             materialRef.current.color = highlightColor;
+        } else if (expiryLevel === 'expired') {
+            // Expired: steady red glow
+            materialRef.current.emissive = expiryExpiredColor;
+            materialRef.current.emissiveIntensity = 0.35;
+            materialRef.current.color = expiryExpiredColor;
+        } else if (expiryLevel === 'critical') {
+            // Critical (<=7 days): pulsing red glow
+            const t = state.clock.elapsedTime;
+            const intensity = (Math.sin(t * 4) + 1) * 0.25;
+            materialRef.current.emissive = expiryExpiredColor;
+            materialRef.current.emissiveIntensity = intensity;
+            materialRef.current.color.lerpColors(baseColor, expiryExpiredColor, 0.4);
+        } else if (expiryLevel === 'warning') {
+            // Warning (<=30 days): subtle amber tint
+            const t = state.clock.elapsedTime;
+            const intensity = (Math.sin(t * 2) + 1) * 0.12;
+            materialRef.current.emissive = expiryWarningColor;
+            materialRef.current.emissiveIntensity = intensity;
+            materialRef.current.color.lerpColors(baseColor, expiryWarningColor, 0.15);
         } else {
             materialRef.current.emissiveIntensity = 0;
             materialRef.current.color = baseColor;
@@ -297,6 +319,11 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
                     opacity={opacity}
                     scale={scale}
                     isHighlighted={isHighlighted}
+                    expiryLevel={(() => {
+                        if (isGhost || dimmed) return undefined;
+                        const status = getExpiryStatus(item.expiryDate);
+                        return status?.level ?? undefined;
+                    })()}
                 />
             </animated.group>
             {/* Label could go here */}

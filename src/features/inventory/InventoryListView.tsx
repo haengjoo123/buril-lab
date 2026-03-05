@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Archive, Package, SearchX, MapPin, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Search, Archive, Package, SearchX, MapPin, Loader2, AlertTriangle, Clock } from 'lucide-react';
 import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { InventoryFormModal } from './InventoryFormModal';
 import { CustomDialog } from '../../components/CustomDialog';
 import { useTranslation } from 'react-i18next';
+import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
 
 import { useLabStore } from '../../store/useLabStore';
 
@@ -45,6 +46,19 @@ export const InventoryListView: React.FC = () => {
         (item.product_number && item.product_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (item.cas_number && item.cas_number.toLowerCase().includes(searchQuery.toLowerCase()))
     );
+
+    // Compute expiry summary
+    const expirySummary = useMemo(() => {
+        let expiredCount = 0;
+        let warningCount = 0;
+        for (const item of items) {
+            const status = getExpiryStatus(item.expiry_date);
+            if (!status) continue;
+            if (status.level === 'expired') expiredCount++;
+            else if (status.level === 'critical' || status.level === 'warning') warningCount++;
+        }
+        return { expiredCount, warningCount };
+    }, [items]);
 
     const handleEdit = (item: InventoryItem) => {
         setEditingItem(item);
@@ -90,6 +104,23 @@ export const InventoryListView: React.FC = () => {
         );
     };
 
+    const renderExpiryBadge = (item: InventoryItem) => {
+        const status = getExpiryStatus(item.expiry_date);
+        if (!status || status.level === 'ok') return null;
+
+        const badgeClasses = getExpiryBadgeClasses(status.level);
+        const icon = status.level === 'expired'
+            ? <AlertTriangle className="w-3 h-3" />
+            : <Clock className="w-3 h-3" />;
+
+        return (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${badgeClasses}`}>
+                {icon}
+                {t(status.labelKey, status.labelParams)}
+            </span>
+        );
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
             {/* Header */}
@@ -114,52 +145,83 @@ export const InventoryListView: React.FC = () => {
 
             {/* List */}
             <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-3">
+                {/* Expiry Summary Banner */}
+                {!isLoading && (expirySummary.expiredCount > 0 || expirySummary.warningCount > 0) && (
+                    <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/30 dark:to-amber-950/30 border-red-200/60 dark:border-red-900/40 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
+                        <div className="flex flex-col gap-1 text-sm">
+                            <span className="font-semibold text-slate-800 dark:text-slate-100">{t('expiry_summary_title')}</span>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                                {expirySummary.expiredCount > 0 && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-medium">
+                                        🔴 {t('expiry_summary_expired', { count: expirySummary.expiredCount })}
+                                    </span>
+                                )}
+                                {expirySummary.warningCount > 0 && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 font-medium">
+                                        🟡 {t('expiry_summary_warning', { count: expirySummary.warningCount })}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {isLoading ? (
                     <div className="flex items-center justify-center py-20">
                         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
                     </div>
                 ) : filteredItems.length > 0 ? (
-                    filteredItems.map(item => (
-                        <div
-                            key={item.id}
-                            onClick={() => handleEdit(item)}
-                            className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors"
-                        >
-                            <div className="flex justify-between items-start gap-2">
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
-                                        {item.name}
-                                    </h3>
-                                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                        {item.cas_number && <span>CAS: {item.cas_number}</span>}
-                                        {item.brand && <span>{item.brand}</span>}
-                                        {item.product_number && <span>PN: {item.product_number}</span>}
+                    filteredItems.map(item => {
+                        const expiryStatus = getExpiryStatus(item.expiry_date);
+                        const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
+
+                        return (
+                            <div
+                                key={item.id}
+                                onClick={() => handleEdit(item)}
+                                className={`bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm flex flex-col gap-3 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors ${cardBorderClass || 'border-slate-200 dark:border-slate-700'
+                                    }`}
+                            >
+                                <div className="flex justify-between items-start gap-2">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
+                                                {item.name}
+                                            </h3>
+                                            {renderExpiryBadge(item)}
+                                        </div>
+                                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                            {item.cas_number && <span>CAS: {item.cas_number}</span>}
+                                            {item.brand && <span>{item.brand}</span>}
+                                            {item.product_number && <span>PN: {item.product_number}</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col items-end shrink-0">
+                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
+                                            {item.quantity}개
+                                        </span>
+                                        {item.capacity && (
+                                            <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                                {item.capacity}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex flex-col items-end shrink-0">
-                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
-                                        {item.quantity}개
-                                    </span>
-                                    {item.capacity && (
-                                        <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                            {item.capacity}
-                                        </span>
-                                    )}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
+                                    {renderStorageBadge(item)}
+
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteClick(item); }}
+                                        disabled={isDeleting}
+                                        className="text-xs text-red-500 hover:text-red-700 disabled:text-red-300 disabled:cursor-not-allowed font-medium px-2 py-1"
+                                    >
+                                        {t('inventory_btn_delete')}
+                                    </button>
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
-                                {renderStorageBadge(item)}
-
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteClick(item); }}
-                                    disabled={isDeleting}
-                                    className="text-xs text-red-500 hover:text-red-700 disabled:text-red-300 disabled:cursor-not-allowed font-medium px-2 py-1"
-                                >
-                                    {t('inventory_btn_delete')}
-                                </button>
-                            </div>
-                        </div>
-                    ))
+                        );
+                    })
                 ) : (
                     <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 dark:text-slate-500">
                         <SearchX className="w-12 h-12 mb-3 text-slate-300 dark:text-slate-600" />

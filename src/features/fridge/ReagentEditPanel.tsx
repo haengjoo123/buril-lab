@@ -6,6 +6,9 @@ import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
 import type { ReagentTemplateType } from '../../types/fridge';
 import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
+import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
+import { classifyStorageGroups, checkShelfCompatibility, getStorageGroupLabels } from '../../utils/storageCompatibilityChecker';
+import { AlertTriangle, FlaskConical } from 'lucide-react';
 
 type DisposalReason = 'used' | 'expired' | 'broken' | 'other';
 
@@ -40,6 +43,7 @@ export const ReagentEditPanel: React.FC = () => {
     const [template, setTemplate] = useState<ReagentTemplateType>('A');
     const [brand, setBrand] = useState('');
     const [productNumber, setProductNumber] = useState('');
+    const [casNo, setCasNo] = useState('');
 
     // Disposal flow state
     const [showDisposalView, setShowDisposalView] = useState(false);
@@ -67,6 +71,7 @@ export const ReagentEditPanel: React.FC = () => {
             setTemplate(selectedItem.template);
             setBrand(selectedItem.brand || '');
             setProductNumber(selectedItem.productNumber || '');
+            setCasNo(selectedItem.casNo || '');
         }
     }, [selectedItem]);
 
@@ -93,6 +98,7 @@ export const ReagentEditPanel: React.FC = () => {
             capacity: capacity || undefined,
             brand: brand || undefined,
             product_number: productNumber || undefined,
+            cas_number: casNo || undefined,
         };
 
         updateReagent(selectedReagentId, {
@@ -103,8 +109,16 @@ export const ReagentEditPanel: React.FC = () => {
             template,
             brand: brand || undefined,
             productNumber: productNumber || undefined,
+            casNo: casNo || undefined,
             ...(newWidth !== undefined && { width: newWidth }),
         });
+
+        // If CAS changed and now has a value, trigger PubChem enrichment
+        const casChanged = (casNo || '') !== (selectedItem.casNo || '');
+        if (casChanged && casNo) {
+            const enrichStore = useFridgeStore.getState();
+            enrichStore.enrichReagentGHS(selectedReagentId);
+        }
 
         // 감사로그를 남기기 위해 cabinet_item 업데이트 RPC를 먼저 호출합니다.
         setIsSaving(true);
@@ -119,18 +133,7 @@ export const ReagentEditPanel: React.FC = () => {
         }
     };
 
-    // Expiry status helper
-    const getExpiryStatus = () => {
-        if (!expiryDate) return null;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const expiry = new Date(expiryDate);
-        const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays < 0) return { label: '만료됨', color: 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400' };
-        if (diffDays <= 30) return { label: `${diffDays}일 남음`, color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400' };
-        return { label: `${diffDays}일 남음`, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400' };
-    };
-    const expiryStatus = getExpiryStatus();
+    const expiryStatus = getExpiryStatus(expiryDate);
 
     const handleDeleteClick = () => {
         setShowDisposalView(true);
@@ -329,6 +332,26 @@ export const ReagentEditPanel: React.FC = () => {
                             />
                         </div>
 
+                        {/* CAS Number Input */}
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                <FlaskConical size={12} />
+                                CAS Number
+                            </label>
+                            <input
+                                type="text"
+                                value={casNo}
+                                onChange={(e) => setCasNo(e.target.value)}
+                                className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
+                                placeholder="예: 67-64-1"
+                            />
+                            {casNo && (
+                                <p className="text-[10px] text-gray-400">
+                                    저장 시 PubChem에서 GHS 위험 정보를 자동 조회합니다
+                                </p>
+                            )}
+                        </div>
+
                         {/* Expiry Date Input */}
                         <div className="flex flex-col gap-1.5">
                             <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
@@ -354,8 +377,8 @@ export const ReagentEditPanel: React.FC = () => {
                                 )}
                             </div>
                             {expiryStatus && (
-                                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md w-fit ${expiryStatus.color}`}>
-                                    {expiryStatus.label}
+                                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md w-fit ${getExpiryBadgeClasses(expiryStatus.level)}`}>
+                                    {t(expiryStatus.labelKey, expiryStatus.labelParams)}
                                 </span>
                             )}
                         </div>
@@ -371,6 +394,67 @@ export const ReagentEditPanel: React.FC = () => {
                                 placeholder={t('cabinet_placeholder_notes')}
                             />
                         </div>
+
+                        {/* Storage Compatibility Section */}
+                        {(() => {
+                            const storageGroups = classifyStorageGroups(selectedItem);
+                            const groupLabels = getStorageGroupLabels(storageGroups);
+                            const currentShelf = shelves.find(s => s.items.some(i => i.id === selectedReagentId));
+                            const shelfWarnings = currentShelf ? checkShelfCompatibility(currentShelf.items).filter(
+                                w => w.itemA === selectedItem.name || w.itemB === selectedItem.name
+                            ) : [];
+
+                            if (groupLabels.length === 0 && shelfWarnings.length === 0) return null;
+
+                            return (
+                                <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+                                    {/* Storage Group Tags */}
+                                    {groupLabels.length > 0 && (
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                                                보관 분류
+                                            </label>
+                                            <div className="flex flex-wrap gap-1">
+                                                {groupLabels.map(key => (
+                                                    <span key={key} className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                                        {t(key)}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Shelf Compatibility Warnings */}
+                                    {shelfWarnings.length > 0 && (
+                                        <div className="flex flex-col gap-1.5">
+                                            {shelfWarnings.map((w, i) => {
+                                                const isDanger = w.severity === 'DANGER';
+                                                const otherName = w.itemA === selectedItem.name ? w.itemB : w.itemA;
+                                                return (
+                                                    <div
+                                                        key={`${w.ruleId}-${i}`}
+                                                        className={`flex items-start gap-1.5 p-2 rounded-lg text-[11px] leading-relaxed ${isDanger
+                                                            ? 'bg-red-50 text-red-700 border border-red-200'
+                                                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                                            }`}
+                                                    >
+                                                        <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isDanger ? 'text-red-500' : 'text-amber-500'}`} />
+                                                        <div>
+                                                            <span className={`font-bold mr-1 ${isDanger ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                {isDanger ? t('storage_compat_danger') : t('storage_compat_warning')}
+                                                            </span>
+                                                            <span className="font-semibold">{otherName}</span>
+                                                            <span className="mx-1">—</span>
+                                                            <span>{t(w.messageKey)}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* Footer Actions */}
