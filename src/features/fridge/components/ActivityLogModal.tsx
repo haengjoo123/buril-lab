@@ -1,8 +1,21 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react';
-import { X, History, Loader2, User, PackagePlus, Trash2, AlertTriangle } from 'lucide-react';
-import { cabinetService, type ActivityLog, type ActivityActionType } from '../../../services/cabinetService';
+import { X, History, Loader2, User, PackagePlus, Trash2, AlertTriangle, FileEdit } from 'lucide-react';
+import { cabinetService, type ActivityActionType } from '../../../services/cabinetService';
+import { auditService } from '../../../services/auditService';
 import { useTranslation } from 'react-i18next';
+
+export type UnifiedLog = {
+    id: string;
+    action_type: ActivityActionType | 'update';
+    item_name: string;
+    reason?: string;
+    memo?: string;
+    performed_by_name?: string;
+    performed_at: string;
+    diff_data?: Record<string, { from: any, to: any }> | null;
+    is_audit?: boolean;
+};
 
 interface ActivityLogModalProps {
     isOpen: boolean;
@@ -18,21 +31,60 @@ const REASON_LABELS: Record<string, string> = {
     other: 'cabinet_dispose_reason_other',
 };
 
-type FilterType = 'all' | 'add' | 'remove' | 'clear_all';
+type FilterType = 'all' | 'add' | 'remove' | 'update' | 'clear_all';
 
 export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: ActivityLogModalProps) {
     const { t } = useTranslation();
-    const [logs, setLogs] = useState<ActivityLog[]>([]);
+    const [logs, setLogs] = useState<UnifiedLog[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [filter, setFilter] = useState<FilterType>('all');
 
     useEffect(() => {
         if (isOpen && cabinetId) {
             setIsLoading(true);
-            cabinetService.getActivityLogs(cabinetId)
-                .then(data => setLogs(data))
-                .catch(err => console.error('Failed to load activity logs:', err))
-                .finally(() => setIsLoading(false));
+            Promise.allSettled([
+                cabinetService.getActivityLogs(cabinetId),
+                auditService.getCabinetAuditLogs(cabinetId)
+            ]).then(([activityRes, auditRes]) => {
+                const unified: UnifiedLog[] = [];
+
+                if (activityRes.status === 'fulfilled') {
+                    unified.push(...activityRes.value.map(l => ({
+                        id: l.id,
+                        action_type: l.action_type,
+                        item_name: l.item_name,
+                        reason: l.reason,
+                        memo: l.memo,
+                        performed_by_name: l.performed_by_nickname || l.performed_by_email,
+                        performed_at: l.performed_at,
+                    })));
+                }
+
+                if (auditRes.status === 'fulfilled') {
+                    unified.push(...auditRes.value.map(a => {
+                        let aType: ActivityActionType | 'update' = 'update';
+                        if (a.action === 'create') aType = 'add';
+                        if (a.action === 'delete') aType = 'remove';
+                        if (a.action === 'clear_all') aType = 'clear_all';
+
+                        const itemName = (a.after_data?.name || a.before_data?.name || 'Unknown Item');
+                        return {
+                            id: a.id,
+                            action_type: aType,
+                            item_name: itemName,
+                            memo: a.location_context ? `Location: ${a.location_context}` : undefined,
+                            performed_by_name: a.actor_name || undefined,
+                            performed_at: a.created_at,
+                            diff_data: a.diff_data,
+                            is_audit: true,
+                        };
+                    }));
+                }
+
+                // Sort descending
+                unified.sort((a, b) => new Date(b.performed_at).getTime() - new Date(a.performed_at).getTime());
+                setLogs(unified);
+            }).finally(() => setIsLoading(false));
         }
     }, [isOpen, cabinetId]);
 
@@ -57,7 +109,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
         return key ? t(key) : reason;
     };
 
-    const getActionConfig = (action: ActivityActionType) => {
+    const getActionConfig = (action: ActivityActionType | 'update') => {
         switch (action) {
             case 'add':
                 return {
@@ -73,6 +125,13 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                     chipStyle: 'bg-red-100 text-red-700',
                     rowStyle: 'border-l-2 border-red-400',
                 };
+            case 'update':
+                return {
+                    icon: <FileEdit size={14} className="text-blue-500" />,
+                    label: '업데이트',
+                    chipStyle: 'bg-blue-100 text-blue-700',
+                    rowStyle: 'border-l-2 border-blue-400',
+                };
             case 'clear_all':
                 return {
                     icon: <AlertTriangle size={14} className="text-orange-500" />,
@@ -87,6 +146,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
         { key: 'all', label: t('activity_log_filter_all') },
         { key: 'add', label: t('activity_log_action_add') },
         { key: 'remove', label: t('activity_log_action_remove') },
+        { key: 'update', label: '업데이트' },
         { key: 'clear_all', label: t('activity_log_action_clear_all') },
     ];
 
@@ -122,8 +182,8 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                             key={f.key}
                             onClick={() => setFilter(f.key)}
                             className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${filter === f.key
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-600'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                                 }`}
                         >
                             {f.label}
@@ -145,7 +205,8 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                         filteredLogs.map(log => {
                             const config = getActionConfig(log.action_type);
                             const reasonLabel = getReasonLabel(log.reason);
-                            const displayName = log.performed_by_nickname || log.performed_by_email;
+                            const displayName = log.performed_by_name;
+                            const hasDiff = log.diff_data && Object.keys(log.diff_data).length > 0;
                             return (
                                 <div
                                     key={log.id}
@@ -186,6 +247,27 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                                             <div className="flex items-center gap-1 mt-1 text-xs text-slate-400 dark:text-slate-500">
                                                 <User size={10} className="shrink-0" />
                                                 <span className="truncate">{displayName}</span>
+                                            </div>
+                                        )}
+
+                                        {/* Diff Rendering */}
+                                        {hasDiff && (
+                                            <div className="mt-2 text-xs bg-slate-100 dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700">
+                                                <div className="font-semibold text-slate-600 dark:text-slate-400 mb-1">변경 내용</div>
+                                                {Object.entries(log.diff_data!).map(([k, v]) => (
+                                                    <div key={k} className="flex flex-col gap-0.5 mb-1 last:mb-0">
+                                                        <span className="text-slate-500 font-medium">{k}:</span>
+                                                        <div className="flex items-center gap-1 text-[10px]">
+                                                            <span className="bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-1 py-0.5 rounded break-all line-through">
+                                                                {JSON.stringify(v.from)}
+                                                            </span>
+                                                            <span className="text-slate-400">→</span>
+                                                            <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 px-1 py-0.5 rounded break-all">
+                                                                {JSON.stringify(v.to)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </div>

@@ -3,6 +3,13 @@ import { supabase } from './supabaseClient';
 import type { ShelfData, ReagentPlacement } from '../types/fridge';
 import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
+import { getCurrentUserDisplayName } from '../utils/userDisplayName';
+
+const mapCabinetActionToAuditAction = (actionType: ActivityActionType): 'create' | 'update' | 'delete' => {
+    if (actionType === 'add') return 'create';
+    if (actionType === 'remove') return 'delete';
+    return 'update';
+};
 
 export interface Cabinet {
     id: string;
@@ -307,7 +314,15 @@ export const cabinetService = {
         reason?: string,
         memo?: string
     ): Promise<void> {
+        const { currentLabId } = useLabStore.getState();
         const { data: userData } = await supabase.auth.getUser();
+        const actorName = await getCurrentUserDisplayName(currentLabId);
+        const { data: cabinetRow } = await supabase
+            .from('cabinets')
+            .select('lab_id')
+            .eq('id', cabinetId)
+            .maybeSingle();
+        const targetLabId = cabinetRow?.lab_id || currentLabId || null;
         const { error } = await supabase
             .from('cabinet_activity_logs')
             .insert({
@@ -322,6 +337,55 @@ export const cabinetService = {
         if (error) {
             console.error('Error logging activity:', error);
             // 로그 실패는 silent — 실제 작업을 막으면 안 됨
+        }
+
+        // 감사로그는 admin 전역 조회 화면에서 확인되므로 별도로 남깁니다.
+        const { error: auditError } = await supabase.rpc('insert_audit_log_rpc', {
+            p_actor_user_id: userData.user?.id || null,
+            p_actor_name: actorName || null,
+            p_lab_id: targetLabId,
+            p_entity_type: 'cabinet_activity',
+            p_entity_id: cabinetId,
+            p_action: mapCabinetActionToAuditAction(actionType),
+            p_location_context: cabinetId,
+            p_before_data: null,
+            p_after_data: {
+                action_type: actionType,
+                item_name: itemName,
+                reason: reason || null,
+                memo: memo || null,
+            },
+            p_diff_data: null,
+            p_source: 'ui',
+            p_request_id: null,
+        });
+
+        if (auditError) {
+            console.error('Error logging audit entry from cabinet activity:', auditError);
+            const { error: fallbackAuditError } = await supabase
+                .from('audit_logs')
+                .insert({
+                    actor_user_id: userData.user?.id || null,
+                    actor_name: actorName || null,
+                    lab_id: targetLabId,
+                    entity_type: 'cabinet_activity',
+                    entity_id: cabinetId,
+                    action: mapCabinetActionToAuditAction(actionType),
+                    location_context: cabinetId,
+                    before_data: null,
+                    after_data: {
+                        action_type: actionType,
+                        item_name: itemName,
+                        reason: reason || null,
+                        memo: memo || null,
+                    },
+                    diff_data: null,
+                    source: 'ui',
+                    request_id: null,
+                });
+            if (fallbackAuditError) {
+                console.error('Error logging audit entry with fallback insert:', fallbackAuditError);
+            }
         }
     },
 

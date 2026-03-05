@@ -3,10 +3,12 @@ import { Plus, Search, Archive, Package, SearchX, MapPin, Loader2 } from 'lucide
 import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { InventoryFormModal } from './InventoryFormModal';
 import { CustomDialog } from '../../components/CustomDialog';
+import { useTranslation } from 'react-i18next';
 
 import { useLabStore } from '../../store/useLabStore';
 
 export const InventoryListView: React.FC = () => {
+    const { t } = useTranslation();
     const { currentLabId } = useLabStore();
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [locations, setLocations] = useState<StorageLocation[]>([]);
@@ -70,12 +72,12 @@ export const InventoryListView: React.FC = () => {
     const renderStorageBadge = (item: InventoryItem) => {
         if (item.storage_type === 'cabinet') {
             const shelfLabel = typeof item.shelf_level === 'number'
-                ? ` · ${item.shelf_level + 1}층`
+                ? t('inventory_shelf_level', { level: item.shelf_level + 1 })
                 : '';
             return (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                     <Archive className="w-3.5 h-3.5" />
-                    시약장: {item.cabinet_name || '미지정'}{shelfLabel}
+                    {item.cabinet_name || t('inventory_cabinet_unassigned')}{shelfLabel}
                 </span>
             );
         }
@@ -83,7 +85,7 @@ export const InventoryListView: React.FC = () => {
         return (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
                 <MapPin className="w-3.5 h-3.5" />
-                {item.storage_location_icon || '📦'} {item.storage_location_name || '기타 보관장소'}
+                {item.storage_location_icon || '📦'} {item.storage_location_name || t('inventory_other_storage')}
             </span>
         );
     };
@@ -94,7 +96,7 @@ export const InventoryListView: React.FC = () => {
             <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-4 flex-shrink-0">
                 <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                     <Package className="w-6 h-6 text-emerald-500" />
-                    재고 목록
+                    {t('inventory_list_title')}
                 </h1>
 
                 {/* Search Bar */}
@@ -104,7 +106,7 @@ export const InventoryListView: React.FC = () => {
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="시약명, 브랜드, CAS, 제품번호 검색"
+                        placeholder={t('inventory_search_placeholder')}
                         className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-slate-50 dark:bg-slate-700/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-shadow"
                     />
                 </div>
@@ -153,7 +155,7 @@ export const InventoryListView: React.FC = () => {
                                     disabled={isDeleting}
                                     className="text-xs text-red-500 hover:text-red-700 disabled:text-red-300 disabled:cursor-not-allowed font-medium px-2 py-1"
                                 >
-                                    삭제
+                                    {t('inventory_btn_delete')}
                                 </button>
                             </div>
                         </div>
@@ -161,7 +163,7 @@ export const InventoryListView: React.FC = () => {
                 ) : (
                     <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 dark:text-slate-500">
                         <SearchX className="w-12 h-12 mb-3 text-slate-300 dark:text-slate-600" />
-                        <p>{searchQuery ? '검색 결과가 없습니다.' : '등록된 재고가 없습니다.'}</p>
+                        <p>{searchQuery ? t('inventory_empty_search') : t('inventory_empty_list')}</p>
                     </div>
                 )}
             </div>
@@ -183,17 +185,16 @@ export const InventoryListView: React.FC = () => {
                 onSaved={loadData}
             />
 
-            {/* Delete Confirm */}
             <CustomDialog
                 isOpen={!!itemToDelete}
                 onClose={() => setItemToDelete(null)}
-                title="재고 삭제"
-                description={`'${itemToDelete?.name}' 항목을 재고 목록에서 삭제하시겠습니까?`}
+                title={t('inventory_delete_title')}
+                description={itemToDelete ? t('inventory_delete_desc', { name: itemToDelete.name }) : ''}
                 type="confirm"
                 isDestructive={true}
                 onConfirm={confirmDelete}
-                confirmText="삭제"
-                cancelText="취소"
+                confirmText={t('btn_confirm')}
+                cancelText={t('btn_cancel')}
                 isConfirmLoading={isDeleting}
                 preventCloseWhileLoading={true}
             />

@@ -3,10 +3,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { fetchWasteLogs, deleteWasteLog } from '../services/wasteLogService';
 import type { WasteLog } from '../types';
 import { useTranslation } from 'react-i18next';
-import { Trash2, ChevronDown, ChevronUp, FlaskConical, Loader2, AlertCircle, Search } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, FlaskConical, Loader2, AlertCircle, Search, History, X } from 'lucide-react';
 import { CustomDialog } from './CustomDialog';
 import { useLabStore } from '../store/useLabStore';
 import type { WasteLogSortBy } from '../services/wasteLogService';
+import { auditService, type AuditLog } from '../services/auditService';
 
 export const WasteLogView: React.FC = () => {
     const { t } = useTranslation();
@@ -25,7 +26,37 @@ export const WasteLogView: React.FC = () => {
     const [searchInput, setSearchInput] = useState('');
     const [sortBy, setSortBy] = useState<WasteLogSortBy>('created_at');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const [viewingAuditLogForId, setViewingAuditLogForId] = useState<string | null>(null);
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+    const [isLoadingAudit, setIsLoadingAudit] = useState(false);
     const PAGE_SIZE = 20;
+
+    useEffect(() => {
+        if (!viewingAuditLogForId) {
+            setAuditLogs([]);
+            return;
+        }
+
+        let targetId = viewingAuditLogForId;
+        // Some items from cart might have a prefixed ID like 'cabinet:UUID'
+        if (targetId.includes(':')) {
+            targetId = targetId.split(':').pop() || targetId;
+        }
+
+        const isUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/i.test(targetId);
+
+        if (!isUUID) {
+            console.warn('Invalid UUID format for audit log search:', targetId);
+            setAuditLogs([]);
+            return;
+        }
+
+        setIsLoadingAudit(true);
+        auditService.getLogs({ entity_id: targetId, limit: 10 })
+            .then(setAuditLogs)
+            .catch(console.error)
+            .finally(() => setIsLoadingAudit(false));
+    }, [viewingAuditLogForId]);
 
     const loadLogs = useCallback(async (reset: boolean = false) => {
         setIsLoading(true);
@@ -200,12 +231,12 @@ export const WasteLogView: React.FC = () => {
                     }}
                     className="flex-shrink-0 h-[42px] py-2.5 px-3 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 >
-                        <option value="created_at-desc">{t('log_sort_date_desc')}</option>
-                        <option value="created_at-asc">{t('log_sort_date_asc')}</option>
-                        <option value="disposal_category-asc">{t('log_sort_category_asc')}</option>
-                        <option value="disposal_category-desc">{t('log_sort_category_desc')}</option>
-                        <option value="handler_name-asc">{t('log_sort_handler_asc')}</option>
-                        <option value="handler_name-desc">{t('log_sort_handler_desc')}</option>
+                    <option value="created_at-desc">{t('log_sort_date_desc')}</option>
+                    <option value="created_at-asc">{t('log_sort_date_asc')}</option>
+                    <option value="disposal_category-asc">{t('log_sort_category_asc')}</option>
+                    <option value="disposal_category-desc">{t('log_sort_category_desc')}</option>
+                    <option value="handler_name-asc">{t('log_sort_handler_asc')}</option>
+                    <option value="handler_name-desc">{t('log_sort_handler_desc')}</option>
                 </select>
             </div>
 
@@ -307,6 +338,14 @@ export const WasteLogView: React.FC = () => {
                                                         {chem.volume}{chem.volume && chem.molarity && ' • '}{chem.molarity}
                                                     </div>
                                                 )}
+                                                {(chem as any).id && (
+                                                    <button
+                                                        onClick={() => setViewingAuditLogForId((chem as any).id)}
+                                                        className="mt-1.5 flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
+                                                    >
+                                                        <History className="w-3 h-3" /> 변경 내용 비교 보기
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
@@ -369,6 +408,60 @@ export const WasteLogView: React.FC = () => {
                 isDestructive={true}
                 onConfirm={handleDelete}
             />
+
+            {/* Audit Log Modal */}
+            {viewingAuditLogForId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewingAuditLogForId(null)} />
+                    <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                            <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <History className="w-4 h-4" /> 항목의 원본 변경 이력
+                            </h3>
+                            <button onClick={() => setViewingAuditLogForId(null)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded">
+                                <X className="w-4 h-4 text-slate-500" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {isLoadingAudit ? (
+                                <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+                            ) : auditLogs.length === 0 ? (
+                                <p className="text-center text-sm text-slate-500 py-8">이 항목의 감사 로그가 없습니다.</p>
+                            ) : (
+                                auditLogs.map(log => (
+                                    <div key={log.id} className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-semibold">{log.action.toUpperCase()}</span>
+                                            <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString('ko-KR')}</span>
+                                        </div>
+                                        {log.actor_name && <div className="text-xs text-slate-500 mb-2">작업자: {log.actor_name}</div>}
+                                        {log.diff_data && Object.keys(log.diff_data).length > 0 && (
+                                            <div className="mt-1 flex flex-col gap-1 text-[11px] font-mono">
+                                                {Object.entries(log.diff_data).map(([k, v]: [string, any]) => (
+                                                    <div key={k} className="flex gap-2">
+                                                        <span className="text-slate-500 w-20 shrink-0">{k}:</span>
+                                                        <span className="text-red-500/80 line-through truncate">{JSON.stringify(v.from)}</span>
+                                                        <span>→</span>
+                                                        <span className="text-emerald-600 truncate">{JSON.stringify(v.to)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {log.before_data && log.action === 'delete' && (
+                                            <div className="mt-2 bg-red-50 dark:bg-red-900/10 p-2 rounded text-[10px] overflow-auto">
+                                                <span className="font-bold text-red-800 dark:text-red-400 mb-1 block">Deleted Data:</span>
+                                                <pre className="text-slate-600 dark:text-slate-400 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                                                    {JSON.stringify(log.before_data, null, 2)}
+                                                </pre>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

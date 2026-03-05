@@ -9,7 +9,8 @@ create or replace function public.delete_inventory_item_atomic(
     p_cabinet_id uuid default null,
     p_cabinet_name text default null,
     p_storage_location_name text default null,
-    p_disposal_reason text default '재고 목록에서 삭제'
+    p_disposal_reason text default '재고 목록에서 삭제',
+    p_actor_name text default null
 )
 returns void
 language plpgsql
@@ -30,6 +31,7 @@ declare
     v_lab_id uuid := p_lab_id;
     v_match_cabinet_item_id uuid := null;
     v_chemical jsonb;
+    v_before_data jsonb;
 begin
     if p_item_source not in ('inventory', 'cabinet_item') then
         raise exception 'Unsupported item source: %', p_item_source;
@@ -108,6 +110,25 @@ begin
             values (v_cabinet_id, 'remove', v_item_name, coalesce(p_disposal_reason, '단순 삭제'), v_user_id);
         end if;
 
+        v_before_data := jsonb_build_object(
+            'id', p_item_id,
+            'name', v_item_name,
+            'brand', v_brand,
+            'product_number', v_product_number,
+            'cas_number', v_cas,
+            'capacity', v_capacity,
+            'quantity', v_quantity,
+            'storage_type', v_storage_type,
+            'cabinet_id', v_cabinet_id,
+            'lab_id', v_lab_id
+        );
+
+        insert into public.audit_logs (
+            actor_user_id, actor_name, lab_id, entity_type, entity_id, action, location_context, before_data, source
+        ) values (
+            v_user_id, p_actor_name, v_lab_id, 'inventory', p_item_id, 'delete', v_location, v_before_data, 'rpc'
+        );
+
         delete from inventory where id = p_item_id;
     else
         select
@@ -132,6 +153,13 @@ begin
             raise exception 'Cabinet item row not found: %', p_item_id;
         end if;
 
+        if v_cabinet_id is not null then
+            select c.lab_id
+            into v_lab_id
+            from cabinets c
+            where c.id = v_cabinet_id;
+        end if;
+
         v_storage_type := 'cabinet';
         v_location := coalesce(p_cabinet_name, '시약장');
 
@@ -144,6 +172,23 @@ begin
             insert into cabinet_activity_logs (cabinet_id, action_type, item_name, reason, performed_by)
             values (v_cabinet_id, 'remove', v_item_name, coalesce(p_disposal_reason, '단순 삭제'), v_user_id);
         end if;
+
+        v_before_data := jsonb_build_object(
+            'id', p_item_id,
+            'name', v_item_name,
+            'brand', v_brand,
+            'product_number', v_product_number,
+            'cas_no', v_cas,
+            'capacity', v_capacity,
+            'cabinet_id', v_cabinet_id,
+            'lab_id', v_lab_id
+        );
+
+        insert into public.audit_logs (
+            actor_user_id, actor_name, lab_id, entity_type, entity_id, action, location_context, before_data, source
+        ) values (
+            v_user_id, p_actor_name, coalesce(v_lab_id, p_lab_id), 'cabinet_item', p_item_id, 'delete', v_location, v_before_data, 'rpc'
+        );
     end if;
 
     v_chemical := jsonb_build_object(
@@ -182,5 +227,15 @@ begin
 end;
 $$;
 
-comment on function public.delete_inventory_item_atomic is
+comment on function public.delete_inventory_item_atomic(
+    uuid,
+    text,
+    text,
+    uuid,
+    uuid,
+    text,
+    text,
+    text,
+    text
+) is
 'Atomically deletes inventory/cabinet item and writes cabinet + waste logs.';

@@ -368,6 +368,24 @@ export const translations = {
         reagent_no_space: "❌ 빈 공간이 없습니다. 선반을 추가하거나 정리해주세요.",
         scan_upload: "📁 파일 업로드",
 
+        // App View Extensions
+        app_ai_analyzing: "AI가 시약 정보를 분석하고 있습니다. 잠시만 기다려주세요...",
+        app_cabinet_results: "내 시약장 검색 결과",
+        app_fold: "접기",
+        app_view_more_count: "+{{count}}개 더 보기",
+
+        // Inventory List View
+        inventory_list_title: "재고 목록",
+        inventory_search_placeholder: "시약명, 브랜드, CAS, 제품번호 검색",
+        inventory_cabinet_unassigned: "미지정",
+        inventory_other_storage: "기타 보관장소",
+        inventory_btn_delete: "삭제",
+        inventory_empty_search: "검색 결과가 없습니다.",
+        inventory_empty_list: "등록된 재고가 없습니다.",
+        inventory_delete_title: "재고 삭제",
+        inventory_delete_desc: "'{{name}}' 항목을 재고 목록에서 삭제하시겠습니까?",
+        inventory_shelf_level: " · {{level}}층",
+
         // Auth
         auth_login: "로그인",
         auth_signup: "회원가입",
@@ -756,6 +774,24 @@ export const translations = {
         reagent_placed_toast: "✅ {{name}} placed on Shelf {{level}}",
         reagent_no_space: "❌ No space available. Add more shelves or rearrange.",
         scan_upload: "📁 Upload",
+
+        // App View Extensions
+        app_ai_analyzing: "AI is analyzing reagent information. Please wait a moment...",
+        app_cabinet_results: "My Cabinet Search Results",
+        app_fold: "Fold",
+        app_view_more_count: "+{{count}} View More",
+
+        // Inventory List View
+        inventory_list_title: "Inventory List",
+        inventory_search_placeholder: "Search Chemical Name, Brand, CAS, Product No.",
+        inventory_cabinet_unassigned: "Unassigned",
+        inventory_other_storage: "Other Storage",
+        inventory_btn_delete: "Delete",
+        inventory_empty_search: "No search results.",
+        inventory_empty_list: "No registered inventory.",
+        inventory_delete_title: "Delete Inventory",
+        inventory_delete_desc: "Are you sure you want to delete '{{name}}' from the inventory list?",
+        inventory_shelf_level: " · Level {{level}}",
 
         // Auth
         auth_login: "Log In",

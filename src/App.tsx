@@ -13,6 +13,7 @@ import { CabinetListView } from './features/fridge/CabinetListView';
 import { AuthView } from './components/AuthView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
 import { InventoryListView } from './features/inventory/InventoryListView';
+import { GlobalAuditLogsView } from './features/admin/GlobalAuditLogsView';
 import { searchChemical } from './services/searchService';
 import { cabinetService, type CabinetSearchResult } from './services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from './services/mediaProductService';
@@ -24,7 +25,7 @@ import { useLabStore } from './store/useLabStore';
 import { useFridgeStore } from './store/fridgeStore';
 import { useTranslation } from 'react-i18next';
 import type { AnalysisResult } from './types';
-import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, ClipboardList, Box, Package } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ShoppingBag, ChevronDown, ChevronUp, ClipboardList, Box, Package, ShieldAlert } from 'lucide-react';
 
 function App() {
   const { t } = useTranslation();
@@ -44,13 +45,16 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'logs' | 'cabinet' | 'inventory'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'logs' | 'cabinet' | 'inventory' | 'admin'>('search');
   const [activeCabinetId, setActiveCabinetId] = useState<string | null>(null);
   const [logRefreshKey, setLogRefreshKey] = useState(0);
 
   const cart = useWasteStore((state) => state.cart);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory } = useWasteStore();
   const currentLabId = useLabStore((state) => state.currentLabId);
+  const myLabs = useLabStore((state) => state.myLabs);
+  const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
+  const isAdmin = currentRole === 'admin';
 
   useEffect(() => {
     setActiveCabinetId(null);
@@ -286,6 +290,18 @@ function App() {
             <Package className="w-5 h-5" />
             {t('tab_inventory')}
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'admin'
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                }`}
+            >
+              <ShieldAlert className="w-5 h-5" />
+              감사로그
+            </button>
+          )}
         </nav>
       }>
         {activeTab === 'cabinet' ? (
@@ -300,6 +316,8 @@ function App() {
           <WasteLogView key={logRefreshKey} />
         ) : activeTab === 'inventory' ? (
           <InventoryListView />
+        ) : activeTab === 'admin' && isAdmin ? (
+          <GlobalAuditLogsView />
         ) : (
           <div className="p-5 flex flex-col gap-6" style={{ paddingBottom: cart.length > 0 ? '100px' : undefined }}>
 
@@ -349,7 +367,7 @@ function App() {
             {isAiAnalyzing && (
               <div className="flex items-center gap-3 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl text-sm animate-in fade-in slide-in-from-top-1 border border-purple-100 dark:border-purple-900/30">
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="font-medium">AI가 시약 정보를 분석하고 있습니다. 잠시만 기다려주세요...</span>
+                <span className="font-medium">{t('app_ai_analyzing')}</span>
               </div>
             )}
 
@@ -369,7 +387,7 @@ function App() {
                 {cabinetResults.length > 0 && (
                   <div>
                     <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">
-                      내 시약장 검색 결과
+                      {t('app_cabinet_results')}
                     </h3>
                     <div className="flex flex-col gap-3">
                       {cabinetResults.map(item => (
@@ -401,7 +419,7 @@ function App() {
                           </div>
                           <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                             <Box className="w-3 h-3" />
-                            {`${item.shelfLevel + 1}층 선반`}
+                            {t('cabinet_shelf_level', { level: item.shelfLevel + 1 })}
                           </div>
                         </div>
                       ))}
@@ -454,12 +472,12 @@ function App() {
                         {showAllProducts ? (
                           <>
                             <ChevronUp className="w-4 h-4" />
-                            접기
+                            {t('app_fold')}
                           </>
                         ) : (
                           <>
                             <ChevronDown className="w-4 h-4" />
-                            +{mediaProducts.length - 5}개 더 보기
+                            {t('app_view_more_count', { count: mediaProducts.length - 5 })}
                           </>
                         )}
                       </button>

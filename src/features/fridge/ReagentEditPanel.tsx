@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package } from 'lucide-react';
+import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
@@ -45,6 +45,7 @@ export const ReagentEditPanel: React.FC = () => {
     const [showDisposalView, setShowDisposalView] = useState(false);
     const [selectedReason, setSelectedReason] = useState<DisposalReason | null>(null);
     const [isDisposing, setIsDisposing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Find the selected item from all shelves
     const selectedItem = React.useMemo(() => {
@@ -78,10 +79,21 @@ export const ReagentEditPanel: React.FC = () => {
     if (!selectedReagentId || !selectedItem) return null;
 
     const handleSave = async () => {
+        if (isSaving) return;
+
         // Calculate new width if template changed
         const newWidth = template !== selectedItem.template
             ? (CONTAINER_BASE_WIDTHS[template] || 8)
             : undefined;
+
+        const updatePayload = {
+            name,
+            memo: notes || undefined,
+            expiry_date: expiryDate || undefined,
+            capacity: capacity || undefined,
+            brand: brand || undefined,
+            product_number: productNumber || undefined,
+        };
 
         updateReagent(selectedReagentId, {
             name,
@@ -93,12 +105,17 @@ export const ReagentEditPanel: React.FC = () => {
             productNumber: productNumber || undefined,
             ...(newWidth !== undefined && { width: newWidth }),
         });
-        setSelectedReagentId(null);
-        // 수정 내용을 DB에 즉시 반영
+
+        // 감사로그를 남기기 위해 cabinet_item 업데이트 RPC를 먼저 호출합니다.
+        setIsSaving(true);
         try {
+            await inventoryService.updateItem(selectedReagentId, updatePayload, 'cabinet_item');
             await saveCabinet();
+            setSelectedReagentId(null);
         } catch (err) {
             console.error('Failed to save reagent edits:', err);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -360,6 +377,7 @@ export const ReagentEditPanel: React.FC = () => {
                     <div className="p-3 border-t bg-gray-50/50 flex items-center justify-between gap-2 shrink-0">
                         <button
                             onClick={handleDeleteClick}
+                            disabled={isSaving}
                             className="px-3.5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 transition-colors"
                         >
                             <Trash2 size={16} />
@@ -367,10 +385,11 @@ export const ReagentEditPanel: React.FC = () => {
                         </button>
                         <button
                             onClick={handleSave}
-                            className="flex-1 px-3.5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                            disabled={isSaving}
+                            className="flex-1 px-3.5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            <Save size={16} />
-                            {t('cabinet_save')}
+                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            {isSaving ? '처리 중...' : t('cabinet_save')}
                         </button>
                     </div>
                 </>

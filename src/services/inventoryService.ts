@@ -98,7 +98,7 @@ interface CabinetItemRowWithCabinet {
     created_at: string;
     cabinet_id: string;
     shelf_id: string | null;
-    cabinets: { name: string | null; lab_id: string | null }[] | null;
+    cabinets: { name: string | null; lab_id: string | null } | { name: string | null; lab_id: string | null }[] | null;
 }
 
 interface ShelfLevelRow {
@@ -280,6 +280,12 @@ export const inventoryService = {
     /** Get all inventory items for the current lab (includes cabinet_items) */
     async getItems(): Promise<InventoryItem[]> {
         const { currentLabId } = useLabStore.getState();
+        const getCabinetRelation = (
+            relation: CabinetItemRowWithCabinet['cabinets']
+        ): { name: string | null; lab_id: string | null } | null => {
+            if (!relation) return null;
+            return Array.isArray(relation) ? (relation[0] || null) : relation;
+        };
         const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
         const buildCabinetItemKey = (input: {
             cabinetId?: string | null;
@@ -386,7 +392,7 @@ export const inventoryService = {
             })
             .map((ci) => ({
                 id: ci.id,
-                lab_id: ci.cabinets?.[0]?.lab_id || null,
+                lab_id: getCabinetRelation(ci.cabinets)?.lab_id || null,
                 user_id: null,
                 name: ci.name,
                 brand: ci.brand || null,
@@ -404,7 +410,7 @@ export const inventoryService = {
                 memo: ci.notes || null,
                 created_at: ci.created_at,
                 updated_at: ci.created_at,
-                cabinet_name: ci.cabinets?.[0]?.name || undefined,
+                cabinet_name: getCabinetRelation(ci.cabinets)?.name || undefined,
                 storage_location_name: undefined,
                 storage_location_icon: undefined,
                 _source: 'cabinet_item',
@@ -484,99 +490,129 @@ export const inventoryService = {
     async createItem(input: CreateInventoryInput): Promise<InventoryItem | null> {
         const { currentLabId } = useLabStore.getState();
         const { data: userData } = await supabase.auth.getUser();
+        const actorName = await getCurrentUserDisplayName(currentLabId);
 
-        const row = {
-            lab_id: currentLabId || null,
-            user_id: userData.user?.id || null,
-            name: input.name,
-            brand: input.brand || null,
-            product_number: input.product_number || null,
-            cas_number: input.cas_number || null,
-            quantity: input.quantity ?? 1,
-            capacity: input.capacity || null,
-            storage_type: input.storage_type,
-            cabinet_id: input.storage_type === 'cabinet' ? (input.cabinet_id || null) : null,
-            storage_location_id: input.storage_type === 'other' ? (input.storage_location_id || null) : null,
-            product_id: input.product_id || null,
-            expiry_date: input.expiry_date || null,
-            memo: input.memo || null,
+        const payload = {
+            p_name: input.name,
+            p_storage_type: input.storage_type,
+            p_brand: input.brand || null,
+            p_product_number: input.product_number || null,
+            p_cas_number: input.cas_number || null,
+            p_quantity: input.quantity ?? 1,
+            p_capacity: input.capacity || null,
+            p_cabinet_id: input.storage_type === 'cabinet' ? (input.cabinet_id || null) : null,
+            p_storage_location_id: input.storage_type === 'other' ? (input.storage_location_id || null) : null,
+            p_product_id: input.product_id || null,
+            p_expiry_date: input.expiry_date || null,
+            p_memo: input.memo || null,
+            p_lab_id: currentLabId || null,
+            p_actor_user_id: userData.user?.id || null,
+            p_actor_name: actorName || null,
         };
 
-        const { data, error } = await supabase
-            .from('inventory')
-            .insert(row)
-            .select()
-            .single();
+        const { data, error } = await supabase.rpc('create_inventory_item_atomic', payload);
 
         if (error) {
-            console.error('[Inventory] create error:', error);
+            // fallback to direct insert if RPC not yet deployed
+            if (error.code === '42883' || error.code === 'PGRST202') {
+                console.warn('[Inventory] RPC not found, falling back to direct insert');
+                const row = {
+                    lab_id: currentLabId || null,
+                    user_id: userData.user?.id || null,
+                    name: input.name,
+                    brand: input.brand || null,
+                    product_number: input.product_number || null,
+                    cas_number: input.cas_number || null,
+                    quantity: input.quantity ?? 1,
+                    capacity: input.capacity || null,
+                    storage_type: input.storage_type,
+                    cabinet_id: input.storage_type === 'cabinet' ? (input.cabinet_id || null) : null,
+                    storage_location_id: input.storage_type === 'other' ? (input.storage_location_id || null) : null,
+                    product_id: input.product_id || null,
+                    expiry_date: input.expiry_date || null,
+                    memo: input.memo || null,
+                };
+                const { data: directData, error: directError } = await supabase.from('inventory').insert(row).select().single();
+                if (directError) {
+                    console.error('[Inventory] create error:', directError);
+                    return null;
+                }
+                return directData as InventoryItem;
+            }
+            console.error('[Inventory] atomic create error:', error);
             return null;
         }
 
-        return data;
+        return data as unknown as InventoryItem;
     },
 
     /** Update an inventory item */
     async updateItem(id: string, updates: Partial<CreateInventoryInput>, source: InventorySource = 'inventory'): Promise<void> {
+        const { currentLabId } = useLabStore.getState();
+        const actorName = await getCurrentUserDisplayName(currentLabId);
+
+        let payloadRecord: Record<string, any> = {};
+
         if (source === 'cabinet_item') {
-            const cabinetItemUpdates: Record<string, string | null> = {};
-            if (updates.name !== undefined) cabinetItemUpdates.name = updates.name.trim();
-            if (updates.brand !== undefined) cabinetItemUpdates.brand = updates.brand || null;
-            if (updates.product_number !== undefined) cabinetItemUpdates.product_number = updates.product_number || null;
-            if (updates.cas_number !== undefined) cabinetItemUpdates.cas_no = updates.cas_number || null;
-            if (updates.capacity !== undefined) cabinetItemUpdates.capacity = updates.capacity || null;
-            if (updates.expiry_date !== undefined) cabinetItemUpdates.expiry_date = updates.expiry_date || null;
-            if (updates.memo !== undefined) cabinetItemUpdates.notes = updates.memo || null;
-
-            if (Object.keys(cabinetItemUpdates).length === 0) return;
-
-            const { error } = await supabase
-                .from('cabinet_items')
-                .update(cabinetItemUpdates)
-                .eq('id', id);
-            if (error) {
-                console.error('[Inventory] update cabinet_item error:', error);
-                throw error;
-            }
-            return;
-        }
-
-        const payload: Record<string, string | number | null> = {};
-        if (updates.name !== undefined) payload.name = updates.name.trim();
-        if (updates.brand !== undefined) payload.brand = updates.brand || null;
-        if (updates.product_number !== undefined) payload.product_number = updates.product_number || null;
-        if (updates.cas_number !== undefined) payload.cas_number = updates.cas_number || null;
-        if (updates.quantity !== undefined) payload.quantity = Math.max(1, updates.quantity);
-        if (updates.capacity !== undefined) payload.capacity = updates.capacity || null;
-        if (updates.product_id !== undefined) payload.product_id = updates.product_id || null;
-        if (updates.expiry_date !== undefined) payload.expiry_date = updates.expiry_date || null;
-        if (updates.memo !== undefined) payload.memo = updates.memo || null;
-
-        if (updates.storage_type !== undefined) {
-            payload.storage_type = updates.storage_type;
-            payload.cabinet_id = updates.storage_type === 'cabinet' ? (updates.cabinet_id || null) : null;
-            payload.storage_location_id = updates.storage_type === 'other' ? (updates.storage_location_id || null) : null;
+            if (updates.name !== undefined) payloadRecord.name = updates.name.trim();
+            if (updates.brand !== undefined) payloadRecord.brand = updates.brand || null;
+            if (updates.product_number !== undefined) payloadRecord.product_number = updates.product_number || null;
+            if (updates.cas_number !== undefined) payloadRecord.cas_no = updates.cas_number || null;
+            if (updates.capacity !== undefined) payloadRecord.capacity = updates.capacity || null;
+            if (updates.expiry_date !== undefined) payloadRecord.expiry_date = updates.expiry_date || null;
+            if (updates.memo !== undefined) payloadRecord.notes = updates.memo || null;
         } else {
-            if (updates.cabinet_id !== undefined) payload.cabinet_id = updates.cabinet_id || null;
-            if (updates.storage_location_id !== undefined) payload.storage_location_id = updates.storage_location_id || null;
+            if (updates.name !== undefined) payloadRecord.name = updates.name.trim();
+            if (updates.brand !== undefined) payloadRecord.brand = updates.brand || null;
+            if (updates.product_number !== undefined) payloadRecord.product_number = updates.product_number || null;
+            if (updates.cas_number !== undefined) payloadRecord.cas_number = updates.cas_number || null;
+            if (updates.quantity !== undefined) payloadRecord.quantity = Math.max(1, updates.quantity);
+            if (updates.capacity !== undefined) payloadRecord.capacity = updates.capacity || null;
+            if (updates.product_id !== undefined) payloadRecord.product_id = updates.product_id || null;
+            if (updates.expiry_date !== undefined) payloadRecord.expiry_date = updates.expiry_date || null;
+            if (updates.memo !== undefined) payloadRecord.memo = updates.memo || null;
+
+            if (updates.storage_type !== undefined) {
+                payloadRecord.storage_type = updates.storage_type;
+                payloadRecord.cabinet_id = updates.storage_type === 'cabinet' ? (updates.cabinet_id || null) : null;
+                payloadRecord.storage_location_id = updates.storage_type === 'other' ? (updates.storage_location_id || null) : null;
+            } else {
+                if (updates.cabinet_id !== undefined) payloadRecord.cabinet_id = updates.cabinet_id || null;
+                if (updates.storage_location_id !== undefined) payloadRecord.storage_location_id = updates.storage_location_id || null;
+            }
         }
 
-        if (Object.keys(payload).length === 0) return;
+        if (Object.keys(payloadRecord).length === 0) return;
 
-        const { error } = await supabase
-            .from('inventory')
-            .update(payload)
-            .eq('id', id);
+        const payload = {
+            p_item_id: id,
+            p_item_source: source,
+            p_updates: payloadRecord,
+            p_actor_name: actorName || null,
+        };
+
+        const { error } = await supabase.rpc('update_inventory_item_atomic', payload);
         if (error) {
-            console.error('[Inventory] update error:', error);
+            // fallback if missing
+            if (error.code === '42883' || error.code === 'PGRST202') {
+                console.warn('[Inventory] Atomic update RPC not found. Falling back to direct update.');
+                const table = source === 'cabinet_item' ? 'cabinet_items' : 'inventory';
+                const { error: directError } = await supabase.from(table).update(payloadRecord).eq('id', id);
+                if (directError) throw directError;
+                return;
+            }
+            console.error('[Inventory] atomic update error:', error);
             throw error;
         }
     },
 
     /** Delete an inventory item through an atomic DB RPC transaction */
     async deleteItem(item: InventoryItem): Promise<void> {
+        const { currentLabId } = useLabStore.getState();
+        const actorName = await getCurrentUserDisplayName(currentLabId);
+
         const source: InventorySource = item._source || 'inventory';
-        const payload: AtomicDeleteRpcParams = {
+        const payload: AtomicDeleteRpcParams & { p_actor_name: string | null } = {
             p_item_id: item.id,
             p_item_source: source,
             p_item_name: item.name,
@@ -585,6 +621,7 @@ export const inventoryService = {
             p_cabinet_name: item.cabinet_name || null,
             p_storage_location_name: item.storage_location_name || null,
             p_disposal_reason: '재고 목록에서 삭제',
+            p_actor_name: actorName || null,
         };
 
         const { error } = await supabase.rpc('delete_inventory_item_atomic', payload);
@@ -595,6 +632,12 @@ export const inventoryService = {
                 String(error.message || '').includes('delete_inventory_item_atomic');
             if (missingRpc) {
                 throw new Error('삭제 RPC가 배포되지 않았습니다. `database/delete_inventory_item_atomic.sql`을 먼저 적용해주세요.');
+            }
+            const outdatedRpc =
+                error.code === '0A000' &&
+                String(error.message || '').includes('FOR UPDATE cannot be applied to the nullable side of an outer join');
+            if (outdatedRpc) {
+                throw new Error('삭제 RPC가 구버전입니다. `database/delete_inventory_item_atomic.sql` 최신 버전을 다시 적용해주세요.');
             }
             console.error('[Inventory] atomic delete error:', error);
             throw error;
