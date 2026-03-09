@@ -218,20 +218,6 @@ export const cabinetService = {
             throw upsertShelvesError;
         }
 
-        const currentItemIds = shelves.flatMap(s => s.items).map(i => i.id);
-        if (currentItemIds.length > 0) {
-            await supabase
-                .from('cabinet_items')
-                .delete()
-                .eq('cabinet_id', cabinetId)
-                .not('id', 'in', `(${currentItemIds.join(',')})`);
-        } else {
-            await supabase
-                .from('cabinet_items')
-                .delete()
-                .eq('cabinet_id', cabinetId);
-        }
-
         const newItems = shelves.flatMap(s => s.items.map(i => ({
             id: i.id,
             cabinet_id: cabinetId,
@@ -260,18 +246,52 @@ export const cabinetService = {
             }
         }
 
+        // Delete stale cabinet items using explicit ID diff (safer than raw "not in" filter strings)
+        const desiredItemIds = new Set(shelves.flatMap(s => s.items).map(i => i.id));
+        const { data: existingItems, error: fetchExistingItemsError } = await supabase
+            .from('cabinet_items')
+            .select('id')
+            .eq('cabinet_id', cabinetId);
+        if (fetchExistingItemsError) {
+            console.error('Error fetching existing cabinet items:', fetchExistingItemsError);
+            throw fetchExistingItemsError;
+        }
+        const staleItemIds = (existingItems || [])
+            .map((row: { id: string }) => row.id)
+            .filter((id) => !desiredItemIds.has(id));
+        if (staleItemIds.length > 0) {
+            const { error: deleteStaleItemsError } = await supabase
+                .from('cabinet_items')
+                .delete()
+                .in('id', staleItemIds);
+            if (deleteStaleItemsError) {
+                console.error('Error deleting stale cabinet items:', deleteStaleItemsError);
+                throw deleteStaleItemsError;
+            }
+        }
+
         const shelfIds = shelves.map(s => s.id);
-        if (shelfIds.length > 0) {
-            await supabase
+        const desiredShelfIds = new Set(shelfIds);
+        const { data: existingShelves, error: fetchExistingShelvesError } = await supabase
+            .from('cabinet_shelves')
+            .select('id')
+            .eq('cabinet_id', cabinetId);
+        if (fetchExistingShelvesError) {
+            console.error('Error fetching existing cabinet shelves:', fetchExistingShelvesError);
+            throw fetchExistingShelvesError;
+        }
+        const staleShelfIds = (existingShelves || [])
+            .map((row: { id: string }) => row.id)
+            .filter((id) => !desiredShelfIds.has(id));
+        if (staleShelfIds.length > 0) {
+            const { error: deleteStaleShelvesError } = await supabase
                 .from('cabinet_shelves')
                 .delete()
-                .eq('cabinet_id', cabinetId)
-                .not('id', 'in', `(${shelfIds.join(',')})`);
-        } else {
-            await supabase
-                .from('cabinet_shelves')
-                .delete()
-                .eq('cabinet_id', cabinetId);
+                .in('id', staleShelfIds);
+            if (deleteStaleShelvesError) {
+                console.error('Error deleting stale cabinet shelves:', deleteStaleShelvesError);
+                throw deleteStaleShelvesError;
+            }
         }
     },
 

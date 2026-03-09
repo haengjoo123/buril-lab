@@ -3,11 +3,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { fetchWasteLogs, deleteWasteLog } from '../services/wasteLogService';
 import type { WasteLog } from '../types';
 import { useTranslation } from 'react-i18next';
-import { Trash2, ChevronDown, ChevronUp, FlaskConical, Loader2, AlertCircle, Search, History, X } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X } from 'lucide-react';
 import { CustomDialog } from './CustomDialog';
 import { useLabStore } from '../store/useLabStore';
 import type { WasteLogSortBy } from '../services/wasteLogService';
 import { auditService, type AuditLog } from '../services/auditService';
+import { EmptyState } from './EmptyState';
 
 export const WasteLogView: React.FC = () => {
     const { t } = useTranslation();
@@ -250,14 +251,7 @@ export const WasteLogView: React.FC = () => {
 
             {/* Empty State */}
             {!isLoading && logs.length === 0 && !error && (
-                <div className="text-center py-20">
-                    <div className="inline-flex p-4 bg-slate-100 dark:bg-slate-800 rounded-full mb-4">
-                        <FlaskConical className="w-8 h-8 text-slate-400 dark:text-slate-500" />
-                    </div>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">
-                        {searchQuery ? t('log_search_empty') : t('log_empty')}
-                    </p>
-                </div>
+                <EmptyState variant={searchQuery ? 'logs_search' : 'logs'} />
             )}
 
             {/* Log Cards */}

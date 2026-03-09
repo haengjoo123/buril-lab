@@ -9,6 +9,7 @@ import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { cabinetService } from '../../services/cabinetService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
+import { supabase } from '../../services/supabaseClient';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 
@@ -90,10 +91,35 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     } = useFridgeStore();
 
     React.useEffect(() => {
-        if (cabinetId) {
-            // 항상 최신 DB 상태를 반영해 외부(재고 목록 등) 변경과 동기화합니다.
-            loadCabinet(cabinetId);
-        }
+        if (!cabinetId) return;
+
+        // 항상 최신 DB 상태를 반영해 외부(재고 목록 등) 변경과 동기화합니다.
+        loadCabinet(cabinetId);
+
+        let reloadTimeout: ReturnType<typeof setTimeout>;
+
+        const handleChange = () => {
+            const currentMode = useFridgeStore.getState().mode;
+            // 편집 모드나 배치 모드 중일 때는 사용자 작업을 방해하지 않기 위해 자동 새로고침을 건너뜁니다.
+            if (currentMode === 'EDIT' || currentMode === 'PLACE') return;
+
+            clearTimeout(reloadTimeout);
+            // 여러 변경 이벤트가 동시에 발생할 수 있으므로 디바운스 처리
+            reloadTimeout = setTimeout(() => {
+                loadCabinet(cabinetId);
+            }, 500);
+        };
+
+        const channel = supabase.channel(`cabinet_realtime_${cabinetId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cabinet_items', filter: `cabinet_id=eq.${cabinetId}` }, handleChange)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cabinet_shelves', filter: `cabinet_id=eq.${cabinetId}` }, handleChange)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cabinets', filter: `id=eq.${cabinetId}` }, handleChange)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+            clearTimeout(reloadTimeout);
+        };
     }, [cabinetId, loadCabinet]);
 
     // Auto-place result toast

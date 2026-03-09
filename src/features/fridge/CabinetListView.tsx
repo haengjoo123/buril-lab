@@ -10,7 +10,9 @@ import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { ImageActionMenu } from './components/ImageActionMenu';
 import { ActivityLogModal } from './components/ActivityLogModal';
 import { useTranslation } from 'react-i18next';
+import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
+import { supabase } from '../../services/supabaseClient';
 
 interface CabinetListViewProps {
     onSelectCabinet: (cabinetId: string) => void;
@@ -120,6 +122,24 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
 
     useEffect(() => {
         loadCabinets();
+
+        let reloadTimeout: ReturnType<typeof setTimeout>;
+
+        const handleChange = () => {
+            clearTimeout(reloadTimeout);
+            reloadTimeout = setTimeout(() => {
+                loadCabinets();
+            }, 500);
+        };
+
+        const channel = supabase.channel('cabinets_realtime_list')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cabinets' }, handleChange)
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+            clearTimeout(reloadTimeout);
+        };
     }, [currentLabId]);
 
     const handleCreate = () => {
@@ -268,9 +288,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                     ))}
 
                     {cabinets.length === 0 && !error && (
-                        <div className="text-center py-10 bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-                            <p className="text-slate-500 dark:text-slate-400">{t('cabinet_empty')}</p>
-                        </div>
+                        <EmptyState variant="cabinet" />
                     )}
 
                     {canCreateCabinet && (

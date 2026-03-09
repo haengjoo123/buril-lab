@@ -2,6 +2,24 @@
 import type { Chemical } from '../types';
 import { COMMON_CHEMICALS } from '../data/commonChemicals';
 
+/**
+ * Fetch autocomplete suggestions for a chemical name from PubChem
+ */
+export const fetchPubchemSuggestions = async (query: string, limit: number = 5): Promise<string[]> => {
+    if (!query || query.trim().length < 2) return [];
+    try {
+        const url = `https://pubchem.ncbi.nlm.nih.gov/rest/autocomplete/compound/${encodeURIComponent(query.trim())}/json?limit=${limit}`;
+        const response = await fetch(url);
+        if (!response.ok) return [];
+        const data = await response.json();
+        return data?.dictionary_terms?.compound || [];
+    } catch (e) {
+        console.warn('Failed to fetch pubchem suggestions', e);
+        return [];
+    }
+};
+
+
 const PUBCHEM_BASE_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
 const PUBCHEM_VIEW_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound';
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { CartItem } from '../types';
+import { searchHistoryService } from '../services/searchHistoryService';
 
 interface WasteState {
     cart: CartItem[];
@@ -10,6 +11,7 @@ interface WasteState {
 
     // Search History State
     recentSearches: string[];
+    loadSearchHistory: () => Promise<void>;
     addSearchHistory: (query: string) => void;
     removeSearchHistory: (query: string) => void;
     clearSearchHistory: () => void;
@@ -32,21 +34,35 @@ export const useWasteStore = create<WasteState>()(
             clearCart: () => set({ cart: [] }),
 
             recentSearches: [],
-            addSearchHistory: (query) => set((state) => {
+            loadSearchHistory: async () => {
+                const history = await searchHistoryService.getRecentSearches(5);
+                set({ recentSearches: history });
+            },
+            addSearchHistory: (query) => {
                 const normalized = query.trim();
-                if (!normalized) return state; // Block empty strings
-                // Remove existing if present to move to top, limit to 5
-                const filtered = state.recentSearches.filter(q => q !== normalized);
-                return { recentSearches: [normalized, ...filtered].slice(0, 5) };
-            }),
-            removeSearchHistory: (query) => set((state) => ({
-                recentSearches: state.recentSearches.filter(q => q !== query)
-            })),
-            clearSearchHistory: () => set({ recentSearches: [] }),
+                if (!normalized) return;
+
+                set((state) => {
+                    const filtered = state.recentSearches.filter(q => q !== normalized);
+                    return { recentSearches: [normalized, ...filtered].slice(0, 5) };
+                });
+
+                searchHistoryService.addSearch(normalized).catch(console.error);
+            },
+            removeSearchHistory: (query) => {
+                set((state) => ({
+                    recentSearches: state.recentSearches.filter(q => q !== query)
+                }));
+                searchHistoryService.removeSearch(query).catch(console.error);
+            },
+            clearSearchHistory: () => {
+                set({ recentSearches: [] });
+                searchHistoryService.clearHistory().catch(console.error);
+            },
         }),
         {
             name: 'buril-waste-store',
-            partialize: (state) => ({ cart: state.cart, recentSearches: state.recentSearches }), // Persist cart and history
+            partialize: (state) => ({ cart: state.cart }), // Only persist cart locally
         }
     )
 )

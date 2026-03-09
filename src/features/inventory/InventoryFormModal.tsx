@@ -5,6 +5,7 @@ import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { auditService, type AuditLog } from '../../services/auditService';
 import { useFridgeStore } from '../../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
+import { supabase } from '../../services/supabaseClient';
 
 interface Props {
     isOpen: boolean;
@@ -125,7 +126,15 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
 
         try {
             if (initialData) {
-                await inventoryService.updateItem(initialData.id, formData, initialData._source || 'inventory');
+                const isStorageChanged = initialData.storage_type !== formData.storage_type
+                    || (formData.storage_type === 'cabinet' && (initialData.cabinet_id || '') !== (formData.cabinet_id || ''))
+                    || (formData.storage_type === 'other' && (initialData.storage_location_id || '') !== (formData.storage_location_id || ''));
+
+                if (isStorageChanged) {
+                    await moveItemStorage(initialData, formData);
+                } else {
+                    await inventoryService.updateItem(initialData.id, formData, initialData._source || 'inventory');
+                }
             } else {
                 const createdItem = await inventoryService.createItem(formData);
                 if (!createdItem) {
@@ -156,6 +165,225 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             setIsSaving(false);
         }
     };
+
+    async function moveItemStorage(sourceItem: InventoryItem, input: CreateInventoryInput): Promise<void> {
+        if (input.storage_type === 'cabinet') {
+            if (!input.cabinet_id) throw new Error('보관할 시약장을 선택해주세요.');
+
+            const geometry = await getSourceGeometry(sourceItem, input);
+            const targetStore = useFridgeStore.getState();
+            await targetStore.loadCabinet(input.cabinet_id);
+
+            const placed = targetStore.autoPlaceReagent({
+                id: '',
+                reagentId: sourceItem.id,
+                name: input.name.trim(),
+                width: geometry.width,
+                template: geometry.template,
+                isAcidic: false,
+                isBasic: false,
+                hCodes: [],
+                notes: input.memo || undefined,
+                casNo: input.cas_number || undefined,
+                capacity: input.capacity || undefined,
+                productNumber: input.product_number || undefined,
+                brand: input.brand || undefined,
+                expiryDate: input.expiry_date || undefined,
+            });
+            if (!placed) {
+                throw new Error('재고 이동 실패: 대상 시약장에 빈 공간이 없습니다.');
+            }
+
+            await persistLoadedCabinetStateStrict(input.cabinet_id);
+            cabinetService.logActivity(input.cabinet_id, 'add', input.name, undefined, input.memo || undefined)
+                .catch(console.error);
+
+            let createdInventoryId: string | null = null;
+            try {
+                if (sourceItem._source === 'inventory') {
+                    await inventoryService.updateItem(sourceItem.id, {
+                        ...input,
+                        storage_type: 'cabinet',
+                        cabinet_id: input.cabinet_id,
+                    }, 'inventory');
+                }
+
+                if (sourceItem.storage_type === 'cabinet' && sourceItem.cabinet_id && sourceItem.cabinet_id !== input.cabinet_id) {
+                    const removed = await removeSourceCabinetRow(sourceItem);
+                    if (!removed) throw new Error('원본 시약장에서 항목 제거에 실패했습니다.');
+                }
+            } catch (error) {
+                // Roll back target cabinet placement on downstream failures
+                await rollbackPlacementInCabinet(input.cabinet_id, placed.itemId);
+                if (createdInventoryId) {
+                    await supabase.from('inventory').delete().eq('id', createdInventoryId);
+                }
+                throw error;
+            }
+            return;
+        }
+
+        // Move to 'other' storage
+        if (!input.storage_location_id) throw new Error('기타 보관 장소를 선택해주세요.');
+
+        if (sourceItem._source === 'inventory') {
+            await inventoryService.updateItem(sourceItem.id, {
+                ...input,
+                storage_type: 'other',
+                storage_location_id: input.storage_location_id,
+            }, 'inventory');
+            if (sourceItem.storage_type === 'cabinet' && sourceItem.cabinet_id) {
+                const removed = await removeSourceCabinetRow(sourceItem);
+                if (!removed) {
+                    // Revert inventory row when cabinet sync fails
+                    await inventoryService.updateItem(sourceItem.id, {
+                        storage_type: 'cabinet',
+                        cabinet_id: sourceItem.cabinet_id,
+                    }, 'inventory');
+                    throw new Error('원본 시약장 동기화에 실패했습니다.');
+                }
+            }
+            return;
+        }
+
+        // cabinet_item -> other: create inventory row then remove source cabinet item
+        const created = await inventoryService.createItem({
+            ...input,
+            storage_type: 'other',
+            storage_location_id: input.storage_location_id,
+            quantity: 1,
+        });
+        if (!created) throw new Error('기타 위치 이동을 위한 재고 생성에 실패했습니다.');
+
+        const removed = await removeSourceCabinetRow(sourceItem);
+        if (!removed) {
+            await supabase.from('inventory').delete().eq('id', created.id);
+            throw new Error('원본 시약장 제거에 실패해 이동을 취소했습니다.');
+        }
+    }
+
+    async function getSourceGeometry(sourceItem: InventoryItem, input: CreateInventoryInput): Promise<{ template: ReagentTemplateType; width: number }> {
+        if (sourceItem.storage_type === 'cabinet' && sourceItem.cabinet_id) {
+            const store = useFridgeStore.getState();
+            await store.loadCabinet(sourceItem.cabinet_id);
+            const placement = store.shelves
+                .flatMap(shelf => shelf.items)
+                .find((placed) => placed.id === sourceItem.id
+                    || (placed.reagentId === sourceItem.id)
+                    || (
+                        normalizeText(placed.name) === normalizeText(sourceItem.name)
+                        && normalizeText(placed.brand) === normalizeText(sourceItem.brand)
+                        && normalizeText(placed.productNumber) === normalizeText(sourceItem.product_number)
+                        && normalizeText(placed.capacity) === normalizeText(sourceItem.capacity)
+                        && normalizeText(placed.casNo) === normalizeText(sourceItem.cas_number)
+                    ));
+            if (placement) {
+                return {
+                    template: placement.template as ReagentTemplateType,
+                    width: placement.width,
+                };
+            }
+        }
+        const template = guessTemplate((input.capacity || sourceItem.capacity || '').toString());
+        return { template, width: getWidthForTemplate(template) };
+    }
+
+    async function removeSourceCabinetRow(sourceItem: InventoryItem): Promise<boolean> {
+        if (sourceItem.storage_type !== 'cabinet' || !sourceItem.cabinet_id) return true;
+
+        const sourceCabinetId = sourceItem.cabinet_id;
+
+        if (sourceItem._source === 'cabinet_item') {
+            const { data, error } = await supabase
+                .from('cabinet_items')
+                .delete()
+                .eq('cabinet_id', sourceCabinetId)
+                .eq('id', sourceItem.id)
+                .select('id');
+            if (error) {
+                console.error('Failed to remove source cabinet_item row:', error);
+                return false;
+            }
+            if ((data || []).length > 0) {
+                cabinetService.logActivity(sourceCabinetId, 'remove', sourceItem.name, '모달 위치 이동', sourceItem.memo || undefined)
+                    .catch(console.error);
+                return true;
+            }
+        }
+
+        const store = useFridgeStore.getState();
+        await store.loadCabinet(sourceCabinetId);
+        const placement = store.shelves
+            .flatMap(shelf => shelf.items)
+            .find((placed) =>
+                placed.id === sourceItem.id
+                || (
+                    normalizeText(placed.name) === normalizeText(sourceItem.name)
+                    && normalizeText(placed.brand) === normalizeText(sourceItem.brand)
+                    && normalizeText(placed.productNumber) === normalizeText(sourceItem.product_number)
+                    && normalizeText(placed.capacity) === normalizeText(sourceItem.capacity)
+                    && normalizeText(placed.casNo) === normalizeText(sourceItem.cas_number)
+                )
+            );
+        if (!placement) return false;
+
+        store.removeReagent(placement.id);
+        await persistLoadedCabinetStateStrict(sourceCabinetId);
+        cabinetService.logActivity(sourceCabinetId, 'remove', sourceItem.name, '모달 위치 이동', sourceItem.memo || undefined)
+            .catch(console.error);
+        return true;
+    }
+
+    async function rollbackPlacementInCabinet(cabinetId: string, itemId: string): Promise<void> {
+        const store = useFridgeStore.getState();
+        await store.loadCabinet(cabinetId);
+        const rollbackTarget = store.shelves.flatMap(shelf => shelf.items).find(item => item.id === itemId);
+        if (!rollbackTarget) return;
+        store.removeReagent(itemId);
+        await persistLoadedCabinetStateStrict(cabinetId);
+    }
+
+    async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promise<void> {
+        const state = useFridgeStore.getState();
+        if (!state.cabinetId || state.cabinetId !== expectedCabinetId) {
+            throw new Error('시약장 상태가 동기화되지 않아 저장을 중단했습니다.');
+        }
+        await cabinetService.saveCabinetState(expectedCabinetId, state.shelves);
+        await cabinetService.updateCabinet(expectedCabinetId, {
+            width: state.cabinetWidth,
+            height: state.cabinetHeight,
+            depth: state.cabinetDepth,
+        });
+    }
+
+    function normalizeText(value?: string | null): string {
+        return (value || '').trim().toLowerCase();
+    }
+
+    const resolveLocationLabel = (storageType: 'cabinet' | 'other', cabinetId?: string | null, locationId?: string | null): string => {
+        if (storageType === 'cabinet') {
+            const cabinetName = cabinets.find(cab => cab.id === (cabinetId || ''))?.name;
+            return cabinetName ? `시약장 · ${cabinetName}` : '시약장 · 미지정';
+        }
+        const location = locations.find(loc => loc.id === (locationId || ''));
+        return location ? `기타 · ${location.icon} ${location.name}` : '기타 · 미지정';
+    };
+
+    const currentLocationLabel = initialData
+        ? resolveLocationLabel(initialData.storage_type, initialData.cabinet_id, initialData.storage_location_id)
+        : '신규 등록';
+    const targetLocationLabel = resolveLocationLabel(
+        formData.storage_type,
+        formData.cabinet_id,
+        formData.storage_location_id
+    );
+    const isLocationChanged = initialData
+        ? (
+            initialData.storage_type !== formData.storage_type
+            || (formData.storage_type === 'cabinet' && (initialData.cabinet_id || '') !== (formData.cabinet_id || ''))
+            || (formData.storage_type === 'other' && (initialData.storage_location_id || '') !== (formData.storage_location_id || ''))
+        )
+        : Boolean(formData.cabinet_id || formData.storage_location_id);
 
     if (!isOpen && !successToastMessage) return null;
 
@@ -274,16 +502,16 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                     <label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">보관 위치 설정</label>
 
                                     <div className="flex gap-2">
-                                        <button type="button" disabled={isEditingCabinetItem} onClick={() => setFormData(prev => ({ ...prev, storage_type: 'cabinet' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'cabinet' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'} ${isEditingCabinetItem ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, storage_type: 'cabinet' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'cabinet' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
                                             시약장에 보관
                                         </button>
-                                        <button type="button" disabled={isEditingCabinetItem} onClick={() => setFormData(prev => ({ ...prev, storage_type: 'other' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'other' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'} ${isEditingCabinetItem ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, storage_type: 'other' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'other' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
                                             기타 위치에 보관
                                         </button>
                                     </div>
                                     {isEditingCabinetItem && (
                                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                            시약장 항목의 위치 이동은 시약장 화면에서 Drag & Drop으로 변경해주세요.
+                                            시약장 항목도 이 모달에서 위치 이동할 수 있습니다. 대상 시약장 공간이 부족하면 이동이 실패합니다.
                                         </p>
                                     )}
 
@@ -292,7 +520,6 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                             name="cabinet_id"
                                             value={formData.cabinet_id}
                                             onChange={handleChange}
-                                            disabled={isEditingCabinetItem}
                                             className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-slate-100"
                                         >
                                             <option value="">-- 시약장 선택 --</option>
@@ -315,6 +542,21 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                             ))}
                                         </select>
                                     )}
+
+                                    {/* 현재 위치 -> 변경 위치 미리보기 */}
+                                    <div className={`rounded-lg border px-3 py-2 text-xs ${isLocationChanged
+                                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
+                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
+                                        }`}>
+                                        <span className="font-semibold">현재 위치</span>
+                                        <span className="mx-1">→</span>
+                                        <span className="font-semibold">변경 위치</span>
+                                        <div className="mt-1 leading-relaxed">
+                                            {currentLocationLabel}
+                                            <span className="mx-1.5">→</span>
+                                            {targetLocationLabel}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="flex flex-col gap-1.5 mt-2">
