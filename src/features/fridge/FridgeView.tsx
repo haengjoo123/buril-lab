@@ -10,6 +10,8 @@ import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiR
 import { cabinetService } from '../../services/cabinetService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
 import { supabase } from '../../services/supabaseClient';
+import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
+import { useOnboardingStore } from '../../store/useOnboardingStore';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 
@@ -20,6 +22,8 @@ export interface FridgeViewProps {
 
 export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => {
     const { t } = useTranslation();
+    const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
+    const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const [verticalPanelPos, setVerticalPanelPos] = useState(50);
     const [isEditPanelVisible, setIsEditPanelVisible] = useState(true);
     const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(true);
@@ -449,6 +453,24 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     </div>
                 )}
                 <FridgeScene />
+
+                {showOnboardingGuide && (
+                    <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+                        <div className="pointer-events-auto w-full max-w-md">
+                            <OnboardingGuideCard
+                                icon={<Box className="h-5 w-5" />}
+                                title={t('onboarding_cabinet_detail_title')}
+                                description={t('onboarding_cabinet_detail_desc')}
+                                points={[
+                                    t('onboarding_cabinet_detail_point_1'),
+                                    t('onboarding_cabinet_detail_point_2'),
+                                    t('onboarding_cabinet_detail_point_3'),
+                                ]}
+                                onDismiss={() => markGuideSeen('cabinetDetail')}
+                            />
+                        </div>
+                    </div>
+                )}
 
                 {/* Mode Switcher - Floating Pill */}
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">

@@ -10,8 +10,10 @@ import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { supabase } from '../../services/supabaseClient';
+import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 
 import { useLabStore } from '../../store/useLabStore';
+import { useOnboardingStore } from '../../store/useOnboardingStore';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type ReagentTemplateType = 'A' | 'B' | 'C' | 'D';
@@ -48,6 +50,8 @@ async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promi
 
 export const InventoryListView: React.FC = () => {
     const { t } = useTranslation();
+    const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.inventory);
+    const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const { currentLabId } = useLabStore();
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [locations, setLocations] = useState<StorageLocation[]>([]);
@@ -834,6 +838,22 @@ export const InventoryListView: React.FC = () => {
                         {t('inventory_csv_manage_button')}
                     </button>
                 </div>
+
+                {showOnboardingGuide && (
+                    <div className="mt-4">
+                        <OnboardingGuideCard
+                            icon={<Package className="h-5 w-5" />}
+                            title={t('onboarding_inventory_title')}
+                            description={t('onboarding_inventory_desc')}
+                            points={[
+                                t('onboarding_inventory_point_1'),
+                                t('onboarding_inventory_point_2'),
+                                t('onboarding_inventory_point_3'),
+                            ]}
+                            onDismiss={() => markGuideSeen('inventory')}
+                        />
+                    </div>
+                )}
 
                 {/* Search Bar */}
                 <div className="mt-4 relative">

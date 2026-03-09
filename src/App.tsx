@@ -1,4 +1,4 @@
-import { useEffect, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useCallback, lazy, Suspense, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { MainLayout } from './components/MainLayout';
 import { SearchTabView } from './components/SearchTabView';
@@ -21,8 +21,10 @@ import { useAppUiState } from './hooks/useAppUiState';
 import { useSearchFlow } from './hooks/useSearchFlow';
 import { useLabStore } from './store/useLabStore';
 import { useFridgeStore } from './store/fridgeStore';
+import { useOnboardingStore } from './store/useOnboardingStore';
 import { useTranslation } from 'react-i18next';
 import { Loader2, ShoppingBag } from 'lucide-react';
+import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
 
 function App() {
   const { t } = useTranslation();
@@ -35,10 +37,16 @@ function App() {
 
   const cart = useWasteStore((state) => state.cart);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
+  const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
   const currentLabId = useLabStore((state) => state.currentLabId);
   const myLabs = useLabStore((state) => state.myLabs);
   const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
   const isAdmin = currentRole === 'admin';
+  const isWelcomeOpen = useOnboardingStore((state) => state.isWelcomeOpen);
+  const hasCompletedWelcome = useOnboardingStore((state) => state.hasCompletedWelcome);
+  const hasSkippedOnboarding = useOnboardingStore((state) => state.hasSkippedOnboarding);
+  const syncVersion = useOnboardingStore((state) => state.syncVersion);
+  const openWelcome = useOnboardingStore((state) => state.openWelcome);
 
   const {
     query,
@@ -95,6 +103,27 @@ function App() {
       loadSearchHistory();
     }
   }, [session, loadSearchHistory]);
+
+  useEffect(() => {
+    syncVersion();
+  }, [syncVersion]);
+
+  useEffect(() => {
+    const handleSafetyAcknowledged = () => setIsSafetyAcknowledged(true);
+    window.addEventListener('buril:safety-acknowledged', handleSafetyAcknowledged);
+
+    return () => {
+      window.removeEventListener('buril:safety-acknowledged', handleSafetyAcknowledged);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session || !isSafetyAcknowledged || isWelcomeOpen || hasCompletedWelcome || hasSkippedOnboarding) {
+      return;
+    }
+
+    openWelcome();
+  }, [session, isSafetyAcknowledged, isWelcomeOpen, hasCompletedWelcome, hasSkippedOnboarding, openWelcome]);
   const handleNavigateToCabinet = useCallback((cabinetId: string, itemId: string) => {
     // Switch to cabinet tab and load the cabinet
     navigate(`/cabinet?id=${cabinetId}`);
@@ -145,6 +174,8 @@ function App() {
   return (
     <>
       <SafetyDisclaimer />
+
+      {isWelcomeOpen && <OnboardingWelcomeModal />}
 
       {isScanning && (
         <Suspense fallback={

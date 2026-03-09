@@ -4,6 +4,7 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import { searchChemical } from '../services/searchService';
 import { fetchPubchemSuggestions } from '../services/pubchemApi';
+import { fetchKoshaSuggestions } from '../services/koshaApi';
 import { cabinetService, type CabinetSearchResult } from '../services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from '../services/mediaProductService';
 import { analyzeChemical } from '../utils/chemicalAnalyzer';
@@ -185,8 +186,11 @@ export function useSearchFlow({
     const timer = setTimeout(async () => {
       setIsSuggestionsLoading(true);
       try {
-        // Fetch lightweight autocomplete suggestions
-        const newSuggestions = await fetchPubchemSuggestions(query);
+        // 한글 입력은 KOSHA, 그 외는 PubChem을 사용해 자동완성 품질을 맞춘다.
+        const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(query);
+        const newSuggestions = hasKorean
+          ? await fetchKoshaSuggestions(query)
+          : await fetchPubchemSuggestions(query);
         setSuggestions(newSuggestions);
       } catch (err) {
         setSuggestions([]);

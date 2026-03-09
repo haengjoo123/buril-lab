@@ -140,6 +140,59 @@ export const resolveKoreanChemical = async (keyword: string): Promise<{ casNo: s
 };
 
 /**
+ * 한글 화학물질명을 자동완성하기 위해 KOSHA chemlist를 조회한다.
+ * 일반 검색 API를 재사용하므로 prefix/부분일치 결과를 그대로 노출한다.
+ */
+export const fetchKoshaSuggestions = async (keyword: string, limit: number = 5): Promise<string[]> => {
+    const trimmedKeyword = keyword.trim();
+
+    if (trimmedKeyword.length < 2) {
+        return [];
+    }
+
+    try {
+        const searchRes = await axios.get(`${BASE_URL}/chemlist`, {
+            params: {
+                searchWrd: trimmedKeyword,
+                searchCnd: 0, // 0 = Korean Name
+                numOfRows: Math.max(limit * 2, 10),
+                pageNo: 1,
+                serviceKey: SERVICE_KEY
+            }
+        });
+
+        const searchObj = parser.parse(searchRes.data);
+        const items = searchObj?.response?.body?.items?.item;
+
+        if (!items) {
+            return [];
+        }
+
+        const list: KoshaSearchItem[] = Array.isArray(items) ? items : [items];
+        const uniqueSuggestions = new Set<string>();
+
+        for (const item of list) {
+            const candidate = item.chemNameKor?.trim();
+
+            if (!candidate) {
+                continue;
+            }
+
+            uniqueSuggestions.add(candidate);
+
+            if (uniqueSuggestions.size >= limit) {
+                break;
+            }
+        }
+
+        return Array.from(uniqueSuggestions);
+    } catch (error) {
+        console.warn('[KOSHA] Failed to fetch suggestions:', error);
+        return [];
+    }
+};
+
+/**
  * Resolves a CAS No to KOSHA chemId
  */
 export const resolveCasChemical = async (casNo: string): Promise<{ chemId: number; nameKo?: string } | null> => {

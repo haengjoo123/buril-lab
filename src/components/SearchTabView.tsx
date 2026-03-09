@@ -4,9 +4,11 @@ import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box } fro
 import { ResultCard } from './ResultCard';
 import { MediaProductCard } from './MediaProductCard';
 import { MediaProductFilter } from './MediaProductFilter';
+import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
 import type { AnalysisResult } from '../types';
 import type { CabinetSearchResult } from '../services/cabinetService';
 import type { MediaProduct, SortOption } from '../services/mediaProductService';
+import { useOnboardingStore } from '../store/useOnboardingStore';
 
 interface SearchTabViewProps {
   cartCount: number;
@@ -74,9 +76,25 @@ export function SearchTabView({
   onClearSuggestions,
 }: SearchTabViewProps) {
   const { t } = useTranslation();
+  const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
+  const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
 
   return (
     <div className="p-5 flex flex-col gap-6" style={{ paddingBottom: cartCount > 0 ? '100px' : undefined }}>
+      {showOnboardingGuide && (
+        <OnboardingGuideCard
+          icon={<Search className="h-5 w-5" />}
+          title={t('onboarding_search_title')}
+          description={t('onboarding_search_desc')}
+          points={[
+            t('onboarding_search_point_1'),
+            t('onboarding_search_point_2'),
+            t('onboarding_search_point_3'),
+          ]}
+          onDismiss={() => markGuideSeen('search')}
+        />
+      )}
+
       {!result && (
         <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight">

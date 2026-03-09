@@ -19,6 +19,7 @@ export const SafetyDisclaimer: React.FC = () => {
         setIsClosing(true);
         setTimeout(() => {
             localStorage.setItem('buril-safety-acknowledged', 'true');
+            window.dispatchEvent(new Event('buril:safety-acknowledged'));
             setIsOpen(false);
         }, 300); // Wait for animation
     };

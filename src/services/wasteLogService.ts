@@ -61,6 +61,8 @@ export interface FetchWasteLogsParams {
     search?: string;
     sortBy?: WasteLogSortBy;
     sortOrder?: 'asc' | 'desc';
+    createdAfter?: string;
+    createdBefore?: string;
 }
 
 /**
@@ -75,6 +77,8 @@ export async function fetchWasteLogs(
     const search = params?.search?.trim();
     const sortBy = params?.sortBy ?? 'created_at';
     const sortOrder = params?.sortOrder ?? 'desc';
+    const createdAfter = params?.createdAfter;
+    const createdBefore = params?.createdBefore;
 
     let query = supabase
         .from('waste_logs')
@@ -94,6 +98,14 @@ export async function fetchWasteLogs(
         query = query.or(
             `disposal_category.ilike.${pattern},handler_name.ilike.${pattern},memo.ilike.${pattern}`
         );
+    }
+
+    if (createdAfter) {
+        query = query.gte('created_at', createdAfter);
+    }
+
+    if (createdBefore) {
+        query = query.lte('created_at', createdBefore);
     }
 
     const { data, error, count } = await query

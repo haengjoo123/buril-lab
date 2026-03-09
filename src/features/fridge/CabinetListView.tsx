@@ -13,6 +13,8 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
 import { supabase } from '../../services/supabaseClient';
+import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
+import { useOnboardingStore } from '../../store/useOnboardingStore';
 
 interface CabinetListViewProps {
     onSelectCabinet: (cabinetId: string) => void;
@@ -20,6 +22,8 @@ interface CabinetListViewProps {
 
 export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     const { t } = useTranslation();
+    const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetList);
+    const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
@@ -266,6 +270,20 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{t('cabinet_list_desc')}</p>
                     </div>
                 </header>
+
+                {showOnboardingGuide && (
+                    <OnboardingGuideCard
+                        icon={<Beaker className="h-5 w-5" />}
+                        title={t('onboarding_cabinet_list_title')}
+                        description={t('onboarding_cabinet_list_desc')}
+                        points={[
+                            t('onboarding_cabinet_list_point_1'),
+                            t('onboarding_cabinet_list_point_2'),
+                            t('onboarding_cabinet_list_point_3'),
+                        ]}
+                        onDismiss={() => markGuideSeen('cabinetList')}
+                    />
+                )}
 
                 {error && (
                     <div className="p-4 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">

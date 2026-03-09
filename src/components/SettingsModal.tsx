@@ -4,6 +4,7 @@ import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from './CustomDialog';
 import { supabase } from '../services/supabaseClient';
+import { useOnboardingStore } from '../store/useOnboardingStore';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -13,6 +14,7 @@ type FeedbackType = 'bug' | 'improvement' | 'general';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const clearCart = useWasteStore((state) => state.clearCart);
+    const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
     const { t, i18n } = useTranslation();
 
     const [dialogConfig, setDialogConfig] = React.useState<{
@@ -81,6 +83,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 });
             }
         });
+    };
+
+    const handleReplayOnboarding = () => {
+        resetOnboarding();
+        onClose();
     };
 
     const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -310,6 +317,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         >
                             <span className="font-medium">{t('settings_view_guide')}</span>
                             <ShieldCheck className="w-5 h-5" />
+                        </button>
+
+                        <button
+                            onClick={handleReplayOnboarding}
+                            className="w-full flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl transition-colors text-left"
+                        >
+                            <span className="font-medium">{t('settings_replay_onboarding')}</span>
+                            <Lightbulb className="w-5 h-5" />
                         </button>
                     </div>
                 )}
