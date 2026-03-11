@@ -4,7 +4,6 @@ import { XMLParser } from 'fast-xml-parser';
 
 
 const BASE_URL = '/api/kosha';
-const SERVICE_KEY = import.meta.env.VITE_KOSHA_API_KEY;
 
 // KOSHA API Types (Internal)
 import type { MsdsSection } from '../types';
@@ -37,7 +36,6 @@ export const fetchKoshaPH = async (chemId: number | string): Promise<number | un
         const res = await axios.get(`${BASE_URL}/chemdetail09`, {
             params: {
                 chemId: paddedId,
-                serviceKey: SERVICE_KEY
             }
         });
 
@@ -102,7 +100,6 @@ export const resolveKoreanChemical = async (keyword: string): Promise<{ casNo: s
             params: {
                 searchWrd: keyword,
                 searchCnd: 0, // 0 = Korean Name
-                serviceKey: SERVICE_KEY
             }
         });
 
@@ -157,7 +154,6 @@ export const fetchKoshaSuggestions = async (keyword: string, limit: number = 5):
                 searchCnd: 0, // 0 = Korean Name
                 numOfRows: Math.max(limit * 2, 10),
                 pageNo: 1,
-                serviceKey: SERVICE_KEY
             }
         });
 
@@ -204,7 +200,6 @@ export const resolveCasChemical = async (casNo: string): Promise<{ chemId: numbe
             params: {
                 searchWrd: casNo,
                 searchCnd: 1, // 1 = CAS No (Confirmed by doc)
-                serviceKey: SERVICE_KEY
             }
         });
 
@@ -266,7 +261,6 @@ export const fetchKoshaMsds = async (chemId: number): Promise<MsdsSection[]> => 
         return axios.get(`${BASE_URL}/chemdetail${detailNum}`, {
             params: {
                 chemId: paddedId,
-                serviceKey: SERVICE_KEY
             }
         }).then(res => ({ idx: i, data: res.data })).catch(e => ({ idx: i, error: e }));
     });
