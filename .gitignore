@@ -12,8 +12,11 @@ dist
 .venv
 .env
 .env.e2e
+.env.android
 dist-ssr
 *.local
+*.jks
+*.keystore
 
 # Editor directories and files
 .vscode/*
@@ -31,3 +34,13 @@ dist-ssr
 /playwright-report/
 /blob-report/
 /playwright/.auth/
+
+# Android
+/android/.gradle/
+/android/local.properties
+/android/app/release/
+/android/app/build/
+/keystore.properties
+
+# Android tooling
+.tooling/

@@ -22,7 +22,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['vite.svg', 'pwa-icon.svg'],
+      includeAssets: ['vite.svg', 'pwa-icon.svg', 'pwa-192.png', 'pwa-512.png', 'pwa-maskable-512.png'],
       manifest: {
         name: 'Buril-Lab — 랩실 폐시약 안전 관리',
         short_name: 'Buril-Lab',
@@ -36,16 +36,22 @@ export default defineConfig({
         categories: ['education', 'utilities'],
         icons: [
           {
-            src: 'pwa-icon.svg',
+            src: 'pwa-192.png',
             sizes: '192x192',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-icon.svg',
+            src: 'pwa-512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: 'pwa-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       },

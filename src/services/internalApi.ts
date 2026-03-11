@@ -1,3 +1,5 @@
+import { getInternalApiUrl } from './apiUrl'
+
 interface ApiErrorPayload {
   error?: string
 }
@@ -7,7 +9,7 @@ interface ApiErrorPayload {
  * 서버가 돌려준 명시적 에러 메시지가 있으면 그대로 사용합니다.
  */
 export async function postJson<TResponse>(url: string, body: unknown): Promise<TResponse> {
-  const response = await fetch(url, {
+  const response = await fetch(getInternalApiUrl(url), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

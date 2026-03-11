@@ -1,11 +1,16 @@
 {
-  "name": "temp_app",
+  "name": "buril-lab",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "assets:generate": "node scripts/generate-app-assets.mjs",
     "build": "tsc -b && vite build",
+    "build:android": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:sync": "npx cap sync android",
+    "android:run": "npm run build:android && npx cap run android",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
@@ -14,6 +19,9 @@
     "test:e2e": "npx playwright test"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
     "@google/genai": "^1.42.0",
     "@react-spring/three": "^10.0.3",
     "@react-spring/web": "^10.0.3",
@@ -58,6 +66,7 @@
     "globals": "^16.5.0",
     "jsdom": "^28.1.0",
     "postcss": "^8.5.6",
+    "sharp": "^0.34.4",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",

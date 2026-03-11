@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
+import { getInternalApiUrl } from './apiUrl';
 
 
-const BASE_URL = '/api/kosha';
+const BASE_URL = getInternalApiUrl('/api/kosha');
 
 // KOSHA API Types (Internal)
 import type { MsdsSection } from '../types';
