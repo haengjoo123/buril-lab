@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Search, Archive, Package, MapPin, Loader2, AlertTriangle, Clock } from 'lucide-react';
+import { Plus, Search, Archive, Package, MapPin, Loader2, AlertTriangle, Clock, ArrowUpDown } from 'lucide-react';
 import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { InventoryFormModal } from './InventoryFormModal';
@@ -17,6 +17,7 @@ import { useOnboardingStore } from '../../store/useOnboardingStore';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type ReagentTemplateType = 'A' | 'B' | 'C' | 'D';
+type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'created_at_desc' | 'created_at_asc';
 
 const CONTAINER_BASE_WIDTHS: Record<ReagentTemplateType, number> = { A: 8, B: 6, C: 12, D: 14 };
 
@@ -33,6 +34,49 @@ function guessTemplate(capacity: string): ReagentTemplateType {
     if (num >= 500) return 'C';
     if (num >= 100) return 'A';
     return 'B';
+}
+
+function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: InventorySortOption): number {
+    if (sortBy === 'expiry_asc') {
+        const expiryA = getExpiryStatus(a.expiry_date);
+        const expiryB = getExpiryStatus(b.expiry_date);
+        const daysLeftA = expiryA ? expiryA.daysLeft : Number.POSITIVE_INFINITY;
+        const daysLeftB = expiryB ? expiryB.daysLeft : Number.POSITIVE_INFINITY;
+        if (daysLeftA !== daysLeftB) return daysLeftA - daysLeftB;
+        return a.name.localeCompare(b.name, 'ko');
+    }
+
+    if (sortBy === 'location_asc') {
+        const typeRankA = a.storage_type === 'cabinet' ? 0 : 1;
+        const typeRankB = b.storage_type === 'cabinet' ? 0 : 1;
+        if (typeRankA !== typeRankB) return typeRankA - typeRankB;
+
+        const locationNameA = a.storage_type === 'cabinet'
+            ? (a.cabinet_name || '')
+            : (a.storage_location_name || '');
+        const locationNameB = b.storage_type === 'cabinet'
+            ? (b.cabinet_name || '')
+            : (b.storage_location_name || '');
+        const locationCompare = locationNameA.localeCompare(locationNameB, 'ko');
+        if (locationCompare !== 0) return locationCompare;
+
+        const shelfLevelA = typeof a.shelf_level === 'number' ? a.shelf_level : Number.POSITIVE_INFINITY;
+        const shelfLevelB = typeof b.shelf_level === 'number' ? b.shelf_level : Number.POSITIVE_INFINITY;
+        if (shelfLevelA !== shelfLevelB) return shelfLevelA - shelfLevelB;
+
+        return a.name.localeCompare(b.name, 'ko');
+    }
+
+    if (sortBy === 'name_asc') {
+        return a.name.localeCompare(b.name, 'ko');
+    }
+
+    const createdAtDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (createdAtDiff !== 0) {
+        return sortBy === 'created_at_asc' ? createdAtDiff : -createdAtDiff;
+    }
+
+    return a.name.localeCompare(b.name, 'ko');
 }
 
 async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promise<void> {
@@ -58,6 +102,7 @@ export const InventoryListView: React.FC = () => {
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<InventorySortOption>('expiry_asc');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
@@ -175,12 +220,22 @@ export const InventoryListView: React.FC = () => {
         }
     }, [cabinets, bulkMoveCabinetId]);
 
-    const filteredItems = items.filter(item =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.brand && item.brand.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (item.product_number && item.product_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (item.cas_number && item.cas_number.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    const filteredItems = useMemo(() => {
+        const normalizedQuery = searchQuery.trim().toLowerCase();
+        if (!normalizedQuery) return items;
+
+        return items.filter(item =>
+            item.name.toLowerCase().includes(normalizedQuery) ||
+            (item.brand && item.brand.toLowerCase().includes(normalizedQuery)) ||
+            (item.product_number && item.product_number.toLowerCase().includes(normalizedQuery)) ||
+            (item.cas_number && item.cas_number.toLowerCase().includes(normalizedQuery))
+        );
+    }, [items, searchQuery]);
+
+    // 만료/위치 우선으로 빠르게 확인할 수 있게 화면 전용 정렬 목록을 만든다.
+    const visibleItems = useMemo(() => {
+        return [...filteredItems].sort((a, b) => compareInventoryItems(a, b, sortBy));
+    }, [filteredItems, sortBy]);
 
     // Compute expiry summary
     const expirySummary = useMemo(() => {
@@ -219,9 +274,9 @@ export const InventoryListView: React.FC = () => {
     };
 
     const selectedFilteredCount = useMemo(() => {
-        const filteredIdSet = new Set(filteredItems.map(item => item.id));
+        const filteredIdSet = new Set(visibleItems.map(item => item.id));
         return selectedItemIds.filter(id => filteredIdSet.has(id)).length;
-    }, [filteredItems, selectedItemIds]);
+    }, [visibleItems, selectedItemIds]);
 
     const toggleSelectMode = () => {
         if (isSelectMode) {
@@ -265,8 +320,8 @@ export const InventoryListView: React.FC = () => {
     };
 
     const handleSelectAllFiltered = () => {
-        if (filteredItems.length === 0) return;
-        const filteredIds = filteredItems.map(item => item.id);
+        if (visibleItems.length === 0) return;
+        const filteredIds = visibleItems.map(item => item.id);
         const isAllSelected = filteredIds.every(id => selectedItemIds.includes(id));
         if (isAllSelected) {
             setSelectedItemIds(prev => prev.filter(id => !filteredIds.includes(id)));
@@ -866,6 +921,23 @@ export const InventoryListView: React.FC = () => {
                         className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-slate-50 dark:bg-slate-700/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-shadow"
                     />
                 </div>
+                <div className="mt-3 flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <ArrowUpDown className="w-3.5 h-3.5" />
+                        {t('sort_by')}
+                    </label>
+                    <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as InventorySortOption)}
+                        className="min-w-0 flex-1 px-3 py-2 rounded-xl text-sm border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                        <option value="expiry_asc">{t('inventory_sort_expiry_asc')}</option>
+                        <option value="location_asc">{t('inventory_sort_location_asc')}</option>
+                        <option value="name_asc">{t('inventory_sort_name_asc')}</option>
+                        <option value="created_at_desc">{t('inventory_sort_created_desc')}</option>
+                        <option value="created_at_asc">{t('inventory_sort_created_asc')}</option>
+                    </select>
+                </div>
                 {isSelectMode ? (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
@@ -878,7 +950,7 @@ export const InventoryListView: React.FC = () => {
                             onClick={handleSelectAllFiltered}
                             className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200"
                         >
-                            {selectedFilteredCount === filteredItems.length && filteredItems.length > 0
+                            {selectedFilteredCount === visibleItems.length && visibleItems.length > 0
                                 ? t('inventory_unselect_all_filtered')
                                 : t('inventory_select_all_filtered')}
                         </button>
@@ -1013,8 +1085,8 @@ export const InventoryListView: React.FC = () => {
                     <div className="flex items-center justify-center py-20">
                         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
                     </div>
-                ) : filteredItems.length > 0 ? (
-                    filteredItems.map(item => {
+                ) : visibleItems.length > 0 ? (
+                    visibleItems.map(item => {
                         const expiryStatus = getExpiryStatus(item.expiry_date);
                         const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
 
