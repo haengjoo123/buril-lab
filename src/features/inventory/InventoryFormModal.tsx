@@ -6,6 +6,7 @@ import { auditService, type AuditLog } from '../../services/auditService';
 import { useFridgeStore } from '../../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
 import { supabase } from '../../services/supabaseClient';
+import { AppSelect } from '../../components/AppSelect';
 
 interface Props {
     isOpen: boolean;
@@ -91,7 +92,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
     }, []);
 
     // Handle form changes
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
 
         if (name === 'quantity') {
@@ -377,6 +378,14 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         formData.cabinet_id,
         formData.storage_location_id
     );
+    const cabinetOptions = cabinets.map((cab) => ({
+        value: cab.id,
+        label: cab.name,
+    }));
+    const locationOptions = locations.map((loc) => ({
+        value: loc.id,
+        label: `${loc.icon} ${loc.name}`,
+    }));
     const isLocationChanged = initialData
         ? (
             initialData.storage_type !== formData.storage_type
@@ -516,31 +525,23 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                     )}
 
                                     {formData.storage_type === 'cabinet' && (
-                                        <select
-                                            name="cabinet_id"
-                                            value={formData.cabinet_id}
-                                            onChange={handleChange}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-slate-100"
-                                        >
-                                            <option value="">-- 시약장 선택 --</option>
-                                            {cabinets.map(cab => (
-                                                <option key={cab.id} value={cab.id}>{cab.name}</option>
-                                            ))}
-                                        </select>
+                                        <AppSelect
+                                            value={formData.cabinet_id || ''}
+                                            onChange={(value) => setFormData((prev) => ({ ...prev, cabinet_id: value }))}
+                                            options={cabinetOptions}
+                                            placeholder="-- 시약장 선택 --"
+                                            buttonClassName="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                                        />
                                     )}
 
                                     {formData.storage_type === 'other' && (
-                                        <select
-                                            name="storage_location_id"
-                                            value={formData.storage_location_id}
-                                            onChange={handleChange}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-slate-100"
-                                        >
-                                            <option value="">-- 보관 장소 선택 --</option>
-                                            {locations.map(loc => (
-                                                <option key={loc.id} value={loc.id}>{loc.icon} {loc.name}</option>
-                                            ))}
-                                        </select>
+                                        <AppSelect
+                                            value={formData.storage_location_id || ''}
+                                            onChange={(value) => setFormData((prev) => ({ ...prev, storage_location_id: value }))}
+                                            options={locationOptions}
+                                            placeholder="-- 보관 장소 선택 --"
+                                            buttonClassName="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                                        />
                                     )}
 
                                     {/* 현재 위치 -> 변경 위치 미리보기 */}

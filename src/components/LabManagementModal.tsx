@@ -5,6 +5,7 @@ import { X, Search, Plus, Check, Loader2, AlertCircle, Users, Settings } from 'l
 import { labService } from '../services/labService';
 import { useLabStore } from '../store/useLabStore';
 import type { Lab } from '../store/useLabStore';
+import { AppSelect } from './AppSelect';
 
 interface LabManagementModalProps {
     onClose: () => void;
@@ -462,16 +463,19 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                                             {currentRole === 'admin' && member.role !== 'admin' && ( // Admins can't demote themselves easily here to avoid 0 admins scenario
                                                 <div className="flex gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                                                    <select
+                                                    <AppSelect
                                                         value={member.role}
-                                                        onChange={(e) => handleRoleChange(member.user_id, e.target.value)}
+                                                        onChange={(value) => handleRoleChange(member.user_id, value)}
                                                         disabled={isLoading}
-                                                        className="text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 flex-1 text-slate-700 dark:text-slate-300"
-                                                    >
-                                                        <option value="researcher">연구원 (Researcher)</option>
-                                                        <option value="student">학생 (Student)</option>
-                                                        <option value="admin">관리자 승급 (Admin)</option>
-                                                    </select>
+                                                        size="sm"
+                                                        className="flex-1"
+                                                        options={[
+                                                            { value: 'researcher', label: '연구원 (Researcher)' },
+                                                            { value: 'student', label: '학생 (Student)' },
+                                                            { value: 'admin', label: '관리자 승급 (Admin)' },
+                                                        ]}
+                                                        buttonClassName="flex-1 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"
+                                                    />
                                                     <button
                                                         onClick={() => handleRemoveMember(member.user_id)}
                                                         disabled={isLoading}

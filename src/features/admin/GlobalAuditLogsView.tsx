@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ShieldAlert, Loader2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { EmptyState } from '../../components/EmptyState';
+import { AppSelect } from '../../components/AppSelect';
 
 type ActionFilter = 'all' | 'create' | 'update' | 'delete';
 type PeriodFilter = 'all' | 'today' | '7d';
@@ -168,6 +169,27 @@ export const GlobalAuditLogsView: React.FC = () => {
         return Array.from(new Set(logs.map(log => log.entity_type))).sort();
     }, [logs]);
 
+    const actionFilterOptions = useMemo(() => ([
+        { value: 'all', label: t('audit_filter_all_actions') },
+        { value: 'create', label: t('audit_filter_create') },
+        { value: 'update', label: t('audit_filter_update') },
+        { value: 'delete', label: t('audit_filter_delete') },
+    ]), [t]);
+
+    const entityFilterOptions = useMemo(() => ([
+        { value: 'all', label: t('audit_filter_all_entities') },
+        ...entityOptions.map((entity) => ({
+            value: entity,
+            label: formatEntityName(entity, t),
+        })),
+    ]), [entityOptions, t]);
+
+    const periodFilterOptions = useMemo(() => ([
+        { value: 'all', label: t('audit_filter_all_period') },
+        { value: 'today', label: t('audit_filter_today') },
+        { value: '7d', label: t('audit_filter_7d') },
+    ]), [t]);
+
     const toggleExpand = (logId: string) => {
         setExpandedLogIds(prev => ({ ...prev, [logId]: !prev[logId] }));
     };
@@ -226,35 +248,24 @@ export const GlobalAuditLogsView: React.FC = () => {
 
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 flex flex-col gap-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <select
+                    <AppSelect
                         value={actionFilter}
-                        onChange={(e) => setActionFilter(e.target.value as ActionFilter)}
-                        className="px-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                    >
-                        <option value="all">{t('audit_filter_all_actions')}</option>
-                        <option value="create">{t('audit_filter_create')}</option>
-                        <option value="update">{t('audit_filter_update')}</option>
-                        <option value="delete">{t('audit_filter_delete')}</option>
-                    </select>
-                    <select
+                        onChange={(value) => setActionFilter(value as ActionFilter)}
+                        options={actionFilterOptions}
+                        buttonClassName="bg-white dark:bg-slate-900"
+                    />
+                    <AppSelect
                         value={entityFilter}
-                        onChange={(e) => setEntityFilter(e.target.value)}
-                        className="px-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                    >
-                        <option value="all">{t('audit_filter_all_entities')}</option>
-                        {entityOptions.map(entity => (
-                            <option key={entity} value={entity}>{formatEntityName(entity, t)}</option>
-                        ))}
-                    </select>
-                    <select
+                        onChange={setEntityFilter}
+                        options={entityFilterOptions}
+                        buttonClassName="bg-white dark:bg-slate-900"
+                    />
+                    <AppSelect
                         value={periodFilter}
-                        onChange={(e) => setPeriodFilter(e.target.value as PeriodFilter)}
-                        className="px-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                    >
-                        <option value="all">{t('audit_filter_all_period')}</option>
-                        <option value="today">{t('audit_filter_today')}</option>
-                        <option value="7d">{t('audit_filter_7d')}</option>
-                    </select>
+                        onChange={(value) => setPeriodFilter(value as PeriodFilter)}
+                        options={periodFilterOptions}
+                        buttonClassName="bg-white dark:bg-slate-900"
+                    />
                     <input
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}

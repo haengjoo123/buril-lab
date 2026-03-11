@@ -6,6 +6,7 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import { supabase } from '../../services/supabaseClient';
 import { useTranslation } from 'react-i18next';
 import * as XLSX from 'xlsx';
+import { AppSelect } from '../../components/AppSelect';
 
 interface InventoryCsvImportModalProps {
     isOpen: boolean;
@@ -605,16 +606,16 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                                         <span className="text-xs font-bold text-slate-700 dark:text-slate-100">
                                             {key} <span className="text-rose-500">*</span>
                                         </span>
-                                        <select
+                                        <AppSelect
                                             value={mapping[key] || ''}
-                                            onChange={(e) => setMapping((prev) => ({ ...prev, [key]: e.target.value }))}
-                                            className="px-2 py-1.5 rounded-md text-xs border border-rose-200 dark:border-rose-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold"
-                                        >
-                                            <option value="">(none)</option>
-                                            {rawCsvData.headers.map((header) => (
-                                                <option key={header} value={header}>{header}</option>
-                                            ))}
-                                        </select>
+                                            onChange={(value) => setMapping((prev) => ({ ...prev, [key]: value }))}
+                                            options={[
+                                                { value: '', label: '(none)' },
+                                                ...rawCsvData.headers.map((header) => ({ value: header, label: header })),
+                                            ]}
+                                            size="sm"
+                                            buttonClassName="border-rose-200 dark:border-rose-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold"
+                                        />
                                     </label>
                                 ))}
                             </div>
@@ -626,16 +627,16 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                                 {OPTIONAL_MAPPING_KEYS.map((key) => (
                                 <label key={key} className="flex flex-col gap-1">
                                     <span className="text-[11px] text-slate-500 dark:text-slate-400">{key}</span>
-                                    <select
+                                    <AppSelect
                                         value={mapping[key] || ''}
-                                        onChange={(e) => setMapping((prev) => ({ ...prev, [key]: e.target.value }))}
-                                        className="px-2 py-1.5 rounded-md text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-                                    >
-                                        <option value="">(none)</option>
-                                        {rawCsvData.headers.map((header) => (
-                                            <option key={header} value={header}>{header}</option>
-                                        ))}
-                                    </select>
+                                        onChange={(value) => setMapping((prev) => ({ ...prev, [key]: value }))}
+                                        options={[
+                                            { value: '', label: '(none)' },
+                                            ...rawCsvData.headers.map((header) => ({ value: header, label: header })),
+                                        ]}
+                                        size="sm"
+                                        buttonClassName="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                                    />
                                 </label>
                             ))}
                             </div>

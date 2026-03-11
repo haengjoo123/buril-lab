@@ -11,6 +11,7 @@ import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from
 import { useFridgeStore } from '../../store/fridgeStore';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
+import { AppSelect } from '../../components/AppSelect';
 
 import { useLabStore } from '../../store/useLabStore';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
@@ -236,6 +237,28 @@ export const InventoryListView: React.FC = () => {
     const visibleItems = useMemo(() => {
         return [...filteredItems].sort((a, b) => compareInventoryItems(a, b, sortBy));
     }, [filteredItems, sortBy]);
+
+    const sortOptions = useMemo(() => ([
+        { value: 'expiry_asc', label: t('inventory_sort_expiry_asc') },
+        { value: 'location_asc', label: t('inventory_sort_location_asc') },
+        { value: 'name_asc', label: t('inventory_sort_name_asc') },
+        { value: 'created_at_desc', label: t('inventory_sort_created_desc') },
+        { value: 'created_at_asc', label: t('inventory_sort_created_asc') },
+    ]), [t]);
+
+    const bulkMoveLocationOptions = useMemo(() => (
+        locations.map((loc) => ({
+            value: loc.id,
+            label: `${loc.icon} ${loc.name}`,
+        }))
+    ), [locations]);
+
+    const bulkMoveCabinetOptions = useMemo(() => (
+        cabinets.map((cab) => ({
+            value: cab.id,
+            label: `📦 ${cab.name}`,
+        }))
+    ), [cabinets]);
 
     // Compute expiry summary
     const expirySummary = useMemo(() => {
@@ -926,17 +949,13 @@ export const InventoryListView: React.FC = () => {
                         <ArrowUpDown className="w-3.5 h-3.5" />
                         {t('sort_by')}
                     </label>
-                    <select
+                    <AppSelect
                         value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as InventorySortOption)}
-                        className="min-w-0 flex-1 px-3 py-2 rounded-xl text-sm border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                        <option value="expiry_asc">{t('inventory_sort_expiry_asc')}</option>
-                        <option value="location_asc">{t('inventory_sort_location_asc')}</option>
-                        <option value="name_asc">{t('inventory_sort_name_asc')}</option>
-                        <option value="created_at_desc">{t('inventory_sort_created_desc')}</option>
-                        <option value="created_at_asc">{t('inventory_sort_created_asc')}</option>
-                    </select>
+                        onChange={(value) => setSortBy(value as InventorySortOption)}
+                        options={sortOptions}
+                        className="min-w-0 flex-1"
+                        buttonClassName="min-w-0 flex-1 bg-white dark:bg-slate-700/50"
+                    />
                 </div>
                 {isSelectMode ? (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -991,29 +1010,23 @@ export const InventoryListView: React.FC = () => {
                                 </button>
                             </div>
                             {bulkMoveTargetType === 'other' ? (
-                                <select
+                                <AppSelect
                                     value={bulkMoveLocationId}
-                                    onChange={(e) => setBulkMoveLocationId(e.target.value)}
-                                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200"
-                                >
-                                    {locations.map(loc => (
-                                        <option key={loc.id} value={loc.id}>
-                                            {loc.icon} {loc.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setBulkMoveLocationId}
+                                    options={bulkMoveLocationOptions}
+                                    size="sm"
+                                    className="min-w-[132px]"
+                                    buttonClassName="min-w-[132px] bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200"
+                                />
                             ) : (
-                                <select
+                                <AppSelect
                                     value={bulkMoveCabinetId}
-                                    onChange={(e) => setBulkMoveCabinetId(e.target.value)}
-                                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200"
-                                >
-                                    {cabinets.map(cab => (
-                                        <option key={cab.id} value={cab.id}>
-                                            📦 {cab.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setBulkMoveCabinetId}
+                                    options={bulkMoveCabinetOptions}
+                                    size="sm"
+                                    className="min-w-[132px]"
+                                    buttonClassName="min-w-[132px] bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200"
+                                />
                             )}
                             <button
                                 onClick={handleOpenBulkMoveConfirm}

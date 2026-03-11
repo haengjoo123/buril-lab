@@ -3,71 +3,11 @@
  * Custom dropdown with modern styling
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Filter, ArrowUpDown, X, ChevronDown, Check } from 'lucide-react';
+import { Filter, ArrowUpDown, X } from 'lucide-react';
 import type { SortOption } from '../services/mediaProductService';
-
-interface DropdownProps {
-    value: string;
-    options: { value: string; label: string }[];
-    onChange: (value: string) => void;
-    placeholder?: string;
-}
-
-const CustomDropdown: React.FC<DropdownProps> = ({ value, options, onChange, placeholder }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-
-    const selectedOption = options.find(o => o.value === value);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    return (
-        <div ref={dropdownRef} className="relative">
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full px-4 py-2.5 text-sm font-medium bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 cursor-pointer transition-all text-slate-700 dark:text-slate-200 shadow-sm hover:border-emerald-400 flex items-center justify-between gap-2"
-            >
-                <span className="truncate">{selectedOption?.label || placeholder}</span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {isOpen && (
-                <div className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="max-h-60 overflow-y-auto">
-                        {options.map((option) => (
-                            <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => {
-                                    onChange(option.value);
-                                    setIsOpen(false);
-                                }}
-                                className={`w-full px-4 py-2.5 text-sm text-left flex items-center justify-between transition-colors ${option.value === value
-                                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium'
-                                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                    }`}
-                            >
-                                <span>{option.label}</span>
-                                {option.value === value && <Check className="w-4 h-4" />}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
+import { AppSelect } from './AppSelect';
 
 interface MediaProductFilterProps {
     brands: string[];
@@ -138,7 +78,7 @@ export const MediaProductFilter: React.FC<MediaProductFilterProps> = ({
                     <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 tracking-wide uppercase">
                         {t('brand') || '브랜드'}
                     </label>
-                    <CustomDropdown
+                    <AppSelect
                         value={selectedBrand}
                         options={brandOptions}
                         onChange={onBrandChange}
@@ -151,7 +91,7 @@ export const MediaProductFilter: React.FC<MediaProductFilterProps> = ({
                         <ArrowUpDown className="w-3 h-3" />
                         {t('sort_by') || '정렬'}
                     </label>
-                    <CustomDropdown
+                    <AppSelect
                         value={sortBy}
                         options={sortOptions}
                         onChange={(val) => onSortChange(val as SortOption)}

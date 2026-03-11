@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Package, MapPin, Plus, Check, Loader2, ChevronDown, ArrowRight } from 'lucide-react';
+import { X, Package, MapPin, Plus, Check, Loader2, ArrowRight } from 'lucide-react';
 import type { MediaProduct } from '../services/mediaProductService';
 import type { Cabinet } from '../services/cabinetService';
 import { cabinetService } from '../services/cabinetService';
@@ -18,6 +18,7 @@ import {
 } from '../services/inventoryService';
 import { useFridgeStore } from '../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../types/fridge';
+import { AppSelect } from './AppSelect';
 
 interface InventoryRegistrationModalProps {
     product: MediaProduct;
@@ -264,6 +265,10 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     if (!isOpen) return null;
 
     const isSuccess = successState !== null;
+    const cabinetOptions = cabinets.map((cab) => ({
+        value: cab.id,
+        label: `${cab.name}${cab.location ? ` (${cab.location})` : ''}`,
+    }));
 
     return (
         <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
@@ -509,19 +514,13 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                         {/* Cabinet selector */}
                         {storageType === 'cabinet' && (
                             <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
-                                <select
+                                <AppSelect
                                     value={selectedCabinetId}
-                                    onChange={(e) => setSelectedCabinetId(e.target.value)}
-                                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent appearance-none pr-8"
-                                >
-                                    <option value="">{t('inventory_select_cabinet')}</option>
-                                    {cabinets.map((cab) => (
-                                        <option key={cab.id} value={cab.id}>
-                                            {cab.name}{cab.location ? ` (${cab.location})` : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                                    onChange={setSelectedCabinetId}
+                                    options={cabinetOptions}
+                                    placeholder={t('inventory_select_cabinet')}
+                                    buttonClassName="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700"
+                                />
                             </div>
                         )}
 

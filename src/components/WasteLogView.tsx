@@ -13,6 +13,7 @@ import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
 import * as XLSX from 'xlsx';
 import html2pdf from 'html2pdf.js';
 import { useOnboardingStore } from '../store/useOnboardingStore';
+import { AppSelect } from './AppSelect';
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
@@ -203,6 +204,15 @@ export const WasteLogView: React.FC = () => {
             : [],
         [filteredLogs, sortOrder, sortBy, t]
     );
+
+    const sortOptions = useMemo(() => ([
+        { value: 'created_at-desc', label: t('log_sort_date_desc') },
+        { value: 'created_at-asc', label: t('log_sort_date_asc') },
+        { value: 'disposal_category-asc', label: t('log_sort_category_asc') },
+        { value: 'disposal_category-desc', label: t('log_sort_category_desc') },
+        { value: 'handler_name-asc', label: t('log_sort_handler_asc') },
+        { value: 'handler_name-desc', label: t('log_sort_handler_desc') },
+    ]), [t]);
 
     const isDeleteAllowedForLog = useCallback((log: WasteLog) => {
         if (!canDeleteLogs) {
@@ -734,22 +744,18 @@ export const WasteLogView: React.FC = () => {
                             className="w-full h-[42px] pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                         />
                     </form>
-                    <select
+                    <AppSelect
                         value={`${sortBy}-${sortOrder}`}
-                        onChange={e => {
-                            const [by, order] = e.target.value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
+                        onChange={(value) => {
+                            const [by, order] = value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
                             setSortBy(by);
                             setSortOrder(order);
                         }}
-                        className="flex-shrink-0 h-[42px] py-2.5 px-3 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    >
-                        <option value="created_at-desc">{t('log_sort_date_desc')}</option>
-                        <option value="created_at-asc">{t('log_sort_date_asc')}</option>
-                        <option value="disposal_category-asc">{t('log_sort_category_asc')}</option>
-                        <option value="disposal_category-desc">{t('log_sort_category_desc')}</option>
-                        <option value="handler_name-asc">{t('log_sort_handler_asc')}</option>
-                        <option value="handler_name-desc">{t('log_sort_handler_desc')}</option>
-                    </select>
+                        options={sortOptions}
+                        className="flex-shrink-0 min-w-[148px]"
+                        buttonClassName="flex-shrink-0 min-w-[148px] bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600"
+                        align="right"
+                    />
                 </div>
             </div>
 
