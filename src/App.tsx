@@ -32,8 +32,9 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const locationState = location.state as { cabinetId?: string; itemId?: string } | null;
 
-  const activeCabinetId = searchParams.get('id');
+  const activeCabinetId = searchParams.get('id') || locationState?.cabinetId || null;
 
   const cart = useWasteStore((state) => state.cart);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
@@ -124,20 +125,44 @@ function App() {
 
     openWelcome();
   }, [session, isSafetyAcknowledged, isWelcomeOpen, hasCompletedWelcome, hasSkippedOnboarding, openWelcome]);
+  useEffect(() => {
+    if (location.pathname !== '/cabinet' || searchParams.get('id') || !locationState?.cabinetId) {
+      return;
+    }
+
+    // 상태 기반 진입도 새로고침/공유 시 일관되도록 URL에 캐비닛 ID를 복원합니다.
+    navigate(`/cabinet?id=${locationState.cabinetId}`, {
+      replace: true,
+      state: locationState,
+    });
+  }, [location.pathname, locationState, navigate, searchParams]);
+
   const handleNavigateToCabinet = useCallback((cabinetId: string, itemId: string) => {
-    // Switch to cabinet tab and load the cabinet
-    navigate(`/cabinet?id=${cabinetId}`);
-    // Set highlight with a small delay to let the FridgeView mount
-    setTimeout(() => {
+    navigate(`/cabinet?id=${cabinetId}`, {
+      state: { cabinetId, itemId },
+    });
+
+    void (async () => {
       const store = useFridgeStore.getState();
-      store.setHighlightedItemId(itemId);
-      // Clear highlight after 6 seconds
+      store.setMode('VIEW');
+      store.setFocusedShelfId(null);
+
+      await store.loadCabinet(cabinetId);
+
+      // 배치된 아이템이 있는 선반까지 함께 포커스해야 상세 화면 진입 직후 바로 위치를 보여줄 수 있습니다.
+      const matchedShelf = useFridgeStore.getState().shelves.find((shelf) =>
+        shelf.items.some((item) => item.id === itemId)
+      );
+
+      useFridgeStore.getState().setFocusedShelfId(matchedShelf?.id ?? null);
+      useFridgeStore.getState().setHighlightedItemId(itemId);
+
       setTimeout(() => {
         if (useFridgeStore.getState().highlightedItemId === itemId) {
           useFridgeStore.getState().setHighlightedItemId(null);
         }
       }, 6000);
-    }, 500);
+    })();
   }, [navigate]);
 
   const handleCabinetSearchResultClick = useCallback(async (item: CabinetSearchResult) => {

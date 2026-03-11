@@ -55,11 +55,10 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         : null;
     const isPlacedItemDrag = !!draggedItem && !!draggedPlacement;
 
-    const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
+    const getPlacementCandidate = (e: ThreeEvent<PointerEvent>) => {
         const dragWidth = draggedTemplate?.width ?? draggedPlacement?.width;
         if (!draggedTemplate && !isPlacedItemDrag) return;
-        if (!dragWidth) return;
-        e.stopPropagation();
+        if (!dragWidth) return null;
 
         const localX = e.point.x - position[0];
         const localZ = e.point.z - position[2];
@@ -71,17 +70,23 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         const depthPct = ((localZ + shelfDepth / 2) / shelfDepth) * 100;
         const depthClamped = Math.max(0, Math.min(100, depthPct));
 
+        return {
+            position: pct,
+            depthPosition: depthClamped,
+            dragWidth,
+        };
+    };
+
+    const updatePlacementPreview = (pct: number, depthPosition: number, dragWidth: number) => {
         setGhostPos(pct);
-        setGhostDepthPos(depthClamped);
-
-
-        // Manual placement always allowed (no collision blocking)
+        setGhostDepthPos(depthPosition);
         setIsValid(true);
 
+        // 모바일에서는 hover가 없으므로 탭한 지점을 즉시 프리뷰로 보여줍니다.
         if (draggedTemplate?.chemicalData) {
             const neighbors = shelf.items.filter(i => {
                 const dist = Math.min(
-                    Math.abs(i.position - (pct + draggedTemplate.width)),
+                    Math.abs(i.position - (pct + dragWidth)),
                     Math.abs((i.position + i.width) - pct)
                 );
                 return dist < 5; // 5% proximity threshold
@@ -126,6 +131,13 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         }
     };
 
+    const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
+        const candidate = getPlacementCandidate(e);
+        if (!candidate) return;
+        e.stopPropagation();
+        updatePlacementPreview(candidate.position, candidate.depthPosition, candidate.dragWidth);
+    };
+
     const handlePointerLeave = () => {
         setGhostPos(null);
         setWarning(null);
@@ -138,6 +150,12 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
 
     const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
         pointerDownPos.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
+        if ((draggedTemplate || isPlacedItemDrag) && e.nativeEvent.pointerType !== 'mouse') {
+            const candidate = getPlacementCandidate(e);
+            if (!candidate) return;
+            e.stopPropagation();
+            updatePlacementPreview(candidate.position, candidate.depthPosition, candidate.dragWidth);
+        }
     };
 
     const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
@@ -149,6 +167,12 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
             e.nativeEvent.clientX - down.x,
             e.nativeEvent.clientY - down.y
         ) > CLICK_THRESHOLD;
+        const isTouchLikePointer = e.nativeEvent.pointerType !== 'mouse';
+        const tapPlacementCandidate = !isDrag && isTouchLikePointer ? getPlacementCandidate(e) : null;
+        const nextGhostPos = ghostPos ?? tapPlacementCandidate?.position ?? null;
+        const nextGhostDepthPos = ghostPos === null
+            ? (tapPlacementCandidate?.depthPosition ?? ghostDepthPos)
+            : ghostDepthPos;
 
         if (!draggedTemplate && !draggedItem) {
             if (isDrag) return;
@@ -158,7 +182,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         }
 
         // 시약 선택 상태에서도, 호버 없이 선반만 클릭한 경우 포커스 처리
-        if (ghostPos === null) {
+        if (nextGhostPos === null) {
             if (isDrag) return;
             e.stopPropagation();
             onShelfFocus?.(position[1]);
@@ -167,7 +191,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         e.stopPropagation();
 
         if (isPlacedItemDrag && draggedItem) {
-            moveReagent(draggedItem.id, shelf.id, ghostPos, ghostDepthPos);
+            moveReagent(draggedItem.id, shelf.id, nextGhostPos, nextGhostDepthPos);
             setDraggedItem(null);
             setGhostPos(null);
             document.body.style.cursor = 'default';
@@ -181,8 +205,8 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         // Instead of immediate placement, set pending placement to show the modal
         setPendingPlacement({
             shelfId: shelf.id,
-            position: ghostPos,
-            depthPosition: ghostDepthPos,
+            position: nextGhostPos,
+            depthPosition: nextGhostDepthPos,
             width: draggedTemplate.width,
             template: draggedTemplate.type,
             chemicalData: chem

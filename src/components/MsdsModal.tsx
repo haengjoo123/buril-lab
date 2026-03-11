@@ -86,7 +86,8 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                     <div>
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <FileText className="w-5 h-5 text-blue-600" />
-                            {t('msds_title')}
+                            <span className="sm:hidden">{t('msds_title_short')}</span>
+                            <span className="hidden sm:inline">{t('msds_title')}</span>
                         </h2>
                         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                             {chemical.name} {chemical.casNumber && `• CAS: ${chemical.casNumber}`}

@@ -358,6 +358,11 @@ export const translations = {
         cabinet_clear_all_confirm: "선택된 시약장에 있는 모든 시약을 정말 삭제하시겠습니까?",
         cabinet_clear_all_confirm_second: "되돌릴 수 없습니다. 정말 전체 비우기를 진행하시겠습니까?",
         cabinet_reagent_tray_title: "시약 목록",
+        cabinet_place_instruction_select: "배치할 시약을 먼저 선택하세요.",
+        cabinet_place_instruction_touch: "선택한 시약을 놓을 선반 위치를 탭하세요.",
+        cabinet_place_instruction_desktop: "선반 위로 마우스를 움직여 위치를 고른 뒤 놓으세요.",
+        cabinet_place_selected_reagent: "선택됨: {{name}}",
+        cabinet_place_clear_selection: "선택 취소",
 
         // Cabinet Edit
         cabinet_edit_title: "시약 정보 수정",
@@ -408,7 +413,9 @@ export const translations = {
         cabinet_card_size: "크기: {{width}}x{{height}} 단 | {{date}} 생성",
         cabinet_card_change_photo: "시약장 사진 변경",
         cabinet_card_edit: "시약장 수정",
+        cabinet_card_edit_short: "수정",
         cabinet_card_delete: "시약장 삭제",
+        cabinet_card_delete_short: "삭제",
 
         // Cabinet Disposal Log
         cabinet_dispose_reason_title: "폐기 사유 선택",
@@ -421,6 +428,7 @@ export const translations = {
         cabinet_dispose_log_title: "폐기 이력",
         cabinet_dispose_log_empty: "폐기 기록이 없습니다.",
         cabinet_dispose_log_btn: "폐기 이력",
+        cabinet_dispose_log_btn_short: "이력",
         cabinet_dispose_log_count: "총 {{count}}건",
 
         // Activity Log (통합 등록/삭제 이력)
@@ -643,6 +651,7 @@ export const translations = {
 
         // MSDS Modal
         msds_title: "MSDS 정보 (물질안전보건자료)",
+        msds_title_short: "MSDS 정보",
         msds_not_found: "MSDS 정보를 찾을 수 없습니다.",
         msds_load_error: "데이터를 불러오는 중 오류가 발생했습니다.",
         msds_loading: "데이터를 불러오는 중입니다...",
@@ -739,9 +748,6 @@ export const translations = {
         btn_close: "Close",
         btn_confirm: "Confirm",
         btn_cancel: "Cancel",
-        log_export_pdf: "Export to PDF",
-        log_export_excel: "Export to Excel",
-        log_exporting: "Exporting...",
 
         input_volume: "Volume (mL)",
         input_molarity: "Molarity (M) (Optional)",
@@ -1080,6 +1086,11 @@ export const translations = {
         cabinet_clear_all_confirm: "Are you sure you want to remove all reagents from the cabinet?",
         cabinet_clear_all_confirm_second: "This cannot be undone. Do you want to clear all items?",
         cabinet_reagent_tray_title: "Reagent Tray",
+        cabinet_place_instruction_select: "Select a reagent to place first.",
+        cabinet_place_instruction_touch: "Tap the shelf position where you want to place it.",
+        cabinet_place_instruction_desktop: "Move over the shelf to preview a spot, then drop it.",
+        cabinet_place_selected_reagent: "Selected: {{name}}",
+        cabinet_place_clear_selection: "Clear",
 
         // Cabinet Edit
         cabinet_edit_title: "Edit Reagent",
@@ -1130,7 +1141,9 @@ export const translations = {
         cabinet_card_size: "Size: {{width}}x{{height}} levels | Created on {{date}}",
         cabinet_card_change_photo: "Change Photo",
         cabinet_card_edit: "Edit Cabinet",
+        cabinet_card_edit_short: "Edit",
         cabinet_card_delete: "Delete Cabinet",
+        cabinet_card_delete_short: "Delete",
 
         // Cabinet Disposal Log
         cabinet_dispose_reason_title: "Select Disposal Reason",
@@ -1143,6 +1156,7 @@ export const translations = {
         cabinet_dispose_log_title: "Disposal History",
         cabinet_dispose_log_empty: "No disposal records.",
         cabinet_dispose_log_btn: "Disposal Log",
+        cabinet_dispose_log_btn_short: "Log",
         cabinet_dispose_log_count: "Total {{count}} records",
 
         // Activity Log
@@ -1365,6 +1379,7 @@ export const translations = {
 
         // MSDS Modal
         msds_title: "MSDS (Safety Data Sheet)",
+        msds_title_short: "MSDS",
         msds_not_found: "MSDS data not found.",
         msds_load_error: "Failed to load data.",
         msds_loading: "Loading data...",

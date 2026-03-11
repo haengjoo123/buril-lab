@@ -460,8 +460,6 @@ export const WasteLogView: React.FC = () => {
     const fetchLogsForExport = useCallback(async (scope: ExportScope) => {
         const filters = getExportDateFilters(
             scope,
-            activeTab,
-            dateRange,
             customExportStartDate,
             customExportEndDate
         );
@@ -474,7 +472,7 @@ export const WasteLogView: React.FC = () => {
         });
 
         return result.logs;
-    }, [activeTab, customExportEndDate, customExportStartDate, dateRange, searchQuery, sortBy, sortOrder]);
+    }, [customExportEndDate, customExportStartDate, searchQuery, sortBy, sortOrder]);
 
     const handleExportExcel = async (scope: ExportScope) => {
         setIsExporting(true);
@@ -678,11 +676,10 @@ export const WasteLogView: React.FC = () => {
                             key={value}
                             type="button"
                             onClick={() => setActiveTab(value)}
-                            className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                                isActive
+                            className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${isActive
                                     ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
                                     : 'bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700'
-                            }`}
+                                }`}
                         >
                             {label}
                         </button>
@@ -714,11 +711,10 @@ export const WasteLogView: React.FC = () => {
                                     key={value}
                                     type="button"
                                     onClick={() => setDateRange(value)}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                                        isActive
+                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${isActive
                                             ? 'bg-blue-600 text-white'
                                             : 'bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700'
-                                    }`}
+                                        }`}
                                 >
                                     {label}
                                 </button>
@@ -728,32 +724,32 @@ export const WasteLogView: React.FC = () => {
                 )}
 
                 <div className="flex items-center gap-2">
-                <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-0">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                        type="text"
-                        value={searchInput}
-                        onChange={e => setSearchInput(e.target.value)}
-                        placeholder={t('log_search_placeholder')}
-                        className="w-full h-[42px] pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                    />
-                </form>
-                <select
-                    value={`${sortBy}-${sortOrder}`}
-                    onChange={e => {
-                        const [by, order] = e.target.value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
-                        setSortBy(by);
-                        setSortOrder(order);
-                    }}
-                    className="flex-shrink-0 h-[42px] py-2.5 px-3 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                >
-                    <option value="created_at-desc">{t('log_sort_date_desc')}</option>
-                    <option value="created_at-asc">{t('log_sort_date_asc')}</option>
-                    <option value="disposal_category-asc">{t('log_sort_category_asc')}</option>
-                    <option value="disposal_category-desc">{t('log_sort_category_desc')}</option>
-                    <option value="handler_name-asc">{t('log_sort_handler_asc')}</option>
-                    <option value="handler_name-desc">{t('log_sort_handler_desc')}</option>
-                </select>
+                    <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-0">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                            type="text"
+                            value={searchInput}
+                            onChange={e => setSearchInput(e.target.value)}
+                            placeholder={t('log_search_placeholder')}
+                            className="w-full h-[42px] pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        />
+                    </form>
+                    <select
+                        value={`${sortBy}-${sortOrder}`}
+                        onChange={e => {
+                            const [by, order] = e.target.value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
+                            setSortBy(by);
+                            setSortOrder(order);
+                        }}
+                        className="flex-shrink-0 h-[42px] py-2.5 px-3 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    >
+                        <option value="created_at-desc">{t('log_sort_date_desc')}</option>
+                        <option value="created_at-asc">{t('log_sort_date_asc')}</option>
+                        <option value="disposal_category-asc">{t('log_sort_category_asc')}</option>
+                        <option value="disposal_category-desc">{t('log_sort_category_desc')}</option>
+                        <option value="handler_name-asc">{t('log_sort_handler_asc')}</option>
+                        <option value="handler_name-desc">{t('log_sort_handler_desc')}</option>
+                    </select>
                 </div>
             </div>
 
@@ -887,11 +883,10 @@ export const WasteLogView: React.FC = () => {
                                         key={option.value}
                                         type="button"
                                         onClick={() => setExportScope(option.value)}
-                                        className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                                            isSelected
+                                        className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${isSelected
                                                 ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/30'
                                                 : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800'
-                                        }`}
+                                            }`}
                                     >
                                         <div className="text-sm font-medium text-slate-900 dark:text-white">
                                             {option.label}
@@ -1088,8 +1083,6 @@ function getTodayRange(): { createdAfter: string; createdBefore: string } {
 
 function getExportDateFilters(
     scope: ExportScope,
-    activeTab: LogViewTab,
-    dateRange: LogDateRange,
     customStartDate?: string,
     customEndDate?: string
 ): { createdAfter?: string; createdBefore?: string } {

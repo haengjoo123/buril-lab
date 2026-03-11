@@ -36,11 +36,16 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     onNavigateToCabinet,
 }) => {
     const { t } = useTranslation();
+    const productNumbers = product.product_numbers?.filter(Boolean) || [];
 
     // Form state
+    const [itemName, setItemName] = useState(product.product_name || '');
+    const [brand, setBrand] = useState(product.brand || '');
     const [selectedProductNumber, setSelectedProductNumber] = useState<string>('');
+    const [casNumber, setCasNumber] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [capacity, setCapacity] = useState('');
+    const [expiryDate, setExpiryDate] = useState('');
     const [storageType, setStorageType] = useState<'cabinet' | 'other'>('other');
     const [selectedCabinetId, setSelectedCabinetId] = useState<string>('');
     const [selectedLocationId, setSelectedLocationId] = useState<string>('');
@@ -67,15 +72,9 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     // Load cabinets and storage locations on mount
     useEffect(() => {
         if (!isOpen) return;
-        loadData();
-    }, [isOpen]);
-
-    // Auto-select first product number if only one
-    useEffect(() => {
-        if (product.product_numbers && product.product_numbers.length === 1) {
-            setSelectedProductNumber(product.product_numbers[0]);
-        }
-    }, [product]);
+        initializeForm();
+        void loadData();
+    }, [isOpen, product]);
 
     const loadData = async () => {
         const [cabs, locs] = await Promise.all([
@@ -85,10 +84,28 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         setCabinets(cabs);
         setLocations(locs);
 
-        // Auto-select first location if available
-        if (locs.length > 0 && !selectedLocationId) {
-            setSelectedLocationId(locs[0].id);
+        // 새로 열 때 초기화 직후에도 기본 위치가 안정적으로 선택되도록 보정합니다.
+        if (locs.length > 0) {
+            setSelectedLocationId((currentLocationId) => currentLocationId || locs[0].id);
         }
+    };
+
+    const initializeForm = () => {
+        setSuccessState(null);
+        setItemName(product.product_name || '');
+        setBrand(product.brand || '');
+        setSelectedProductNumber(productNumbers.length === 1 ? productNumbers[0] : '');
+        setCasNumber('');
+        setQuantity(1);
+        setCapacity('');
+        setExpiryDate('');
+        setStorageType('other');
+        setSelectedCabinetId('');
+        setSelectedLocationId('');
+        setMemo('');
+        setShowNewLocation(false);
+        setNewLocationName('');
+        setError(null);
     };
 
     const handleAddLocation = async () => {
@@ -103,30 +120,42 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     };
 
     const resetForm = () => {
-        setSuccessState(null);
-        setQuantity(1);
-        setCapacity('');
-        setMemo('');
-        setSelectedProductNumber('');
-        setError(null);
+        initializeForm();
     };
 
     const handleSubmit = async () => {
+        if (!itemName.trim()) {
+            setError('시약/물품 이름을 입력해주세요.');
+            return;
+        }
+
+        if (storageType === 'cabinet' && !selectedCabinetId) {
+            setError('보관할 시약장을 선택해주세요.');
+            return;
+        }
+
+        if (storageType === 'other' && !selectedLocationId) {
+            setError('기타 보관 장소를 선택해주세요.');
+            return;
+        }
+
         setIsSubmitting(true);
         setError(null);
 
         try {
             // 1. Register in inventory table
             const result = await inventoryService.createItem({
-                name: product.product_name || 'Unknown',
-                brand: product.brand || undefined,
+                name: itemName.trim(),
+                brand: brand.trim() || undefined,
                 product_number: selectedProductNumber || undefined,
+                cas_number: casNumber.trim() || undefined,
                 quantity,
                 capacity: capacity || undefined,
                 storage_type: storageType,
                 cabinet_id: storageType === 'cabinet' ? selectedCabinetId : undefined,
                 storage_location_id: storageType === 'other' ? selectedLocationId : undefined,
                 product_id: product.id,
+                expiry_date: expiryDate || undefined,
                 memo: memo || undefined,
             });
 
@@ -137,7 +166,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
 
             // 2. If cabinet storage, actually place the reagent on a shelf
             if (storageType === 'cabinet' && selectedCabinetId) {
-                const placedItemId = await placeToCabinet();
+                const placedItemId = await placeToCabinet(result.id);
                 if (placedItemId) {
                     setSuccessState({
                         type: 'cabinet',
@@ -167,7 +196,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     };
 
     /** Load the target cabinet into fridgeStore, auto-place, and save */
-    const placeToCabinet = async (): Promise<string | null> => {
+    const placeToCabinet = async (inventoryId: string): Promise<string | null> => {
         const store = useFridgeStore.getState();
 
         // Load the cabinet data
@@ -179,18 +208,19 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         // Build reagent placement data
         const itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'> = {
             id: '', // autoPlaceReagent will assign a new UUID
-            reagentId: product.id,
-            name: product.product_name || 'Unknown',
+            reagentId: inventoryId,
+            name: itemName.trim(),
             width: getWidthForTemplate(template),
             template,
             isAcidic: false,
             isBasic: false,
             hCodes: [],
             notes: memo || undefined,
-            casNo: undefined,
+            casNo: casNumber.trim() || undefined,
             capacity: capacity || undefined,
             productNumber: selectedProductNumber || undefined,
-            brand: product.brand || undefined,
+            brand: brand.trim() || undefined,
+            expiryDate: expiryDate || undefined,
         };
 
         const placeResult = useFridgeStore.getState().autoPlaceReagent(itemData);
@@ -202,7 +232,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
             await cabinetService.logActivity(
                 selectedCabinetId,
                 'add',
-                product.product_name || 'Unknown',
+                itemName.trim() || product.product_name || 'Unknown',
             );
             return placeResult.itemId;
         }
@@ -210,12 +240,19 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         return null;
     };
 
-    const handleGoToCabinet = () => {
+    const handleGoToCabinet = (e?: React.MouseEvent<HTMLButtonElement>) => {
+        e?.preventDefault();
+        e?.stopPropagation();
+
         if (successState?.cabinetId && successState?.itemId && onNavigateToCabinet) {
             onNavigateToCabinet(successState.cabinetId, successState.itemId);
         }
-        onClose();
-        resetForm();
+
+        // 모달을 같은 클릭 프레임에 바로 닫으면 뒤쪽 탭/카드가 클릭되어 목록 화면으로 덮일 수 있습니다.
+        window.setTimeout(() => {
+            onClose();
+            resetForm();
+        }, 0);
     };
 
     const handleCloseAfterSuccess = () => {
@@ -226,7 +263,6 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
 
     if (!isOpen) return null;
 
-    const productNumbers = product.product_numbers?.filter(Boolean) || [];
     const isSuccess = successState !== null;
 
     return (
@@ -271,7 +307,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                         {successState.type === 'cabinet' && successState.itemId && successState.shelfLevel && (
                             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 text-center">
                                 {t('reagent_placed_toast', {
-                                    name: product.product_name || '',
+                                    name: itemName || '',
                                     level: successState.shelfLevel,
                                 })}
                             </p>
@@ -290,6 +326,10 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                             {successState.type === 'cabinet' && successState.itemId && onNavigateToCabinet && (
                                 <button
                                     onClick={handleGoToCabinet}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                    }}
                                     className="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20"
                                 >
                                     {t('inventory_go_to_cabinet')}
@@ -336,39 +376,84 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                         </div>
                     </div>
 
-                    {/* Product Number Selection */}
-                    {productNumbers.length > 0 && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            {t('inventory_product_name')} <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={itemName}
+                            onChange={(e) => setItemName(e.target.value)}
+                            placeholder="예: 염산, 비커 등"
+                            className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                {t('inventory_brand')}
+                            </label>
+                            <input
+                                type="text"
+                                value={brand}
+                                onChange={(e) => setBrand(e.target.value)}
+                                placeholder="예: Sigma"
+                                className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            />
+                        </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                                 {t('inventory_product_number')}
                             </label>
-                            {productNumbers.length === 1 ? (
-                                <div className="px-3 py-2.5 bg-gray-50 dark:bg-slate-800 rounded-xl text-sm text-slate-700 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
-                                    {productNumbers[0]}
-                                </div>
-                            ) : (
-                                <div className="relative">
-                                    <select
-                                        value={selectedProductNumber}
-                                        onChange={(e) => setSelectedProductNumber(e.target.value)}
-                                        className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent appearance-none pr-8"
-                                    >
-                                        <option value="">{t('inventory_select_product_number')}</option>
-                                        {productNumbers.map((num) => (
-                                            <option key={num} value={num}>{num}</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                </div>
+                            <input
+                                type="text"
+                                value={selectedProductNumber}
+                                onChange={(e) => setSelectedProductNumber(e.target.value)}
+                                placeholder="예: A1234"
+                                list={productNumbers.length > 0 ? `product-numbers-${product.id}` : undefined}
+                                className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            />
+                            {productNumbers.length > 0 && (
+                                <datalist id={`product-numbers-${product.id}`}>
+                                    {productNumbers.map((num) => (
+                                        <option key={num} value={num} />
+                                    ))}
+                                </datalist>
                             )}
                         </div>
-                    )}
+                    </div>
 
-                    {/* Quantity & Capacity Row */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            CAS Number
+                        </label>
+                        <input
+                            type="text"
+                            value={casNumber}
+                            onChange={(e) => setCasNumber(e.target.value)}
+                            placeholder="예: 7647-01-0"
+                            className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                    </div>
+
+                    {/* Capacity & Quantity Row */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                {t('inventory_quantity')}
+                                {t('inventory_capacity')}
+                            </label>
+                            <input
+                                type="text"
+                                value={capacity}
+                                onChange={(e) => setCapacity(e.target.value)}
+                                placeholder={t('inventory_capacity_placeholder')}
+                                className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                {t('inventory_quantity')} <span className="text-red-500">*</span>
                             </label>
                             <div className="flex items-center h-[46px] border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800">
                                 <button
@@ -391,18 +476,6 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                                     +
                                 </button>
                             </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                {t('inventory_capacity')}
-                            </label>
-                            <input
-                                type="text"
-                                value={capacity}
-                                onChange={(e) => setCapacity(e.target.value)}
-                                placeholder={t('inventory_capacity_placeholder')}
-                                className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            />
                         </div>
                     </div>
 
@@ -514,6 +587,18 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                                 )}
                             </div>
                         )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            유효기간
+                        </label>
+                        <input
+                            type="date"
+                            value={expiryDate}
+                            onChange={(e) => setExpiryDate(e.target.value)}
+                            className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
                     </div>
 
                     {/* Memo */}

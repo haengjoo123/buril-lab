@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 export type AppTab = 'search' | 'logs' | 'cabinet' | 'inventory' | 'admin';
@@ -41,6 +41,7 @@ export function useAppUiState({
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [logRefreshKey, setLogRefreshKey] = useState(0);
   const [lastCabinetId, setLastCabinetId] = useState<string | null>(null);
+  const previousLabIdRef = useRef<string | null | undefined>(currentLabId);
 
   const activeTab = useMemo(() => getActiveTab(pathname), [pathname]);
 
@@ -51,9 +52,16 @@ export function useAppUiState({
     }
   }, [activeTab, activeCabinetId]);
 
-  // 연구실 전환 시 이전 시약장 컨텍스트를 초기화해 교차 오염 네비게이션을 방지한다.
+  // 연구실이 실제로 바뀐 경우에만 시약장 컨텍스트를 초기화합니다.
+  // 기존에는 /cabinet?id=... 로 이동할 때도 pathname 변화만으로 상세 ID를 지워버렸습니다.
   useEffect(() => {
+    if (previousLabIdRef.current === currentLabId) {
+      return;
+    }
+
+    previousLabIdRef.current = currentLabId;
     setLastCabinetId(null);
+
     if (pathname.startsWith('/cabinet')) {
       navigate('/cabinet');
     }

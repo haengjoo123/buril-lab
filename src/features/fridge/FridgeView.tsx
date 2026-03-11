@@ -62,6 +62,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
     // Toast state
     const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const [isCoarsePointer, setIsCoarsePointer] = useState(false);
 
     const {
         mode,
@@ -143,6 +144,33 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         }
     }, [autoPlaceResult, clearAutoPlaceResult, t]);
 
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+        const mediaQuery = window.matchMedia('(pointer: coarse)');
+        const syncPointerType = () => {
+            const hasTouchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            const isMobileViewport = window.innerWidth <= 768;
+            setIsCoarsePointer(mediaQuery.matches || (hasTouchSupport && isMobileViewport));
+        };
+        syncPointerType();
+
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', syncPointerType);
+            window.addEventListener('resize', syncPointerType);
+            return () => {
+                mediaQuery.removeEventListener('change', syncPointerType);
+                window.removeEventListener('resize', syncPointerType);
+            };
+        }
+
+        mediaQuery.addListener(syncPointerType);
+        window.addEventListener('resize', syncPointerType);
+        return () => {
+            mediaQuery.removeListener(syncPointerType);
+            window.removeEventListener('resize', syncPointerType);
+        };
+    }, []);
+
     // 자동저장 헬퍼 — 모든 상태 변경 후 호출
     const autoSave = React.useCallback(async () => {
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -206,6 +234,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         // 이미 선택된 시약을 다시 클릭하면 선택 취소
         if (draggedTemplate?.name === item.name) {
             setDraggedTemplate(null);
+            if (isCoarsePointer) setIsReagentTrayVisible(true);
             return;
         }
         setDraggedTemplate({
@@ -217,6 +246,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             name: item.name,
             chemicalData: item.chemicalData
         });
+        if (isCoarsePointer) setIsReagentTrayVisible(false);
+    };
+
+    const handleClearSelectedReagent = () => {
+        setDraggedTemplate(null);
+        if (isCoarsePointer) setIsReagentTrayVisible(true);
     };
 
     const handleConfirmPlacement = async () => {
@@ -251,6 +286,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
+        if (isCoarsePointer) setIsReagentTrayVisible(true);
 
         // 자동저장 + 활동 로그 (병렬)
         const currentCabinetId = useFridgeStore.getState().cabinetId;
@@ -270,6 +306,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
+        if (isCoarsePointer) setIsReagentTrayVisible(true);
     };
 
     // ====== Scan Flow ======
@@ -398,6 +435,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         { type: 'C', label: t('reagent_type_glass'), color: '#e2e8f0' },
         { type: 'D', label: t('reagent_type_box'), color: '#cbd5e1' },
     ];
+    const placementInstruction = draggedTemplate
+        ? (isCoarsePointer ? t('cabinet_place_instruction_touch') : t('cabinet_place_instruction_desktop'))
+        : t('cabinet_place_instruction_select');
 
     return (
         <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-hidden">
@@ -501,6 +541,27 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     </div>
                 </div>
 
+                {mode === 'PLACE' && isCoarsePointer && draggedTemplate && !pendingPlacement && (
+                    <div className="pointer-events-none absolute inset-x-0 top-20 z-20 flex justify-center px-4">
+                        <div className="pointer-events-auto flex w-full max-w-sm items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+                            <div className="min-w-0">
+                                <p className="text-xs font-medium text-emerald-700">
+                                    {t('cabinet_place_instruction_touch')}
+                                </p>
+                                <p className="truncate text-sm font-semibold text-slate-800">
+                                    {t('cabinet_place_selected_reagent', { name: draggedTemplate.name ?? t('cabinet_reagent_tray_title') })}
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleClearSelectedReagent}
+                                className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                            >
+                                {t('cabinet_place_clear_selection')}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Storage Compatibility Warning Banner */}
                 <StorageCompatBanner />
 
@@ -520,66 +581,51 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 </button>
                                 <div className="flex flex-col gap-3">
                                     {/* 버튼 행 - flex-wrap으로 공간 부족 시 자연스럽게 줄바꿈 */}
-                                    <div className="flex flex-wrap items-end justify-center gap-x-4 gap-y-3">
+                                    {/* 버튼 행 - 4개의 버튼이 모바일에서 한 줄에 들어가도록 최적화 */}
+                                    <div className="flex justify-between sm:justify-center items-end gap-x-2 sm:gap-x-6 w-full px-1">
                                         <button
                                             onClick={() => { addShelf(); autoSave(); }}
-                                            className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-blue-600 transition-colors group shrink-0"
+                                            className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-blue-600 transition-colors group shrink-0"
                                         >
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-blue-500 group-hover:bg-blue-50 transition-all">
                                                 <Plus size={20} />
                                             </div>
-                                            <span className="whitespace-nowrap">{t('cabinet_add_shelf')}</span>
+                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_add_shelf')}</span>
                                         </button>
                                         <button
                                             onClick={() => { if (shelves.length > 0) { removeShelf(shelves[shelves.length - 1].id); autoSave(); } }}
                                             disabled={shelves.length === 0}
-                                            className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-red-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
+                                            className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-red-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
                                         >
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-red-500 group-hover:bg-red-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">
                                                 <Minus size={20} />
                                             </div>
-                                            <span className="whitespace-nowrap">{t('cabinet_remove_shelf')}</span>
+                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_remove_shelf')}</span>
                                         </button>
-                                        <div className="flex flex-col items-center gap-1 shrink-0">
-                                            <div className="flex items-center gap-1">
-                                                <button
-                                                    onClick={() => { if (verticalPanelPos >= 1 && verticalPanelPos <= 99) { addVerticalPanel(verticalPanelPos); autoSave(); } }}
-                                                    disabled={shelves.length === 0}
-                                                    className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-indigo-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600"
-                                                >
-                                                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-indigo-500 group-hover:bg-indigo-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">
-                                                        <SplitSquareVertical size={20} className="rotate-90" />
-                                                    </div>
-                                                    <span className="whitespace-nowrap">{t('cabinet_add_vertical_panel')}</span>
-                                                </button>
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    max={99}
-                                                    value={verticalPanelPos}
-                                                    onChange={(e) => {
-                                                        const v = parseInt(e.target.value, 10);
-                                                        if (!Number.isNaN(v)) setVerticalPanelPos(Math.max(1, Math.min(99, v)));
-                                                    }}
-                                                    className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded"
-                                                />
-                                                <span className="text-[10px] text-gray-400">%</span>
+                                        <button
+                                            onClick={() => { if (verticalPanelPos >= 1 && verticalPanelPos <= 99) { addVerticalPanel(verticalPanelPos); autoSave(); } }}
+                                            disabled={shelves.length === 0}
+                                            className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-indigo-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
+                                        >
+                                            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-indigo-500 group-hover:bg-indigo-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">
+                                                <SplitSquareVertical size={20} className="rotate-90" />
                                             </div>
-                                        </div>
+                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_add_vertical_panel')}</span>
+                                        </button>
                                         <button
                                             onClick={() => { removeVerticalPanel(); autoSave(); }}
                                             disabled={shelves.every(s => s.dividers.length === 0)}
-                                            className="flex flex-col items-center gap-1 text-xs font-medium text-gray-600 hover:text-orange-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
+                                            className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-orange-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
                                         >
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-orange-500 group-hover:bg-orange-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">
                                                 <SplitSquareVertical size={20} className="rotate-90" />
                                             </div>
-                                            <span className="whitespace-nowrap">{t('cabinet_remove_vertical_panel')}</span>
+                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_remove_vertical_panel')}</span>
                                         </button>
                                     </div>
 
                                     {/* Sort Controls */}
-                                    <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full">
+                                    <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full mt-1">
                                         <button
                                             onClick={() => { sortShelves('name'); autoSave(); }}
                                             disabled={shelves.length === 0}
@@ -597,10 +643,30 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             {t('cabinet_sort_type')}
                                         </button>
                                     </div>
-                                    {/* 설명 텍스트 - 별도 줄로 분리하여 가독성 향상 */}
-                                    <p className="text-xs text-gray-500 text-center leading-relaxed">
-                                        {t('cabinet_vertical_panel_hint')}
-                                    </p>
+
+                                    {/* 구분선 설정 밑 설명 텍스트 (입력창을 버튼부에서 분리) */}
+                                    <div className="flex flex-col items-center gap-2 mb-1 bg-gray-50 border border-gray-100 rounded-lg p-2 w-full mt-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-600 font-medium">세로 구분 위치</span>
+                                            <div className="flex items-center gap-1 bg-white border border-gray-200 px-2 py-0.5 rounded shadow-sm">
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    max={99}
+                                                    value={verticalPanelPos}
+                                                    onChange={(e) => {
+                                                        const v = parseInt(e.target.value, 10);
+                                                        if (!Number.isNaN(v)) setVerticalPanelPos(Math.max(1, Math.min(99, v)));
+                                                    }}
+                                                    className="w-10 text-xs text-center border-none focus:ring-0 p-0"
+                                                />
+                                                <span className="text-[10px] text-gray-400">%</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] sm:text-xs text-gray-500 text-center leading-relaxed">
+                                            {t('cabinet_vertical_panel_hint')}
+                                        </p>
+                                    </div>
                                 </div>
 
                                 {/* 가로/세로/폭 크기 입력 - 한 줄 */}
@@ -692,13 +758,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 >
                                     <ChevronDown size={18} />
                                 </button>
-                                <div className="flex justify-between items-center px-2 pr-8">
-                                    <h3 className="text-sm font-semibold text-gray-700">{t('cabinet_reagent_tray_title')}</h3>
-                                    <div className="flex items-center gap-2">
+                                <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 px-1 pr-6 w-full">
+                                    <h3 className="text-sm font-semibold text-gray-700 whitespace-nowrap shrink-0">{t('cabinet_reagent_tray_title')}</h3>
+                                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                                         <button
                                             onClick={() => { sortShelves('name'); autoSave(); }}
                                             disabled={shelves.length === 0}
-                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
+                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
                                         >
                                             <span>AZ</span>
                                             {t('cabinet_sort_name')}
@@ -706,7 +772,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         <button
                                             onClick={() => { sortShelves('type'); autoSave(); }}
                                             disabled={shelves.length === 0}
-                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
+                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
                                         >
                                             <Layers size={10} />
                                             {t('cabinet_sort_type')}
@@ -714,12 +780,32 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         <button
                                             onClick={() => setIsClearConfirmOpen(true)}
                                             disabled={shelves.every(s => s.items.length === 0)}
-                                            className="text-xs text-red-600 hover:underline ml-2 flex items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                                            className="text-[11px] sm:text-xs text-red-600 hover:underline sm:ml-2 flex flex-1 sm:flex-none justify-end sm:justify-start items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
                                         >
                                             {t('cabinet_clear_all')}
                                         </button>
                                     </div>
                                 </div>
+                                {(!isCoarsePointer || !draggedTemplate) && (
+                                    <div className="flex flex-col gap-2 px-1">
+                                        <p className={`text-xs ${draggedTemplate ? 'text-emerald-700 font-medium' : 'text-gray-500'}`}>
+                                            {placementInstruction}
+                                        </p>
+                                        {draggedTemplate && (
+                                            <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                                                <span className="min-w-0 text-xs font-medium text-emerald-800 truncate">
+                                                    {t('cabinet_place_selected_reagent', { name: draggedTemplate.name ?? t('cabinet_reagent_tray_title') })}
+                                                </span>
+                                                <button
+                                                    onClick={handleClearSelectedReagent}
+                                                    className="shrink-0 rounded-md border border-emerald-200 bg-white px-2 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                                                >
+                                                    {t('cabinet_place_clear_selection')}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
                                     {/* 📷 Scan Button */}
                                     <div
@@ -754,7 +840,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     ))}
                                 </div>
                             </div>
-                        ) : (
+                        ) : (!isCoarsePointer || !draggedTemplate) ? (
                             <button
                                 onClick={() => setIsReagentTrayVisible(true)}
                                 className="bg-white/90 backdrop-blur pointer-events-auto px-4 py-2 rounded-xl shadow-lg border flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50/50 transition-colors z-20"
@@ -763,7 +849,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 <ChevronUp size={18} />
                                 {t('cabinet_reagent_tray_show')}
                             </button>
-                        )}
+                        ) : null}
                     </div>
                 )}
             </div>

@@ -132,7 +132,9 @@ export const FridgeScene: React.FC = () => {
     const shelves = useFridgeStore((state) => state.shelves);
     const mode = useFridgeStore((state) => state.mode);
     const draggedItem = useFridgeStore((state) => state.draggedItem);
+    const draggedTemplate = useFridgeStore((state) => state.draggedTemplate);
     const setDraggedItem = useFridgeStore((state) => state.setDraggedItem);
+    const [isCoarsePointer, setIsCoarsePointer] = useState(false);
 
     useEffect(() => {
         if (!draggedItem) return;
@@ -143,6 +145,33 @@ export const FridgeScene: React.FC = () => {
         window.addEventListener('pointerup', onPointerUp);
         return () => window.removeEventListener('pointerup', onPointerUp);
     }, [draggedItem, setDraggedItem]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+        const mediaQuery = window.matchMedia('(pointer: coarse)');
+        const syncPointerType = () => {
+            const hasTouchSupport = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            const isMobileViewport = window.innerWidth <= 768;
+            setIsCoarsePointer(mediaQuery.matches || (hasTouchSupport && isMobileViewport));
+        };
+        syncPointerType();
+
+        if (typeof mediaQuery.addEventListener === 'function') {
+            mediaQuery.addEventListener('change', syncPointerType);
+            window.addEventListener('resize', syncPointerType);
+            return () => {
+                mediaQuery.removeEventListener('change', syncPointerType);
+                window.removeEventListener('resize', syncPointerType);
+            };
+        }
+
+        mediaQuery.addListener(syncPointerType);
+        window.addEventListener('resize', syncPointerType);
+        return () => {
+            mediaQuery.removeListener(syncPointerType);
+            window.removeEventListener('resize', syncPointerType);
+        };
+    }, []);
     const cabinetWidth = useFridgeStore((state) => state.cabinetWidth);
     const cabinetHeight = useFridgeStore((state) => state.cabinetHeight);
     const cabinetDepth = useFridgeStore((state) => state.cabinetDepth);
@@ -174,6 +203,7 @@ export const FridgeScene: React.FC = () => {
 
     const effectiveTarget = shelfFocusTarget ?? cameraConfig.target;
     const isPlaceMode = mode === 'PLACE';
+    const isTouchPlacementSelection = isPlaceMode && isCoarsePointer && !!draggedTemplate;
 
     // 포커스된 선반의 Y 좌표 계산 (탑뷰에서 위의 선반 숨김 로직에 사용)
     const focusedShelfY = useMemo(() => {
@@ -352,7 +382,7 @@ export const FridgeScene: React.FC = () => {
                         maxDistance={cameraConfig.maxDistance}
                         target={effectiveTarget}
                         enableRotate={!isPlaceMode && !draggedItem}
-                        enablePan={!draggedItem}
+                        enablePan={!draggedItem && !isTouchPlacementSelection}
                         enableZoom={true}
                         touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
                     />
