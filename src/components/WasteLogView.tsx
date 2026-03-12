@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import html2pdf from 'html2pdf.js';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { AppSelect } from './AppSelect';
+import { translateLocationName } from '../utils/i18nUtils';
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
@@ -36,7 +37,7 @@ const DELETE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ARCHIVE_CUTOFF_DAYS = 90;
 
 export const WasteLogView: React.FC = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.logs);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const currentLabId = useLabStore(state => state.currentLabId);
@@ -200,9 +201,9 @@ export const WasteLogView: React.FC = () => {
 
     const groupedSections = useMemo(
         () => sortBy === 'created_at'
-            ? groupWasteLogsByAge(filteredLogs, sortOrder, t)
+            ? groupWasteLogsByAge(filteredLogs, sortOrder, t, i18n.language)
             : [],
-        [filteredLogs, sortOrder, sortBy, t]
+        [filteredLogs, sortOrder, sortBy, t, i18n.language]
     );
 
     const sortOptions = useMemo(() => ([
@@ -262,7 +263,7 @@ export const WasteLogView: React.FC = () => {
 
     const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
-        return d.toLocaleDateString(undefined, {
+        return d.toLocaleDateString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -292,11 +293,16 @@ export const WasteLogView: React.FC = () => {
 
     const getDeletedLocation = (log: WasteLog): string | null => {
         const first = log.chemicals?.[0] as any;
-        if (first?.deleted_location) return String(first.deleted_location);
-
-        const memo = log.memo || '';
-        const match = memo.match(/삭제 위치:\s*([^|]+)/);
-        return match?.[1]?.trim() || null;
+        let locName: string | null = null;
+        if (first?.deleted_location) {
+            locName = String(first.deleted_location);
+        } else {
+            const memo = log.memo || '';
+            const match = memo.match(/삭제 위치:\s*([^|]+)/);
+            locName = match?.[1]?.trim() || null;
+        }
+        
+        return locName ? translateLocationName(locName, t) : null;
     };
 
     const getDeleteReason = (log: WasteLog): string | null => {
@@ -388,7 +394,7 @@ export const WasteLogView: React.FC = () => {
                                             onClick={() => setViewingAuditLogForId((chem as any).id)}
                                             className="mt-1.5 flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
                                         >
-                                            <History className="w-3 h-3" /> 변경 내용 비교 보기
+                                            <History className="w-3 h-3" /> {t('log_view_diff')}
                                         </button>
                                     )}
                                 </div>
@@ -397,7 +403,7 @@ export const WasteLogView: React.FC = () => {
 
                         {deleteReason && (
                             <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-700/30 rounded-lg text-sm text-slate-700 dark:text-slate-300">
-                                <span className="font-medium">폐기 사유:</span> {deleteReason}
+                                <span className="font-medium">{t('log_disposal_reason')}:</span> {deleteReason}
                             </div>
                         )}
 
@@ -618,7 +624,7 @@ export const WasteLogView: React.FC = () => {
                     </h2>
                     {totalCount > 0 && (
                         <span className="text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                            {totalCount}건
+                            {t('log_records_count', { count: totalCount })}
                         </span>
                     )}
                 </div>
@@ -916,7 +922,8 @@ export const WasteLogView: React.FC = () => {
                                                 type="date"
                                                 value={customExportStartDate}
                                                 onChange={(e) => setCustomExportStartDate(e.target.value)}
-                                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                                lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
+                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                                             />
                                         </label>
                                         <label className="flex flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
@@ -925,7 +932,8 @@ export const WasteLogView: React.FC = () => {
                                                 type="date"
                                                 value={customExportEndDate}
                                                 onChange={(e) => setCustomExportEndDate(e.target.value)}
-                                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                                lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
+                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                                             />
                                         </label>
                                     </div>
@@ -963,7 +971,7 @@ export const WasteLogView: React.FC = () => {
                     <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
                             <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <History className="w-4 h-4" /> 항목의 원본 변경 이력
+                                <History className="w-4 h-4" /> {t('audit_item_origin_history')}
                             </h3>
                             <button onClick={() => setViewingAuditLogForId(null)} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded">
                                 <X className="w-4 h-4 text-slate-500" />
@@ -973,15 +981,15 @@ export const WasteLogView: React.FC = () => {
                             {isLoadingAudit ? (
                                 <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
                             ) : auditLogs.length === 0 ? (
-                                <p className="text-center text-sm text-slate-500 py-8">이 항목의 감사 로그가 없습니다.</p>
+                                <p className="text-center text-sm text-slate-500 py-8">{t('audit_no_logs')}</p>
                             ) : (
                                 auditLogs.map(log => (
                                     <div key={log.id} className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="font-semibold">{log.action.toUpperCase()}</span>
-                                            <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString('ko-KR')}</span>
+                                            <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
                                         </div>
-                                        {log.actor_name && <div className="text-xs text-slate-500 mb-2">작업자: {log.actor_name}</div>}
+                                        {log.actor_name && <div className="text-xs text-slate-500 mb-2">{t('audit_actor_label')}: {log.actor_name}</div>}
                                         {log.diff_data && Object.keys(log.diff_data).length > 0 && (
                                             <div className="mt-1 flex flex-col gap-1 text-[11px] font-mono">
                                                 {Object.entries(log.diff_data).map(([k, v]: [string, any]) => (
@@ -1141,7 +1149,8 @@ function toEndOfDayIso(dateString: string): string {
 function groupWasteLogsByAge(
     logs: WasteLog[],
     sortOrder: 'asc' | 'desc',
-    t: (key: string, options?: Record<string, unknown>) => string
+    t: (key: string, options?: Record<string, unknown>) => string,
+    lang: string
 ): GroupedLogSection[] {
     const now = Date.now();
     const sections = new Map<string, GroupedLogSection>();
@@ -1169,8 +1178,8 @@ function groupWasteLogsByAge(
         sections.set(key, {
             key,
             mode,
-            title: formatGroupTitle(mode, bucketDate),
-            subtitle: formatGroupSubtitle(mode, bucketDate, createdAt, 1, t),
+            title: formatGroupTitle(mode, bucketDate, lang),
+            subtitle: formatGroupSubtitle(mode, bucketDate, createdAt, 1, t, lang),
             logs: [log],
             totalVolumeMl,
             latestCreatedAt: createdAt.getTime(),
@@ -1184,7 +1193,8 @@ function groupWasteLogsByAge(
             getGroupBaseDate(section.key),
             new Date(section.latestCreatedAt),
             section.logs.length,
-            t
+            t,
+            lang
         ),
         logs: [...section.logs].sort((a, b) => {
             const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -1213,9 +1223,10 @@ function sumLogVolume(log: WasteLog): number {
     }, 0);
 }
 
-function formatGroupTitle(mode: LogGroupMode, baseDate: Date): string {
+function formatGroupTitle(mode: LogGroupMode, baseDate: Date, lang: string): string {
+    const locale = lang.startsWith('ko') ? 'ko-KR' : 'en-US';
     if (mode === 'day') {
-        return baseDate.toLocaleDateString('ko-KR', {
+        return baseDate.toLocaleDateString(locale, {
             month: 'long',
             day: 'numeric',
             weekday: 'short',
@@ -1225,16 +1236,16 @@ function formatGroupTitle(mode: LogGroupMode, baseDate: Date): string {
     if (mode === 'week') {
         const endDate = new Date(baseDate);
         endDate.setDate(baseDate.getDate() + 6);
-        return `${baseDate.toLocaleDateString('ko-KR', {
+        return `${baseDate.toLocaleDateString(locale, {
             month: 'numeric',
             day: 'numeric',
-        })} - ${endDate.toLocaleDateString('ko-KR', {
+        })} - ${endDate.toLocaleDateString(locale, {
             month: 'numeric',
             day: 'numeric',
         })}`;
     }
 
-    return baseDate.toLocaleDateString('ko-KR', {
+    return baseDate.toLocaleDateString(locale, {
         year: 'numeric',
         month: 'long',
     });
@@ -1245,8 +1256,10 @@ function formatGroupSubtitle(
     baseDate: Date,
     latestDate: Date,
     count: number,
-    t: (key: string, options?: Record<string, unknown>) => string
+    t: (key: string, options?: Record<string, unknown>) => string,
+    lang: string
 ): string {
+    const locale = lang.startsWith('ko') ? 'ko-KR' : 'en-US';
     if (mode === 'day') {
         return t('log_group_day_count', { count });
     }
@@ -1254,13 +1267,13 @@ function formatGroupSubtitle(
     if (mode === 'week') {
         return t('log_group_week_summary', {
             count,
-            latest: latestDate.toLocaleDateString(),
+            latest: latestDate.toLocaleDateString(locale),
         });
     }
 
     return t('log_group_month_summary', {
         count,
-        month: baseDate.toLocaleDateString(undefined, {
+        month: baseDate.toLocaleDateString(locale, {
             year: 'numeric',
             month: 'long',
         }),

@@ -291,18 +291,19 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                     </div>
                 )}
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 min-w-0">
                     {cabinets.map(cabinet => (
-                        <CabinetCard
-                            key={cabinet.id}
-                            cabinet={cabinet}
-                            onClick={() => onSelectCabinet(cabinet.id)}
-                            onEdit={canCreateCabinet ? (e) => handleEdit(e, cabinet) : undefined}
-                            onDelete={canCreateCabinet ? (e) => handleDelete(e, cabinet.id) : undefined}
-                            onImageClick={(e) => handleImageClick(e, cabinet.id)}
-                            onInventory={(e) => handleInventory(e, cabinet)}
-                            onDisposalLog={(e) => handleDisposalLog(e, cabinet)}
-                        />
+                        <div key={cabinet.id} className="min-w-0">
+                            <CabinetCard
+                                cabinet={cabinet}
+                                onClick={() => onSelectCabinet(cabinet.id)}
+                                onEdit={canCreateCabinet ? (e) => handleEdit(e, cabinet) : undefined}
+                                onDelete={canCreateCabinet ? (e) => handleDelete(e, cabinet.id) : undefined}
+                                onImageClick={(e) => handleImageClick(e, cabinet.id)}
+                                onInventory={(e) => handleInventory(e, cabinet)}
+                                onDisposalLog={(e) => handleDisposalLog(e, cabinet)}
+                            />
+                        </div>
                     ))}
 
                     {cabinets.length === 0 && !error && (

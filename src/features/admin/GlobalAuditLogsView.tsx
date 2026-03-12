@@ -6,6 +6,7 @@ import { ShieldAlert, Loader2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { AppSelect } from '../../components/AppSelect';
+import { translateLocationName } from '../../utils/i18nUtils';
 
 type ActionFilter = 'all' | 'create' | 'update' | 'delete';
 type PeriodFilter = 'all' | 'today' | '7d';
@@ -76,7 +77,8 @@ const buildEventDescription = (log: AuditLog, t: TFunction): string => {
         (beforeData?.item_name as string | undefined) ||
         (beforeData?.name as string | undefined);
 
-    const location = log.location_context && !isUuidLike(log.location_context) ? log.location_context : null;
+    const context = log.location_context && !isUuidLike(log.location_context) ? log.location_context : null;
+    const location = translateLocationName(context, t);
 
     if (itemName && location) {
         return t('audit_event_item_location', { actor, item: itemName, location, action: actionLabel });
@@ -99,7 +101,7 @@ const getChangedFields = (log: AuditLog, t: TFunction): string[] => {
 };
 
 export const GlobalAuditLogsView: React.FC = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const currentLabId = useLabStore(state => state.currentLabId);
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -283,10 +285,10 @@ export const GlobalAuditLogsView: React.FC = () => {
                                 <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">{buildEventDescription(log, t)}</div>
                                 <div className="text-xs text-slate-500">
                                     {t('audit_entity_type_label')} {formatEntityName(log.entity_type, t)}
-                                    {log.location_context && !isUuidLike(log.location_context) ? `${t('audit_location_label')}${log.location_context}` : ''}
+                                    {log.location_context && !isUuidLike(log.location_context) ? `${t('audit_location_label')}${translateLocationName(log.location_context, t)}` : ''}
                                 </div>
                             </div>
-                            <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString()}</span>
+                            <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             {renderActionChip(log.action)}

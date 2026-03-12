@@ -159,7 +159,14 @@ export const storageLocationService = {
             return await this.seedDefaults(currentLabId);
         }
 
-        return data;
+        // 동일 lab_id + name 조합이 중복되어 있으면(예: seed 중복 실행) 하나만 노출
+        const seen = new Set<string>();
+        return data.filter((row) => {
+            const key = `${row.lab_id ?? ''}\0${(row.name || '').trim()}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
     },
 
     /** Seed default locations for a lab or personal space */

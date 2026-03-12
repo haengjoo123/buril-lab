@@ -27,7 +27,7 @@ import { Loader2, ShoppingBag } from 'lucide-react';
 import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
 
 function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { session, user, isLoading: isAuthLoading, signIn, signUp, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -108,6 +108,12 @@ function App() {
   useEffect(() => {
     syncVersion();
   }, [syncVersion]);
+
+  // Update HTML lang attribute for localized date input placeholders
+  useEffect(() => {
+    const lang = i18n.language.startsWith('ko') ? 'ko' : 'en';
+    document.documentElement.lang = lang;
+  }, [i18n.language]);
 
   useEffect(() => {
     const handleSafetyAcknowledged = () => setIsSafetyAcknowledged(true);

@@ -19,6 +19,7 @@ import {
 import { useFridgeStore } from '../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../types/fridge';
 import { AppSelect } from './AppSelect';
+import { translateLocationName } from '../utils/i18nUtils';
 
 interface InventoryRegistrationModalProps {
     product: MediaProduct;
@@ -36,7 +37,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     onSuccess,
     onNavigateToCabinet,
 }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const productNumbers = product.product_numbers?.filter(Boolean) || [];
 
     // Form state
@@ -126,17 +127,17 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
 
     const handleSubmit = async () => {
         if (!itemName.trim()) {
-            setError('시약/물품 이름을 입력해주세요.');
+            setError(t('inventory_error_name_required'));
             return;
         }
 
         if (storageType === 'cabinet' && !selectedCabinetId) {
-            setError('보관할 시약장을 선택해주세요.');
+            setError(t('inventory_error_cabinet_required'));
             return;
         }
 
         if (storageType === 'other' && !selectedLocationId) {
-            setError('기타 보관 장소를 선택해주세요.');
+            setError(t('inventory_error_location_required'));
             return;
         }
 
@@ -389,7 +390,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                             type="text"
                             value={itemName}
                             onChange={(e) => setItemName(e.target.value)}
-                            placeholder="예: 염산, 비커 등"
+                            placeholder={t('inventory_name_placeholder')}
                             className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                         />
                     </div>
@@ -403,7 +404,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                                 type="text"
                                 value={brand}
                                 onChange={(e) => setBrand(e.target.value)}
-                                placeholder="예: Sigma"
+                                placeholder={t('inventory_brand_placeholder')}
                                 className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                             />
                         </div>
@@ -415,7 +416,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                                 type="text"
                                 value={selectedProductNumber}
                                 onChange={(e) => setSelectedProductNumber(e.target.value)}
-                                placeholder="예: A1234"
+                                placeholder={t('inventory_pn_placeholder')}
                                 list={productNumbers.length > 0 ? `product-numbers-${product.id}` : undefined}
                                 className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                             />
@@ -437,7 +438,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                             type="text"
                             value={casNumber}
                             onChange={(e) => setCasNumber(e.target.value)}
-                            placeholder="예: 7647-01-0"
+                            placeholder={t('inventory_cas_placeholder')}
                             className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-mono text-slate-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                         />
                     </div>
@@ -538,7 +539,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                                                 : 'bg-gray-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
                                                 }`}
                                         >
-                                            {loc.icon} {loc.name}
+                                            {loc.icon} {translateLocationName(loc.name, t)}
                                         </button>
                                     ))}
 
@@ -590,12 +591,13 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                            유효기간
+                            {t('inventory_expiry_date')}
                         </label>
                         <input
                             type="date"
                             value={expiryDate}
                             onChange={(e) => setExpiryDate(e.target.value)}
+                            lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
                             className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                         />
                     </div>

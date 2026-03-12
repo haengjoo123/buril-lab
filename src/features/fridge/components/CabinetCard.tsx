@@ -14,8 +14,8 @@ interface CabinetCardProps {
 }
 
 export function CabinetCard({ cabinet, onClick, onEdit, onDelete, onImageClick, onInventory, onDisposalLog }: CabinetCardProps) {
-    const { t } = useTranslation();
-    const formattedDate = new Date(cabinet.created_at).toLocaleDateString();
+    const { t, i18n } = useTranslation();
+    const formattedDate = new Date(cabinet.created_at).toLocaleDateString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US');
     const actionCount = [onInventory, onDisposalLog, onEdit, onDelete].filter(Boolean).length;
 
     const handleImageClick = (e: React.MouseEvent) => {
@@ -27,10 +27,10 @@ export function CabinetCard({ cabinet, onClick, onEdit, onDelete, onImageClick, 
     return (
         <div
             onClick={onClick}
-            className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:border-blue-300 dark:hover:border-blue-700 flex flex-col gap-3"
+            className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:border-blue-300 dark:hover:border-blue-700 flex flex-col gap-3 min-w-0 overflow-hidden"
         >
             {/* Top: Image + Info */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
                 <div
                     className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden cursor-pointer group/image"
                     onClick={handleImageClick}
@@ -49,9 +49,10 @@ export function CabinetCard({ cabinet, onClick, onEdit, onDelete, onImageClick, 
                         </div>
                     )}
                 </div>
-                <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-2 flex-wrap">
-                        <span className="truncate">{cabinet.name}</span>
+                {/* min-w-0 + overflow-hidden: 영어 등 긴 텍스트가 카드 밖으로 넘치지 않도록 함 */}
+                <div className="min-w-0 flex-1 overflow-hidden">
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="truncate min-w-0">{cabinet.name}</span>
                         {cabinet.location && (
                             <span className="text-xs font-normal px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md flex items-center gap-1 shrink-0">
                                 <MapPin className="w-3 h-3" />
@@ -59,67 +60,67 @@ export function CabinetCard({ cabinet, onClick, onEdit, onDelete, onImageClick, 
                             </span>
                         )}
                     </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate" title={t('cabinet_card_size', { width: cabinet.width, height: cabinet.height, date: formattedDate })}>
                         {t('cabinet_card_size', { width: cabinet.width, height: cabinet.height, date: formattedDate })}
                     </p>
                 </div>
             </div>
 
             {/* Bottom: Action Buttons */}
-            {(onEdit || onDelete || onInventory || onDisposalLog) && (
+            {(onEdit || onDelete || onInventory || onDisposalLog) ? (
                 <div
-                    className="grid gap-1.5 border-t border-gray-100 dark:border-slate-700 pt-3 -mb-1 sm:flex sm:items-center sm:justify-end sm:gap-1"
+                    className="grid gap-1.5 border-t border-gray-100 dark:border-slate-700 pt-3 -mb-1 sm:flex sm:items-center sm:justify-evenly sm:gap-1"
                     style={{ gridTemplateColumns: `repeat(${actionCount}, minmax(0, 1fr))` }}
                 >
                     {onInventory && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onInventory(e); }}
-                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs"
+                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs overflow-hidden"
                             title={t('tab_inventory')}
                             aria-label={t('tab_inventory')}
                         >
-                            <ClipboardList className="w-4 h-4" />
-                            <span className="whitespace-nowrap">{t('tab_inventory')}</span>
+                            <ClipboardList className="w-4 h-4 shrink-0" />
+                            <span className="whitespace-nowrap truncate min-w-0">{t('tab_inventory')}</span>
                         </button>
                     )}
                     {onDisposalLog && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onDisposalLog(e); }}
-                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs"
+                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs overflow-hidden"
                             title={t('cabinet_dispose_log_btn')}
                             aria-label={t('cabinet_dispose_log_btn')}
                         >
-                            <History className="w-4 h-4" />
-                            <span className="whitespace-nowrap sm:hidden">{t('cabinet_dispose_log_btn_short')}</span>
-                            <span className="hidden whitespace-nowrap sm:inline">{t('cabinet_dispose_log_btn')}</span>
+                            <History className="w-4 h-4 shrink-0" />
+                            <span className="whitespace-nowrap truncate min-w-0 sm:hidden">{t('cabinet_dispose_log_btn_short')}</span>
+                            <span className="hidden whitespace-nowrap truncate min-w-0 sm:inline">{t('cabinet_dispose_log_btn')}</span>
                         </button>
                     )}
                     {onEdit && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(e); }}
-                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs"
+                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs overflow-hidden"
                             title={t('cabinet_card_edit')}
                             aria-label={t('cabinet_card_edit')}
                         >
-                            <Edit2 className="w-4 h-4" />
-                            <span className="whitespace-nowrap sm:hidden">{t('cabinet_card_edit_short')}</span>
-                            <span className="hidden whitespace-nowrap sm:inline">{t('cabinet_card_edit')}</span>
+                            <Edit2 className="w-4 h-4 shrink-0" />
+                            <span className="whitespace-nowrap truncate min-w-0 sm:hidden">{t('cabinet_card_edit_short')}</span>
+                            <span className="hidden whitespace-nowrap truncate min-w-0 sm:inline">{t('cabinet_card_edit')}</span>
                         </button>
                     )}
                     {onDelete && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(e); }}
-                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs"
+                            className="min-w-0 rounded-xl px-1.5 py-2 text-[11px] font-medium text-slate-500 transition-colors flex flex-col items-center justify-center gap-1 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 sm:min-w-fit sm:flex-row sm:gap-1 sm:px-2.5 sm:py-1.5 sm:text-xs overflow-hidden"
                             title={t('cabinet_card_delete')}
                             aria-label={t('cabinet_card_delete')}
                         >
-                            <Trash2 className="w-4 h-4" />
-                            <span className="whitespace-nowrap sm:hidden">{t('cabinet_card_delete_short')}</span>
-                            <span className="hidden whitespace-nowrap sm:inline">{t('cabinet_card_delete')}</span>
+                            <Trash2 className="w-4 h-4 shrink-0" />
+                            <span className="whitespace-nowrap truncate min-w-0 sm:hidden">{t('cabinet_card_delete_short')}</span>
+                            <span className="hidden whitespace-nowrap truncate min-w-0 sm:inline">{t('cabinet_card_delete')}</span>
                         </button>
                     )}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }

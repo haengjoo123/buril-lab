@@ -15,6 +15,7 @@ import { AppSelect } from '../../components/AppSelect';
 
 import { useLabStore } from '../../store/useLabStore';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
+import { translateLocationName } from '../../utils/i18nUtils';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type ReagentTemplateType = 'A' | 'B' | 'C' | 'D';
@@ -249,9 +250,9 @@ export const InventoryListView: React.FC = () => {
     const bulkMoveLocationOptions = useMemo(() => (
         locations.map((loc) => ({
             value: loc.id,
-            label: `${loc.icon} ${loc.name}`,
+            label: `${loc.icon} ${translateLocationName(loc.name, t)}`,
         }))
-    ), [locations]);
+    ), [locations, t]);
 
     const bulkMoveCabinetOptions = useMemo(() => (
         cabinets.map((cab) => ({
@@ -730,7 +731,7 @@ export const InventoryListView: React.FC = () => {
         return (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
                 <MapPin className="w-3.5 h-3.5" />
-                {item.storage_location_icon || '📦'} {item.storage_location_name || t('inventory_other_storage')}
+                {item.storage_location_icon || '📦'} {translateLocationName(item.storage_location_name, t) || t('inventory_other_storage')}
             </span>
         );
     };

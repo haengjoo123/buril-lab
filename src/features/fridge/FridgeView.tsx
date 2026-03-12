@@ -21,7 +21,7 @@ export interface FridgeViewProps {
 }
 
 export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const [verticalPanelPos, setVerticalPanelPos] = useState(50);
@@ -465,12 +465,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     {saveStatus === 'saving' ? (
                         <span className="flex items-center gap-1.5 text-sm text-slate-400">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            <span className="hidden sm:inline">저장 중...</span>
+                            <span className="hidden sm:inline">{t('cabinet_saving')}</span>
                         </span>
                     ) : saveStatus === 'saved' ? (
                         <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium animate-in fade-in duration-200">
                             <CheckCircle2 className="w-4 h-4" />
-                            <span className="hidden sm:inline">저장됨</span>
+                            <span className="hidden sm:inline">{t('cabinet_saved')}</span>
                         </span>
                     ) : (
                         <button
@@ -647,7 +647,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     {/* 구분선 설정 밑 설명 텍스트 (입력창을 버튼부에서 분리) */}
                                     <div className="flex flex-col items-center gap-2 mb-1 bg-gray-50 border border-gray-100 rounded-lg p-2 w-full mt-1">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-600 font-medium">세로 구분 위치</span>
+                                            <span className="text-xs text-gray-600 font-medium">{t('cabinet_vertical_panel')}</span>
                                             <div className="flex items-center gap-1 bg-white border border-gray-200 px-2 py-0.5 rounded shadow-sm">
                                                 <input
                                                     type="number"
@@ -901,22 +901,22 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                         {/* 브랜드 + 제품번호 */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-semibold text-gray-600">📦 브랜드</label>
+                                <label className="text-xs font-semibold text-gray-600">📦 {t('inventory_brand')}</label>
                                 <input
                                     type="text"
                                     value={placementBrand}
                                     onChange={e => setPlacementBrand(e.target.value)}
-                                    placeholder="예: Sigma"
+                                    placeholder={t('inventory_brand_placeholder')}
                                     className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                 />
                             </div>
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-semibold text-gray-600">🏷 제품번호</label>
+                                <label className="text-xs font-semibold text-gray-600">🏷 {t('inventory_product_number')}</label>
                                 <input
                                     type="text"
                                     value={placementProductNumber}
                                     onChange={e => setPlacementProductNumber(e.target.value)}
-                                    placeholder="예: A1234"
+                                    placeholder={t('inventory_pn_placeholder')}
                                     className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                                 />
                             </div>
@@ -955,7 +955,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     type="text"
                                     value={placementCapacity}
                                     onChange={e => setPlacementCapacity(e.target.value)}
-                                    placeholder="예: 500mL, 1kg"
+                                    placeholder={t('inventory_capacity_placeholder')}
                                     className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                 />
                             </div>
@@ -967,6 +967,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     type="date"
                                     value={placementExpiry}
                                     onChange={e => setPlacementExpiry(e.target.value)}
+                                    lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
                                     className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                 />
                             </div>
@@ -1067,22 +1068,22 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 {/* Brand + Product Number */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1">
-                                        <label className="text-xs font-semibold text-gray-600">📦 브랜드</label>
+                                        <label className="text-xs font-semibold text-gray-600">📦 {t('inventory_brand')}</label>
                                         <input
                                             type="text"
                                             value={scanBrand}
                                             onChange={e => setScanBrand(e.target.value)}
-                                            placeholder="예: Sigma"
+                                            placeholder={t('inventory_brand_placeholder')}
                                             className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1">
-                                        <label className="text-xs font-semibold text-gray-600">🏷 제품번호</label>
+                                        <label className="text-xs font-semibold text-gray-600">🏷 {t('inventory_product_number')}</label>
                                         <input
                                             type="text"
                                             value={scanProductNumber}
                                             onChange={e => setScanProductNumber(e.target.value)}
-                                            placeholder="예: A1234"
+                                            placeholder={t('inventory_pn_placeholder')}
                                             className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                                         />
                                     </div>
@@ -1152,6 +1153,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             type="date"
                                             value={scanExpiry}
                                             onChange={e => setScanExpiry(e.target.value)}
+                                            lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
                                             className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                         />
                                     </div>

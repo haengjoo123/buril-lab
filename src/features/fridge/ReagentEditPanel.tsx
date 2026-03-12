@@ -20,14 +20,14 @@ const REASONS: { key: DisposalReason; i18n: string; icon: string }[] = [
 ];
 
 const CONTAINER_TYPES: { type: ReagentTemplateType; label: string; icon: string }[] = [
-    { type: 'A', label: '갈색병', icon: '🟤' },
-    { type: 'B', label: '플라스틱 통', icon: '🤍' },
-    { type: 'C', label: '솔벤트 캔', icon: '🥫' },
-    { type: 'D', label: '바이알 박스', icon: '📦' },
+    { type: 'A', label: 'cabinet_container_amber', icon: '🟤' },
+    { type: 'B', label: 'cabinet_container_plastic', icon: '🤍' },
+    { type: 'C', label: 'cabinet_container_solvent', icon: '🥫' },
+    { type: 'D', label: 'cabinet_container_vial', icon: '📦' },
 ];
 
 export const ReagentEditPanel: React.FC = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const selectedReagentId = useFridgeStore(s => s.selectedReagentId);
     const shelves = useFridgeStore(s => s.shelves);
     const cabinetId = useFridgeStore(s => s.cabinetId);
@@ -228,7 +228,7 @@ export const ReagentEditPanel: React.FC = () => {
                             className="w-full px-3.5 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Trash2 size={16} />
-                            {isDisposing ? '처리 중...' : t('cabinet_delete')}
+                            {isDisposing ? t('cabinet_processing') : t('cabinet_delete')}
                         </button>
                     </div>
                 </>
@@ -244,11 +244,11 @@ export const ReagentEditPanel: React.FC = () => {
                                     <MapPin size={10} />
                                     {t('cabinet_shelf_level', { level: selectedItem.shelfLevel + 1 })}
                                     {' · '}
-                                    {selectedItem.position <= 15 ? '왼쪽'
-                                        : selectedItem.position <= 35 ? '중앙 왼쪽'
-                                            : selectedItem.position <= 65 ? '중앙'
-                                                : selectedItem.position <= 85 ? '중앙 오른쪽'
-                                                    : '오른쪽'}
+                                    {selectedItem.position <= 15 ? t('cabinet_pos_left')
+                                        : selectedItem.position <= 35 ? t('cabinet_pos_center_left')
+                                            : selectedItem.position <= 65 ? t('cabinet_pos_center')
+                                                : selectedItem.position <= 85 ? t('cabinet_pos_center_right')
+                                                    : t('cabinet_pos_right')}
                                 </span>
                             </div>
                         </div>
@@ -270,7 +270,7 @@ export const ReagentEditPanel: React.FC = () => {
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
                                     <Package size={11} />
-                                    브랜드
+                                    {t('inventory_brand')}
                                 </label>
                                 <input
                                     type="text"
@@ -283,7 +283,7 @@ export const ReagentEditPanel: React.FC = () => {
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
                                     <Tag size={11} />
-                                    제품번호
+                                    {t('inventory_product_number')}
                                 </label>
                                 <input
                                     type="text"
@@ -311,7 +311,7 @@ export const ReagentEditPanel: React.FC = () => {
                                             }`}
                                     >
                                         <span className="text-base leading-none">{ct.icon}</span>
-                                        <span className="leading-tight text-center">{ct.label}</span>
+                                        <span className="leading-tight text-center">{t(ct.label)}</span>
                                     </button>
                                 ))}
                             </div>
@@ -321,14 +321,14 @@ export const ReagentEditPanel: React.FC = () => {
                         <div className="flex flex-col gap-1.5">
                             <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
                                 <Beaker size={12} />
-                                용량(규격)
+                                {t('inventory_capacity')}
                             </label>
                             <input
                                 type="text"
                                 value={capacity}
                                 onChange={(e) => setCapacity(e.target.value)}
                                 className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                                placeholder="예: 500mL, 1kg"
+                                placeholder={t('inventory_capacity_placeholder')}
                             />
                         </div>
 
@@ -343,11 +343,11 @@ export const ReagentEditPanel: React.FC = () => {
                                 value={casNo}
                                 onChange={(e) => setCasNo(e.target.value)}
                                 className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
-                                placeholder="예: 67-64-1"
+                                placeholder={t('inventory_cas_placeholder')}
                             />
                             {casNo && (
                                 <p className="text-[10px] text-gray-400">
-                                    저장 시 PubChem에서 GHS 위험 정보를 자동 조회합니다
+                                    {t('cabinet_pubchem_auto_enrich')}
                                 </p>
                             )}
                         </div>
@@ -356,13 +356,14 @@ export const ReagentEditPanel: React.FC = () => {
                         <div className="flex flex-col gap-1.5">
                             <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
                                 <CalendarClock size={12} />
-                                유효기간
+                                {t('inventory_error_expiry_label')}
                             </label>
                             <div className="flex items-center gap-2">
                                 <input
                                     type="date"
                                     value={expiryDate}
                                     onChange={(e) => setExpiryDate(e.target.value)}
+                                    lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
                                     className="flex-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                                 />
                                 {expiryDate && (
@@ -370,7 +371,7 @@ export const ReagentEditPanel: React.FC = () => {
                                         type="button"
                                         onClick={() => setExpiryDate('')}
                                         className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                                        title="유효기간 삭제"
+                                        title={t('cabinet_delete_expiry')}
                                     >
                                         <X size={14} />
                                     </button>
@@ -412,7 +413,7 @@ export const ReagentEditPanel: React.FC = () => {
                                     {groupLabels.length > 0 && (
                                         <div className="flex flex-col gap-1">
                                             <label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
-                                                보관 분류
+                                                {t('cabinet_storage_group')}
                                             </label>
                                             <div className="flex flex-wrap gap-1">
                                                 {groupLabels.map(key => (
@@ -473,7 +474,7 @@ export const ReagentEditPanel: React.FC = () => {
                             className="flex-1 px-3.5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                            {isSaving ? '처리 중...' : t('cabinet_save')}
+                            {isSaving ? t('cabinet_processing') : t('cabinet_save')}
                         </button>
                     </div>
                 </>

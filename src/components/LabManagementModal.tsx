@@ -2,6 +2,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import { X, Search, Plus, Check, Loader2, AlertCircle, Users, Settings } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { labService } from '../services/labService';
 import { useLabStore } from '../store/useLabStore';
 import type { Lab } from '../store/useLabStore';
@@ -12,6 +13,7 @@ interface LabManagementModalProps {
 }
 
 export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose }) => {
+    const { t, i18n } = useTranslation();
     const [view, setView] = useState<'menu' | 'create' | 'search' | 'members' | 'settings'>('menu');
     const [query, setQuery] = useState('');
     const [searchResults, setSearchResults] = useState<Lab[]>([]);
@@ -454,7 +456,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <span className="text-xs text-slate-500 mt-0.5">가입일: {new Date(member.joined_at).toLocaleDateString()}</span>
+                                                    <span className="text-xs text-slate-500 mt-0.5">{t('member_joined_label')}: {new Date(member.joined_at).toLocaleDateString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
                                                 </div>
                                                 <span className={`text-xs px-2 py-1 rounded font-medium ${member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
                                                     {member.role.toUpperCase()}

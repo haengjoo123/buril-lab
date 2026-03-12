@@ -7,6 +7,7 @@ import { supabase } from '../../services/supabaseClient';
 import { useTranslation } from 'react-i18next';
 import * as XLSX from 'xlsx';
 import { AppSelect } from '../../components/AppSelect';
+import { translateLocationName } from '../../utils/i18nUtils';
 
 interface InventoryCsvImportModalProps {
     isOpen: boolean;
@@ -213,12 +214,16 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     const matchLocationId = (rawLocation: string): string | null => {
         const target = normalize(rawLocation);
         if (!target) return null;
+        
         const exact = locations.find(loc => normalize(loc.name) === target);
         if (exact) return exact.id;
+
         const compact = target.replace(/[^a-z0-9가-힣]/gi, '');
         const fuzzy = locations.find((loc) => {
+            const translatedName = translateLocationName(loc.name, t);
             const normalizedName = normalize(loc.name).replace(/[^a-z0-9가-힣]/gi, '');
-            return normalizedName === compact;
+            const normalizedTranslated = normalize(translatedName).replace(/[^a-z0-9]/gi, '');
+            return normalizedName === compact || normalizedTranslated === compact;
         });
         return fuzzy?.id || null;
     };
@@ -332,19 +337,19 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const rowsForExport = items.map((item) => {
             const storageLabel = item.storage_type === 'cabinet'
                 ? (item.cabinet_name || '')
-                : (item.storage_location_name || '');
+                : translateLocationName(item.storage_location_name || '', t);
 
             return {
-                시약명: item.name || '',
-                브랜드: item.brand || '',
-                제품번호: item.product_number || '',
-                CAS번호: item.cas_number || '',
-                수량: item.quantity ?? '',
-                용량: item.capacity || '',
-                보관유형: item.storage_type === 'cabinet' ? '시약장' : '기타',
-                보관위치: storageLabel,
-                유효기간: item.expiry_date || '',
-                메모: item.memo || '',
+                [t('inventory_product_name')]: item.name || '',
+                [t('inventory_brand')]: item.brand || '',
+                [t('inventory_product_number')]: item.product_number || '',
+                [t('inventory_cas_number')]: item.cas_number || '',
+                [t('inventory_quantity')]: item.quantity ?? '',
+                [t('inventory_capacity')]: item.capacity || '',
+                [t('inventory_storage_type')]: item.storage_type === 'cabinet' ? t('inventory_loc_cabinet') : t('inventory_loc_other'),
+                [t('inventory_storage_location')]: storageLabel,
+                [t('inventory_expiry_date')]: item.expiry_date || '',
+                [t('inventory_memo')]: item.memo || '',
             };
         });
 

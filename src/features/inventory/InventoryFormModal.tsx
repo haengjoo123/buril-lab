@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Save, AlertCircle, CheckCircle2, History, Loader2 } from 'lucide-react';
 import { inventoryService, type InventoryItem, type CreateInventoryInput, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
@@ -7,6 +8,8 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
 import { supabase } from '../../services/supabaseClient';
 import { AppSelect } from '../../components/AppSelect';
+
+import { translateLocationName } from '../../utils/i18nUtils';
 
 interface Props {
     isOpen: boolean;
@@ -17,6 +20,7 @@ interface Props {
 }
 
 export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations, initialData, onSaved }) => {
+    const { t, i18n } = useTranslation();
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
@@ -108,17 +112,17 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         e.preventDefault();
 
         if (!formData.name.trim()) {
-            setError('시약/물품 이름을 입력해주세요.');
+            setError(t('msg_input_required_name'));
             return;
         }
 
         if (formData.storage_type === 'cabinet' && !formData.cabinet_id) {
-            setError('보관할 시약장을 선택해주세요.');
+            setError(t('msg_select_cabinet'));
             return;
         }
 
         if (formData.storage_type === 'other' && !formData.storage_location_id) {
-            setError('기타 보관 장소를 선택해주세요.');
+            setError(t('msg_select_location'));
             return;
         }
 
@@ -139,7 +143,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             } else {
                 const createdItem = await inventoryService.createItem(formData);
                 if (!createdItem) {
-                    throw new Error('재고 등록에 실패했습니다.');
+                    throw new Error(t('inventory_error'));
                 }
 
                 // 수동 등록에서도 시약장 선택 시 실제 3D 시약장 빈 공간에 자동 배치
@@ -147,11 +151,11 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     const isPlaced = await placeToCabinet(createdItem.id, formData);
                     if (!isPlaced) {
                         onSaved();
-                        setError('재고 등록은 완료되었지만 시약장에 빈 공간이 없어 자동 배치되지 않았습니다.');
+                        setError(t('inventory_auto_placed_fail'));
                         return;
                     }
                     // 모달이 닫힌 뒤에도 짧게 성공 피드백을 보여 중복 입력을 줄입니다.
-                    setSuccessToastMessage('시약장 빈 공간에 자동 배치되었습니다.');
+                    setSuccessToastMessage(t('inventory_auto_placed'));
                     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
                     toastTimerRef.current = setTimeout(() => setSuccessToastMessage(null), 1800);
                 }
@@ -160,7 +164,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             onClose();
         } catch (err: unknown) {
             console.error('Failed to save inventory:', err);
-            const message = err instanceof Error ? err.message : '저장 중 오류가 발생했습니다.';
+            const message = err instanceof Error ? err.message : t('error_save_generic');
             setError(message);
         } finally {
             setIsSaving(false);
@@ -363,16 +367,20 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
 
     const resolveLocationLabel = (storageType: 'cabinet' | 'other', cabinetId?: string | null, locationId?: string | null): string => {
         if (storageType === 'cabinet') {
-            const cabinetName = cabinets.find(cab => cab.id === (cabinetId || ''))?.name;
-            return cabinetName ? `시약장 · ${cabinetName}` : '시약장 · 미지정';
+            const cabinetName = cabinets.find(cab => cab.id === (cabinetId || ''))?.name || t('inventory_unspecified');
+            return `${t('inventory_loc_cabinet')} · ${cabinetName}`;
         }
         const location = locations.find(loc => loc.id === (locationId || ''));
-        return location ? `기타 · ${location.icon} ${location.name}` : '기타 · 미지정';
+        if (!location) return `${t('inventory_loc_other')} · ${t('inventory_unspecified')}`;
+        
+        const locName = translateLocationName(location.name, t);
+        
+        return `${t('inventory_loc_other')} · ${location.icon} ${locName}`;
     };
 
     const currentLocationLabel = initialData
         ? resolveLocationLabel(initialData.storage_type, initialData.cabinet_id, initialData.storage_location_id)
-        : '신규 등록';
+        : t('inventory_new_registration');
     const targetLocationLabel = resolveLocationLabel(
         formData.storage_type,
         formData.cabinet_id,
@@ -384,7 +392,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
     }));
     const locationOptions = locations.map((loc) => ({
         value: loc.id,
-        label: `${loc.icon} ${loc.name}`,
+        label: `${loc.icon} ${translateLocationName(loc.name, t)}`,
     }));
     const isLocationChanged = initialData
         ? (
@@ -414,7 +422,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-800">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
                             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                                {initialData ? '재고 수정' : '재고 수동 등록'}
+                                {initialData ? t('inventory_modal_title_edit') : t('inventory_modal_title_add')}
                             </h2>
                             <button onClick={onClose} className="p-1 -mr-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <X className="w-5 h-5" />
@@ -432,63 +440,63 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                 )}
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">이름 <span className="text-red-500">*</span></label>
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_product_name')} <span className="text-red-500">*</span></label>
                                     <input
                                         name="name"
                                         value={formData.name}
                                         onChange={handleChange}
-                                        placeholder="예: 염산, 비커 등"
+                                        placeholder={t('inventory_product_name_placeholder')}
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">브랜드</label>
+                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_brand')}</label>
                                         <input
                                             name="brand"
                                             value={formData.brand}
                                             onChange={handleChange}
-                                            placeholder="예: Sigma"
+                                            placeholder={t('inventory_brand_placeholder')}
                                             className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">제품번호 (PN)</label>
+                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_product_number')}</label>
                                         <input
                                             name="product_number"
                                             value={formData.product_number}
                                             onChange={handleChange}
-                                            placeholder="예: A1234"
+                                            placeholder={t('inventory_pn_placeholder')}
                                             className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-slate-900 dark:text-slate-100"
                                         />
                                     </div>
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">CAS Number</label>
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_cas_number')}</label>
                                     <input
                                         name="cas_number"
                                         value={formData.cas_number}
                                         onChange={handleChange}
-                                        placeholder="예: 7647-01-0"
+                                        placeholder={t('inventory_cas_placeholder')}
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-slate-900 dark:text-slate-100"
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">용량</label>
+                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_capacity')}</label>
                                         <input
                                             name="capacity"
                                             value={formData.capacity}
                                             onChange={handleChange}
-                                            placeholder="예: 500mL, 1kg"
+                                            placeholder={t('inventory_capacity_placeholder')}
                                             className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">수량 <span className="text-red-500">*</span></label>
+                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_quantity')} <span className="text-red-500">*</span></label>
                                         <input
                                             name="quantity"
                                             type="number"
@@ -500,7 +508,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                         />
                                         {isEditingCabinetItem && (
                                             <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                                                시약장 항목 수량은 3D 시약장 위치 기준으로 관리됩니다.
+                                                {t('inventory_qty_notice')}
                                             </span>
                                         )}
                                     </div>
@@ -508,19 +516,19 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
 
                                 {/* 보관 위치 지정 */}
                                 <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3 mt-2">
-                                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">보관 위치 설정</label>
+                                    <label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">{t('inventory_storage_type')}</label>
 
                                     <div className="flex gap-2">
                                         <button type="button" onClick={() => setFormData(prev => ({ ...prev, storage_type: 'cabinet' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'cabinet' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
-                                            시약장에 보관
+                                            {t('inventory_storage_cabinet')}
                                         </button>
                                         <button type="button" onClick={() => setFormData(prev => ({ ...prev, storage_type: 'other' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'other' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
-                                            기타 위치에 보관
+                                            {t('inventory_storage_other')}
                                         </button>
                                     </div>
                                     {isEditingCabinetItem && (
                                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                            시약장 항목도 이 모달에서 위치 이동할 수 있습니다. 대상 시약장 공간이 부족하면 이동이 실패합니다.
+                                            {t('inventory_move_notice')}
                                         </p>
                                     )}
 
@@ -529,7 +537,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                             value={formData.cabinet_id || ''}
                                             onChange={(value) => setFormData((prev) => ({ ...prev, cabinet_id: value }))}
                                             options={cabinetOptions}
-                                            placeholder="-- 시약장 선택 --"
+                                            placeholder={`-- ${t('inventory_select_cabinet')} --`}
                                             buttonClassName="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                                         />
                                     )}
@@ -539,7 +547,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                             value={formData.storage_location_id || ''}
                                             onChange={(value) => setFormData((prev) => ({ ...prev, storage_location_id: value }))}
                                             options={locationOptions}
-                                            placeholder="-- 보관 장소 선택 --"
+                                            placeholder={`-- ${t('inventory_select_location')} --`}
                                             buttonClassName="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                                         />
                                     )}
@@ -549,9 +557,9 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                         ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
                                         : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
                                         }`}>
-                                        <span className="font-semibold">현재 위치</span>
+                                        <span className="font-semibold">{t('inventory_current_location')}</span>
                                         <span className="mx-1">→</span>
-                                        <span className="font-semibold">변경 위치</span>
+                                        <span className="font-semibold">{t('inventory_change_location')}</span>
                                         <div className="mt-1 leading-relaxed">
                                             {currentLocationLabel}
                                             <span className="mx-1.5">→</span>
@@ -561,23 +569,24 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                 </div>
 
                                 <div className="flex flex-col gap-1.5 mt-2">
-                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">유효기간</label>
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_expiry_date')}</label>
                                     <input
                                         name="expiry_date"
                                         type="date"
                                         value={formData.expiry_date}
                                         onChange={handleChange}
+                                        lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100 min-h-[42px]"
                                     />
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">메모</label>
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_memo')}</label>
                                     <textarea
                                         name="memo"
                                         value={formData.memo}
                                         onChange={handleChange}
-                                        placeholder="특이사항, 보관 방법 등"
+                                        placeholder={t('inventory_memo_placeholder')}
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm h-20 resize-none focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
                                     />
                                 </div>
@@ -585,33 +594,33 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                 {initialData && (
                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                                         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
-                                            <History className="w-4 h-4" /> 변경 이력
+                                            <History className="w-4 h-4" /> {t('history_log', '변경 이력')}
                                         </h3>
                                         {isLoadingLogs ? (
                                             <div className="flex justify-center p-4">
                                                 <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
                                             </div>
                                         ) : auditLogs.length === 0 ? (
-                                            <p className="text-xs text-slate-500 text-center py-2">기록이 없습니다.</p>
+                                            <p className="text-xs text-slate-500 text-center py-2">{t('log_empty', '기록이 없습니다.')}</p>
                                         ) : (
                                             <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                                                 {auditLogs.map(log => (
                                                     <div key={log.id} className="bg-slate-50 dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300">
                                                         <div className="flex justify-between items-center mb-1">
-                                                            <span className={`font-semibold px-1.5 py-0.5 rounded text-[10px] ${log.action === 'create' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
+                                                             <span className={`font-semibold px-1.5 py-0.5 rounded text-[10px] ${log.action === 'create' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
                                                                     log.action === 'update' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
                                                                         'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
                                                                 }`}>
-                                                                {log.action === 'update' ? '수정' : log.action === 'create' ? '등록' : log.action}
+                                                                {log.action === 'update' ? t('log_action_update', '수정') : log.action === 'create' ? t('log_action_create', '등록') : log.action}
                                                             </span>
                                                             <span className="text-[10px] text-slate-400">
-                                                                {new Date(log.created_at).toLocaleString('ko-KR')}
+                                                                {new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}
                                                             </span>
                                                         </div>
-                                                        {log.actor_name && <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">작업자: {log.actor_name}</div>}
+                                                        {log.actor_name && <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
                                                         {log.diff_data && Object.keys(log.diff_data).length > 0 && (
                                                             <div className="mt-1 flex flex-col gap-0.5">
-                                                                {Object.entries(log.diff_data).map(([k, v]) => (
+                                                                {Object.entries(log.diff_data).map(([k, v]: [string, any]) => (
                                                                     <div key={k} className="flex gap-1 text-[10px] items-center">
                                                                         <span className="text-slate-400 w-16 shrink-0 truncate">{k}:</span>
                                                                         <span className="line-through text-red-500/70 truncate break-all">{JSON.stringify(v.from)}</span>
@@ -635,7 +644,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                 onClick={onClose}
                                 className="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-400 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
                             >
-                                취소
+                                {t('btn_cancel')}
                             </button>
                             <button
                                 type="submit"
@@ -644,7 +653,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                 className="px-6 py-2 rounded-lg text-white font-medium bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2"
                             >
                                 {isSaving ? <span className="animate-spin text-xl leading-none w-4 h-4 rounded-full border-2 border-white/30 border-t-white"></span> : <Save className="w-4 h-4" />}
-                                {initialData ? '수정 내용 저장' : '등록 완료'}
+                                {initialData ? t('cabinet_save') : t('inventory_register_btn')}
                             </button>
                         </div>
                     </div>
