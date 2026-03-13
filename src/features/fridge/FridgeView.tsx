@@ -64,6 +64,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [isCoarsePointer, setIsCoarsePointer] = useState(false);
 
+    // 모바일: 시약 내려놓은 직후 발생하는 합성 클릭(ghost click)으로 백드롭이 눌리는 것 방지
+    const placementModalOpenedAtRef = React.useRef<number>(0);
+
     const {
         mode,
         setMode,
@@ -94,6 +97,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         autoPlaceResult,
         clearAutoPlaceResult,
     } = useFridgeStore();
+
+    // 시약 정보 입력 모달이 열릴 때 시각 기록 (모바일 ghost click 방지용)
+    React.useEffect(() => {
+        if (pendingPlacement) placementModalOpenedAtRef.current = Date.now();
+    }, [pendingPlacement]);
 
     React.useEffect(() => {
         if (!cabinetId) return;
@@ -881,7 +889,18 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             {/* Original manual placement dialog */}
             {pendingPlacement && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={handleCancelPlacement} />
+                    <div
+                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                        onClick={(e) => {
+                            // 모바일: 손 뗀 직후 발생하는 합성 클릭은 무시 (의도치 않은 백드롭 클릭 방지)
+                            if (Date.now() - placementModalOpenedAtRef.current < 400) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                return;
+                            }
+                            handleCancelPlacement();
+                        }}
+                    />
                     <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto">
                         <h3 className="text-xl font-bold text-slate-800">{t('reagent_info_title')}</h3>
 

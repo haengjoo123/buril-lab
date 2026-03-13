@@ -102,43 +102,28 @@ const parseStorageType = (raw: string): 'other' | 'cabinet' | null => {
     return STORAGE_TYPE_ALIAS_MAP[raw.trim()] || STORAGE_TYPE_ALIAS_MAP[normalized] || null;
 };
 
-const parseCsvLine = (line: string): string[] => {
-    const out: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i += 1) {
-        const ch = line[i];
-        const next = line[i + 1];
-
-        if (ch === '"') {
-            if (inQuotes && next === '"') {
-                current += '"';
-                i += 1;
-            } else {
-                inQuotes = !inQuotes;
-            }
-            continue;
-        }
-        if (ch === ',' && !inQuotes) {
-            out.push(current.trim());
-            current = '';
-            continue;
-        }
-        current += ch;
-    }
-
-    out.push(current.trim());
-    return out;
-};
+// CSV support has been removed in favor of Excel (.xlsx)
 
 const toIsoDate = (raw: string): string | null => {
     const value = raw.trim();
     if (!value) return null;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    
+    // If it's already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const date = new Date(value);
+        if (!Number.isNaN(date.getTime())) return value;
+    }
+
+    // Try parsing as generic date
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return value;
+    if (!Number.isNaN(date.getTime())) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+    
+    return null;
 };
 
 export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
@@ -304,33 +289,35 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     };
 
     const handleTemplateDownload = () => {
-        const content = [
-            '# ============================================',
-            '# Buril-lab Inventory CSV Import Template',
-            '# ============================================',
-            '# [안내]',
-            '# 1) 아래 "입력 영역" 헤더와 순서를 유지해서 작성하세요.',
-            '# 2) 필수 컬럼: **name, quantity, storage_type, storage_location**',
-            '# 3) storage_type: 기타 또는 시약장 (영문 other/cabinet도 허용)',
-            '# 4) storage_location:',
-            '#    - storage_type=기타     -> 앱에 등록된 보관 위치 이름',
-            '#    - storage_type=시약장   -> 앱에 등록된 시약장 이름',
-            '# 5) expiry_date 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
-            '#',
-            '# ---------------- [입력 영역] ----------------',
-            TEMPLATE_HEADERS_KO.join(','),
-            'Acetone,Sigma,A123,67-64-1,1,500mL,기타,냉장고,2026-12-31,샘플 메모',
-            'Ethanol,Daejung,E100,64-17-5,2,1L,기타,냉장고,,',
-            'HCl,Junsei,HCL500,7647-01-0,1,500mL,시약장,A421,,시약장 테스트',
-        ].join('\n');
+        // Create headers
+        const headers = TEMPLATE_HEADERS_KO;
+        
+        // Create sample rows with guidance
+        const data = [
+            ['# ' + t('inventory_csv_template_guide_title')],
+            ['# ' + t('inventory_csv_template_guide_1')],
+            ['# ' + t('inventory_csv_template_guide_2')],
+            ['# ' + t('inventory_csv_template_guide_3')],
+            ['# ' + t('inventory_csv_template_guide_4_other')],
+            ['# ' + t('inventory_csv_template_guide_4_cabinet')],
+            ['# ' + t('inventory_csv_template_guide_5')],
+            [''], // Spacer
+            ['# ' + t('inventory_csv_template_input_area')],
+            headers,
+            ['Acetone', 'Sigma', 'A123', '67-64-1', '1', '500mL', '기타', '냉장고', '2026-12-31', '샘플 메모'],
+            ['Ethanol', 'Daejung', 'E100', '64-17-5', '2', '1L', '기타', '냉장고', '', ''],
+            ['HCl', 'Junsei', 'HCL500', '7647-01-0', '1', '500mL', '시약장', 'A421', '', '시약장 테스트'],
+        ];
 
-        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'inventory_import_template.csv';
-        link.click();
-        URL.revokeObjectURL(url);
+        // Create worksheet
+        const worksheet = XLSX.utils.aoa_to_sheet(data);
+        
+        // Optional: Add some styling or info columns if needed, but keeping it simple for now
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory_Template');
+
+        // Write file
+        XLSX.writeFile(workbook, 'inventory_import_template.xlsx');
     };
 
     const handleInventoryExcelDownload = () => {
@@ -362,9 +349,11 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         XLSX.writeFile(workbook, `inventory_list_${dateToken}.xlsx`);
     };
 
-    const parseCsvFile = async (file: File) => {
+    const parseImportFile = async (file: File) => {
         const lowerName = file.name.toLowerCase();
-        if (!lowerName.endsWith('.csv')) {
+        const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+
+        if (!isExcel) {
             setGlobalError(t('inventory_csv_error_only_csv'));
             return;
         }
@@ -375,24 +364,40 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         setLastFileName(file.name);
 
         try {
-            const text = await file.text();
-            const lines = text
-                .split(/\r?\n/)
-                .map(line => line.trim())
-                .filter(line => line.length > 0)
-                .filter(line => !line.startsWith('#'));
-
-            if (lines.length < 2) {
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Convert to JSON (array of arrays)
+            const jsonData = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, defval: '' });
+            
+            if (jsonData.length < 2) {
                 setGlobalError(t('inventory_csv_error_need_header_and_data'));
                 return;
             }
 
-            const headers = parseCsvLine(lines[0]);
+            const headers = jsonData[0].map(h => String(h || '').trim());
             const rawRows: Array<{ rowNumber: number; values: string[] }> = [];
-            for (let i = 1; i < lines.length; i += 1) {
+            
+            for (let i = 1; i < jsonData.length; i += 1) {
+                const row = jsonData[i];
+                // Skip empty rows
+                if (row.every(cell => !cell)) continue;
+                
+                const values = row.map((v: any) => {
+                    if (v instanceof Date) {
+                        const y = v.getFullYear();
+                        const m = String(v.getMonth() + 1).padStart(2, '0');
+                        const d = String(v.getDate()).padStart(2, '0');
+                        return `${y}-${m}-${d}`;
+                    }
+                    return String(v || '').trim();
+                });
+
                 rawRows.push({
                     rowNumber: i + 1,
-                    values: parseCsvLine(lines[i]),
+                    values,
                 });
             }
 
@@ -400,12 +405,15 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             setMapping(buildDefaultMapping(headers));
             setStep('mapping');
         } catch (error) {
-            console.error('Failed to parse CSV:', error);
+            console.error('Failed to parse file:', error);
             setGlobalError(t('inventory_csv_error_parse_failed'));
         } finally {
             setIsParsing(false);
         }
     };
+
+    // Rename for usage consistency
+    const parseCsvFile = parseImportFile;
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -580,7 +588,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         {t('inventory_csv_upload')}
                         <input
                             type="file"
-                            accept=".csv,text/csv"
+                            accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                             className="hidden"
                             onChange={handleFileChange}
                             disabled={isParsing || isImporting}
