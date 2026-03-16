@@ -66,6 +66,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
     // 모바일: 시약 내려놓은 직후 발생하는 합성 클릭(ghost click)으로 백드롭이 눌리는 것 방지
     const placementModalOpenedAtRef = React.useRef<number>(0);
+    /** 시약 정보 입력 모달: 이름 입력란 — 모달 열릴 때 자동 포커스해 ghost click 흡수 */
+    const placementNameInputRef = React.useRef<HTMLInputElement>(null);
 
     const {
         mode,
@@ -98,9 +100,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         clearAutoPlaceResult,
     } = useFridgeStore();
 
-    // 시약 정보 입력 모달이 열릴 때 시각 기록 (모바일 ghost click 방지용)
+    // 시약 정보 입력 모달이 열릴 때 시각 기록 + 이름 입력란 자동 포커스 (모바일 ghost click 흡수)
     React.useEffect(() => {
-        if (pendingPlacement) placementModalOpenedAtRef.current = Date.now();
+        if (!pendingPlacement) return;
+        placementModalOpenedAtRef.current = Date.now();
+        // 모달이 DOM에 그려진 뒤 이름 입력란에 포커스 → ghost click이 입력란으로 흡수됨
+        const t = setTimeout(() => placementNameInputRef.current?.focus(), 50);
+        return () => clearTimeout(t);
     }, [pendingPlacement]);
 
     React.useEffect(() => {
@@ -904,10 +910,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto">
                         <h3 className="text-xl font-bold text-slate-800">{t('reagent_info_title')}</h3>
 
-                        {/* 시약 이름 */}
+                        {/* 시약 이름 — 모달 열리면 자동 포커스(모바일 ghost click 흡수) */}
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
                             <input
+                                ref={placementNameInputRef}
                                 autoFocus
                                 type="text"
                                 value={placementName}

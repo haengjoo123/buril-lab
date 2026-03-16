@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Chemical } from '../types';
+import type { Chemical, MsdsSection } from '../types';
 import { COMMON_CHEMICALS } from '../data/commonChemicals';
 
 /**
@@ -24,85 +24,65 @@ const PUBCHEM_BASE_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
 const PUBCHEM_VIEW_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound';
 
 /**
- * Fetch GHS Safety Data (Signal, Hazard Statements) from PubChem PUG View API
+ * PUG View 전체 레코드 조회 (heading 없음).
+ * 일부 화합물은 GHS/Safety 등 heading별 URL이 404이지만 전체 레코드에는 데이터가 있을 수 있음.
  */
-const fetchGHSData = async (cid: string | number): Promise<Chemical['ghs'] | undefined> => {
+const fetchFullPugView = async (cid: string | number): Promise<any | null> => {
     try {
-        const url = `${PUBCHEM_VIEW_URL}/${cid}/JSON?heading=GHS+Classification`;
+        const url = `${PUBCHEM_VIEW_URL}/${cid}/JSON`;
         const response = await fetch(url);
-
-        if (!response.ok) return undefined;
-
+        if (!response.ok) return null;
         const data = await response.json();
+        return data?.Record ?? null;
+    } catch (e) {
+        console.warn('[PubChem] Full PUG View fetch failed', e);
+        return null;
+    }
+};
 
-        // Navigate deep JSON structure safely
-        // Record -> Section -> ... -> Information -> Name: "Signal" / "GHS Hazard Statements"
-
-        // 1. Find the "Safety and Hazards" section (usually handled by ?heading=GHS+Classification, but structure varies)
-        // Ensure we are in the right Record
-        const sections = data.Record?.Section;
-        if (!sections) return undefined;
-
-        // Recursive helper to find "GHS Classification" section or specific Info
-        // However, with ?heading=GHS+Classification, the response is usually trimmed to that section.
-        // The structure usually is:
-        // Section[0] -> "Safety and Hazards" -> Section -> "Hazards Identification" -> Section -> "GHS Classification"
-
-        // Let's search for "Information" array directly inside the first section tree
-        // Or flattener approach
-
-        let signal = '';
-        const hazardStatements: string[] = [];
-        const pictograms: string[] = [];
-
-        // Helper to traverse and extract
-        const traverse = (node: any) => {
-            if (node.Information) {
-                for (const info of node.Information) {
-                    if (info.Name === 'Signal') {
-                        signal = info.Value?.StringWithMarkup?.[0]?.String || '';
+/**
+ * 전체 Record에서 GHS(Signal, Hazard Statements, Pictograms) 추출
+ */
+const parseGHSFromRecord = (record: any): Chemical['ghs'] | undefined => {
+    if (!record) return undefined;
+    let signal = '';
+    const hazardStatements: string[] = [];
+    const pictograms: string[] = [];
+    const traverse = (node: any) => {
+        if (node.Information) {
+            for (const info of node.Information) {
+                if (info.Name === 'Signal') {
+                    signal = info.Value?.StringWithMarkup?.[0]?.String || '';
+                }
+                if (info.Name === 'GHS Hazard Statements') {
+                    if (info.Value?.StringWithMarkup) {
+                        info.Value.StringWithMarkup.forEach((s: any) => {
+                            if (s.String) hazardStatements.push(s.String);
+                        });
                     }
-                    if (info.Name === 'GHS Hazard Statements') {
-                        // Value can be StringWithMarkup array
-                        if (info.Value?.StringWithMarkup) {
-                            info.Value.StringWithMarkup.forEach((s: any) => {
-                                if (s.String) hazardStatements.push(s.String);
-                            });
-                        }
-                    }
-                    if (info.Name === 'Pictogram(s)') {
-                        if (info.Value?.StringWithMarkup) {
-                            info.Value.StringWithMarkup.forEach((s: any) => {
-                                // Extract from Markup -> URL
-                                if (s.Markup) {
-                                    s.Markup.forEach((m: any) => {
-                                        if (m.URL) pictograms.push(m.URL);
-                                    });
-                                }
-                            });
-                        }
+                }
+                if (info.Name === 'Pictogram(s)') {
+                    if (info.Value?.StringWithMarkup) {
+                        info.Value.StringWithMarkup.forEach((s: any) => {
+                            if (s.Markup) {
+                                s.Markup.forEach((m: any) => {
+                                    if (m.URL) pictograms.push(m.URL);
+                                });
+                            }
+                        });
                     }
                 }
             }
-            if (node.Section) {
-                node.Section.forEach(traverse);
-            }
-        };
-
-        traverse(data.Record);
-
-        // if (!signal && hazardStatements.length === 0) return undefined; // Let's return even if only pictograms found, though unlikely
-
-        return {
-            signal: signal || 'Warning', // Default if found statements but no signal
-            hazardStatements: [...new Set(hazardStatements)], // Dedupe
-            pictograms: [...new Set(pictograms)]
-        };
-
-    } catch (e) {
-        console.warn('Failed to fetch GHS data', e);
-        return undefined;
-    }
+        }
+        if (node.Section) node.Section.forEach(traverse);
+    };
+    traverse(record);
+    if (!signal && hazardStatements.length === 0 && pictograms.length === 0) return undefined;
+    return {
+        signal: signal || 'Warning',
+        hazardStatements: [...new Set(hazardStatements)],
+        pictograms: [...new Set(pictograms)]
+    };
 };
 
 /**
@@ -155,12 +135,13 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
 
         const cid = compoundProps.CID;
 
-        // 3. Fetch GHS Data, Physical Properties, and Synonyms in parallel
-        const [ghsData, physicalProps, synonyms] = await Promise.all([
-            fetchGHSData(cid),
-            fetchPhysicalProperties(cid),
+        // 3. PUG View 전체 레코드 1회 조회 후 GHS/물성 파싱 (heading별 URL 404 방지), Synonyms 병렬
+        const [fullRecord, synonyms] = await Promise.all([
+            fetchFullPugView(cid),
             fetchSynonyms(cid)
         ]);
+        const ghsData = fullRecord ? parseGHSFromRecord(fullRecord) : undefined;
+        const physicalProps = fullRecord ? parsePhysicalFromRecord(fullRecord) : undefined;
 
         // Find CAS Number from synonyms (Pattern: d-dd-d where d is digit, but usually 2-7 digits first)
         // Strict CAS pattern: \d{2,7}-\d{2}-\d
@@ -195,137 +176,96 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
 };
 
 /**
- * Fetch Physical Properties and Stability info from PubChem PUG View API
+ * 전체 Record에서 물성·안정성(Chemical and Physical Properties, Stability and Reactivity) 추출
  */
-const fetchPhysicalProperties = async (cid: string | number): Promise<Chemical['physicalProperties'] | undefined> => {
-    try {
-        const url = `${PUBCHEM_VIEW_URL}/${cid}/JSON?heading=Chemical+and+Physical+Properties`;
-        // Note: Stability info is often in a separate section "Stability and Reactivity", but let's try to fetch broadly or separate calls.
-        // Actually PUG View API allows full record or specific headings. "Stability+and+Reactivity" is another heading.
-        // Let's try fetching the full record is too big. Let's make parallel calls or one smart call if possible.
-        // PUG View doesn't support multi-heading in one param easily usually, but let's try separately for Stability.
+const parsePhysicalFromRecord = (record: any): Chemical['physicalProperties'] | undefined => {
+    if (!record) return undefined;
+    const result: Chemical['physicalProperties'] = {};
 
-        const [propsResponse, stabilityResponse] = await Promise.all([
-            fetch(url),
-            fetch(`${PUBCHEM_VIEW_URL}/${cid}/JSON?heading=Stability+and+Reactivity`)
-        ]);
-
-        const propsData = propsResponse.ok ? await propsResponse.json() : {};
-        const stabilityData = stabilityResponse.ok ? await stabilityResponse.json() : {};
-
-        const result: Chemical['physicalProperties'] = {};
-
-        // Helper to find specific localized props
-        // Section -> Chemical and Physical Properties -> Experimental Properties -> ...
-
-        const extractValue = (record: any, sectionName: string): string | undefined => {
-            let foundVal: string | undefined;
-            const traverse = (node: any) => {
-                if (foundVal) return;
-
-                if (node.TOCHeading === sectionName && node.Information) {
-                    // Get the first good String value
-                    for (const info of node.Information) {
-                        if (info.Value?.StringWithMarkup?.[0]?.String) {
-                            foundVal = info.Value.StringWithMarkup[0].String;
-                            return;
-                        }
-                        if (info.Value?.StringWithMarkup?.[0]?.Value) { // specific case
-                            foundVal = info.Value.StringWithMarkup[0].Value;
-                            return;
-                        }
+    const extractValue = (sectionName: string): string | undefined => {
+        let foundVal: string | undefined;
+        const traverse = (node: any) => {
+            if (foundVal) return;
+            if (node.TOCHeading === sectionName && node.Information) {
+                for (const info of node.Information) {
+                    if (info.Value?.StringWithMarkup?.[0]?.String) {
+                        foundVal = info.Value.StringWithMarkup[0].String;
+                        return;
                     }
-                }
-                if (node.Section) {
-                    node.Section.forEach(traverse);
-                }
-            };
-            traverse(record.Record);
-            return foundVal;
-        };
-
-        // 1. Solubility
-        const solubilityRaw = extractValue(propsData, 'Solubility');
-        if (solubilityRaw) {
-            result.solubility = solubilityRaw; // e.g. "Miscible with water", "Insoluble"
-        }
-
-        // 2. Flash Point
-        const fpRaw = extractValue(propsData, 'Flash Point');
-        if (fpRaw) {
-            // Parse "12 deg C", "-20 C", "54 F"
-            // We need C.
-            const match = fpRaw.match(/(-?[\d.]+)\s*°?\s*C/i);
-            if (match) {
-                result.flashPoint = parseFloat(match[1]);
-            }
-        }
-
-        // 3. Boiling Point
-        const bpRaw = extractValue(propsData, 'Boiling Point');
-        if (bpRaw) {
-            const match = bpRaw.match(/(-?[\d.]+)\s*°?\s*C/i);
-            if (match) {
-                result.boilingPoint = parseFloat(match[1]);
-            }
-        }
-
-        // 4. Log Kow (Octanol/Water Partition Coefficient)
-        const logPRaw = extractValue(propsData, 'Octanol/Water Partition Coefficient');
-        if (logPRaw) {
-            const match = logPRaw.match(/(-?[\d.]+)/);
-            if (match) {
-                result.logKow = parseFloat(match[1]);
-            }
-        }
-
-        // 5. Stability
-        // Extract from stabilityData -> Section "Stability and Reactivity" -> "Reactivity Profile" or "Stability"
-        // Let's grab "Stability/Shelf Life" or "Stability"
-        const traverseStability = (node: any) => {
-            if (result.stability) return;
-            // Look for keywords in any info under Stability headers
-            if (node.TOCHeading === 'Stability' || node.TOCHeading === 'Stability/Shelf Life' || node.TOCHeading === 'Reactivity Profile') {
-                if (node.Information) {
-                    for (const info of node.Information) {
-                        const text = info.Value?.StringWithMarkup?.[0]?.String || '';
-                        if (text) {
-                            // Just take the first meaningful description
-                            result.stability = text;
-                            return;
-                        }
+                    if (info.Value?.StringWithMarkup?.[0]?.Value) {
+                        foundVal = info.Value.StringWithMarkup[0].Value;
+                        return;
                     }
                 }
             }
-            if (node.Section) node.Section.forEach(traverseStability);
+            if (node.Section) node.Section.forEach(traverse);
         };
-        if (stabilityData.Record) {
-            traverseStability(stabilityData.Record);
-        }
+        traverse(record);
+        return foundVal;
+    };
 
-        return result;
+    const solubilityRaw = extractValue('Solubility');
+    if (solubilityRaw) result.solubility = solubilityRaw;
 
-    } catch (e) {
-        console.warn('Failed to fetch physical properties', e);
-        return undefined;
+    const fpRaw = extractValue('Flash Point');
+    if (fpRaw) {
+        const match = fpRaw.match(/(-?[\d.]+)\s*°?\s*C/i);
+        if (match) result.flashPoint = parseFloat(match[1]);
     }
+
+    const bpRaw = extractValue('Boiling Point');
+    if (bpRaw) {
+        const match = bpRaw.match(/(-?[\d.]+)\s*°?\s*C/i);
+        if (match) result.boilingPoint = parseFloat(match[1]);
+    }
+
+    const logPRaw = extractValue('Octanol/Water Partition Coefficient');
+    if (logPRaw) {
+        const match = logPRaw.match(/(-?[\d.]+)/);
+        if (match) result.logKow = parseFloat(match[1]);
+    }
+
+    const traverseStability = (node: any) => {
+        if (result.stability) return;
+        if (node.TOCHeading === 'Stability' || node.TOCHeading === 'Stability/Shelf Life' || node.TOCHeading === 'Reactivity Profile') {
+            if (node.Information) {
+                for (const info of node.Information) {
+                    const text = info.Value?.StringWithMarkup?.[0]?.String || '';
+                    if (text) {
+                        result.stability = text;
+                        return;
+                    }
+                }
+            }
+        }
+        if (node.Section) node.Section.forEach(traverseStability);
+    };
+    traverseStability(record);
+
+    return Object.keys(result).length > 0 ? result : undefined;
 };
 
 /**
  * Fetches Safety and Hazards data from PubChem to emulate MSDS content.
+ * heading 전용 URL 404 시 전체 레코드에서 Safety and Hazards 섹션을 파싱해 사용.
  */
-import type { MsdsSection } from '../types';
-
 export const fetchPubChemMsds = async (cid: string | number): Promise<MsdsSection[]> => {
     try {
         const url = `${PUBCHEM_VIEW_URL}/${cid}/JSON?heading=Safety+and+Hazards`;
         const response = await fetch(url);
 
-        if (!response.ok) return [];
-
-        const data = await response.json();
-        const rootSection = data.Record?.Section?.[0]; // Usually "Safety and Hazards"
-
+        let rootSection: any = null;
+        if (response.ok) {
+            const data = await response.json();
+            rootSection = data.Record?.Section?.[0]; // Usually "Safety and Hazards"
+        }
+        // heading 전용 URL이 404인 화합물(예: Psicose)은 전체 레코드에서 Safety and Hazards 섹션 추출
+        if (!rootSection?.Section) {
+            const fullRecord = await fetchFullPugView(cid);
+            if (fullRecord?.Section) {
+                rootSection = fullRecord.Section.find((s: any) => s.TOCHeading === 'Safety and Hazards');
+            }
+        }
         if (!rootSection || !rootSection.Section) return [];
 
         const sections: MsdsSection[] = [];

@@ -1,0 +1,35 @@
+{
+  "file1": {
+    "path": "src/data/gibco_products_chunk_1_40.json",
+    "count": 623
+  },
+  "file2": {
+    "path": "src/data/gibco_products.json",
+    "count": 610
+  },
+  "onlyIn1Count": 13,
+  "onlyIn2Count": 0,
+  "onlyIn1Sample": [
+    {
+      "id": "34853139-29fa-4746-a69f-75edbfd6f0a5",
+      "name": "Mammary Epithelial Growth Supplement (MEGS)"
+    },
+    {
+      "id": "f5d18be1-9c3a-45d8-80de-8ed644319744",
+      "name": "B-27™ Plus Neuronal Culture System"
+    },
+    {
+      "id": "b71798cb-91a4-4336-beed-3e991d98d88c",
+      "name": "PSC Cardiomyocyte Maintenance Medium"
+    },
+    {
+      "id": "fef62561-95ba-45a5-a061-d9c63cc2af7e",
+      "name": "Williams' E Medium, no phenol red"
+    },
+    {
+      "id": "cdbdb3f0-c197-4a25-b390-89c58026a09e",
+      "name": "Hibernate™-A Medium"
+    }
+  ],
+  "onlyIn2Sample": []
+}

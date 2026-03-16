@@ -1,0 +1,39 @@
+﻿File 1 (src/data/gibco_products_chunk_1_40.json): 623 entries
+File 2 (src/data/gibco_products.json): 610 entries
+Entries only in File 1: 13
+Entries only in File 2: 0
+Sample from File 1 only:
+[
+  {
+    "id": "34853139-29fa-4746-a69f-75edbfd6f0a5",
+    "brand": "Gibco",
+    "product_name": "Mammary Epithelial Growth Supplement (MEGS)",
+    "product_numbers": [
+      "S0155"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/gibco/a0130c42-2c67-4e14-a471-c828a5446181.jpg",
+    "url_slug": "gibco-mammaryepithelialgrowthsupplementmegs-S0155"
+  },
+  {
+    "id": "f5d18be1-9c3a-45d8-80de-8ed644319744",
+    "brand": "Gibco",
+    "product_name": "B-27??Plus Neuronal Culture System",
+    "product_numbers": [
+      "A3653401"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/gibco/979e28df-7b31-4015-aac1-3af99574c792.jpg",
+    "url_slug": "gibco-b27plusneuronalculturesystem-A3653401"
+  },
+  {
+    "id": "b71798cb-91a4-4336-beed-3e991d98d88c",
+    "brand": "Gibco",
+    "product_name": "PSC Cardiomyocyte Maintenance Medium",
+    "product_numbers": [
+      "A2920801"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/gibco/1a06baa4-d5b2-4f82-b50b-80e7db3f16b2.jpg",
+    "url_slug": "gibco-psccardiomyocytemaintenancemedium-A2920801"
+  }
+]
+Duplicate product names in File 1: 46
+Duplicate product names in File 2: 46

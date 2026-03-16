@@ -152,6 +152,8 @@ export default defineConfig({
     })
   ],
   server: {
+    // 같은 Wi‑Fi의 모바일에서 접속 가능 (주소는 터미널에 표시됨)
+    host: true,
     proxy: {
       '/api/kosha': {
         target: 'https://msds.kosha.or.kr/openapi/service/msdschem',
