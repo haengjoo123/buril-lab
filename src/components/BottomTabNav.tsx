@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Search, ClipboardList, Box, Package, ShieldAlert } from 'lucide-react';
+import { Search, ClipboardList, Box, Package, Building2 } from 'lucide-react';
 import type { AppTab } from '../hooks/useAppUiState';
 
 interface BottomTabNavProps {
@@ -61,7 +61,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
             : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
             }`}
         >
-          <ShieldAlert className="w-5 h-5" />
+          <Building2 className="w-5 h-5" />
           {t('tab_audit')}
         </button>
       )}

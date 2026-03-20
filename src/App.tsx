@@ -252,6 +252,7 @@ function App() {
           <SearchTabView
             cartCount={cart.length}
             query={query}
+            lastSearchQuery={lastSearchQuery}
             isLoading={isLoading}
             isAiAnalyzing={isAiAnalyzing}
             error={error}

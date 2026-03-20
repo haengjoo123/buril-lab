@@ -1,0 +1,22 @@
+[
+  {
+    "id": "85f54a18-ecbf-4fc5-8951-2a9fb9f6e2d5",
+    "brand": "Thermo Fisher",
+    "product_name": "UltraPure™ DEPC-Treated Water",
+    "product_numbers": [
+      "750024"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/22df5483-f7a4-470d-9c78-efa7c476165e.jpg",
+    "url_slug": "thermo-chemicals-ultrapuredepctreatedwater-750024"
+  },
+  {
+    "id": "5db7f273-4c45-4473-bd34-8fa4dcc216a7",
+    "brand": "Thermo Fisher",
+    "product_name": "Potassium chloride, 99.0-105.0% (dried basis), crystals, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3045-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/174dd07e-1e86-41d0-a7ae-18500ce67a7c.jpg",
+    "url_slug": "thermo-chemicals-potassiumchloride9901050driedbasiscrystalsuspmulticompendialgmpjtbaker-3045-09"
+  }
+]

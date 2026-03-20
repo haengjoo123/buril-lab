@@ -13,6 +13,7 @@ import { useOnboardingStore } from '../store/useOnboardingStore';
 interface SearchTabViewProps {
   cartCount: number;
   query: string;
+  lastSearchQuery: string;
   isLoading: boolean;
   isAiAnalyzing: boolean;
   error: string | null;
@@ -46,6 +47,7 @@ interface SearchTabViewProps {
 export function SearchTabView({
   cartCount,
   query,
+  lastSearchQuery,
   isLoading,
   isAiAnalyzing,
   error,
@@ -78,6 +80,8 @@ export function SearchTabView({
   const { t } = useTranslation();
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
   const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
+  const hasOtherResults = mediaProducts.length > 0 || cabinetResults.length > 0;
+  const showChemicalNotFoundNotice = !isLoading && !result && hasOtherResults && !!lastSearchQuery;
 
   return (
     <div className="p-5 flex flex-col gap-6" style={{ paddingBottom: cartCount > 0 ? '100px' : undefined }}>
@@ -180,6 +184,12 @@ export function SearchTabView({
 
       {(result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
         <div className="flex flex-col gap-4">
+          {showChemicalNotFoundNotice && (
+            <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg text-sm border border-amber-100 dark:border-amber-900/40">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{t('search_chemical_not_found_notice', { query: lastSearchQuery })}</span>
+            </div>
+          )}
           {cabinetResults.length > 0 && (
             <div>
               <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">

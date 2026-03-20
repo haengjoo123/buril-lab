@@ -1,0 +1,874 @@
+[
+  {
+    "id": "440cd5b2-3c9f-44c0-a6dd-286eaf0f95dd",
+    "brand": "Invitrogen™",
+    "product_name": "UltraPure™ DEPC-Treated Water",
+    "product_numbers": [
+      "750024"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/f50f81fe-d4c9-4e96-8983-54aae893cf9a.jpg",
+    "url_slug": "invitrogen-ultrapuredepctreatedwater-750024"
+  },
+  {
+    "id": "0f0e9990-43a4-4b84-9bd1-6601ecad0d54",
+    "brand": "Avantor™",
+    "product_name": "Potassium chloride, 99.0-105.0% (dried basis), crystals, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3045-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/f9cc4328-14d1-4371-82a6-12ae70eede1c.jpg",
+    "url_slug": "avantor-potassiumchloride9901050driedbasiscrystalsuspmulticompendialgmpjtbaker-3045-09"
+  },
+  {
+    "id": "df890f27-f51a-4a87-a14c-8289ec20d08f",
+    "brand": "Avantor™",
+    "product_name": "Sodium chloride, 99.0-100.5% (dried basis), granular, GenAR™, USP for haemodialysis, GMP, Macron Fine Chemicals™",
+    "product_numbers": [
+      "M7713-30"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/ac7d7b7e-3e8c-43ad-a235-91d4709acf17.jpg",
+    "url_slug": "avantor-sodiumchloride9901005driedbasisgranulargenaruspforhaemodialysisgmpmacronfinechemicals-M7713-30"
+  },
+  {
+    "id": "fef046ca-bb49-471e-916f-459e20e75247",
+    "brand": "Avantor™",
+    "product_name": "Magnesium stearate (vegetable based), Hyqual™, GenAR™, NF, GMP, Macron Fine Chemicals™",
+    "product_numbers": [
+      "M5712-04"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/db23c56d-eb6b-4a06-b7d8-66eed0937da7.jpg",
+    "url_slug": "avantor-magnesiumstearatevegetablebasedhyqualgenarnfgmpmacronfinechemicals-M5712-04"
+  },
+  {
+    "id": "91b09887-c8eb-4ec0-b391-5018e19c68e1",
+    "brand": "Avantor™",
+    "product_name": "Sodium chloride, 99.0-100.5% (dry basis), granular, FCC, USP, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3628-F7"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/d87a04b4-0fb0-4567-972c-1c42220877f4.jpg",
+    "url_slug": "avantor-sodiumchloride9901005drybasisgranularfccuspgmpjtbaker-3628-F7"
+  },
+  {
+    "id": "84d4389e-213f-42cd-b925-29175ce530b7",
+    "brand": "Avantor™",
+    "product_name": "Sodium chloride, 99.0-100.5% (dried basis), granular, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3627-65"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/69fc3a72-3ce3-4b88-b16e-93f964575c78.jpg",
+    "url_slug": "avantor-sodiumchloride9901005driedbasisgranularuspmulticompendialgmpjtbaker-3627-65"
+  },
+  {
+    "id": "67f75f82-1697-4a37-8400-5a02a49558ec",
+    "brand": "Thermo Scientific™",
+    "product_name": "DNase/RNase-Free Deionized Water",
+    "product_numbers": [
+      "A57775"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/70dbd436-6994-4eae-a4a6-5d546666525c.jpg",
+    "url_slug": "thermoscientific-dnasernasefreedeionizedwater-A57775"
+  },
+  {
+    "id": "4f33ac05-c872-42c1-bd9b-8d89f913e7ef",
+    "brand": "Thermo Scientific™",
+    "product_name": "Iodoacetamido-LC-Phosphonic Acid (6C-CysPAT)",
+    "product_numbers": [
+      "A52285"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/7072a3f9-0fa0-4b5a-8fe4-6199be616498.jpg",
+    "url_slug": "thermoscientific-iodoacetamidolcphosphonicacid6ccyspat-A52285"
+  },
+  {
+    "id": "8a3a05a1-fefc-43ee-ac54-0541b32df2ba",
+    "brand": "Avantor™",
+    "product_name": "Orthophosphoric acid, 33% (w/w), Biotech Reagent, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0334-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e8f0e8c7-5db2-4868-aafe-6205940c7183.jpg",
+    "url_slug": "avantor-orthophosphoricacid33wwbiotechreagentgmpjtbaker-0334-09"
+  },
+  {
+    "id": "83b99f39-c526-4e6e-b417-e08bd6b9986b",
+    "brand": "Thermo Scientific™",
+    "product_name": "POROS™ 50 HQ Strong Anion Exchange Resin",
+    "product_numbers": [
+      "1255911"
+    ],
+    "thumbnail_url": null,
+    "url_slug": "thermoscientific-poros50hqstronganionexchangeresin-1255911"
+  },
+  {
+    "id": "2ca1ec93-6d6d-4e23-bc35-db1c27ab8f3d",
+    "brand": "Avantor™",
+    "product_name": "Hydrochloric acid 1.0 N, Biotech Reagent, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0325-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/da798487-d761-428f-a1fb-a6cee7ca4104.jpg",
+    "url_slug": "avantor-hydrochloricacid10nbiotechreagentgmpjtbaker-0325-09"
+  },
+  {
+    "id": "395ea067-4060-4384-9d74-34bf3654b234",
+    "brand": "Avantor™",
+    "product_name": "Sodium metabisulfite, NF, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3550-05TS"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/14646a2b-3c13-4140-97f6-1f6542bbdc9e.jpg",
+    "url_slug": "avantor-sodiummetabisulfitenfgmpjtbaker-3550-05TS"
+  },
+  {
+    "id": "e352e9ae-a869-4166-b6fb-f7132d3200b4",
+    "brand": "Avantor™",
+    "product_name": "Dipotassium hydrogen phosphate, 98.0-100.5% (dried basis),USP, Multi-Compendial, Endotoxin-free, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3250-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/a106be0d-c968-4c14-816c-febc692e6e6e.jpg",
+    "url_slug": "avantor-dipotassiumhydrogenphosphate9801005driedbasisuspmulticompendialendotoxinfreegmpjtbaker-3250-07"
+  },
+  {
+    "id": "e14fd642-cddc-4ea7-81e0-bd13e8c7a7c3",
+    "brand": "Avantor™",
+    "product_name": "Trisodium citrate, dihydrate, 99.0-100.5% (by anhydrous basis), crystals, GenAR™, USP, Multi-Compendial, GMP, Macron Fine Chemicals™",
+    "product_numbers": [
+      "M7773-20"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/62ae07a0-c00c-4a17-8cce-79d17fa5675f.jpg",
+    "url_slug": "avantor-trisodiumcitratedihydrate9901005byanhydrousbasiscrystalsgenaruspmulticompendialgmpmacronfinechemicals-M7773-20"
+  },
+  {
+    "id": "1ab46bfa-387c-4ba4-8932-11a9a534d2ea",
+    "brand": "Thermo Scientific™",
+    "product_name": "Water, nuclease-free",
+    "product_numbers": [
+      "R0582"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/930e35dc-01f4-49b3-8dda-aefdab51be8a.jpg",
+    "url_slug": "thermoscientific-waternucleasefree-R0582"
+  },
+  {
+    "id": "8af11ff6-ac98-4dd8-8448-f699d342da8e",
+    "brand": "Avantor™",
+    "product_name": "Magnesium sulfate heptahydrate, 99.0-100.5% (by anhydrous basis), crystals, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "2504-44"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/0743c460-74c8-4ea6-b1fd-bd3082efca14.jpg",
+    "url_slug": "avantor-magnesiumsulfateheptahydrate9901005byanhydrousbasiscrystalsuspmulticompendialgmpjtbaker-2504-44"
+  },
+  {
+    "id": "361cd969-3084-46da-a385-9ed85d0e67e4",
+    "brand": "Gibco™",
+    "product_name": "Water For Injection (WFI) for Cell Culture",
+    "product_numbers": [
+      "A1287304"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/8b0066cc-0595-4471-bf40-ab380b30f745.jpg",
+    "url_slug": "gibco-waterforinjectionwfiforcellculture-A1287304"
+  },
+  {
+    "id": "6ae7c282-470e-4795-b925-9815b6869373",
+    "brand": "Avantor™",
+    "product_name": "Lactic acid, 88.0-92.0%, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0200-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/76f7943e-ace0-416a-b8ad-7735a7c69a7d.jpg",
+    "url_slug": "avantor-lacticacid880920multicompendialgmpjtbaker-0200-07"
+  },
+  {
+    "id": "c4c8d85b-cfff-47b7-b96a-87f1a6418730",
+    "brand": "Thermo Scientific™",
+    "product_name": "POROS™ XQ Strong Anion Exchange Resin",
+    "product_numbers": [
+      "4467820"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/cc26fa65-c151-4943-a5d7-c6a328ab887a.jpg",
+    "url_slug": "thermoscientific-porosxqstronganionexchangeresin-4467820"
+  },
+  {
+    "id": "ae11bcaf-dfa4-47be-80d5-340a534ea22e",
+    "brand": "Greenfield Global",
+    "product_name": "Methanol absolute, GMP, Multi-Compendial",
+    "product_numbers": [
+      "P339WORLDDM55UV"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/86d505dd-edb8-4453-93d2-ca4efd9e0d5a.jpg",
+    "url_slug": "greenfieldglobal-methanolabsolutegmpmulticompendial-P339WORLDDM55UV"
+  },
+  {
+    "id": "901b3b14-db47-4869-bcf7-7395ec16d7df",
+    "brand": "Greenfield Global",
+    "product_name": "Ethyl Alcohol with WFI, 35 proof",
+    "product_numbers": [
+      "P111WFI350DM55"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e6536a27-812a-4493-9760-d170f07ba22b.jpg",
+    "url_slug": "greenfieldglobal-ethylalcoholwithwfi35proof-P111WFI350DM55"
+  },
+  {
+    "id": "728f8cfe-d0c9-4bc9-b342-4bb470a3ebf6",
+    "brand": "Applied Biosystems™",
+    "product_name": "POP-7™ Polymer Dx",
+    "product_numbers": [
+      "4393713"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/5c07c5a5-096f-4461-a68e-8ecf902602bf.jpg",
+    "url_slug": "appliedbiosystems-pop7polymerdx-4393713"
+  },
+  {
+    "id": "532089df-eb8f-4b0e-8428-5377f5f8e425",
+    "brand": "Thermo Scientific™",
+    "product_name": "POROS™ 50 HS Strong Cation Exchange Resin",
+    "product_numbers": [
+      "1335911"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/d652030b-c334-44a4-a24b-525f50ee48b5.jpg",
+    "url_slug": "thermoscientific-poros50hsstrongcationexchangeresin-1335911"
+  },
+  {
+    "id": "c32e0f59-ec26-41ab-9f47-a664772e0b29",
+    "brand": "Avantor™",
+    "product_name": "Calcium chloride dihydrate, granular, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "1335-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e22c7431-887c-4494-85d4-28bd9bfbb10d.jpg",
+    "url_slug": "avantor-calciumchloridedihydrategranularuspmulticompendialgmpjtbaker-1335-07"
+  },
+  {
+    "id": "0dbb51e2-82a7-4927-a1d2-3c96859162ea",
+    "brand": "Thermo Scientific™",
+    "product_name": "VitroEase™ Methylamine Tungstate Negative Stain",
+    "product_numbers": [
+      "A51036"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/46ac53d8-eae4-4dc1-8adc-7f140bba7e5d.jpg",
+    "url_slug": "thermoscientific-vitroeasemethylaminetungstatenegativestain-A51036"
+  },
+  {
+    "id": "e6163d9b-b7c3-45c1-9c01-17bf111d3faf",
+    "brand": "Avantor™",
+    "product_name": "Hydrochloric acid, 36.5-38.0%, NF, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "9544-33"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/1d1ad3ef-f85a-4072-8801-4594c520d7d0.jpg",
+    "url_slug": "avantor-hydrochloricacid365380nfmulticompendialgmpjtbaker-9544-33"
+  },
+  {
+    "id": "2ae4dc85-03aa-4577-94a6-812d5884264b",
+    "brand": "Avantor™",
+    "product_name": "Ammonia solution, 27.0-30.0%, NF, Multi-Compendial, GMP Manufactured Product, J.T.Baker™",
+    "product_numbers": [
+      "9736-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/80992a2a-4603-4570-8631-c64cbc86a208.jpg",
+    "url_slug": "avantor-ammoniasolution270300nfmulticompendialgmpmanufacturedproductjtbaker-9736-09"
+  },
+  {
+    "id": "267634a8-3e2f-40a4-82cb-22fb267c97c4",
+    "brand": "Avantor™",
+    "product_name": "Nitric acid, 69.0-70.0%, NF, GMP, J.T.Baker™",
+    "product_numbers": [
+      "9607-33"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/d69f3f58-9fa9-418e-97f9-121b9b8c9a19.jpg",
+    "url_slug": "avantor-nitricacid690700nfgmpjtbaker-9607-33"
+  },
+  {
+    "id": "a448a961-de46-4d47-be97-12e430cabc97",
+    "brand": "Gibco™",
+    "product_name": "Choline Chloride",
+    "product_numbers": [
+      "A39755IP"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/ab4b5cd8-9708-4281-b028-3f1b671c7ffc.jpg",
+    "url_slug": "gibco-cholinechloride-A39755IP"
+  },
+  {
+    "id": "2fb279b8-1c98-456b-b70c-885f8930d8e7",
+    "brand": "BioSpectra",
+    "product_name": "Sodium hydroxide solution, 10N (30%), GMP",
+    "product_numbers": [
+      "BNH4150-CASE"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/b77ca28a-d7c4-41b8-bee5-a3d7b289e34e.jpg",
+    "url_slug": "biospectra-sodiumhydroxidesolution10n30gmp-BNH4150-CASE"
+  },
+  {
+    "id": "a83ca506-9ace-4abf-a958-aec0079ec3aa",
+    "brand": "Invitrogen™",
+    "product_name": "UltraPure™ DNase/RNase-Free Distilled Water",
+    "product_numbers": [
+      "10977049",
+      "10977023"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/7a0f31c5-5b85-44ff-bf04-8db460f91fc1.jpg",
+    "url_slug": "invitrogen-ultrapurednasernasefreedistilledwater-10977049"
+  },
+  {
+    "id": "a077e8c0-8c6e-4988-8c32-675df2c4c0ba",
+    "brand": "Avantor™",
+    "product_name": "Trisodium citrate dihydrate, ≥99% (by anhydrous basis), granular, BP, Ph. Eur., JP, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3647-20"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/685cdde4-256b-4c9a-9c43-9051e5263134.jpg",
+    "url_slug": "avantor-trisodiumcitratedihydrate99byanhydrousbasisgranularbppheurjpuspmulticompendialgmpjtbaker-3647-20"
+  },
+  {
+    "id": "f9f5c1ef-5155-41e7-8963-6a66f39ab463",
+    "brand": "Applied Biosystems™",
+    "product_name": "Hi-Di™ Formamide Dx (5 mL)",
+    "product_numbers": [
+      "4404307"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/c1212c85-e7d1-47e7-99d3-0f2d432bb689.jpg",
+    "url_slug": "appliedbiosystems-hidiformamidedx5ml-4404307"
+  },
+  {
+    "id": "d8e275c6-4b45-427d-9ed1-1860317129db",
+    "brand": "Greenfield Global",
+    "product_name": "Acetonitrile, GMP",
+    "product_numbers": [
+      "P300000GMPDM55M"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/055d9451-530a-4cb1-aed8-d7f6c2fafb4b.jpg",
+    "url_slug": "greenfieldglobal-acetonitrilegmp-P300000GMPDM55M"
+  },
+  {
+    "id": "f63abb93-d4b5-4ca2-b131-058bb82be8b1",
+    "brand": "Thermo Scientific™",
+    "product_name": "DEPC-treated Water",
+    "product_numbers": [
+      "R0603",
+      "AM9922"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/bbb87029-792c-45b1-be41-39494af076eb.jpg",
+    "url_slug": "thermoscientific-depctreatedwater-R0603"
+  },
+  {
+    "id": "fe1f69ce-ada5-46c9-99bc-15cff73b5e1b",
+    "brand": "Applied Biosystems™",
+    "product_name": "POP-6™ Polymer, for 3500/SeqStudio™ Flex",
+    "product_numbers": [
+      "A26071"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/04e78264-6dad-471e-b3e8-6fac4b870264.jpg",
+    "url_slug": "appliedbiosystems-pop6polymerfor3500seqstudioflex-A26071"
+  },
+  {
+    "id": "a03ad532-4dd3-4fc1-92a5-7ce7027b76d7",
+    "brand": "Avantor™",
+    "product_name": "Sodium hydroxide, 1.0 N in aqueous solution, WFI, Biotech Reagent, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0328-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/939e1d8c-e8ff-459f-8386-d28af9c25a72.jpg",
+    "url_slug": "avantor-sodiumhydroxide10ninaqueoussolutionwfibiotechreagentgmpjtbaker-0328-09"
+  },
+  {
+    "id": "930239ae-de80-4856-a968-9186a0d55266",
+    "brand": "Avantor™",
+    "product_name": "Magnesium stearate (vegetable based), Hyqual™, GenAR™, FCC, NF, GMP, Macron Fine Chemicals™",
+    "product_numbers": [
+      "2257-88"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/3329495c-7200-489d-967d-83e89fda8a4a.jpg",
+    "url_slug": "avantor-magnesiumstearatevegetablebasedhyqualgenarfccnfgmpmacronfinechemicals-2257-88"
+  },
+  {
+    "id": "0ea32cfe-1ea8-4a65-853e-ef85c1033b4a",
+    "brand": "Avantor™",
+    "product_name": "Orthophosphoric acid, ≥85.0-88.0%, NF, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0268-15"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/fec221d8-4b82-484d-baf1-884d3b241e74.jpg",
+    "url_slug": "avantor-orthophosphoricacid850880nfmulticompendialgmpjtbaker-0268-15"
+  },
+  {
+    "id": "2fd378fb-4483-41d4-9980-54e582b71ab1",
+    "brand": "Avantor™",
+    "product_name": "Citric acid, 99.5-100.5%, powder, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0127-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/8e4ebb68-27df-459a-b7c8-3baf681c667e.jpg",
+    "url_slug": "avantor-citricacid9951005powderuspmulticompendialgmpjtbaker-0127-07"
+  },
+  {
+    "id": "f86aaba3-e5cd-4fb1-a880-e917d1d98513",
+    "brand": "Avantor™",
+    "product_name": "Citric acid monohydrate, 99.5-100.5% (by anhydrous basis), granular, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0115-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/6b03c4ce-f8b1-40b4-87bf-8408ca2ba2fc.jpg",
+    "url_slug": "avantor-citricacidmonohydrate9951005byanhydrousbasisgranularuspmulticompendialgmpjtbaker-0115-09"
+  },
+  {
+    "id": "d224f840-fee5-403f-951a-23638284552c",
+    "brand": "Avantor™",
+    "product_name": "2-Propanol, ≥99.0%, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "9037-20"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/964d6dd2-2da0-409b-a667-971a1ad78c00.jpg",
+    "url_slug": "avantor-2propanol990uspmulticompendialgmpjtbaker-9037-20"
+  },
+  {
+    "id": "fa8edb70-a1d8-498a-90b2-bb0f344e3e9c",
+    "brand": "Avantor™",
+    "product_name": "Sodium hydroxide, 95.0-100.5%, pellets, FCC, NF, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3728-R"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/5d785494-1b5b-4515-b15c-7613bd51f377.jpg",
+    "url_slug": "avantor-sodiumhydroxide9501005pelletsfccnfgmpjtbaker-3728-R"
+  },
+  {
+    "id": "f778b369-faa1-4878-af9b-53b26bc73e21",
+    "brand": "Avantor™",
+    "product_name": "Disodium hydrogen phosphate heptahydrate, 98.0-100.5% (dried basis), USP, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3803-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/f8206aef-218f-4533-b6f8-ff803e4baf39.jpg",
+    "url_slug": "avantor-disodiumhydrogenphosphateheptahydrate9801005driedbasisuspgmpjtbaker-3803-07"
+  },
+  {
+    "id": "b4bef808-fb88-4f9c-aa2a-6f57d3e49510",
+    "brand": "Thermo Scientific™",
+    "product_name": "POROS™ 20 HS Strong Cation Exchange Resin",
+    "product_numbers": [
+      "1332907"
+    ],
+    "thumbnail_url": null,
+    "url_slug": "thermoscientific-poros20hsstrongcationexchangeresin-1332907"
+  },
+  {
+    "id": "d7fa7bb3-bc43-4567-9af3-a9c319c170c4",
+    "brand": "Greenfield Global",
+    "product_name": "Ethyl Alcohol with USP Grade WFI, 40 proof, GMP",
+    "product_numbers": [
+      "PZP111USPW40DM55M"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/6ee127c4-96c9-44e3-9a6e-dcbceca489bd.jpg",
+    "url_slug": "greenfieldglobal-ethylalcoholwithuspgradewfi40proofgmp-PZP111USPW40DM55M"
+  },
+  {
+    "id": "07e257c8-122b-4182-9dc8-53ca403b58c4",
+    "brand": "Thermo Scientific™",
+    "product_name": "Pierce™ Trifluoroacetic Acid (TFA), Sequencing grade",
+    "product_numbers": [
+      "28904"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/d6286a8f-ed0e-4efc-9e6c-923176febb35.jpg",
+    "url_slug": "thermoscientific-piercetrifluoroaceticacidtfasequencinggrade-28904"
+  },
+  {
+    "id": "1ebfeeea-7c2d-44ae-9957-08f4b46fdf25",
+    "brand": "Greenfield Global",
+    "product_name": "Acetonitrile, ACS",
+    "product_numbers": [
+      "P300000ACSPL05M"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/f159a4f3-702f-4d2f-b9e9-3f87be23cc32.jpg",
+    "url_slug": "greenfieldglobal-acetonitrileacs-P300000ACSPL05M"
+  },
+  {
+    "id": "3c91fa68-ddb2-403b-81c4-f17fb600cbdd",
+    "brand": "Greenfield Global",
+    "product_name": "Ethyl Alcohol with Deionized Water, 140 proof",
+    "product_numbers": [
+      "P111000140PL05"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/c7cc9b27-1713-4ddd-9fd9-45fb0db9fa13.jpg",
+    "url_slug": "greenfieldglobal-ethylalcoholwithdeionizedwater140proof-P111000140PL05"
+  },
+  {
+    "id": "6d9c7ada-96c5-4962-9bc5-042528d18f44",
+    "brand": "Greenfield Global",
+    "product_name": "Ethyl Alcohol, 190 proof, GMP",
+    "product_numbers": [
+      "P111GMP190PL05"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/99513755-f04a-46e2-9401-4b1855672bd0.jpg",
+    "url_slug": "greenfieldglobal-ethylalcohol190proofgmp-P111GMP190PL05"
+  },
+  {
+    "id": "88814ae6-00e7-4760-b1d3-8aa65dc6b11e",
+    "brand": "Avantor™",
+    "product_name": "Sodium hypochlorite 5% in aqueous solution, sterile, GMP, J.T.Baker™",
+    "product_numbers": [
+      "P005-03"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/7abc8579-a11f-4223-a67c-3450623ac38c.jpg",
+    "url_slug": "avantor-sodiumhypochlorite5inaqueoussolutionsterilegmpjtbaker-P005-03"
+  },
+  {
+    "id": "afaad086-19de-4543-bf6b-06c9259e7517",
+    "brand": "Invitrogen™",
+    "product_name": "Propidium Iodide",
+    "product_numbers": [
+      "P1304MP"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/5d8b8ebb-4a03-4e5c-ab42-5c6e7912186b.jpg",
+    "url_slug": "invitrogen-propidiumiodide-P1304MP"
+  },
+  {
+    "id": "4c7d8bc5-76d0-4181-83d1-feece61aef5f",
+    "brand": "Avantor™",
+    "product_name": "Potassium dihydrogen phosphate, 98.0-100.5% (dried basis), crystals, NF, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3248-44"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/aa01db72-9041-4b3e-8224-0bfb0190fe5c.jpg",
+    "url_slug": "avantor-potassiumdihydrogenphosphate9801005driedbasiscrystalsnfmulticompendialgmpjtbaker-3248-44"
+  },
+  {
+    "id": "36763bcc-28fe-4ddb-af27-22e8d6d5cb76",
+    "brand": "Greenfield Global",
+    "product_name": "Isopropanol, GMP, Multi-Compendial",
+    "product_numbers": [
+      "P211USPNFDM55M"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/06051438-bd7c-45e8-bf56-183a65556d60.jpg",
+    "url_slug": "greenfieldglobal-isopropanolgmpmulticompendial-P211USPNFDM55M"
+  },
+  {
+    "id": "13a7fa59-9a9d-477c-9593-327b10356948",
+    "brand": "Avantor™",
+    "product_name": "Zinc sulfate heptahydrate, granular, USP, FCC, GMP, J.T.Baker™",
+    "product_numbers": [
+      "4384-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/9fa0383a-1c3e-4072-b62f-b6f1cad8b233.jpg",
+    "url_slug": "avantor-zincsulfateheptahydrategranularuspfccgmpjtbaker-4384-07"
+  },
+  {
+    "id": "862c2759-70df-42f5-9435-1257fc54ad2a",
+    "brand": "Avantor™",
+    "product_name": "Acetic acid, glacial, 99.5-100.05%, USP, Multi-Compendial, GMP Manufactured Product, J.T.Baker™",
+    "product_numbers": [
+      "9526-33"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e715a191-74fa-41cc-b8fe-b918d502567d.jpg",
+    "url_slug": "avantor-aceticacidglacial99510005uspmulticompendialgmpmanufacturedproductjtbaker-9526-33"
+  },
+  {
+    "id": "8443f31e-8441-464f-a8b7-8b506aaf74a6",
+    "brand": "Avantor™",
+    "product_name": "Sodium carbonate monohydrate, 99.5-100.5% (by anhydrous basis), crystals, NF, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3603-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/a9576669-0735-4d38-990f-2e962f98fb33.jpg",
+    "url_slug": "avantor-sodiumcarbonatemonohydrate9951005byanhydrousbasiscrystalsnfmulticompendialgmpjtbaker-3603-09"
+  },
+  {
+    "id": "50090f6b-408a-4dab-8ef2-fe018c5dcaeb",
+    "brand": "Avantor™",
+    "product_name": "Sodium hydroxide, pellets, NF, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3717-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/29a35b56-24ee-4c8f-a0ea-442836ce8298.jpg",
+    "url_slug": "avantor-sodiumhydroxidepelletsnfmulticompendialgmpjtbaker-3717-07"
+  },
+  {
+    "id": "2b7aafeb-8ec3-4c3f-bad8-c21f2918c3e0",
+    "brand": "Applied Biosystems™",
+    "product_name": "POP-7™ Polymer, for 3500/SeqStudio™ Flex",
+    "product_numbers": [
+      "A26073"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/f6f15724-e0d1-4637-9b56-ce613407c2fc.jpg",
+    "url_slug": "appliedbiosystems-pop7polymerfor3500seqstudioflex-A26073"
+  },
+  {
+    "id": "09b665c6-3d64-4ccb-9d88-f52c229653aa",
+    "brand": "Applied Biosystems™",
+    "product_name": "POP-4™ Polymer, for 3500/SeqStudio™ Flex",
+    "product_numbers": [
+      "A26070"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e379b4b3-87fb-4026-b23a-c74de91c083e.jpg",
+    "url_slug": "appliedbiosystems-pop4polymerfor3500seqstudioflex-A26070"
+  },
+  {
+    "id": "efc445c9-9aa9-4fb4-843e-bdf462bfc7ca",
+    "brand": "Thermo Scientific™",
+    "product_name": "Ethylene Glycol",
+    "product_numbers": [
+      "29810"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/7e59d081-5648-4792-a373-cdf92c3636f7.jpg",
+    "url_slug": "thermoscientific-ethyleneglycol-29810"
+  },
+  {
+    "id": "361ece6e-af9d-43e0-8a8d-cca16ce3da89",
+    "brand": "Invitrogen™",
+    "product_name": "Nuclease-Free Water (not DEPC-Treated)",
+    "product_numbers": [
+      "AM9939"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/4db4d9db-24d6-4919-8b7d-217a928ccb6a.jpg",
+    "url_slug": "invitrogen-nucleasefreewaternotdepctreated-AM9939"
+  },
+  {
+    "id": "c3317977-418d-403e-a730-81b22718fa29",
+    "brand": "procedures.",
+    "product_name": "Nuclease-free Water (1.75 mL/tube)",
+    "product_numbers": [
+      "AM9914G"
+    ],
+    "thumbnail_url": null,
+    "url_slug": "procedures-nucleasefreewater175mltube-AM9914G"
+  },
+  {
+    "id": "b764a966-c32d-46df-87f8-eec83129d860",
+    "brand": "Invitrogen™",
+    "product_name": "RT-PCR Grade Water",
+    "product_numbers": [
+      "AM9935"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/808547dc-c59b-4de2-8833-36e1fc59c2f4.jpg",
+    "url_slug": "invitrogen-rtpcrgradewater-AM9935"
+  },
+  {
+    "id": "43e0ee66-46f0-4d30-926e-6cd335d5e608",
+    "brand": "Avantor™",
+    "product_name": "Ammonium iron (III) citrate, 16.5-18.5% Fe, FCC, GMP, J.T.Baker™",
+    "product_numbers": [
+      "1980-01"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/06ed642f-c424-491c-af06-f53535c34caa.jpg",
+    "url_slug": "avantor-ammoniumironiiicitrate165185fefccgmpjtbaker-1980-01"
+  },
+  {
+    "id": "4c374289-a3ac-4b17-bed2-cf9cfe057418",
+    "brand": "Avantor™",
+    "product_name": "Sulfuric acid, 95.0-98.0% (by acidimetry), NF, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "9671-03"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/2b80df5e-4df2-46d3-8524-7a7d974b2d3b.jpg",
+    "url_slug": "avantor-sulfuricacid950980byacidimetrynfmulticompendialgmpjtbaker-9671-03"
+  },
+  {
+    "id": "304363d3-e5d9-4afd-ad7d-da68ba964e71",
+    "brand": "Fisher Scientific™",
+    "product_name": "Polyethylene Glycol 400, MilliporeSigma™",
+    "product_numbers": [
+      "MPX1286B2"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/c24dd6ba-7662-45b2-b62a-b4401997160a.jpg",
+    "url_slug": "fisherscientific-polyethyleneglycol400milliporesigma-MPX1286B2"
+  },
+  {
+    "id": "6155dbb8-cc39-4eec-98ec-2bf436c170df",
+    "brand": "Avantor™",
+    "product_name": "Disodium hydrogen phosphate heptahydrate, 98.0-100.5% (dried basis), crystals, USP, endotoxin tested, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3816-R"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/76671353-9d39-4ba4-a844-f2b58617c11f.jpg",
+    "url_slug": "avantor-disodiumhydrogenphosphateheptahydrate9801005driedbasiscrystalsuspendotoxintestedgmpjtbaker-3816-R"
+  },
+  {
+    "id": "d482b6d4-f222-46ef-a3d9-4620630052f1",
+    "brand": "Fisher Scientific™",
+    "product_name": "Humidity Sponge™ Dessicant Window Type, Fisherbrand™",
+    "product_numbers": [
+      "07580"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/0367c065-a326-4bae-857b-288d5dc98880.jpg",
+    "url_slug": "fisherscientific-humidityspongedessicantwindowtypefisherbrand-07580"
+  },
+  {
+    "id": "ed3d19bb-8ae8-478e-86c7-dd39d90dcb44",
+    "brand": "Fisher Scientific™",
+    "product_name": "Drierite™ Drying Desiccants, W.A. Hammond",
+    "product_numbers": [
+      "075773B"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/0ef63a4a-493e-402b-98e9-98dfdd5b2299.jpg",
+    "url_slug": "fisherscientific-drieritedryingdesiccantswahammond-075773B"
+  },
+  {
+    "id": "5f4d000d-6460-46a7-a6ac-cecb7cde39bd",
+    "brand": "Thermo Scientific™",
+    "product_name": "Pierce™ Endotoxin-Free Water",
+    "product_numbers": [
+      "A43883"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/62ccff6b-034f-4711-9c66-03dc19779587.jpg",
+    "url_slug": "thermoscientific-pierceendotoxinfreewater-A43883"
+  },
+  {
+    "id": "b2fe46eb-2dc1-408d-9404-f7671b6d4e2b",
+    "brand": "Avantor™",
+    "product_name": "Sodium dihydrogen phosphate monohydrate, 98.0-103.0% (by anhydrous basis), USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3802-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e42f78c3-1ef3-4b5f-a193-d65745fb72ea.jpg",
+    "url_slug": "avantor-sodiumdihydrogenphosphatemonohydrate9801030byanhydrousbasisuspmulticompendialgmpjtbaker-3802-07"
+  },
+  {
+    "id": "542d3dce-ab0d-40b0-b1e6-64a3d16f4865",
+    "brand": "Avantor™",
+    "product_name": "Sodium carbonate, 99.5-100.5% (by anhydrous basis), NF, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "3606-R"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/ac8ec8e3-a5d9-4621-a063-aa26a28bb699.jpg",
+    "url_slug": "avantor-sodiumcarbonate9951005byanhydrousbasisnfmulticompendialgmpjtbaker-3606-R"
+  },
+  {
+    "id": "5632d731-67ec-40ce-b015-ba31011360cd",
+    "brand": "Avantor™",
+    "product_name": "Sodium carbonate, anhydrous, 99.5-100.5% (by anhydrous basis), granular, NF, FCC, Food GMP, J.T.Baker™",
+    "product_numbers": [
+      "3605-R"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/d351417e-0623-424c-9b4a-308cd3d3ce6d.jpg",
+    "url_slug": "avantor-sodiumcarbonateanhydrous9951005byanhydrousbasisgranularnffccfoodgmpjtbaker-3605-R"
+  },
+  {
+    "id": "49a21916-3ac5-450b-a5c2-dec92d39d2fa",
+    "brand": "Greenfield Global",
+    "product_name": "Ethyl acetate, GMP, Multi-Compendial",
+    "product_numbers": [
+      "PZP3300000EPDM55M"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/747e32d0-2a4b-4dbc-af25-d7b0782662ee.jpg",
+    "url_slug": "greenfieldglobal-ethylacetategmpmulticompendial-PZP3300000EPDM55M"
+  },
+  {
+    "id": "828d624d-7b00-439b-a4e3-c876371f0244",
+    "brand": "Thermo Scientific™",
+    "product_name": "Pierce™ Small Molecule System Suitability Standard",
+    "product_numbers": [
+      "A51740"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/f174f529-00f6-474f-88a8-5c16232f7ac1.jpg",
+    "url_slug": "thermoscientific-piercesmallmoleculesystemsuitabilitystandard-A51740"
+  },
+  {
+    "id": "f6f4adb1-a1f3-4e78-bcd7-d539078bb38e",
+    "brand": "Thermo Scientific™",
+    "product_name": "Pierce™ FlexMix™ Calibration Solution for Auto-Ready Mass Spectrometers",
+    "product_numbers": [
+      "A51739"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/fe7afe83-5366-44a1-92c6-c305a4368a0b.jpg",
+    "url_slug": "thermoscientific-pierceflexmixcalibrationsolutionforautoreadymassspectrometers-A51739"
+  },
+  {
+    "id": "48fd6f85-c504-4026-9731-8f1ef239ae26",
+    "brand": "Avantor™",
+    "product_name": "Magnesium sulfate heptahydrate, 99-100.5%, FCC, USP for parenteral use, GMP, Macron Fine Chemicals™",
+    "product_numbers": [
+      "4200-20"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/999108e0-4df0-48de-861f-7f86c28ae46b.jpg",
+    "url_slug": "avantor-magnesiumsulfateheptahydrate991005fccuspforparenteralusegmpmacronfinechemicals-4200-20"
+  },
+  {
+    "id": "207d1009-4c87-4cd0-aee6-3fc9b5e46931",
+    "brand": "Avantor™",
+    "product_name": "Urea, 98.0-102.0%, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "4203-60"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/a6d4aac9-b0c3-4e5e-a825-1826afe0c014.jpg",
+    "url_slug": "avantor-urea9801020uspmulticompendialgmpjtbaker-4203-60"
+  },
+  {
+    "id": "790b7106-b8d2-45fe-9048-96dfbc80e2fb",
+    "brand": "Thermo Scientific Chemicals",
+    "product_name": "Urea hydrogen peroxide, 1 g tablets, stabilized, contains 35 wt% H2O2",
+    "product_numbers": [
+      "241020010"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/5cb38440-9e60-4f21-b352-6d82f601dda6.jpg",
+    "url_slug": "thermoscientificchemicals-ureahydrogenperoxide1gtabletsstabilizedcontains35wth2o2-241020010"
+  },
+  {
+    "id": "a739cdb7-9296-49f7-9973-4abe5292e01b",
+    "brand": "Thermo Scientific™",
+    "product_name": "Pierce™ BCA Solid",
+    "product_numbers": [
+      "23230"
+    ],
+    "thumbnail_url": null,
+    "url_slug": "thermoscientific-piercebcasolid-23230"
+  },
+  {
+    "id": "ac7162a5-9649-47f5-8872-6a6b9df38c69",
+    "brand": "Thermo Scientific Chemicals",
+    "product_name": "Chloral hydrate, 98.5%",
+    "product_numbers": [
+      "232475000"
+    ],
+    "thumbnail_url": null,
+    "url_slug": "thermoscientificchemicals-chloralhydrate985-232475000"
+  },
+  {
+    "id": "5630c02d-a6cc-430a-84b0-cfc00f8a805f",
+    "brand": "Avantor™",
+    "product_name": "Sodium hydroxide, 50% in aqueous solution, Biotech Reagent, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0339-09"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/f12367b1-ad38-4d98-b7ba-950bbda867dc.jpg",
+    "url_slug": "avantor-sodiumhydroxide50inaqueoussolutionbiotechreagentgmpjtbaker-0339-09"
+  },
+  {
+    "id": "193f3af1-a2c2-42dc-b3fe-6c92f40df7e4",
+    "brand": "Avantor™",
+    "product_name": "Hydrochloric acid solution, 6.0 N, Biotech Reagent, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0347-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/14837796-ad5b-4741-8da4-fb8d325dc8d8.jpg",
+    "url_slug": "avantor-hydrochloricacidsolution60nbiotechreagentgmpjtbaker-0347-07"
+  },
+  {
+    "id": "9206b220-dc5e-4f6c-8018-2cab7e324e4f",
+    "brand": "Avantor™",
+    "product_name": "Hydrochloric acid, 2.0 N, Biotech Reagent, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0336-03"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e44b2b03-40f4-4dfb-ad94-4cc9921ead25.jpg",
+    "url_slug": "avantor-hydrochloricacid20nbiotechreagentgmpjtbaker-0336-03"
+  },
+  {
+    "id": "5ac23dee-e58a-4dea-b2ca-2edc409d06f1",
+    "brand": "Avantor™",
+    "product_name": "Sodium hydroxide solution, 10 N, WFI, Biotech Reagent, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0312-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/9a4e1032-0b55-4d1a-85f0-346b668f2ad5.jpg",
+    "url_slug": "avantor-sodiumhydroxidesolution10nwfibiotechreagentgmpjtbaker-0312-07"
+  },
+  {
+    "id": "bea56950-28f6-42b0-b37f-7f18465e4e59",
+    "brand": "Avantor™",
+    "product_name": "Orthophosphoric acid, ≥85.0-88.0%, NF, FCC, Food GMP, J.T.Baker™",
+    "product_numbers": [
+      "0262-15"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/3e5bc9bc-738c-4292-9693-ed7b46316d6a.jpg",
+    "url_slug": "avantor-orthophosphoricacid850880nffccfoodgmpjtbaker-0262-15"
+  }
+]

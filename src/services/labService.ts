@@ -43,7 +43,7 @@ export const labService = {
             target_lab_id: labId,
             joining_user_id: userData.user.id,
             requested_role: role,
-            provided_password: password || null,
+            provided_password: password ?? '',
             p_nickname: nickname || null
         });
 
@@ -84,16 +84,11 @@ export const labService = {
         return data as LabMember[];
     },
 
-    async searchLabs(query: string): Promise<Lab[]> {
+    async searchLabs(query: string): Promise<(Lab & { has_password?: boolean })[]> {
         if (!query.trim()) return [];
-        const { data, error } = await supabase
-            .from('labs')
-            .select('*')
-            .ilike('name', `%${query}%`)
-            .limit(10);
-
+        const { data, error } = await supabase.rpc('search_labs', { search_query: query });
         if (error) throw error;
-        return data as Lab[];
+        return (data ?? []) as (Lab & { has_password?: boolean })[];
     },
 
     async getLabMembers(labId: string): Promise<{ user_id: string; role: string; joined_at: string; email: string; nickname?: string }[]> {
@@ -135,5 +130,20 @@ export const labService = {
             .eq('id', labId);
 
         if (error) throw error;
-    }
+    },
+
+    async transferAdmin(labId: string, newAdminUserId: string): Promise<void> {
+        const { error } = await supabase.rpc('transfer_admin', {
+            target_lab_id: labId,
+            new_admin_user_id: newAdminUserId,
+        });
+        if (error) throw error;
+    },
+
+    async leaveLab(labId: string): Promise<void> {
+        const { error } = await supabase.rpc('leave_lab', {
+            target_lab_id: labId,
+        });
+        if (error) throw error;
+    },
 };

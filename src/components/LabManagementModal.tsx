@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
-import { X, Search, Plus, Check, Loader2, AlertCircle, Users, Settings } from 'lucide-react';
+import { X, Search, Plus, Check, Loader2, AlertCircle, Users, Settings, Lock, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { labService } from '../services/labService';
 import { useLabStore } from '../store/useLabStore';
 import type { Lab } from '../store/useLabStore';
+
+type LabWithPassword = Lab & { has_password?: boolean };
 import { AppSelect } from './AppSelect';
 
 interface LabManagementModalProps {
@@ -16,7 +18,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const { t, i18n } = useTranslation();
     const [view, setView] = useState<'menu' | 'create' | 'search' | 'members' | 'settings'>('menu');
     const [query, setQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<Lab[]>([]);
+    const [searchResults, setSearchResults] = useState<LabWithPassword[]>([]);
     const [members, setMembers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -34,9 +36,34 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const [settingsName, setSettingsName] = useState('');
     const [settingsPassword, setSettingsPassword] = useState('');
 
+    const [isLeaving, setIsLeaving] = useState<string | null>(null); // labId being left
+
     const { myLabs, setMyLabs, currentLabId, setCurrentLabId } = useLabStore();
 
     const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
+
+    const handleLeaveLab = async (labId: string, labName: string) => {
+        if (!window.confirm(t('lab_leave_confirm', { name: labName }))) return;
+        setIsLeaving(labId);
+        setError(null);
+        try {
+            await labService.leaveLab(labId);
+            const updatedLabs = await labService.getMyLabs();
+            setMyLabs(updatedLabs);
+            if (currentLabId === labId) {
+                setCurrentLabId(updatedLabs.length > 0 ? updatedLabs[0].lab_id : null);
+            }
+        } catch (err: any) {
+            const msg = err.message || '';
+            if (msg.includes('transfer admin') || msg.includes('Admin cannot leave')) {
+                setError(t('lab_leave_error_admin'));
+            } else {
+                setError(t('lab_leave_error'));
+            }
+        } finally {
+            setIsLeaving(null);
+        }
+    };
 
     const loadMembers = async () => {
         setIsLoading(true);
@@ -287,12 +314,46 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     <div className="text-sm text-slate-400 italic px-1">가입된 연구실이 없습니다.</div>
                                 ) : (
                                     <ul className="space-y-2">
-                                        {myLabs.map(ml => (
-                                            <li key={ml.lab_id} className="flex justify-between items-center p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                                                <span className="font-medium text-slate-700 dark:text-slate-200">{ml.lab?.name}</span>
-                                                <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400 capitalize">{ml.role}</span>
-                                            </li>
-                                        ))}
+                                        {myLabs.map(ml => {
+                                            const isActive = ml.lab_id === currentLabId;
+                                            return (
+                                                <li
+                                                    key={ml.lab_id}
+                                                    onClick={() => !isActive && setCurrentLabId(ml.lab_id)}
+                                                    className={`flex justify-between items-center p-3 rounded-lg border gap-2 transition-colors ${
+                                                        isActive
+                                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400 dark:border-blue-500'
+                                                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70 hover:border-slate-300 dark:hover:border-slate-700'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        {isActive && (
+                                                            <span className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">
+                                                                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full inline-block" />
+                                                                접속 중
+                                                            </span>
+                                                        )}
+                                                        <span className={`font-medium min-w-0 truncate ${isActive ? 'text-blue-800 dark:text-blue-200' : 'text-slate-700 dark:text-slate-200'}`}>
+                                                            {ml.lab?.name}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                        <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400 capitalize">{ml.role}</span>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleLeaveLab(ml.lab_id, ml.lab?.name ?? ''); }}
+                                                            disabled={isLeaving === ml.lab_id}
+                                                            className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {isLeaving === ml.lab_id
+                                                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                                : <LogOut className="w-3 h-3" />
+                                                            }
+                                                            {t('lab_leave_btn')}
+                                                        </button>
+                                                    </div>
+                                                </li>
+                                            );
+                                        })}
                                     </ul>
                                 )}
                             </div>
@@ -347,15 +408,24 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                     {view === 'search' && (
                         <div className="space-y-4">
-                            <form onSubmit={handleSearch} className="relative">
-                                <input
-                                    type="text"
-                                    value={query}
-                                    onChange={e => setQuery(e.target.value)}
-                                    placeholder="연구실 이름 검색"
-                                    className="w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
-                                />
-                                <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+            <form onSubmit={handleSearch} className="relative flex gap-2">
+                                <div className="relative flex-1">
+                                    <input
+                                        type="text"
+                                        value={query}
+                                        onChange={e => setQuery(e.target.value)}
+                                        placeholder="연구실 이름 검색"
+                                        className="w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+                                    />
+                                    <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading || !query.trim()}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '검색'}
+                                </button>
                             </form>
 
                             {searchResults.length > 0 && (
@@ -367,7 +437,10 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                             onClick={() => setSelectedLabId(lab.id)}
                                         >
                                             <div className="flex justify-between items-center">
-                                                <span className="font-medium text-slate-800 dark:text-slate-200">{lab.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    {lab.has_password && <Lock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200">{lab.name}</span>
+                                                </div>
                                                 {selectedLabId === lab.id && <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
                                             </div>
                                         </div>
@@ -444,21 +517,19 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 <ul className="space-y-3">
                                     {members.map(member => (
                                         <li key={member.user_id} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex flex-col">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                                                            {member.nickname || member.email || '알 수 없는 사용자'}
+                                            <div className="flex justify-between items-start gap-2 mb-2">
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                                                        {member.nickname || member.email || '알 수 없는 사용자'}
+                                                    </span>
+                                                    {member.nickname && member.email && (
+                                                        <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                                                            {member.email}
                                                         </span>
-                                                        {member.nickname && member.email && (
-                                                            <span className="text-xs text-slate-400 dark:text-slate-500">
-                                                                ({member.email})
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                    )}
                                                     <span className="text-xs text-slate-500 mt-0.5">{t('member_joined_label')}: {new Date(member.joined_at).toLocaleDateString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
                                                 </div>
-                                                <span className={`text-xs px-2 py-1 rounded font-medium ${member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
+                                                <span className={`flex-shrink-0 text-xs px-2 py-1 rounded font-medium ${member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
                                                     {member.role.toUpperCase()}
                                                 </span>
                                             </div>
@@ -474,7 +545,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                         options={[
                                                             { value: 'researcher', label: '연구원 (Researcher)' },
                                                             { value: 'student', label: '학생 (Student)' },
-                                                            { value: 'admin', label: '관리자 승급 (Admin)' },
+                                                            // admin 승급은 transfer_admin으로만 가능 (이중 admin 방지)
                                                         ]}
                                                         buttonClassName="flex-1 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"
                                                     />

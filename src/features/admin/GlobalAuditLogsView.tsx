@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
 import { useTranslation } from 'react-i18next';
-import { ShieldAlert, Loader2 } from 'lucide-react';
+import { ShieldAlert, Loader2, Users } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { AppSelect } from '../../components/AppSelect';
 import { translateLocationName } from '../../utils/i18nUtils';
+import { MemberManagementPanel } from './MemberManagementPanel';
 
 type ActionFilter = 'all' | 'create' | 'update' | 'delete';
 type PeriodFilter = 'all' | 'today' | '7d';
@@ -100,9 +101,12 @@ const getChangedFields = (log: AuditLog, t: TFunction): string[] => {
     });
 };
 
+type AdminTab = 'members' | 'audit';
+
 export const GlobalAuditLogsView: React.FC = () => {
     const { t, i18n } = useTranslation();
     const currentLabId = useLabStore(state => state.currentLabId);
+    const [activeTab, setActiveTab] = useState<AdminTab>('members');
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [limit, setLimit] = useState(100);
@@ -113,13 +117,13 @@ export const GlobalAuditLogsView: React.FC = () => {
     const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
-        if (!currentLabId) return;
+        if (!currentLabId || activeTab !== 'audit') return;
         setIsLoading(true);
         auditService.getLogs({ limit })
             .then(setLogs)
             .catch(console.error)
             .finally(() => setIsLoading(false));
-    }, [currentLabId, limit]);
+    }, [currentLabId, limit, activeTab]);
 
     const filteredLogs = useMemo(() => {
         const now = Date.now();
@@ -207,7 +211,7 @@ export const GlobalAuditLogsView: React.FC = () => {
         return <span className={`px-2 py-0.5 rounded text-xs font-bold ${className}`}>{formatActionName(action, t)}</span>;
     };
 
-    if (isLoading) {
+    if (isLoading && activeTab === 'audit') {
         return (
             <div className="flex items-center justify-center p-8">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -216,132 +220,165 @@ export const GlobalAuditLogsView: React.FC = () => {
     }
 
     return (
-        <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <ShieldAlert className="w-6 h-6 text-red-500" />
-                    {t('audit_title')}
-                </h2>
-            </div>
-            <div className="text-xs text-slate-500 mb-2">{t('audit_subtitle')}</div>
-
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
-                    <div className="text-[11px] text-slate-500">{t('audit_summary_total')}</div>
-                    <div className="text-lg font-bold text-slate-800 dark:text-slate-100">{summary.total}</div>
-                </div>
-                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-3">
-                    <div className="text-[11px] text-emerald-700 dark:text-emerald-300">{t('audit_summary_create')}</div>
-                    <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{summary.create}</div>
-                </div>
-                <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3">
-                    <div className="text-[11px] text-blue-700 dark:text-blue-300">{t('audit_summary_update')}</div>
-                    <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{summary.update}</div>
-                </div>
-                <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-3">
-                    <div className="text-[11px] text-red-700 dark:text-red-300">{t('audit_summary_delete')}</div>
-                    <div className="text-lg font-bold text-red-700 dark:text-red-300">{summary.delete}</div>
-                </div>
-                <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
-                    <div className="text-[11px] text-slate-500">{t('audit_summary_actors')}</div>
-                    <div className="text-lg font-bold text-slate-800 dark:text-slate-100">{summary.actors}</div>
-                </div>
+        <div className="flex flex-col">
+            {/* Tab header */}
+            <div className="flex border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-10">
+                <button
+                    onClick={() => setActiveTab('members')}
+                    className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'members'
+                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Users className="w-4 h-4" />
+                    {t('admin_tab_members')}
+                </button>
+                <button
+                    onClick={() => setActiveTab('audit')}
+                    className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'audit'
+                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <ShieldAlert className="w-4 h-4" />
+                    {t('admin_tab_audit')}
+                </button>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 flex flex-col gap-2">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <AppSelect
-                        value={actionFilter}
-                        onChange={(value) => setActionFilter(value as ActionFilter)}
-                        options={actionFilterOptions}
-                        buttonClassName="bg-white dark:bg-slate-900"
-                    />
-                    <AppSelect
-                        value={entityFilter}
-                        onChange={setEntityFilter}
-                        options={entityFilterOptions}
-                        buttonClassName="bg-white dark:bg-slate-900"
-                    />
-                    <AppSelect
-                        value={periodFilter}
-                        onChange={(value) => setPeriodFilter(value as PeriodFilter)}
-                        options={periodFilterOptions}
-                        buttonClassName="bg-white dark:bg-slate-900"
-                    />
-                    <input
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        placeholder={t('audit_search_placeholder')}
-                        className="px-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                    />
-                </div>
-            </div>
+            {/* Tab content */}
+            {activeTab === 'members' ? (
+                <MemberManagementPanel />
+            ) : (
+                <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <ShieldAlert className="w-6 h-6 text-red-500" />
+                            {t('audit_title')}
+                        </h2>
+                    </div>
+                    <div className="text-xs text-slate-500 mb-2">{t('audit_subtitle')}</div>
 
-            <div className="space-y-3">
-                {filteredLogs.map(log => (
-                    <div key={log.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2">
-                        <div className="flex justify-between items-start gap-2">
-                            <div className="flex flex-col gap-1">
-                                <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">{buildEventDescription(log, t)}</div>
-                                <div className="text-xs text-slate-500">
-                                    {t('audit_entity_type_label')} {formatEntityName(log.entity_type, t)}
-                                    {log.location_context && !isUuidLike(log.location_context) ? `${t('audit_location_label')}${translateLocationName(log.location_context, t)}` : ''}
-                                </div>
-                            </div>
-                            <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                        <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+                            <div className="text-[11px] text-slate-500">{t('audit_summary_total')}</div>
+                            <div className="text-lg font-bold text-slate-800 dark:text-slate-100">{summary.total}</div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {renderActionChip(log.action)}
-                            <span className="text-xs text-slate-600 dark:text-slate-300">
-                                {t('audit_actor_label')} {log.actor_name || t('audit_unknown')}
-                            </span>
+                        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-3">
+                            <div className="text-[11px] text-emerald-700 dark:text-emerald-300">{t('audit_summary_create')}</div>
+                            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{summary.create}</div>
                         </div>
+                        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3">
+                            <div className="text-[11px] text-blue-700 dark:text-blue-300">{t('audit_summary_update')}</div>
+                            <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{summary.update}</div>
+                        </div>
+                        <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-3">
+                            <div className="text-[11px] text-red-700 dark:text-red-300">{t('audit_summary_delete')}</div>
+                            <div className="text-lg font-bold text-red-700 dark:text-red-300">{summary.delete}</div>
+                        </div>
+                        <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+                            <div className="text-[11px] text-slate-500">{t('audit_summary_actors')}</div>
+                            <div className="text-lg font-bold text-slate-800 dark:text-slate-100">{summary.actors}</div>
+                        </div>
+                    </div>
 
-                        {getChangedFields(log, t).length > 0 && (
-                            <div className="mt-1 bg-slate-50 dark:bg-slate-900 p-2 rounded text-xs">
-                                <div className="font-medium text-slate-700 dark:text-slate-300 mb-1">{t('audit_change_summary')}</div>
-                                {getChangedFields(log, t).map((line, index) => (
-                                    <div key={index} className="text-slate-600 dark:text-slate-300">{line}</div>
-                                ))}
-                            </div>
-                        )}
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 flex flex-col gap-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <AppSelect
+                                value={actionFilter}
+                                onChange={(value) => setActionFilter(value as ActionFilter)}
+                                options={actionFilterOptions}
+                                buttonClassName="bg-white dark:bg-slate-900"
+                            />
+                            <AppSelect
+                                value={entityFilter}
+                                onChange={setEntityFilter}
+                                options={entityFilterOptions}
+                                buttonClassName="bg-white dark:bg-slate-900"
+                            />
+                            <AppSelect
+                                value={periodFilter}
+                                onChange={(value) => setPeriodFilter(value as PeriodFilter)}
+                                options={periodFilterOptions}
+                                buttonClassName="bg-white dark:bg-slate-900"
+                            />
+                            <input
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                                placeholder={t('audit_search_placeholder')}
+                                className="px-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                            />
+                        </div>
+                    </div>
 
-                        <button
-                            onClick={() => toggleExpand(log.id)}
-                            className="text-xs text-blue-600 hover:text-blue-700 w-fit"
-                        >
-                            {expandedLogIds[log.id] ? t('audit_detail_hide') : t('audit_detail_show')}
-                        </button>
-
-                        {expandedLogIds[log.id] && (
-                            <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-[11px]">
-                                    <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">{t('audit_before')}</div>
-                                    <pre className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto">
-                                        {JSON.stringify(log.before_data, null, 2)}
-                                    </pre>
+                    <div className="space-y-3">
+                        {filteredLogs.map(log => (
+                            <div key={log.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2">
+                                <div className="flex justify-between items-start gap-2">
+                                    <div className="flex flex-col gap-1">
+                                        <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">{buildEventDescription(log, t)}</div>
+                                        <div className="text-xs text-slate-500">
+                                            {t('audit_entity_type_label')} {formatEntityName(log.entity_type, t)}
+                                            {log.location_context && !isUuidLike(log.location_context) ? `${t('audit_location_label')}${translateLocationName(log.location_context, t)}` : ''}
+                                        </div>
+                                    </div>
+                                    <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-[11px]">
-                                    <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">{t('audit_after')}</div>
-                                    <pre className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto">
-                                        {JSON.stringify(log.after_data, null, 2)}
-                                    </pre>
+                                <div className="flex items-center gap-2">
+                                    {renderActionChip(log.action)}
+                                    <span className="text-xs text-slate-600 dark:text-slate-300">
+                                        {t('audit_actor_label')} {log.actor_name || t('audit_unknown')}
+                                    </span>
                                 </div>
+
+                                {getChangedFields(log, t).length > 0 && (
+                                    <div className="mt-1 bg-slate-50 dark:bg-slate-900 p-2 rounded text-xs">
+                                        <div className="font-medium text-slate-700 dark:text-slate-300 mb-1">{t('audit_change_summary')}</div>
+                                        {getChangedFields(log, t).map((line, index) => (
+                                            <div key={index} className="text-slate-600 dark:text-slate-300">{line}</div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <button
+                                    onClick={() => toggleExpand(log.id)}
+                                    className="text-xs text-blue-600 hover:text-blue-700 w-fit"
+                                >
+                                    {expandedLogIds[log.id] ? t('audit_detail_hide') : t('audit_detail_show')}
+                                </button>
+
+                                {expandedLogIds[log.id] && (
+                                    <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-[11px]">
+                                            <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">{t('audit_before')}</div>
+                                            <pre className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto">
+                                                {JSON.stringify(log.before_data, null, 2)}
+                                            </pre>
+                                        </div>
+                                        <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-[11px]">
+                                            <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">{t('audit_after')}</div>
+                                            <pre className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto">
+                                                {JSON.stringify(log.after_data, null, 2)}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+                        ))}
+                        {filteredLogs.length === 0 && (
+                            <EmptyState variant="audit" subtitle={t('audit_empty')} />
                         )}
                     </div>
-                ))}
-                {filteredLogs.length === 0 && (
-                    <EmptyState variant="audit" subtitle={t('audit_empty')} />
-                )}
-            </div>
-            {logs.length >= limit && (
-                <button
-                    onClick={() => setLimit(l => l + 50)}
-                    className="w-full py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-blue-600 font-medium"
-                >
-                    {t('audit_load_more')}
-                </button>
+                    {logs.length >= limit && (
+                        <button
+                            onClick={() => setLimit(l => l + 50)}
+                            className="w-full py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-blue-600 font-medium"
+                        >
+                            {t('audit_load_more')}
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );

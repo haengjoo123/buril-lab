@@ -11,6 +11,7 @@ export const translations = {
         search_placeholder: "시약명 (예: Acetone) 또는 CAS No.",
         search_not_found: "에 대한 결과를 찾을 수 없습니다.",
         search_error: "데이터를 불러오는 중 오류가 발생했습니다.",
+        search_chemical_not_found_notice: "'{{query}}' 화학물질 검색 결과가 없어 폐기 방법을 안내할 수 없습니다.",
 
         btn_scan: "카메라로 스캔하기",
         btn_settings: "설정",
@@ -724,8 +725,8 @@ export const translations = {
         msds_no_content: "내용 없음",
         msds_view: "MSDS 확인",
 
-        // Audit Log
-        tab_audit: "감사로그",
+        // Lab Management Tab (formerly Audit Log)
+        tab_audit: "Lab 관리",
         audit_title: "전체 감사 로그 (Admin)",
         audit_subtitle: "※ 모든 항목의 변경 이력이 기록됩니다.",
         audit_action_create: "등록",
@@ -792,7 +793,35 @@ export const translations = {
         empty_cabinet_title: "아직 시약장이 없습니다",
         empty_cabinet_desc: "아래 버튼을 눌러 첫 번째 시약장을 만들어보세요.",
         empty_audit_title: "감사 로그가 없습니다",
-        empty_audit_desc: "조건에 맞는 변경 이력이 없습니다. 필터를 조정해보세요."
+        empty_audit_desc: "조건에 맞는 변경 이력이 없습니다. 필터를 조정해보세요.",
+
+        // Admin - Member Management
+        admin_tab_members: "멤버 관리",
+        admin_tab_audit: "감사 로그",
+        admin_members_title: "연구실 멤버",
+        admin_members_loading: "멤버 목록을 불러오는 중...",
+        admin_members_error: "멤버 목록을 불러오지 못했습니다.",
+        admin_members_empty: "멤버가 없습니다.",
+        member_you_label: "(나)",
+        member_role_admin: "관리자",
+        member_role_researcher: "연구원",
+        member_role_student: "학생",
+        member_joined_at: "가입일",
+        admin_transfer_btn: "관리자 위임",
+        admin_transfer_confirm: "'{{email}}'님에게 관리자 권한을 위임하시겠습니까? 위임 후 회원님은 연구원으로 변경됩니다.",
+        admin_transfer_success: "관리자 권한이 이전되었습니다.",
+        admin_transfer_error: "관리자 이전에 실패했습니다.",
+        admin_role_change_success: "역할이 변경되었습니다.",
+        admin_role_change_error: "역할 변경에 실패했습니다.",
+        admin_remove_confirm: "'{{email}}'님을 연구실에서 내보내시겠습니까?",
+        admin_remove_success: "멤버가 연구실에서 제거되었습니다.",
+        admin_remove_error: "멤버 제거에 실패했습니다.",
+        admin_remove_btn: "강퇴",
+        lab_leave_btn: "연구실 탈퇴",
+        lab_leave_confirm: "'{{name}}' 연구실에서 탈퇴하시겠습니까?",
+        lab_leave_success: "연구실에서 탈퇴했습니다.",
+        lab_leave_error_admin: "관리자는 다른 멤버에게 관리자를 위임한 후 탈퇴할 수 있습니다.",
+        lab_leave_error: "탈퇴에 실패했습니다."
     },
     en: {
         app_title: "Buril-lab",
@@ -804,6 +833,7 @@ export const translations = {
         search_placeholder: "Chemical Name (e.g. Acetone) or CAS No.",
         search_not_found: "No results found for",
         search_error: "Error fetching data.",
+        search_chemical_not_found_notice: "No chemical result for '{{query}}', so disposal guidance is unavailable.",
 
         btn_scan: "Scan with Camera",
         btn_settings: "Settings",
@@ -1516,8 +1546,8 @@ export const translations = {
         msds_no_content: "No content",
         msds_view: "View MSDS",
 
-        // Audit Log
-        tab_audit: "Audit Log",
+        // Lab Management Tab
+        tab_audit: "Lab Mgmt",
         audit_title: "Global Audit Logs (Admin)",
         audit_subtitle: "※ All item change histories are recorded.",
         audit_action_create: "Create",
@@ -1584,6 +1614,34 @@ export const translations = {
         empty_cabinet_title: "No cabinets registered",
         empty_cabinet_desc: "Tap the button below to create your first cabinet.",
         empty_audit_title: "No audit logs",
-        empty_audit_desc: "No change histories match the criteria. Try adjusting the filters."
+        empty_audit_desc: "No change histories match the criteria. Try adjusting the filters.",
+
+        // Admin - Member Management
+        admin_tab_members: "Members",
+        admin_tab_audit: "Audit Logs",
+        admin_members_title: "Lab Members",
+        admin_members_loading: "Loading members...",
+        admin_members_error: "Failed to load members.",
+        admin_members_empty: "No members found.",
+        member_you_label: "(You)",
+        member_role_admin: "Admin",
+        member_role_researcher: "Researcher",
+        member_role_student: "Student",
+        member_joined_at: "Joined",
+        admin_transfer_btn: "Transfer Admin",
+        admin_transfer_confirm: "Transfer admin rights to '{{email}}'? You will be changed to Researcher after transfer.",
+        admin_transfer_success: "Admin rights transferred successfully.",
+        admin_transfer_error: "Failed to transfer admin rights.",
+        admin_role_change_success: "Role updated successfully.",
+        admin_role_change_error: "Failed to update role.",
+        admin_remove_confirm: "Remove '{{email}}' from the lab?",
+        admin_remove_success: "Member removed from the lab.",
+        admin_remove_error: "Failed to remove member.",
+        admin_remove_btn: "Remove",
+        lab_leave_btn: "Leave Lab",
+        lab_leave_confirm: "Leave '{{name}}'?",
+        lab_leave_success: "You have left the lab.",
+        lab_leave_error_admin: "Transfer admin rights to another member before leaving.",
+        lab_leave_error: "Failed to leave the lab."
     }
 };

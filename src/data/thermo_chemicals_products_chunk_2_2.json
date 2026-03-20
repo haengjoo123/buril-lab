@@ -1,0 +1,52 @@
+[
+  {
+    "id": "e88c6f44-621e-4bee-8671-b3f915e43971",
+    "brand": "Avantor™",
+    "product_name": "Magnesium sulfate heptahydrate, 99.0-100.5% (by anhydrous basis), crystals, USP, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "2504-44"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/2da91bdd-4ec0-4214-a89d-9ae5286dc74c.jpg",
+    "url_slug": "avantor-magnesiumsulfateheptahydrate9901005byanhydrousbasiscrystalsuspmulticompendialgmpjtbaker-2504-44"
+  },
+  {
+    "id": "091803e9-d86a-49cf-bc45-c87000070696",
+    "brand": "Thermo Scientific™",
+    "product_name": "Iodoacetamido-LC-Phosphonic Acid (6C-CysPAT)",
+    "product_numbers": [
+      "A52285"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/ceb0df8d-b419-4452-a8e3-f32fa53b4de4.jpg",
+    "url_slug": "thermoscientific-iodoacetamidolcphosphonicacid6ccyspat-A52285"
+  },
+  {
+    "id": "8b9bdb81-c4c6-4513-b264-d604f75e7cf3",
+    "brand": "Gibco™",
+    "product_name": "Water For Injection (WFI) for Cell Culture",
+    "product_numbers": [
+      "A1287304"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/e44f7084-8984-4805-ab28-9af8c0931be9.jpg",
+    "url_slug": "gibco-waterforinjectionwfiforcellculture-A1287304"
+  },
+  {
+    "id": "caaff593-1f77-41bc-893f-a7129fc37abe",
+    "brand": "Avantor™",
+    "product_name": "Lactic acid, 88.0-92.0%, Multi-Compendial, GMP, J.T.Baker™",
+    "product_numbers": [
+      "0200-07"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/cff62722-dc70-49d7-89e9-752b169bb4ed.jpg",
+    "url_slug": "avantor-lacticacid880920multicompendialgmpjtbaker-0200-07"
+  },
+  {
+    "id": "1e801979-b2a4-4779-a8aa-de940e7534d4",
+    "brand": "Thermo Scientific™",
+    "product_name": "POROS™ XQ Strong Anion Exchange Resin",
+    "product_numbers": [
+      "4467820"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/6cea094a-837a-4766-b68f-7c23cf34883f.jpg",
+    "url_slug": "thermoscientific-porosxqstronganionexchangeresin-4467820"
+  }
+]

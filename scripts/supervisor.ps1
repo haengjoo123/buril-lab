@@ -11,7 +11,7 @@ Write-Host "=========================================="
 
 while ($retryCount -lt $MAX_RETRIES) {
     Write-Host "Starting Scraper (Attempt $($retryCount + 1))..."
-    node scripts/scrape_thermo_gibco.js | Out-File -FilePath $LOG_FILE -Append -Encoding utf8
+    node scripts/scrape_thermo_gibco.js --limit $PRODUCT_TARGET | Out-File -FilePath $LOG_FILE -Append -Encoding utf8
     
     $exitCode = $LASTEXITCODE
     if ($exitCode -eq 0) {

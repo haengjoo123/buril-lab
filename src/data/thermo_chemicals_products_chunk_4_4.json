@@ -1,0 +1,52 @@
+[
+  {
+    "id": "b281bead-1bc1-49ae-9f0b-2032ade5c770",
+    "brand": "Applied Biosystems™",
+    "product_name": "Hi-Di™ Formamide Dx (5 mL)",
+    "product_numbers": [
+      "4404307"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/0af79ed2-a03c-461e-a9a7-4d53e3f640aa.jpg",
+    "url_slug": "appliedbiosystems-hidiformamidedx5ml-4404307"
+  },
+  {
+    "id": "b456c2e3-0e06-4bd6-8d8e-e44cde66c975",
+    "brand": "Greenfield Global",
+    "product_name": "Acetonitrile, GMP",
+    "product_numbers": [
+      "P300000GMPDM55M"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/ae1d20b1-cb93-47a8-9d9e-5cc66b14dbc1.jpg",
+    "url_slug": "greenfieldglobal-acetonitrilegmp-P300000GMPDM55M"
+  },
+  {
+    "id": "1a7ea79f-b122-4cf2-bb40-c617d10bc739",
+    "brand": "Thermo Scientific™",
+    "product_name": "Water, nuclease-free",
+    "product_numbers": [
+      "R0582"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/2f0d3f2b-72b7-4a1a-af8c-65a9453d3e3f.jpg",
+    "url_slug": "thermoscientific-waternucleasefree-R0582"
+  },
+  {
+    "id": "c9312ba4-b4b5-4f11-b6ab-7f5556fefde0",
+    "brand": "Thermo Scientific™",
+    "product_name": "DEPC-treated Water",
+    "product_numbers": [
+      "R0603"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/731ded74-d104-40c0-bd18-b1f33494aaee.jpg",
+    "url_slug": "thermoscientific-depctreatedwater-R0603"
+  },
+  {
+    "id": "78dade59-c1e8-4199-a462-5c9f0e868d94",
+    "brand": "Applied Biosystems™",
+    "product_name": "POP-6™ Polymer, for 3500/SeqStudio™ Flex",
+    "product_numbers": [
+      "A26071"
+    ],
+    "thumbnail_url": "https://zafxzidbtbryiksemlwc.supabase.co/storage/v1/object/public/media-products/thermo-chemicals/d1f1a6a4-4926-4ae9-923b-7be4fb216341.jpg",
+    "url_slug": "appliedbiosystems-pop6polymerfor3500seqstudioflex-A26071"
+  }
+]
