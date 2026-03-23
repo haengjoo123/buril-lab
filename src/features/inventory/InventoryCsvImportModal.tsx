@@ -385,7 +385,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                 // Skip empty rows
                 if (row.every(cell => !cell)) continue;
                 
-                const values = row.map((v: any) => {
+                const values = row.map((v: unknown) => {
                     if (v instanceof Date) {
                         const y = v.getFullYear();
                         const m = String(v.getMonth() + 1).padStart(2, '0');

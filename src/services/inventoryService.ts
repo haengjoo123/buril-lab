@@ -558,7 +558,7 @@ export const inventoryService = {
         const { currentLabId } = useLabStore.getState();
         const actorName = await getCurrentUserDisplayName(currentLabId);
 
-        let payloadRecord: Record<string, any> = {};
+        const payloadRecord: Record<string, unknown> = {};
 
         if (source === 'cabinet_item') {
             if (updates.name !== undefined) payloadRecord.name = updates.name.trim();

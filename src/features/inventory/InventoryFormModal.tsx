@@ -203,7 +203,6 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             cabinetService.logActivity(input.cabinet_id, 'add', input.name, undefined, input.memo || undefined)
                 .catch(console.error);
 
-            let createdInventoryId: string | null = null;
             try {
                 if (sourceItem._source === 'inventory') {
                     await inventoryService.updateItem(sourceItem.id, {
@@ -220,9 +219,6 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             } catch (error) {
                 // Roll back target cabinet placement on downstream failures
                 await rollbackPlacementInCabinet(input.cabinet_id, placed.itemId);
-                if (createdInventoryId) {
-                    await supabase.from('inventory').delete().eq('id', createdInventoryId);
-                }
                 throw error;
             }
             return;
@@ -620,7 +616,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                                         {log.actor_name && <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
                                                         {log.diff_data && Object.keys(log.diff_data).length > 0 && (
                                                             <div className="mt-1 flex flex-col gap-0.5">
-                                                                {Object.entries(log.diff_data).map(([k, v]: [string, any]) => (
+                                                                {Object.entries(log.diff_data).map(([k, v]: [string, { from: unknown; to: unknown }]) => (
                                                                     <div key={k} className="flex gap-1 text-[10px] items-center">
                                                                         <span className="text-slate-400 w-16 shrink-0 truncate">{k}:</span>
                                                                         <span className="line-through text-red-500/70 truncate break-all">{JSON.stringify(v.from)}</span>

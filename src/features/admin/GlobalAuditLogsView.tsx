@@ -11,6 +11,7 @@ import { MemberManagementPanel } from './MemberManagementPanel';
 
 type ActionFilter = 'all' | 'create' | 'update' | 'delete';
 type PeriodFilter = 'all' | 'today' | '7d';
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ACTION_KEY: Record<string, string> = {
     create: 'audit_action_create',
@@ -118,24 +119,33 @@ export const GlobalAuditLogsView: React.FC = () => {
 
     useEffect(() => {
         if (!currentLabId || activeTab !== 'audit') return;
-        setIsLoading(true);
-        auditService.getLogs({ limit })
-            .then(setLogs)
-            .catch(console.error)
-            .finally(() => setIsLoading(false));
+        const run = async () => {
+            setIsLoading(true);
+            try {
+                const fetchedLogs = await auditService.getLogs({ limit });
+                setLogs(fetchedLogs);
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        void run();
     }, [currentLabId, limit, activeTab]);
 
     const filteredLogs = useMemo(() => {
-        const now = Date.now();
         return logs.filter((log) => {
             if (actionFilter !== 'all' && log.action !== actionFilter) return false;
             if (entityFilter !== 'all' && log.entity_type !== entityFilter) return false;
 
             if (periodFilter !== 'all') {
                 const createdAtMs = new Date(log.created_at).getTime();
+                const nowDate = new Date();
+                const todayStart = new Date(nowDate);
+                todayStart.setHours(0, 0, 0, 0);
                 const boundaryMs = periodFilter === 'today'
-                    ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
-                    : now - 7 * 24 * 60 * 60 * 1000;
+                    ? todayStart.getTime()
+                    : nowDate.getTime() - SEVEN_DAYS_MS;
                 if (createdAtMs < boundaryMs) return false;
             }
 

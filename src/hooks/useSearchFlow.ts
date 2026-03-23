@@ -192,7 +192,7 @@ export function useSearchFlow({
           ? await fetchKoshaSuggestions(query)
           : await fetchPubchemSuggestions(query);
         setSuggestions(newSuggestions);
-      } catch (err) {
+      } catch {
         setSuggestions([]);
       } finally {
         setIsSuggestionsLoading(false);

@@ -40,17 +40,16 @@ export function useAppUiState({
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [logRefreshKey, setLogRefreshKey] = useState(0);
-  const [lastCabinetId, setLastCabinetId] = useState<string | null>(null);
+  const lastCabinetIdRef = useRef<string | null>(activeCabinetId);
   const previousLabIdRef = useRef<string | null | undefined>(currentLabId);
 
   const activeTab = useMemo(() => getActiveTab(pathname), [pathname]);
 
-  // 시약장 상세 진입 상태를 기억해 탭 재진입 시 같은 캐비닛으로 복귀한다.
   useEffect(() => {
-    if (activeTab === 'cabinet') {
-      setLastCabinetId(activeCabinetId);
+    if (activeTab === 'cabinet' && activeCabinetId) {
+      lastCabinetIdRef.current = activeCabinetId;
     }
-  }, [activeTab, activeCabinetId]);
+  }, [activeCabinetId, activeTab]);
 
   // 연구실이 실제로 바뀐 경우에만 시약장 컨텍스트를 초기화합니다.
   // 기존에는 /cabinet?id=... 로 이동할 때도 pathname 변화만으로 상세 ID를 지워버렸습니다.
@@ -60,7 +59,7 @@ export function useAppUiState({
     }
 
     previousLabIdRef.current = currentLabId;
-    setLastCabinetId(null);
+    lastCabinetIdRef.current = null;
 
     if (pathname.startsWith('/cabinet')) {
       navigate('/cabinet');
@@ -76,7 +75,7 @@ export function useAppUiState({
         navigate('/logs');
         break;
       case 'cabinet':
-        navigate(lastCabinetId ? `/cabinet?id=${lastCabinetId}` : '/cabinet');
+        navigate(lastCabinetIdRef.current ? `/cabinet?id=${lastCabinetIdRef.current}` : '/cabinet');
         break;
       case 'inventory':
         navigate('/inventory');
@@ -88,7 +87,7 @@ export function useAppUiState({
         navigate('/');
         break;
     }
-  }, [lastSearchQuery, lastCabinetId, navigate]);
+  }, [lastSearchQuery, navigate]);
 
   const incrementLogRefreshKey = useCallback(() => {
     setLogRefreshKey((prev) => prev + 1);

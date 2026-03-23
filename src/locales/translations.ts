@@ -482,10 +482,6 @@ export const translations = {
         activity_log_count: "총 {{count}}건",
 
         // FridgeView
-        reagent_type_brown: "갈색병",
-        reagent_type_plastic: "플라스틱 통",
-        reagent_type_glass: "투명 유리병",
-        reagent_type_box: "앰플/바이알 박스",
         reagent_info_title: "시약 정보 입력",
         reagent_name_label: "시약 이름",
         reagent_name_placeholder: "예: 구연산 (Citric Acid)",
@@ -510,6 +506,7 @@ export const translations = {
         cabinet_container_plastic: "플라스틱 통",
         cabinet_container_solvent: "솔벤트 캔",
         cabinet_container_vial: "바이알 박스",
+        cabinet_container_glass: "유리병",
         cabinet_pubchem_auto_enrich: "저장 시 PubChem에서 GHS 위험 정보를 자동 조회합니다",
         cabinet_delete_expiry: "유효기간 삭제",
         cabinet_storage_group: "보관 분류",
@@ -1304,10 +1301,6 @@ export const translations = {
         activity_log_count: "Total {{count}} records",
 
         // FridgeView
-        reagent_type_brown: "Brown Bottle",
-        reagent_type_plastic: "Plastic Container",
-        reagent_type_glass: "Clear Glass Bottle",
-        reagent_type_box: "Ampoule/Vial Box",
         reagent_info_title: "Enter Reagent Info",
         reagent_name_label: "Reagent Name",
         reagent_name_placeholder: "Ex: Citric Acid",
@@ -1332,6 +1325,7 @@ export const translations = {
         cabinet_container_plastic: "Plastic Container",
         cabinet_container_solvent: "Solvent Can",
         cabinet_container_vial: "Vial Box",
+        cabinet_container_glass: "Glass Bottle",
         cabinet_pubchem_auto_enrich: "GHS info will be enriched from PubChem on save",
         cabinet_delete_expiry: "Delete expiry date",
         cabinet_storage_group: "Storage Group",

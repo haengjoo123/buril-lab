@@ -6,6 +6,7 @@ import type { ReagentPlacement } from '../../types/fridge';
 import { useSpring, animated } from '@react-spring/three';
 import { useFridgeStore } from '../../store/fridgeStore';
 import * as THREE from 'three';
+import { useGLTF } from '@react-three/drei';
 import { getExpiryStatus, type ExpiryLevel } from '../../utils/expiryStatus';
 
 interface ReagentItemProps {
@@ -18,7 +19,7 @@ interface ReagentItemProps {
     dimmed?: boolean;
 }
 
-export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15 };
+export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15, E: 8 };
 
 // --- Shared Geometries (Performance Optimization) ---
 // Type A: 갈색 병
@@ -209,10 +210,74 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
                     </mesh>
                 </group>
             );
+        case 'E': // 유리병 GLB 모델
+            return (
+                <group scale={scale}>
+                    <GlassBottleModel
+                        onPrimaryMaterialChange={(material) => {
+                            materialRef.current = material;
+                        }}
+                        materialProps={materialProps}
+                    />
+                </group>
+            );
         default:
             return null;
     }
 };
+
+/** GLB 모델 로더 컴포넌트 — glass.glb */
+const GlassBottleModel: React.FC<{
+    onPrimaryMaterialChange: (material: THREE.MeshStandardMaterial | null) => void;
+    materialProps: Record<string, unknown>;
+}> = ({ onPrimaryMaterialChange, materialProps }) => {
+    const { scene } = useGLTF('/models/reagents/glass.glb');
+    const { clonedScene, primaryMaterial } = useMemo(() => {
+        const clone = scene.clone(true);
+        const overrideErrorColor = materialProps.color === '#ef4444';
+        const nextOpacity = typeof materialProps.opacity === 'number' ? materialProps.opacity : undefined;
+        let firstMaterial: THREE.MeshStandardMaterial | null = null;
+
+        const cloneMaterial = (original: THREE.Material): THREE.Material => {
+            const next = original.clone();
+            if (next instanceof THREE.MeshStandardMaterial) {
+                next.transparent = true;
+                if (nextOpacity !== undefined) {
+                    next.opacity = nextOpacity;
+                }
+                if (overrideErrorColor) {
+                    next.color = new THREE.Color('#ef4444');
+                }
+                if (!firstMaterial) {
+                    firstMaterial = next;
+                }
+            }
+            return next;
+        };
+
+        // 모델의 원본 머티리얼을 유지하되 확장
+        clone.traverse((node) => {
+            if ((node as THREE.Mesh).isMesh) {
+                const mesh = node as THREE.Mesh;
+                mesh.material = Array.isArray(mesh.material)
+                    ? mesh.material.map((mat) => cloneMaterial(mat))
+                    : cloneMaterial(mesh.material);
+                mesh.castShadow = true;
+            }
+        });
+        return { clonedScene: clone, primaryMaterial: firstMaterial };
+    }, [scene, materialProps.color, materialProps.opacity]);
+
+    useEffect(() => {
+        onPrimaryMaterialChange(primaryMaterial);
+        return () => onPrimaryMaterialChange(null);
+    }, [onPrimaryMaterialChange, primaryMaterial]);
+
+    return <primitive object={clonedScene} scale={0.5} />;
+};
+
+// Preload the GLB model
+useGLTF.preload('/models/reagents/glass.glb');
 
 export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shelfDepth = 2, isGhost, isValid = true, dimmed = false }) => {
     const setDraggedItem = useFridgeStore(s => s.setDraggedItem);
@@ -297,7 +362,7 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
         config: { mass: 1, tension: 170, friction: 26 }
     });
 
-    const CONTAINER_COLORS: Record<string, string> = { A: '#8D6E63', B: '#F5F5F5', C: '#78909C', D: '#D7CCC8' };
+    const CONTAINER_COLORS: Record<string, string> = { A: '#8D6E63', B: '#F5F5F5', C: '#78909C', D: '#D7CCC8', E: '#b0c4de' };
     const defaultColor = isGhost ? (isValid ? '#4ade80' : '#ef4444') : (CONTAINER_COLORS[item.template] || '#8D6E63');
     let opacity = isGhost ? 0.6 : isBeingDragged ? 0.4 : 1;
     if (dimmed) opacity *= 0.5;

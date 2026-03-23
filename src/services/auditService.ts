@@ -1,6 +1,9 @@
 import { supabase } from './supabaseClient';
 import { useLabStore } from '../store/useLabStore';
 
+type JsonObject = Record<string, unknown>;
+type AuditDiffRecord = Record<string, { from: unknown; to: unknown }>;
+
 export interface AuditLog {
     id: string;
     created_at: string;
@@ -11,9 +14,9 @@ export interface AuditLog {
     entity_id: string;
     action: string;
     location_context: string | null;
-    before_data: Record<string, any> | null;
-    after_data: Record<string, any> | null;
-    diff_data: Record<string, { from: any; to: any }> | null;
+    before_data: JsonObject | null;
+    after_data: JsonObject | null;
+    diff_data: AuditDiffRecord | null;
     source: string;
     request_id: string | null;
 }

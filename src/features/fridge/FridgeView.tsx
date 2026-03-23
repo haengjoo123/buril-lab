@@ -358,7 +358,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     };
 
     const handleScanAutoPlace = () => {
-        const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15 };
+        const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15, E: 8 };
         const baseWidth = CONTAINER_BASE_WIDTHS[scanContainerType] || 8;
         const finalWidth = baseWidth * scanSize;
         const finalName = scanName.trim() || '이름 없음';
@@ -423,31 +423,36 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setIsScanning(false);
     };
 
-    // Generic containers for the placement tray
+    // Generic containers for the placement tray (labels match ReagentEditPanel: cabinet_container_*)
     const genericContainers = [
         {
-            name: t('reagent_type_brown'), type: 'A', color: '#8b4513', width: 8,
-            chemicalData: { name: t('reagent_type_brown') }
+            name: t('cabinet_container_amber'), type: 'A', color: '#8b4513', width: 8,
+            chemicalData: { name: t('cabinet_container_amber') }
         },
         {
-            name: t('reagent_type_plastic'), type: 'B', color: '#f8fafc', width: 10,
-            chemicalData: { name: t('reagent_type_plastic') }
+            name: t('cabinet_container_plastic'), type: 'B', color: '#f8fafc', width: 10,
+            chemicalData: { name: t('cabinet_container_plastic') }
         },
         {
-            name: t('reagent_type_glass'), type: 'C', color: '#e2e8f0', width: 9,
-            chemicalData: { name: t('reagent_type_glass') }
+            name: t('cabinet_container_solvent'), type: 'C', color: '#e2e8f0', width: 9,
+            chemicalData: { name: t('cabinet_container_solvent') }
         },
         {
-            name: t('reagent_type_box'), type: 'D', color: '#cbd5e1', width: 15,
-            chemicalData: { name: t('reagent_type_box') }
+            name: t('cabinet_container_vial'), type: 'D', color: '#cbd5e1', width: 15,
+            chemicalData: { name: t('cabinet_container_vial') }
+        },
+        {
+            name: t('cabinet_container_glass'), type: 'E', color: '#b0c4de', width: 8,
+            chemicalData: { name: t('cabinet_container_glass') }
         },
     ];
 
     const containerTypeOptions: { type: ReagentTemplateType; label: string; color: string }[] = [
-        { type: 'A', label: t('reagent_type_brown'), color: '#8b4513' },
-        { type: 'B', label: t('reagent_type_plastic'), color: '#f8fafc' },
-        { type: 'C', label: t('reagent_type_glass'), color: '#e2e8f0' },
-        { type: 'D', label: t('reagent_type_box'), color: '#cbd5e1' },
+        { type: 'A', label: t('cabinet_container_amber'), color: '#8b4513' },
+        { type: 'B', label: t('cabinet_container_plastic'), color: '#f8fafc' },
+        { type: 'C', label: t('cabinet_container_solvent'), color: '#e2e8f0' },
+        { type: 'D', label: t('cabinet_container_vial'), color: '#cbd5e1' },
+        { type: 'E', label: t('cabinet_container_glass'), color: '#b0c4de' },
     ];
     const placementInstruction = draggedTemplate
         ? (isCoarsePointer ? t('cabinet_place_instruction_touch') : t('cabinet_place_instruction_desktop'))

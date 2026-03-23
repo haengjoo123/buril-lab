@@ -44,12 +44,6 @@ export const AppSelect: React.FC<AppSelectProps> = ({
     );
 
     useEffect(() => {
-        if (disabled) {
-            setIsOpen(false);
-        }
-    }, [disabled]);
-
-    useEffect(() => {
         const handlePointerDown = (event: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 setIsOpen(false);

@@ -31,6 +31,7 @@ const TEMPLATE_DEPTHS = {
     B: 0.35, // box depth
     C: 0.7,  // 0.35 radius * 2
     D: 0.8,  // box depth
+    E: 0.44, // glass bottle (similar to A)
 };
 
 // The raw THREE.js width of the base geometries before scaling
@@ -39,9 +40,10 @@ const MESH_BASE_WIDTHS: Record<string, number> = {
     B: 0.5,  // box width
     C: 0.7,  // 0.35 radius * 2
     D: 1.2,  // box width
+    E: 0.44, // glass bottle GLB (approx)
 };
 
-const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15 };
+const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15, E: 8 };
 
 const INITIAL_SHELVES: ShelfData[] = [
     { id: uuidv4(), level: 0, dividers: [], items: [] },

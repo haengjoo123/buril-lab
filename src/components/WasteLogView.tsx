@@ -261,7 +261,7 @@ export const WasteLogView: React.FC = () => {
         }
     };
 
-    const formatDate = (dateStr: string) => {
+    const formatDate = useCallback((dateStr: string) => {
         const d = new Date(dateStr);
         return d.toLocaleDateString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US', {
             year: 'numeric',
@@ -270,7 +270,7 @@ export const WasteLogView: React.FC = () => {
             hour: '2-digit',
             minute: '2-digit',
         });
-    };
+    }, [i18n.language]);
 
     // Compute total volume from individual cart items
     const computeTotalVolume = (log: WasteLog): string | null => {
@@ -291,7 +291,7 @@ export const WasteLogView: React.FC = () => {
         return first?.chemical?.name || first?.name || null;
     };
 
-    const getDeletedLocation = (log: WasteLog): string | null => {
+    const getDeletedLocation = useCallback((log: WasteLog): string | null => {
         const first = log.chemicals?.[0] as any;
         let locName: string | null = null;
         if (first?.deleted_location) {
@@ -303,7 +303,7 @@ export const WasteLogView: React.FC = () => {
         }
         
         return locName ? translateLocationName(locName, t) : null;
-    };
+    }, [t]);
 
     const getDeleteReason = (log: WasteLog): string | null => {
         const memo = (log.memo || '').trim();
@@ -424,7 +424,7 @@ export const WasteLogView: React.FC = () => {
                 )}
             </div>
         );
-    }, [expandedId, getDeleteBlockedMessage, isDeleteAllowedForLog, t]);
+    }, [expandedId, formatDate, getDeleteBlockedMessage, getDeletedLocation, isDeleteAllowedForLog, t]);
 
     const openExportDialog = (format: ExportFormat) => {
         setIsExportMenuOpen(false);

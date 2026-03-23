@@ -18,10 +18,10 @@ import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { translateLocationName } from '../../utils/i18nUtils';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
-type ReagentTemplateType = 'A' | 'B' | 'C' | 'D';
+type ReagentTemplateType = 'A' | 'B' | 'C' | 'D' | 'E';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'created_at_desc' | 'created_at_asc';
 
-const CONTAINER_BASE_WIDTHS: Record<ReagentTemplateType, number> = { A: 8, B: 6, C: 12, D: 14 };
+const CONTAINER_BASE_WIDTHS: Record<ReagentTemplateType, number> = { A: 8, B: 6, C: 12, D: 14, E: 8 };
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
 
@@ -864,7 +864,14 @@ export const InventoryListView: React.FC = () => {
         if (fingerprintError) {
             console.error('Failed to fetch source cabinet geometry by fingerprint:', fingerprintError);
         } else {
-            const fingerprintRow = (fingerprintRows || []).find((row: any) =>
+            const fingerprintRow = (fingerprintRows || []).find((row: {
+                brand?: string | null;
+                product_number?: string | null;
+                capacity?: string | null;
+                cas_no?: string | null;
+                template?: ReagentTemplateType | null;
+                width?: number | string | null;
+            }) =>
                 normalizeText(row.brand) === normalizeText(item.brand) &&
                 normalizeText(row.product_number) === normalizeText(item.product_number) &&
                 normalizeText(row.capacity) === normalizeText(item.capacity) &&

@@ -1,4 +1,4 @@
-export type ReagentTemplateType = 'A' | 'B' | 'C' | 'D'; // Bottle types
+export type ReagentTemplateType = 'A' | 'B' | 'C' | 'D' | 'E'; // Bottle types (E = GLB glass bottle)
 
 export interface ReagentTemplate {
     type: ReagentTemplateType;

@@ -13,7 +13,7 @@ export type UnifiedLog = {
     memo?: string;
     performed_by_name?: string;
     performed_at: string;
-    diff_data?: Record<string, { from: any, to: any }> | null;
+    diff_data?: Record<string, { from: unknown, to: unknown }> | null;
     is_audit?: boolean;
 };
 
@@ -67,7 +67,10 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                         if (a.action === 'delete') aType = 'remove';
                         if (a.action === 'clear_all') aType = 'clear_all';
 
-                        const itemName = (a.after_data?.name || a.before_data?.name || 'Unknown Item');
+                        const itemNameCandidate = a.after_data?.name ?? a.before_data?.name;
+                        const itemName = typeof itemNameCandidate === 'string' && itemNameCandidate.trim()
+                            ? itemNameCandidate
+                            : 'Unknown Item';
                         return {
                             id: a.id,
                             action_type: aType,
