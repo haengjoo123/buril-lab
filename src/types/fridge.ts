@@ -1,4 +1,5 @@
-export type ReagentTemplateType = 'A' | 'B' | 'C' | 'D' | 'E'; // Bottle types (E = GLB glass bottle)
+/** A=갈색병 B=플라스틱 C=바이알박스 D=유리병(GLB) */
+export type ReagentTemplateType = 'A' | 'B' | 'C' | 'D';
 
 export interface ReagentTemplate {
     type: ReagentTemplateType;

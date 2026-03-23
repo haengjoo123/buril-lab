@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from './supabaseClient';
 import type { ShelfData, ReagentPlacement } from '../types/fridge';
+import { normalizeTemplateFromDb } from '../utils/normalizeTemplateFromDb';
 import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
@@ -168,7 +169,7 @@ export const cabinetService = {
                     id: item.id,
                     shelfId: item.shelf_id,
                     reagentId: item.id,
-                    template: item.template,
+                    template: normalizeTemplateFromDb(item.template),
                     name: item.name,
                     width: Number(item.width),
                     position: Number(item.position),

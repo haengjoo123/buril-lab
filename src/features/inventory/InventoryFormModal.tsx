@@ -10,6 +10,7 @@ import { supabase } from '../../services/supabaseClient';
 import { AppSelect } from '../../components/AppSelect';
 
 import { translateLocationName } from '../../utils/i18nUtils';
+import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
 
 interface Props {
     isOpen: boolean;
@@ -285,7 +286,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                 };
             }
         }
-        const template = guessTemplate((input.capacity || sourceItem.capacity || '').toString());
+        const template = guessTemplateFromCapacity((input.capacity || sourceItem.capacity || '').toString());
         return { template, width: getWidthForTemplate(template) };
     }
 
@@ -665,7 +666,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         const fridgeStore = useFridgeStore.getState();
         await fridgeStore.loadCabinet(input.cabinet_id);
 
-        const template = guessTemplate(input.capacity || '');
+        const template = guessTemplateFromCapacity(input.capacity || '');
         const placeResult = useFridgeStore.getState().autoPlaceReagent({
             id: '',
             reagentId: inventoryId,
@@ -696,25 +697,3 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
     }
 };
 
-function guessTemplate(capacity: string): ReagentTemplateType {
-    if (!capacity) return 'A';
-    const lower = capacity.toLowerCase();
-    const numMatch = lower.match(/(\d+)/);
-    const num = numMatch ? parseInt(numMatch[1], 10) : 0;
-
-    if (lower.includes('kg') || num >= 2500) return 'D';
-    if (lower.includes('l') && !lower.includes('ml')) return 'C';
-    if (num >= 500) return 'C';
-    if (num >= 100) return 'A';
-    return 'B';
-}
-
-function getWidthForTemplate(template: ReagentTemplateType): number {
-    switch (template) {
-        case 'A': return 8;
-        case 'B': return 6;
-        case 'C': return 12;
-        case 'D': return 14;
-        default: return 8;
-    }
-}

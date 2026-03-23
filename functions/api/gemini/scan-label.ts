@@ -98,7 +98,7 @@ Extract the following information and return it as a JSON object ONLY (no markdo
 {
   "name": "<Chemical/reagent name, in the language shown on the label>",
   "casNumber": "<CAS Number if visible, otherwise null>",
-  "suggestedContainerType": "<One of: A (brown glass bottle), B (plastic container), C (clear glass bottle), D (ampoule/vial box) - choose based on what you see in the image>",
+  "suggestedContainerType": "<One of: A (brown glass bottle), B (plastic container), C (ampoule/vial box), D (clear glass bottle) - choose based on what you see in the image>",
   "capacity": "<Volume or weight shown on the label, e.g. '500mL', '1kg', otherwise null>",
   "expiryDate": "<Expiry date in YYYY-MM-DD format if visible, otherwise null>",
   "brand": "<Manufacturer/brand name if visible, e.g. 'Sigma-Aldrich', 'Merck', otherwise null>",
@@ -106,7 +106,7 @@ Extract the following information and return it as a JSON object ONLY (no markdo
 }
 
 Rules:
-- For suggestedContainerType: A = amber/brown glass bottle, B = white/opaque plastic bottle or container, C = clear/transparent glass bottle, D = cardboard box with ampoules or vials inside
+- For suggestedContainerType: A = amber/brown glass bottle, B = white/opaque plastic bottle or container, C = cardboard box with ampoules or vials inside, D = clear/transparent glass bottle
 - If you cannot determine the container type from the image, default to "A"
 - Always try to extract the chemical name
 - Return ONLY the JSON object, no other text`
@@ -140,8 +140,11 @@ Rules:
       productNumber?: string | null
     }
 
-    const suggestedContainerType = VALID_CONTAINER_TYPES.has(parsed.suggestedContainerType || '')
-      ? (parsed.suggestedContainerType as 'A' | 'B' | 'C' | 'D')
+    let rawType = (parsed.suggestedContainerType || '').trim().toUpperCase()
+    // 구형 응답: E=유리병 → 현재 D
+    if (rawType === 'E') rawType = 'D'
+    const suggestedContainerType = VALID_CONTAINER_TYPES.has(rawType)
+      ? (rawType as 'A' | 'B' | 'C' | 'D')
       : 'A'
 
     return json({

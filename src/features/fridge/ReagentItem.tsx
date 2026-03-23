@@ -19,7 +19,7 @@ interface ReagentItemProps {
     dimmed?: boolean;
 }
 
-export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15, E: 8 };
+export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 15, D: 8 };
 
 // --- Shared Geometries (Performance Optimization) ---
 // Type A: 갈색 병
@@ -34,17 +34,11 @@ const GEO_B_CAP = new THREE.BoxGeometry(0.52, 0.1, 0.37);
 const GEO_B_LABEL_FRONT = new THREE.PlaneGeometry(0.4, 0.55);
 const GEO_B_LABEL_STRIP = new THREE.PlaneGeometry(0.38, 0.08);
 
-// Type C: 솔벤트 캔
-const GEO_C_BODY = new THREE.CylinderGeometry(0.35, 0.35, 1.1, 12);
-const GEO_C_RIM = new THREE.CylinderGeometry(0.36, 0.36, 0.04, 12);
-const GEO_C_HANDLE = new THREE.TorusGeometry(0.15, 0.025, 6, 10, Math.PI);
-const GEO_C_SPOUT = new THREE.CylinderGeometry(0.05, 0.06, 0.1, 8);
-
-// Type D: 바이알 박스
+// Type C: 바이알 박스
 const GEO_D_BOX = new THREE.BoxGeometry(1.2, 0.5, 0.8);
 const GEO_D_DIV_VERT = new THREE.BoxGeometry(0.02, 0.44, 0.74);
 const GEO_D_DIV_HORZ = new THREE.BoxGeometry(1.14, 0.44, 0.02);
-const GEO_D_RIM = new THREE.BoxGeometry(1.22, 0.02, 0.82);
+const GEO_D_RIM = new THREE.BoxGeometry(1.22, 0.02, 0.82); // vial box rim (type C mesh)
 
 export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean; expiryLevel?: ExpiryLevel }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false, expiryLevel }) => {
 
@@ -147,36 +141,7 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
                     </mesh>
                 </group>
             );
-        case 'C': // 솔벤트 캔: 원기둥 몸통 + 손잡이
-            return (
-                <group scale={scale}>
-                    {/* 캔 몸통 (금속 원기둥) - 메인 그림자 캐스터 */}
-                    <mesh castShadow position={[0, 0.55, 0]} geometry={GEO_C_BODY}>
-                        <meshStandardMaterial ref={materialRef} {...materialProps} metalness={0.6} roughness={0.4} />
-                    </mesh>
-                    {/* 캔 상단 림 */}
-                    <mesh position={[0, 1.1, 0]} geometry={GEO_C_RIM}>
-                        <meshStandardMaterial color="#9E9E9E" metalness={0.8} roughness={0.3}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
-                    {/* 캔 하단 림 */}
-                    <mesh position={[0, 0.01, 0]} geometry={GEO_C_RIM}>
-                        <meshStandardMaterial color="#9E9E9E" metalness={0.8} roughness={0.3}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
-                    {/* 손잡이 (Torus) */}
-                    <mesh position={[0, 1.2, 0]} rotation={[Math.PI / 2, 0, 0]} geometry={GEO_C_HANDLE}>
-                        <meshStandardMaterial color="#757575" metalness={0.9} roughness={0.2}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
-                    {/* 주둥이 */}
-                    <mesh position={[0.15, 1.15, 0]} geometry={GEO_C_SPOUT}>
-                        <meshStandardMaterial color="#BDBDBD" metalness={0.7} roughness={0.3}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
-                </group>
-            );
-        case 'D': // 바이알 박스: 박스 + 칸막이
+        case 'C': // 바이알 박스: 박스 + 칸막이
             return (
                 <group scale={scale}>
                     {/* 외곽 박스 - 메인 그림자 캐스터 */}
@@ -210,7 +175,7 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
                     </mesh>
                 </group>
             );
-        case 'E': // 유리병 GLB 모델
+        case 'D': // 유리병 GLB 모델
             return (
                 <group scale={scale}>
                     <GlassBottleModel
@@ -362,7 +327,7 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
         config: { mass: 1, tension: 170, friction: 26 }
     });
 
-    const CONTAINER_COLORS: Record<string, string> = { A: '#8D6E63', B: '#F5F5F5', C: '#78909C', D: '#D7CCC8', E: '#b0c4de' };
+    const CONTAINER_COLORS: Record<string, string> = { A: '#8D6E63', B: '#F5F5F5', C: '#D7CCC8', D: '#b0c4de' };
     const defaultColor = isGhost ? (isValid ? '#4ade80' : '#ef4444') : (CONTAINER_COLORS[item.template] || '#8D6E63');
     let opacity = isGhost ? 0.6 : isBeingDragged ? 0.4 : 1;
     if (dimmed) opacity *= 0.5;

@@ -16,27 +16,14 @@ import { AppSelect } from '../../components/AppSelect';
 import { useLabStore } from '../../store/useLabStore';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { translateLocationName } from '../../utils/i18nUtils';
+import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
+import type { ReagentTemplateType } from '../../types/fridge';
+import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
-type ReagentTemplateType = 'A' | 'B' | 'C' | 'D' | 'E';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'created_at_desc' | 'created_at_asc';
 
-const CONTAINER_BASE_WIDTHS: Record<ReagentTemplateType, number> = { A: 8, B: 6, C: 12, D: 14, E: 8 };
-
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
-
-function guessTemplate(capacity: string): ReagentTemplateType {
-    if (!capacity) return 'A';
-    const lower = capacity.toLowerCase();
-    const numMatch = lower.match(/(\d+)/);
-    const num = numMatch ? parseInt(numMatch[1], 10) : 0;
-
-    if (lower.includes('kg') || num >= 2500) return 'D';
-    if (lower.includes('l') && !lower.includes('ml')) return 'C';
-    if (num >= 500) return 'C';
-    if (num >= 100) return 'A';
-    return 'B';
-}
 
 function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: InventorySortOption): number {
     if (sortBy === 'expiry_asc') {
@@ -547,8 +534,8 @@ export const InventoryListView: React.FC = () => {
 
                 for (const item of moveCandidates) {
                     const sourceGeometry = await getSourcePlacementGeometry(item);
-                    const template = sourceGeometry?.template ?? guessTemplate(item.capacity || '');
-                    const width = sourceGeometry?.width ?? CONTAINER_BASE_WIDTHS[template];
+                    const template = sourceGeometry?.template ?? guessTemplateFromCapacity(item.capacity || '');
+                    const width = sourceGeometry?.width ?? getWidthForTemplate(template);
                     let placedItemId: string | null = null;
                     let isInventoryUpdated = false;
                     try {
@@ -850,7 +837,7 @@ export const InventoryListView: React.FC = () => {
             console.error('Failed to fetch source cabinet geometry by id:', exactRowError);
         } else if (exactRow?.template && Number.isFinite(Number(exactRow.width)) && Number(exactRow.width) > 0) {
             return {
-                template: exactRow.template as ReagentTemplateType,
+                template: normalizeTemplateFromDb(exactRow.template),
                 width: Number(exactRow.width),
             };
         }
@@ -879,7 +866,7 @@ export const InventoryListView: React.FC = () => {
             );
             if (fingerprintRow?.template && Number.isFinite(Number(fingerprintRow.width)) && Number(fingerprintRow.width) > 0) {
                 return {
-                    template: fingerprintRow.template as ReagentTemplateType,
+                    template: normalizeTemplateFromDb(fingerprintRow.template),
                     width: Number(fingerprintRow.width),
                 };
             }
@@ -902,7 +889,7 @@ export const InventoryListView: React.FC = () => {
                 )
             );
         if (!placement) return null;
-        const template = placement.template as ReagentTemplateType;
+        const template = normalizeTemplateFromDb(placement.template);
         const width = Number(placement.width);
         if (!template || !Number.isFinite(width) || width <= 0) return null;
         return { template, width };

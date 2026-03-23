@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import * as XLSX from 'xlsx';
 import { AppSelect } from '../../components/AppSelect';
 import { translateLocationName } from '../../utils/i18nUtils';
+import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
 
 interface InventoryCsvImportModalProps {
     isOpen: boolean;
@@ -488,7 +489,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                 }
 
                 if (input.storage_type === 'cabinet' && input.cabinet_id) {
-                    const template = guessTemplate(input.capacity || '');
+                    const template = guessTemplateFromCapacity(input.capacity || '');
                     const width = getWidthForTemplate(template);
                     const store = useFridgeStore.getState();
                     await store.loadCabinet(input.cabinet_id);
@@ -760,28 +761,6 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         </div>
     );
 };
-
-function guessTemplate(capacity: string): 'A' | 'B' | 'C' | 'D' {
-    if (!capacity) return 'A';
-    const lower = capacity.toLowerCase();
-    const numMatch = lower.match(/(\d+)/);
-    const num = numMatch ? Number.parseInt(numMatch[1], 10) : 0;
-    if (lower.includes('kg') || num >= 2500) return 'D';
-    if (lower.includes('l') && !lower.includes('ml')) return 'C';
-    if (num >= 500) return 'C';
-    if (num >= 100) return 'A';
-    return 'B';
-}
-
-function getWidthForTemplate(template: 'A' | 'B' | 'C' | 'D'): number {
-    switch (template) {
-        case 'A': return 8;
-        case 'B': return 6;
-        case 'C': return 12;
-        case 'D': return 14;
-        default: return 8;
-    }
-}
 
 async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promise<void> {
     const state = useFridgeStore.getState();

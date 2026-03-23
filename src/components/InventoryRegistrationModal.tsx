@@ -20,6 +20,7 @@ import { useFridgeStore } from '../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../types/fridge';
 import { AppSelect } from './AppSelect';
 import { translateLocationName } from '../utils/i18nUtils';
+import { guessTemplateFromCapacity, getWidthForTemplate } from '../utils/guessReagentTemplate';
 
 interface InventoryRegistrationModalProps {
     product: MediaProduct;
@@ -205,7 +206,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         await store.loadCabinet(selectedCabinetId);
 
         // Determine template type based on capacity string
-        const template: ReagentTemplateType = guessTemplate(capacity);
+        const template: ReagentTemplateType = guessTemplateFromCapacity(capacity);
 
         // Build reagent placement data
         const itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'> = {
@@ -648,32 +649,5 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         </div>
     );
 };
-
-// ── Helpers ─────────────────────────────────────────────
-
-/** Guess a bottle template type from the capacity string */
-function guessTemplate(capacity: string): ReagentTemplateType {
-    if (!capacity) return 'A';
-    const lower = capacity.toLowerCase();
-    const numMatch = lower.match(/(\d+)/);
-    const num = numMatch ? parseInt(numMatch[1]) : 0;
-
-    if (lower.includes('kg') || num >= 2500) return 'D'; // Large box
-    if (lower.includes('l') && !lower.includes('ml')) return 'C'; // Large bottle
-    if (num >= 500) return 'C';
-    if (num >= 100) return 'A';
-    return 'B'; // Small
-}
-
-/** Get width percentage for a template */
-function getWidthForTemplate(template: ReagentTemplateType): number {
-    switch (template) {
-        case 'A': return 8;
-        case 'B': return 6;
-        case 'C': return 12;
-        case 'D': return 14;
-        default: return 8;
-    }
-}
 
 export default InventoryRegistrationModal;

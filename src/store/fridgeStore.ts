@@ -27,23 +27,20 @@ interface FridgeStore extends FridgeState {
 }
 
 const TEMPLATE_DEPTHS = {
-    A: 0.44, // 0.22 radius * 2
-    B: 0.35, // box depth
-    C: 0.7,  // 0.35 radius * 2
-    D: 0.8,  // box depth
-    E: 0.44, // glass bottle (similar to A)
+    A: 0.44,
+    B: 0.35,
+    C: 0.8, // 바이알 박스
+    D: 0.44, // 유리병 GLB
 };
 
-// The raw THREE.js width of the base geometries before scaling
 const MESH_BASE_WIDTHS: Record<string, number> = {
-    A: 0.44, // 0.22 radius * 2
-    B: 0.5,  // box width
-    C: 0.7,  // 0.35 radius * 2
-    D: 1.2,  // box width
-    E: 0.44, // glass bottle GLB (approx)
+    A: 0.44,
+    B: 0.5,
+    C: 1.2,
+    D: 0.44,
 };
 
-const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 9, D: 15, E: 8 };
+const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 15, D: 8 };
 
 const INITIAL_SHELVES: ShelfData[] = [
     { id: uuidv4(), level: 0, dividers: [], items: [] },
