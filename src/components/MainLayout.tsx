@@ -10,9 +10,20 @@ interface MainLayoutProps {
     onLogoClick?: () => void;
     userEmail?: string;
     onSignOut?: () => void;
+    /** 비로그인 시 연구실 전환 UI 숨김 */
+    hideLabSwitcher?: boolean;
+    onLoginClick?: () => void;
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ children, bottomNav, onLogoClick, userEmail, onSignOut }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({
+    children,
+    bottomNav,
+    onLogoClick,
+    userEmail,
+    onSignOut,
+    hideLabSwitcher,
+    onLoginClick,
+}) => {
     const { t } = useTranslation();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -33,7 +44,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, bottomNav, onL
                         <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white">{t('app_title')}</h1>
                     </button>
                     <div className="flex items-center gap-3">
-                        <LabContextSwitcher />
+                        {!hideLabSwitcher && <LabContextSwitcher />}
+                        {onLoginClick && (
+                            <button
+                                type="button"
+                                onClick={onLoginClick}
+                                className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                            >
+                                {t('auth_login')}
+                            </button>
+                        )}
                         <button
                             onClick={() => setIsSettingsOpen(true)}
                             className="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"

@@ -710,6 +710,8 @@ export const translations = {
         auth_error_password_mismatch: "비밀번호가 일치하지 않습니다.",
         auth_error_password_short: "비밀번호는 6자 이상이어야 합니다.",
         auth_error_generic: "인증 중 오류가 발생했습니다.",
+        auth_required_for_feature: "이 기능을 사용하려면 로그인이 필요합니다.",
+        auth_back_to_search: "검색 화면으로 돌아가기",
 
         // MSDS Modal
         msds_title: "MSDS 정보 (물질안전보건자료)",
@@ -1527,6 +1529,8 @@ export const translations = {
         auth_error_password_mismatch: "Passwords do not match.",
         auth_error_password_short: "Password must be at least 6 characters.",
         auth_error_generic: "An error occurred during authentication.",
+        auth_required_for_feature: "Sign in to use this feature.",
+        auth_back_to_search: "Back to search",
 
         // MSDS Modal
         msds_title: "MSDS (Safety Data Sheet)",

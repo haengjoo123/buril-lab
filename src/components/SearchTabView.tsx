@@ -42,6 +42,7 @@ interface SearchTabViewProps {
   suggestions?: string[];
   isSuggestionsLoading?: boolean;
   onClearSuggestions?: () => void;
+  onRequireAuth?: () => void;
 }
 
 export function SearchTabView({
@@ -76,6 +77,7 @@ export function SearchTabView({
   suggestions = [],
   isSuggestionsLoading = false,
   onClearSuggestions,
+  onRequireAuth,
 }: SearchTabViewProps) {
   const { t } = useTranslation();
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
@@ -227,7 +229,7 @@ export function SearchTabView({
                   {t('search_results_chemical')}
                 </h3>
               )}
-              <ResultCard result={result} onReset={onReset} />
+              <ResultCard result={result} onReset={onReset} onRequireAuth={onRequireAuth} />
             </div>
           )}
 

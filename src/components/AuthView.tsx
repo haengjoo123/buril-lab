@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Mail, Lock, Loader2, LogIn, UserPlus, FlaskConical } from 'lucide-react';
+import { Mail, Lock, Loader2, LogIn, UserPlus, FlaskConical, ArrowLeft, Info } from 'lucide-react';
 
 interface AuthViewProps {
     onSignIn: (email: string, password: string) => Promise<{ error: string | null }>;
     onSignUp: (email: string, password: string) => Promise<{ error: string | null }>;
+    /** 로그인 유도 시 상단 안내 (예: 기능 사용 전 필요) */
+    authPrompt?: string;
+    /** 게스트가 검색만 계속할 때 */
+    onBackToSearch?: () => void;
 }
 
-export const AuthView: React.FC<AuthViewProps> = ({ onSignIn, onSignUp }) => {
+export const AuthView: React.FC<AuthViewProps> = ({ onSignIn, onSignUp, authPrompt, onBackToSearch }) => {
     const { t } = useTranslation();
     const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState('');
@@ -54,6 +58,24 @@ export const AuthView: React.FC<AuthViewProps> = ({ onSignIn, onSignUp }) => {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 p-4">
             <div className="w-full max-w-md">
+                {onBackToSearch && (
+                    <button
+                        type="button"
+                        onClick={onBackToSearch}
+                        className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        {t('auth_back_to_search')}
+                    </button>
+                )}
+
+                {authPrompt && (
+                    <div className="mb-6 flex gap-3 rounded-xl border border-blue-200 dark:border-blue-800/50 bg-blue-50/90 dark:bg-blue-950/40 px-4 py-3 text-sm text-blue-900 dark:text-blue-100">
+                        <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                        <p className="leading-snug">{authPrompt}</p>
+                    </div>
+                )}
+
                 {/* Logo & Title */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/25 mb-4">

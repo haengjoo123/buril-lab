@@ -9,6 +9,8 @@ interface UseAppUiStateParams {
   currentLabId: string | null;
   lastSearchQuery: string;
   navigate: NavigateFunction;
+  /** 비로그인 시 검색 탭만 허용, 그 외 탭은 로그인으로 유도 */
+  isAuthenticated: boolean;
 }
 
 interface UseAppUiStateResult {
@@ -36,6 +38,7 @@ export function useAppUiState({
   currentLabId,
   lastSearchQuery,
   navigate,
+  isAuthenticated,
 }: UseAppUiStateParams): UseAppUiStateResult {
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -67,6 +70,23 @@ export function useAppUiState({
   }, [currentLabId, navigate, pathname]);
 
   const handleTabClick = useCallback((tab: AppTab) => {
+    if (!isAuthenticated && tab !== 'search') {
+      const returnTo =
+        tab === 'logs'
+          ? '/logs'
+          : tab === 'cabinet'
+            ? lastCabinetIdRef.current
+              ? `/cabinet?id=${lastCabinetIdRef.current}`
+              : '/cabinet'
+            : tab === 'inventory'
+              ? '/inventory'
+              : tab === 'admin'
+                ? '/admin'
+                : '/';
+      navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+
     switch (tab) {
       case 'search':
         navigate(lastSearchQuery ? `/?q=${encodeURIComponent(lastSearchQuery)}` : '/');
@@ -87,7 +107,7 @@ export function useAppUiState({
         navigate('/');
         break;
     }
-  }, [lastSearchQuery, navigate]);
+  }, [isAuthenticated, lastSearchQuery, navigate]);
 
   const incrementLogRefreshKey = useCallback(() => {
     setLogRefreshKey((prev) => prev + 1);

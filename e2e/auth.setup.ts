@@ -20,8 +20,8 @@ setup('authenticate', async ({ page }) => {
         );
     }
 
-    // 1. Navigate to the app — should show AuthView
-    await page.goto('/');
+    // 1. 로그인 화면 (게스트는 / 에서 검색부터 시작하므로 E2E는 /login 사용)
+    await page.goto('/login');
 
     // 2. Wait for the login form to appear
     const emailInput = page.locator('input[type="email"]');

@@ -10,9 +10,11 @@ import { MsdsModal } from './MsdsModal';
 interface ResultCardProps {
     result: AnalysisResult;
     onReset: () => void;
+    /** 비로그인 시 폐기 목록 담기 대신 호출 */
+    onRequireAuth?: () => void;
 }
 
-export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
+export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequireAuth }) => {
     const { chemical, binColor, reason, isSafe, category, label } = result;
     const addToCart = useWasteStore((state) => state.addToCart);
     const { t, i18n } = useTranslation();
@@ -32,6 +34,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset }) => {
     };
 
     const handleAddClick = () => {
+        if (onRequireAuth) {
+            onRequireAuth();
+            return;
+        }
         setIsModalOpen(true);
         setVolume('');
         setMolarity('');

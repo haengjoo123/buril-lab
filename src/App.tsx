@@ -25,6 +25,7 @@ import { useOnboardingStore } from './store/useOnboardingStore';
 import { useTranslation } from 'react-i18next';
 import { Loader2, ShoppingBag } from 'lucide-react';
 import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
+import { isAuthRequiredPath, sanitizeReturnTo } from './utils/authRoutes';
 
 function App() {
   const { t, i18n } = useTranslation();
@@ -97,13 +98,42 @@ function App() {
     currentLabId,
     lastSearchQuery,
     navigate,
+    isAuthenticated: !!session,
   });
+
+  const isLoginRoute = location.pathname === '/login';
 
   useEffect(() => {
     if (session) {
       loadSearchHistory();
     }
   }, [session, loadSearchHistory]);
+
+  // 게스트에게는 저장된 연구실 컨텍스트가 남지 않도록 정리
+  useEffect(() => {
+    if (session) return;
+    if (useLabStore.getState().currentLabId !== null) {
+      useLabStore.getState().clearLabState();
+    }
+  }, [session]);
+
+  // 보호 경로 직접 진입 시 로그인으로 치환
+  useEffect(() => {
+    if (isAuthLoading || session) return;
+    if (isLoginRoute) return;
+    if (!isAuthRequiredPath(location.pathname)) return;
+    const returnTo = `${location.pathname}${location.search}`;
+    navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
+  }, [isAuthLoading, session, isLoginRoute, location.pathname, location.search, navigate]);
+
+  // 로그인 완료 후 /login 에서 원래 화면으로
+  useEffect(() => {
+    if (isAuthLoading || !session) return;
+    if (!isLoginRoute) return;
+    const raw = searchParams.get('returnTo');
+    const dest = sanitizeReturnTo(raw) ?? '/';
+    navigate(dest, { replace: true });
+  }, [isAuthLoading, session, isLoginRoute, navigate, searchParams]);
 
   useEffect(() => {
     syncVersion();
@@ -144,6 +174,12 @@ function App() {
   }, [location.pathname, locationState, navigate, searchParams]);
 
   const handleNavigateToCabinet = useCallback((cabinetId: string, itemId: string) => {
+    if (!session) {
+      const returnTo = `/cabinet?id=${cabinetId}`;
+      navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+
     navigate(`/cabinet?id=${cabinetId}`, {
       state: { cabinetId, itemId },
     });
@@ -169,16 +205,22 @@ function App() {
         }
       }, 6000);
     })();
-  }, [navigate]);
+  }, [navigate, session]);
 
   const handleCabinetSearchResultClick = useCallback(async (item: CabinetSearchResult) => {
+    if (!session) {
+      const returnTo = `/cabinet?id=${item.cabinetId}`;
+      navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+
     navigate(`/cabinet?id=${item.cabinetId}`);
     const store = useFridgeStore.getState();
     store.setMode('VIEW');
     await store.loadCabinet(item.cabinetId);
     useFridgeStore.getState().setFocusedShelfId(item.shelfId);
     useFridgeStore.getState().setHighlightedItemId(item.itemId);
-  }, [navigate]);
+  }, [navigate, session]);
 
   const handleScan = (scannedText: string) => {
     setIsScanning(false);
@@ -194,12 +236,94 @@ function App() {
     );
   }
 
-  // Auth Gate
+  const guestRedirectingToLogin =
+    !session && !isLoginRoute && isAuthRequiredPath(location.pathname);
+
+  if (guestRedirectingToLogin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (!session && isLoginRoute) {
+    const showAuthPrompt = Boolean(searchParams.get('returnTo'));
+    return (
+      <AuthView
+        onSignIn={signIn}
+        onSignUp={signUp}
+        authPrompt={showAuthPrompt ? t('auth_required_for_feature') : undefined}
+        onBackToSearch={() => navigate('/')}
+      />
+    );
+  }
+
   if (!session) {
-    if (useLabStore.getState().currentLabId !== null) {
-      useLabStore.getState().clearLabState();
-    }
-    return <AuthView onSignIn={signIn} onSignUp={signUp} />;
+    return (
+      <>
+        <SafetyDisclaimer />
+
+        {isScanning && (
+          <Suspense fallback={
+            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+              <Loader2 className="w-10 h-10 text-white animate-spin" />
+            </div>
+          }>
+            <Scanner
+              onScan={handleScan}
+              onClose={() => setIsScanning(false)}
+            />
+          </Suspense>
+        )}
+
+        <MainLayout
+          onLogoClick={handleReset}
+          hideLabSwitcher
+          onLoginClick={() => navigate('/login')}
+          bottomNav={
+            <BottomTabNav activeTab={activeTab} isAdmin={false} onTabClick={handleTabClick} />
+          }
+        >
+          <SearchTabView
+            cartCount={0}
+            query={query}
+            lastSearchQuery={lastSearchQuery}
+            isLoading={isLoading}
+            isAiAnalyzing={isAiAnalyzing}
+            error={error}
+            result={result}
+            mediaProducts={mediaProducts}
+            mediaBrands={mediaBrands}
+            mediaCount={mediaCount}
+            cabinetResults={cabinetResults}
+            showAllProducts={showAllProducts}
+            selectedBrand={selectedBrand}
+            sortBy={sortBy}
+            recentSearches={recentSearches}
+            onQueryChange={setQuery}
+            onSearchSubmit={handleSearch}
+            onReset={handleReset}
+            onSuggestionClick={navigateWithFreshFilters}
+            onOpenScanner={() => setIsScanning(true)}
+            onClearSearchHistory={clearSearchHistory}
+            onRemoveSearchHistory={removeSearchHistory}
+            onCabinetResultClick={handleCabinetSearchResultClick}
+            onBrandChange={handleBrandChange}
+            onSortChange={handleSortChange}
+            onClearFilters={handleClearFilters}
+            onToggleShowAllProducts={() => setShowAllProducts(!showAllProducts)}
+            onNavigateToCabinet={handleNavigateToCabinet}
+            suggestions={suggestions}
+            isSuggestionsLoading={isSuggestionsLoading}
+            onClearSuggestions={clearSuggestions}
+            onRequireAuth={() =>
+              navigate(`/login?returnTo=${encodeURIComponent(`${location.pathname}${location.search}`)}`)
+            }
+          />
+        </MainLayout>
+      </>
+    );
   }
 
   return (
