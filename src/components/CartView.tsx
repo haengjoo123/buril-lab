@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useWasteStore } from '../store/useWasteStore';
 import { analyzeMixture } from '../utils/mixtureLogic';
 import { checkCompatibility } from '../utils/compatibilityChecker';
 import { saveWasteLog } from '../services/wasteLogService';
-import { X, Trash2, AlertTriangle, AlertOctagon, CheckCircle, Loader2 } from 'lucide-react';
+import { getAIDisposalGuide } from '../services/geminiDisposalGuideService';
+import { X, Trash2, AlertTriangle, AlertOctagon, CheckCircle, Loader2, Sparkles, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from './CustomDialog';
 
@@ -28,6 +29,42 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
     const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null);
 
     const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+
+    // AI Guide state
+    const [aiGuide, setAiGuide] = useState<string | null>(null);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiError, setAiError] = useState(false);
+    const [aiExpanded, setAiExpanded] = useState(true);
+    const prevCartLengthRef = useRef(cart.length);
+
+    // Reset AI guide when cart items change
+    useEffect(() => {
+        if (cart.length !== prevCartLengthRef.current) {
+            setAiGuide(null);
+            setAiError(false);
+            prevCartLengthRef.current = cart.length;
+        }
+    }, [cart.length]);
+
+    const handleRequestAIGuide = async () => {
+        setAiLoading(true);
+        setAiError(false);
+        setAiGuide(null);
+        try {
+            const chemicals = cart.map(item => ({
+                name: item.chemical.name,
+                casNumber: item.chemical.casNumber,
+                molecularFormula: item.chemical.molecularFormula,
+                category: item.category,
+            }));
+            const result = await getAIDisposalGuide(chemicals);
+            setAiGuide(result.guide);
+        } catch {
+            setAiError(true);
+        } finally {
+            setAiLoading(false);
+        }
+    };
 
     const handleDispose = async () => {
         setIsSaving(true);
@@ -181,6 +218,83 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                             <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-xs p-2 rounded flex items-center gap-2 mb-3 text-left">
                                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                                 {t('cart_safety_check')}
+                            </div>
+                        )}
+
+                        {/* ── AI Disposal Guide ── */}
+                        {!aiGuide && !aiLoading && !aiError && (
+                            <button
+                                onClick={handleRequestAIGuide}
+                                className="w-full py-3 bg-gradient-to-r from-violet-500 to-indigo-500 text-white rounded-xl hover:from-violet-600 hover:to-indigo-600 text-sm font-semibold transition-all shadow-md mb-2 flex items-center justify-center gap-2"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                {t('ai_guide_btn' as any)}
+                            </button>
+                        )}
+
+                        {aiLoading && (
+                            <div className="p-4 rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30 border border-violet-200 dark:border-violet-800/50 mb-2">
+                                <div className="flex items-center gap-2 text-violet-600 dark:text-violet-300">
+                                    <Sparkles className="w-4 h-4 animate-pulse" />
+                                    <span className="text-sm font-medium animate-pulse">{t('ai_guide_loading' as any)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {aiError && (
+                            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 mb-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-red-600 dark:text-red-300 text-sm">
+                                        <AlertTriangle className="w-4 h-4" />
+                                        {t('ai_guide_error' as any)}
+                                    </div>
+                                    <button
+                                        onClick={handleRequestAIGuide}
+                                        className="flex items-center gap-1 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-200 font-medium"
+                                    >
+                                        <RotateCcw className="w-3 h-3" />
+                                        {t('ai_guide_retry' as any)}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {aiGuide && (
+                            <div className="rounded-xl bg-gradient-to-br from-violet-50 via-indigo-50 to-purple-50 dark:from-violet-950/30 dark:via-indigo-950/30 dark:to-purple-950/30 border border-violet-200 dark:border-violet-800/50 mb-2 overflow-hidden shadow-sm">
+                                <button
+                                    onClick={() => setAiExpanded(!aiExpanded)}
+                                    className="w-full p-3 flex items-center justify-between text-left"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-violet-500 dark:text-violet-400" />
+                                        <span className="text-sm font-bold text-violet-700 dark:text-violet-300">
+                                            {t('ai_guide_title' as any)}
+                                        </span>
+                                    </div>
+                                    {aiExpanded
+                                        ? <ChevronUp className="w-4 h-4 text-violet-400" />
+                                        : <ChevronDown className="w-4 h-4 text-violet-400" />
+                                    }
+                                </button>
+                                {aiExpanded && (
+                                    <div className="px-3 pb-3">
+                                        <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                                            {aiGuide}
+                                        </div>
+                                        <div className="mt-2 pt-2 border-t border-violet-200/50 dark:border-violet-700/50">
+                                            <p className="text-[10px] text-violet-400 dark:text-violet-500 italic">
+                                                {t('ai_guide_disclaimer' as any)}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={handleRequestAIGuide}
+                                            className="mt-2 w-full py-1.5 text-xs text-violet-500 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 font-medium flex items-center justify-center gap-1 rounded-lg hover:bg-violet-100/50 dark:hover:bg-violet-900/20 transition-colors"
+                                        >
+                                            <RotateCcw className="w-3 h-3" />
+                                            {t('ai_guide_retry' as any)}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 

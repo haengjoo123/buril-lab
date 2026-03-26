@@ -8,7 +8,12 @@ import type { ReagentTemplateType } from '../../types/fridge';
 import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
 import { classifyStorageGroups, checkShelfCompatibility, getStorageGroupLabels } from '../../utils/storageCompatibilityChecker';
-import { AlertTriangle, FlaskConical } from 'lucide-react';
+import { AlertTriangle, FlaskConical, BookOpen } from 'lucide-react';
+import { searchChemical } from '../../services/searchService';
+import { analyzeChemical } from '../../utils/chemicalAnalyzer';
+import { classifyChemicalWithAI } from '../../services/geminiClassificationService';
+import { ResultCard } from '../../components/ResultCard';
+import type { AnalysisResult } from '../../types';
 
 type DisposalReason = 'used' | 'expired' | 'broken' | 'other';
 
@@ -50,6 +55,10 @@ export const ReagentEditPanel: React.FC = () => {
     const [selectedReason, setSelectedReason] = useState<DisposalReason | null>(null);
     const [isDisposing, setIsDisposing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Disposal guide state
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
     // Find the selected item from all shelves
     const selectedItem = React.useMemo(() => {
@@ -170,9 +179,43 @@ export const ReagentEditPanel: React.FC = () => {
         }
     };
 
+    const handleCheckDisposalGuide = async () => {
+        const query = casNo || name;
+        if (!query) return;
+
+        setIsAnalyzing(true);
+        try {
+            const chemicalData = await searchChemical(query);
+            if (chemicalData) {
+                let analysis = analyzeChemical(chemicalData);
+                if (analysis.category === 'UNKNOWN') {
+                    const aiResult = await classifyChemicalWithAI(chemicalData);
+                    if (aiResult) {
+                        analysis = { ...analysis, ...aiResult };
+                    }
+                }
+                setAnalysisResult(analysis);
+            } else {
+                setAnalysisResult({
+                    chemical: { id: '', name: name || query, casNumber: casNo, molecularFormula: '', molecularWeight: 0, properties: { isOrganic: false, isHalogenated: false } },
+                    category: 'UNKNOWN',
+                    isSafe: false,
+                    reason: 'reason_unknown',
+                    binColor: 'bg-gray-400',
+                    label: 'mix_label_unknown'
+                });
+            }
+        } catch (error) {
+            console.error('Failed to analyze chemical:', error);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
     return (
-        <div className="absolute left-1/2 -translate-x-1/2 top-16 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-80px-5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200">
-            {/* Header */}
+        <>
+            <div className="absolute left-1/2 -translate-x-1/2 top-16 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-80px-5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200">
+                {/* Header */}
             <div className="flex items-center justify-between p-3 border-b bg-gray-50/50 flex-shrink-0">
                 <div className="flex items-center gap-2 text-gray-800 font-semibold">
                     {showDisposalView ? (
@@ -255,7 +298,18 @@ export const ReagentEditPanel: React.FC = () => {
 
                         {/* Name Input */}
                         <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-gray-600">{t('cabinet_reagent_name')}</label>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium text-gray-600">{t('cabinet_reagent_name')}</label>
+                                <button
+                                    type="button"
+                                    onClick={handleCheckDisposalGuide}
+                                    disabled={isAnalyzing}
+                                    className="text-[11px] px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium flex items-center gap-1 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <BookOpen size={12} />}
+                                    {isAnalyzing ? t('analyzing_guide', '가이드 불러오는 중...') : t('btn_check_disposal_guide', '폐기가이드 확인')}
+                                </button>
+                            </div>
                             <input
                                 type="text"
                                 value={name}
@@ -479,6 +533,34 @@ export const ReagentEditPanel: React.FC = () => {
                     </div>
                 </>
             )}
-        </div>
+            </div>
+
+            {/* Disposal Guide Modal overlay */}
+            {analysisResult && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+                        <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
+                            <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                <BookOpen className="w-5 h-5 text-blue-500" />
+                                {t('btn_check_disposal_guide', '폐기가이드 확인')}
+                            </h3>
+                            <button
+                                onClick={() => setAnalysisResult(null)}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-4 max-h-[80vh] overflow-y-auto">
+                            <ResultCard 
+                                result={analysisResult} 
+                                onReset={() => setAnalysisResult(null)} 
+                                secondaryBtnText={t('btn_close', '닫기')}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };

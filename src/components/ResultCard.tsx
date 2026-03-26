@@ -12,9 +12,11 @@ interface ResultCardProps {
     onReset: () => void;
     /** 비로그인 시 폐기 목록 담기 대신 호출 */
     onRequireAuth?: () => void;
+    /** 커스텀 취소/닫기 버튼 텍스트 (기본값: btn_reset) */
+    secondaryBtnText?: string;
 }
 
-export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequireAuth }) => {
+export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequireAuth, secondaryBtnText }) => {
     const { chemical, binColor, reason, isSafe, category, label } = result;
     const addToCart = useWasteStore((state) => state.addToCart);
     const { t, i18n } = useTranslation();
@@ -175,7 +177,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                         onClick={onReset}
                         className="py-2.5 px-3 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl transition-colors whitespace-nowrap"
                     >
-                        {t('btn_reset')}
+                        {secondaryBtnText || t('btn_reset')}
                     </button>
                     <button
                         onClick={handleAddClick}

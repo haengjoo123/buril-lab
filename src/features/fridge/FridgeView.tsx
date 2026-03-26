@@ -249,7 +249,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         // 이미 선택된 시약을 다시 클릭하면 선택 취소
         if (draggedTemplate?.name === item.name) {
             setDraggedTemplate(null);
-            if (isCoarsePointer) setIsReagentTrayVisible(true);
+            setIsReagentTrayVisible(true);
             return;
         }
         setDraggedTemplate({
@@ -261,12 +261,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             name: item.name,
             chemicalData: item.chemicalData
         });
-        if (isCoarsePointer) setIsReagentTrayVisible(false);
+        // 병 선택 후 트레이를 접어 시약장 전체가 보이도록 함 (데스크톱·터치 공통)
+        setIsReagentTrayVisible(false);
     };
 
     const handleClearSelectedReagent = () => {
         setDraggedTemplate(null);
-        if (isCoarsePointer) setIsReagentTrayVisible(true);
+        setIsReagentTrayVisible(true);
     };
 
     const handleConfirmPlacement = async () => {
@@ -301,7 +302,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
-        if (isCoarsePointer) setIsReagentTrayVisible(true);
+        setIsReagentTrayVisible(true);
 
         // 자동저장 + 활동 로그 (병렬)
         const currentCabinetId = useFridgeStore.getState().cabinetId;
@@ -321,7 +322,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
-        if (isCoarsePointer) setIsReagentTrayVisible(true);
+        setIsReagentTrayVisible(true);
     };
 
     // ====== Scan Flow ======
@@ -450,10 +451,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         { type: 'C', label: t('cabinet_container_vial'), color: '#cbd5e1' },
         { type: 'D', label: t('cabinet_container_glass'), color: '#b0c4de' },
     ];
-    const placementInstruction = draggedTemplate
-        ? (isCoarsePointer ? t('cabinet_place_instruction_touch') : t('cabinet_place_instruction_desktop'))
-        : t('cabinet_place_instruction_select');
-
     return (
         <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-hidden">
             {/* Header Toolbar */}
@@ -556,12 +553,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     </div>
                 </div>
 
-                {mode === 'PLACE' && isCoarsePointer && draggedTemplate && !pendingPlacement && (
-                    <div className="pointer-events-none absolute inset-x-0 top-20 z-20 flex justify-center px-4">
+                {mode === 'PLACE' && draggedTemplate && !pendingPlacement && (
+                    <div className="pointer-events-none absolute inset-x-0 top-[4rem] z-20 flex justify-center px-4">
                         <div className="pointer-events-auto flex w-full max-w-sm items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
                             <div className="min-w-0">
                                 <p className="text-xs font-medium text-emerald-700">
-                                    {t('cabinet_place_instruction_touch')}
+                                    {isCoarsePointer ? t('cabinet_place_instruction_touch') : t('cabinet_place_instruction_desktop')}
                                 </p>
                                 <p className="truncate text-sm font-semibold text-slate-800">
                                     {t('cabinet_place_selected_reagent', { name: draggedTemplate.name ?? t('cabinet_reagent_tray_title') })}
@@ -801,24 +798,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         </button>
                                     </div>
                                 </div>
-                                {(!isCoarsePointer || !draggedTemplate) && (
+                                {!draggedTemplate && (
                                     <div className="flex flex-col gap-2 px-1">
-                                        <p className={`text-xs ${draggedTemplate ? 'text-emerald-700 font-medium' : 'text-gray-500'}`}>
-                                            {placementInstruction}
-                                        </p>
-                                        {draggedTemplate && (
-                                            <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                                                <span className="min-w-0 text-xs font-medium text-emerald-800 truncate">
-                                                    {t('cabinet_place_selected_reagent', { name: draggedTemplate.name ?? t('cabinet_reagent_tray_title') })}
-                                                </span>
-                                                <button
-                                                    onClick={handleClearSelectedReagent}
-                                                    className="shrink-0 rounded-md border border-emerald-200 bg-white px-2 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
-                                                >
-                                                    {t('cabinet_place_clear_selection')}
-                                                </button>
-                                            </div>
-                                        )}
+                                        <p className="text-xs text-gray-500">{t('cabinet_place_instruction_select')}</p>
                                     </div>
                                 )}
                                 <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-200">
@@ -855,7 +837,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     ))}
                                 </div>
                             </div>
-                        ) : (!isCoarsePointer || !draggedTemplate) ? (
+                        ) : (
                             <button
                                 onClick={() => setIsReagentTrayVisible(true)}
                                 className="bg-white/90 backdrop-blur pointer-events-auto px-4 py-2 rounded-xl shadow-lg border flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50/50 transition-colors z-20"
@@ -864,7 +846,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 <ChevronUp size={18} />
                                 {t('cabinet_reagent_tray_show')}
                             </button>
-                        ) : null}
+                        )}
                     </div>
                 )}
             </div>

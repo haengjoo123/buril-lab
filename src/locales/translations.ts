@@ -21,6 +21,8 @@ export const translations = {
         btn_close: "닫기",
         btn_confirm: "확인",
         btn_cancel: "취소",
+        btn_check_disposal_guide: "폐기가이드 확인",
+        analyzing_guide: "가이드 불러오는 중...",
 
         input_volume: "용액 부피 (mL)",
         input_molarity: "몰농도 (M) (선택)",
@@ -819,7 +821,15 @@ export const translations = {
         lab_leave_confirm: "'{{name}}' 연구실에서 탈퇴하시겠습니까?",
         lab_leave_success: "연구실에서 탈퇴했습니다.",
         lab_leave_error_admin: "관리자는 다른 멤버에게 관리자를 위임한 후 탈퇴할 수 있습니다.",
-        lab_leave_error: "탈퇴에 실패했습니다."
+        lab_leave_error: "탈퇴에 실패했습니다.",
+
+        // AI Disposal Guide
+        ai_guide_btn: "✨ AI 전문 분석 요청",
+        ai_guide_loading: "AI가 혼합물을 분석하고 있습니다...",
+        ai_guide_title: "AI 추천 폐기 가이드",
+        ai_guide_error: "AI 분석에 실패했습니다.",
+        ai_guide_retry: "다시 시도",
+        ai_guide_disclaimer: "AI 분석 결과는 참고용이며, 반드시 MSDS를 확인하세요."
     },
     en: {
         app_title: "Buril-lab",
@@ -841,6 +851,8 @@ export const translations = {
         btn_close: "Close",
         btn_confirm: "Confirm",
         btn_cancel: "Cancel",
+        btn_check_disposal_guide: "Check Disposal Guide",
+        analyzing_guide: "Analyzing Guide...",
 
         input_volume: "Volume (mL)",
         input_molarity: "Molarity (M) (Optional)",
@@ -1638,6 +1650,14 @@ export const translations = {
         lab_leave_confirm: "Leave '{{name}}'?",
         lab_leave_success: "You have left the lab.",
         lab_leave_error_admin: "Transfer admin rights to another member before leaving.",
-        lab_leave_error: "Failed to leave the lab."
+        lab_leave_error: "Failed to leave the lab.",
+
+        // AI Disposal Guide
+        ai_guide_btn: "✨ Request AI Analysis",
+        ai_guide_loading: "AI is analyzing the mixture...",
+        ai_guide_title: "AI Disposal Guide",
+        ai_guide_error: "AI analysis failed.",
+        ai_guide_retry: "Retry",
+        ai_guide_disclaimer: "AI results are for reference only. Always check MSDS."
     }
 };
