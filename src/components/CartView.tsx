@@ -278,7 +278,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                                 </button>
                                 {aiExpanded && (
                                     <div className="px-3 pb-3">
-                                        <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                                        <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed max-h-[140px] overflow-y-auto">
                                             {aiGuide}
                                         </div>
                                         <div className="mt-2 pt-2 border-t border-violet-200/50 dark:border-violet-700/50">
