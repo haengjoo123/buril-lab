@@ -28,7 +28,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     // For joining a lab
     const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
-    const [selectedRole, setSelectedRole] = useState<'researcher' | 'student'>('researcher');
+    const [selectedRole, setSelectedRole] = useState<'pi' | 'postdoc' | 'graduate' | 'undergrad'>('graduate');
     const [joinPassword, setJoinPassword] = useState('');
     const [joinNickname, setJoinNickname] = useState('');
 
@@ -449,14 +449,22 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             {selectedLabId && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t('lab_mgmt_form_role_select')}</label>
-                                    <div className="flex gap-2 mb-4">
-                                        <label className={`flex-1 flex justify-center py-2 px-3 border rounded-lg cursor-pointer transition-colors ${selectedRole === 'researcher' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                                            <input type="radio" className="hidden" checked={selectedRole === 'researcher'} onChange={() => setSelectedRole('researcher')} />
-                                            {t('lab_mgmt_role_researcher')}
+                                    <div className="grid grid-cols-2 gap-2 mb-4">
+                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'pi' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                                            <input type="radio" className="hidden" checked={selectedRole === 'pi'} onChange={() => setSelectedRole('pi')} />
+                                            <span className="text-xs truncate">{t('lab_mgmt_role_pi')}</span>
                                         </label>
-                                        <label className={`flex-1 flex justify-center py-2 px-3 border rounded-lg cursor-pointer transition-colors ${selectedRole === 'student' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                                            <input type="radio" className="hidden" checked={selectedRole === 'student'} onChange={() => setSelectedRole('student')} />
-                                            {t('lab_mgmt_role_student')}
+                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'postdoc' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                                            <input type="radio" className="hidden" checked={selectedRole === 'postdoc'} onChange={() => setSelectedRole('postdoc')} />
+                                            <span className="text-xs truncate">{t('lab_mgmt_role_postdoc')}</span>
+                                        </label>
+                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'graduate' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                                            <input type="radio" className="hidden" checked={selectedRole === 'graduate'} onChange={() => setSelectedRole('graduate')} />
+                                            <span className="text-xs truncate">{t('lab_mgmt_role_graduate')}</span>
+                                        </label>
+                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'undergrad' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                                            <input type="radio" className="hidden" checked={selectedRole === 'undergrad'} onChange={() => setSelectedRole('undergrad')} />
+                                            <span className="text-xs truncate">{t('lab_mgmt_role_undergrad')}</span>
                                         </label>
                                     </div>
                                     <div className="mb-4">
@@ -527,8 +535,12 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                     )}
                                                     <span className="text-xs text-slate-500 mt-0.5">{t('member_joined_label')}: {new Date(member.joined_at).toLocaleDateString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
                                                 </div>
-                                                <span className={`flex-shrink-0 text-xs px-2 py-1 rounded font-medium ${member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'}`}>
-                                                    {member.role.toUpperCase()}
+                                                <span className={`flex-shrink-0 text-xs px-2 py-1 rounded font-medium ${
+                                                    member.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' :
+                                                    member.role === 'pi' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                                                    'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                                                }`}>
+                                                    {member.role === 'admin' ? 'ADMIN' : t(`member_role_${member.role}`)}
                                                 </span>
                                             </div>
 
@@ -541,8 +553,10 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                         size="sm"
                                                         className="flex-1"
                                                         options={[
-                                                            { value: 'researcher', label: `${t('lab_mgmt_role_researcher')} (Researcher)` },
-                                                            { value: 'student', label: `${t('lab_mgmt_role_student')} (Student)` },
+                                                            { value: 'pi', label: t('lab_mgmt_role_pi') },
+                                                            { value: 'postdoc', label: t('lab_mgmt_role_postdoc') },
+                                                            { value: 'graduate', label: t('lab_mgmt_role_graduate') },
+                                                            { value: 'undergrad', label: t('lab_mgmt_role_undergrad') },
                                                             // admin 승급은 transfer_admin으로만 가능 (이중 admin 방지)
                                                         ]}
                                                         buttonClassName="flex-1 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"

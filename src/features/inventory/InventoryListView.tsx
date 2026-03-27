@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Search, Archive, Package, MapPin, Loader2, AlertTriangle, Clock, ArrowUpDown } from 'lucide-react';
+import {
+    Package,
+    Plus,
+    Search,
+    Archive,
+    MapPin,
+    Loader2,
+    AlertTriangle,
+    Clock,
+    Download,
+    Upload,
+    ShieldAlert
+} from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { InventoryFormModal } from './InventoryFormModal';
@@ -19,6 +32,7 @@ import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
+import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'created_at_desc' | 'created_at_asc';
@@ -92,6 +106,7 @@ export const InventoryListView: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<InventorySortOption>('expiry_asc');
+    const [hazardFilter, setHazardFilter] = useState(false);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
@@ -211,15 +226,32 @@ export const InventoryListView: React.FC = () => {
 
     const filteredItems = useMemo(() => {
         const normalizedQuery = searchQuery.trim().toLowerCase();
-        if (!normalizedQuery) return items;
+        let result = items;
 
-        return items.filter(item =>
-            item.name.toLowerCase().includes(normalizedQuery) ||
-            (item.brand && item.brand.toLowerCase().includes(normalizedQuery)) ||
-            (item.product_number && item.product_number.toLowerCase().includes(normalizedQuery)) ||
-            (item.cas_number && item.cas_number.toLowerCase().includes(normalizedQuery))
-        );
-    }, [items, searchQuery]);
+        if (normalizedQuery) {
+            result = result.filter(item =>
+                item.name.toLowerCase().includes(normalizedQuery) ||
+                (item.brand && item.brand.toLowerCase().includes(normalizedQuery)) ||
+                (item.product_number && item.product_number.toLowerCase().includes(normalizedQuery)) ||
+                (item.cas_number && item.cas_number.toLowerCase().includes(normalizedQuery))
+            );
+        }
+
+        if (hazardFilter) {
+            result = result.filter(item => classifyInventoryHazard(item).level === 'high');
+        }
+
+        return result;
+    }, [items, searchQuery, hazardFilter]);
+
+    // Hazard summary for showing count
+    const hazardSummary = useMemo(() => {
+        let count = 0;
+        for (const item of items) {
+            if (classifyInventoryHazard(item).level === 'high') count++;
+        }
+        return count;
+    }, [items]);
 
     // 만료/위치 우선으로 빠르게 확인할 수 있게 화면 전용 정렬 목록을 만든다.
     const visibleItems = useMemo(() => {
@@ -268,6 +300,33 @@ export const InventoryListView: React.FC = () => {
 
     const handleDeleteClick = (item: InventoryItem) => {
         setItemToDelete(item);
+    };
+
+    const handleExportExcel = () => {
+        const rowsForExport = visibleItems.map((item) => {
+
+            return {
+                [t('inventory_csv_table_name')]: item.name,
+                [t('inventory_brand')]: item.brand || '',
+                [t('inventory_product_number')]: item.product_number || '',
+                [t('inventory_cas_number')]: item.cas_number || '',
+                [t('inventory_quantity')]: item.quantity,
+                [t('inventory_capacity')]: item.capacity || '',
+                [t('inventory_csv_table_storage')]: item.storage_type === 'cabinet'
+                    ? `${item.cabinet_name || t('inventory_loc_cabinet')}${item.shelf_level ? ` (${item.shelf_level}${t('inventory_shelf_level').replace(' · ', '')})` : ''}`
+                    : (item.storage_location_name || t('inventory_loc_other')),
+                [t('inventory_expiry_date')]: item.expiry_date || '',
+                [t('inventory_memo')]: item.memo || ''
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(rowsForExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+
+        const timestamp = new Date().toISOString().split('T')[0];
+        const fileName = `inventory_export_${timestamp}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
     };
 
     const confirmDelete = async () => {
@@ -898,18 +957,30 @@ export const InventoryListView: React.FC = () => {
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
             {/* Header */}
-            <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-4 flex-shrink-0">
+            <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 pt-4 pb-3 flex-shrink-0">
                 <div className="flex items-center justify-between gap-2">
-                    <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0 whitespace-nowrap">
                         <Package className="w-6 h-6 text-emerald-500" />
                         {t('inventory_list_title')}
                     </h1>
-                    <button
-                        onClick={() => setIsCsvImportOpen(true)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 whitespace-nowrap"
-                    >
-                        {t('inventory_csv_manage_button')}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={handleExportExcel}
+                            title={t('inventory_excel_download_view')}
+                            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 flex items-center gap-1.5 transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                        >
+                            <Download className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
+                            <span className="hidden lg:inline whitespace-nowrap">{t('inventory_excel_download_view')}</span>
+                        </button>
+                        <button
+                            onClick={() => setIsCsvImportOpen(true)}
+                            title={t('inventory_csv_manage_button')}
+                            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 flex items-center gap-1.5 transition-colors hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                        >
+                            <Upload className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
+                            <span className="hidden lg:inline whitespace-nowrap">{t('inventory_csv_manage_button')}</span>
+                        </button>
+                    </div>
                 </div>
 
                 {showOnboardingGuide && (
@@ -936,23 +1007,40 @@ export const InventoryListView: React.FC = () => {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder={t('inventory_search_placeholder')}
-                        className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-slate-50 dark:bg-slate-700/50 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-shadow"
+                        className="w-full h-[42px] pl-9 pr-4 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                     />
                 </div>
-                <div className="mt-3 flex items-center gap-2">
-                    <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        <ArrowUpDown className="w-3.5 h-3.5" />
-                        {t('sort_by')}
-                    </label>
-                    <AppSelect
-                        value={sortBy}
-                        onChange={(value) => setSortBy(value as InventorySortOption)}
-                        options={sortOptions}
-                        className="min-w-0 flex-1"
-                        buttonClassName="min-w-0 flex-1 bg-white dark:bg-slate-700/50"
-                    />
+                <div className="mt-3 flex items-center justify-end gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        {/* Hazard Filter */}
+                        {hazardSummary > 0 && (
+                            <button
+                                onClick={() => setHazardFilter(!hazardFilter)}
+                                className={`flex items-center gap-1.5 px-2.5 rounded-xl text-xs font-semibold border transition-all h-[42px] shrink-0 shadow-sm ${hazardFilter
+                                        ? 'border-red-400 dark:border-red-600 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 ring-1 ring-red-300 dark:ring-red-700'
+                                        : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:border-red-300 dark:hover:border-red-600 hover:text-red-600 dark:hover:text-red-400'
+                                    }`}
+                            >
+                                <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                                <span>{t('inventory_hazard_filter')}</span>
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${hazardFilter
+                                        ? 'bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200'
+                                        : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300'
+                                    }`}>
+                                    {hazardSummary}
+                                </span>
+                            </button>
+                        )}
+                        <AppSelect
+                            value={sortBy}
+                            onChange={(value) => setSortBy(value as InventorySortOption)}
+                            options={sortOptions}
+                            className="min-w-0 w-32 sm:w-40 shrink-0"
+                            buttonClassName="min-w-0 w-full bg-white dark:bg-slate-700 !h-[40px] !rounded-xl !shadow-sm !text-xs !py-0"
+                        />
+                    </div>
                 </div>
-                {isSelectMode ? (
+                {isSelectMode && (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
                             onClick={toggleSelectMode}
@@ -1038,23 +1126,19 @@ export const InventoryListView: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                ) : (
-                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        {t('inventory_long_press_hint')}
-                    </p>
                 )}
                 {isSelectMode && (
-                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
                         {t('inventory_selected_count', { count: selectedItemIds.length })}
                     </p>
                 )}
                 {bulkDeleteError && (
-                    <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                    <p className="mt-4 text-xs text-red-600 dark:text-red-400">
                         {bulkDeleteError}
                     </p>
                 )}
                 {bulkMoveError && (
-                    <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                    <p className="mt-4 text-xs text-red-600 dark:text-red-400">
                         {bulkMoveError}
                     </p>
                 )}
@@ -1071,7 +1155,7 @@ export const InventoryListView: React.FC = () => {
                 {!isLoading && (expirySummary.expiredCount > 0 || expirySummary.warningCount > 0) && (
                     <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/30 dark:to-amber-950/30 border-red-200/60 dark:border-red-900/40 animate-in fade-in slide-in-from-top-2 duration-300">
                         <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
-                        <div className="flex flex-col gap-1 text-sm">
+                        <div className="flex flex-col gap-2 text-sm">
                             <span className="font-semibold text-slate-800 dark:text-slate-100">{t('expiry_summary_title')}</span>
                             <div className="flex flex-wrap gap-2 text-xs">
                                 {expirySummary.expiredCount > 0 && (
@@ -1141,7 +1225,21 @@ export const InventoryListView: React.FC = () => {
                                             </h3>
                                             {renderExpiryBadge(item)}
                                         </div>
-                                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                        {(() => {
+                                            const hazard = classifyInventoryHazard(item);
+                                            if (hazard.level === 'none') return null;
+                                            return (
+                                                <div className="mt-2 mb-1 flex flex-wrap gap-1">
+                                                    {hazard.groupLabelKeys.map(key => (
+                                                        <span key={key} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
+                                                            <ShieldAlert className="w-2.5 h-2.5" />
+                                                            {t(key)}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+                                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                                             {item.cas_number && <span>CAS: {item.cas_number}</span>}
                                             {item.brand && <span>{item.brand}</span>}
                                             {item.product_number && <span>PN: {item.product_number}</span>}
@@ -1199,7 +1297,7 @@ export const InventoryListView: React.FC = () => {
 
             <InventoryCsvImportModal
                 isOpen={isCsvImportOpen}
-                items={items}
+                items={visibleItems}
                 locations={locations}
                 cabinets={cabinets}
                 onClose={() => setIsCsvImportOpen(false)}

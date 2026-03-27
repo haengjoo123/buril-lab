@@ -68,7 +68,7 @@ export const LabContextSwitcher: React.FC = () => {
                                 >
                                     <Users className="w-4 h-4 shrink-0" />
                                     <span className="truncate">{member.lab?.name || 'Unknown'}</span>
-                                    <span className="text-xs text-slate-400 shrink-0 capitalize">({member.role})</span>
+                                    <span className="text-xs text-slate-400 shrink-0 capitalize">({t(`member_role_${member.role}`)})</span>
                                 </button>
                             ))
                         )}
