@@ -251,6 +251,7 @@ export const translations = {
         mix_label_warn_hf: "혼합 금지 (불산)",
         mix_label_unknown: "분류 불가 (혼합)",
         mix_label_alkali_organic: "알칼리 + 유기계 혼합 폐액",
+        mix_label_reactive_organic: "반응성 유기 혼합 폐액",
 
         // Disposal Details
         detail_solubility: "유기상 용해도",
@@ -1102,6 +1103,7 @@ export const translations = {
         mix_label_warn_hf: "Do Not Mix (Hydrofluoric Acid)",
         mix_label_unknown: "Unknown (Mixed)",
         mix_label_alkali_organic: "Alkali + Organic Mixture",
+        mix_label_reactive_organic: "Reactive Organic Mixed Waste",
 
         // Disposal Details
         detail_solubility: "Organic Solubility",

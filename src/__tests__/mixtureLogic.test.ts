@@ -172,6 +172,27 @@ describe('analyzeMixture - 알칼리 + 유기물', () => {
         expect(result.disposalDetails?.solubility).toBe('INSOLUBLE');
         expect(result.disposalDetails?.neutralization).toBe('PROHIBITED');
     });
+
+    it('알칼리 + 유기물 + 산화제(아질산나트륨) → 반응성 유기 혼합 폐액 우선', () => {
+        const oxidizer = makeResult({
+            chemical: makeChemical({
+                name: 'Sodium Nitrite',
+                molecularFormula: 'NaNO2',
+                properties: { isOrganic: false, isHalogenated: false },
+                ghs: { signal: 'Danger', hazardStatements: ['H272: May intensify fire; oxidizer'] },
+            }),
+            category: 'UNKNOWN',
+        });
+
+        const ethanol = makeOrganic('Ethanol');
+        ethanol.chemical.ghs = { signal: 'Danger', hazardStatements: ['H225: Highly flammable liquid and vapour'] };
+
+        const result = analyzeMixture([makeAlkali(), ethanol, oxidizer]);
+        expect(result.label).toBe('mix_label_reactive_organic');
+        expect(result.reason).toBe('disposal_method_case2');
+        expect(result.isSafe).toBe(false);
+        expect(result.disposalDetails?.neutralization).toBe('PROHIBITED');
+    });
 });
 
 // ══════════════════════════════════════════════

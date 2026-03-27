@@ -1,5 +1,6 @@
-import type { AnalysisResult, DisposalCategory } from '../types';
+import type { AnalysisResult, CartItem, DisposalCategory } from '../types';
 import { determineDisposal } from './wasteDisposal';
+import { checkCompatibility } from './compatibilityChecker';
 
 export const analyzeMixture = (cart: AnalysisResult[]): {
     category: DisposalCategory;
@@ -96,10 +97,30 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
     if (hasAlkali && hasNonHalogenOrganic) {
         const alkaliItems = cart.filter(item => item.category === 'ALKALI');
         const organicItems = cart.filter(item => item.category === 'ORGANIC_NON_HALOGEN');
+        const hasCriticalReactivePair = checkCompatibility(cart as CartItem[]).some((warning) =>
+            warning.ruleId === 'oxidizer_flammable' ||
+            warning.ruleId === 'water_reactive' ||
+            warning.ruleId === 'self_reactive' ||
+            warning.ruleId === 'pyrophoric' ||
+            warning.ruleId === 'explosive'
+        );
 
         // Extract chemical objects
         const chemicals = [...alkaliItems, ...organicItems].map(r => r.chemical);
         const { solubilityStatus, neutralizationStatus, disposalMethod } = determineDisposal(chemicals);
+        if (hasCriticalReactivePair) {
+            return {
+                category: 'UNKNOWN',
+                binColor: 'bg-orange-600',
+                label: 'mix_label_reactive_organic',
+                reason: 'disposal_method_case2',
+                isSafe: false,
+                disposalDetails: {
+                    solubility: solubilityStatus,
+                    neutralization: 'PROHIBITED'
+                }
+            };
+        }
 
         // Determine color based on Case
         let color = 'bg-red-700'; // Default Dangerous (Case 3: Insoluble)
@@ -156,37 +177,6 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
             label: 'mix_label_warn_aa',
             reason: 'mix_warn_acid_alkali',
             isSafe: false
-        };
-    }
-
-    // Special Case: Alkali + Organic (Non-Halogenated)
-    if (hasAlkali && hasNonHalogenOrganic) {
-        const alkaliItems = cart.filter(item => item.category === 'ALKALI');
-        const organicItems = cart.filter(item => item.category === 'ORGANIC_NON_HALOGEN');
-
-        // Extract chemical objects
-        const chemicals = [...alkaliItems, ...organicItems].map(r => r.chemical);
-        const { solubilityStatus, neutralizationStatus, disposalMethod } = determineDisposal(chemicals);
-
-        // Determine color based on Case
-        let color = 'bg-red-700'; // Default Dangerous (Case 3: Insoluble)
-
-        if (neutralizationStatus === 'ALLOWED') {
-            color = 'bg-blue-600'; // Case 1: Safe
-        } else if (solubilityStatus === 'SOLUBLE') {
-            color = 'bg-orange-600'; // Case 2: Soluble but Prohibited (Reactive)
-        }
-
-        return {
-            category: 'UNKNOWN', // Or 'MIXED_WASTE' logic
-            binColor: color,
-            label: 'mix_label_alkali_organic',
-            reason: disposalMethod, // Use the disposal method key as the main reason/instruction
-            isSafe: neutralizationStatus === 'ALLOWED',
-            disposalDetails: {
-                solubility: solubilityStatus,
-                neutralization: neutralizationStatus
-            }
         };
     }
 
