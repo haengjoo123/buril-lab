@@ -8,6 +8,8 @@ interface WasteState {
     addToCart: (result: CartItem) => void;
     removeFromCart: (id: string) => void;
     clearCart: () => void;
+    aiGuide: string | null;
+    setAiGuide: (guide: string | null) => void;
 
     // Search History State
     recentSearches: string[];
@@ -26,12 +28,15 @@ export const useWasteStore = create<WasteState>()(
                 if (state.cart.some(item => item.chemical.id === result.chemical.id)) {
                     return state;
                 }
-                return { cart: [...state.cart, result] };
+                return { cart: [...state.cart, result], aiGuide: null };
             }),
             removeFromCart: (id) => set((state) => ({
-                cart: state.cart.filter((item) => item.chemical.id !== id)
+                cart: state.cart.filter((item) => item.chemical.id !== id),
+                aiGuide: null
             })),
-            clearCart: () => set({ cart: [] }),
+            clearCart: () => set({ cart: [], aiGuide: null }),
+            aiGuide: null,
+            setAiGuide: (guide) => set({ aiGuide: guide }),
 
             recentSearches: [],
             loadSearchHistory: async () => {

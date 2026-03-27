@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useWasteStore } from '../store/useWasteStore';
 import { analyzeMixture } from '../utils/mixtureLogic';
 import { checkCompatibility } from '../utils/compatibilityChecker';
@@ -15,7 +15,8 @@ interface CartViewProps {
 }
 
 export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
-    const { cart, removeFromCart, clearCart } = useWasteStore();
+    const { cart, removeFromCart, clearCart, aiGuide, setAiGuide } = useWasteStore();
+
     const { t } = useTranslation();
 
     const mixtureResult = useMemo(() => analyzeMixture(cart), [cart]);
@@ -30,26 +31,18 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
 
     const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
-    // AI Guide state
-    const [aiGuide, setAiGuide] = useState<string | null>(null);
+    // AI Guide local UI state
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState(false);
     const [aiExpanded, setAiExpanded] = useState(true);
-    const prevCartLengthRef = useRef(cart.length);
 
-    // Reset AI guide when cart items change
-    useEffect(() => {
-        if (cart.length !== prevCartLengthRef.current) {
-            setAiGuide(null);
-            setAiError(false);
-            prevCartLengthRef.current = cart.length;
-        }
-    }, [cart.length]);
+
+
 
     const handleRequestAIGuide = async () => {
         setAiLoading(true);
         setAiError(false);
-        setAiGuide(null);
+
         try {
             const chemicals = cart.map(item => ({
                 name: item.chemical.name,
@@ -59,6 +52,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
             }));
             const result = await getAIDisposalGuide(chemicals);
             setAiGuide(result.guide);
+
         } catch {
             setAiError(true);
         } finally {
@@ -315,7 +309,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                                                 if (sections.length === 0) {
                                                     // Fallback: render as plain text
                                                     return (
-                                                        <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                                                        <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed text-left">
                                                             {aiGuide}
                                                         </div>
                                                     );
@@ -340,7 +334,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
 
                                                     if (section.type === 'warning') {
                                                         return (
-                                                            <div key={idx} className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300/60 dark:border-amber-700/60 p-3">
+                                                            <div key={idx} className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300/60 dark:border-amber-700/60 p-3 text-left">
                                                                 <div className="flex items-center gap-1.5 mb-1.5">
                                                                     <span className="text-base">⚠️</span>
                                                                     <span className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wide">{section.title}</span>
