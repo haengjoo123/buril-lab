@@ -822,7 +822,6 @@ export const WasteLogView: React.FC = () => {
             </div>
 
             {/* Load More */}
-            {logs.length < totalCount && (
                 <button
                     onClick={handleLoadMore}
                     disabled={isLoading}
@@ -830,10 +829,9 @@ export const WasteLogView: React.FC = () => {
                 >
                     {isLoading
                         ? <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-                        : `더 보기 (${logs.length}/${totalCount})`
+                        : `${t('log_view_more')} (${logs.length}/${totalCount})`
                     }
                 </button>
-            )}
 
             {/* Initial Loading */}
             {isLoading && logs.length === 0 && (

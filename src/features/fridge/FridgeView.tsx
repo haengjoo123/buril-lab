@@ -101,12 +101,16 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         clearAutoPlaceResult,
     } = useFridgeStore();
 
-    // 시약 정보 입력 모달이 열릴 때 시각 기록 + 이름 입력란 자동 포커스 (모바일 ghost click 흡수)
+    const [showModalContent, setShowModalContent] = useState(false);
+
+    // 시약 정보 입력 모달 렌더링 지연 (모바일 고스트 클릭 방지용)
     React.useEffect(() => {
-        if (!pendingPlacement) return;
+        if (!pendingPlacement) {
+            setShowModalContent(false);
+            return;
+        }
         placementModalOpenedAtRef.current = Date.now();
-        // 모달이 DOM에 그려진 뒤 이름 입력란에 포커스 → ghost click이 입력란으로 흡수됨
-        const t = setTimeout(() => placementNameInputRef.current?.focus(), 50);
+        const t = setTimeout(() => setShowModalContent(true), 300);
         return () => clearTimeout(t);
     }, [pendingPlacement]);
 
@@ -876,7 +880,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             />
 
             {/* Original manual placement dialog */}
-            {pendingPlacement && (
+            {(pendingPlacement && showModalContent) && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div
                         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
@@ -890,15 +894,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             handleCancelPlacement();
                         }}
                     />
-                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto">
+                    <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto`}>
                         <h3 className="text-xl font-bold text-slate-800">{t('reagent_info_title')}</h3>
 
-                        {/* 시약 이름 — 모달 열리면 자동 포커스(모바일 ghost click 흡수) */}
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
                             <input
                                 ref={placementNameInputRef}
-                                autoFocus
                                 type="text"
                                 value={placementName}
                                 onChange={e => setPlacementName(e.target.value)}

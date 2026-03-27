@@ -61,8 +61,7 @@ export const ReagentEditPanel: React.FC = () => {
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
 
     // Prevent immediate interaction to avoid ghost clicks on mobile
-    const [isInteractable, setIsInteractable] = useState(false);
-
+    const [showModalContent, setShowModalContent] = useState(false);
     // Find the selected item from all shelves
     const selectedItem = React.useMemo(() => {
         if (!selectedReagentId) return null;
@@ -85,11 +84,13 @@ export const ReagentEditPanel: React.FC = () => {
             setProductNumber(selectedItem.productNumber || '');
             setCasNo(selectedItem.casNo || '');
 
-            setIsInteractable(false);
+            setShowModalContent(false);
             const timer = setTimeout(() => {
-                setIsInteractable(true);
+                setShowModalContent(true);
             }, 300);
             return () => clearTimeout(timer);
+        } else {
+            setShowModalContent(false);
         }
     }, [selectedItem]);
 
@@ -99,7 +100,7 @@ export const ReagentEditPanel: React.FC = () => {
         setSelectedReason(null);
     }, [selectedReagentId]);
 
-    if (!selectedReagentId || !selectedItem) return null;
+    if (!selectedReagentId || !selectedItem || !showModalContent) return null;
 
     const handleSave = async () => {
         if (isSaving) return;
@@ -223,7 +224,7 @@ export const ReagentEditPanel: React.FC = () => {
 
     return (
         <>
-            <div className={`absolute left-1/2 -translate-x-1/2 top-16 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-80px-5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200 ${!isInteractable ? 'pointer-events-none' : ''}`}>
+            <div className={`absolute left-1/2 -translate-x-1/2 top-16 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-80px-5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200`}>
                 {/* Header */}
             <div className="flex items-center justify-between p-3 border-b bg-gray-50/50 flex-shrink-0">
                 <div className="flex items-center gap-2 text-gray-800 font-semibold">

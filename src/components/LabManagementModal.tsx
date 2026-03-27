@@ -72,7 +72,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             const data = await labService.getLabMembers(currentLabId!);
             setMembers(data);
         } catch (err: any) {
-            setError(err.message || '멤버 목록을 불러오지 못했습니다.');
+            setError(err.message || t('admin_members_error'));
         } finally {
             setIsLoading(false);
         }
@@ -91,20 +91,20 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             await labService.updateMemberRole(currentLabId, userId, newRole);
             await loadMembers(); // refresh
         } catch (err: any) {
-            setError(err.message || "권한 변경에 실패했습니다.");
+            setError(err.message || t('admin_role_change_error'));
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleRemoveMember = async (userId: string) => {
-        if (!currentLabId || !window.confirm("정말 이 사용자를 강퇴하시겠습니까? (이 작업은 되돌릴 수 없습니다.)")) return;
+        if (!currentLabId || !window.confirm(t('lab_mgmt_member_kick_confirm'))) return;
         setIsLoading(true);
         try {
             await labService.removeMember(currentLabId, userId);
             await loadMembers(); // refresh
         } catch (err: any) {
-            setError(err.message || "맴버 강퇴에 실패했습니다.");
+            setError(err.message || t('admin_remove_error'));
         } finally {
             setIsLoading(false);
         }
@@ -156,9 +156,9 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             onClose();
         } catch (err: any) {
             if (err.code === '23505') {
-                setError("이미 이 연구실에 가입되어 있습니다.");
+                setError(t('lab_mgmt_already_joined'));
             } else {
-                setError(err.message || "가입에 실패했습니다.");
+                setError(err.message || t('lab_leave_error'));
             }
         } finally {
             setIsLoading(false);
@@ -175,13 +175,12 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                 name: settingsName,
                 ...(settingsPassword ? { join_password: settingsPassword } : { join_password: '' })
             });
-            // Update local state to reflect changes instantly
             const updatedLabs = await labService.getMyLabs();
             setMyLabs(updatedLabs);
-            alert("연구실 설정이 저장되었습니다.");
+            alert(t('lab_mgmt_settings_saved'));
             setView('menu');
         } catch (err: any) {
-            setError(err.message || "설정 변경에 실패했습니다.");
+            setError(err.message || t('admin_role_change_error'));
         } finally {
             setIsLoading(false);
         }
@@ -189,12 +188,12 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     const handleDeleteLab = async () => {
         if (!currentLabId) return;
-        const confirm1 = window.confirm(`정말 "${settingsName}" 연구실을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없으며, 모든 데이터가 삭제될 수 있습니다.`);
+        const confirm1 = window.confirm(t('lab_mgmt_delete_confirm_1', { name: settingsName }));
         if (!confirm1) return;
 
-        const confirm2 = window.prompt(`삭제 확인을 위해 연구실 이름 "${settingsName}"을(를) 정확히 입력해주세요.`);
+        const confirm2 = window.prompt(t('lab_mgmt_delete_confirm_2', { name: settingsName }));
         if (confirm2 !== settingsName) {
-            alert("연구실 이름이 일치하지 않습니다. 삭제가 취소되었습니다.");
+            alert(t('lab_mgmt_delete_mismatch'));
             return;
         }
 
@@ -205,10 +204,10 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             const updatedLabs = await labService.getMyLabs();
             setMyLabs(updatedLabs);
             setCurrentLabId(null);
-            alert("연구실이 삭제되었습니다.");
+            alert(t('lab_mgmt_delete_success'));
             onClose();
         } catch (err: any) {
-            setError(err.message || "연구실 삭제에 실패했습니다.");
+            setError(err.message || t('admin_remove_error'));
             setIsLoading(false);
         }
     };
@@ -226,11 +225,11 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center shrink-0">
                     <h3 className="font-bold text-lg text-slate-800 dark:text-white">
-                        {view === 'menu' && '연구실 관리'}
-                        {view === 'create' && '새 연구실 만들기'}
-                        {view === 'search' && '연구실 검색 / 가입'}
-                        {view === 'members' && '멤버 관리'}
-                        {view === 'settings' && '연구실 설정'}
+                        {view === 'menu' && t('lab_mgmt_title')}
+                        {view === 'create' && t('lab_mgmt_create_title')}
+                        {view === 'search' && t('lab_mgmt_search_title')}
+                        {view === 'members' && t('lab_mgmt_members_title')}
+                        {view === 'settings' && t('lab_mgmt_settings_title')}
                     </h3>
                     <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors">
                         <X className="w-5 h-5 text-gray-500" />
@@ -257,8 +256,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                             <Users className="w-5 h-5" />
                                         </div>
                                         <div className="text-left">
-                                            <div className="font-semibold text-slate-800 dark:text-slate-200">현재 연구실 멤버 관리</div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400">연구실에 소속된 멤버 목록 확인 및 권한 설정</div>
+                                            <div className="font-semibold text-slate-800 dark:text-slate-200">{t('lab_mgmt_menu_members')}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{t('lab_mgmt_menu_members_desc')}</div>
                                         </div>
                                     </div>
                                 </button>
@@ -273,8 +272,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                             <Settings className="w-5 h-5" />
                                         </div>
                                         <div className="text-left">
-                                            <div className="font-semibold text-slate-800 dark:text-slate-200">연구실 설정</div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400">이름 및 가입 비밀번호 변경</div>
+                                            <div className="font-semibold text-slate-800 dark:text-slate-200">{t('lab_mgmt_settings_title')}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{t('lab_mgmt_form_password_help')}</div>
                                         </div>
                                     </div>
                                 </button>
@@ -288,8 +287,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         <Search className="w-5 h-5" />
                                     </div>
                                     <div className="text-left">
-                                        <div className="font-semibold text-slate-800 dark:text-slate-200">기존 연구실 가입</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">연구실을 검색하고 소속으로 가입합니다.</div>
+                                        <div className="font-semibold text-slate-800 dark:text-slate-200">{t('lab_mgmt_menu_join')}</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">{t('lab_mgmt_menu_join_desc')}</div>
                                     </div>
                                 </div>
                             </button>
@@ -302,16 +301,16 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         <Plus className="w-5 h-5" />
                                     </div>
                                     <div className="text-left">
-                                        <div className="font-semibold text-slate-800 dark:text-slate-200">새 연구실 생성</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">새로운 그룹을 만들고 관리자가 됩니다.</div>
+                                        <div className="font-semibold text-slate-800 dark:text-slate-200">{t('lab_mgmt_menu_create')}</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400">{t('lab_mgmt_menu_create_desc')}</div>
                                     </div>
                                 </div>
                             </button>
 
                             <div className="mt-8">
-                                <h4 className="font-semibold text-sm text-slate-500 mb-2 px-1">소속된 연구실 목록</h4>
+                                <h4 className="font-semibold text-sm text-slate-500 mb-2 px-1">{t('lab_mgmt_joined_list')}</h4>
                                 {myLabs.length === 0 ? (
-                                    <div className="text-sm text-slate-400 italic px-1">가입된 연구실이 없습니다.</div>
+                                    <div className="text-sm text-slate-400 italic px-1">{t('lab_no_joined')}</div>
                                 ) : (
                                     <ul className="space-y-2">
                                         {myLabs.map(ml => {
@@ -330,7 +329,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                         {isActive && (
                                                             <span className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">
                                                                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full inline-block" />
-                                                                접속 중
+                                                                {t('lab_mgmt_current_session')}
                                                             </span>
                                                         )}
                                                         <span className={`font-medium min-w-0 truncate ${isActive ? 'text-blue-800 dark:text-blue-200' : 'text-slate-700 dark:text-slate-200'}`}>
@@ -359,48 +358,47 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             </div>
                         </div>
                     )}
-
                     {view === 'create' && (
                         <form onSubmit={handleCreate} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">연구실 이름</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_lab_name')}</label>
                                 <input
                                     type="text"
                                     value={createName}
                                     onChange={e => setCreateName(e.target.value)}
-                                    placeholder="예: 생명공학 제1연구실"
+                                    placeholder={t('lab_mgmt_form_lab_name_placeholder')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">내 닉네임 / 이름</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_nickname')}</label>
                                 <input
                                     type="text"
                                     value={createNickname}
                                     onChange={e => setCreateNickname(e.target.value)}
-                                    placeholder="예: 홍길동"
+                                    placeholder={t('lab_mgmt_form_nickname_placeholder')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">입장 비밀번호 (선택)</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_password_opt')}</label>
                                 <input
                                     type="password"
                                     value={createPassword}
                                     onChange={e => setCreatePassword(e.target.value)}
-                                    placeholder="설정하지 않으면 누구나 가입할 수 있습니다."
+                                    placeholder={t('lab_mgmt_form_password_placeholder')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     autoComplete="new-password"
                                 />
                             </div>
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
-                                    취소
+                                    {t('common_cancel')}
                                 </button>
                                 <button type="submit" disabled={isLoading || !createName.trim() || !createNickname.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
-                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '생성하기'}
+                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_create')}
                                 </button>
                             </div>
                         </form>
@@ -414,7 +412,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         type="text"
                                         value={query}
                                         onChange={e => setQuery(e.target.value)}
-                                        placeholder="연구실 이름 검색"
+                                        placeholder={t('lab_mgmt_search_placeholder')}
                                         className="w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     />
                                     <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
@@ -424,7 +422,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     disabled={isLoading || !query.trim()}
                                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
-                                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '검색'}
+                                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('lab_mgmt_search_btn')}
                                 </button>
                             </form>
 
@@ -450,35 +448,35 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                             {selectedLabId && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">역할 선택</label>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t('lab_mgmt_form_role_select')}</label>
                                     <div className="flex gap-2 mb-4">
                                         <label className={`flex-1 flex justify-center py-2 px-3 border rounded-lg cursor-pointer transition-colors ${selectedRole === 'researcher' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
                                             <input type="radio" className="hidden" checked={selectedRole === 'researcher'} onChange={() => setSelectedRole('researcher')} />
-                                            연구원
+                                            {t('lab_mgmt_role_researcher')}
                                         </label>
                                         <label className={`flex-1 flex justify-center py-2 px-3 border rounded-lg cursor-pointer transition-colors ${selectedRole === 'student' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
                                             <input type="radio" className="hidden" checked={selectedRole === 'student'} onChange={() => setSelectedRole('student')} />
-                                            학생
+                                            {t('lab_mgmt_role_student')}
                                         </label>
                                     </div>
                                     <div className="mb-4">
-                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">내 닉네임 / 이름</label>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_nickname')}</label>
                                         <input
                                             type="text"
                                             value={joinNickname}
                                             onChange={e => setJoinNickname(e.target.value)}
-                                            placeholder="예: 홍길동"
+                                            placeholder={t('lab_mgmt_form_nickname_placeholder')}
                                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                             required
                                         />
                                     </div>
                                     <div className="mb-4">
-                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">비밀번호 (해당 시)</label>
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_password_if_set')}</label>
                                         <input
                                             type="password"
                                             value={joinPassword}
                                             onChange={e => setJoinPassword(e.target.value)}
-                                            placeholder="연구실 비밀번호를 입력하세요"
+                                            placeholder={t('lab_mgmt_form_password_join_placeholder')}
                                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                             autoComplete="new-password"
                                         />
@@ -488,20 +486,20 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         disabled={isLoading || !joinNickname.trim()}
                                         className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center"
                                     >
-                                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '가입하기'}
+                                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_join')}
                                     </button>
                                 </div>
                             )}
 
                             {searchResults.length === 0 && query && !isLoading && (
                                 <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm">
-                                    검색 결과가 없습니다.
+                                    {t('lab_mgmt_search_no_results')}
                                 </div>
                             )}
 
                             <div className="pt-2">
                                 <button type="button" onClick={() => { setView('menu'); setSelectedLabId(null); setJoinPassword(''); setJoinNickname(''); }} className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
-                                    뒤로 가기
+                                    {t('lab_mgmt_btn_back')}
                                 </button>
                             </div>
                         </div>
@@ -512,7 +510,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             {isLoading && members.length === 0 ? (
                                 <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
                             ) : members.length === 0 ? (
-                                <div className="text-center py-8 text-slate-500">멤버가 없습니다.</div>
+                                <div className="text-center py-8 text-slate-500">{t('admin_members_empty')}</div>
                             ) : (
                                 <ul className="space-y-3">
                                     {members.map(member => (
@@ -543,8 +541,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                         size="sm"
                                                         className="flex-1"
                                                         options={[
-                                                            { value: 'researcher', label: '연구원 (Researcher)' },
-                                                            { value: 'student', label: '학생 (Student)' },
+                                                            { value: 'researcher', label: `${t('lab_mgmt_role_researcher')} (Researcher)` },
+                                                            { value: 'student', label: `${t('lab_mgmt_role_student')} (Student)` },
                                                             // admin 승급은 transfer_admin으로만 가능 (이중 admin 방지)
                                                         ]}
                                                         buttonClassName="flex-1 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"
@@ -554,7 +552,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                         disabled={isLoading}
                                                         className="text-xs px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:text-red-400 rounded transition-colors"
                                                     >
-                                                        강퇴
+                                                        {t('lab_mgmt_member_kick_btn')}
                                                     </button>
                                                 </div>
                                             )}
@@ -564,7 +562,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             )}
                             <div className="pt-2 sticky bottom-0 bg-white dark:bg-slate-900 pb-1 -mx-1 px-1 mt-2 border-t border-slate-100 dark:border-slate-800">
                                 <button type="button" onClick={() => setView('menu')} className="w-full mt-2 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
-                                    뒤로 가기
+                                    {t('lab_mgmt_btn_back')}
                                 </button>
                             </div>
                         </div>
@@ -573,42 +571,42 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                     {view === 'settings' && (
                         <form onSubmit={handleUpdateSettings} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">연구실 이름</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_lab_name')}</label>
                                 <input
                                     type="text"
                                     value={settingsName}
                                     onChange={e => setSettingsName(e.target.value)}
-                                    placeholder="연구실 이름"
+                                    placeholder={t('lab_mgmt_form_lab_name')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">입장 비밀번호</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_password')}</label>
                                 <input
                                     type="text"
                                     value={settingsPassword}
                                     onChange={e => setSettingsPassword(e.target.value)}
-                                    placeholder="비밀번호 없음 (빈칸 시 누구나 가입 가능)"
+                                    placeholder={t('lab_mgmt_form_password_placeholder')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     autoComplete="off"
                                 />
-                                <p className="text-xs text-slate-500 mt-1">이전에 설정한 비밀번호가 표시되며, 수정하실 수 있습니다.</p>
+                                <p className="text-xs text-slate-500 mt-1">{t('lab_mgmt_form_password_info')}</p>
                             </div>
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
-                                    취소
+                                    {t('common_cancel')}
                                 </button>
                                 <button type="submit" disabled={isLoading || !settingsName.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
-                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : '저장하기'}
+                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_save')}
                                 </button>
                             </div>
 
                             <div className="mt-8 pt-6 border-t border-red-100 dark:border-red-900/30">
-                                <h4 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">위험 구역 (Danger Zone)</h4>
+                                <h4 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">{t('lab_mgmt_danger_zone')}</h4>
                                 <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30 flex flex-col gap-3">
                                     <div className="text-sm text-red-700 dark:text-red-300">
-                                        연구실을 삭제하면 모든 데이터(시약장, 시약 등) 복구가 불가능할 수 있습니다.
+                                        {t('lab_mgmt_danger_zone_desc')}
                                     </div>
                                     <button
                                         type="button"
@@ -616,7 +614,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         disabled={isLoading}
                                         className="w-full py-2 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-lg font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
                                     >
-                                        연구실 완전 삭제
+                                        {t('lab_mgmt_delete_lab_btn')}
                                     </button>
                                 </div>
                             </div>
