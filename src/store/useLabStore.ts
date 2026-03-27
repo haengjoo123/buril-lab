@@ -12,7 +12,7 @@ export interface LabMember {
     id: string;
     lab_id: string;
     user_id: string;
-    role: 'admin' | 'researcher' | 'student';
+    role: 'admin' | 'pi' | 'postdoc' | 'graduate' | 'undergrad';
     joined_at: string;
     lab?: Lab;
 }
