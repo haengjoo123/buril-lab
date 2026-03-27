@@ -278,10 +278,89 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                                 </button>
                                 {aiExpanded && (
                                     <div className="px-3 pb-3">
-                                        <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed max-h-[140px] overflow-y-auto">
-                                            {aiGuide}
+                                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                            {(() => {
+                                                if (!aiGuide) return null;
+                                                // Parse the AI guide text into styled sections
+                                                const lines = aiGuide.split('\n').filter(l => l.trim());
+                                                const sections: Array<{ type: 'recommendation' | 'warning' | 'info'; title: string; content: string[] }> = [];
+                                                let current: (typeof sections)[0] | null = null;
+
+                                                for (const line of lines) {
+                                                    const trimmed = line.trim();
+                                                    if (trimmed.startsWith('🪣')) {
+                                                        current = { type: 'recommendation', title: trimmed.replace('🪣', '').trim(), content: [] };
+                                                        sections.push(current);
+                                                    } else if (trimmed.startsWith('⚠️')) {
+                                                        current = { type: 'warning', title: trimmed.replace('⚠️', '').trim(), content: [] };
+                                                        sections.push(current);
+                                                    } else if (trimmed.startsWith('→') || trimmed.startsWith('->')) {
+                                                        if (current) {
+                                                            current.content.push(trimmed.replace(/^(→|->)\s*/, ''));
+                                                        }
+                                                    } else {
+                                                        // Any other text: attach to current or create info section
+                                                        if (current) {
+                                                            current.content.push(trimmed);
+                                                        } else {
+                                                            current = { type: 'info', title: '', content: [trimmed] };
+                                                            sections.push(current);
+                                                        }
+                                                    }
+                                                }
+
+                                                if (sections.length === 0) {
+                                                    // Fallback: render as plain text
+                                                    return (
+                                                        <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                                                            {aiGuide}
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return sections.map((section, idx) => {
+                                                    if (section.type === 'recommendation') {
+                                                        return (
+                                                            <div key={idx} className="rounded-lg bg-gradient-to-r from-violet-100 to-indigo-100 dark:from-violet-900/40 dark:to-indigo-900/40 border border-violet-300/60 dark:border-violet-700/60 p-3">
+                                                                <div className="flex items-center gap-1.5 mb-1.5">
+                                                                    <span className="text-base">🪣</span>
+                                                                    <span className="text-xs font-bold text-violet-700 dark:text-violet-300 uppercase tracking-wide">{section.title}</span>
+                                                                </div>
+                                                                {section.content.map((c, ci) => (
+                                                                    <div key={ci} className="text-sm font-semibold text-violet-800 dark:text-violet-200 pl-6">
+                                                                        {c}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    if (section.type === 'warning') {
+                                                        return (
+                                                            <div key={idx} className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300/60 dark:border-amber-700/60 p-3">
+                                                                <div className="flex items-center gap-1.5 mb-1.5">
+                                                                    <span className="text-base">⚠️</span>
+                                                                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wide">{section.title}</span>
+                                                                </div>
+                                                                {section.content.map((c, ci) => (
+                                                                    <div key={ci} className="text-[13px] text-amber-800 dark:text-amber-200 pl-6 leading-snug">
+                                                                        {c}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    // 'info' fallback
+                                                    return (
+                                                        <div key={idx} className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed pl-1">
+                                                            {section.content.join(' ')}
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
                                         </div>
-                                        <div className="mt-2 pt-2 border-t border-violet-200/50 dark:border-violet-700/50">
+                                        <div className="mt-2.5 pt-2 border-t border-violet-200/50 dark:border-violet-700/50">
                                             <p className="text-[10px] text-violet-400 dark:text-violet-500 italic">
                                                 {t('ai_guide_disclaimer' as any)}
                                             </p>
