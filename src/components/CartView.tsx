@@ -192,7 +192,10 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
 
                 {/* Mixture Analysis Result Footer */}
                 {cart.length > 0 && (
-                    <div className="p-5 border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] text-center">
+                    <>
+                    {/* Scrollable analysis content */}
+                    <div className="overflow-y-auto border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <div className="p-5 pb-3 text-center">
                         <h4 className="text-sm text-gray-500 dark:text-gray-400 mb-2 font-medium">{t('cart_guide_title')}</h4>
 
                         <div className={`p-4 rounded-xl ${mixtureResult.binColor} text-white shadow-lg mb-3`}>
@@ -376,11 +379,14 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                                 )}
                             </div>
                         )}
+                        </div>
+                    </div>
 
-                        {/* ── Dispose Complete Button ── */}
+                    {/* ── Action Buttons (always visible) ── */}
+                    <div className="shrink-0 p-4 pt-3 border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-center space-y-2">
                         <button
                             onClick={() => setShowDisposeModal(true)}
-                            className="w-full py-3 bg-blue-600 dark:bg-blue-500 text-white rounded-xl hover:bg-blue-700 dark:hover:bg-blue-600 text-sm font-semibold transition-colors shadow-md mb-2"
+                            className="w-full py-3 bg-blue-600 dark:bg-blue-500 text-white rounded-xl hover:bg-blue-700 dark:hover:bg-blue-600 text-sm font-semibold transition-colors shadow-md"
                         >
                             {t('btn_dispose_complete')}
                         </button>
@@ -392,6 +398,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                             {t('btn_clear_all')}
                         </button>
                     </div>
+                    </>
                 )}
             </div>
 
