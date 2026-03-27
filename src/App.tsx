@@ -412,7 +412,7 @@ function App() {
         {cart.length > 0 && !isCartOpen && (
           <button
             onClick={() => setIsCartOpen(true)}
-            className="absolute bottom-20 right-6 w-14 h-14 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-90 transition-transform animate-in fade-in slide-in-from-bottom-4"
+            className={`absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} w-14 h-14 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-90 transition-transform animate-in fade-in slide-in-from-bottom-4`}
           >
             <ShoppingBag className="w-6 h-6" />
             <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold border-2 border-white dark:border-slate-900 text-white">{cart.length}</span>

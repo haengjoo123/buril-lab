@@ -128,7 +128,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                 </div>
 
                 {/* List of Chemicals */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[150px]">
+                <div className="flex-shrink overflow-y-auto p-4 space-y-3 min-h-[80px] max-h-[150px]">
                     {cart.length === 0 ? (
                         <div className="text-center text-gray-400 dark:text-gray-500 py-10">
                             {t('cart_empty')}
@@ -194,32 +194,32 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                 {cart.length > 0 && (
                     <>
                     {/* Scrollable analysis content */}
-                    <div className="overflow-y-auto border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                        <div className="p-5 pb-3 text-center">
-                        <h4 className="text-sm text-gray-500 dark:text-gray-400 mb-2 font-medium">{t('cart_guide_title')}</h4>
+                    <div className="flex-1 overflow-y-auto border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <div className="p-4 pb-2 text-center">
+                        <h4 className="text-xs text-gray-400 dark:text-gray-500 mb-2 font-medium uppercase tracking-tight">{t('cart_guide_title')}</h4>
 
-                        <div className={`p-4 rounded-xl ${mixtureResult.binColor} text-white shadow-lg mb-3`}>
-                            <div className="font-bold text-lg mb-1">{t(mixtureResult.label as any)}</div>
-                            <div className="text-sm opacity-90 leading-snug">{t(mixtureResult.reason as any)}</div>
+                        <div className={`p-3.5 rounded-xl ${mixtureResult.binColor} text-white shadow-md mb-2.5`}>
+                            <div className="font-bold text-base mb-0.5">{t(mixtureResult.label as any)}</div>
+                            <div className="text-[13px] opacity-90 leading-snug">{t(mixtureResult.reason as any)}</div>
 
                             {/* Detailed Disposal Info for Alkali+Organic */}
                             {(mixtureResult as any).disposalDetails && (
-                                <div className="mt-3 pt-3 border-t border-white/20 text-xs text-left space-y-1">
+                                <div className="mt-2 pt-2 border-t border-white/20 text-[11px] text-left space-y-0.5">
                                     <div className="flex justify-between">
                                         <span className="opacity-80">{t('detail_solubility' as any)}:</span>
-                                        <span className="font-bold">{(mixtureResult as any).disposalDetails.solubility}</span>
+                                        <span className="font-bold">{t(`status_${(mixtureResult as any).disposalDetails.solubility.toLowerCase()}` as any)}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="opacity-80">{t('detail_neutralization' as any)}:</span>
-                                        <span className="font-bold">{(mixtureResult as any).disposalDetails.neutralization}</span>
+                                        <span className="font-bold">{t(`status_${(mixtureResult as any).disposalDetails.neutralization.toLowerCase()}` as any)}</span>
                                     </div>
                                 </div>
                             )}
                         </div>
 
                         {!mixtureResult.isSafe && (
-                            <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-xs p-2 rounded flex items-center gap-2 mb-3 text-left">
-                                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                            <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-[11px] p-2 rounded-lg flex items-center gap-2 mb-2.5 text-left border border-red-100 dark:border-red-900/40">
+                                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                                 {t('cart_safety_check')}
                             </div>
                         )}
@@ -383,19 +383,19 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                     </div>
 
                     {/* ── Action Buttons (always visible) ── */}
-                    <div className="shrink-0 p-4 pt-3 border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-center space-y-2">
+                    <div className="shrink-0 p-4 pt-3 border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-center flex gap-2.5">
                         <button
-                            onClick={() => setShowDisposeModal(true)}
-                            className="w-full py-3 bg-blue-600 dark:bg-blue-500 text-white rounded-xl hover:bg-blue-700 dark:hover:bg-blue-600 text-sm font-semibold transition-colors shadow-md"
+                            onClick={() => setIsClearDialogOpen(true)}
+                            className="flex-1 py-3 border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-sm font-medium transition-colors"
                         >
-                            {t('btn_dispose_complete')}
+                            {t('btn_clear_all')}
                         </button>
 
                         <button
-                            onClick={() => setIsClearDialogOpen(true)}
-                            className="w-full py-3 border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-sm font-medium transition-colors"
+                            onClick={() => setShowDisposeModal(true)}
+                            className="flex-[1.5] py-3 bg-blue-600 dark:bg-blue-500 text-white rounded-xl hover:bg-blue-700 dark:hover:bg-blue-600 text-sm font-semibold transition-colors shadow-md"
                         >
-                            {t('btn_clear_all')}
+                            {t('btn_dispose_complete')}
                         </button>
                     </div>
                     </>

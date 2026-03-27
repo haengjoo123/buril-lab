@@ -7,6 +7,13 @@ export const translations = {
         app_subtitle_2: "안전하게",
         app_subtitle_3: "처리하세요.",
         app_desc: "사진을 찍거나 시약명을 검색하여 올바른 폐기 방법을 확인하세요.",
+        
+        lab_personal_space: "개인 공간",
+        lab_switcher_title: "연구실 / 개인공간 전환",
+        lab_list: "연구실 목록",
+        lab_my_space: "내 공간",
+        lab_no_joined: "가입된 연구실이 없습니다",
+        lab_manage_join: "연구실 관리 / 그룹 참가",
 
         search_placeholder: "시약명 (예: Acetone) 또는 CAS No.",
         search_not_found: "에 대한 결과를 찾을 수 없습니다.",
@@ -204,6 +211,10 @@ export const translations = {
         // Disposal Details
         detail_solubility: "유기상 용해도",
         detail_neutralization: "중화 가능 여부",
+        status_soluble: "수용성",
+        status_insoluble: "불용성",
+        status_allowed: "허용",
+        status_prohibited: "금지",
 
         // Disposal Methods (Cases)
         disposal_method_case1: "수용성 + 중화 가능: 희석 후 중화(pH 6-8)하여 산/알칼리 수계 폐액으로 배출하세요.",
@@ -824,7 +835,7 @@ export const translations = {
         lab_leave_error: "탈퇴에 실패했습니다.",
 
         // AI Disposal Guide
-        ai_guide_btn: "✨ AI 전문 분석 요청",
+        ai_guide_btn: "AI 전문 분석 요청",
         ai_guide_loading: "AI가 혼합물을 분석하고 있습니다...",
         ai_guide_title: "AI 추천 폐기 가이드",
         ai_guide_error: "AI 분석에 실패했습니다.",
@@ -837,6 +848,13 @@ export const translations = {
         app_subtitle_2: "Dispose Safely",
         app_subtitle_3: ".",
         app_desc: "Scan or search chemicals to find the correct disposal method.",
+
+        lab_personal_space: "Personal",
+        lab_switcher_title: "Switch Lab / Personal Space",
+        lab_list: "Lab List",
+        lab_my_space: "My Space",
+        lab_no_joined: "No joined labs",
+        lab_manage_join: "Manage Labs / Join Group",
 
         search_placeholder: "Chemical Name (e.g. Acetone) or CAS No.",
         search_not_found: "No results found for",
@@ -1034,6 +1052,10 @@ export const translations = {
         // Disposal Details
         detail_solubility: "Organic Solubility",
         detail_neutralization: "Neutralization",
+        status_soluble: "Soluble",
+        status_insoluble: "Insoluble",
+        status_allowed: "Allowed",
+        status_prohibited: "Prohibited",
 
         // Disposal Methods (Cases)
         disposal_method_case1: "Soluble + Neutralizable: Dilute & Neutralize (pH 6-8), then dispose as Aqueous Waste.",
@@ -1653,7 +1675,7 @@ export const translations = {
         lab_leave_error: "Failed to leave the lab.",
 
         // AI Disposal Guide
-        ai_guide_btn: "✨ Request AI Analysis",
+        ai_guide_btn: "Request AI Analysis",
         ai_guide_loading: "AI is analyzing the mixture...",
         ai_guide_title: "AI Disposal Guide",
         ai_guide_error: "AI analysis failed.",

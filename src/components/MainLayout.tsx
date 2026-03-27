@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlaskConical, LogOut } from 'lucide-react';
+import { FlaskConical, LogOut, Settings } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { useTranslation } from 'react-i18next';
 import { LabContextSwitcher } from './LabContextSwitcher';
@@ -33,40 +33,41 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <div className="w-full max-w-[430px] h-full bg-white dark:bg-slate-900 shadow-xl relative flex flex-col overflow-hidden transition-colors duration-300">
 
                 {/* Header */}
-                <header className="px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-40 transition-colors duration-300">
+                <header className="px-3 sm:px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-40 transition-colors duration-300">
                     <button
                         onClick={onLogoClick}
-                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                        className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity min-w-0"
                     >
-                        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg shrink-0">
                             <FlaskConical className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                         </div>
-                        <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white">{t('app_title')}</h1>
+                        <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white shrink-0 truncate max-w-[100px] sm:max-w-none">{t('app_title')}</h1>
                     </button>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 sm:gap-3 min-w-0">
                         {!hideLabSwitcher && <LabContextSwitcher />}
                         {onLoginClick && (
                             <button
                                 type="button"
                                 onClick={onLoginClick}
-                                className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                                className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors px-1"
                             >
                                 {t('auth_login')}
                             </button>
                         )}
                         <button
                             onClick={() => setIsSettingsOpen(true)}
-                            className="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                            className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors shrink-0 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                            title={t('btn_settings')}
                         >
-                            {t('btn_settings')}
+                            <Settings className="w-5 h-5 transition-transform hover:rotate-45" />
                         </button>
                         {userEmail && onSignOut && (
                             <button
                                 onClick={onSignOut}
-                                className="p-2 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                                className="p-2 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
                                 title={t('auth_logout')}
                             >
-                                <LogOut className="w-4 h-4" />
+                                <LogOut className="w-5 h-5" />
                             </button>
                         )}
                     </div>
