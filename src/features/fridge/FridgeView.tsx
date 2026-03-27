@@ -8,6 +8,7 @@ import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { cabinetService } from '../../services/cabinetService';
+import { inventoryService } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
@@ -19,6 +20,16 @@ import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 export interface FridgeViewProps {
     cabinetId: string;
     onBack?: () => void;
+}
+
+interface GenericContainerItem {
+    name: string;
+    type: ReagentTemplateType;
+    color: string;
+    width: number;
+    chemicalData: {
+        name: string;
+    };
 }
 
 export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => {
@@ -117,10 +128,31 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     React.useEffect(() => {
         if (!cabinetId) return;
 
-        // 항상 최신 DB 상태를 반영해 외부(재고 목록 등) 변경과 동기화합니다.
-        loadCabinet(cabinetId);
-
         let reloadTimeout: ReturnType<typeof setTimeout>;
+        let isDisposed = false;
+        let isReloading = false;
+        let hasPendingReload = false;
+
+        const runReload = async () => {
+            if (isDisposed) return;
+            if (isReloading) {
+                hasPendingReload = true;
+                return;
+            }
+
+            isReloading = true;
+            try {
+                await loadCabinet(cabinetId);
+            } finally {
+                isReloading = false;
+                if (hasPendingReload && !isDisposed) {
+                    hasPendingReload = false;
+                    void runReload();
+                }
+            }
+        };
+
+        void runReload();
 
         const handleChange = () => {
             const currentMode = useFridgeStore.getState().mode;
@@ -130,7 +162,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             clearTimeout(reloadTimeout);
             // 여러 변경 이벤트가 동시에 발생할 수 있으므로 디바운스 처리
             reloadTimeout = setTimeout(() => {
-                loadCabinet(cabinetId);
+                void runReload();
             }, 500);
         };
 
@@ -141,6 +173,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             .subscribe();
 
         return () => {
+            isDisposed = true;
             supabase.removeChannel(channel);
             clearTimeout(reloadTimeout);
         };
@@ -227,17 +260,22 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setIsClearConfirmOpen(false);
         setIsClearSecondConfirmOpen(false);
 
-        // 로그 기록 (비동기, 실패해도 UI에 영향 없음)
-        if (currentCabinetId && allItems.length > 0) {
+        // 로그 및 DB 동기화 (비동기, 실패해도 UI에 영향 없음)
+        if (currentCabinetId) {
             try {
                 await saveCabinet(); // 먼저 DB에 빈 상태 반영
-                // 전체비우기는 아이템 묶어서 1회 로그
-                const names = allItems.map(i => i.name).join(', ');
-                await cabinetService.logActivity(
-                    currentCabinetId,
-                    'clear_all',
-                    names.length > 200 ? names.slice(0, 197) + '...' : names
-                );
+                
+                // 연결된 재고 항목 삭제 및 폐기 로그 기록 (allItems가 없어도 DB에서 cabinet_id로 삭제함)
+                await inventoryService.clearCabinetInventory(currentCabinetId, allItems);
+                
+                if (allItems.length > 0) {
+                    const names = allItems.map(i => i.name).join(', ');
+                    await cabinetService.logActivity(
+                        currentCabinetId,
+                        'clear_all',
+                        names.length > 200 ? names.slice(0, 197) + '...' : names
+                    );
+                }
             } catch (err) {
                 console.error('Failed to log clear_all activity:', err);
             }
@@ -249,7 +287,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setIsClearSecondConfirmOpen(true);
     };
 
-    const handleReagentClick = (item: typeof genericContainers[0]) => {
+    const handleReagentClick = (item: GenericContainerItem) => {
         // 이미 선택된 시약을 다시 클릭하면 선택 취소
         if (draggedTemplate?.name === item.name) {
             setDraggedTemplate(null);
@@ -430,7 +468,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     };
 
     // Generic containers for the placement tray (labels match ReagentEditPanel: cabinet_container_*)
-    const genericContainers = [
+    const genericContainers: GenericContainerItem[] = [
         {
             name: t('cabinet_container_amber'), type: 'A', color: '#8b4513', width: 8,
             chemicalData: { name: t('cabinet_container_amber') }
@@ -455,6 +493,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         { type: 'C', label: t('cabinet_container_vial'), color: '#cbd5e1' },
         { type: 'D', label: t('cabinet_container_glass'), color: '#b0c4de' },
     ];
+
     return (
         <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-hidden">
             {/* Header Toolbar */}
@@ -753,7 +792,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             <button
                                 onClick={() => setIsEditPanelVisible(true)}
                                 className="bg-white/90 backdrop-blur pointer-events-auto px-4 py-2 rounded-xl shadow-lg border flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50/50 transition-colors"
-                                title="패널 펼치기"
+                                title="패널 숨기기"
                             >
                                 <ChevronUp size={18} />
                                 {t('cabinet_edit_panel_show')}
@@ -946,7 +985,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         key={opt.value}
                                         onClick={() => setPlacementSize(opt.value)}
                                         className={`flex-1 py-1.5 rounded-lg text-sm font-medium border transition-colors ${placementSize === opt.value
-                                            ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                            ? 'bg-blue-100 border-blue-500 text-blue-700'
                                             : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                                             }`}
                                     >

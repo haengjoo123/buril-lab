@@ -25,8 +25,6 @@ const HIGH_RISK_GROUPS: StorageGroup[] = [
     'TOXIC_SULFIDE',
     'ORGANIC_PEROXIDE',
     'OXIDIZER',
-    'FLAMMABLE',
-    'INORGANIC_ACID',
     'COMPRESSED_GAS',
 ];
 

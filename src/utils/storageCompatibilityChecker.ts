@@ -92,6 +92,7 @@ const INORGANIC_ACID_PATTERNS = [
     /hydrofluoric\s*acid/i, /불산/i, /\bHF\b/,
     /chromic\s*acid/i, /크롬산/i,
     /boric\s*acid/i, /붕산/i,
+    /inorganic\s*acid/i, /무기산/i,
 ];
 
 /** Organic acids */
@@ -107,6 +108,7 @@ const ORGANIC_ACID_PATTERNS = [
     /tartaric\s*acid/i, /타르타르산/i,
     /propionic\s*acid/i, /프로피온산/i,
     /butyric\s*acid/i, /부티르산/i,
+    /organic\s*acid/i, /유기산/i,
 ];
 
 /** Bases / Alkalies */
@@ -121,6 +123,7 @@ const BASE_PATTERNS = [
     /barium\s*hydroxide/i, /수산화\s*바륨/i,
     /triethylamine/i, /트리에틸아민/i, /\bTEA\b/,
     /pyridine/i, /피리딘/i,
+    /base/i, /alkali/i, /염기/i, /알칼리/i,
 ];
 
 /** Common organic solvents (flammable liquids) */

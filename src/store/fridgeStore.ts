@@ -52,6 +52,8 @@ const INITIAL_SHELVES: ShelfData[] = [
 const DEFAULT_CABINET_WIDTH = 5;
 const DEFAULT_CABINET_HEIGHT = 9;
 const DEFAULT_CABINET_DEPTH = 2;
+const GHS_QUEUED_ITEM_IDS_BY_CABINET = new Map<string, Set<string>>();
+const GHS_IN_FLIGHT_ITEM_IDS = new Set<string>();
 
 export const useFridgeStore = create<FridgeStore>((set, get) => ({
     shelves: INITIAL_SHELVES,
@@ -75,9 +77,17 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     autoPlaceResult: null as AutoPlaceResult | null,
 
     loadCabinet: async (cabinetId: string) => {
-        set({ isLoadingCabinet: true, cabinetId, cabinetName: '', shelves: [] });
+        const previousState = get();
+        const isSameCabinet = previousState.cabinetId === cabinetId;
+        set({
+            isLoadingCabinet: isSameCabinet ? previousState.isLoadingCabinet : true,
+            cabinetId,
+            cabinetName: isSameCabinet ? previousState.cabinetName : '',
+            shelves: isSameCabinet ? previousState.shelves : [],
+        });
         try {
             const { shelves, cabinetName, width, height, depth } = await cabinetService.getCabinetDetails(cabinetId);
+            if (get().cabinetId !== cabinetId) return;
             set({
                 shelves: shelves.length > 0 ? shelves : INITIAL_SHELVES,
                 cabinetName,
@@ -88,11 +98,14 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
             // Background: enrich existing items that have CAS but no H-codes
             const loadedShelves = shelves.length > 0 ? shelves : INITIAL_SHELVES;
+            const queuedIds = GHS_QUEUED_ITEM_IDS_BY_CABINET.get(cabinetId) ?? new Set<string>();
+            GHS_QUEUED_ITEM_IDS_BY_CABINET.set(cabinetId, queuedIds);
             const itemsNeedingEnrichment = loadedShelves
                 .flatMap(s => s.items)
-                .filter(item => item.casNo && (!item.hCodes || item.hCodes.length === 0));
+                .filter(item => item.casNo && (!item.hCodes || item.hCodes.length === 0) && !queuedIds.has(item.id));
 
             if (itemsNeedingEnrichment.length > 0) {
+                itemsNeedingEnrichment.forEach((item) => queuedIds.add(item.id));
                 // Enrich sequentially with small delay to respect PubChem rate limits (5 req/sec)
                 (async () => {
                     for (const item of itemsNeedingEnrichment) {
@@ -104,7 +117,9 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         } catch (err) {
             console.error('Failed to load cabinet', err);
         } finally {
-            set({ isLoadingCabinet: false });
+            if (get().cabinetId === cabinetId) {
+                set({ isLoadingCabinet: false });
+            }
         }
     },
 
@@ -423,6 +438,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     },
 
     enrichReagentGHS: async (reagentId: string) => {
+        if (GHS_IN_FLIGHT_ITEM_IDS.has(reagentId)) return;
         // Find the reagent
         const state = get();
         let targetItem: ReagentPlacement | undefined;
@@ -431,6 +447,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             if (found) { targetItem = found; break; }
         }
         if (!targetItem?.casNo) return;
+        GHS_IN_FLIGHT_ITEM_IDS.add(reagentId);
 
         try {
             const result = await lookupGHSByCAS(targetItem.casNo);
@@ -458,6 +475,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             );
         } catch (err) {
             console.warn('[GHS Enrich] Failed for', targetItem.casNo, err);
+        } finally {
+            GHS_IN_FLIGHT_ITEM_IDS.delete(reagentId);
         }
     },
 

@@ -1,5 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Upload, Download, X, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { 
+    Upload, 
+    Download, 
+    X, 
+    AlertCircle, 
+    CheckCircle2, 
+    Loader2, 
+    Check 
+} from 'lucide-react';
 import { inventoryService, type CreateInventoryInput, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { type Cabinet, cabinetService } from '../../services/cabinetService';
 import { useFridgeStore } from '../../store/fridgeStore';
@@ -30,7 +38,7 @@ interface ParsedCsvRow {
     matchedCabinetId?: string;
 }
 
-type CsvStep = 'upload' | 'mapping' | 'preview';
+type CsvStep = 'upload' | 'mapping' | 'preview' | 'success';
 
 interface RawCsvData {
     headers: string[];
@@ -145,6 +153,8 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     const [isDragOver, setIsDragOver] = useState(false);
     const [globalError, setGlobalError] = useState<string | null>(null);
     const [lastFileName, setLastFileName] = useState('');
+    const [importProgress, setImportProgress] = useState(0);
+    const [totalRowsToImport, setTotalRowsToImport] = useState(0);
 
     const summary = useMemo(() => {
         const validCount = rows.filter(r => r.status === 'valid').length;
@@ -371,20 +381,53 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             const worksheet = workbook.Sheets[firstSheetName];
             
             // Convert to JSON (array of arrays)
-            const jsonData = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, defval: '' });
+            const jsonData = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: '' });
             
-            if (jsonData.length < 2) {
-                setGlobalError(t('inventory_csv_error_need_header_and_data'));
+            if (jsonData.length < 1) {
+                setGlobalError(t('inventory_csv_error_no_usable_rows'));
                 return;
             }
 
-            const headers = jsonData[0].map(h => String(h || '').trim());
+            // Find header row by matching aliases
+            let headerRowIndex = 0;
+            let maxMatches = -1;
+            const rowsToSearch = Math.min(jsonData.length, 30); // Inspect first 30 rows
+            
+            for (let i = 0; i < rowsToSearch; i++) {
+                const row = jsonData[i];
+                if (!Array.isArray(row)) continue;
+                
+                let matchCount = 0;
+                row.forEach(cell => {
+                    const cellVal = normalize(String(cell || ''));
+                    if (!cellVal) return;
+                    
+                    // Check if this cell matches any recognized header alias
+                    for (const key in HEADER_ALIASES) {
+                        if (HEADER_ALIASES[key].some(alias => normalize(alias) === cellVal)) {
+                            matchCount++;
+                            break;
+                        }
+                    }
+                });
+
+                // The row with the most recognizable header keywords is the winner
+                // Minimum 2 matches to avoid accidental matches in instruction text
+                if (matchCount > maxMatches && matchCount >= 2) {
+                    maxMatches = matchCount;
+                    headerRowIndex = i;
+                }
+            }
+
+            const headerRow = Array.isArray(jsonData[headerRowIndex]) ? jsonData[headerRowIndex] : [];
+            const headers = headerRow.map(h => String(h || '').trim());
             const rawRows: Array<{ rowNumber: number; values: string[] }> = [];
             
-            for (let i = 1; i < jsonData.length; i += 1) {
+            for (let i = headerRowIndex + 1; i < jsonData.length; i += 1) {
                 const row = jsonData[i];
+                if (!Array.isArray(row)) continue;
                 // Skip empty rows
-                if (row.every(cell => !cell)) continue;
+                if (row.every((cell: unknown) => !cell)) continue;
                 
                 const values = row.map((v: unknown) => {
                     if (v instanceof Date) {
@@ -475,12 +518,16 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         if (validRows.length === 0) return;
 
         setIsImporting(true);
+        setImportProgress(0);
+        setTotalRowsToImport(validRows.length);
         setGlobalError(null);
 
         let importedCount = 0;
         const nextRows = [...rows];
 
-        for (const row of validRows) {
+        for (let i = 0; i < validRows.length; i++) {
+            const row = validRows[i];
+            setImportProgress(i);
             try {
                 const input = row.input as CreateInventoryInput;
                 const created = await inventoryService.createItem(input);
@@ -540,12 +587,24 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                     };
                 }
             }
+            setImportProgress(i + 1);
         }
 
         setRows(nextRows);
         setIsImporting(false);
 
-        if (importedCount > 0) {
+        const allSucceeded = validRows.every((vRow) => {
+            const finished = nextRows.find(nr => nr.rowNumber === vRow.rowNumber);
+            return finished?.status === 'imported';
+        });
+
+        if (allSucceeded && importedCount > 0) {
+            setStep('success');
+            setTimeout(() => {
+                onClose();
+                onImported();
+            }, 1500);
+        } else if (importedCount > 0) {
             onImported();
         }
     };
@@ -566,6 +625,54 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         <X className="w-5 h-5" />
                     </button>
                 </div>
+
+                {isImporting && (
+                    <div className="absolute inset-0 z-[230] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+                        <div className="w-16 h-16 mb-6 relative">
+                            <div className="absolute inset-0 border-4 border-slate-100 dark:border-slate-800 rounded-full" />
+                            <div 
+                                className="absolute inset-4 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-xs font-bold text-blue-600">{Math.round((importProgress / totalRowsToImport) * 100)}%</span>
+                            </div>
+                        </div>
+                        
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                            {t('inventory_csv_importing_title')}
+                        </h3>
+                        <p className="max-w-md text-slate-600 dark:text-slate-400 text-sm mb-6">
+                            {totalRowsToImport > 10
+                                ? t('inventory_csv_importing_desc_bulk')
+                                : t('inventory_csv_importing_desc_short')}
+                        </p>
+                        
+                        <div className="w-full max-w-xs bg-slate-100 dark:bg-slate-800 rounded-full h-2 mb-3 overflow-hidden">
+                            <div 
+                                className="bg-blue-600 h-full transition-all duration-300 ease-out fill-mode-forwards"
+                                style={{ width: `${(importProgress / totalRowsToImport) * 100}%` }}
+                            />
+                        </div>
+                        
+                        <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                            {t('inventory_csv_importing_progress', { current: importProgress, total: totalRowsToImport })}
+                        </div>
+                    </div>
+                )}
+
+                {step === 'success' && (
+                    <div className="absolute inset-0 z-[240] bg-white dark:bg-slate-900 flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-300">
+                        <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-6">
+                            <Check className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                            {t('inventory_csv_registration_complete')}
+                        </h3>
+                        <p className="text-slate-600 dark:text-slate-400">
+                            {t('inventory_csv_summary_imported', { count: totalRowsToImport })}
+                        </p>
+                    </div>
+                )}
 
                 <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2">
                     <button

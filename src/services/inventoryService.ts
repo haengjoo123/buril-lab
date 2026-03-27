@@ -733,4 +733,73 @@ export const inventoryService = {
             console.error('[Inventory] fallback linked waste_log error (non-fatal):', err);
         }
     },
+    /**
+     * Called from cabinet view when "Clear All" is performed.
+     * Deletes all linked inventory rows for the entire cabinet at once.
+     */
+    async clearCabinetInventory(cabinetId: string, items: { name: string; brand?: string; casNo?: string; quantity?: number; capacity?: string }[]): Promise<void> {
+        if (!cabinetId) return;
+
+        // 1. Delete all matching inventory rows for this cabinet
+        const { error: deleteError } = await supabase
+            .from('inventory')
+            .delete()
+            .eq('cabinet_id', cabinetId)
+            .eq('storage_type', 'cabinet');
+
+        if (deleteError) {
+            console.error('[Inventory] clearCabinetInventory delete error:', deleteError);
+            throw deleteError;
+        }
+
+        // 2. Add a bulk entry to waste_logs
+        if (items.length > 0) {
+            try {
+                const { currentLabId } = useLabStore.getState();
+                const { data: userData } = await supabase.auth.getUser();
+                const userId = userData.user?.id || null;
+                const { data: cabinetInfo } = await supabase
+                    .from('cabinets')
+                    .select('name')
+                    .eq('id', cabinetId)
+                    .maybeSingle();
+
+                const chemicals = items.map(item => ({
+                    id: `cabinet:${cabinetId}:${item.name}`,
+                    name: item.name,
+                    brand: item.brand,
+                    cas_number: item.casNo,
+                    quantity: item.quantity || 1,
+                    capacity: item.capacity,
+                    storage_type: 'cabinet',
+                    deleted_location: cabinetInfo?.name || '시약장',
+                }));
+
+                const handlerName = await getCurrentUserDisplayName(currentLabId);
+                const row = {
+                    user_id: userId,
+                    lab_id: currentLabId,
+                    chemicals: chemicals,
+                    disposal_category: '시약장 전체 비우기',
+                    handler_name: handlerName || null,
+                    memo: `${cabinetInfo?.name || '시약장'} 전체 비우기 기능으로 폐기됨 (${items.length}건)`,
+                };
+
+                const { error: logError } = await supabase.from('waste_logs').insert(row);
+                if (logError) {
+                    // Fallback to simpler row if handler_name is not supported
+                    const fallbackRow = {
+                        user_id: row.user_id,
+                        lab_id: row.lab_id,
+                        chemicals: row.chemicals,
+                        disposal_category: row.disposal_category,
+                        memo: row.memo,
+                    };
+                    await supabase.from('waste_logs').insert(fallbackRow);
+                }
+            } catch (err) {
+                console.error('[Inventory] clearCabinetInventory waste_log error (non-fatal):', err);
+            }
+        }
+    },
 };

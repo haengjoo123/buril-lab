@@ -270,26 +270,22 @@ export const GlobalAuditLogsView: React.FC = () => {
                     </div>
                     <div className="text-xs text-slate-500 mb-2">{t('audit_subtitle')}</div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                        <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
-                            <div className="text-[11px] text-slate-500">{t('audit_summary_total')}</div>
-                            <div className="text-lg font-bold text-slate-800 dark:text-slate-100">{summary.total}</div>
+                    <div className="grid grid-cols-4 gap-1 md:gap-2">
+                        <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 md:p-3">
+                            <div className="text-[9px] md:text-[11px] text-slate-500 truncate whitespace-nowrap">{t('audit_summary_total')}</div>
+                            <div className="text-base md:text-lg font-bold text-slate-800 dark:text-slate-100">{summary.total}</div>
                         </div>
-                        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-3">
-                            <div className="text-[11px] text-emerald-700 dark:text-emerald-300">{t('audit_summary_create')}</div>
-                            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{summary.create}</div>
+                        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-2 md:p-3">
+                            <div className="text-[9px] md:text-[11px] text-emerald-700 dark:text-emerald-300 truncate whitespace-nowrap">{t('audit_summary_create')}</div>
+                            <div className="text-base md:text-lg font-bold text-emerald-700 dark:text-emerald-300">{summary.create}</div>
                         </div>
-                        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3">
-                            <div className="text-[11px] text-blue-700 dark:text-blue-300">{t('audit_summary_update')}</div>
-                            <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{summary.update}</div>
+                        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-2 md:p-3">
+                            <div className="text-[11px] md:text-[11px] text-blue-700 dark:text-blue-300 truncate whitespace-nowrap">{t('audit_summary_update')}</div>
+                            <div className="text-base md:text-lg font-bold text-blue-700 dark:text-blue-300">{summary.update}</div>
                         </div>
-                        <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-3">
-                            <div className="text-[11px] text-red-700 dark:text-red-300">{t('audit_summary_delete')}</div>
-                            <div className="text-lg font-bold text-red-700 dark:text-red-300">{summary.delete}</div>
-                        </div>
-                        <div className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
-                            <div className="text-[11px] text-slate-500">{t('audit_summary_actors')}</div>
-                            <div className="text-lg font-bold text-slate-800 dark:text-slate-100">{summary.actors}</div>
+                        <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 p-2 md:p-3">
+                            <div className="text-[9px] md:text-[11px] text-red-700 dark:text-red-300 truncate whitespace-nowrap">{t('audit_summary_delete')}</div>
+                            <div className="text-base md:text-lg font-bold text-red-700 dark:text-red-300">{summary.delete}</div>
                         </div>
                     </div>
 
