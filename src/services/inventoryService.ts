@@ -35,6 +35,7 @@ export interface InventoryItem {
     product_id: string | null;
     expiry_date: string | null;
     memo: string | null;
+    remaining_percent: number | null;
     created_at: string;
     updated_at: string;
     // Joined fields (from queries)
@@ -59,6 +60,7 @@ export interface CreateInventoryInput {
     product_id?: string;
     expiry_date?: string;
     memo?: string;
+    remaining_percent?: number;
 }
 
 interface InventoryRow {
@@ -77,6 +79,7 @@ interface InventoryRow {
     product_id: string | null;
     expiry_date: string | null;
     memo: string | null;
+    remaining_percent: number | null;
     created_at: string;
     updated_at: string;
 }
@@ -95,6 +98,7 @@ interface CabinetItemRowWithCabinet {
     capacity: string | null;
     expiry_date: string | null;
     notes: string | null;
+    remaining_percent: number | null;
     created_at: string;
     cabinet_id: string;
     shelf_id: string | null;
@@ -349,7 +353,7 @@ export const inventoryService = {
             .from('cabinet_items')
             .select(`
                 id, name, brand, product_number, cas_no, capacity, expiry_date, notes, created_at,
-                cabinet_id, shelf_id,
+                cabinet_id, shelf_id, remaining_percent,
                 cabinets!inner ( name, lab_id )
             `);
 
@@ -415,6 +419,7 @@ export const inventoryService = {
                 product_id: null,
                 expiry_date: ci.expiry_date || null,
                 memo: ci.notes || null,
+                remaining_percent: ci.remaining_percent ?? null,
                 created_at: ci.created_at,
                 updated_at: ci.created_at,
                 cabinet_name: getCabinetRelation(ci.cabinets)?.name || undefined,
@@ -512,6 +517,7 @@ export const inventoryService = {
             p_product_id: input.product_id || null,
             p_expiry_date: input.expiry_date || null,
             p_memo: input.memo || null,
+            p_remaining_percent: input.remaining_percent ?? null,
             p_lab_id: currentLabId || null,
             p_actor_user_id: userData.user?.id || null,
             p_actor_name: actorName || null,
@@ -538,6 +544,7 @@ export const inventoryService = {
                     product_id: input.product_id || null,
                     expiry_date: input.expiry_date || null,
                     memo: input.memo || null,
+                    remaining_percent: input.remaining_percent ?? null,
                 };
                 const { data: directData, error: directError } = await supabase.from('inventory').insert(row).select().single();
                 if (directError) {
@@ -568,6 +575,7 @@ export const inventoryService = {
             if (updates.capacity !== undefined) payloadRecord.capacity = updates.capacity || null;
             if (updates.expiry_date !== undefined) payloadRecord.expiry_date = updates.expiry_date || null;
             if (updates.memo !== undefined) payloadRecord.notes = updates.memo || null;
+            if (updates.remaining_percent !== undefined) payloadRecord.remaining_percent = updates.remaining_percent ?? null;
         } else {
             if (updates.name !== undefined) payloadRecord.name = updates.name.trim();
             if (updates.brand !== undefined) payloadRecord.brand = updates.brand || null;
@@ -578,6 +586,7 @@ export const inventoryService = {
             if (updates.product_id !== undefined) payloadRecord.product_id = updates.product_id || null;
             if (updates.expiry_date !== undefined) payloadRecord.expiry_date = updates.expiry_date || null;
             if (updates.memo !== undefined) payloadRecord.memo = updates.memo || null;
+            if (updates.remaining_percent !== undefined) payloadRecord.remaining_percent = updates.remaining_percent ?? null;
 
             if (updates.storage_type !== undefined) {
                 payloadRecord.storage_type = updates.storage_type;

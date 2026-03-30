@@ -40,6 +40,7 @@ export interface ReagentPlacement {
     // Product info (from inventory registration)
     productNumber?: string; // e.g. "A1234-500ML"
     brand?: string; // e.g. "Sigma-Aldrich"
+    remaining_percent?: number;
 }
 
 export interface DragItem {

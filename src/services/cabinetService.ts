@@ -180,6 +180,7 @@ export const cabinetService = {
                     brand: item.brand || undefined,
                     notes: item.notes || undefined,
                     casNo: item.cas_no || undefined,
+                    remaining_percent: item.remaining_percent ?? undefined,
                     isAcidic: false,
                     isBasic: false,
                     hCodes: [],
@@ -233,7 +234,8 @@ export const cabinetService = {
             product_number: i.productNumber || null,
             brand: i.brand || null,
             notes: i.notes || null,
-            cas_no: i.casNo || null
+            cas_no: i.casNo || null,
+            remaining_percent: i.remaining_percent ?? null
         })));
 
         if (newItems.length > 0) {

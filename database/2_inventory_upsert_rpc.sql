@@ -13,6 +13,7 @@ create or replace function public.create_inventory_item_atomic(
     p_product_id uuid default null,
     p_expiry_date date default null,
     p_memo text default null,
+    p_remaining_percent integer default 100,
     p_lab_id uuid default null,
     p_actor_user_id uuid default null,
     p_actor_name text default null
@@ -27,10 +28,10 @@ declare
 begin
     insert into inventory (
         lab_id, user_id, name, brand, product_number, cas_number, quantity, capacity,
-        storage_type, cabinet_id, storage_location_id, product_id, expiry_date, memo
+        storage_type, cabinet_id, storage_location_id, product_id, expiry_date, memo, remaining_percent
     ) values (
         p_lab_id, v_user_id, p_name, p_brand, p_product_number, p_cas_number, p_quantity, p_capacity,
-        p_storage_type, p_cabinet_id, p_storage_location_id, p_product_id, p_expiry_date, p_memo
+        p_storage_type, p_cabinet_id, p_storage_location_id, p_product_id, p_expiry_date, p_memo, p_remaining_percent
     ) returning id into v_new_id;
 
     select to_jsonb(i.*) into v_after_data from inventory i where id = v_new_id;
@@ -84,6 +85,7 @@ begin
             product_id = case when p_updates ? 'product_id' then (p_updates->>'product_id')::uuid else product_id end,
             expiry_date = case when p_updates ? 'expiry_date' then (p_updates->>'expiry_date')::date else expiry_date end,
             memo = case when p_updates ? 'memo' then (p_updates->>'memo') else memo end,
+            remaining_percent = case when p_updates ? 'remaining_percent' then (p_updates->>'remaining_percent')::integer else remaining_percent end,
             updated_at = now()
         where id = p_item_id;
 
@@ -123,7 +125,8 @@ begin
             cas_no = case when p_updates ? 'cas_no' then (p_updates->>'cas_no') else cas_no end,
             capacity = case when p_updates ? 'capacity' then (p_updates->>'capacity') else capacity end,
             expiry_date = case when p_updates ? 'expiry_date' then (p_updates->>'expiry_date')::date else expiry_date end,
-            notes = case when p_updates ? 'notes' then (p_updates->>'notes') else notes end
+            notes = case when p_updates ? 'notes' then (p_updates->>'notes') else notes end,
+            remaining_percent = case when p_updates ? 'remaining_percent' then (p_updates->>'remaining_percent')::integer else remaining_percent end
         where id = p_item_id;
         
         select to_jsonb(ci.*) into v_after_data from cabinet_items ci where ci.id = p_item_id;

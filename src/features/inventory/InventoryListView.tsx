@@ -799,6 +799,42 @@ export const InventoryListView: React.FC = () => {
         );
     };
 
+    const renderRemainingBadge = (item: InventoryItem) => {
+        const val = item.remaining_percent ?? 100;
+
+        let colorClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400';
+        let barColor = 'bg-emerald-500';
+        let stage = 4;
+
+        if (val <= 10) {
+            colorClass = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-400';
+            barColor = 'bg-red-500';
+            stage = 1;
+        } else if (val <= 30) {
+            colorClass = 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400';
+            barColor = 'bg-orange-500';
+            stage = 2;
+        } else if (val <= 70) {
+            colorClass = 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+            barColor = 'bg-blue-500';
+            stage = 3;
+        }
+
+        return (
+            <div className="flex flex-col gap-1 min-w-[64px] ml-auto sm:ml-0 overflow-hidden">
+                <span className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold ${colorClass} leading-none truncate whitespace-nowrap`}>
+                    {t(`inventory_remaining_stage_${stage}_label`)}
+                </span>
+                <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                        className={`h-full ${barColor} transition-all duration-500`}
+                        style={{ width: `${val}%` }}
+                    />
+                </div>
+            </div>
+        );
+    };
+
     const removeFromCabinetByInventoryItem = async (item: InventoryItem): Promise<boolean> => {
         if (!item.cabinet_id) return false;
 
@@ -1223,7 +1259,10 @@ export const InventoryListView: React.FC = () => {
                                             <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
                                                 {item.name}
                                             </h3>
-                                            {renderExpiryBadge(item)}
+                                            <div className="flex items-center gap-1.5">
+                                                {renderExpiryBadge(item)}
+                                                {renderRemainingBadge(item)}
+                                            </div>
                                         </div>
                                         {(() => {
                                             const hazard = classifyInventoryHazard(item);

@@ -43,6 +43,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         storage_location_id: '',
         expiry_date: '',
         memo: '',
+        remaining_percent: 100,
     });
     const isEditingCabinetItem = initialData?._source === 'cabinet_item';
 
@@ -70,6 +71,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     storage_location_id: initialData.storage_location_id || '',
                     expiry_date: initialData.expiry_date || '',
                     memo: initialData.memo || '',
+                    remaining_percent: initialData.remaining_percent ?? 100,
                 });
             } else {
                 setFormData({
@@ -84,6 +86,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     storage_location_id: locations.length > 0 ? locations[0].id : '',
                     expiry_date: '',
                     memo: '',
+                    remaining_percent: 100,
                 });
             }
             setError(null);
@@ -195,6 +198,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                 productNumber: input.product_number || undefined,
                 brand: input.brand || undefined,
                 expiryDate: input.expiry_date || undefined,
+                remaining_percent: input.remaining_percent,
             });
             if (!placed) {
                 throw new Error('재고 이동 실패: 대상 시약장에 빈 공간이 없습니다.');
@@ -401,6 +405,26 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
 
     if (!isOpen && !successToastMessage) return null;
 
+    const translateAuditKey = (key: string): string => {
+        const keyMap: Record<string, string> = {
+            'remaining_percent': t('inventory_remaining_amount', '잔량'),
+            'name': t('inventory_name', '이름'),
+            'brand': t('inventory_brand', '브랜드'),
+            'product_number': t('inventory_product_number', '카탈로그 번호'),
+            'cas_no': 'CAS',
+            'cas_number': 'CAS',
+            'capacity': t('inventory_capacity', '규격'),
+            'expiry_date': t('inventory_expiry', '유통기한'),
+            'memo': t('inventory_memo', '메모'),
+            'notes': t('inventory_memo', '메모'),
+            'quantity': t('inventory_quantity', '수량'),
+            'storage_location_id': t('inventory_location', '보관 위치'),
+            'cabinet_id': t('inventory_cabinet', '보관함'),
+            'storage_type': t('inventory_storage_type', '보관 방식')
+        };
+        return keyMap[key] || key;
+    };
+
     return (
         <>
             {successToastMessage && (
@@ -511,6 +535,56 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                     </div>
                                 </div>
 
+                                <div className="flex flex-col gap-2 mt-1">
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                        {t('inventory_remaining_amount')}
+                                    </label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {[
+                                            { stage: 1, value: 5, color: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800', active: 'bg-red-600 text-white border-red-600 dark:bg-red-600 dark:text-white' },
+                                            { stage: 2, value: 20, color: 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800', active: 'bg-orange-500 text-white border-orange-500 dark:bg-orange-500 dark:text-white' },
+                                            { stage: 3, value: 50, color: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800', active: 'bg-blue-600 text-white border-blue-600 dark:bg-blue-600 dark:text-white' },
+                                            { stage: 4, value: 100, color: 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800', active: 'bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-600 dark:text-white' }
+                                        ].map((item) => {
+                                            const val = formData.remaining_percent ?? 100;
+                                            const isSelected = (
+                                                item.stage === 1 ? val <= 10 :
+                                                item.stage === 2 ? (val > 10 && val <= 30) :
+                                                item.stage === 3 ? (val > 30 && val <= 70) :
+                                                val > 70
+                                            );
+
+                                            return (
+                                                <button
+                                                    key={item.stage}
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({ ...prev, remaining_percent: item.value }))}
+                                                    className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-xl border-2 transition-all duration-200 ${
+                                                        isSelected ? item.active : `${item.color} opacity-60`
+                                                    }`}
+                                                >
+                                                    <span className="text-[10px] font-bold uppercase mb-0.5">
+                                                        {t(`inventory_remaining_stage_${item.stage}`)}
+                                                    </span>
+                                                    <span className="text-[11px] font-bold leading-tight text-center">
+                                                        {t(`inventory_remaining_stage_${item.stage}_label`)}
+                                                    </span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 ml-1 h-4">
+                                        {formData.remaining_percent !== undefined && (
+                                            <>
+                                                {formData.remaining_percent <= 10 && t('inventory_remaining_stage_1_desc')}
+                                                {formData.remaining_percent > 10 && formData.remaining_percent <= 30 && t('inventory_remaining_stage_2_desc')}
+                                                {formData.remaining_percent > 30 && formData.remaining_percent <= 70 && t('inventory_remaining_stage_3_desc')}
+                                                {formData.remaining_percent > 70 && t('inventory_remaining_stage_4_desc')}
+                                            </>
+                                        )}
+                                    </p>
+                                </div>
+
                                 {/* 보관 위치 지정 */}
                                 <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3 mt-2">
                                     <label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">{t('inventory_storage_type')}</label>
@@ -619,7 +693,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                                             <div className="mt-1 flex flex-col gap-0.5">
                                                                 {Object.entries(log.diff_data).map(([k, v]: [string, { from: unknown; to: unknown }]) => (
                                                                     <div key={k} className="flex gap-1 text-[10px] items-center">
-                                                                        <span className="text-slate-400 w-16 shrink-0 truncate">{k}:</span>
+                                                                        <span className="text-slate-400 w-24 shrink-0 truncate">{translateAuditKey(k)}:</span>
                                                                         <span className="line-through text-red-500/70 truncate break-all">{JSON.stringify(v.from)}</span>
                                                                         <span className="text-slate-400 shrink-0">→</span>
                                                                         <span className="text-emerald-600 dark:text-emerald-400 truncate break-all">{JSON.stringify(v.to)}</span>
@@ -682,6 +756,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             productNumber: input.product_number || undefined,
             brand: input.brand || undefined,
             expiryDate: input.expiry_date || undefined,
+            remaining_percent: input.remaining_percent,
         } as Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>);
 
         if (!placeResult) return false;

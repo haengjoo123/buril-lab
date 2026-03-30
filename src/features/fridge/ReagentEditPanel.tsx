@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2 } from 'lucide-react';
+import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
+import { auditService, type AuditLog } from '../../services/auditService';
 import type { ReagentTemplateType } from '../../types/fridge';
 import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
@@ -56,6 +57,10 @@ export const ReagentEditPanel: React.FC = () => {
     const [isDisposing, setIsDisposing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
+    const [remainingPercent, setRemainingPercent] = useState<number>(100);
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+    const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
     // Disposal guide state
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
@@ -83,6 +88,7 @@ export const ReagentEditPanel: React.FC = () => {
             setBrand(selectedItem.brand || '');
             setProductNumber(selectedItem.productNumber || '');
             setCasNo(selectedItem.casNo || '');
+            setRemainingPercent(selectedItem.remaining_percent ?? 100);
 
             setShowModalContent(false);
             const timer = setTimeout(() => {
@@ -98,6 +104,14 @@ export const ReagentEditPanel: React.FC = () => {
     useEffect(() => {
         setShowDisposalView(false);
         setSelectedReason(null);
+
+        if (selectedReagentId) {
+            setIsLoadingLogs(true);
+            auditService.getLogs({ entity_id: selectedReagentId, limit: 10 })
+                .then(setAuditLogs)
+                .catch(console.error)
+                .finally(() => setIsLoadingLogs(false));
+        }
     }, [selectedReagentId]);
 
     if (!selectedReagentId || !selectedItem || !showModalContent) return null;
@@ -118,6 +132,7 @@ export const ReagentEditPanel: React.FC = () => {
             brand: brand || undefined,
             product_number: productNumber || undefined,
             cas_number: casNo || undefined,
+            remaining_percent: remainingPercent,
         };
 
         updateReagent(selectedReagentId, {
@@ -129,6 +144,7 @@ export const ReagentEditPanel: React.FC = () => {
             brand: brand || undefined,
             productNumber: productNumber || undefined,
             casNo: casNo || undefined,
+            remaining_percent: remainingPercent,
             ...(newWidth !== undefined && { width: newWidth }),
         });
 
@@ -220,6 +236,26 @@ export const ReagentEditPanel: React.FC = () => {
         } finally {
             setIsAnalyzing(false);
         }
+    };
+
+    const translateAuditKey = (key: string): string => {
+        const keyMap: Record<string, string> = {
+            'remaining_percent': t('inventory_remaining_amount', '잔량'),
+            'name': t('inventory_name', '이름'),
+            'brand': t('inventory_brand', '브랜드'),
+            'product_number': t('inventory_product_number', '카탈로그 번호'),
+            'cas_no': 'CAS',
+            'cas_number': 'CAS',
+            'capacity': t('inventory_capacity', '규격'),
+            'expiry_date': t('inventory_expiry', '유통기한'),
+            'memo': t('inventory_memo', '메모'),
+            'notes': t('inventory_memo', '메모'),
+            'quantity': t('inventory_quantity', '수량'),
+            'storage_location_id': t('inventory_location', '보관 위치'),
+            'cabinet_id': t('inventory_cabinet', '보관함'),
+            'storage_type': t('inventory_storage_type', '보관 방식')
+        };
+        return keyMap[key] || key;
     };
 
     return (
@@ -448,6 +484,54 @@ export const ReagentEditPanel: React.FC = () => {
                             )}
                         </div>
 
+                        {/* Remaining Amount Input */}
+                        <div className="flex flex-col gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <Beaker size={12} className="text-blue-500" />
+                                {t('inventory_remaining_amount', '잔량')}
+                            </label>
+                            <div className="flex gap-1.5">
+                                {[
+                                    { level: 1, stage: 1, percent: 5, color: 'bg-red-500' },
+                                    { level: 1, stage: 2, percent: 20, color: 'bg-orange-500' },
+                                    { level: 2, stage: 3, percent: 50, color: 'bg-blue-500' },
+                                    { level: 2, stage: 4, percent: 100, color: 'bg-emerald-500' }
+                                ].map((item) => {
+                                    const isSelected = (item.stage === 1 && remainingPercent <= 10) ||
+                                        (item.stage === 2 && remainingPercent > 10 && remainingPercent <= 30) ||
+                                        (item.stage === 3 && remainingPercent > 30 && remainingPercent <= 70) ||
+                                        (item.stage === 4 && remainingPercent > 70);
+
+                                    return (
+                                        <button
+                                            key={item.stage}
+                                            type="button"
+                                            onClick={() => setRemainingPercent(item.percent)}
+                                            className={`flex-1 flex flex-col items-center gap-1 py-1.5 px-0.5 rounded-md border transition-all ${isSelected
+                                                ? 'bg-blue-600 border-blue-600 shadow-md transform scale-105 z-10'
+                                                : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500 hover:border-blue-400'
+                                                }`}
+                                        >
+                                            <div className={`w-full h-1 rounded-full ${isSelected ? 'bg-white/40' : item.color} mb-0.5`} />
+                                            <span className={`text-[9px] font-bold whitespace-nowrap ${isSelected ? 'text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                                                {t(`inventory_remaining_stage_${item.stage}_label`)}
+                                            </span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 h-3">
+                                {(remainingPercent !== undefined) && (
+                                    <>
+                                        {remainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
+                                        {remainingPercent > 10 && remainingPercent <= 30 && t('inventory_remaining_stage_2_desc')}
+                                        {remainingPercent > 30 && remainingPercent <= 70 && t('inventory_remaining_stage_3_desc')}
+                                        {remainingPercent > 70 && t('inventory_remaining_stage_4_desc')}
+                                    </>
+                                )}
+                            </p>
+                        </div>
+
                         {/* Notes Input */}
                         <div className="flex flex-col gap-1.5">
                             <label className="text-xs font-medium text-gray-600">{t('cabinet_notes')}</label>
@@ -520,6 +604,53 @@ export const ReagentEditPanel: React.FC = () => {
                                 </div>
                             );
                         })()}
+
+                        {/* Change History Section */}
+                        <div className="mt-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                            <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2.5 flex items-center gap-2">
+                                <History className="w-3.5 h-3.5" /> {t('history_log', '변경 이력')}
+                            </h3>
+                            {isLoadingLogs ? (
+                                <div className="flex justify-center p-3">
+                                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                                </div>
+                            ) : auditLogs.length === 0 ? (
+                                <p className="text-[10px] text-slate-500 text-center py-1">{t('log_empty', '기록이 없습니다.')}</p>
+                            ) : (
+                                <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 scrollbar-thin">
+                                    {auditLogs.map(log => (
+                                        <div key={log.id} className="bg-slate-50 dark:bg-slate-800/80 p-2 rounded border border-slate-100 dark:border-slate-700 text-[10px] text-slate-600 dark:text-slate-300">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className={`font-semibold px-1 py-0.5 rounded text-[9px] ${log.action === 'create' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
+                                                    log.action === 'update' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
+                                                        'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
+                                                    }`}>
+                                                    {log.action === 'update' ? t('log_action_update', '수정') : log.action === 'create' ? t('log_action_create', '등록') : log.action}
+                                                </span>
+                                                <span className="text-[9px] text-slate-400">
+                                                    {new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US', {
+                                                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                                    })}
+                                                </span>
+                                            </div>
+                                            {log.actor_name && <div className="text-[9px] text-slate-400 mt-0.5">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
+                                            {log.diff_data && Object.keys(log.diff_data).length > 0 && (
+                                                <div className="mt-1 flex flex-col gap-0.5 border-t border-slate-200/50 dark:border-slate-700/50 pt-1">
+                                                    {Object.entries(log.diff_data).map(([k, v]: [string, { from: unknown; to: unknown }]) => (
+                                                        <div key={k} className="flex gap-1 items-center overflow-hidden">
+                                                            <span className="text-slate-400 w-16 shrink-0 truncate">{translateAuditKey(k)}:</span>
+                                                            <span className="line-through text-red-500/70 truncate max-w-[40px]">{JSON.stringify(v.from)}</span>
+                                                            <span className="text-slate-400 shrink-0">→</span>
+                                                            <span className="text-emerald-600 dark:text-emerald-400 truncate flex-1">{JSON.stringify(v.to)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Footer Actions */}
