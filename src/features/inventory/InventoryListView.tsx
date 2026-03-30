@@ -35,7 +35,7 @@ import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
-type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'created_at_desc' | 'created_at_asc';
+type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
 
@@ -71,6 +71,13 @@ function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: Inven
     }
 
     if (sortBy === 'name_asc') {
+        return a.name.localeCompare(b.name, 'ko');
+    }
+
+    if (sortBy === 'remaining_asc') {
+        const remainingA = a.remaining_percent ?? 100;
+        const remainingB = b.remaining_percent ?? 100;
+        if (remainingA !== remainingB) return remainingA - remainingB;
         return a.name.localeCompare(b.name, 'ko');
     }
 
@@ -262,6 +269,7 @@ export const InventoryListView: React.FC = () => {
         { value: 'expiry_asc', label: t('inventory_sort_expiry_asc') },
         { value: 'location_asc', label: t('inventory_sort_location_asc') },
         { value: 'name_asc', label: t('inventory_sort_name_asc') },
+        { value: 'remaining_asc', label: t('inventory_sort_remaining_asc') },
         { value: 'created_at_desc', label: t('inventory_sort_created_desc') },
         { value: 'created_at_asc', label: t('inventory_sort_created_asc') },
     ]), [t]);

@@ -432,6 +432,59 @@ export const ReagentEditPanel: React.FC = () => {
                             />
                         </div>
 
+                        {/* Remaining Amount Input */}
+                        <div className="flex flex-col gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <Beaker size={12} className="text-blue-500" />
+                                {t('inventory_remaining_amount', '잔량')}
+                            </label>
+                            <div className="flex gap-1.5">
+                                {[
+                                    { level: 1, stage: 1, percent: 5, color: 'bg-red-500' },
+                                    { level: 1, stage: 2, percent: 30, color: 'bg-orange-500' },
+                                    { level: 2, stage: 3, percent: 60, color: 'bg-blue-500' },
+                                    { level: 2, stage: 4, percent: 100, color: 'bg-emerald-500' }
+                                ].map((item) => {
+                                    const isSelected = (item.stage === 1 && remainingPercent <= 10) ||
+                                        (item.stage === 2 && remainingPercent > 10 && remainingPercent <= 30) ||
+                                        (item.stage === 3 && remainingPercent > 30 && remainingPercent <= 70) ||
+                                        (item.stage === 4 && remainingPercent > 70);
+
+                                    return (
+                                        <button
+                                            key={item.stage}
+                                            type="button"
+                                            onClick={() => setRemainingPercent(item.percent)}
+                                            className={`flex-1 flex flex-col items-center gap-1 py-1.5 px-0.5 rounded-md border transition-all ${isSelected
+                                                ? 'bg-blue-600 border-blue-600 shadow-md transform scale-105 z-10'
+                                                : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500 hover:border-blue-400'
+                                                }`}
+                                        >
+                                            <div className="w-full h-1 rounded-full bg-gray-200 dark:bg-gray-600 mb-0.5 overflow-hidden">
+                                                <div 
+                                                    className={`h-full rounded-full transition-all duration-200 ${isSelected ? 'bg-white/80' : item.color}`}
+                                                    style={{ width: `${item.percent}%` }}
+                                                />
+                                            </div>
+                                            <span className={`text-[9px] font-bold whitespace-nowrap ${isSelected ? 'text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                                                {t(`inventory_remaining_stage_${item.stage}_label`)}
+                                            </span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 h-3">
+                                {(remainingPercent !== undefined) && (
+                                    <>
+                                        {remainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
+                                        {remainingPercent > 10 && remainingPercent <= 30 && t('inventory_remaining_stage_2_desc')}
+                                        {remainingPercent > 30 && remainingPercent <= 70 && t('inventory_remaining_stage_3_desc')}
+                                        {remainingPercent > 70 && t('inventory_remaining_stage_4_desc')}
+                                    </>
+                                )}
+                            </p>
+                        </div>
+
                         {/* CAS Number Input */}
                         <div className="flex flex-col gap-1.5">
                             <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
@@ -482,54 +535,6 @@ export const ReagentEditPanel: React.FC = () => {
                                     {t(expiryStatus.labelKey, expiryStatus.labelParams)}
                                 </span>
                             )}
-                        </div>
-
-                        {/* Remaining Amount Input */}
-                        <div className="flex flex-col gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                <Beaker size={12} className="text-blue-500" />
-                                {t('inventory_remaining_amount', '잔량')}
-                            </label>
-                            <div className="flex gap-1.5">
-                                {[
-                                    { level: 1, stage: 1, percent: 5, color: 'bg-red-500' },
-                                    { level: 1, stage: 2, percent: 20, color: 'bg-orange-500' },
-                                    { level: 2, stage: 3, percent: 50, color: 'bg-blue-500' },
-                                    { level: 2, stage: 4, percent: 100, color: 'bg-emerald-500' }
-                                ].map((item) => {
-                                    const isSelected = (item.stage === 1 && remainingPercent <= 10) ||
-                                        (item.stage === 2 && remainingPercent > 10 && remainingPercent <= 30) ||
-                                        (item.stage === 3 && remainingPercent > 30 && remainingPercent <= 70) ||
-                                        (item.stage === 4 && remainingPercent > 70);
-
-                                    return (
-                                        <button
-                                            key={item.stage}
-                                            type="button"
-                                            onClick={() => setRemainingPercent(item.percent)}
-                                            className={`flex-1 flex flex-col items-center gap-1 py-1.5 px-0.5 rounded-md border transition-all ${isSelected
-                                                ? 'bg-blue-600 border-blue-600 shadow-md transform scale-105 z-10'
-                                                : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500 hover:border-blue-400'
-                                                }`}
-                                        >
-                                            <div className={`w-full h-1 rounded-full ${isSelected ? 'bg-white/40' : item.color} mb-0.5`} />
-                                            <span className={`text-[9px] font-bold whitespace-nowrap ${isSelected ? 'text-white' : 'text-slate-600 dark:text-slate-300'}`}>
-                                                {t(`inventory_remaining_stage_${item.stage}_label`)}
-                                            </span>
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 h-3">
-                                {(remainingPercent !== undefined) && (
-                                    <>
-                                        {remainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
-                                        {remainingPercent > 10 && remainingPercent <= 30 && t('inventory_remaining_stage_2_desc')}
-                                        {remainingPercent > 30 && remainingPercent <= 70 && t('inventory_remaining_stage_3_desc')}
-                                        {remainingPercent > 70 && t('inventory_remaining_stage_4_desc')}
-                                    </>
-                                )}
-                            </p>
                         </div>
 
                         {/* Notes Input */}
