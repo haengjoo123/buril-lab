@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FridgeScene } from './FridgeScene';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2 } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, Beaker } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
@@ -54,6 +54,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [placementExpiry, setPlacementExpiry] = useState('');
     const [placementBrand, setPlacementBrand] = useState('');
     const [placementProductNumber, setPlacementProductNumber] = useState('');
+    const [placementRemainingPercent, setPlacementRemainingPercent] = useState<number>(100);
 
     // Scan & Auto-Place State
     const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -71,6 +72,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [scanMemo, setScanMemo] = useState('');
     const [scanBrand, setScanBrand] = useState('');
     const [scanProductNumber, setScanProductNumber] = useState('');
+    const [scanRemainingPercent, setScanRemainingPercent] = useState<number>(100);
 
     // Toast state
     const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -333,6 +335,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             expiryDate: placementExpiry || undefined,
             brand: placementBrand || undefined,
             productNumber: placementProductNumber || undefined,
+            remaining_percent: placementRemainingPercent,
         });
 
         // Reset states
@@ -344,6 +347,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
+        setPlacementRemainingPercent(100);
         setIsReagentTrayVisible(true);
 
         // 자동저장 + 활동 로그 (병렬)
@@ -364,6 +368,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
+        setPlacementRemainingPercent(100);
         setIsReagentTrayVisible(true);
     };
 
@@ -392,6 +397,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 setScanExpiry(result.expiryDate || '');
                 setScanBrand(result.brand || '');
                 setScanProductNumber(result.productNumber || '');
+                setScanRemainingPercent(100);
             }
         } catch (err) {
             console.error('Scan failed:', err);
@@ -422,6 +428,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             capacity: scanCapacity || undefined,
             brand: scanBrand || undefined,
             productNumber: scanProductNumber || undefined,
+            remaining_percent: scanRemainingPercent,
         });
 
         if (!result) {
@@ -464,6 +471,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setScanMemo('');
         setScanBrand('');
         setScanProductNumber('');
+        setScanRemainingPercent(100);
         setIsScanning(false);
     };
 
@@ -1023,6 +1031,53 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             </div>
                         </div>
 
+                        {/* Remaining Amount Input */}
+                        <div className="flex flex-col gap-2 mt-1 px-1">
+                            <label className="text-sm font-semibold text-slate-700">
+                                {t('inventory_remaining_amount', '잔량')}
+                            </label>
+                            <div className="grid grid-cols-4 gap-2">
+                                {[
+                                    { stage: 1, value: 5, color: 'bg-red-50 text-red-600 border-red-200', active: 'bg-red-600 text-white border-red-600' },
+                                    { stage: 2, value: 30, color: 'bg-orange-50 text-orange-600 border-orange-200', active: 'bg-orange-500 text-white border-orange-500' },
+                                    { stage: 3, value: 60, color: 'bg-blue-50 text-blue-600 border-blue-200', active: 'bg-blue-600 text-white border-blue-600' },
+                                    { stage: 4, value: 100, color: 'bg-emerald-50 text-emerald-600 border-emerald-200', active: 'bg-emerald-600 text-white border-emerald-600' }
+                                ].map((item) => {
+                                    const val = placementRemainingPercent;
+                                    const isSelected = (
+                                        item.stage === 1 ? val <= 10 :
+                                        item.stage === 2 ? (val > 10 && val <= 30) :
+                                        item.stage === 3 ? (val > 30 && val <= 70) :
+                                        val > 70
+                                    );
+
+                                    return (
+                                        <button
+                                            key={item.stage}
+                                            type="button"
+                                            onClick={() => setPlacementRemainingPercent(item.value)}
+                                            className={`flex flex-col items-center justify-center py-2.5 px-0.5 rounded-xl border-2 transition-all duration-200 ${
+                                                isSelected ? item.active : `${item.color} opacity-60`
+                                            }`}
+                                        >
+                                            <span className="text-[10px] font-bold uppercase mb-0.5">
+                                                {t(`inventory_remaining_stage_${item.stage}`)}
+                                            </span>
+                                            <span className="text-[11px] font-bold leading-tight text-center">
+                                                {t(`inventory_remaining_stage_${item.stage}_label`)}
+                                            </span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            <p className="text-[11px] text-slate-500 ml-1 h-4">
+                                {placementRemainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
+                                {placementRemainingPercent > 10 && placementRemainingPercent <= 30 && t('inventory_remaining_stage_2_desc')}
+                                {placementRemainingPercent > 30 && placementRemainingPercent <= 70 && t('inventory_remaining_stage_3_desc')}
+                                {placementRemainingPercent > 70 && t('inventory_remaining_stage_4_desc')}
+                            </p>
+                        </div>
+
                         {/* 메모 */}
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-semibold text-gray-600">{t('reagent_memo_label')}</label>
@@ -1207,6 +1262,53 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                         />
                                     </div>
+                                </div>
+
+                                {/* Remaining Amount Input */}
+                                <div className="flex flex-col gap-2 mt-1 px-1">
+                                    <label className="text-sm font-semibold text-slate-700">
+                                        {t('inventory_remaining_amount', '잔량')}
+                                    </label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {[
+                                            { stage: 1, value: 5, color: 'bg-red-50 text-red-600 border-red-200', active: 'bg-red-600 text-white border-red-600' },
+                                            { stage: 2, value: 30, color: 'bg-orange-50 text-orange-600 border-orange-200', active: 'bg-orange-500 text-white border-orange-500' },
+                                            { stage: 3, value: 60, color: 'bg-blue-50 text-blue-600 border-blue-200', active: 'bg-blue-600 text-white border-blue-600' },
+                                            { stage: 4, value: 100, color: 'bg-emerald-50 text-emerald-600 border-emerald-200', active: 'bg-emerald-600 text-white border-emerald-600' }
+                                        ].map((item) => {
+                                            const val = scanRemainingPercent;
+                                            const isSelected = (
+                                                item.stage === 1 ? val <= 10 :
+                                                item.stage === 2 ? (val > 10 && val <= 30) :
+                                                item.stage === 3 ? (val > 30 && val <= 70) :
+                                                val > 70
+                                            );
+
+                                            return (
+                                                <button
+                                                    key={item.stage}
+                                                    type="button"
+                                                    onClick={() => setScanRemainingPercent(item.value)}
+                                                    className={`flex flex-col items-center justify-center py-2.5 px-0.5 rounded-xl border-2 transition-all duration-200 ${
+                                                        isSelected ? item.active : `${item.color} opacity-60`
+                                                    }`}
+                                                >
+                                                    <span className="text-[10px] font-bold uppercase mb-0.5">
+                                                        {t(`inventory_remaining_stage_${item.stage}`)}
+                                                    </span>
+                                                    <span className="text-[11px] font-bold leading-tight text-center">
+                                                        {t(`inventory_remaining_stage_${item.stage}_label`)}
+                                                    </span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 ml-1 h-4">
+                                        {scanRemainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
+                                        {scanRemainingPercent > 10 && scanRemainingPercent <= 30 && t('inventory_remaining_stage_2_desc')}
+                                        {scanRemainingPercent > 30 && scanRemainingPercent <= 70 && t('inventory_remaining_stage_3_desc')}
+                                        {scanRemainingPercent > 70 && t('inventory_remaining_stage_4_desc')}
+                                    </p>
                                 </div>
 
                                 {/* Memo */}
