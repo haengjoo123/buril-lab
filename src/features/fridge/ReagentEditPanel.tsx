@@ -460,9 +460,14 @@ export const ReagentEditPanel: React.FC = () => {
                                                 : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-500 hover:border-blue-400'
                                                 }`}
                                         >
-                                            <div className="w-full h-1 rounded-full bg-gray-200 dark:bg-gray-600 mb-0.5 overflow-hidden">
+                                            <div className="relative w-full h-1 rounded-full bg-gray-300 dark:bg-gray-600 mb-0.5">
                                                 <div 
-                                                    className={`h-full rounded-full transition-all duration-200 ${isSelected ? 'bg-white/80' : item.color}`}
+                                                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-300 ${
+                                                        isSelected ? 'bg-white' : 
+                                                        item.stage === 1 ? 'bg-red-500' :
+                                                        item.stage === 2 ? 'bg-orange-500' :
+                                                        item.stage === 3 ? 'bg-blue-500' : 'bg-emerald-500'
+                                                    }`}
                                                     style={{ width: `${item.percent}%` }}
                                                 />
                                             </div>
