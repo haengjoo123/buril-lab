@@ -383,7 +383,7 @@ export const FridgeScene: React.FC = () => {
                         target={effectiveTarget}
                         enableRotate={!isPlaceMode && !draggedItem}
                         enablePan={!draggedItem && !isTouchPlacementSelection}
-                        enableZoom={true}
+                        enableZoom={!draggedItem && !isTouchPlacementSelection}
                         touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
                     />
                     <SyncOrbitTarget target={effectiveTarget} />

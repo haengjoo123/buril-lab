@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FridgeScene } from './FridgeScene';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, Beaker } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
