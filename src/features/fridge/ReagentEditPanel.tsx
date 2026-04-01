@@ -260,7 +260,7 @@ export const ReagentEditPanel: React.FC = () => {
 
     return (
         <>
-            <div className={`absolute left-1/2 -translate-x-1/2 top-16 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-80px-5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200`}>
+            <div className={`absolute left-1/2 -translate-x-1/2 top-2 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-4.5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200`}>
                 {/* Header */}
             <div className="flex items-center justify-between p-3 border-b bg-gray-50/50 flex-shrink-0">
                 <div className="flex items-center gap-2 text-gray-800 font-semibold">
@@ -395,27 +395,6 @@ export const ReagentEditPanel: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Container Type Selection */}
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                {t('cabinet_label_type')}
-                            </label>
-                            <div className="grid grid-cols-4 gap-1.5">
-                                {CONTAINER_TYPES.map((ct) => (
-                                    <button
-                                        key={ct.type}
-                                        onClick={() => setTemplate(ct.type)}
-                                        className={`flex flex-col items-center gap-0.5 px-1.5 py-2 rounded-lg border text-xs font-medium transition-all ${template === ct.type
-                                            ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300'
-                                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                                            }`}
-                                    >
-                                        <span className="text-base leading-none">{ct.icon}</span>
-                                        <span className="leading-tight text-center">{t(ct.label)}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
 
                         {/* Capacity Input */}
                         <div className="flex flex-col gap-1.5">
@@ -488,6 +467,28 @@ export const ReagentEditPanel: React.FC = () => {
                                     </>
                                 )}
                             </p>
+                        </div>
+
+                        {/* Container Type Selection */}
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                {t('cabinet_label_type')}
+                            </label>
+                            <div className="grid grid-cols-4 gap-1.5">
+                                {CONTAINER_TYPES.map((ct) => (
+                                    <button
+                                        key={ct.type}
+                                        onClick={() => setTemplate(ct.type)}
+                                        className={`flex flex-col items-center gap-0.5 px-1.5 py-2 rounded-lg border text-xs font-medium transition-all ${template === ct.type
+                                            ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300'
+                                            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        <span className="text-base leading-none">{ct.icon}</span>
+                                        <span className="leading-tight text-center">{t(ct.label)}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         {/* CAS Number Input */}
