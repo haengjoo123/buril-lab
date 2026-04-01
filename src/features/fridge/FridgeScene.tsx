@@ -194,12 +194,17 @@ export const FridgeScene: React.FC = () => {
 
     const cameraConfig = useCabinetCamera(cabinetWidth, cabinetHeight, mode, containerAspect);
     const [shelfFocusTarget, setShelfFocusTarget] = useState<[number, number, number] | null>(null);
+    const [cameraStateId, setCameraStateId] = useState(0);
     const focusedShelfId = useFridgeStore((state) => state.focusedShelfId);
     const setFocusedShelfId = useFridgeStore((state) => state.setFocusedShelfId);
     const GROUP_OFFSET_Y = -0.5;
 
     /** 탑뷰 (90° 위에서 보기) 상태 */
     const [isTopDownView, setIsTopDownView] = useState(false);
+
+    useEffect(() => {
+        setCameraStateId(id => id + 1);
+    }, [mode, isTopDownView]);
 
     const effectiveTarget = shelfFocusTarget ?? cameraConfig.target;
     const isPlaceMode = mode === 'PLACE';
@@ -217,6 +222,7 @@ export const FridgeScene: React.FC = () => {
     }, [focusedShelfId, shelfFocusTarget, floorShelf, floatingShelves, getShelfY]);
 
     const handleShelfFocus = useCallback((shelfId: string, localY: number) => {
+        setCameraStateId(id => id + 1);
         if (mode === 'PLACE' && focusedShelfId === shelfId) {
             setShelfFocusTarget(null);
             setFocusedShelfId(null);
@@ -235,8 +241,10 @@ export const FridgeScene: React.FC = () => {
             const shelfIndex = floatingShelves.findIndex(s => s.id === focusedShelfId);
             if (shelfIndex !== -1) {
                 setShelfFocusTarget([0, GROUP_OFFSET_Y + getShelfY(shelfIndex), 0]);
+                setCameraStateId(id => id + 1);
             } else if (floorShelf && focusedShelfId === floorShelf.id) {
                 setShelfFocusTarget([0, GROUP_OFFSET_Y + (SHELF_BOTTOM_Y + 0.02), 0]);
+                setCameraStateId(id => id + 1);
             }
         }
     }, [focusedShelfId, mode, floatingShelves, floorShelf, getShelfY]);
@@ -317,6 +325,7 @@ export const FridgeScene: React.FC = () => {
                         cabinetWidth={cabinetWidth}
                         cabinetHeight={cabinetHeight}
                         config={effectiveCameraConfig}
+                        cameraStateId={cameraStateId}
                     />
                     <Environment preset="city" />
                     <ambientLight intensity={0.5} />

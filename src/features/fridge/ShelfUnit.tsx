@@ -203,10 +203,6 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         // 모바일: 합성 클릭(ghost click) 방지 — 터치 후 발생하는 의도치 않은 클릭 차단
         if (e.nativeEvent.pointerType !== 'mouse') {
             e.nativeEvent.preventDefault();
-            e.nativeEvent.stopPropagation();
-            if (e.nativeEvent.stopImmediatePropagation) {
-                e.nativeEvent.stopImmediatePropagation();
-            }
         }
 
         const chem = draggedTemplate.chemicalData as any;

@@ -12,28 +12,27 @@ interface ResponsiveCameraProps {
         maxDistance: number;
         target: [number, number, number];
     };
+    cameraStateId: number;
 }
 
 const LERP_FACTOR = 0.06;
 const ARRIVAL_THRESHOLD = 0.05;
 
 /** 시약장 크기 변경 시 OrbitControls 동기화, 부드러운 전환. 줌/팬 시 즉시 보간 중단 */
-export function ResponsiveCamera({ config }: ResponsiveCameraProps) {
+export function ResponsiveCamera({ config, cameraStateId }: ResponsiveCameraProps) {
     const { camera, controls, gl } = useThree();
     const targetPos = useRef(new THREE.Vector3(...config.position));
     const targetLookAt = useRef(new THREE.Vector3(...config.target));
     const isAnimating = useRef(true);
-    const lastConfigKey = useRef('');
 
     useEffect(() => {
-        const key = `${config.position.join(',')}|${config.target.join(',')}`;
-        if (lastConfigKey.current === key) return;
-        lastConfigKey.current = key;
-
         targetPos.current.set(...config.position);
         targetLookAt.current.set(...config.target);
-        isAnimating.current = true;
     }, [config.position[0], config.position[1], config.position[2], config.target[0], config.target[1], config.target[2]]);
+
+    useEffect(() => {
+        isAnimating.current = true;
+    }, [cameraStateId]);
 
     // 줌/팬 시 보간 즉시 중단 → OrbitControls가 제어
     useEffect(() => {
