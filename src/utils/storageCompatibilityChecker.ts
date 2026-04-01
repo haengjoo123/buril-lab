@@ -28,6 +28,8 @@ export interface StorageWarning {
     ruleId: string;
     itemA: string;
     itemB: string;
+    itemAId?: string;
+    itemBId?: string;
     messageKey: string; // i18n translation key
 }
 
@@ -355,7 +357,7 @@ interface ClassifiedItem {
  * Check storage compatibility for all items on a shelf.
  * Returns deduplicated warnings sorted by severity.
  */
-export function checkShelfCompatibility(items: ReagentPlacement[]): StorageWarning[] {
+export function checkShelfCompatibility(items: ReagentPlacement[], dividers: number[] = []): StorageWarning[] {
     if (items.length < 2) return [];
 
     // Pre-classify all items
@@ -372,6 +374,27 @@ export function checkShelfCompatibility(items: ReagentPlacement[]): StorageWarni
         for (let j = i + 1; j < classified.length; j++) {
             const a = classified[i];
             const b = classified[j];
+
+            // Check if items are physically separated by a divider
+            // Use the center point of each item to determine its position relative to dividers
+            let isSeparated = false;
+            if (dividers && dividers.length > 0) {
+                const centerA = a.item.position + (a.item.width / 2);
+                const centerB = b.item.position + (b.item.width / 2);
+                const minPos = Math.min(centerA, centerB);
+                const maxPos = Math.max(centerA, centerB);
+                
+                // If there's any divider between the two centers, they are separated
+                for (const d of dividers) {
+                    if (d > minPos && d < maxPos) {
+                        isSeparated = true;
+                        break;
+                    }
+                }
+            }
+
+            // If separated by a divider, they are considered safely stored
+            if (isSeparated) continue;
 
             // Check each rule
             for (const rule of STORAGE_RULES) {
@@ -392,6 +415,8 @@ export function checkShelfCompatibility(items: ReagentPlacement[]): StorageWarni
                                 ruleId: rule.ruleId,
                                 itemA: aExplosive ? a.item.name : b.item.name,
                                 itemB: aExplosive ? b.item.name : a.item.name,
+                                itemAId: aExplosive ? a.item.id : b.item.id,
+                                itemBId: aExplosive ? b.item.id : a.item.id,
                                 messageKey: rule.messageKey,
                             });
                         }
@@ -408,6 +433,8 @@ export function checkShelfCompatibility(items: ReagentPlacement[]): StorageWarni
                             ruleId: rule.ruleId,
                             itemA: a.item.name,
                             itemB: b.item.name,
+                            itemAId: a.item.id,
+                            itemBId: b.item.id,
                             messageKey: rule.messageKey,
                         });
                     }
@@ -430,11 +457,11 @@ export function checkShelfCompatibility(items: ReagentPlacement[]): StorageWarni
  * Returns a map of shelf ID → warnings.
  */
 export function checkCabinetCompatibility(
-    shelves: { id: string; items: ReagentPlacement[] }[]
+    shelves: { id: string; items: ReagentPlacement[]; dividers?: number[] }[]
 ): Map<string, StorageWarning[]> {
     const results = new Map<string, StorageWarning[]>();
     for (const shelf of shelves) {
-        const warnings = checkShelfCompatibility(shelf.items);
+        const warnings = checkShelfCompatibility(shelf.items, shelf.dividers || []);
         if (warnings.length > 0) {
             results.set(shelf.id, warnings);
         }

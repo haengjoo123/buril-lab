@@ -250,7 +250,9 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
     const highlightedItemId = useFridgeStore(s => s.highlightedItemId);
     const mode = useFridgeStore(s => s.mode);
     const isBeingDragged = draggedItem?.id === item.id;
-    const isHighlighted = highlightedItemId === item.id;
+    const isHighlighted = Array.isArray(highlightedItemId)
+        ? highlightedItemId.includes(item.id)
+        : highlightedItemId === item.id;
 
     const setSelectedReagentId = useFridgeStore(s => s.setSelectedReagentId);
     const setHighlightedItemId = useFridgeStore(s => s.setHighlightedItemId);

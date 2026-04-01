@@ -32,6 +32,40 @@ interface GenericContainerItem {
     };
 }
 
+const NumberInput = ({ value, min, max, onChange, className }: { value: number; min: number; max: number; onChange: (v: number) => void; className?: string }) => {
+    const [localVal, setLocalVal] = React.useState(value.toString());
+    React.useEffect(() => { setLocalVal(value.toString()); }, [value]);
+
+    const apply = () => {
+        let v = parseInt(localVal, 10);
+        if (Number.isNaN(v)) {
+            setLocalVal(value.toString());
+        } else {
+            v = Math.max(min, Math.min(max, v));
+            setLocalVal(v.toString());
+            onChange(v);
+        }
+    };
+
+    return (
+        <input
+            type="number"
+            min={min}
+            max={max}
+            step={1}
+            value={localVal}
+            onChange={e => setLocalVal(e.target.value)}
+            onBlur={apply}
+            onKeyDown={e => {
+                if (e.key === 'Enter') {
+                    e.currentTarget.blur();
+                }
+            }}
+            className={className}
+        />
+    );
+};
+
 export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => {
     const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
@@ -712,15 +746,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         <div className="flex items-center gap-2">
                                             <span className="text-xs text-gray-600 font-medium">{t('cabinet_vertical_panel')}</span>
                                             <div className="flex items-center gap-1 bg-white border border-gray-200 px-2 py-0.5 rounded shadow-sm">
-                                                <input
-                                                    type="number"
+                                                <NumberInput
                                                     min={1}
                                                     max={99}
                                                     value={verticalPanelPos}
-                                                    onChange={(e) => {
-                                                        const v = parseInt(e.target.value, 10);
-                                                        if (!Number.isNaN(v)) setVerticalPanelPos(Math.max(1, Math.min(99, v)));
-                                                    }}
+                                                    onChange={(v) => setVerticalPanelPos(v)}
                                                     className="w-10 text-xs text-center border-none focus:ring-0 p-0"
                                                 />
                                                 <span className="text-[10px] text-gray-400">%</span>
@@ -737,46 +767,31 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     <div className="flex items-center gap-3">
                                         <div className="flex items-center gap-1 shrink-0">
                                             <span className="text-xs font-medium text-gray-600 w-8">{t('cabinet_width')}</span>
-                                            <input
-                                                type="number"
+                                            <NumberInput
                                                 min={4}
                                                 max={20}
-                                                step={1}
                                                 value={cabinetWidth}
-                                                onChange={(e) => {
-                                                    const v = parseInt(e.target.value, 10);
-                                                    if (!Number.isNaN(v)) setCabinetDimensions(v, undefined);
-                                                }}
+                                                onChange={(v) => setCabinetDimensions(v, undefined)}
                                                 className="w-14 px-1.5 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
                                             />
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
                                             <span className="text-xs font-medium text-gray-600 w-8">{t('cabinet_height')}</span>
-                                            <input
-                                                type="number"
+                                            <NumberInput
                                                 min={2}
                                                 max={15}
-                                                step={1}
                                                 value={cabinetHeight}
-                                                onChange={(e) => {
-                                                    const v = parseInt(e.target.value, 10);
-                                                    if (!Number.isNaN(v)) setCabinetDimensions(undefined, v);
-                                                }}
+                                                onChange={(v) => setCabinetDimensions(undefined, v)}
                                                 className="w-14 px-1.5 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
                                             />
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
                                             <span className="text-xs font-medium text-gray-600 w-8">{t('cabinet_depth')}</span>
-                                            <input
-                                                type="number"
+                                            <NumberInput
                                                 min={1}
                                                 max={4}
-                                                step={1}
                                                 value={cabinetDepth}
-                                                onChange={(e) => {
-                                                    const v = parseInt(e.target.value, 10);
-                                                    if (!Number.isNaN(v)) setCabinetDepth(v);
-                                                }}
+                                                onChange={(v) => setCabinetDepth(v)}
                                                 className="w-14 px-1.5 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
                                             />
                                         </div>

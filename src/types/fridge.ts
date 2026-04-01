@@ -108,9 +108,9 @@ export interface FridgeState {
 
     // Selection & Updates
     selectedReagentId: string | null;
-    highlightedItemId: string | null;
+    highlightedItemId: string | string[] | null;
     setSelectedReagentId: (id: string | null) => void;
-    setHighlightedItemId: (id: string | null) => void;
+    setHighlightedItemId: (id: string | string[] | null) => void;
     updateReagent: (id: string, updates: Partial<ReagentPlacement>) => void;
 
     // Auto-placement

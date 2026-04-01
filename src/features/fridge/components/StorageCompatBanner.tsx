@@ -129,20 +129,29 @@ export const StorageCompatBanner: React.FC = () => {
 const WarningRow: React.FC<{ warning: StorageWarning }> = ({ warning }) => {
     const { t } = useTranslation();
     const isDanger = warning.severity === 'DANGER';
+    const setHighlightedItemId = useFridgeStore(s => s.setHighlightedItemId);
 
     return (
-        <div className={`
-            flex items-start gap-2 p-2 rounded-lg text-xs
-            ${isDanger
-                ? 'bg-red-100/60 dark:bg-red-900/30'
-                : 'bg-amber-100/60 dark:bg-amber-900/30'
-            }
-        `}>
+        <div 
+            className={`
+                flex items-start gap-2 p-2 rounded-lg text-xs cursor-pointer hover:opacity-80 transition-opacity
+                ${isDanger
+                    ? 'bg-red-100/60 dark:bg-red-900/30'
+                    : 'bg-amber-100/60 dark:bg-amber-900/30'
+                }
+            `}
+            onClick={() => {
+                const ids = [];
+                if (warning.itemAId) ids.push(warning.itemAId);
+                if (warning.itemBId) ids.push(warning.itemBId);
+                if (ids.length > 0) setHighlightedItemId(ids);
+            }}
+        >
             <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isDanger ? 'text-red-500' : 'text-amber-500'}`} />
             <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
+                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                     <span className={`
-                        text-[10px] font-bold px-1.5 py-px rounded
+                        text-[10px] font-bold px-1.5 py-px rounded shrink-0
                         ${isDanger
                             ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200'
                             : 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200'
@@ -150,9 +159,33 @@ const WarningRow: React.FC<{ warning: StorageWarning }> = ({ warning }) => {
                     `}>
                         {isDanger ? t('storage_compat_danger') : t('storage_compat_warning')}
                     </span>
-                    <span className="text-slate-500 dark:text-slate-400 font-medium truncate">
-                        {warning.itemA} ↔ {warning.itemB}
-                    </span>
+                    <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 font-medium truncate">
+                        <span 
+                            className={`truncate ${warning.itemAId ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors' : ''}`}
+                            onClick={(e) => {
+                                if (warning.itemAId) {
+                                    e.stopPropagation();
+                                    setHighlightedItemId(warning.itemAId);
+                                }
+                            }}
+                            title={warning.itemA}
+                        >
+                            {warning.itemA}
+                        </span>
+                        <span>↔</span>
+                        <span 
+                            className={`truncate ${warning.itemBId ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors' : ''}`}
+                            onClick={(e) => {
+                                if (warning.itemBId) {
+                                    e.stopPropagation();
+                                    setHighlightedItemId(warning.itemBId);
+                                }
+                            }}
+                            title={warning.itemB}
+                        >
+                            {warning.itemB}
+                        </span>
+                    </div>
                 </div>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                     {t(warning.messageKey)}
