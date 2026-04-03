@@ -30,17 +30,17 @@ const TEMPLATE_DEPTHS = {
     A: 0.44,
     B: 0.35,
     C: 0.44, // 유리병 GLB
-    D: 0.8, // 바이알 박스
+    D: 0.44, // 사각병 GLB (기존 바이알 박스 0.8)
 };
 
 const MESH_BASE_WIDTHS: Record<string, number> = {
     A: 0.44,
     B: 0.5,
     C: 0.44,
-    D: 1.2,
+    D: 0.5,
 };
 
-const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 15 };
+const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
 
 const INITIAL_SHELVES: ShelfData[] = [
     { id: uuidv4(), level: 0, dividers: [], items: [] },

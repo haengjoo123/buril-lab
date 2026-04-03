@@ -442,7 +442,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     };
 
     const handleScanAutoPlace = () => {
-        const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 15 };
+        const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
         const baseWidth = CONTAINER_BASE_WIDTHS[scanContainerType] || 8;
         const finalWidth = baseWidth * scanSize;
         const finalName = scanName.trim() || '이름 없음';
@@ -524,7 +524,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             chemicalData: { name: t('cabinet_container_glass') }
         },
         {
-            name: t('cabinet_container_vial'), type: 'D', color: '#cbd5e1', width: 15,
+            name: t('cabinet_container_vial'), type: 'D', color: '#cbd5e1', width: 10,
             chemicalData: { name: t('cabinet_container_vial') }
         },
     ];

@@ -15,6 +15,7 @@ export function guessTemplateFromCapacity(capacity: string): ReagentTemplateType
     if (/갈색|앰버|\bamber\b|\bbrown\b/i.test(trimmed)) return 'A';
     if (/플라스틱|\bplastic\b/i.test(trimmed)) return 'B';
     if (/투명|유리\s*병|유리병|글라스|\bglass\b|\bclear\b|\bborosilicate\b/i.test(trimmed)) return 'C';
+    if (/사각|스퀘어|\bsquare\b/i.test(trimmed)) return 'D';
 
     if (lower.includes('kg') || num >= 2500) return 'D';
     if (lower.includes('l') && !lower.includes('ml')) return 'A';
@@ -28,7 +29,7 @@ export function getWidthForTemplate(template: ReagentTemplateType): number {
         case 'A': return 8;
         case 'B': return 10;
         case 'C': return 8;
-        case 'D': return 15;
+        case 'D': return 10;
         default: return 8;
     }
 }

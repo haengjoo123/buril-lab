@@ -19,15 +19,9 @@ interface ReagentItemProps {
     dimmed?: boolean;
 }
 
-export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 15 };
+export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
 
-// --- Shared Geometries (Performance Optimization) ---
-
-// Type D: 바이알 박스
-const GEO_D_BOX = new THREE.BoxGeometry(1.2, 0.5, 0.8);
-const GEO_D_DIV_VERT = new THREE.BoxGeometry(0.02, 0.44, 0.74);
-const GEO_D_DIV_HORZ = new THREE.BoxGeometry(1.14, 0.44, 0.02);
-const GEO_D_RIM = new THREE.BoxGeometry(1.22, 0.02, 0.82); // vial box rim (type D mesh)
+// --- Geometries are now loaded via GLB models ---
 
 export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean; expiryLevel?: ExpiryLevel }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false, expiryLevel }) => {
 
@@ -113,38 +107,15 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
                     />
                 </group>
             );
-        case 'D': // 바이알 박스: 박스 + 칸막이
+        case 'D': // 사각병 GLB 모델
             return (
                 <group scale={scale}>
-                    {/* 외곽 박스 - 메인 그림자 캐스터 */}
-                    <mesh castShadow position={[0, 0.25, 0]} geometry={GEO_D_BOX}>
-                        <meshStandardMaterial ref={materialRef} {...materialProps} />
-                    </mesh>
-                    {/* 칸막이 1 */}
-                    <mesh position={[-0.3, 0.26, 0]} geometry={GEO_D_DIV_VERT}>
-                        <meshStandardMaterial color="#BDBDBD" roughness={0.7}
-                            transparent opacity={opacity * 0.7} />
-                    </mesh>
-                    {/* 칸막이 2 */}
-                    <mesh position={[0, 0.26, 0]} geometry={GEO_D_DIV_VERT}>
-                        <meshStandardMaterial color="#BDBDBD" roughness={0.7}
-                            transparent opacity={opacity * 0.7} />
-                    </mesh>
-                    {/* 칸막이 3 */}
-                    <mesh position={[0.3, 0.26, 0]} geometry={GEO_D_DIV_VERT}>
-                        <meshStandardMaterial color="#BDBDBD" roughness={0.7}
-                            transparent opacity={opacity * 0.7} />
-                    </mesh>
-                    {/* 가로 칸막이 */}
-                    <mesh position={[0, 0.26, 0]} geometry={GEO_D_DIV_HORZ}>
-                        <meshStandardMaterial color="#BDBDBD" roughness={0.7}
-                            transparent opacity={opacity * 0.7} />
-                    </mesh>
-                    {/* 상단 테두리 */}
-                    <mesh position={[0, 0.505, 0]} geometry={GEO_D_RIM}>
-                        <meshStandardMaterial color="#E0E0E0" roughness={0.5}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
+                    <SquareBottleModel
+                        onPrimaryMaterialChange={(material) => {
+                            materialRef.current = material;
+                        }}
+                        materialProps={materialProps}
+                    />
                 </group>
             );
         default:
@@ -168,9 +139,13 @@ function useReagentGLBModel(
         const cloneMaterial = (original: THREE.Material): THREE.Material => {
             const next = original.clone();
             if (next instanceof THREE.MeshStandardMaterial) {
-                next.transparent = true;
                 if (nextOpacity !== undefined) {
                     next.opacity = nextOpacity;
+                    next.transparent = nextOpacity < 1;
+                } else {
+                    // GLB 원본 투명도 무시 — 불투명으로 강제
+                    next.transparent = false;
+                    next.opacity = 1;
                 }
                 if (overrideErrorColor) {
                     next.color = new THREE.Color('#ef4444');
@@ -225,10 +200,17 @@ const GlassBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, ma
     return <primitive object={clonedScene} scale={0.5} />;
 };
 
+/** GLB 모델 로더 — square bottle.glb (사각병) */
+const SquareBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/square bottle.glb', materialProps, onPrimaryMaterialChange);
+    return <primitive object={clonedScene} scale={0.5} />;
+};
+
 // Preload GLB models
 useGLTF.preload('/models/reagents/brown bottle.glb');
 useGLTF.preload('/models/reagents/plastic bottle.glb');
 useGLTF.preload('/models/reagents/glass.glb');
+useGLTF.preload('/models/reagents/square bottle.glb');
 
 export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shelfDepth = 2, isGhost, isValid = true, dimmed = false }) => {
     const setDraggedItem = useFridgeStore(s => s.setDraggedItem);
@@ -315,7 +297,7 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
         config: { mass: 1, tension: 170, friction: 26 }
     });
 
-    const CONTAINER_COLORS: Record<string, string> = { A: '#8D6E63', B: '#F5F5F5', C: '#D7CCC8', D: '#b0c4de' };
+    const CONTAINER_COLORS: Record<string, string> = { A: '#8D6E63', B: '#F5F5F5', C: '#D7CCC8', D: '#eeeeee' };
     const defaultColor = isGhost ? (isValid ? '#4ade80' : '#ef4444') : (CONTAINER_COLORS[item.template] || '#8D6E63');
     let opacity = isGhost ? 0.6 : isBeingDragged ? 0.4 : 1;
     if (dimmed) opacity *= 0.5;

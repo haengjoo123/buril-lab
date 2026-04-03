@@ -29,7 +29,7 @@ const CONTAINER_TYPES: { type: ReagentTemplateType; label: string; icon: string 
     { type: 'A', label: 'cabinet_container_amber', icon: '🟤' },
     { type: 'B', label: 'cabinet_container_plastic', icon: '🤍' },
     { type: 'C', label: 'cabinet_container_glass', icon: '🧪' },
-    { type: 'D', label: 'cabinet_container_vial', icon: '📦' },
+    { type: 'D', label: 'cabinet_container_vial', icon: '🧴' },
 ];
 
 export const ReagentEditPanel: React.FC = () => {
