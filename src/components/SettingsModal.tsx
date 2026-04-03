@@ -367,9 +367,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                 <div className="p-4 bg-gray-50 dark:bg-slate-950/50 flex flex-col items-center gap-2 text-xs text-gray-400 dark:text-gray-600">
                     <a
-                        href="/privacy.html"
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href="/privacy"
                         className="hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2 transition-colors"
                     >
                         {t('settings_privacy_policy', '개인정보처리방침')}

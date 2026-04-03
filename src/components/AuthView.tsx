@@ -209,9 +209,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onSignIn, onSignUp, authProm
                 {/* Privacy Policy Link */}
                 <div className="mt-4 text-center">
                     <a
-                        href="/privacy.html"
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href="/privacy"
                         className="text-xs text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2"
                     >
                         {t('auth_privacy_policy', '개인정보처리방침')}

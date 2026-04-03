@@ -12,6 +12,7 @@ import { FridgeView } from './features/fridge/FridgeView';
 import { CabinetListView } from './features/fridge/CabinetListView';
 import { AuthView } from './components/AuthView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
+import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { InventoryListView } from './features/inventory/InventoryListView';
 import { GlobalAuditLogsView } from './features/admin/GlobalAuditLogsView';
 import type { CabinetSearchResult } from './services/cabinetService';
@@ -102,6 +103,7 @@ function App() {
   });
 
   const isLoginRoute = location.pathname === '/login';
+  const isPrivacyRoute = location.pathname === '/privacy';
 
   useEffect(() => {
     if (session) {
@@ -234,6 +236,10 @@ function App() {
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
       </div>
     );
+  }
+
+  if (isPrivacyRoute) {
+    return <PrivacyPolicyView onBack={() => navigate(-1)} />;
   }
 
   const guestRedirectingToLogin =
