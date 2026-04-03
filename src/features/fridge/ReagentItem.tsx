@@ -25,43 +25,41 @@ export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8
 
 export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean; expiryLevel?: ExpiryLevel }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false, expiryLevel }) => {
 
-    const materialRef = useRef<THREE.MeshStandardMaterial>(null);
+    const materialsRef = useRef<{ mat: THREE.MeshStandardMaterial; origColor: THREE.Color }[]>([]);
     const highlightColor = useMemo(() => new THREE.Color('#ffff00'), []);
-    const baseColor = useMemo(() => new THREE.Color(defaultColor), [defaultColor]);
     const expiryExpiredColor = useMemo(() => new THREE.Color('#ef4444'), []);
     const expiryWarningColor = useMemo(() => new THREE.Color('#f59e0b'), []);
 
     useFrame((state) => {
-        if (!materialRef.current) return;
-        if (isHighlighted) {
-            // Search highlight takes priority
-            const t = state.clock.elapsedTime;
-            const intensity = (Math.sin(t * 8) + 1) * 0.4;
-            materialRef.current.emissive = highlightColor;
-            materialRef.current.emissiveIntensity = intensity;
-            materialRef.current.color = highlightColor;
-        } else if (expiryLevel === 'expired') {
-            // Expired: steady red glow
-            materialRef.current.emissive = expiryExpiredColor;
-            materialRef.current.emissiveIntensity = 0.35;
-            materialRef.current.color = expiryExpiredColor;
-        } else if (expiryLevel === 'critical') {
-            // Critical (<=7 days): pulsing red glow
-            const t = state.clock.elapsedTime;
-            const intensity = (Math.sin(t * 4) + 1) * 0.25;
-            materialRef.current.emissive = expiryExpiredColor;
-            materialRef.current.emissiveIntensity = intensity;
-            materialRef.current.color.lerpColors(baseColor, expiryExpiredColor, 0.4);
-        } else if (expiryLevel === 'warning') {
-            // Warning (<=30 days): subtle amber tint
-            const t = state.clock.elapsedTime;
-            const intensity = (Math.sin(t * 2) + 1) * 0.12;
-            materialRef.current.emissive = expiryWarningColor;
-            materialRef.current.emissiveIntensity = intensity;
-            materialRef.current.color.lerpColors(baseColor, expiryWarningColor, 0.15);
-        } else {
-            materialRef.current.emissiveIntensity = 0;
-            materialRef.current.color = baseColor;
+        const entries = materialsRef.current;
+        if (entries.length === 0) return;
+        for (const { mat, origColor } of entries) {
+            if (isHighlighted) {
+                const t = state.clock.elapsedTime;
+                const intensity = (Math.sin(t * 8) + 1) * 0.4;
+                mat.emissive = highlightColor;
+                mat.emissiveIntensity = intensity;
+                mat.color = highlightColor;
+            } else if (expiryLevel === 'expired') {
+                mat.emissive = expiryExpiredColor;
+                mat.emissiveIntensity = 0.35;
+                mat.color = expiryExpiredColor;
+            } else if (expiryLevel === 'critical') {
+                const t = state.clock.elapsedTime;
+                const intensity = (Math.sin(t * 4) + 1) * 0.25;
+                mat.emissive = expiryExpiredColor;
+                mat.emissiveIntensity = intensity;
+                mat.color.lerpColors(origColor, expiryExpiredColor, 0.4);
+            } else if (expiryLevel === 'warning') {
+                const t = state.clock.elapsedTime;
+                const intensity = (Math.sin(t * 2) + 1) * 0.12;
+                mat.emissive = expiryWarningColor;
+                mat.emissiveIntensity = intensity;
+                mat.color.lerpColors(origColor, expiryWarningColor, 0.15);
+            } else {
+                mat.emissiveIntensity = 0;
+                mat.color.copy(origColor);
+            }
         }
     });
 
@@ -78,8 +76,8 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
             return (
                 <group scale={scale}>
                     <BrownBottleModel
-                        onPrimaryMaterialChange={(material) => {
-                            materialRef.current = material;
+                        onMaterialsChange={(mats) => {
+                            materialsRef.current = mats;
                         }}
                         materialProps={materialProps}
                     />
@@ -89,8 +87,8 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
             return (
                 <group scale={scale}>
                     <PlasticBottleModel
-                        onPrimaryMaterialChange={(material) => {
-                            materialRef.current = material;
+                        onMaterialsChange={(mats) => {
+                            materialsRef.current = mats;
                         }}
                         materialProps={materialProps}
                     />
@@ -100,8 +98,8 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
             return (
                 <group scale={scale}>
                     <GlassBottleModel
-                        onPrimaryMaterialChange={(material) => {
-                            materialRef.current = material;
+                        onMaterialsChange={(mats) => {
+                            materialsRef.current = mats;
                         }}
                         materialProps={materialProps}
                     />
@@ -111,8 +109,8 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
             return (
                 <group scale={scale}>
                     <SquareBottleModel
-                        onPrimaryMaterialChange={(material) => {
-                            materialRef.current = material;
+                        onMaterialsChange={(mats) => {
+                            materialsRef.current = mats;
                         }}
                         materialProps={materialProps}
                     />
@@ -123,22 +121,26 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
     }
 };
 
+type MaterialEntry = { mat: THREE.MeshStandardMaterial; origColor: THREE.Color };
+
 /** 공통 GLB 모델 로더 팩토리 */
 function useReagentGLBModel(
     glbPath: string,
     materialProps: Record<string, unknown>,
-    onPrimaryMaterialChange: (material: THREE.MeshStandardMaterial | null) => void,
+    onMaterialsChange: (entries: MaterialEntry[]) => void,
 ) {
     const { scene } = useGLTF(glbPath);
-    const { clonedScene, primaryMaterial } = useMemo(() => {
+    const { clonedScene, allEntries } = useMemo(() => {
         const clone = scene.clone(true);
         const overrideErrorColor = materialProps.color === '#ef4444';
         const nextOpacity = typeof materialProps.opacity === 'number' ? materialProps.opacity : undefined;
-        let firstMaterial: THREE.MeshStandardMaterial | null = null;
+        const collected: MaterialEntry[] = [];
 
         const cloneMaterial = (original: THREE.Material): THREE.Material => {
             const next = original.clone();
             if (next instanceof THREE.MeshStandardMaterial) {
+                // 원본 색상 기록 (나중에 복원용)
+                const origColor = next.color.clone();
                 if (nextOpacity !== undefined) {
                     next.opacity = nextOpacity;
                     next.transparent = nextOpacity < 1;
@@ -150,9 +152,7 @@ function useReagentGLBModel(
                 if (overrideErrorColor) {
                     next.color = new THREE.Color('#ef4444');
                 }
-                if (!firstMaterial) {
-                    firstMaterial = next;
-                }
+                collected.push({ mat: next, origColor });
             }
             return next;
         };
@@ -166,43 +166,43 @@ function useReagentGLBModel(
                 mesh.castShadow = true;
             }
         });
-        return { clonedScene: clone, primaryMaterial: firstMaterial };
+        return { clonedScene: clone, allEntries: collected };
     }, [scene, materialProps.color, materialProps.opacity]);
 
     useEffect(() => {
-        onPrimaryMaterialChange(primaryMaterial);
-        return () => onPrimaryMaterialChange(null);
-    }, [onPrimaryMaterialChange, primaryMaterial]);
+        onMaterialsChange(allEntries);
+        return () => onMaterialsChange([]);
+    }, [onMaterialsChange, allEntries]);
 
     return clonedScene;
 }
 
 interface GLBModelProps {
-    onPrimaryMaterialChange: (material: THREE.MeshStandardMaterial | null) => void;
+    onMaterialsChange: (entries: MaterialEntry[]) => void;
     materialProps: Record<string, unknown>;
 }
 
 /** GLB 모델 로더 — brown bottle.glb (갈색병) */
-const BrownBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
-    const clonedScene = useReagentGLBModel('/models/reagents/brown bottle.glb', materialProps, onPrimaryMaterialChange);
+const BrownBottleModel: React.FC<GLBModelProps> = ({ onMaterialsChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/brown bottle.glb', materialProps, onMaterialsChange);
     return <primitive object={clonedScene} scale={0.5} />;
 };
 
 /** GLB 모델 로더 — plastic bottle.glb (플라스틱 통) */
-const PlasticBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
-    const clonedScene = useReagentGLBModel('/models/reagents/plastic bottle.glb', materialProps, onPrimaryMaterialChange);
+const PlasticBottleModel: React.FC<GLBModelProps> = ({ onMaterialsChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/plastic bottle.glb', materialProps, onMaterialsChange);
     return <primitive object={clonedScene} scale={0.5} />;
 };
 
 /** GLB 모델 로더 — glass.glb (유리병) */
-const GlassBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
-    const clonedScene = useReagentGLBModel('/models/reagents/glass.glb', materialProps, onPrimaryMaterialChange);
+const GlassBottleModel: React.FC<GLBModelProps> = ({ onMaterialsChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/glass.glb', materialProps, onMaterialsChange);
     return <primitive object={clonedScene} scale={0.5} />;
 };
 
 /** GLB 모델 로더 — square bottle.glb (사각병) */
-const SquareBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
-    const clonedScene = useReagentGLBModel('/models/reagents/square bottle.glb', materialProps, onPrimaryMaterialChange);
+const SquareBottleModel: React.FC<GLBModelProps> = ({ onMaterialsChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/square bottle.glb', materialProps, onMaterialsChange);
     return <primitive object={clonedScene} scale={0.5} />;
 };
 

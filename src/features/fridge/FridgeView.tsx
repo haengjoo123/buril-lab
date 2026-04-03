@@ -10,6 +10,7 @@ import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiR
 import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
+import ReagentModelPreview from './components/ReagentModelPreview';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
@@ -873,7 +874,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     {/* 📷 Scan Button */}
                                     <div
                                         onClick={() => setIsCameraOpen(true)}
-                                        className="min-w-[90px] h-[120px] flex flex-col items-center justify-between p-2 bg-gradient-to-b from-emerald-50 to-emerald-100 border-2 border-dashed border-emerald-400 rounded-lg hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all shrink-0 group"
+                                        className="min-w-[90px] h-[100px] flex flex-col items-center justify-between px-2 py-1.5 bg-gradient-to-b from-emerald-50 to-emerald-100 border-2 border-dashed border-emerald-400 rounded-lg hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all shrink-0 group"
                                     >
                                         <div className="w-10 h-16 rounded-md flex items-center justify-center group-hover:scale-105 transition-transform origin-bottom">
                                             <ScanLine className="w-8 h-8 text-emerald-600" />
@@ -888,12 +889,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         <div
                                             key={idx}
                                             onClick={() => handleReagentClick(item)}
-                                            className={`min-w-[90px] h-[120px] flex flex-col items-center justify-between p-2 bg-white border rounded-lg hover:shadow-md hover:border-blue-300 cursor-pointer transition-all shrink-0 group relative ${draggedTemplate?.name === item.name ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
+                                            className={`min-w-[90px] h-[100px] flex flex-col items-center justify-end gap-1 px-2 py-1.5 bg-white border rounded-lg hover:shadow-md hover:border-blue-300 cursor-pointer transition-all shrink-0 group relative ${draggedTemplate?.name === item.name ? 'ring-2 ring-blue-500 ring-offset-1 bg-blue-50' : ''}`}
                                         >
-                                            <div
-                                                className="w-10 h-16 rounded-md shadow-sm group-hover:scale-105 transition-transform origin-bottom"
-                                                style={{ backgroundColor: item.color }}
-                                            />
+                                            <div className="group-hover:scale-105 transition-transform origin-bottom">
+                                                <ReagentModelPreview type={item.type as 'A' | 'B' | 'C' | 'D'} width={60} height={64} />
+                                            </div>
                                             <div className="w-full text-center">
                                                 <span className="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">
                                                     {item.name}
@@ -1222,10 +1222,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                                     : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                                                     }`}
                                             >
-                                                <div
-                                                    className="w-6 h-10 rounded-sm"
-                                                    style={{ backgroundColor: opt.color, border: '1px solid #d1d5db' }}
-                                                />
+                                                <ReagentModelPreview type={opt.type as 'A' | 'B' | 'C' | 'D'} width={36} height={44} />
                                                 <span className="text-center leading-tight">{opt.label}</span>
                                             </button>
                                         ))}
