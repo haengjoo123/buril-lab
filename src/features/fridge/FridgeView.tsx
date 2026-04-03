@@ -89,6 +89,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [placementExpiry, setPlacementExpiry] = useState('');
     const [placementBrand, setPlacementBrand] = useState('');
     const [placementProductNumber, setPlacementProductNumber] = useState('');
+    const [placementCas, setPlacementCas] = useState('');
     const [placementRemainingPercent, setPlacementRemainingPercent] = useState<number>(100);
 
     // Scan & Auto-Place State
@@ -370,6 +371,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             expiryDate: placementExpiry || undefined,
             brand: placementBrand || undefined,
             productNumber: placementProductNumber || undefined,
+            casNo: placementCas || undefined,
             remaining_percent: placementRemainingPercent,
         });
 
@@ -382,6 +384,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
+        setPlacementCas('');
         setPlacementRemainingPercent(100);
         setIsReagentTrayVisible(true);
 
@@ -403,6 +406,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setPlacementExpiry('');
         setPlacementBrand('');
         setPlacementProductNumber('');
+        setPlacementCas('');
         setPlacementRemainingPercent(100);
         setIsReagentTrayVisible(true);
     };
@@ -993,6 +997,18 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                                 />
                             </div>
+                        </div>
+
+                        {/* CAS 번호 */}
+                        <div className="flex flex-col gap-1">
+                            <label className="text-xs font-semibold text-gray-600">🧬 {t('reagent_cas_label')}</label>
+                            <input
+                                type="text"
+                                value={placementCas}
+                                onChange={e => setPlacementCas(e.target.value)}
+                                placeholder="e.g. 64-17-5"
+                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                            />
                         </div>
 
                         {/* 크기 */}

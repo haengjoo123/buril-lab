@@ -1,7 +1,7 @@
 /**
  * ReagentModelPreview — 시약 목록 트레이에서 GLB 모델을 3D로 미리보기하는 컴포넌트
  *
- * 작은 Canvas 안에 GLB 모델을 로드하여 자동 회전하며 보여줍니다.
+ * 작은 Canvas 안에 GLB 모델을 로드하여 보여줍니다.
  * bounding box 기반으로 자동 센터링 & 스케일링하여 모든 모델이 프레임을 꽉 채웁니다.
  */
 import React, { Suspense, useMemo } from 'react';

@@ -1079,8 +1079,10 @@ export const InventoryListView: React.FC = () => {
                             value={sortBy}
                             onChange={(value) => setSortBy(value as InventorySortOption)}
                             options={sortOptions}
-                            className="min-w-0 w-32 sm:w-40 shrink-0"
+                            align="right"
+                            className="min-w-0 shrink"
                             buttonClassName="min-w-0 w-full bg-white dark:bg-slate-700 !h-[40px] !rounded-xl !shadow-sm !text-xs !py-0"
+                            menuClassName="w-max min-w-[180px]"
                         />
                     </div>
                 </div>
