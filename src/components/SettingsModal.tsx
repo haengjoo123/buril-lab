@@ -1,10 +1,11 @@
 import React from 'react';
-import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2 } from 'lucide-react';
+import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2, UserMinus } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from './CustomDialog';
 import { supabase } from '../services/supabaseClient';
 import { useOnboardingStore } from '../store/useOnboardingStore';
+import { useAuth } from '../hooks/useAuth';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -17,14 +18,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
     const { t, i18n } = useTranslation();
 
+    const { session, deleteAccount } = useAuth();
     const [dialogConfig, setDialogConfig] = React.useState<{
         isOpen: boolean;
-        type: 'alert' | 'confirm';
+        type: 'alert' | 'confirm' | 'prompt';
         title: string;
         description: string;
         isDestructive?: boolean;
         onConfirm?: () => void;
+        inputValue?: string;
+        inputPlaceholder?: string;
+        isConfirmLoading?: boolean;
     }>({ isOpen: false, type: 'alert', title: '', description: '' });
+
+    const [deleteInputValue, setDeleteInputValue] = React.useState('');
 
     // Feedback state
     const [showFeedback, setShowFeedback] = React.useState(false);
@@ -88,6 +95,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const handleReplayOnboarding = () => {
         resetOnboarding();
         onClose();
+    };
+
+    const handleDeleteAccount = () => {
+        setDeleteInputValue('');
+        setDialogConfig({
+            isOpen: true,
+            type: 'prompt',
+            title: t('settings_delete_account'),
+            description: t('settings_delete_account_confirm'),
+            isDestructive: true,
+            inputPlaceholder: t('settings_delete_account_confirm_input'),
+            onConfirm: async () => {} // Logic is handled in CustomDialog onConfirm prop directly
+        });
     };
 
     const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -326,11 +346,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <span className="font-medium">{t('settings_replay_onboarding')}</span>
                             <Lightbulb className="w-5 h-5" />
                         </button>
+
+                        {session && (
+                            <>
+                                <hr className="border-gray-100 dark:border-slate-800 my-2" />
+                                <button
+                                    onClick={handleDeleteAccount}
+                                    className="w-full flex items-center justify-between p-4 bg-red-50/50 dark:bg-red-950/20 hover:bg-red-50 dark:hover:bg-red-900/40 text-red-600 dark:text-red-500 rounded-xl transition-colors text-left"
+                                >
+                                    <span className="font-medium text-sm">{t('settings_delete_account')}</span>
+                                    <UserMinus className="w-4 h-4 opacity-70" />
+                                </button>
+                                <p className="text-xs text-red-400/80 px-1 text-center">
+                                    {t('settings_delete_account_desc')}
+                                </p>
+                            </>
+                        )}
                     </div>
                 )}
 
-                <div className="p-4 bg-gray-50 dark:bg-slate-950/50 text-center text-xs text-gray-400 dark:text-gray-600">
-                    Buril-lab v1.0.0
+                <div className="p-4 bg-gray-50 dark:bg-slate-950/50 flex flex-col items-center gap-2 text-xs text-gray-400 dark:text-gray-600">
+                    <a
+                        href="/privacy.html"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2 transition-colors"
+                    >
+                        {t('settings_privacy_policy', '개인정보처리방침')}
+                    </a>
+                    <span>Buril-lab v1.0.0</span>
                 </div>
             </div>
 
@@ -341,7 +385,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 description={dialogConfig.description}
                 type={dialogConfig.type}
                 isDestructive={dialogConfig.isDestructive}
-                onConfirm={dialogConfig.onConfirm}
+                inputValue={deleteInputValue}
+                onInputChange={setDeleteInputValue}
+                inputPlaceholder={dialogConfig.inputPlaceholder}
+                isConfirmLoading={dialogConfig.isConfirmLoading}
+                onConfirm={async () => {
+                    if (dialogConfig.type === 'prompt' && dialogConfig.title === t('settings_delete_account')) {
+                        const targetWord = i18n.language === 'ko' ? '탈퇴하겠습니다' : 'delete my account';
+                        if (deleteInputValue !== targetWord) {
+                            alert(t('settings_delete_account_confirm_input'));
+                            return;
+                        }
+                        
+                        setDialogConfig(prev => ({ ...prev, isConfirmLoading: true }));
+                        const { error } = await deleteAccount();
+                        setDialogConfig(prev => ({ ...prev, isConfirmLoading: false }));
+                        
+                        if (error) {
+                            alert(t('settings_delete_account_error') + '\n' + error);
+                        } else {
+                            closeDialog();
+                            setTimeout(() => {
+                                alert(t('settings_delete_account_success'));
+                                window.location.href = '/';
+                            }, 100);
+                        }
+                    } else if (dialogConfig.onConfirm) {
+                        dialogConfig.onConfirm();
+                    }
+                }}
             />
         </div>
     );

@@ -17,6 +17,7 @@ interface UseAuthReturn extends AuthState {
     signIn: (email: string, password: string) => Promise<{ error: string | null }>;
     signUp: (email: string, password: string) => Promise<{ error: string | null }>;
     signOut: () => Promise<void>;
+    deleteAccount: () => Promise<{ error: string | null }>;
 }
 
 export function useAuth(): UseAuthReturn {
@@ -66,10 +67,20 @@ export function useAuth(): UseAuthReturn {
         await supabase.auth.signOut();
     }, []);
 
+    const deleteAccount = useCallback(async () => {
+        const { error } = await supabase.rpc('delete_user');
+        if (error) {
+            return { error: error.message };
+        }
+        await supabase.auth.signOut();
+        return { error: null };
+    }, []);
+
     return {
         ...state,
         signIn,
         signUp,
         signOut,
+        deleteAccount,
     };
 }

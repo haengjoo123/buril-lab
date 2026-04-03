@@ -111,6 +111,13 @@ export const translations = {
         settings_view_guide: "안전 가이드 다시보기",
         settings_language: "언어 설정 (Language)",
         settings_replay_onboarding: "온보딩 다시보기",
+        settings_delete_account: "회원 탈퇴",
+        settings_delete_account_desc: "계정과 관련된 모든 데이터를 영구적으로 삭제합니다.",
+        settings_delete_account_confirm: "정말 탈퇴하시겠습니까? 로그인 정보 및 개인 데이터가 영원히 삭제됩니다.",
+        settings_delete_account_confirm_input: "탈퇴 확인을 위해 '탈퇴하겠습니다' 를 입력해주세요.",
+        settings_delete_account_success: "회원 탈퇴가 완료되었습니다.",
+        settings_delete_account_error: "회원 탈퇴 중 오류가 발생했습니다.",
+        settings_privacy_policy: "개인정보처리방침",
 
         // Onboarding
         onboarding_close_guide: "온보딩 안내 닫기",
@@ -792,6 +799,7 @@ export const translations = {
         auth_error_generic: "인증 중 오류가 발생했습니다.",
         auth_required_for_feature: "이 기능을 사용하려면 로그인이 필요합니다.",
         auth_back_to_search: "검색 화면으로 돌아가기",
+        auth_privacy_policy: "개인정보처리방침",
 
         // MSDS Modal
         msds_title: "MSDS 정보 (물질안전보건자료)",
@@ -977,6 +985,13 @@ export const translations = {
         settings_view_guide: "View Safety Guide",
         settings_language: "Language",
         settings_replay_onboarding: "Replay Onboarding",
+        settings_delete_account: "Delete Account",
+        settings_delete_account_desc: "Permanently delete your account and all associated data.",
+        settings_delete_account_confirm: "Are you sure you want to delete your account? Your login information and personal data will be permanently deleted.",
+        settings_delete_account_confirm_input: "Please type 'delete my account' to confirm.",
+        settings_delete_account_success: "Your account has been deleted.",
+        settings_delete_account_error: "An error occurred while deleting your account.",
+        settings_privacy_policy: "Privacy Policy",
 
         // Onboarding
         onboarding_close_guide: "Close onboarding tip",
@@ -1657,6 +1672,7 @@ export const translations = {
         auth_error_generic: "An error occurred during authentication.",
         auth_required_for_feature: "Sign in to use this feature.",
         auth_back_to_search: "Back to search",
+        auth_privacy_policy: "Privacy Policy",
 
         // MSDS Modal
         msds_title: "MSDS (Safety Data Sheet)",
