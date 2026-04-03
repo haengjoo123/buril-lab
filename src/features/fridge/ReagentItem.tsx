@@ -19,26 +19,15 @@ interface ReagentItemProps {
     dimmed?: boolean;
 }
 
-export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 15, D: 8 };
+export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 15 };
 
 // --- Shared Geometries (Performance Optimization) ---
-// Type A: 갈색 병
-const GEO_A_BODY = new THREE.CylinderGeometry(0.22, 0.24, 0.7, 10);
-const GEO_A_NECK = new THREE.CylinderGeometry(0.1, 0.14, 0.18, 8);
-const GEO_A_CAP = new THREE.CylinderGeometry(0.12, 0.12, 0.1, 8);
-const GEO_A_BOTTOM = new THREE.CylinderGeometry(0.24, 0.24, 0.02, 10);
 
-// Type B: 플라스틱 용기
-const GEO_B_BODY = new THREE.BoxGeometry(0.5, 0.9, 0.35);
-const GEO_B_CAP = new THREE.BoxGeometry(0.52, 0.1, 0.37);
-const GEO_B_LABEL_FRONT = new THREE.PlaneGeometry(0.4, 0.55);
-const GEO_B_LABEL_STRIP = new THREE.PlaneGeometry(0.38, 0.08);
-
-// Type C: 바이알 박스
+// Type D: 바이알 박스
 const GEO_D_BOX = new THREE.BoxGeometry(1.2, 0.5, 0.8);
 const GEO_D_DIV_VERT = new THREE.BoxGeometry(0.02, 0.44, 0.74);
 const GEO_D_DIV_HORZ = new THREE.BoxGeometry(1.14, 0.44, 0.02);
-const GEO_D_RIM = new THREE.BoxGeometry(1.22, 0.02, 0.82); // vial box rim (type C mesh)
+const GEO_D_RIM = new THREE.BoxGeometry(1.22, 0.02, 0.82); // vial box rim (type D mesh)
 
 export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean; expiryLevel?: ExpiryLevel }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false, expiryLevel }) => {
 
@@ -91,57 +80,40 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
     };
 
     switch (type) {
-        case 'A': // 갈색 병: 원기둥 몸통 + 좁은 목 + 뚜껑
+        case 'A': // 갈색 병 GLB 모델
             return (
                 <group scale={scale}>
-                    {/* 몸통 (갈색 원기둥) - 메인 그림자 캐스터 */}
-                    <mesh castShadow position={[0, 0.35, 0]} geometry={GEO_A_BODY}>
-                        <meshStandardMaterial ref={materialRef} {...materialProps} />
-                    </mesh>
-                    {/* 목 (좁은 원기둥) */}
-                    <mesh position={[0, 0.78, 0]} geometry={GEO_A_NECK}>
-                        <meshStandardMaterial color="#6D4C41" roughness={0.4} metalness={0.1}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
-                    {/* 뚜껑 (검정 원기둥) */}
-                    <mesh position={[0, 0.92, 0]} geometry={GEO_A_CAP}>
-                        <meshStandardMaterial color="#212121" roughness={0.6} metalness={0.2}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
-                    {/* 바닥 */}
-                    <mesh position={[0, 0.01, 0]} geometry={GEO_A_BOTTOM}>
-                        <meshStandardMaterial color="#5D4037" roughness={0.5}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
+                    <BrownBottleModel
+                        onPrimaryMaterialChange={(material) => {
+                            materialRef.current = material;
+                        }}
+                        materialProps={materialProps}
+                    />
                 </group>
             );
-        case 'B': // 플라스틱 용기: 박스 몸통 + 뚜껑 + 라벨
+        case 'B': // 플라스틱 용기 GLB 모델
             return (
                 <group scale={scale}>
-                    {/* 몸통 (흰색 박스) - 메인 그림자 캐스터 */}
-                    <mesh castShadow position={[0, 0.45, 0]} geometry={GEO_B_BODY}>
-                        <meshStandardMaterial ref={materialRef} {...materialProps} roughness={0.8} />
-                    </mesh>
-                    {/* 뚜껑 (파란색) */}
-                    <mesh position={[0, 0.95, 0]} geometry={GEO_B_CAP}>
-                        <meshStandardMaterial color="#1565C0" roughness={0.7} metalness={0.05}
-                            transparent={opacity < 1} opacity={opacity} />
-                    </mesh>
-                    {/* 앞면 라벨 (Plane) */}
-                    <mesh position={[0, 0.45, 0.176]} geometry={GEO_B_LABEL_FRONT}>
-                        <meshStandardMaterial color="#FFFFFF" roughness={1} metalness={0}
-                            transparent opacity={opacity * 0.92}
-                            polygonOffset polygonOffsetFactor={-1} />
-                    </mesh>
-                    {/* 라벨 색상 띠 */}
-                    <mesh position={[0, 0.6, 0.177]} geometry={GEO_B_LABEL_STRIP}>
-                        <meshStandardMaterial color="#E53935" roughness={1} metalness={0}
-                            transparent opacity={opacity * 0.9}
-                            polygonOffset polygonOffsetFactor={-2} />
-                    </mesh>
+                    <PlasticBottleModel
+                        onPrimaryMaterialChange={(material) => {
+                            materialRef.current = material;
+                        }}
+                        materialProps={materialProps}
+                    />
                 </group>
             );
-        case 'C': // 바이알 박스: 박스 + 칸막이
+        case 'C': // 유리병 GLB 모델
+            return (
+                <group scale={scale}>
+                    <GlassBottleModel
+                        onPrimaryMaterialChange={(material) => {
+                            materialRef.current = material;
+                        }}
+                        materialProps={materialProps}
+                    />
+                </group>
+            );
+        case 'D': // 바이알 박스: 박스 + 칸막이
             return (
                 <group scale={scale}>
                     {/* 외곽 박스 - 메인 그림자 캐스터 */}
@@ -175,28 +147,18 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
                     </mesh>
                 </group>
             );
-        case 'D': // 유리병 GLB 모델
-            return (
-                <group scale={scale}>
-                    <GlassBottleModel
-                        onPrimaryMaterialChange={(material) => {
-                            materialRef.current = material;
-                        }}
-                        materialProps={materialProps}
-                    />
-                </group>
-            );
         default:
             return null;
     }
 };
 
-/** GLB 모델 로더 컴포넌트 — glass.glb */
-const GlassBottleModel: React.FC<{
-    onPrimaryMaterialChange: (material: THREE.MeshStandardMaterial | null) => void;
-    materialProps: Record<string, unknown>;
-}> = ({ onPrimaryMaterialChange, materialProps }) => {
-    const { scene } = useGLTF('/models/reagents/glass.glb');
+/** 공통 GLB 모델 로더 팩토리 */
+function useReagentGLBModel(
+    glbPath: string,
+    materialProps: Record<string, unknown>,
+    onPrimaryMaterialChange: (material: THREE.MeshStandardMaterial | null) => void,
+) {
+    const { scene } = useGLTF(glbPath);
     const { clonedScene, primaryMaterial } = useMemo(() => {
         const clone = scene.clone(true);
         const overrideErrorColor = materialProps.color === '#ef4444';
@@ -220,7 +182,6 @@ const GlassBottleModel: React.FC<{
             return next;
         };
 
-        // 모델의 원본 머티리얼을 유지하되 확장
         clone.traverse((node) => {
             if ((node as THREE.Mesh).isMesh) {
                 const mesh = node as THREE.Mesh;
@@ -238,10 +199,35 @@ const GlassBottleModel: React.FC<{
         return () => onPrimaryMaterialChange(null);
     }, [onPrimaryMaterialChange, primaryMaterial]);
 
+    return clonedScene;
+}
+
+interface GLBModelProps {
+    onPrimaryMaterialChange: (material: THREE.MeshStandardMaterial | null) => void;
+    materialProps: Record<string, unknown>;
+}
+
+/** GLB 모델 로더 — brown bottle.glb (갈색병) */
+const BrownBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/brown bottle.glb', materialProps, onPrimaryMaterialChange);
     return <primitive object={clonedScene} scale={0.5} />;
 };
 
-// Preload the GLB model
+/** GLB 모델 로더 — plastic bottle.glb (플라스틱 통) */
+const PlasticBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/plastic bottle.glb', materialProps, onPrimaryMaterialChange);
+    return <primitive object={clonedScene} scale={0.5} />;
+};
+
+/** GLB 모델 로더 — glass.glb (유리병) */
+const GlassBottleModel: React.FC<GLBModelProps> = ({ onPrimaryMaterialChange, materialProps }) => {
+    const clonedScene = useReagentGLBModel('/models/reagents/glass.glb', materialProps, onPrimaryMaterialChange);
+    return <primitive object={clonedScene} scale={0.5} />;
+};
+
+// Preload GLB models
+useGLTF.preload('/models/reagents/brown bottle.glb');
+useGLTF.preload('/models/reagents/plastic bottle.glb');
 useGLTF.preload('/models/reagents/glass.glb');
 
 export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shelfDepth = 2, isGhost, isValid = true, dimmed = false }) => {

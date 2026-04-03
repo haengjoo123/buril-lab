@@ -1,4 +1,4 @@
-/** A=갈색병 B=플라스틱 C=바이알박스 D=유리병(GLB) */
+/** A=갈색병 B=플라스틱 C=유리병(GLB) D=바이알박스 */
 export type ReagentTemplateType = 'A' | 'B' | 'C' | 'D';
 
 export interface ReagentTemplate {

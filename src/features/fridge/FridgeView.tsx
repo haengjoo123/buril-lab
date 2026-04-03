@@ -442,7 +442,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     };
 
     const handleScanAutoPlace = () => {
-        const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 15, D: 8 };
+        const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 15 };
         const baseWidth = CONTAINER_BASE_WIDTHS[scanContainerType] || 8;
         const finalWidth = baseWidth * scanSize;
         const finalName = scanName.trim() || '이름 없음';
@@ -520,20 +520,20 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             chemicalData: { name: t('cabinet_container_plastic') }
         },
         {
-            name: t('cabinet_container_vial'), type: 'C', color: '#cbd5e1', width: 15,
-            chemicalData: { name: t('cabinet_container_vial') }
+            name: t('cabinet_container_glass'), type: 'C', color: '#b0c4de', width: 8,
+            chemicalData: { name: t('cabinet_container_glass') }
         },
         {
-            name: t('cabinet_container_glass'), type: 'D', color: '#b0c4de', width: 8,
-            chemicalData: { name: t('cabinet_container_glass') }
+            name: t('cabinet_container_vial'), type: 'D', color: '#cbd5e1', width: 15,
+            chemicalData: { name: t('cabinet_container_vial') }
         },
     ];
 
     const containerTypeOptions: { type: ReagentTemplateType; label: string; color: string }[] = [
         { type: 'A', label: t('cabinet_container_amber'), color: '#8b4513' },
         { type: 'B', label: t('cabinet_container_plastic'), color: '#f8fafc' },
-        { type: 'C', label: t('cabinet_container_vial'), color: '#cbd5e1' },
-        { type: 'D', label: t('cabinet_container_glass'), color: '#b0c4de' },
+        { type: 'C', label: t('cabinet_container_glass'), color: '#b0c4de' },
+        { type: 'D', label: t('cabinet_container_vial'), color: '#cbd5e1' },
     ];
 
     return (
