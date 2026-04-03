@@ -47,6 +47,7 @@ export const ReagentEditPanel: React.FC = () => {
     const [expiryDate, setExpiryDate] = useState('');
     const [capacity, setCapacity] = useState('');
     const [template, setTemplate] = useState<ReagentTemplateType>('A');
+    const [width, setWidth] = useState<number>(10);
     const [brand, setBrand] = useState('');
     const [productNumber, setProductNumber] = useState('');
     const [casNo, setCasNo] = useState('');
@@ -77,7 +78,7 @@ export const ReagentEditPanel: React.FC = () => {
         return null;
     }, [selectedReagentId, shelves]);
 
-    // Update local state when selection changes
+    // Update local state when selection data changes
     useEffect(() => {
         if (selectedItem) {
             setName(selectedItem.name);
@@ -89,7 +90,13 @@ export const ReagentEditPanel: React.FC = () => {
             setProductNumber(selectedItem.productNumber || '');
             setCasNo(selectedItem.casNo || '');
             setRemainingPercent(selectedItem.remaining_percent ?? 100);
+            setWidth(selectedItem.width || CONTAINER_BASE_WIDTHS[selectedItem.template] || 10);
+        }
+    }, [selectedItem]);
 
+    // Handle open animation when a new reagent is selected
+    useEffect(() => {
+        if (selectedReagentId) {
             setShowModalContent(false);
             const timer = setTimeout(() => {
                 setShowModalContent(true);
@@ -98,7 +105,7 @@ export const ReagentEditPanel: React.FC = () => {
         } else {
             setShowModalContent(false);
         }
-    }, [selectedItem]);
+    }, [selectedReagentId]);
 
     // Reset disposal view when panel opens/closes
     useEffect(() => {
@@ -118,11 +125,6 @@ export const ReagentEditPanel: React.FC = () => {
 
     const handleSave = async () => {
         if (isSaving) return;
-
-        // Calculate new width if template changed
-        const newWidth = template !== selectedItem.template
-            ? (CONTAINER_BASE_WIDTHS[template] || 8)
-            : undefined;
 
         const updatePayload = {
             name,
@@ -145,7 +147,7 @@ export const ReagentEditPanel: React.FC = () => {
             productNumber: productNumber || undefined,
             casNo: casNo || undefined,
             remaining_percent: remainingPercent,
-            ...(newWidth !== undefined && { width: newWidth }),
+            width,
         });
 
         // If CAS changed and now has a value, trigger PubChem enrichment
@@ -396,19 +398,43 @@ export const ReagentEditPanel: React.FC = () => {
                             </div>
 
 
-                            {/* Capacity Input */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                    <Beaker size={12} />
-                                    {t('inventory_capacity')}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={capacity}
-                                    onChange={(e) => setCapacity(e.target.value)}
-                                    className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                                    placeholder={t('inventory_capacity_placeholder')}
-                                />
+                            {/* Capacity & CAS Number Row */}
+                            <div className="flex flex-col gap-0.5">
+                                <div className="grid grid-cols-2 gap-2">
+                                    {/* Capacity Input */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                            <Beaker size={12} />
+                                            {t('inventory_capacity')}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={capacity}
+                                            onChange={(e) => setCapacity(e.target.value)}
+                                            className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                            placeholder={t('inventory_capacity_placeholder')}
+                                        />
+                                    </div>
+                                    {/* CAS Number Input */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                            <FlaskConical size={12} />
+                                            CAS Number
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={casNo}
+                                            onChange={(e) => setCasNo(e.target.value)}
+                                            className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
+                                            placeholder={t('inventory_cas_placeholder')}
+                                        />
+                                    </div>
+                                </div>
+                                {casNo && (
+                                    <p className="text-[10px] text-gray-400 mt-1 pl-1">
+                                        {t('cabinet_pubchem_auto_enrich')}
+                                    </p>
+                                )}
                             </div>
 
                             {/* Remaining Amount Input */}
@@ -477,7 +503,12 @@ export const ReagentEditPanel: React.FC = () => {
                                     {CONTAINER_TYPES.map((ct) => (
                                         <button
                                             key={ct.type}
-                                            onClick={() => setTemplate(ct.type)}
+                                            onClick={() => {
+                                                setTemplate(ct.type);
+                                                if (template !== ct.type) {
+                                                    setWidth(CONTAINER_BASE_WIDTHS[ct.type] || 8);
+                                                }
+                                            }}
                                             className={`flex flex-col items-center gap-0.5 px-1.5 py-2 rounded-lg border text-xs font-medium transition-all ${template === ct.type
                                                 ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300'
                                                 : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
@@ -490,25 +521,26 @@ export const ReagentEditPanel: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* CAS Number Input */}
+                            {/* Container Size (Width) Input */}
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                                    <FlaskConical size={12} />
-                                    CAS Number
+                                    {t('cabinet_container_size', '용기 크기')}
                                 </label>
-                                <input
-                                    type="text"
-                                    value={casNo}
-                                    onChange={(e) => setCasNo(e.target.value)}
-                                    className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
-                                    placeholder={t('inventory_cas_placeholder')}
-                                />
-                                {casNo && (
-                                    <p className="text-[10px] text-gray-400">
-                                        {t('cabinet_pubchem_auto_enrich')}
-                                    </p>
-                                )}
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="range"
+                                        min="2"
+                                        max="30"
+                                        step="0.5"
+                                        value={width}
+                                        onChange={(e) => setWidth(parseFloat(e.target.value))}
+                                        className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                    />
+                                    <span className="text-xs text-gray-500 w-8 text-right">{width}</span>
+                                </div>
                             </div>
+
+
 
                             {/* Expiry Date Input */}
                             <div className="flex flex-col gap-1.5">
