@@ -27,6 +27,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
     const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
     const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [showQtyNotice, setShowQtyNotice] = useState(false);
 
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -494,17 +495,6 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_cas_number')}</label>
-                                    <input
-                                        name="cas_number"
-                                        value={formData.cas_number}
-                                        onChange={handleChange}
-                                        placeholder={t('inventory_cas_placeholder')}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-slate-900 dark:text-slate-100"
-                                    />
-                                </div>
-
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_capacity')}</label>
@@ -524,15 +514,32 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                             min="1"
                                             value={formData.quantity}
                                             onChange={handleChange}
-                                            disabled={isEditingCabinetItem}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-900 dark:text-slate-100"
+                                            readOnly={isEditingCabinetItem}
+                                            onClick={() => {
+                                                if (isEditingCabinetItem) {
+                                                    setShowQtyNotice(true);
+                                                    setTimeout(() => setShowQtyNotice(false), 3000);
+                                                }
+                                            }}
+                                            className={`w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-900 dark:text-slate-100 ${isEditingCabinetItem ? 'opacity-70 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50' : ''}`}
                                         />
-                                        {isEditingCabinetItem && (
-                                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        {isEditingCabinetItem && showQtyNotice && (
+                                            <span className="text-[11px] text-red-500 dark:text-red-400 font-medium animate-in fade-in slide-in-from-top-1">
                                                 {t('inventory_qty_notice')}
                                             </span>
                                         )}
                                     </div>
+                                </div>
+
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_cas_number')}</label>
+                                    <input
+                                        name="cas_number"
+                                        value={formData.cas_number}
+                                        onChange={handleChange}
+                                        placeholder={t('inventory_cas_placeholder')}
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-slate-900 dark:text-slate-100"
+                                    />
                                 </div>
 
                                 <div className="flex flex-col gap-2 mt-1">
