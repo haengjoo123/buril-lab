@@ -6,6 +6,8 @@ export interface Lab {
     name: string;
     created_by: string;
     created_at: string;
+    institution_type?: string;
+    research_field?: string;
 }
 
 export interface LabMember {

@@ -25,6 +25,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const [createName, setCreateName] = useState('');
     const [createPassword, setCreatePassword] = useState('');
     const [createNickname, setCreateNickname] = useState('');
+    const [createInstitutionType, setCreateInstitutionType] = useState('');
+    const [createResearchField, setCreateResearchField] = useState('');
 
     // For joining a lab
     const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
@@ -131,7 +133,13 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         setIsLoading(true);
         setError(null);
         try {
-            const newLab = await labService.createLab(createName, createPassword, createNickname);
+            const newLab = await labService.createLab(
+                createName, 
+                createPassword, 
+                createNickname,
+                createInstitutionType.trim() ? createInstitutionType.trim() : undefined,
+                createResearchField.trim() ? createResearchField.trim() : undefined
+            );
             // update state
             const updatedLabs = await labService.getMyLabs();
             setMyLabs(updatedLabs);
@@ -218,6 +226,31 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         setSettingsPassword(lab?.join_password || '');
         setView('settings');
     };
+
+    const instOptions = [
+        { value: '', label: t('lab_mgmt_form_institution_type_placeholder') },
+        { value: 'university', label: t('inst_uni') },
+        { value: 'research_institute_gov', label: t('inst_gov') },
+        { value: 'corporate_rd_large', label: t('inst_corp_large') },
+        { value: 'corporate_rd_sme', label: t('inst_corp_sme') },
+        { value: 'hospital_clinical', label: t('inst_hospital') },
+        { value: 'school_edu', label: t('inst_edu') },
+        { value: 'other', label: t('inst_other') }
+    ];
+
+    const fieldOptions = [
+        { value: '', label: t('lab_mgmt_form_research_field_placeholder') },
+        { value: 'biotech_lifescience', label: t('field_bio') },
+        { value: 'chemistry_chemical_eng', label: t('field_chem') },
+        { value: 'materials_science', label: t('field_material') },
+        { value: 'battery_energy', label: t('field_battery') },
+        { value: 'pharmaceutical', label: t('field_pharma') },
+        { value: 'environmental_water', label: t('field_env') },
+        { value: 'food_agriculture', label: t('field_food') },
+        { value: 'medical_clinical', label: t('field_medical') },
+        { value: 'physics_semiconductor', label: t('field_physics') },
+        { value: 'other_field', label: t('field_other') }
+    ];
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -380,6 +413,26 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     placeholder={t('lab_mgmt_form_nickname_placeholder')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_institution_type')}</label>
+                                <AppSelect
+                                    value={createInstitutionType}
+                                    onChange={setCreateInstitutionType}
+                                    options={instOptions}
+                                    className="w-full"
+                                    buttonClassName="w-full bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 min-h-[42px] px-3 py-2 rounded-lg"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_research_field')}</label>
+                                <AppSelect
+                                    value={createResearchField}
+                                    onChange={setCreateResearchField}
+                                    options={fieldOptions}
+                                    className="w-full"
+                                    buttonClassName="w-full bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 min-h-[42px] px-3 py-2 rounded-lg"
                                 />
                             </div>
                             <div>

@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient';
 import type { Lab, LabMember } from '../store/useLabStore';
 
 export const labService = {
-    async createLab(name: string, password?: string, nickname?: string): Promise<Lab> {
+    async createLab(name: string, password?: string, nickname?: string, institutionType?: string, researchField?: string): Promise<Lab> {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) throw new Error("Not authenticated");
 
@@ -13,7 +13,9 @@ export const labService = {
             .insert({
                 name,
                 created_by: userData.user.id,
-                join_password: password || null
+                join_password: password || null,
+                institution_type: institutionType || null,
+                research_field: researchField || null
             })
             .select()
             .single();
