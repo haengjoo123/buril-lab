@@ -129,7 +129,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!createName.trim() || !createNickname.trim()) return;
+        if (!createName.trim() || !createNickname.trim() || !createInstitutionType || !createResearchField) return;
         setIsLoading(true);
         setError(null);
         try {
@@ -253,8 +253,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     ];
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-[380px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-[380px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
 
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center shrink-0">
                     <h3 className="font-bold text-lg text-slate-800 dark:text-white">
@@ -269,7 +269,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                     </button>
                 </div>
 
-                <div className="p-5 flex-1 overflow-y-auto">
+                <div className="p-5 overflow-y-auto w-full">
                     {error && (
                         <div className="mb-4 flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm">
                             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -446,11 +446,11 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     autoComplete="new-password"
                                 />
                             </div>
-                            <div className="flex gap-2 pt-4">
+                            <div className="flex gap-2 pt-4 pb-4">
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
-                                    {t('common_cancel')}
+                                    {t('btn_cancel')}
                                 </button>
-                                <button type="submit" disabled={isLoading || !createName.trim() || !createNickname.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
+                                <button type="submit" disabled={isLoading || !createName.trim() || !createNickname.trim() || !createInstitutionType || !createResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_create')}
                                 </button>
                             </div>
@@ -662,7 +662,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             </div>
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
-                                    {t('common_cancel')}
+                                    {t('btn_cancel')}
                                 </button>
                                 <button type="submit" disabled={isLoading || !settingsName.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_save')}

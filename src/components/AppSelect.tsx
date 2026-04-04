@@ -80,7 +80,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                 }}
                 disabled={disabled}
                 className={joinClasses(
-                    'w-full border bg-white text-left text-slate-900 shadow-sm transition-all dark:bg-slate-800 dark:text-slate-100',
+                    'w-full border bg-white text-left shadow-sm transition-all dark:bg-slate-800',
                     'border-slate-200 hover:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-slate-600 dark:hover:border-emerald-500/70',
                     'flex items-center justify-between gap-2',
                     'disabled:cursor-not-allowed disabled:opacity-50',
@@ -88,7 +88,10 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                     buttonClassName
                 )}
             >
-                <span className="min-w-0 truncate">
+                <span className={joinClasses(
+                    "min-w-0 truncate",
+                    value ? "text-slate-900 dark:text-slate-100 font-medium" : "text-slate-400 dark:text-slate-500"
+                )}>
                     {selectedOption?.label || placeholder || ''}
                 </span>
                 <ChevronDown className={joinClasses(iconSizeClasses, 'shrink-0 text-slate-400 transition-transform', isOpen && 'rotate-180')} />
