@@ -105,9 +105,32 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
                             <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">5. 개인정보의 보관 및 파기</h2>
                             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                                 <li>사용자의 개인정보는 계정이 유지되는 동안 보관됩니다.</li>
-                                <li>계정 삭제 요청 시 관련 데이터는 즉시 삭제됩니다.</li>
+                                <li>계정 삭제 완료 시, 해당 사용자와 관련된 모든 데이터(이메일, 닉네임, 등록한 시약 데이터, 활동 로그 및 검색 기록)는 즉시 및 영구적으로 삭제됩니다.</li>
                                 <li>비밀번호는 단방향 암호화(해시) 처리되어 저장되며, 원본은 보관되지 않습니다.</li>
                             </ul>
+                        </section>
+
+                        <section id="delete-account">
+                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">6. 계정과 관련 데이터의 삭제 방법</h2>
+                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">BurilLab은 사용자가 원할 때 언제든지 직접 계정을 삭제하고 모든 데이터를 파기할 수 있는 권리를 보장합니다.</p>
+                            
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 mb-4">
+                                <h3 className="text-sm font-bold text-white mb-2">A. 앱 내에서 직접 삭제하는 방법 (권장)</h3>
+                                <ol className="list-decimal pl-5 text-slate-400 space-y-1 text-sm">
+                                    <li>BurilLab 앱에 로그인합니다.</li>
+                                    <li>메인 화면 우상단의 '설정(톱니바퀴 아이콘)' 메뉴를 클릭합니다.</li>
+                                    <li>하단의 <span className="text-red-400 font-medium">'계정 탈퇴'</span> 버튼을 클릭합니다.</li>
+                                    <li>화면의 안내에 따라 확인 문구를 입력하면 즉시 계정과 모든 데이터가 삭제됩니다.</li>
+                                </ol>
+                            </div>
+
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+                                <h3 className="text-sm font-bold text-white mb-2">B. 웹 또는 이메일을 통한 삭제 요청</h3>
+                                <p className="text-slate-400 text-sm m-0">
+                                    앱 접근이 불가능한 경우, 고객센터 이메일(<a href="mailto:gudwns999999@gmail.com" className="text-blue-400">gudwns999999@gmail.com</a>)로 
+                                    계정 이메일 주소와 함께 삭제를 요청하시면 본인 확인 절차 후 7일 이내에 모든 데이터를 파기해 드립니다.
+                                </p>
+                            </div>
                         </section>
 
                         <section>
@@ -218,9 +241,32 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
                             <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">5. Data Retention and Deletion</h2>
                             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                                 <li>Personal information is retained for the duration of the account's existence.</li>
-                                <li>Upon account deletion request, all related data will be promptly deleted.</li>
+                                <li>Upon completion of account deletion, all data associated with the user (email, nickname, registered reagent data, activity logs, and search history) is immediately and permanently deleted.</li>
                                 <li>Passwords are stored using one-way encryption (hashing); original passwords are never retained.</li>
                             </ul>
+                        </section>
+
+                        <section id="delete-account-en">
+                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">6. How to Delete Your Account and Data</h2>
+                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">BurilLab ensures your right to delete your account and destroy all data at any time.</p>
+                            
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 mb-4">
+                                <h3 className="text-sm font-bold text-white mb-2">A. Deletion via the App (Recommended)</h3>
+                                <ol className="list-decimal pl-5 text-slate-400 space-y-1 text-sm">
+                                    <li>Log in to the BurilLab app.</li>
+                                    <li>Click on the 'Settings (Gear icon)' in the upper right.</li>
+                                    <li>Click the <span className="text-red-400 font-medium">'Delete Account'</span> button at the bottom.</li>
+                                    <li>Follow the prompts and enter the confirmation phrase to immediately delete your account and all data.</li>
+                                </ol>
+                            </div>
+
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+                                <h3 className="text-sm font-bold text-white mb-2">B. Request via Email</h3>
+                                <p className="text-slate-400 text-sm m-0">
+                                    If you cannot access the app, you can request deletion by emailing <a href="mailto:gudwns999999@gmail.com" className="text-blue-400">gudwns999999@gmail.com</a> with 
+                                    your registered email address. We will destroy all data within 7 days after identity verification.
+                                </p>
+                            </div>
                         </section>
 
                         <section>

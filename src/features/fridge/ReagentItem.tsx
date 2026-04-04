@@ -49,13 +49,13 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
                 const intensity = (Math.sin(t * 4) + 1) * 0.25;
                 mat.emissive = expiryExpiredColor;
                 mat.emissiveIntensity = intensity;
-                mat.color.lerpColors(origColor, expiryExpiredColor, 0.4);
+                mat.color.copy(origColor);
             } else if (expiryLevel === 'warning') {
                 const t = state.clock.elapsedTime;
                 const intensity = (Math.sin(t * 2) + 1) * 0.12;
                 mat.emissive = expiryWarningColor;
                 mat.emissiveIntensity = intensity;
-                mat.color.lerpColors(origColor, expiryWarningColor, 0.15);
+                mat.color.copy(origColor);
             } else {
                 mat.emissiveIntensity = 0;
                 mat.color.copy(origColor);

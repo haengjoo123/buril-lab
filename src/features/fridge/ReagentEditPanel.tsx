@@ -327,6 +327,20 @@ export const ReagentEditPanel: React.FC = () => {
                     <>
                         {/* Scrollable Content */}
                         <div className="p-3 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0">
+                            {/* Expiry Alert Banner — shown at top only for urgent states */}
+                            {expiryStatus && (expiryStatus.level === 'expired' || expiryStatus.level === 'critical' || expiryStatus.level === 'warning') && (
+                                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${
+                                    expiryStatus.level === 'expired'
+                                        ? 'bg-red-100 text-red-700 border border-red-200 animate-pulse'
+                                        : expiryStatus.level === 'critical'
+                                            ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
+                                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                }`}>
+                                    <CalendarClock size={14} className="shrink-0" />
+                                    <span>{t(expiryStatus.labelKey, expiryStatus.labelParams)}</span>
+                                </div>
+                            )}
+
                             {/* Info Read-only */}
                             <div className="text-xs text-gray-500 flex flex-col gap-1">
                                 <div className="flex justify-between items-center">

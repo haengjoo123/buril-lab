@@ -14,8 +14,9 @@ interface SettingsModalProps {
 type FeedbackType = 'bug' | 'improvement' | 'general';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
-    const clearCart = useWasteStore((state) => state.clearCart);
-    const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
+        const clearCart = useWasteStore((state) => state.clearCart);
+        const clearSearchHistory = useWasteStore((state) => state.clearSearchHistory);
+        const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
     const { t, i18n } = useTranslation();
 
     const { session, deleteAccount } = useAuth();
@@ -58,6 +59,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             isDestructive: true,
             onConfirm: () => {
                 clearCart();
+                clearSearchHistory();
                 const currentLang = i18n.language;
                 localStorage.clear();
                 localStorage.setItem('i18nextLng', currentLang);
