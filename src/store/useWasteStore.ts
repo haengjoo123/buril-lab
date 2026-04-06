@@ -10,6 +10,10 @@ interface WasteState {
     clearCart: () => void;
     aiGuide: string | null;
     setAiGuide: (guide: string | null) => void;
+    aiLoading: boolean;
+    setAiLoading: (loading: boolean) => void;
+    aiError: boolean;
+    setAiError: (error: boolean) => void;
 
     // Search History State
     recentSearches: string[];
@@ -28,15 +32,21 @@ export const useWasteStore = create<WasteState>()(
                 if (state.cart.some(item => item.chemical.id === result.chemical.id)) {
                     return state;
                 }
-                return { cart: [...state.cart, result], aiGuide: null };
+                return { cart: [...state.cart, result], aiGuide: null, aiLoading: false, aiError: false };
             }),
             removeFromCart: (id) => set((state) => ({
                 cart: state.cart.filter((item) => item.chemical.id !== id),
-                aiGuide: null
+                aiGuide: null,
+                aiLoading: false,
+                aiError: false
             })),
-            clearCart: () => set({ cart: [], aiGuide: null }),
+            clearCart: () => set({ cart: [], aiGuide: null, aiLoading: false, aiError: false }),
             aiGuide: null,
             setAiGuide: (guide) => set({ aiGuide: guide }),
+            aiLoading: false,
+            setAiLoading: (loading) => set({ aiLoading: loading }),
+            aiError: false,
+            setAiError: (error) => set({ aiError: error }),
 
             recentSearches: [],
             loadSearchHistory: async () => {

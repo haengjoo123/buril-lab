@@ -15,7 +15,12 @@ interface CartViewProps {
 }
 
 export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
-    const { cart, removeFromCart, clearCart, aiGuide, setAiGuide } = useWasteStore();
+    const { 
+        cart, removeFromCart, clearCart, 
+        aiGuide, setAiGuide,
+        aiLoading, setAiLoading,
+        aiError, setAiError
+    } = useWasteStore();
 
     const { t } = useTranslation();
 
@@ -32,8 +37,6 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
     const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
     // AI Guide local UI state
-    const [aiLoading, setAiLoading] = useState(false);
-    const [aiError, setAiError] = useState(false);
     const [aiExpanded, setAiExpanded] = useState(true);
 
 
