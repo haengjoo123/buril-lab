@@ -43,7 +43,23 @@ export const MemberManagementPanel: React.FC = () => {
         setIsLoading(true);
         setError(null);
         labService.getLabMembers(currentLabId)
-            .then(setMembers)
+            .then(data => {
+                const roleWeight: Record<string, number> = {
+                    'admin': 0,
+                    'pi': 1,
+                    'postdoc': 2,
+                    'graduate': 3,
+                    'undergrad': 4,
+                    'student': 5
+                };
+                const sorted = [...data].sort((a, b) => {
+                    const weightA = roleWeight[a.role] ?? 99;
+                    const weightB = roleWeight[b.role] ?? 99;
+                    if (weightA !== weightB) return weightA - weightB;
+                    return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
+                });
+                setMembers(sorted);
+            })
             .catch(() => setError(t('admin_members_error')))
             .finally(() => setIsLoading(false));
     }, [currentLabId, t]);
@@ -118,6 +134,7 @@ export const MemberManagementPanel: React.FC = () => {
         if (role === 'postdoc') return 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300';
         if (role === 'graduate') return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
         if (role === 'undergrad') return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+        if (role === 'student') return 'bg-slate-50 text-slate-400 dark:bg-slate-800/40 dark:text-slate-500 italic border border-slate-100 dark:border-slate-800';
         return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
     };
 

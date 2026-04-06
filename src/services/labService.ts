@@ -4,59 +4,51 @@ import type { Lab, LabMember } from '../store/useLabStore';
 
 export const labService = {
     async createLab(name: string, password?: string, nickname?: string, institutionType?: string, researchField?: string): Promise<Lab> {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData.user) throw new Error("Not authenticated");
+        const { data, error } = await supabase.rpc('create_lab_secure', {
+            p_name: name,
+            p_password: password || null,
+            p_nickname: nickname || null,
+            p_institution_type: institutionType || null,
+            p_research_field: researchField || null
+        });
 
-        // 1. Create Lab
-        const { data: labData, error: labError } = await supabase
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error || "연구실 생성에 실패했습니다.");
+
+        // Fetch the created lab details
+        const { data: labData, error: fetchError } = await supabase
             .from('labs')
-            .insert({
-                name,
-                created_by: userData.user.id,
-                join_password: password || null,
-                institution_type: institutionType || null,
-                research_field: researchField || null
-            })
             .select()
+            .eq('id', data.lab_id)
             .single();
 
-        if (labError) throw labError;
-
-        // 2. Add creator as admin
-        const { error: memberError } = await supabase
-            .from('lab_members')
-            .insert({
-                lab_id: labData.id,
-                user_id: userData.user.id,
-                role: 'admin',
-                nickname: nickname || null
-            });
-
-        if (memberError) throw memberError;
-
+        if (fetchError) throw fetchError;
         return labData as Lab;
     },
 
-    async joinLab(labId: string, role: string = 'researcher', password?: string, nickname?: string): Promise<LabMember> {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData.user) throw new Error("Not authenticated");
-
-        const { error } = await supabase.rpc('join_lab_with_password', {
-            target_lab_id: labId,
-            joining_user_id: userData.user.id,
-            requested_role: role,
-            provided_password: password ?? '',
+    async joinLab(labId: string, password?: string, nickname?: string): Promise<LabMember> {
+        const { data, error } = await supabase.rpc('join_lab', {
+            p_lab_id: labId,
+            p_password: password ?? '',
             p_nickname: nickname || null
         });
 
-        if (error) {
-            if (error.message.includes('User is already a member')) {
+        if (error) throw error;
+        
+        if (!data.success) {
+            if (data.error === 'Already a member') {
                 const err: any = new Error("이미 이 연구실에 가입되어 있습니다.");
-                err.code = '23505'; // keep backward compatibility with existing UI error handling
+                err.code = '23505'; 
                 throw err;
             }
-            throw new Error(error.message === 'Incorrect password' ? '비밀번호가 올바르지 않습니다.' : error.message);
+            if (data.error === 'Incorrect password') {
+                throw new Error('비밀번호가 올바르지 않습니다.');
+            }
+            throw new Error(data.error || "가입에 실패했습니다.");
         }
+
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData.user) throw new Error("가입 후 사용자 정보를 불러올 수 없습니다.");
 
         // Fetch the newly created member to return
         const { data: memberData, error: memberError } = await supabase

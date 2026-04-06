@@ -30,7 +30,6 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     // For joining a lab
     const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
-    const [selectedRole, setSelectedRole] = useState<'pi' | 'postdoc' | 'graduate' | 'undergrad'>('graduate');
     const [joinPassword, setJoinPassword] = useState('');
     const [joinNickname, setJoinNickname] = useState('');
 
@@ -157,7 +156,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         setIsLoading(true);
         setError(null);
         try {
-            await labService.joinLab(selectedLabId!, selectedRole, joinPassword, joinNickname);
+            await labService.joinLab(selectedLabId!, joinPassword, joinNickname);
             const updatedLabs = await labService.getMyLabs();
             setMyLabs(updatedLabs);
             setCurrentLabId(selectedLabId);
@@ -370,7 +369,13 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                                        <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400 capitalize">{ml.role}</span>
+                                                        <span className={`text-xs px-2 py-1 rounded font-medium ${
+                                                            ml.role === 'admin' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
+                                                            ml.role === 'pi' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                                                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                                        }`}>
+                                                            {t(`member_role_${ml.role}`, { defaultValue: ml.role })}
+                                                        </span>
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleLeaveLab(ml.lab_id, ml.lab?.name ?? ''); }}
                                                             disabled={isLeaving === ml.lab_id}
@@ -501,25 +506,9 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                             {selectedLabId && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{t('lab_mgmt_form_role_select')}</label>
-                                    <div className="grid grid-cols-2 gap-2 mb-4">
-                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'pi' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                                            <input type="radio" className="hidden" checked={selectedRole === 'pi'} onChange={() => setSelectedRole('pi')} />
-                                            <span className="text-xs truncate">{t('lab_mgmt_role_pi')}</span>
-                                        </label>
-                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'postdoc' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                                            <input type="radio" className="hidden" checked={selectedRole === 'postdoc'} onChange={() => setSelectedRole('postdoc')} />
-                                            <span className="text-xs truncate">{t('lab_mgmt_role_postdoc')}</span>
-                                        </label>
-                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'graduate' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                                            <input type="radio" className="hidden" checked={selectedRole === 'graduate'} onChange={() => setSelectedRole('graduate')} />
-                                            <span className="text-xs truncate">{t('lab_mgmt_role_graduate')}</span>
-                                        </label>
-                                        <label className={`flex justify-center py-2 px-1 border rounded-lg cursor-pointer transition-colors text-center ${selectedRole === 'undergrad' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                                            <input type="radio" className="hidden" checked={selectedRole === 'undergrad'} onChange={() => setSelectedRole('undergrad')} />
-                                            <span className="text-xs truncate">{t('lab_mgmt_role_undergrad')}</span>
-                                        </label>
-                                    </div>
+                                    <p className="text-[10px] text-slate-500 mb-4 px-1 italic">
+                                        * {t('lab_mgmt_role_approval_info', { defaultValue: '가입 후 관리자가 최종적인 역할을 지정합니다.' })}
+                                    </p>
                                     <div className="mb-4">
                                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_nickname')}</label>
                                         <input
