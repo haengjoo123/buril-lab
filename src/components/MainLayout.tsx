@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FlaskConical, LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
+import logo from '../assets/logo.png';
 import { SettingsModal } from './SettingsModal';
 import { useTranslation } from 'react-i18next';
 import { LabContextSwitcher } from './LabContextSwitcher';
@@ -38,8 +39,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                         onClick={onLogoClick}
                         className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity min-w-0"
                     >
-                        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg shrink-0">
-                            <FlaskConical className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                        <div className="shrink-0 overflow-hidden rounded-lg">
+                            <img src={logo} alt="Logo" className="w-9 h-9 object-contain" />
                         </div>
                         <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white shrink-0 truncate max-w-[100px] sm:max-w-none">{t('app_title')}</h1>
                     </button>
