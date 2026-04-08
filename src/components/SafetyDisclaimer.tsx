@@ -27,7 +27,8 @@ export const SafetyDisclaimer: React.FC = () => {
     if (!isOpen) return null;
 
     // Content defined here for simplicity instead of dictionary
-    const content = i18n.language === 'ko' ? {
+    const isKorean = (i18n.resolvedLanguage ?? i18n.language).startsWith('ko');
+    const content = isKorean ? {
         points: [
             "본 서비스가 제공하는 폐액 분류 정보는 참고용이며, 실제 폐기 시에는 반드시 해당 시약의 MSDS(물질안전보건자료)와 소속 기관의 안전 규정을 최우선으로 따라야 합니다.",
             "제공된 결과에 따른 사고 및 손해에 대해 서비스 제공자는 법적 책임을 지지 않습니다.",

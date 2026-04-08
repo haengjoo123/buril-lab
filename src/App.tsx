@@ -7,14 +7,9 @@ import { BottomTabNav } from './components/BottomTabNav';
 // Lazy load Scanner — react-webcam + Vision OCR are heavy and only needed on camera open
 const Scanner = lazy(() => import('./components/Scanner'));
 import { CartView } from './components/CartView';
-import { WasteLogView } from './components/WasteLogView';
-import { FridgeView } from './features/fridge/FridgeView';
-import { CabinetListView } from './features/fridge/CabinetListView';
 import { AuthView } from './components/AuthView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
-import { InventoryListView } from './features/inventory/InventoryListView';
-import { GlobalAuditLogsView } from './features/admin/GlobalAuditLogsView';
 import type { CabinetSearchResult } from './services/cabinetService';
 import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
@@ -27,6 +22,31 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, ShoppingBag } from 'lucide-react';
 import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
 import { isAuthRequiredPath, sanitizeReturnTo } from './utils/authRoutes';
+
+// Split heavy tabs to reduce initial dev-time module transform cost.
+const WasteLogView = lazy(() =>
+  import('./components/WasteLogView').then((module) => ({ default: module.WasteLogView }))
+);
+const FridgeView = lazy(() =>
+  import('./features/fridge/FridgeView').then((module) => ({ default: module.FridgeView }))
+);
+const CabinetListView = lazy(() =>
+  import('./features/fridge/CabinetListView').then((module) => ({ default: module.CabinetListView }))
+);
+const InventoryListView = lazy(() =>
+  import('./features/inventory/InventoryListView').then((module) => ({ default: module.InventoryListView }))
+);
+const GlobalAuditLogsView = lazy(() =>
+  import('./features/admin/GlobalAuditLogsView').then((module) => ({ default: module.GlobalAuditLogsView }))
+);
+
+function TabContentFallback() {
+  return (
+    <div className="h-full min-h-[16rem] flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+    </div>
+  );
+}
 
 function App() {
   const { t, i18n } = useTranslation();
@@ -364,55 +384,57 @@ function App() {
       <MainLayout onLogoClick={handleReset} userEmail={user?.email} onSignOut={signOut} bottomNav={
         <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} />
       }>
-        {activeTab === 'cabinet' ? (
-          <div className="h-full">
-            {activeCabinetId ? (
-              <FridgeView cabinetId={activeCabinetId} onBack={() => navigate('/cabinet')} />
-            ) : (
-              <CabinetListView onSelectCabinet={(id) => navigate(`/cabinet?id=${id}`)} />
-            )}
-          </div>
-        ) : activeTab === 'logs' ? (
-          <WasteLogView key={logRefreshKey} />
-        ) : activeTab === 'inventory' ? (
-          <InventoryListView />
-        ) : activeTab === 'admin' && isAdmin ? (
-          <GlobalAuditLogsView />
-        ) : (
-          <SearchTabView
-            cartCount={cart.length}
-            query={query}
-            lastSearchQuery={lastSearchQuery}
-            isLoading={isLoading}
-            isAiAnalyzing={isAiAnalyzing}
-            error={error}
-            result={result}
-            mediaProducts={mediaProducts}
-            mediaBrands={mediaBrands}
-            mediaCount={mediaCount}
-            cabinetResults={cabinetResults}
-            showAllProducts={showAllProducts}
-            selectedBrand={selectedBrand}
-            sortBy={sortBy}
-            recentSearches={recentSearches}
-            onQueryChange={setQuery}
-            onSearchSubmit={handleSearch}
-            onReset={handleReset}
-            onSuggestionClick={navigateWithFreshFilters}
-            onOpenScanner={() => setIsScanning(true)}
-            onClearSearchHistory={clearSearchHistory}
-            onRemoveSearchHistory={removeSearchHistory}
-            onCabinetResultClick={handleCabinetSearchResultClick}
-            onBrandChange={handleBrandChange}
-            onSortChange={handleSortChange}
-            onClearFilters={handleClearFilters}
-            onToggleShowAllProducts={() => setShowAllProducts(!showAllProducts)}
-            onNavigateToCabinet={handleNavigateToCabinet}
-            suggestions={suggestions}
-            isSuggestionsLoading={isSuggestionsLoading}
-            onClearSuggestions={clearSuggestions}
-          />
-        )}
+        <Suspense fallback={<TabContentFallback />}>
+          {activeTab === 'cabinet' ? (
+            <div className="h-full">
+              {activeCabinetId ? (
+                <FridgeView cabinetId={activeCabinetId} onBack={() => navigate('/cabinet')} />
+              ) : (
+                <CabinetListView onSelectCabinet={(id) => navigate(`/cabinet?id=${id}`)} />
+              )}
+            </div>
+          ) : activeTab === 'logs' ? (
+            <WasteLogView key={logRefreshKey} />
+          ) : activeTab === 'inventory' ? (
+            <InventoryListView />
+          ) : activeTab === 'admin' && isAdmin ? (
+            <GlobalAuditLogsView />
+          ) : (
+            <SearchTabView
+              cartCount={cart.length}
+              query={query}
+              lastSearchQuery={lastSearchQuery}
+              isLoading={isLoading}
+              isAiAnalyzing={isAiAnalyzing}
+              error={error}
+              result={result}
+              mediaProducts={mediaProducts}
+              mediaBrands={mediaBrands}
+              mediaCount={mediaCount}
+              cabinetResults={cabinetResults}
+              showAllProducts={showAllProducts}
+              selectedBrand={selectedBrand}
+              sortBy={sortBy}
+              recentSearches={recentSearches}
+              onQueryChange={setQuery}
+              onSearchSubmit={handleSearch}
+              onReset={handleReset}
+              onSuggestionClick={navigateWithFreshFilters}
+              onOpenScanner={() => setIsScanning(true)}
+              onClearSearchHistory={clearSearchHistory}
+              onRemoveSearchHistory={removeSearchHistory}
+              onCabinetResultClick={handleCabinetSearchResultClick}
+              onBrandChange={handleBrandChange}
+              onSortChange={handleSortChange}
+              onClearFilters={handleClearFilters}
+              onToggleShowAllProducts={() => setShowAllProducts(!showAllProducts)}
+              onNavigateToCabinet={handleNavigateToCabinet}
+              suggestions={suggestions}
+              isSuggestionsLoading={isSuggestionsLoading}
+              onClearSuggestions={clearSuggestions}
+            />
+          )}
+        </Suspense>
 
         {/* Floating Cart Button */}
         {cart.length > 0 && !isCartOpen && (

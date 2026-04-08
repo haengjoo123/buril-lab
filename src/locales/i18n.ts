@@ -11,12 +11,14 @@ i18n
       en: { translation: translations.en },
       ko: { translation: translations.ko },
     },
+    supportedLngs: ['en', 'ko'],
+    load: 'languageOnly',
     fallbackLng: 'ko',
     interpolation: {
       escapeValue: false, // React already safeguards from XSS
     },
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],
       caches: ['localStorage'],
     },
   });

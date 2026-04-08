@@ -143,7 +143,7 @@ export const WasteLogView: React.FC = () => {
             }
             setTotalCount(result.count);
         } catch {
-            setError(t('dispose_error'));
+            setError(t('log_fetch_error'));
         } finally {
             setIsLoading(false);
         }
@@ -161,24 +161,37 @@ export const WasteLogView: React.FC = () => {
         setSearchQuery(searchInput.trim());
     };
 
-    const handleLoadMore = () => {
+    const handleLoadMore = async () => {
+        if (isLoading || !hasMoreLogs) {
+            return;
+        }
+
         const nextPage = page + 1;
-        setPage(nextPage);
         setIsLoading(true);
         setError(null);
-        fetchWasteLogs(PAGE_SIZE, nextPage * PAGE_SIZE, {
-            search: searchQuery || undefined,
-            sortBy,
-            sortOrder,
-            createdAfter,
-            createdBefore,
-        })
-            .then(result => {
-                setLogs(prev => [...prev, ...result.logs]);
+
+        try {
+            const result = await fetchWasteLogs(PAGE_SIZE, nextPage * PAGE_SIZE, {
+                search: searchQuery || undefined,
+                sortBy,
+                sortOrder,
+                createdAfter,
+                createdBefore,
+            });
+
+            if (result.logs.length === 0) {
                 setTotalCount(result.count);
-            })
-            .catch(() => setError(t('dispose_error')))
-            .finally(() => setIsLoading(false));
+                return;
+            }
+
+            setLogs(prev => [...prev, ...result.logs]);
+            setTotalCount(result.count);
+            setPage(nextPage);
+        } catch {
+            setError(t('log_fetch_error'));
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // 시약명 포함 클라이언트 필터 (서버는 분류/처리자/메모만 검색)
@@ -205,6 +218,7 @@ export const WasteLogView: React.FC = () => {
             : [],
         [filteredLogs, sortOrder, sortBy, t, i18n.language]
     );
+    const hasMoreLogs = logs.length < totalCount;
 
     const sortOptions = useMemo(() => ([
         { value: 'created_at-desc', label: t('log_sort_date_desc') },
@@ -822,6 +836,7 @@ export const WasteLogView: React.FC = () => {
             </div>
 
             {/* Load More */}
+            {logs.length > 0 && hasMoreLogs && (
                 <button
                     onClick={handleLoadMore}
                     disabled={isLoading}
@@ -832,6 +847,7 @@ export const WasteLogView: React.FC = () => {
                         : `${t('log_view_more')} (${logs.length}/${totalCount})`
                     }
                 </button>
+            )}
 
             {/* Initial Loading */}
             {isLoading && logs.length === 0 && (

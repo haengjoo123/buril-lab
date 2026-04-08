@@ -113,6 +113,15 @@ export async function fetchWasteLogs(
         .range(offset, offset + limit - 1);
 
     if (error) {
+        const status = (error as { status?: number }).status;
+        const code = (error as { code?: string }).code;
+        if (status === 416 || code === 'PGRST103') {
+            return {
+                logs: [],
+                count: typeof count === 'number' ? count : offset,
+            };
+        }
+
         console.error('Failed to fetch waste logs:', error);
         throw error;
     }

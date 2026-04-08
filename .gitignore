@@ -44,3 +44,10 @@ dist-ssr
 
 # Android tooling
 .tooling/
+
+# Local analysis/debug outputs
+.eslint_out.txt
+git_log*.txt
+lint_*.txt
+scene_changes*.txt
+tmp_results*.txt

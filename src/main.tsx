@@ -1,9 +1,9 @@
-import { StrictMode } from 'react'
+import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
-import ReloadPrompt from './components/ReloadPrompt'
+const ReloadPrompt = lazy(() => import('./components/ReloadPrompt'))
 
 import './locales/i18n'; // i18n 초기화
 
@@ -12,6 +12,10 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <App />
     </BrowserRouter>
-    <ReloadPrompt />
+    {import.meta.env.PROD ? (
+      <Suspense fallback={null}>
+        <ReloadPrompt />
+      </Suspense>
+    ) : null}
   </StrictMode>,
 )
