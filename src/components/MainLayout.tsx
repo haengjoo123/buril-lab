@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LogOut, Settings } from 'lucide-react';
-import logo from '../assets/logo.png';
+import logo from '../assets/burillab_app_icon.png';
 import { SettingsModal } from './SettingsModal';
 import { useTranslation } from 'react-i18next';
 import { LabContextSwitcher } from './LabContextSwitcher';
