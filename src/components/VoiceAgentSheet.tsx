@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Bot, Loader2, Mic, Send, Square, Volume2, X } from 'lucide-react'
+import { Bot, Loader2, Mic, Square, Volume2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useVoiceAgentStore, type VoiceAgentSubmitOptions } from '../store/useVoiceAgentStore'
 import type { VoiceQueryContext, VoiceQueryResponse, VoiceUiAction } from '../utils/voiceAgent'
@@ -9,22 +9,11 @@ interface VoiceAgentSheetProps {
   onUiAction?: (action: VoiceUiAction, result: VoiceQueryResponse) => Promise<void> | void
 }
 
-function appendIntentTemplate(inputText: string, templateText: string) {
-  const trimmed = inputText.trim()
-
-  if (!trimmed) {
-    return templateText
-  }
-
-  return `${trimmed} ${templateText}`
-}
-
 export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetProps) {
   const { t } = useTranslation()
   const {
     isOpen,
     status,
-    inputText,
     transcriptText,
     resolvedText,
     answerText,
@@ -33,10 +22,8 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
     isRecordingSupported,
     closeSheet,
     setContext,
-    setInputText,
     startRecording,
     stopRecordingAndSubmit,
-    submitText,
     stopSpeaking,
     submitCorrection,
     cancelCurrentTurn,
@@ -71,20 +58,14 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
   const isBusy = status === 'transcribing' || status === 'querying'
   const isRecording = status === 'recording'
   const isPlaying = status === 'playing'
-  const intentTemplates = {
-    location: t('voice_agent_template_location', '위치 알려줘'),
-    expiration: t('voice_agent_template_expiration', '유통기한 얼마나 남았어?'),
-    remaining: t('voice_agent_template_remaining', '잔량 얼마나 남았어?'),
-    disposal: t('voice_agent_template_disposal', '어떻게 버려야 해?'),
-  } as const
   const helperMessage = (() => {
-    if (status === 'recording') return t('voice_agent_recording', '질문을 듣고 있어요. 다시 누르면 전송합니다.')
-    if (status === 'transcribing') return t('voice_agent_transcribing', '음성을 텍스트로 바꾸고 있어요...')
-    if (status === 'querying') return t('voice_agent_querying', '시약 정보를 찾고 있어요...')
-    if (status === 'playing') return t('voice_agent_playing', '답변을 음성으로 재생하고 있어요.')
-    if (status === 'clarifying') return t('voice_agent_clarifying', '후보를 골라 주시면 바로 다시 찾아볼게요.')
-    if (status === 'error') return error || t('voice_agent_error', '음성 도우미를 처리하지 못했어요.')
-    return t('voice_agent_idle', '시약명과 함께 위치, 유통기한, 잔량, 폐기를 물어보세요.')
+    if (status === 'recording') return t('voice_agent_recording', 'Listening. Tap again to submit.')
+    if (status === 'transcribing') return t('voice_agent_transcribing', 'Transcribing your voice...')
+    if (status === 'querying') return t('voice_agent_querying', 'Looking up the reagent...')
+    if (status === 'playing') return t('voice_agent_playing', 'Playing the answer...')
+    if (status === 'clarifying') return t('voice_agent_clarifying', 'Pick the closest reagent to continue.')
+    if (status === 'error') return error || t('voice_agent_error', 'Unable to process the voice request.')
+    return t('voice_agent_idle', 'Ask about a reagent\'s location, expiry, remaining amount, or disposal.')
   })()
 
   return (
@@ -108,15 +89,15 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
               </h2>
               <p className="text-xs text-slate-500">
                 {currentContext.screen === 'cabinet'
-                  ? t('voice_agent_context_cabinet', '현재 시약장 맥락에서 찾습니다.')
-                  : t('voice_agent_context_search', '검색과 시약장 데이터를 함께 조회합니다.')}
+                  ? t('voice_agent_context_cabinet', 'Searching within the current cabinet context.')
+                  : t('voice_agent_context_search', 'Searching across search and cabinet data.')}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={closeSheet}
-            aria-label={t('btn_close', '닫기')}
+            aria-label={t('btn_close', 'Close')}
             className="rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
           >
             <X className="h-5 w-5" />
@@ -139,7 +120,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto]">
+          <div>
             <button
               type="button"
               onClick={() => {
@@ -147,10 +128,11 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
                   void stopRecordingAndSubmit(submitOptions)
                   return
                 }
+
                 void startRecording()
               }}
               disabled={!isRecordingSupported || isBusy}
-              className={`flex h-14 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-medium transition-colors ${
+              className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-medium transition-colors ${
                 isRecording
                   ? 'bg-red-600 text-white hover:bg-red-700'
                   : 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300'
@@ -159,68 +141,16 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
               {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               <span>
                 {isRecording
-                  ? t('voice_agent_stop_recording', '녹음 종료')
-                  : t('voice_agent_start_recording', '음성 질문')}
+                  ? t('voice_agent_stop_recording', 'Stop recording')
+                  : t('voice_agent_start_recording', 'Voice question')}
               </span>
-            </button>
-
-            <div className="flex min-h-14 items-center rounded-2xl border border-slate-200 bg-white px-4">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(event) => setInputText(event.target.value)}
-                placeholder={t('voice_agent_input_placeholder', '예: Sodium nitrate 유통기한 얼마나 남았어?')}
-                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                disabled={isBusy}
-              />
-            </div>
-
-            <button
-              type="button"
-              disabled={isBusy || !inputText.trim()}
-              onClick={() => void submitText(undefined, submitOptions)}
-              className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-900 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:bg-slate-300"
-            >
-              <Send className="h-4 w-4" />
-              <span>{t('voice_agent_send', '질문')}</span>
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.location))}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-            >
-              {t('voice_agent_chip_location', '위치')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.expiration))}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-            >
-              {t('voice_agent_chip_expiration', '유통기한')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.remaining))}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-            >
-              {t('voice_agent_chip_remaining', '잔량')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.disposal))}
-              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-            >
-              {t('voice_agent_chip_disposal', '폐기')}
             </button>
           </div>
 
           {transcriptText && (
             <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                {t('voice_agent_transcript', '전사 결과')}
+                {t('voice_agent_transcript', 'Transcript')}
               </p>
               <p className="mt-1 text-sm text-slate-800">{transcriptText}</p>
             </div>
@@ -229,7 +159,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
           {resolvedText && resolvedText !== transcriptText && (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                {t('voice_agent_resolved', '해석된 질의')}
+                {t('voice_agent_resolved', 'Resolved query')}
               </p>
               <p className="mt-1 text-sm text-slate-800">{resolvedText}</p>
             </div>
@@ -240,7 +170,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                    {t('voice_agent_answer', '답변')}
+                    {t('voice_agent_answer', 'Answer')}
                   </p>
                   <p className="mt-1 text-sm leading-6 text-slate-900">{answerText}</p>
                 </div>
@@ -294,18 +224,10 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => void submitCorrection(inputText, submitOptions)}
-                  disabled={!inputText.trim() || isBusy}
-                  className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:bg-slate-300"
-                >
-                  {t('voice_agent_submit_correction', '교정해서 다시 찾기')}
-                </button>
-                <button
-                  type="button"
                   onClick={cancelCurrentTurn}
                   className="rounded-xl border border-amber-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-amber-100"
                 >
-                  {t('voice_agent_clear', '초기화')}
+                  {t('voice_agent_clear', 'Clear')}
                 </button>
               </div>
             </div>
