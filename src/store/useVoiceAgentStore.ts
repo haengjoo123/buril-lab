@@ -45,7 +45,7 @@ interface VoiceAgentStore {
   closeSheet: () => void
   setContext: (context?: VoiceQueryContext) => void
   setInputText: (text: string) => void
-  startRecording: () => Promise<void>
+  startRecording: (options?: VoiceAgentSubmitOptions) => Promise<void>
   stopRecordingAndSubmit: (options?: VoiceAgentSubmitOptions) => Promise<void>
   submitText: (text?: string, options?: VoiceAgentSubmitOptions) => Promise<void>
   applyResult: (result: VoiceQueryResponse, options?: VoiceAgentSubmitOptions) => Promise<void>
@@ -58,6 +58,35 @@ interface VoiceAgentStore {
 const recorder = createAudioRecorderAdapter()
 let activeAudio: HTMLAudioElement | null = null
 let activeAudioUrl: string | null = null
+let recordingAutoStopTimer: ReturnType<typeof setTimeout> | null = null
+let recordingAutoStopOptions: VoiceAgentSubmitOptions | undefined
+
+export const VOICE_RECORDING_MAX_DURATION_MS = 10_000
+
+function clearRecordingAutoStopTimer() {
+  if (recordingAutoStopTimer) {
+    clearTimeout(recordingAutoStopTimer)
+    recordingAutoStopTimer = null
+  }
+
+  recordingAutoStopOptions = undefined
+}
+
+function scheduleRecordingAutoStop(options?: VoiceAgentSubmitOptions) {
+  clearRecordingAutoStopTimer()
+  recordingAutoStopOptions = options
+  recordingAutoStopTimer = setTimeout(() => {
+    recordingAutoStopTimer = null
+
+    const state = useVoiceAgentStore.getState()
+    if (state.status !== 'recording') {
+      recordingAutoStopOptions = undefined
+      return
+    }
+
+    void state.stopRecordingAndSubmit(recordingAutoStopOptions)
+  }, VOICE_RECORDING_MAX_DURATION_MS)
+}
 
 function translateVoiceAgentError(
   message: string | null | undefined,
@@ -224,7 +253,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
 
   setInputText: (text) => set({ inputText: text }),
 
-  startRecording: async () => {
+  startRecording: async (options) => {
     try {
       get().cancelCurrentTurn()
 
@@ -237,6 +266,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
       }
 
       await recorder.startRecording()
+      scheduleRecordingAutoStop(options)
       set({
         status: 'recording',
         error: null,
@@ -253,6 +283,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
   },
 
   stopRecordingAndSubmit: async (options) => {
+    clearRecordingAutoStopTimer()
     const nextTurnId = get().turnId + 1
     set({
       turnId: nextTurnId,
@@ -458,6 +489,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
 
   cancelCurrentTurn: () => {
     stopActiveAudioPlayback()
+    clearRecordingAutoStopTimer()
 
     if (get().status === 'recording') {
       void recorder.stopRecording().catch(() => undefined)

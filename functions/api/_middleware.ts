@@ -22,7 +22,7 @@ const LIMIT_CONFIGS = {
     pattern: /^\/api\/vision\//,
   },
   VOICE: {
-    user: { count: 8, window: "1 m" },
+    user: { count: 30, window: "1 m" },
     ip: { count: 1, window: "1 m" },
     pattern: /^\/api\/voice\//,
   },

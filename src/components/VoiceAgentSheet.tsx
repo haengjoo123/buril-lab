@@ -1,7 +1,11 @@
 import { useEffect } from 'react'
 import { Bot, Loader2, Mic, Square, Volume2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useVoiceAgentStore, type VoiceAgentSubmitOptions } from '../store/useVoiceAgentStore'
+import {
+  VOICE_RECORDING_MAX_DURATION_MS,
+  useVoiceAgentStore,
+  type VoiceAgentSubmitOptions,
+} from '../store/useVoiceAgentStore'
 import type { VoiceQueryContext, VoiceQueryResponse, VoiceUiAction } from '../utils/voiceAgent'
 
 interface VoiceAgentSheetProps {
@@ -58,8 +62,14 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
   const isBusy = status === 'transcribing' || status === 'querying'
   const isRecording = status === 'recording'
   const isPlaying = status === 'playing'
+  const recordingAutoStopSeconds = Math.round(VOICE_RECORDING_MAX_DURATION_MS / 1000)
   const helperMessage = (() => {
-    if (status === 'recording') return t('voice_agent_recording', 'Listening. Tap again to submit.')
+    if (status === 'recording') {
+      return t('voice_agent_recording', {
+        seconds: recordingAutoStopSeconds,
+        defaultValue: `Listening to your question. Tap again to send or wait ${recordingAutoStopSeconds} seconds for it to stop automatically.`,
+      })
+    }
     if (status === 'transcribing') return t('voice_agent_transcribing', 'Transcribing your voice...')
     if (status === 'querying') return t('voice_agent_querying', 'Looking up the reagent...')
     if (status === 'playing') return t('voice_agent_playing', 'Playing the answer...')
@@ -129,7 +139,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
                   return
                 }
 
-                void startRecording()
+                void startRecording(submitOptions)
               }}
               disabled={!isRecordingSupported || isBusy}
               className={`flex h-14 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-medium transition-colors ${
