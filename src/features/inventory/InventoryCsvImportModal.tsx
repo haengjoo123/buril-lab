@@ -333,9 +333,12 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
 
     const handleInventoryExcelDownload = () => {
         const rowsForExport = items.map((item) => {
+            const shelfLabel = item.storage_type === 'cabinet' && typeof item.shelf_level === 'number'
+                ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})`
+                : '';
             const storageLabel = item.storage_type === 'cabinet'
-                ? (item.cabinet_name || '')
-                : translateLocationName(item.storage_location_name || '', t);
+                ? `${item.cabinet_name || t('inventory_loc_cabinet')}${shelfLabel}`
+                : (translateLocationName(item.storage_location_name || '', t) || t('inventory_loc_other'));
 
             return {
                 [t('inventory_product_name')]: item.name || '',

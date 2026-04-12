@@ -321,7 +321,7 @@ export const InventoryListView: React.FC = () => {
                 [t('inventory_quantity')]: item.quantity,
                 [t('inventory_capacity')]: item.capacity || '',
                 [t('inventory_csv_table_storage')]: item.storage_type === 'cabinet'
-                    ? `${item.cabinet_name || t('inventory_loc_cabinet')}${item.shelf_level ? ` (${item.shelf_level}${t('inventory_shelf_level').replace(' · ', '')})` : ''}`
+                    ? `${item.cabinet_name || t('inventory_loc_cabinet')}${typeof item.shelf_level === 'number' ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})` : ''}`
                     : (item.storage_location_name || t('inventory_loc_other')),
                 [t('inventory_expiry_date')]: item.expiry_date || '',
                 [t('inventory_memo')]: item.memo || ''
@@ -777,7 +777,7 @@ export const InventoryListView: React.FC = () => {
             return (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                     <Archive className="w-3.5 h-3.5" />
-                    {item.cabinet_name || t('inventory_cabinet_unassigned')}{shelfLabel}
+                    {item.cabinet_name || t('inventory_cabinet_unassigned')}{shelfLabel ? ` · ${shelfLabel}` : ''}
                 </span>
             );
         }
