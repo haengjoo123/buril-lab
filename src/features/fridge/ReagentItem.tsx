@@ -318,6 +318,52 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
 
     const showLabel = !isGhost && !isBeingDragged && !dimmed;
 
+    // 카메라 극각(polar angle) 기반 텍스트 방향 및 실제 모델 높이 감지
+    const labelGroupRef = useRef<THREE.Group>(null);
+    const geometryGroupRef = useRef<THREE.Group>(null);
+    const lastScale = useRef<number>(0);
+    const measuredYRef = useRef<number | null>(null);
+
+    useFrame(({ camera }) => {
+        const labelGroup = labelGroupRef.current;
+        if (!labelGroup) return;
+
+        // 1. 실제 모델의 Bounding Box를 이용한 정밀한 높이 계산 (스케일 변경 시만 재계산)
+        if (geometryGroupRef.current && lastScale.current !== scale) {
+            geometryGroupRef.current.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(geometryGroupRef.current);
+            const height = box.max.y - box.min.y;
+            
+            // 높이가 정상적으로 계산되었을 경우에만 적용
+            if (height > 0 && height !== Infinity) {
+                // anchorY="middle"이고 폰트 크기를 고정(0.16)했으므로, 병 상단에서 띄울 고정 여백 설정
+                const margin = 0.13;
+                measuredYRef.current = height + margin;
+                lastScale.current = scale;
+            }
+        }
+
+        // React 리렌더링(클릭 등) 시 position prop이 덮어씌워지는 것을 방지하기 위해 
+        // 측정된 값이 있다면 매 프레임 y 좌표를 강제 고정
+        if (measuredYRef.current !== null) {
+            labelGroup.position.y = measuredYRef.current;
+        }
+
+        // 2. 카메라 방향에 따른 텍스트 전환 (위에서 볼때 눕기)
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        const polarAngle = Math.acos(-dir.y);
+        const isTopView = polarAngle < Math.PI / 4;
+
+        if (isTopView) {
+            // 위에서 보기: 바닥에 눕힘
+            labelGroup.rotation.set(-Math.PI / 2, 0, 0);
+        } else {
+            // 일반 뷰: 패널이 항상 카메라를 바라보도록
+            labelGroup.quaternion.copy(camera.quaternion);
+        }
+    });
+
     return (
         <animated.group
             position={position as any /* eslint-disable-line @typescript-eslint/no-explicit-any */}
@@ -326,7 +372,7 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
             onPointerEnter={handlePointerEnter}
             onPointerLeave={handlePointerLeave}
         >
-            <animated.group>
+            <animated.group ref={geometryGroupRef}>
                 <ItemGeometry
                     type={item.template}
                     defaultColor={defaultColor}
@@ -342,20 +388,22 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
             </animated.group>
             {/* 시약명 3D 텍스트 라벨 */}
             {showLabel && labelText && (
-                <Text
-                    position={[0, labelY, 0]}
-                    fontSize={0.18 * Math.max(scale, 0.7)}
-                    color="#1e293b"
-                    anchorX="center"
-                    anchorY="bottom"
-                    maxWidth={1.5}
-                    textAlign="center"
-                    outlineWidth={0.02}
-                    outlineColor="#ffffff"
-                    font="/fonts/NotoSansKR-Medium.ttf"
-                >
-                    {labelText}
-                </Text>
+                <group ref={labelGroupRef} position={[0, labelY, 0]}>
+                    <Text
+                        fontSize={0.16} // 사이즈 고정
+                        color="#1e293b"
+                        anchorX="center"
+                        anchorY="middle"
+                        maxWidth={1.5}
+                        textAlign="center"
+                        outlineWidth={0.02}
+                        outlineColor="#ffffff"
+                        font="/fonts/NotoSansKR-Medium.ttf"
+                        position-z={0} // Z-fighting 방지 및 정위치 확보
+                    >
+                        {labelText}
+                    </Text>
+                </group>
             )}
         </animated.group>
     );
