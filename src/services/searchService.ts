@@ -1,12 +1,23 @@
 import type { Chemical } from '../types';
 import { fetchChemicalInfo } from './pubchemApi';
 import { resolveKoreanChemical, resolveCasChemical, fetchKoshaPH } from './koshaApi';
+import { resolveWikiCas } from './wikiApi';
 
 /**
  * Unified search function that delegates to the appropriate API based on input language.
  * - Korean input -> Resolve CAS via KOSHA -> Setup PubChem search via CAS
  * - English/Other input -> PubChem API
  */
+
+// KOSHA API may be missing exact names for very common chemicals or use completely different variants.
+// We map common Korean names to their CAS numbers as a fallback.
+const KOREAN_MANUAL_SYNONYMS: Record<string, string> = {
+    '구연산': '77-92-9', // Citric acid
+    '비타민C': '50-81-7', // Ascorbic acid
+    '아스피린': '50-78-2', // Aspirin
+    '아세톤': '67-64-1', // Acetone (often just "아세톤" in KOSHA, but ensuring safety)
+};
+
 export const searchChemical = async (query: string): Promise<Chemical | null> => {
     if (!query.trim()) return null;
 
@@ -79,17 +90,60 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
     const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(query);
 
     if (hasKorean) {
-        // 1. Resolve Korean Name to CAS
-        const resolved = await resolveKoreanChemical(query);
+        let casToSearch: string | null = null;
+        let koshaId: number | undefined = undefined;
+        let finalNameKo: string | undefined = undefined;
 
-        if (resolved && resolved.casNo) {
-            console.log(`[Search] Resolved '${query}' to CAS ${resolved.casNo}. Fetching from PubChem...`);
+        // 0. Manual Check
+        if (KOREAN_MANUAL_SYNONYMS[trimmedQuery]) {
+            casToSearch = KOREAN_MANUAL_SYNONYMS[trimmedQuery];
+            finalNameKo = trimmedQuery;
+            console.log(`[Search] Match found in local synonyms: '${trimmedQuery}' -> ${casToSearch}`);
+            // Let's resolve koshaId since we skipped KOSHA search
+            try {
+                const koshaResolved = await resolveCasChemical(casToSearch);
+                if (koshaResolved?.chemId) {
+                    koshaId = koshaResolved.chemId;
+                }
+            } catch (e) {
+                // Ignore
+            }
+        } 
+        
+        // 1. Resolve Korean Name to CAS via KOSHA
+        if (!casToSearch) {
+            const resolved = await resolveKoreanChemical(trimmedQuery);
+            if (resolved && resolved.casNo) {
+                casToSearch = resolved.casNo;
+                koshaId = resolved.chemId;
+                finalNameKo = resolved.nameKo;
+                console.log(`[Search] Resolved '${trimmedQuery}' to CAS ${casToSearch}. Fetching from PubChem...`);
+            }
+        }
 
-            // 2. Parallel Fetch: PubChem Info + KOSHA pH
+        // 2. Fallback to Wikipedia API if KOSHA didn't have it
+        if (!casToSearch) {
+            const wikiCas = await resolveWikiCas(trimmedQuery);
+            if (wikiCas) {
+                casToSearch = wikiCas;
+                finalNameKo = trimmedQuery;
+                console.log(`[Search] Wikipedia resolved '${trimmedQuery}' to CAS ${casToSearch}`);
+                // Try resolving KOSHA ID with this new CAS
+                try {
+                    const koshaResolved = await resolveCasChemical(casToSearch);
+                    if (koshaResolved?.chemId) {
+                        koshaId = koshaResolved.chemId;
+                    }
+                } catch(e) {}
+            }
+        }
+
+        if (casToSearch) {
+            // 3. Parallel Fetch: PubChem Info + KOSHA pH
             const [pubchemResult, koshaPh] = await Promise.all([
-                fetchChemicalInfo(resolved.casNo),
+                fetchChemicalInfo(casToSearch),
                 // Only fetch pH if we have a chemId
-                resolved.chemId ? fetchKoshaPH(resolved.chemId) : Promise.resolve(undefined)
+                koshaId ? fetchKoshaPH(koshaId) : Promise.resolve(undefined)
             ]);
 
             if (pubchemResult) {
@@ -101,9 +155,9 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
 
                 return {
                     ...pubchemResult,
-                    name: `${resolved.nameKo} (${pubchemResult.name})`, // e.g., "벤젠 (Benzene)"
+                    name: finalNameKo ? `${finalNameKo} (${pubchemResult.name})` : pubchemResult.name, // e.g., "벤젠 (Benzene)"
                     properties: mergedProps,
-                    koshaId: resolved.chemId
+                    koshaId: koshaId
                 };
             }
         }

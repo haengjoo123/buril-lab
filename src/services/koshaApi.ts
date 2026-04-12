@@ -113,14 +113,36 @@ export const resolveKoreanChemical = async (keyword: string): Promise<{ casNo: s
         }
 
         // Handle single item vs array logic from XML parser
-        const firstMatch: KoshaSearchItem = Array.isArray(items) ? items[0] : items;
+        const list: KoshaSearchItem[] = Array.isArray(items) ? items : [items];
+
+        const trimmedKw = keyword.trim();
+
+        // 1. Strict Match: Only accept exact name or exact name inside parens/before parens
+        // e.g. "시트르산(구연산)" -> correctly matches "구연산"
+        // "구연산리튬" -> fails to match "구연산"
+        let bestMatch = list.find(item => {
+            const name = item.chemNameKor?.trim() || "";
+            if (name === trimmedKw) return true;
+            
+            const beforeParen = name.split('(')[0].trim();
+            const inParenMatch = name.match(/\((.*?)\)/);
+            const inParen = inParenMatch ? inParenMatch[1].trim() : '';
+
+            if (beforeParen === trimmedKw) return true;
+            if (inParen === trimmedKw || inParen.split(',').map(s => s.trim()).includes(trimmedKw)) return true;
+            
+            return false;
+        });
 
         // Debugging: Log the structure to see correct keys
-        console.log('[KOSHA] First Match:', firstMatch);
+        console.log(`[KOSHA] Found ${list.length} partial matches, strict match result:`, bestMatch || 'None');
 
-        const { chemId, chemNameKor, casNo } = firstMatch;
+        if (!bestMatch) {
+             console.warn(`[KOSHA] Found results, but no exact match for '${keyword}'. Prevented fallback to unrelated chemicals.`);
+             return null;
+        }
 
-        if (!chemId || !casNo) return null;
+        const { chemId, chemNameKor, casNo } = bestMatch;
 
         console.log(`[KOSHA] Resolved: ${chemNameKor} -> CAS: ${casNo}`);
 
