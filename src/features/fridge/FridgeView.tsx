@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FridgeScene } from './FridgeScene';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, Mic } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
@@ -21,7 +21,6 @@ import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 export interface FridgeViewProps {
     cabinetId: string;
     onBack?: () => void;
-    onOpenVoiceAgent?: () => void;
 }
 
 interface GenericContainerItem {
@@ -68,7 +67,7 @@ const NumberInput = ({ value, min, max, onChange, className }: { value: number; 
     );
 };
 
-export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onOpenVoiceAgent }) => {
+export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => {
     const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
@@ -565,16 +564,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onOpe
                 </div>
                 <div className="flex items-center gap-2">
                     {/* 저장 상태 인디케이터 */}
-                    {onOpenVoiceAgent && (
-                        <button
-                            onClick={onOpenVoiceAgent}
-                            disabled={isLoadingCabinet}
-                            className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40"
-                            title={t('voice_agent_open', 'Open AI assistant')}
-                        >
-                            <Mic className="w-4 h-4" />
-                        </button>
-                    )}
+
                     {saveStatus === 'saving' ? (
                         <span className="flex items-center gap-1.5 text-sm text-slate-400">
                             <Loader2 className="w-4 h-4 animate-spin" />

@@ -399,11 +399,6 @@ function App() {
                 <FridgeView
                   cabinetId={activeCabinetId}
                   onBack={() => navigate('/cabinet')}
-                  onOpenVoiceAgent={() => openVoiceAgentSheet({
-                    screen: 'cabinet',
-                    cabinetId: activeCabinetId,
-                    language: i18n.language.startsWith('ko') ? 'ko' : 'en',
-                  })}
                 />
               ) : (
                 <CabinetListView onSelectCabinet={(id) => navigate(`/cabinet?id=${id}`)} />
