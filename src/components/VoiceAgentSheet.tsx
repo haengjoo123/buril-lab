@@ -9,20 +9,14 @@ interface VoiceAgentSheetProps {
   onUiAction?: (action: VoiceUiAction, result: VoiceQueryResponse) => Promise<void> | void
 }
 
-function appendIntentTemplate(inputText: string, label: 'location' | 'expiration' | 'remaining' | 'disposal') {
+function appendIntentTemplate(inputText: string, templateText: string) {
   const trimmed = inputText.trim()
-  const templates = {
-    location: '위치 알려줘',
-    expiration: '유통기한 얼마나 남았어?',
-    remaining: '잔량 얼마나 남았어?',
-    disposal: '어떻게 버려야 해?',
-  } as const
 
   if (!trimmed) {
-    return templates[label]
+    return templateText
   }
 
-  return `${trimmed} ${templates[label]}`
+  return `${trimmed} ${templateText}`
 }
 
 export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetProps) {
@@ -77,6 +71,12 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
   const isBusy = status === 'transcribing' || status === 'querying'
   const isRecording = status === 'recording'
   const isPlaying = status === 'playing'
+  const intentTemplates = {
+    location: t('voice_agent_template_location', '위치 알려줘'),
+    expiration: t('voice_agent_template_expiration', '유통기한 얼마나 남았어?'),
+    remaining: t('voice_agent_template_remaining', '잔량 얼마나 남았어?'),
+    disposal: t('voice_agent_template_disposal', '어떻게 버려야 해?'),
+  } as const
   const helperMessage = (() => {
     if (status === 'recording') return t('voice_agent_recording', '질문을 듣고 있어요. 다시 누르면 전송합니다.')
     if (status === 'transcribing') return t('voice_agent_transcribing', '음성을 텍스트로 바꾸고 있어요...')
@@ -116,6 +116,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
           <button
             type="button"
             onClick={closeSheet}
+            aria-label={t('btn_close', '닫기')}
             className="rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
           >
             <X className="h-5 w-5" />
@@ -188,28 +189,28 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, 'location'))}
+              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.location))}
               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
             >
               {t('voice_agent_chip_location', '위치')}
             </button>
             <button
               type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, 'expiration'))}
+              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.expiration))}
               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
             >
               {t('voice_agent_chip_expiration', '유통기한')}
             </button>
             <button
               type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, 'remaining'))}
+              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.remaining))}
               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
             >
               {t('voice_agent_chip_remaining', '잔량')}
             </button>
             <button
               type="button"
-              onClick={() => setInputText(appendIntentTemplate(inputText, 'disposal'))}
+              onClick={() => setInputText(appendIntentTemplate(inputText, intentTemplates.disposal))}
               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
             >
               {t('voice_agent_chip_disposal', '폐기')}
@@ -262,21 +263,31 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
 
               {clarification.candidates.length > 0 && (
                 <div className="mt-3 flex flex-col gap-2">
-                  {clarification.candidates.map((candidate) => (
-                    <button
-                      key={`${candidate.source}:${candidate.id}`}
-                      type="button"
-                      onClick={() => void submitCorrection(candidate.name, submitOptions)}
-                      className="rounded-xl border border-amber-200 bg-white px-3 py-3 text-left text-sm text-slate-800 transition-colors hover:bg-amber-100"
-                    >
-                      <div className="font-medium">{candidate.name}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {candidate.cabinetName && `${candidate.cabinetName} `}
-                        {typeof candidate.shelfLevel === 'number' && `${candidate.shelfLevel + 1}번 선반 `}
-                        {candidate.storageLocationName && `${candidate.storageLocationName}`}
-                      </div>
-                    </button>
-                  ))}
+                  {clarification.candidates.map((candidate) => {
+                    const candidateMeta = [
+                      candidate.cabinetName,
+                      typeof candidate.shelfLevel === 'number'
+                        ? t('cabinet_shelf_level', { level: candidate.shelfLevel + 1 })
+                        : null,
+                      candidate.storageLocationName,
+                    ]
+                      .filter((value): value is string => Boolean(value))
+                      .join(' · ')
+
+                    return (
+                      <button
+                        key={`${candidate.source}:${candidate.id}`}
+                        type="button"
+                        onClick={() => void submitCorrection(candidate.name, submitOptions)}
+                        className="rounded-xl border border-amber-200 bg-white px-3 py-3 text-left text-sm text-slate-800 transition-colors hover:bg-amber-100"
+                      >
+                        <div className="font-medium">{candidate.name}</div>
+                        {candidateMeta && (
+                          <div className="mt-1 text-xs text-slate-500">{candidateMeta}</div>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
 

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { createAudioRecorderAdapter } from '../services/audioRecorderAdapter'
 import { speakText, transcribeAudio } from '../services/openaiVoiceService'
 import { queryVoiceAgent, submitVoiceQueryFeedback } from '../services/voiceAgentService'
+import i18n from '../locales/i18n'
 import type {
   VoiceAgentIntent,
   VoiceClarification,
@@ -57,6 +58,67 @@ interface VoiceAgentStore {
 const recorder = createAudioRecorderAdapter()
 let activeAudio: HTMLAudioElement | null = null
 let activeAudioUrl: string | null = null
+
+function translateVoiceAgentError(
+  message: string | null | undefined,
+  fallbackKey:
+    | 'voice_agent_error_mic_start'
+    | 'voice_agent_error_voice_submit'
+    | 'voice_agent_error_text_submit',
+): string {
+  const normalizedMessage = message?.trim() || ''
+
+  if (!normalizedMessage) {
+    return i18n.t(fallbackKey)
+  }
+
+  if (normalizedMessage === 'Audio recording is not supported on this device.') {
+    return i18n.t('voice_agent_error_recording_unsupported')
+  }
+
+  if (normalizedMessage === 'A recording is already in progress.') {
+    return i18n.t('voice_agent_error_recording_in_progress')
+  }
+
+  if (
+    normalizedMessage === 'No active recording to stop.'
+    || normalizedMessage === 'Audio recording failed to stop cleanly.'
+  ) {
+    return i18n.t('voice_agent_error_recording_stop')
+  }
+
+  if (
+    normalizedMessage === 'OpenAI audio feature is disabled.'
+    || normalizedMessage === 'feature_disabled'
+  ) {
+    return i18n.t('voice_agent_error_feature_disabled')
+  }
+
+  if (
+    normalizedMessage.includes('You exceeded your current quota')
+    || normalizedMessage.includes('check your plan and billing details')
+  ) {
+    return i18n.t('voice_agent_error_quota_exceeded')
+  }
+
+  if (
+    normalizedMessage.includes('Rate limit')
+    || normalizedMessage.includes('Too Many Requests')
+    || normalizedMessage.includes('Request failed with status 429')
+  ) {
+    return i18n.t('voice_agent_error_rate_limited')
+  }
+
+  if (
+    /notallowederror/i.test(normalizedMessage)
+    || /permission/i.test(normalizedMessage)
+    || /denied/i.test(normalizedMessage)
+  ) {
+    return i18n.t('voice_agent_error_mic_permission')
+  }
+
+  return normalizedMessage
+}
 
 function stopActiveAudioPlayback() {
   if (activeAudio) {
@@ -169,7 +231,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
       if (!recorder.isSupported()) {
         set({
           status: 'error',
-          error: '이 기기에서는 음성 녹음을 지원하지 않아요. 텍스트 질문을 사용해 주세요.',
+          error: i18n.t('voice_agent_error_recording_unsupported'),
         })
         return
       }
@@ -185,7 +247,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
     } catch (error) {
       set({
         status: 'error',
-        error: error instanceof Error ? error.message : '마이크를 시작하지 못했어요.',
+        error: translateVoiceAgentError(error instanceof Error ? error.message : null, 'voice_agent_error_mic_start'),
       })
     }
   },
@@ -237,7 +299,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
       if (get().turnId !== nextTurnId) return
       set({
         status: 'error',
-        error: error instanceof Error ? error.message : '음성 질문을 처리하지 못했어요.',
+        error: translateVoiceAgentError(error instanceof Error ? error.message : null, 'voice_agent_error_voice_submit'),
       })
     }
   },
@@ -247,7 +309,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
     if (!trimmedText) {
       set({
         status: 'error',
-        error: '질문 내용을 입력해 주세요.',
+        error: i18n.t('voice_agent_error_text_required'),
       })
       return
     }
@@ -282,7 +344,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
       if (get().turnId !== nextTurnId) return
       set({
         status: 'error',
-        error: error instanceof Error ? error.message : '질문을 처리하지 못했어요.',
+        error: translateVoiceAgentError(error instanceof Error ? error.message : null, 'voice_agent_error_text_submit'),
       })
     }
   },
@@ -351,7 +413,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
     if (!correctionText) {
       set({
         status: 'error',
-        error: '교정할 시약명을 입력해 주세요.',
+        error: i18n.t('voice_agent_error_correction_required'),
       })
       return
     }

@@ -19,6 +19,10 @@ import {
 } from '../../../src/utils/voiceAgent'
 import { getExpiryStatus } from '../../../src/utils/expiryStatus'
 import { dedupeAliasTerms } from '../../../src/utils/reagentAliases'
+import {
+  buildVoiceLookupVariants,
+  sanitizeVoiceReagentQuery,
+} from '../../../src/utils/voiceQueryParsing'
 import { json } from './_shared'
 import {
   buildAliasMap,
@@ -158,9 +162,13 @@ function getManualQueryAliases(value: string): string[] {
 
 function buildQueryVariants(extracted: IntentExtraction, rawInput: string): string[] {
   return dedupeLookupTerms([
-    rawInput,
-    extracted.reagentQuery,
-    ...(extracted.queryAliases || []),
+    ...buildVoiceLookupVariants({
+      rawInput,
+      reagentQuery: extracted.reagentQuery,
+      queryAliases: extracted.queryAliases,
+      intent: extracted.intent,
+      limit: MAX_QUERY_ALIASES + 2,
+    }),
     ...getManualQueryAliases(rawInput),
   ]).slice(0, MAX_QUERY_ALIASES + 2)
 }
@@ -308,7 +316,6 @@ async function generateDisposalGuide(
 }
 
 function fallbackIntentExtraction(input: string, preferredLanguage?: VoiceLanguage): IntentExtraction {
-  const normalized = normalizeVoiceLookupText(input)
   const language = preferredLanguage || detectVoiceLanguage(input)
 
   const keywords: Array<{ intent: VoiceAgentIntent; patterns: RegExp[] }> = [
@@ -320,10 +327,11 @@ function fallbackIntentExtraction(input: string, preferredLanguage?: VoiceLangua
 
   const matchedIntent = keywords.find(({ patterns }) => patterns.some((pattern) => pattern.test(input.toLowerCase())))
   const intent = matchedIntent?.intent || 'location'
+  const reagentQuery = sanitizeVoiceReagentQuery(input, intent) || normalizeVoiceLookupText(input)
 
   return {
     intent,
-    reagentQuery: normalized,
+    reagentQuery,
     queryAliases: [],
     language,
     confidence: 0.35,
@@ -346,7 +354,8 @@ async function extractIntent(
     '{"intent":"location|expiration|remaining|disposal","reagentQuery":"string","queryAliases":["string"],"casNumber":"string or empty","language":"ko|en","confidence":0.0}',
     'Rules:',
     '- intent must be one of location, expiration, remaining, disposal.',
-    '- reagentQuery should be the best corrected reagent name or lookup phrase.',
+    '- reagentQuery should contain only the reagent identifier to search for.',
+    '- Never include question text like "where is it", "어디에 있어", "유통기한", or "얼마 남았어" inside reagentQuery.',
     '- queryAliases should contain up to 6 alternative lookup forms for DB matching.',
     '- If the user says a Korean pronunciation of an English reagent, include the likely English reagent name in queryAliases.',
     '- queryAliases may include Korean common names, English canonical names, abbreviations, or close transliterations.',
@@ -366,10 +375,13 @@ async function extractIntent(
       ? (extracted.intent as VoiceAgentIntent)
       : 'location'
     const intent = refineExtractedIntent(input, initialIntent)
-    const reagentQuery = extracted.reagentQuery?.trim() || input.trim()
+    const reagentQuery = sanitizeVoiceReagentQuery(extracted.reagentQuery?.trim() || input.trim(), intent)
+      || sanitizeVoiceReagentQuery(input, intent)
+      || input.trim()
     const language = extracted.language === 'en' ? 'en' : 'ko'
     const queryAliases = dedupeAliasTerms(
-      Array.isArray(extracted.queryAliases) ? extracted.queryAliases : [],
+      (Array.isArray(extracted.queryAliases) ? extracted.queryAliases : [])
+        .map((value) => sanitizeVoiceReagentQuery(value, intent)),
     ).slice(0, MAX_QUERY_ALIASES)
     const confidence = typeof extracted.confidence === 'number'
       ? Math.max(0, Math.min(1, extracted.confidence))
@@ -503,10 +515,10 @@ function scoreMatch(
         break
       }
 
-      if (compactQuery && normalizedProduct && normalizedProduct === compactQuery) {
+      if (compactQuery && normalizedProduct && normalizedProduct === compactQuery && score < 850) {
         score = 850
         matchedBy = 'product_exact'
-        break
+        continue
       }
 
       if (
@@ -515,10 +527,11 @@ function scoreMatch(
           candidate &&
           (candidate.startsWith(normalizedQuery) || normalizedQuery.startsWith(candidate)),
         )
+        && score < 700
       ) {
         score = 700
         matchedBy = 'prefix'
-        break
+        continue
       }
 
       if (
@@ -527,10 +540,10 @@ function scoreMatch(
           candidate &&
           (candidate.includes(normalizedQuery) || normalizedQuery.includes(candidate)),
         )
+        && score < 600
       ) {
         score = 600
         matchedBy = 'contains'
-        break
       }
     }
   }
