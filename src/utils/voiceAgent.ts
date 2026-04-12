@@ -2,7 +2,12 @@ export type VoiceAgentIntent = 'location' | 'expiration' | 'remaining' | 'dispos
 export type VoiceSource = 'typed' | 'voice'
 export type VoiceLanguage = 'ko' | 'en'
 export type VoiceSpeechMode = 'remote_audio' | 'device_tts' | 'none'
-export type VoiceUiActionType = 'focus_cabinet_item' | 'show_storage_location' | 'clarify' | 'none'
+export type VoiceUiActionType =
+  | 'focus_cabinet_item'
+  | 'show_storage_location'
+  | 'search_reagent'
+  | 'clarify'
+  | 'none'
 export type VoiceFailureReason = 'no_match' | 'ambiguous' | 'user_corrected'
 export type VoiceMatchSource = 'cabinet_item' | 'inventory'
 
@@ -71,6 +76,7 @@ export interface VoiceUiAction {
   cabinetId?: string
   shelfId?: string
   highlightItemId?: string
+  query?: string
 }
 
 export interface VoiceQueryResponse {
@@ -81,6 +87,43 @@ export interface VoiceQueryResponse {
   match: VoiceMatch | null
   uiAction: VoiceUiAction
   clarification: VoiceClarification | null
+}
+
+export function buildVoiceUiAction(
+  intent: VoiceAgentIntent,
+  match: VoiceMatch | null,
+): VoiceUiAction {
+  if (!match) {
+    return { type: 'none' }
+  }
+
+  if (intent === 'location') {
+    if (match.source === 'cabinet_item' && match.cabinetId && match.shelfId) {
+      return {
+        type: 'focus_cabinet_item',
+        cabinetId: match.cabinetId,
+        shelfId: match.shelfId,
+        highlightItemId: match.id,
+      }
+    }
+
+    if (match.storageType === 'other') {
+      return {
+        type: 'show_storage_location',
+      }
+    }
+
+    return { type: 'none' }
+  }
+
+  if (intent === 'disposal') {
+    return {
+      type: 'search_reagent',
+      query: match.name,
+    }
+  }
+
+  return { type: 'none' }
 }
 
 export function normalizeVoiceLookupText(value?: string | null): string {

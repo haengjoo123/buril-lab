@@ -26,7 +26,7 @@ export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8
 export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacity?: number; scale?: number; isHighlighted?: boolean; expiryLevel?: ExpiryLevel }> = ({ type, defaultColor, opacity = 1, scale = 1, isHighlighted = false, expiryLevel }) => {
 
     const materialsRef = useRef<{ mat: THREE.MeshStandardMaterial; origColor: THREE.Color }[]>([]);
-    const highlightColor = useMemo(() => new THREE.Color('#ffff00'), []);
+    const highlightColor = useMemo(() => new THREE.Color('#67e8f9'), []);
     const expiryExpiredColor = useMemo(() => new THREE.Color('#ef4444'), []);
     const expiryWarningColor = useMemo(() => new THREE.Color('#f59e0b'), []);
 
@@ -36,24 +36,24 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
         for (const { mat, origColor } of entries) {
             if (isHighlighted) {
                 const t = state.clock.elapsedTime;
-                const intensity = (Math.sin(t * 8) + 1) * 0.4;
-                mat.emissive = highlightColor;
+                const intensity = 0.45 + ((Math.sin(t * 7) + 1) * 0.25);
+                mat.emissive.copy(highlightColor);
                 mat.emissiveIntensity = intensity;
-                mat.color = highlightColor;
+                mat.color.copy(origColor).lerp(highlightColor, 0.45);
             } else if (expiryLevel === 'expired') {
-                mat.emissive = expiryExpiredColor;
+                mat.emissive.copy(expiryExpiredColor);
                 mat.emissiveIntensity = 0.35;
-                mat.color = expiryExpiredColor;
+                mat.color.copy(expiryExpiredColor);
             } else if (expiryLevel === 'critical') {
                 const t = state.clock.elapsedTime;
                 const intensity = (Math.sin(t * 4) + 1) * 0.25;
-                mat.emissive = expiryExpiredColor;
+                mat.emissive.copy(expiryExpiredColor);
                 mat.emissiveIntensity = intensity;
                 mat.color.copy(origColor);
             } else if (expiryLevel === 'warning') {
                 const t = state.clock.elapsedTime;
                 const intensity = (Math.sin(t * 2) + 1) * 0.12;
-                mat.emissive = expiryWarningColor;
+                mat.emissive.copy(expiryWarningColor);
                 mat.emissiveIntensity = intensity;
                 mat.color.copy(origColor);
             } else {
@@ -387,6 +387,12 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
                 />
             </animated.group>
             {/* 시약명 3D 텍스트 라벨 */}
+            {isHighlighted && !isGhost && (
+                <mesh position={[0, labelY + 0.28, 0]}>
+                    <sphereGeometry args={[0.08, 24, 24]} />
+                    <meshBasicMaterial color="#a5f3fc" transparent opacity={0.95} toneMapped={false} />
+                </mesh>
+            )}
             {showLabel && labelText && (
                 <group ref={labelGroupRef} position={[0, labelY, 0]}>
                     <Text

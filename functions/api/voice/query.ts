@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import {
+  buildVoiceUiAction,
   buildClarificationMessage,
   buildExpiryAnswer,
   buildLocationSummary,
@@ -15,7 +16,6 @@ import {
   type VoiceMatchSource,
   type VoiceQueryRequest,
   type VoiceQueryResponse,
-  type VoiceUiAction,
 } from '../../../src/utils/voiceAgent'
 import { getExpiryStatus } from '../../../src/utils/expiryStatus'
 import { dedupeAliasTerms } from '../../../src/utils/reagentAliases'
@@ -602,29 +602,6 @@ function buildClarification(
   }
 }
 
-function resolveUiAction(match: VoiceMatch | null): VoiceUiAction {
-  if (!match) {
-    return { type: 'none' }
-  }
-
-  if (match.source === 'cabinet_item' && match.cabinetId && match.shelfId) {
-    return {
-      type: 'focus_cabinet_item',
-      cabinetId: match.cabinetId,
-      shelfId: match.shelfId,
-      highlightItemId: match.id,
-    }
-  }
-
-  if (match.storageType === 'other') {
-    return {
-      type: 'show_storage_location',
-    }
-  }
-
-  return { type: 'none' }
-}
-
 async function insertFeedback(
   supabase: ReturnType<typeof createSupabaseUserClient>,
   payload: {
@@ -1018,7 +995,7 @@ export const onRequestPost = async (context: {
         text: answerText,
       },
       match: chosenMatch,
-      uiAction: resolveUiAction(chosenMatch),
+      uiAction: buildVoiceUiAction(extracted.intent, chosenMatch),
       clarification: null,
     }
 

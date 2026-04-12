@@ -221,7 +221,19 @@ function App() {
   }, [navigate, session]);
 
   const handleVoiceUiAction = useCallback(async (action: VoiceUiAction, _result: VoiceQueryResponse) => {
-    void _result;
+    if (action.type === 'search_reagent') {
+      const searchQuery = action.query?.trim() || _result.match?.name?.trim() || _result.resolvedText.trim();
+      if (!searchQuery) {
+        return;
+      }
+
+      navigate(`/?q=${encodeURIComponent(searchQuery)}`);
+      return;
+    }
+
+    if (_result.intent !== 'location') {
+      return;
+    }
 
     if (action.type !== 'focus_cabinet_item' || !action.cabinetId || !action.highlightItemId) {
       return;
