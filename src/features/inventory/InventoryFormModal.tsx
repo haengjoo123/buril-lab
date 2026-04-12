@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Save, AlertCircle, CheckCircle2, History, Loader2 } from 'lucide-react';
+import { analyticsService } from '../../services/analyticsService';
 import { inventoryService, type InventoryItem, type CreateInventoryInput, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { auditService, type AuditLog } from '../../services/auditService';
@@ -113,6 +114,18 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const hasCommerceSignalChange = (before: InventoryItem, after: CreateInventoryInput) => {
+        const normalize = (value?: string | null) => (value || '').trim();
+
+        return (
+            normalize(before.brand) !== normalize(after.brand) ||
+            normalize(before.product_number) !== normalize(after.product_number) ||
+            normalize(before.cas_number) !== normalize(after.cas_number) ||
+            normalize(before.capacity) !== normalize(after.capacity) ||
+            before.quantity !== (after.quantity ?? 1)
+        );
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -139,17 +152,52 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                 const isStorageChanged = initialData.storage_type !== formData.storage_type
                     || (formData.storage_type === 'cabinet' && (initialData.cabinet_id || '') !== (formData.cabinet_id || ''))
                     || (formData.storage_type === 'other' && (initialData.storage_location_id || '') !== (formData.storage_location_id || ''));
+                const shouldTrackCommerceUpdate = hasCommerceSignalChange(initialData, formData);
 
                 if (isStorageChanged) {
                     await moveItemStorage(initialData, formData);
                 } else {
                     await inventoryService.updateItem(initialData.id, formData, initialData._source || 'inventory');
                 }
+                if (shouldTrackCommerceUpdate) {
+                    await analyticsService.trackCommerceIntentEvent({
+                        eventType: initialData._source === 'cabinet_item' ? 'cabinet_item_updated' : 'inventory_updated',
+                        sourceScreen: 'inventory_form_modal',
+                        storageType: formData.storage_type,
+                        sourceItemType: initialData._source || 'inventory',
+                        sourceItemId: initialData.id,
+                        brandName: formData.brand,
+                        productNumber: formData.product_number,
+                        quantity: formData.quantity,
+                        capacityText: formData.capacity,
+                        casNumber: formData.cas_number,
+                        casInputMethod: formData.cas_number?.trim() ? 'manual' : 'unknown',
+                        metadata: {
+                            action: isStorageChanged ? 'move_and_update' : 'update',
+                        },
+                    });
+                }
             } else {
                 const createdItem = await inventoryService.createItem(formData);
                 if (!createdItem) {
                     throw new Error(t('inventory_error'));
                 }
+                await analyticsService.trackCommerceIntentEvent({
+                    eventType: 'inventory_registered',
+                    sourceScreen: 'inventory_form_modal',
+                    storageType: formData.storage_type,
+                    sourceItemType: 'inventory',
+                    sourceItemId: createdItem.id,
+                    brandName: formData.brand,
+                    productNumber: formData.product_number,
+                    quantity: formData.quantity,
+                    capacityText: formData.capacity,
+                    casNumber: formData.cas_number,
+                    casInputMethod: formData.cas_number?.trim() ? 'manual' : 'unknown',
+                    metadata: {
+                        entry_mode: 'manual_form',
+                    },
+                });
 
                 // 수동 등록에서도 시약장 선택 시 실제 3D 시약장 빈 공간에 자동 배치
                 if (formData.storage_type === 'cabinet' && formData.cabinet_id) {
@@ -227,6 +275,17 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                 await rollbackPlacementInCabinet(input.cabinet_id, placed.itemId);
                 throw error;
             }
+
+            await analyticsService.trackStorageWarningIgnoredForItem({
+                cabinetId: input.cabinet_id,
+                shelves: useFridgeStore.getState().shelves,
+                relatedItemId: placed.itemId,
+                sourceScreen: 'inventory_form_modal',
+                triggerSource: 'inventory_move_to_cabinet',
+                metadata: {
+                    inventory_source: sourceItem._source || 'inventory',
+                },
+            });
             return;
         }
 
@@ -774,6 +833,14 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         } catch (error) {
             console.error('Failed to log cabinet add activity:', error);
         }
+
+        await analyticsService.trackStorageWarningIgnoredForItem({
+            cabinetId: input.cabinet_id,
+            shelves: useFridgeStore.getState().shelves,
+            relatedItemId: placeResult.itemId,
+            sourceScreen: 'inventory_form_modal',
+            triggerSource: 'inventory_auto_place',
+        });
 
         return true;
     }

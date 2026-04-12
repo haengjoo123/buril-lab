@@ -1,4 +1,5 @@
 import { postJson } from './internalApi'
+import { analyticsService } from './analyticsService'
 import { supabase } from './supabaseClient'
 
 export interface DisposalGuideResult {
@@ -26,9 +27,15 @@ export async function getAIDisposalGuide(
         casNumber?: string
         molecularFormula?: string
         category?: string
-    }>
+    }>,
+    context?: {
+        sourceScreen?: string
+        triggerSource?: string
+        metadata?: Record<string, unknown>
+    }
 ): Promise<DisposalGuideResult> {
     const cacheKey = generateCacheKey(chemicals);
+    let responseSource: 'cache' | 'ai' = 'ai';
 
     // 1. Check cache
     try {
@@ -41,7 +48,19 @@ export async function getAIDisposalGuide(
 
         if (data && data.response_data && (data.response_data as DisposalGuideResult).guide) {
             console.log('[Gemini Disposal Guide] Cache hit!');
-            return data.response_data as DisposalGuideResult;
+            responseSource = 'cache';
+            const cachedResult = data.response_data as DisposalGuideResult;
+            void analyticsService.trackAIDisposalGuideView({
+                chemicals,
+                sourceScreen: context?.sourceScreen || 'unknown',
+                triggerSource: context?.triggerSource || 'user_request',
+                metadata: {
+                    ...context?.metadata,
+                    cache_key: cacheKey,
+                    response_source: responseSource,
+                },
+            });
+            return cachedResult;
         }
     } catch (err) {
         console.warn('[Gemini Disposal Guide] Failed to read cache:', err);
@@ -63,6 +82,17 @@ export async function getAIDisposalGuide(
     } catch (err) {
         console.warn('[Gemini Disposal Guide] Failed to save cache:', err);
     }
+
+    void analyticsService.trackAIDisposalGuideView({
+        chemicals,
+        sourceScreen: context?.sourceScreen || 'unknown',
+        triggerSource: context?.triggerSource || 'user_request',
+        metadata: {
+            ...context?.metadata,
+            cache_key: cacheKey,
+            response_source: responseSource,
+        },
+    });
 
     return result;
 }

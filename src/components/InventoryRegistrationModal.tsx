@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Package, MapPin, Plus, Check, Loader2, ArrowRight } from 'lucide-react';
+import { analyticsService } from '../services/analyticsService';
 import type { MediaProduct } from '../services/mediaProductService';
 import type { Cabinet } from '../services/cabinetService';
 import { cabinetService } from '../services/cabinetService';
@@ -167,6 +168,26 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                 return;
             }
 
+            await analyticsService.trackCommerceIntentEvent({
+                eventType: 'inventory_registered',
+                sourceScreen: 'inventory_registration_modal',
+                storageType,
+                productId: product.id,
+                sourceItemType: 'inventory',
+                sourceItemId: result.id,
+                brandName: brand.trim() || product.brand || undefined,
+                productNumber: selectedProductNumber || undefined,
+                quantity,
+                capacityText: capacity || undefined,
+                casNumber: casNumber.trim() || undefined,
+                casInputMethod: casNumber.trim() ? 'manual' : 'unknown',
+                metadata: {
+                    brand_input_method: brand.trim() && brand.trim() !== (product.brand || '') ? 'manual' : 'catalog',
+                    capacity_input_method: capacity ? 'manual' : 'unknown',
+                    product_name: product.product_name || null,
+                },
+            });
+
             // 2. If cabinet storage, actually place the reagent on a shelf
             if (storageType === 'cabinet' && selectedCabinetId) {
                 const placedItemId = await placeToCabinet(result.id);
@@ -237,6 +258,16 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                 'add',
                 itemName.trim() || product.product_name || 'Unknown',
             );
+            await analyticsService.trackStorageWarningIgnoredForItem({
+                cabinetId: selectedCabinetId,
+                shelves: useFridgeStore.getState().shelves,
+                relatedItemId: placeResult.itemId,
+                sourceScreen: 'inventory_registration_modal',
+                triggerSource: 'inventory_auto_place',
+                metadata: {
+                    product_id: product.id,
+                },
+            });
             return placeResult.itemId;
         }
 

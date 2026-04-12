@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
+import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
@@ -355,6 +356,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
         const finalName = placementName.trim() || '이름 없음';
         const memo = placementMemo;
+        const existingItemIds = new Set(useFridgeStore.getState().shelves.flatMap((shelf) => shelf.items.map((item) => item.id)));
         placeReagent(pendingPlacement.shelfId, {
             id: '',
             reagentId: 'custom-' + Date.now(),
@@ -374,6 +376,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             casNo: placementCas || undefined,
             remaining_percent: placementRemainingPercent,
         });
+        const newlyPlacedItemId = useFridgeStore.getState().shelves
+            .flatMap((shelf) => shelf.items)
+            .find((item) => !existingItemIds.has(item.id))?.id || null;
 
         // Reset states
         setPendingPlacement(null);
@@ -391,9 +396,37 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         // 자동저장 + 활동 로그 (병렬)
         const currentCabinetId = useFridgeStore.getState().cabinetId;
         autoSave();
+        if (newlyPlacedItemId) {
+            await analyticsService.trackCommerceIntentEvent({
+                eventType: 'cabinet_item_placed',
+                sourceScreen: 'fridge_view',
+                storageType: 'cabinet',
+                sourceItemType: 'cabinet_item',
+                sourceItemId: newlyPlacedItemId,
+                brandName: placementBrand || undefined,
+                productNumber: placementProductNumber || undefined,
+                quantity: 1,
+                capacityText: placementCapacity || undefined,
+                casNumber: placementCas || undefined,
+                casInputMethod: placementCas.trim() ? 'manual' : 'unknown',
+                metadata: {
+                    placement_mode: 'manual',
+                    shelf_id: pendingPlacement.shelfId,
+                },
+            });
+        }
         if (currentCabinetId) {
             cabinetService.logActivity(currentCabinetId, 'add', finalName, undefined, memo || undefined)
                 .catch(err => console.error('Failed to log add activity:', err));
+            if (newlyPlacedItemId) {
+                await analyticsService.trackStorageWarningIgnoredForItem({
+                    cabinetId: currentCabinetId,
+                    shelves: useFridgeStore.getState().shelves,
+                    relatedItemId: newlyPlacedItemId,
+                    sourceScreen: 'fridge_view',
+                    triggerSource: 'manual_place',
+                });
+            }
         }
     };
 
@@ -476,11 +509,34 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         } else {
             // 자동저장 + 스캔 등록 로그 (병렬)
             autoSave();
+            void analyticsService.trackCommerceIntentEvent({
+                eventType: 'cabinet_item_scanned',
+                sourceScreen: 'fridge_view',
+                storageType: 'cabinet',
+                sourceItemType: 'cabinet_item',
+                sourceItemId: result.itemId,
+                brandName: scanBrand || undefined,
+                productNumber: scanProductNumber || undefined,
+                quantity: 1,
+                capacityText: scanCapacity || undefined,
+                casNumber: scanCas || undefined,
+                casInputMethod: scanCas.trim() ? 'scan' : 'unknown',
+                metadata: {
+                    placement_mode: 'scan_auto_place',
+                },
+            });
             const currentCabinetId = useFridgeStore.getState().cabinetId;
             if (currentCabinetId) {
                 const memo = [scanCas && `CAS: ${scanCas}`, scanCapacity && `용량: ${scanCapacity}`].filter(Boolean).join(', ');
                 cabinetService.logActivity(currentCabinetId, 'add', finalName, undefined, memo || undefined)
                     .catch(err => console.error('Failed to log scan-add activity:', err));
+                void analyticsService.trackStorageWarningIgnoredForItem({
+                    cabinetId: currentCabinetId,
+                    shelves: useFridgeStore.getState().shelves,
+                    relatedItemId: result.itemId,
+                    sourceScreen: 'fridge_view',
+                    triggerSource: 'scan_auto_place',
+                });
             }
         }
 

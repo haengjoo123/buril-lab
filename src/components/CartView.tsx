@@ -53,7 +53,10 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                 molecularFormula: item.chemical.molecularFormula,
                 category: item.category,
             }));
-            const result = await getAIDisposalGuide(chemicals);
+            const result = await getAIDisposalGuide(chemicals, {
+                sourceScreen: 'cart_view',
+                triggerSource: 'cart_ai_disposal_guide_button',
+            });
             setAiGuide(result.guide);
 
         } catch {

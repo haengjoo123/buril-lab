@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
 import { auditService, type AuditLog } from '../../services/auditService';
@@ -126,6 +127,13 @@ export const ReagentEditPanel: React.FC = () => {
     const handleSave = async () => {
         if (isSaving) return;
 
+        const normalize = (value?: string | null) => (value || '').trim();
+        const shouldTrackCommerceUpdate =
+            normalize(selectedItem.brand) !== normalize(brand)
+            || normalize(selectedItem.productNumber) !== normalize(productNumber)
+            || normalize(selectedItem.casNo) !== normalize(casNo)
+            || normalize(selectedItem.capacity) !== normalize(capacity);
+
         const updatePayload = {
             name,
             memo: notes || undefined,
@@ -162,6 +170,24 @@ export const ReagentEditPanel: React.FC = () => {
         try {
             await inventoryService.updateItem(selectedReagentId, updatePayload, 'cabinet_item');
             await saveCabinet();
+            if (shouldTrackCommerceUpdate) {
+                await analyticsService.trackCommerceIntentEvent({
+                    eventType: 'cabinet_item_updated',
+                    sourceScreen: 'reagent_edit_panel',
+                    storageType: 'cabinet',
+                    sourceItemType: 'cabinet_item',
+                    sourceItemId: selectedReagentId,
+                    brandName: brand,
+                    productNumber,
+                    quantity: 1,
+                    capacityText: capacity,
+                    casNumber: casNo,
+                    casInputMethod: casNo.trim() ? 'manual' : 'unknown',
+                    metadata: {
+                        edited_from: 'cabinet_detail',
+                    },
+                });
+            }
             setSelectedReagentId(null);
         } catch (err) {
             console.error('Failed to save reagent edits:', err);

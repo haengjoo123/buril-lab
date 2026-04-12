@@ -5,6 +5,7 @@
 
 import { supabase } from './supabaseClient';
 import { useLabStore } from '../store/useLabStore';
+import { estimateTotalVolumeMl } from '../utils/capacityParser';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
 
 // ── Types ──────────────────────────────────────────────
@@ -267,6 +268,7 @@ export const inventoryService = {
             lab_id: input.labId,
             chemicals: [chemicalWithLocation],
             disposal_category: input.chemical.name,
+            total_volume_ml: estimateTotalVolumeMl(input.chemical.capacity, input.chemical.quantity),
             handler_name: handlerName || null,
             memo: input.memo,
         };
@@ -280,6 +282,7 @@ export const inventoryService = {
             lab_id: row.lab_id,
             chemicals: row.chemicals,
             disposal_category: row.disposal_category,
+            total_volume_ml: row.total_volume_ml,
             memo: row.memo,
         };
         const { error: fallbackError } = await supabase.from('waste_logs').insert(fallbackRow);
@@ -785,10 +788,15 @@ export const inventoryService = {
                 }));
 
                 const handlerName = await getCurrentUserDisplayName(currentLabId);
+                const totalVolumeMl = chemicals.reduce((sum, chemical) => {
+                    const estimated = estimateTotalVolumeMl(chemical.capacity, chemical.quantity);
+                    return sum + (estimated ?? 0);
+                }, 0);
                 const row = {
                     user_id: userId,
                     lab_id: currentLabId,
                     chemicals: chemicals,
+                    total_volume_ml: totalVolumeMl > 0 ? totalVolumeMl : null,
                     disposal_category: '시약장 전체 비우기',
                     handler_name: handlerName || null,
                     memo: `${cabinetInfo?.name || '시약장'} 전체 비우기 기능으로 폐기됨 (${items.length}건)`,
@@ -802,6 +810,7 @@ export const inventoryService = {
                         lab_id: row.lab_id,
                         chemicals: row.chemicals,
                         disposal_category: row.disposal_category,
+                        total_volume_ml: row.total_volume_ml,
                         memo: row.memo,
                     };
                     await supabase.from('waste_logs').insert(fallbackRow);
