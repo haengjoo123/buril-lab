@@ -3,7 +3,7 @@
  * Floating banner that shows chemical storage compatibility warnings
  * for the current cabinet. Minimizable, with per-shelf breakdown.
  */
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, ShieldAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useFridgeStore } from '../../../store/fridgeStore';
@@ -12,7 +12,11 @@ import {
     type StorageWarning,
 } from '../../../utils/storageCompatibilityChecker';
 
-export const StorageCompatBanner: React.FC = () => {
+interface StorageCompatBannerProps {
+    reopenToken?: number;
+}
+
+export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopenToken = 0 }) => {
     const { t } = useTranslation();
     const shelves = useFridgeStore(s => s.shelves);
     const [isExpanded, setIsExpanded] = useState(false);
@@ -35,6 +39,12 @@ export const StorageCompatBanner: React.FC = () => {
     }, [warningMap]);
 
     // No warnings or dismissed → don't render
+    useEffect(() => {
+        if (reopenToken === 0) return;
+        setIsDismissed(false);
+        setIsExpanded(false);
+    }, [reopenToken]);
+
     if (totalWarnings === 0 || isDismissed) return null;
 
     const hasDanger = dangerCount > 0;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FridgeScene } from './FridgeScene';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2 } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
@@ -18,6 +18,7 @@ import { useOnboardingStore } from '../../store/useOnboardingStore';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
+import { checkCabinetCompatibility } from '../../utils/storageCompatibilityChecker';
 
 export interface FridgeViewProps {
     cabinetId: string;
@@ -114,6 +115,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     // Toast state
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+    const [storageCompatBannerReopenToken, setStorageCompatBannerReopenToken] = useState(0);
 
     // 모바일: 시약 내려놓은 직후 발생하는 합성 클릭(ghost click)으로 백드롭이 눌리는 것 방지
     const placementModalOpenedAtRef = React.useRef<number>(0);
@@ -152,6 +154,14 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     } = useFridgeStore();
 
     const [showModalContent, setShowModalContent] = useState(false);
+    const storageCompatWarningMap = React.useMemo(() => checkCabinetCompatibility(shelves), [shelves]);
+    const storageCompatWarningCount = React.useMemo(() => {
+        let count = 0;
+        storageCompatWarningMap.forEach((warnings) => {
+            count += warnings.length;
+        });
+        return count;
+    }, [storageCompatWarningMap]);
 
     // 시약 정보 입력 모달 렌더링 지연 (모바일 고스트 클릭 방지용)
     React.useEffect(() => {
@@ -324,6 +334,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const handleClearConfirmStep1 = () => {
         setIsClearConfirmOpen(false);
         setIsClearSecondConfirmOpen(true);
+    };
+
+    const handleOpenStorageCompatBanner = () => {
+        if (storageCompatWarningCount === 0) return;
+        setStorageCompatBannerReopenToken((current) => current + 1);
     };
 
     const handleReagentClick = (item: GenericContainerItem) => {
@@ -722,7 +737,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 )}
 
                 {/* Storage Compatibility Warning Banner */}
-                <StorageCompatBanner />
+                <StorageCompatBanner reopenToken={storageCompatBannerReopenToken} />
 
                 {/* Edit Mode Overlay */}
                 <ReagentEditPanel />
@@ -893,7 +908,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 </button>
                                 <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 px-1 pr-6 w-full">
                                     <h3 className="text-sm font-semibold text-gray-700 whitespace-nowrap shrink-0">{t('cabinet_reagent_tray_title')}</h3>
-                                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                    <div className="flex flex-1 flex-wrap items-center gap-1.5 sm:gap-2 w-full">
                                         <button
                                             onClick={() => { sortShelves('name'); autoSave(); }}
                                             disabled={shelves.length === 0}
@@ -911,9 +926,20 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             {t('cabinet_sort_type')}
                                         </button>
                                         <button
+                                            onClick={handleOpenStorageCompatBanner}
+                                            disabled={storageCompatWarningCount === 0}
+                                            className="px-2 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 hover:text-amber-800 hover:border-amber-300 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50 disabled:hover:text-amber-700 disabled:hover:border-amber-200"
+                                        >
+                                            <ShieldAlert size={10} />
+                                            {t(
+                                                'btn_check_storage_compat',
+                                                i18n.language.startsWith('ko') ? '보관 호환성 확인' : 'Check storage compatibility',
+                                            )}
+                                        </button>
+                                        <button
                                             onClick={() => setIsClearConfirmOpen(true)}
                                             disabled={shelves.every(s => s.items.length === 0)}
-                                            className="text-[11px] sm:text-xs text-red-600 hover:underline sm:ml-2 flex flex-1 sm:flex-none justify-end sm:justify-start items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+                                            className="ml-auto text-[11px] sm:text-xs text-red-600 hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
                                         >
                                             {t('cabinet_clear_all')}
                                         </button>
