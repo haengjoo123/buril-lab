@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp } from 'lucide-react';
 import { ResultCard } from './ResultCard';
 import { MediaProductCard } from './MediaProductCard';
 import { MediaProductFilter } from './MediaProductFilter';
@@ -125,9 +125,9 @@ export function SearchTabView({
         >
           <div className="flex items-center gap-3">
             <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${error
-                ? 'bg-red-50 text-red-500 dark:bg-red-950/30 dark:text-red-300'
-                : 'bg-slate-100 text-slate-500 group-focus-within:bg-blue-50 group-focus-within:text-blue-600 dark:bg-slate-700 dark:text-slate-300 dark:group-focus-within:bg-blue-950/40 dark:group-focus-within:text-blue-300'
+              className={`flex h-10 w-10 shrink-0 items-center justify-center transition-colors ${error
+                ? 'text-red-500 dark:text-red-400'
+                : 'text-slate-400 group-focus-within:text-blue-500 dark:text-slate-500 dark:group-focus-within:text-blue-400'
                 }`}
             >
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
@@ -156,7 +156,7 @@ export function SearchTabView({
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100/80 pt-2.5 dark:border-slate-700/60">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onOpenScanner}
@@ -176,14 +176,17 @@ export function SearchTabView({
                 <span>{t('voice_agent_cta_speak')}</span>
               </button>
             )}
-
             <button
               type="submit"
               disabled={!query.trim() || isLoading}
-              className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
+              className={`ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${
+                query.trim() 
+                  ? 'bg-slate-900 text-white shadow-md hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white' 
+                  : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
+              }`}
               aria-label={t('lab_mgmt_search_btn')}
             >
-              <Search className="w-4 h-4" />
+              <ArrowUp className="w-5 h-5 stroke-[2.5]" />
             </button>
           </div>
         </div>
@@ -344,7 +347,7 @@ export function SearchTabView({
                   <div
                     key={term}
                     onClick={() => onSuggestionClick(term)}
-                    className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 p-4 rounded-xl flex items-center justify-between shadow-sm active:bg-gray-50 dark:active:bg-slate-700 transition-colors cursor-pointer group"
+                    className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/70 p-4 rounded-xl flex items-center justify-between shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] hover:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.15)] active:scale-[0.98] transition-all cursor-pointer group"
                   >
                     <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center gap-2">
                       <div className="bg-gray-100 dark:bg-slate-700 p-1 rounded-md">
