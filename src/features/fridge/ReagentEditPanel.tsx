@@ -549,12 +549,11 @@ export const ReagentEditPanel: React.FC = () => {
                                                     setWidth(CONTAINER_BASE_WIDTHS[ct.type] || 8);
                                                 }
                                             }}
-                                            className={`flex flex-col items-center gap-0.5 px-1.5 py-2 rounded-lg border text-xs font-medium transition-all ${template === ct.type
+                                            className={`flex items-center justify-center px-1.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all min-h-[44px] ${template === ct.type
                                                 ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300'
                                                 : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                                                 }`}
                                         >
-                                            <span className="text-base leading-none">{ct.icon}</span>
                                             <span className="leading-tight text-center">{t(ct.label)}</span>
                                         </button>
                                     ))}
