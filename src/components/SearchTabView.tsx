@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic } from 'lucide-react';
 import { ResultCard } from './ResultCard';
 import { MediaProductCard } from './MediaProductCard';
 import { MediaProductFilter } from './MediaProductFilter';
@@ -43,6 +43,7 @@ interface SearchTabViewProps {
   isSuggestionsLoading?: boolean;
   onClearSuggestions?: () => void;
   onRequireAuth?: () => void;
+  onOpenVoiceAgent?: () => void;
 }
 
 export function SearchTabView({
@@ -78,6 +79,7 @@ export function SearchTabView({
   isSuggestionsLoading = false,
   onClearSuggestions,
   onRequireAuth,
+  onOpenVoiceAgent,
 }: SearchTabViewProps) {
   const { t } = useTranslation();
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
@@ -121,14 +123,24 @@ export function SearchTabView({
           type="text"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          className={`block w-full pl-10 pr-12 py-4 border rounded-xl leading-5 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 placeholder:text-sm focus:outline-none focus:ring-2 shadow-sm transition-all ${error
+          className={`block w-full pl-10 ${onOpenVoiceAgent ? 'pr-24' : 'pr-12'} py-4 border rounded-xl leading-5 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 placeholder:text-sm focus:outline-none focus:ring-2 shadow-sm transition-all ${error
             ? 'border-red-300 dark:border-red-900/50 focus:ring-red-500 focus:border-red-500'
             : 'border-gray-200 dark:border-slate-700 focus:ring-blue-500 focus:border-transparent'
             }`}
           placeholder={t('search_placeholder')}
           disabled={isLoading}
         />
-        <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+        <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-1">
+          {onOpenVoiceAgent && (
+            <button
+              type="button"
+              onClick={onOpenVoiceAgent}
+              className="rounded-full p-2 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-slate-700/70"
+              aria-label={t('voice_agent_open', 'Open AI assistant')}
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+          )}
           {isLoading ? (
             <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
           ) : (result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (

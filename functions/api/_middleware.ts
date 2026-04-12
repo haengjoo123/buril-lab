@@ -5,8 +5,12 @@ import * as jose from 'jose'
 interface Env {
   UPSTASH_REDIS_REST_URL: string
   UPSTASH_REDIS_REST_TOKEN: string
-  SUPABASE_JWT_SECRET: string
+  SUPABASE_JWT_SECRET?: string
+  SUPABASE_URL?: string
+  VITE_SUPABASE_URL?: string
 }
+
+const supabaseJwksCache = new Map<string, ReturnType<typeof jose.createRemoteJWKSet>>()
 
 /**
  * Rate limit categories and their configurations
@@ -16,6 +20,11 @@ const LIMIT_CONFIGS = {
     user: { count: 5, window: "1 m" },
     ip: { count: 1, window: "1 m" },
     pattern: /^\/api\/vision\//,
+  },
+  VOICE: {
+    user: { count: 8, window: "1 m" },
+    ip: { count: 1, window: "1 m" },
+    pattern: /^\/api\/voice\//,
   },
   AI: {
     user: { count: 10, window: "1 m" },
@@ -28,6 +37,48 @@ const LIMIT_CONFIGS = {
     pattern: /^\/api\/kosha/,
   },
 } as const
+
+function resolveSupabaseUrl(env: Env): string | null {
+  return env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim() || null
+}
+
+function getSupabaseJwks(env: Env) {
+  const supabaseUrl = resolveSupabaseUrl(env)
+  if (!supabaseUrl) return null
+
+  if (!supabaseJwksCache.has(supabaseUrl)) {
+    supabaseJwksCache.set(
+      supabaseUrl,
+      jose.createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)),
+    )
+  }
+
+  return supabaseJwksCache.get(supabaseUrl) || null
+}
+
+async function verifySupabaseToken(token: string, env: Env) {
+  const { alg } = jose.decodeProtectedHeader(token)
+
+  if (alg?.startsWith('HS') && env.SUPABASE_JWT_SECRET) {
+    const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET)
+    const { payload } = await jose.jwtVerify(token, secret)
+    return payload
+  }
+
+  const jwks = getSupabaseJwks(env)
+  if (jwks) {
+    const { payload } = await jose.jwtVerify(token, jwks)
+    return payload
+  }
+
+  if (env.SUPABASE_JWT_SECRET) {
+    const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET)
+    const { payload } = await jose.jwtVerify(token, secret)
+    return payload
+  }
+
+  throw new Error('Supabase JWT verification is not configured.')
+}
 
 /**
  * Middleware for all /api/* routes
@@ -51,8 +102,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7)
     try {
-      const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET)
-      const { payload } = await jose.jwtVerify(token, secret)
+      const payload = await verifySupabaseToken(token, env)
       
       if (payload.sub) {
         userId = payload.sub
@@ -69,6 +119,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // 2. Resolve Rate Limit Category
   let category: keyof typeof LIMIT_CONFIGS | null = null
   if (LIMIT_CONFIGS.VISION.pattern.test(path)) category = 'VISION'
+  else if (LIMIT_CONFIGS.VOICE.pattern.test(path)) category = 'VOICE'
   else if (LIMIT_CONFIGS.AI.pattern.test(path)) category = 'AI'
   else if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) category = 'KOSHA'
 
@@ -86,7 +137,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
     const ratelimit = new Ratelimit({
       redis: redis,
-      limiter: Ratelimit.slidingWindow(limitConfig.count, limitConfig.window as any),
+      limiter: Ratelimit.slidingWindow(limitConfig.count, limitConfig.window),
       prefix: `@upstash/ratelimit/${category || 'GLOBAL'}`,
       analytics: true,
     })
