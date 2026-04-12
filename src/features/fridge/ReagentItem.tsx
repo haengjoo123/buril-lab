@@ -6,7 +6,7 @@ import type { ReagentPlacement } from '../../types/fridge';
 import { useSpring, animated } from '@react-spring/three';
 import { useFridgeStore } from '../../store/fridgeStore';
 import * as THREE from 'three';
-import { useGLTF } from '@react-three/drei';
+import { useGLTF, Text } from '@react-three/drei';
 import { getExpiryStatus, type ExpiryLevel } from '../../utils/expiryStatus';
 
 interface ReagentItemProps {
@@ -304,6 +304,20 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
 
     const scale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
 
+    // 라벨 표시 텍스트 — 최대 6자까지만 표시, 초과 시 말줄임
+    const labelText = useMemo(() => {
+        const name = item.name || '';
+        return name.length > 6 ? name.slice(0, 5) + '…' : name;
+    }, [item.name]);
+
+    // 병 높이에 따른 텍스트 Y 위치 (병 상단 약간 위)
+    const labelY = useMemo(() => {
+        const baseHeights: Record<string, number> = { A: 1.1, B: 1.2, C: 1.0, D: 1.1 };
+        return (baseHeights[item.template] || 1.1) * scale;
+    }, [item.template, scale]);
+
+    const showLabel = !isGhost && !isBeingDragged && !dimmed;
+
     return (
         <animated.group
             position={position as any /* eslint-disable-line @typescript-eslint/no-explicit-any */}
@@ -326,7 +340,23 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
                     })()}
                 />
             </animated.group>
-            {/* Label could go here */}
+            {/* 시약명 3D 텍스트 라벨 */}
+            {showLabel && labelText && (
+                <Text
+                    position={[0, labelY, 0]}
+                    fontSize={0.18 * Math.max(scale, 0.7)}
+                    color="#1e293b"
+                    anchorX="center"
+                    anchorY="bottom"
+                    maxWidth={1.5}
+                    textAlign="center"
+                    outlineWidth={0.02}
+                    outlineColor="#ffffff"
+                    font="/fonts/NotoSansKR-Medium.ttf"
+                >
+                    {labelText}
+                </Text>
+            )}
         </animated.group>
     );
 };

@@ -681,7 +681,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 >
                                     <ChevronDown size={18} />
                                 </button>
-                                <div className="flex flex-col gap-3 mt-3">
+                                <div className="flex flex-col gap-3 mt-6">
                                     {/* 버튼 행 - 4개의 버튼이 모바일에서 한 줄에 들어가도록 최적화 */}
                                     <div className="flex justify-between sm:justify-center items-end gap-x-2 sm:gap-x-6 w-full px-1">
                                         <button
@@ -725,12 +725,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         </button>
                                     </div>
 
-                                    {/* Sort Controls + 세로 구분 위치 — 한 줄로 콤팩트 배치 */}
                                     <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full flex-wrap">
+                                        <span className="text-[10px] sm:text-xs text-gray-500 font-medium">{t('cabinet_sort_label')}</span>
                                         <button
                                             onClick={() => { sortShelves('name'); autoSave(); }}
                                             disabled={shelves.length === 0}
-                                            className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1.5"
+                                            className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
                                         >
                                             <span className="text-[10px]">AZ</span>
                                             {t('cabinet_sort_name')}
@@ -738,7 +738,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         <button
                                             onClick={() => { sortShelves('type'); autoSave(); }}
                                             disabled={shelves.length === 0}
-                                            className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1.5"
+                                            className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
                                         >
                                             <Layers size={12} />
                                             {t('cabinet_sort_type')}
