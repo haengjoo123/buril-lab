@@ -1,9 +1,9 @@
+import { generateGeminiText, json } from './_utils'
+
 interface Env {
   GEMINI_API_KEY?: string
 }
 
-const GEMINI_PRIMARY_MODEL = 'gemini-3-flash-preview'
-const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
 const VALID_CATEGORIES = [
   'ACID',
   'ALKALI',
@@ -16,56 +16,6 @@ const VALID_CATEGORIES = [
   'SOLID_WASTE',
   'UNKNOWN',
 ] as const
-
-function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      ...(init?.headers || {}),
-    },
-  })
-}
-
-async function generateGeminiText(
-  apiKey: string,
-  payload: unknown,
-  allowFallback = true,
-): Promise<string> {
-  const model = allowFallback ? GEMINI_PRIMARY_MODEL : GEMINI_FALLBACK_MODEL
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    },
-  )
-
-  if (!response.ok) {
-    if (allowFallback && response.status === 503) {
-      return generateGeminiText(apiKey, payload, false)
-    }
-
-    const errorText = await response.text()
-    throw new Error(`Gemini request failed with status ${response.status}: ${errorText}`)
-  }
-
-  const data = await response.json() as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string }>
-      }
-    }>
-  }
-
-  return (data.candidates?.[0]?.content?.parts || [])
-    .map((part) => part.text || '')
-    .join('')
-    .trim()
-}
 
 export const onRequestPost = async (context: {
   request: Request
@@ -109,9 +59,11 @@ Strict Rules for Assignment:
 Return ONLY the category name as a plain string. No other text.`
 
   try {
-    const rawText = await generateGeminiText(context.env.GEMINI_API_KEY, {
+    const result = await generateGeminiText(context.env.GEMINI_API_KEY, {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     })
+
+    const rawText = result.text
 
     const normalizedText = rawText.toUpperCase()
     const category = VALID_CATEGORIES.find((value) => normalizedText.includes(value)) || 'UNKNOWN'

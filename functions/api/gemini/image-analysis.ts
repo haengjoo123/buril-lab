@@ -1,20 +1,10 @@
+import { generateGeminiText, json } from './_utils'
+
 interface Env {
   GEMINI_API_KEY?: string
 }
 
-const GEMINI_PRIMARY_MODEL = 'gemini-3-flash-preview'
-const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
-
-function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      ...(init?.headers || {}),
-    },
-  })
-}
 
 function parseImageDataUrl(imageSrc: string) {
   const [header, base64Data] = imageSrc.split(',', 2)
@@ -32,51 +22,6 @@ function parseImageDataUrl(imageSrc: string) {
   return {
     mimeType: mimeMatch[1],
     data: base64Data,
-  }
-}
-
-async function generateGeminiText(
-  apiKey: string,
-  payload: unknown,
-  allowFallback = true,
-): Promise<{ text: string; usedModelName: string }> {
-  const model = allowFallback ? GEMINI_PRIMARY_MODEL : GEMINI_FALLBACK_MODEL
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    },
-  )
-
-  if (!response.ok) {
-    if (allowFallback && response.status === 503) {
-      return generateGeminiText(apiKey, payload, false)
-    }
-
-    const errorText = await response.text()
-    throw new Error(`Gemini request failed with status ${response.status}: ${errorText}`)
-  }
-
-  const data = await response.json() as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string }>
-      }
-    }>
-  }
-
-  const text = (data.candidates?.[0]?.content?.parts || [])
-    .map((part) => part.text || '')
-    .join('')
-    .trim()
-
-  return {
-    text,
-    usedModelName: model,
   }
 }
 

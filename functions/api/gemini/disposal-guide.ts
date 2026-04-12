@@ -1,58 +1,7 @@
+import { generateGeminiText, json } from './_utils'
+
 interface Env {
   GEMINI_API_KEY?: string
-}
-
-const GEMINI_PRIMARY_MODEL = 'gemini-3-flash-preview'
-const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
-
-function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      ...(init?.headers || {}),
-    },
-  })
-}
-
-async function generateGeminiText(
-  apiKey: string,
-  payload: unknown,
-  allowFallback = true,
-): Promise<string> {
-  const model = allowFallback ? GEMINI_PRIMARY_MODEL : GEMINI_FALLBACK_MODEL
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    },
-  )
-
-  if (!response.ok) {
-    if (allowFallback && response.status === 503) {
-      return generateGeminiText(apiKey, payload, false)
-    }
-
-    const errorText = await response.text()
-    throw new Error(`Gemini request failed with status ${response.status}: ${errorText}`)
-  }
-
-  const data = await response.json() as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string }>
-      }
-    }>
-  }
-
-  return (data.candidates?.[0]?.content?.parts || [])
-    .map((part) => part.text || '')
-    .join('')
-    .trim()
 }
 
 interface ChemicalInput {
@@ -115,11 +64,11 @@ ${chemicalList}
 규칙: 한국어, 각 항목 1줄, 마크다운 금지, 불확실하면 "MSDS 확인 필요" 명시`
 
   try {
-    const guide = await generateGeminiText(context.env.GEMINI_API_KEY, {
+    const result = await generateGeminiText(context.env.GEMINI_API_KEY, {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     })
 
-    return json({ guide })
+    return json({ guide: result.text })
   } catch (error) {
     return json(
       {

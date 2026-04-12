@@ -28,7 +28,7 @@ const LIMIT_CONFIGS = {
   },
   AI: {
     user: { count: 10, window: "1 m" },
-    ip: { count: 2, window: "1 m" },
+    ip: { count: 5, window: "1 m" },
     pattern: /^\/api\/gemini\//,
   },
   KOSHA: {
