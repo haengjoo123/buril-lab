@@ -91,7 +91,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
     <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/45 backdrop-blur-sm">
       <button
         type="button"
-        aria-label={t('voice_agent_close_overlay', 'Close voice assistant')}
+        aria-label={t('voice_agent_close_overlay', 'Close AI voice agent')}
         className="absolute inset-0"
         onClick={closeSheet}
       />
@@ -104,7 +104,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
             </div>
             <div>
               <h2 className="text-base font-semibold text-slate-900">
-                {t('voice_agent_title', 'AI 도우미')}
+                {t('voice_agent_title', 'AI Voice Agent')}
               </h2>
               <p className="text-xs text-slate-500">
                 {currentContext.screen === 'cabinet'

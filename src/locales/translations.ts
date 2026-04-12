@@ -88,7 +88,7 @@ export const translations = {
         search_error: "데이터를 불러오는 중 오류가 발생했습니다.",
         search_chemical_not_found_notice: "'{{query}}' 화학물질 검색 결과가 없어 폐기 방법을 안내할 수 없습니다.",
 
-        btn_scan: "카메라로 스캔하기",
+        btn_scan: "스캔하기",
         btn_settings: "설정",
         btn_reset: "취소 / 재검색",
         btn_add_to_list: "리스트 담기",
@@ -947,9 +947,10 @@ export const translations = {
         ai_guide_disclaimer: "AI 분석 결과는 참고용이며, 반드시 MSDS를 확인하세요.",
 
         // Voice Agent
-        voice_agent_open: "AI 도우미 열기",
-        voice_agent_close_overlay: "AI 도우미 닫기",
-        voice_agent_title: "AI 도우미",
+        voice_agent_open: "AI 보이스 에이전트 열기",
+        voice_agent_close_overlay: "AI 보이스 에이전트 닫기",
+        voice_agent_title: "AI 보이스 에이전트",
+        voice_agent_cta_speak: "말하기",
         voice_agent_context_cabinet: "현재 시약장 맥락에서 찾습니다.",
         voice_agent_context_search: "검색과 시약장 데이터를 함께 조회합니다.",
         voice_agent_idle: "시약명과 함께 위치, 유통기한, 잔량, 폐기를 물어보세요.",
@@ -1011,7 +1012,7 @@ export const translations = {
         search_error: "Error fetching data.",
         search_chemical_not_found_notice: "No chemical result for '{{query}}', so disposal guidance is unavailable.",
 
-        btn_scan: "Scan with Camera",
+        btn_scan: "Scan",
         btn_settings: "Settings",
         btn_reset: "Reset",
         btn_add_to_list: "Add to List",
@@ -1934,9 +1935,10 @@ export const translations = {
         ai_guide_disclaimer: "AI results are for reference only. Always check MSDS.",
 
         // Voice Agent
-        voice_agent_open: "Open AI assistant",
-        voice_agent_close_overlay: "Close AI assistant",
-        voice_agent_title: "AI Assistant",
+        voice_agent_open: "Open AI voice agent",
+        voice_agent_close_overlay: "Close AI voice agent",
+        voice_agent_title: "AI Voice Agent",
+        voice_agent_cta_speak: "Speak",
         voice_agent_context_cabinet: "Searching within the current cabinet context.",
         voice_agent_context_search: "Searching across search and cabinet data.",
         voice_agent_idle: "Ask about a reagent's location, expiry, remaining amount, or disposal.",

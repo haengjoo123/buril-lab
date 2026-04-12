@@ -85,6 +85,7 @@ export function SearchTabView({
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
   const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
   const hasOtherResults = mediaProducts.length > 0 || cabinetResults.length > 0;
+  const hasSearchResults = Boolean(result) || hasOtherResults;
   const showChemicalNotFoundNotice = !isLoading && !result && hasOtherResults && !!lastSearchQuery;
 
   return (
@@ -116,44 +117,80 @@ export function SearchTabView({
       )}
 
       <form onSubmit={onSearchSubmit} className="relative group z-20">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className={`w-5 h-5 transition-colors ${error ? 'text-red-400' : 'text-gray-400 dark:text-gray-500 group-focus-within:text-blue-500 dark:group-focus-within:text-blue-400'}`} />
-        </div>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          className={`block w-full pl-10 ${onOpenVoiceAgent ? 'pr-24' : 'pr-12'} py-4 border rounded-xl leading-5 bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 placeholder:text-sm focus:outline-none focus:ring-2 shadow-sm transition-all ${error
-            ? 'border-red-300 dark:border-red-900/50 focus:ring-red-500 focus:border-red-500'
-            : 'border-gray-200 dark:border-slate-700 focus:ring-blue-500 focus:border-transparent'
+        <div
+          className={`rounded-[1.5rem] border bg-white dark:bg-slate-800 px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] ${error
+            ? 'border-red-300 dark:border-red-900/50'
+            : 'border-slate-100 dark:border-slate-700/70'
             }`}
-          placeholder={t('search_placeholder')}
-          disabled={isLoading}
-        />
-        <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-1">
-          {onOpenVoiceAgent && (
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${error
+                ? 'bg-red-50 text-red-500 dark:bg-red-950/30 dark:text-red-300'
+                : 'bg-slate-100 text-slate-500 group-focus-within:bg-blue-50 group-focus-within:text-blue-600 dark:bg-slate-700 dark:text-slate-300 dark:group-focus-within:bg-blue-950/40 dark:group-focus-within:text-blue-300'
+                }`}
+            >
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => onQueryChange(e.target.value)}
+                className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+                placeholder={t('search_placeholder')}
+                disabled={isLoading}
+              />
+            </div>
+
+            {!isLoading && (query.trim() || hasSearchResults) && (
+              <button
+                type="button"
+                onClick={onReset}
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+              >
+                <span className="sr-only">Reset</span>
+                X
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100/80 pt-2.5 dark:border-slate-700/60">
             <button
               type="button"
-              onClick={onOpenVoiceAgent}
-              className="rounded-full p-2 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-slate-700/70"
-              aria-label={t('voice_agent_open', 'Open AI assistant')}
+              onClick={onOpenScanner}
+              className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40"
             >
-              <Mic className="w-4 h-4" />
+              <Camera className="w-4 h-4" />
+              <span>{t('btn_scan')}</span>
             </button>
-          )}
-          {isLoading ? (
-            <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-          ) : (result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
-            <button type="button" onClick={onReset} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
-              <span className="sr-only">Reset</span>
-              X
+
+            {onOpenVoiceAgent && (
+              <button
+                type="button"
+                onClick={onOpenVoiceAgent}
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <Mic className="w-4 h-4" />
+                <span>{t('voice_agent_cta_speak')}</span>
+              </button>
+            )}
+
+            <button
+              type="submit"
+              disabled={!query.trim() || isLoading}
+              className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white transition-colors hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
+              aria-label={t('lab_mgmt_search_btn')}
+            >
+              <Search className="w-4 h-4" />
             </button>
-          ) : null}
+          </div>
         </div>
 
         {/* Autocomplete Dropdown */}
         {(suggestions.length > 0 || isSuggestionsLoading) && query.length >= 2 && !result && mediaProducts.length === 0 && cabinetResults.length === 0 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+          <div className="absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
             {isSuggestionsLoading && suggestions.length === 0 ? (
               <div className="p-4 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -291,28 +328,6 @@ export function SearchTabView({
         </div>
       ) : (
         <div className={`flex flex-col gap-6 transition-opacity duration-300 ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-5 px-5 no-scrollbar">
-            {['Water', 'Ethanol', 'HCl', 'NaOH'].map((item) => (
-              <button
-                key={item}
-                onClick={() => onSuggestionClick(item)}
-                className="whitespace-nowrap px-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-full text-sm text-gray-600 dark:text-gray-300 shadow-sm active:bg-gray-50 dark:active:bg-slate-700 from-blue-50 to-white"
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={onOpenScanner}
-            className="w-full h-40 bg-blue-600 dark:bg-blue-700 rounded-2xl flex flex-col items-center justify-center gap-3 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 active:scale-[0.98] transition-all group cursor-pointer hover:bg-blue-700 dark:hover:bg-blue-600"
-          >
-            <div className="p-4 bg-white/20 rounded-full group-hover:bg-white/30 transition-colors">
-              <Camera className="w-10 h-10 text-white" />
-            </div>
-            <span className="text-white font-semibold text-lg">{t('btn_scan')}</span>
-          </button>
-
           {recentSearches.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-3">
