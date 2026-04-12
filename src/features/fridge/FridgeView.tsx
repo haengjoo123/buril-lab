@@ -72,8 +72,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const [verticalPanelPos, setVerticalPanelPos] = useState(50);
-    const [isEditPanelVisible, setIsEditPanelVisible] = useState(true);
-    const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(true);
+    const [isEditPanelVisible, setIsEditPanelVisible] = useState(false);
+    const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(false);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
     const [isClearSecondConfirmOpen, setIsClearSecondConfirmOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -681,8 +681,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 >
                                     <ChevronDown size={18} />
                                 </button>
-                                <div className="flex flex-col gap-3">
-                                    {/* 버튼 행 - flex-wrap으로 공간 부족 시 자연스럽게 줄바꿈 */}
+                                <div className="flex flex-col gap-3 mt-3">
                                     {/* 버튼 행 - 4개의 버튼이 모바일에서 한 줄에 들어가도록 최적화 */}
                                     <div className="flex justify-between sm:justify-center items-end gap-x-2 sm:gap-x-6 w-full px-1">
                                         <button
@@ -726,8 +725,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         </button>
                                     </div>
 
-                                    {/* Sort Controls */}
-                                    <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full mt-1">
+                                    {/* Sort Controls + 세로 구분 위치 — 한 줄로 콤팩트 배치 */}
+                                    <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full flex-wrap">
                                         <button
                                             onClick={() => { sortShelves('name'); autoSave(); }}
                                             disabled={shelves.length === 0}
@@ -744,26 +743,20 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             <Layers size={12} />
                                             {t('cabinet_sort_type')}
                                         </button>
-                                    </div>
-
-                                    {/* 구분선 설정 밑 설명 텍스트 (입력창을 버튼부에서 분리) */}
-                                    <div className="flex flex-col items-center gap-2 mb-1 bg-gray-50 border border-gray-100 rounded-lg p-2 w-full mt-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-600 font-medium">{t('cabinet_vertical_panel')}</span>
-                                            <div className="flex items-center gap-1 bg-white border border-gray-200 px-2 py-0.5 rounded shadow-sm">
+                                        <div className="w-px h-5 bg-gray-200 mx-0.5" />
+                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                                            <span className="text-[10px] sm:text-xs text-gray-500 font-medium whitespace-nowrap">{t('cabinet_vertical_panel')}</span>
+                                            <div className="flex items-center gap-0.5 bg-white border border-gray-200 px-1.5 py-0.5 rounded">
                                                 <NumberInput
                                                     min={1}
                                                     max={99}
                                                     value={verticalPanelPos}
                                                     onChange={(v) => setVerticalPanelPos(v)}
-                                                    className="w-10 text-xs text-center border-none focus:ring-0 p-0"
+                                                    className="w-8 text-xs text-center border-none focus:ring-0 p-0"
                                                 />
                                                 <span className="text-[10px] text-gray-400">%</span>
                                             </div>
                                         </div>
-                                        <p className="text-[10px] sm:text-xs text-gray-500 text-center leading-relaxed">
-                                            {t('cabinet_vertical_panel_hint')}
-                                        </p>
                                     </div>
                                 </div>
 
