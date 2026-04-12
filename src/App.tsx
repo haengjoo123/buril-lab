@@ -3,7 +3,8 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { MainLayout } from './components/MainLayout';
 import { SearchTabView } from './components/SearchTabView';
 import { BottomTabNav } from './components/BottomTabNav';
-import { VoiceAgentSheet, openVoiceAgentSheet } from './components/VoiceAgentSheet';
+import { VoiceAgentSheet } from './components/VoiceAgentSheet';
+import { openVoiceAgentSheet } from './components/openVoiceAgentSheet';
 
 const Scanner = lazy(() => import('./components/Scanner'));
 

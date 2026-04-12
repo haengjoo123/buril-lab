@@ -31,6 +31,7 @@ interface VoiceAgentStore {
   context: VoiceQueryContext
   status: VoiceAgentStatus
   inputText: string
+  recordingLevels: number[]
   transcriptText: string
   resolvedText: string
   answerText: string
@@ -60,8 +61,14 @@ let activeAudio: HTMLAudioElement | null = null
 let activeAudioUrl: string | null = null
 let recordingAutoStopTimer: ReturnType<typeof setTimeout> | null = null
 let recordingAutoStopOptions: VoiceAgentSubmitOptions | undefined
+let recordingVisualizerTimer: ReturnType<typeof setInterval> | null = null
 
 export const VOICE_RECORDING_MAX_DURATION_MS = 10_000
+export const VOICE_RECORDING_VISUALIZER_BAR_COUNT = 20
+
+function createEmptyRecordingLevels(): number[] {
+  return Array.from({ length: VOICE_RECORDING_VISUALIZER_BAR_COUNT }, () => 0)
+}
 
 function clearRecordingAutoStopTimer() {
   if (recordingAutoStopTimer) {
@@ -86,6 +93,40 @@ function scheduleRecordingAutoStop(options?: VoiceAgentSubmitOptions) {
 
     void state.stopRecordingAndSubmit(recordingAutoStopOptions)
   }, VOICE_RECORDING_MAX_DURATION_MS)
+}
+
+function stopRecordingVisualizer(resetLevels = true) {
+  if (recordingVisualizerTimer) {
+    clearInterval(recordingVisualizerTimer)
+    recordingVisualizerTimer = null
+  }
+
+  if (resetLevels) {
+    useVoiceAgentStore.setState({
+      recordingLevels: createEmptyRecordingLevels(),
+    })
+  }
+}
+
+function startRecordingVisualizer() {
+  stopRecordingVisualizer(false)
+
+  const syncRecordingLevels = () => {
+    const state = useVoiceAgentStore.getState()
+
+    if (state.status !== 'recording') {
+      stopRecordingVisualizer()
+      return
+    }
+
+    useVoiceAgentStore.setState({
+      recordingLevels:
+        recorder.getInputActivity(VOICE_RECORDING_VISUALIZER_BAR_COUNT) || createEmptyRecordingLevels(),
+    })
+  }
+
+  syncRecordingLevels()
+  recordingVisualizerTimer = setInterval(syncRecordingLevels, 75)
 }
 
 function translateVoiceAgentError(
@@ -207,6 +248,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
   context: initialContext,
   status: 'idle',
   inputText: '',
+  recordingLevels: createEmptyRecordingLevels(),
   transcriptText: '',
   resolvedText: '',
   answerText: '',
@@ -236,6 +278,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
       transcriptText: '',
       resolvedText: '',
       answerText: '',
+      recordingLevels: createEmptyRecordingLevels(),
       error: null,
       intent: null,
       clarification: null,
@@ -271,10 +314,13 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
         status: 'recording',
         error: null,
         clarification: null,
+        recordingLevels: createEmptyRecordingLevels(),
         transcriptText: '',
         answerText: '',
       })
+      startRecordingVisualizer()
     } catch (error) {
+      stopRecordingVisualizer()
       set({
         status: 'error',
         error: translateVoiceAgentError(error instanceof Error ? error.message : null, 'voice_agent_error_mic_start'),
@@ -284,6 +330,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
 
   stopRecordingAndSubmit: async (options) => {
     clearRecordingAutoStopTimer()
+    stopRecordingVisualizer()
     const nextTurnId = get().turnId + 1
     set({
       turnId: nextTurnId,
@@ -490,6 +537,7 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
   cancelCurrentTurn: () => {
     stopActiveAudioPlayback()
     clearRecordingAutoStopTimer()
+    stopRecordingVisualizer()
 
     if (get().status === 'recording') {
       void recorder.stopRecording().catch(() => undefined)

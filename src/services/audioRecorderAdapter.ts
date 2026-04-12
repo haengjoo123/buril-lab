@@ -8,14 +8,19 @@ export interface AudioRecorderAdapter {
   isSupported: () => boolean
   startRecording: () => Promise<void>
   stopRecording: () => Promise<AudioRecordingResult>
+  getInputActivity: (barCount?: number) => number[] | null
 }
 
 interface ActiveRecordingSession {
+  analyser: AnalyserNode | null
+  analysisData: Uint8Array<ArrayBuffer> | null
+  audioContext: AudioContext | null
   chunks: BlobPart[]
   mimeType: string
   recorder: MediaRecorder
   startedAt: number
   stream: MediaStream
+  sourceNode: MediaStreamAudioSourceNode | null
 }
 
 const AUDIO_MIME_CANDIDATES = [
@@ -50,6 +55,47 @@ function stopStreamTracks(stream: MediaStream) {
   stream.getTracks().forEach((track) => track.stop())
 }
 
+function createAudioAnalysisSession(stream: MediaStream): Pick<
+  ActiveRecordingSession,
+  'analyser' | 'analysisData' | 'audioContext' | 'sourceNode'
+> {
+  const audioWindow = window as Window & {
+    webkitAudioContext?: typeof AudioContext
+  }
+  const AudioContextConstructor = window.AudioContext || audioWindow.webkitAudioContext
+
+  if (!AudioContextConstructor) {
+    return {
+      analyser: null,
+      analysisData: null,
+      audioContext: null,
+      sourceNode: null,
+    }
+  }
+
+  const audioContext = new AudioContextConstructor()
+  const sourceNode = audioContext.createMediaStreamSource(stream)
+  const analyser = audioContext.createAnalyser()
+  analyser.fftSize = 256
+  analyser.smoothingTimeConstant = 0.82
+  sourceNode.connect(analyser)
+
+  void audioContext.resume().catch(() => undefined)
+
+  return {
+    analyser,
+    analysisData: new Uint8Array(analyser.frequencyBinCount),
+    audioContext,
+    sourceNode,
+  }
+}
+
+function disposeAudioAnalysisSession(session: ActiveRecordingSession) {
+  session.sourceNode?.disconnect()
+  session.analyser?.disconnect()
+  void session.audioContext?.close().catch(() => undefined)
+}
+
 export function createAudioRecorderAdapter(): AudioRecorderAdapter {
   let activeSession: ActiveRecordingSession | null = null
 
@@ -72,6 +118,7 @@ export function createAudioRecorderAdapter(): AudioRecorderAdapter {
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream)
+      const analysisSession = createAudioAnalysisSession(stream)
 
       const chunks: BlobPart[] = []
       recorder.addEventListener('dataavailable', (event) => {
@@ -82,6 +129,7 @@ export function createAudioRecorderAdapter(): AudioRecorderAdapter {
 
       recorder.start()
       activeSession = {
+        ...analysisSession,
         chunks,
         mimeType: mimeType || recorder.mimeType || 'audio/webm',
         recorder,
@@ -107,6 +155,7 @@ export function createAudioRecorderAdapter(): AudioRecorderAdapter {
           )
 
           stopStreamTracks(session.stream)
+          disposeAudioAnalysisSession(session)
           activeSession = null
 
           resolve({
@@ -118,6 +167,7 @@ export function createAudioRecorderAdapter(): AudioRecorderAdapter {
 
         const handleError = () => {
           stopStreamTracks(session.stream)
+          disposeAudioAnalysisSession(session)
           activeSession = null
           reject(new Error('Audio recording failed to stop cleanly.'))
         }
@@ -132,6 +182,31 @@ export function createAudioRecorderAdapter(): AudioRecorderAdapter {
 
         session.recorder.requestData()
         session.recorder.stop()
+      })
+    },
+    getInputActivity: (barCount = 20) => {
+      const session = activeSession
+      if (!session || !session.analyser || !session.analysisData || barCount <= 0) {
+        return null
+      }
+
+      const analysisData = session.analysisData
+      session.analyser.getByteFrequencyData(analysisData)
+
+      const bucketSize = Math.max(1, Math.floor(analysisData.length / barCount))
+      return Array.from({ length: barCount }, (_, index) => {
+        const start = index * bucketSize
+        const end = Math.min(analysisData.length, start + bucketSize)
+
+        if (start >= end) return 0
+
+        let total = 0
+        for (let dataIndex = start; dataIndex < end; dataIndex += 1) {
+          total += analysisData[dataIndex]
+        }
+
+        const normalized = total / ((end - start) * 255)
+        return Math.min(1, Math.sqrt(normalized))
       })
     },
   }

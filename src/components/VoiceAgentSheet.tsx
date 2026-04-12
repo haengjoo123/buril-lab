@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bot, Loader2, Mic, Square, Volume2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -13,11 +13,18 @@ interface VoiceAgentSheetProps {
   onUiAction?: (action: VoiceUiAction, result: VoiceQueryResponse) => Promise<void> | void
 }
 
+const VOICE_ACTIVITY_DOT_COUNT = 18
+
+function createIdleDotTrail(): number[] {
+  return Array.from({ length: VOICE_ACTIVITY_DOT_COUNT }, () => 0)
+}
+
 export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetProps) {
   const { t } = useTranslation()
   const {
     isOpen,
     status,
+    recordingLevels,
     transcriptText,
     resolvedText,
     answerText,
@@ -32,33 +39,13 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
     submitCorrection,
     cancelCurrentTurn,
   } = useVoiceAgentStore()
+  const [dotTrail, setDotTrail] = useState<number[]>(() => createIdleDotTrail())
+  const latestLevelRef = useRef(0)
 
   const submitOptions: VoiceAgentSubmitOptions = {
     context: currentContext,
     onUiAction,
   }
-
-  useEffect(() => {
-    setContext(currentContext)
-  }, [currentContext, setContext])
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeSheet()
-      }
-    }
-
-    window.addEventListener('keydown', handleEscape)
-    return () => window.removeEventListener('keydown', handleEscape)
-  }, [closeSheet, isOpen])
-
-  if (!isOpen) {
-    return null
-  }
-
   const isBusy = status === 'transcribing' || status === 'querying'
   const isRecording = status === 'recording'
   const isPlaying = status === 'playing'
@@ -77,6 +64,55 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
     if (status === 'error') return error || t('voice_agent_error', 'Unable to process the voice request.')
     return t('voice_agent_idle', 'Ask about a reagent\'s location, expiry, remaining amount, or disposal.')
   })()
+
+  useEffect(() => {
+    setContext(currentContext)
+  }, [currentContext, setContext])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeSheet()
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [closeSheet, isOpen])
+
+  useEffect(() => {
+    const totalLevel = recordingLevels.reduce((sum, level, index) => {
+      const weight = index < 6 ? 1.2 : 0.85
+      return sum + level * weight
+    }, 0)
+
+    latestLevelRef.current = Math.min(1, totalLevel / Math.max(1, recordingLevels.length))
+  }, [recordingLevels])
+
+  useEffect(() => {
+    if (!isRecording) {
+      setDotTrail(createIdleDotTrail())
+      latestLevelRef.current = 0
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      const nextLevel = latestLevelRef.current
+
+      setDotTrail((previousTrail) => [
+        nextLevel,
+        ...previousTrail.slice(0, VOICE_ACTIVITY_DOT_COUNT - 1),
+      ])
+    }, 90)
+
+    return () => window.clearInterval(timer)
+  }, [isRecording])
+
+  if (!isOpen) {
+    return null
+  }
 
   return (
     <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/45 backdrop-blur-sm">
@@ -126,7 +162,40 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
                   <Bot className="h-4 w-4" />
                 )}
               </div>
-              <p className="text-sm text-slate-700">{helperMessage}</p>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-slate-700">{helperMessage}</p>
+
+                {isRecording && (
+                  <div
+                    role="status"
+                    aria-label="Microphone input visualizer"
+                    className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm"
+                  >
+                    <div className="flex items-center gap-1.5" aria-hidden="true">
+                      {dotTrail.map((level, index) => {
+                        const previousLevel = dotTrail[index - 1] ?? level
+                        const nextLevel = dotTrail[index + 1] ?? 0
+                        const smoothedLevel = Math.min(1, level * 0.62 + previousLevel * 0.24 + nextLevel * 0.14)
+                        const ageFade = Math.max(0.58, 1 - index * 0.03)
+
+                        return (
+                          <span
+                            key={`voice-dot-${index}`}
+                            className="rounded-full bg-slate-500 transition-all duration-100 ease-out"
+                            style={{
+                              width: `${Math.max(5, Math.round(5 + smoothedLevel * 7))}px`,
+                              height: `${Math.max(5, Math.round(5 + smoothedLevel * 7))}px`,
+                              opacity: Math.min(1, 0.22 + smoothedLevel * 0.72) * ageFade,
+                              transform: `translateY(${Math.round((1 - smoothedLevel) * 1.5)}px)`,
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -252,8 +321,4 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
       </div>
     </div>
   )
-}
-
-export function openVoiceAgentSheet(context?: VoiceQueryContext) {
-  useVoiceAgentStore.getState().openSheet(context)
 }
