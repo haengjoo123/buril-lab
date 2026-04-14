@@ -12,9 +12,11 @@ import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
 import ReagentModelPreview from './components/ReagentModelPreview';
+import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
+import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
@@ -116,6 +118,24 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [isCoarsePointer, setIsCoarsePointer] = useState(false);
     const [storageCompatBannerReopenToken, setStorageCompatBannerReopenToken] = useState(0);
+    const placementCasSuggestion = useCasSuggestion({
+        inputName: placementName,
+        casNumber: placementCas,
+        sourceType: 'fridge_manual_placement',
+        brand: placementBrand,
+        productNumber: placementProductNumber,
+        capacity: placementCapacity,
+        onApplyCasNumber: setPlacementCas,
+    });
+    const scanCasSuggestion = useCasSuggestion({
+        inputName: scanName,
+        casNumber: scanCas,
+        sourceType: 'fridge_scan_placement',
+        brand: scanBrand,
+        productNumber: scanProductNumber,
+        capacity: scanCapacity,
+        onApplyCasNumber: setScanCas,
+    });
 
     // 모바일: 시약 내려놓은 직후 발생하는 합성 클릭(ghost click)으로 백드롭이 눌리는 것 방지
     const placementModalOpenedAtRef = React.useRef<number>(0);
@@ -371,6 +391,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
         const finalName = placementName.trim() || '이름 없음';
         const memo = placementMemo;
+        const placementCasInputMethod = getSuggestedCasInputMethod(
+            placementCasSuggestion.isSuggestedCasApplied,
+            placementCas.trim() ? 'manual' : 'unknown',
+            placementCasSuggestion.appliedSuggestion?.confidence,
+        );
         const existingItemIds = new Set(useFridgeStore.getState().shelves.flatMap((shelf) => shelf.items.map((item) => item.id)));
         placeReagent(pendingPlacement.shelfId, {
             id: '',
@@ -423,7 +448,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 quantity: 1,
                 capacityText: placementCapacity || undefined,
                 casNumber: placementCas || undefined,
-                casInputMethod: placementCas.trim() ? 'manual' : 'unknown',
+                casInputMethod: placementCasInputMethod,
                 metadata: {
                     placement_mode: 'manual',
                     shelf_id: pendingPlacement.shelfId,
@@ -498,6 +523,15 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
         const baseWidth = CONTAINER_BASE_WIDTHS[scanContainerType] || 8;
         const finalWidth = baseWidth * scanSize;
+        const scanFallbackInputMethod =
+            scanResult?.casNumber?.trim() && scanCas.trim() === scanResult.casNumber.trim()
+                ? 'scan'
+                : (scanCas.trim() ? 'manual' : 'unknown');
+        const scanCasInputMethod = getSuggestedCasInputMethod(
+            scanCasSuggestion.isSuggestedCasApplied,
+            scanFallbackInputMethod,
+            scanCasSuggestion.appliedSuggestion?.confidence,
+        );
         const finalName = scanName.trim() || '이름 없음';
 
         const result = autoPlaceReagent({
@@ -535,7 +569,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 quantity: 1,
                 capacityText: scanCapacity || undefined,
                 casNumber: scanCas || undefined,
-                casInputMethod: scanCas.trim() ? 'scan' : 'unknown',
+                casInputMethod: scanCasInputMethod,
                 metadata: {
                     placement_mode: 'scan_auto_place',
                 },
@@ -1046,6 +1080,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 type="text"
                                 value={placementName}
                                 onChange={e => setPlacementName(e.target.value)}
+                                onBlur={placementCasSuggestion.triggerLookupFromBlur}
                                 placeholder={t('reagent_name_placeholder')}
                                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             />
@@ -1082,9 +1117,42 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 type="text"
                                 value={placementCas}
                                 onChange={e => setPlacementCas(e.target.value)}
+                                onFocus={placementCasSuggestion.triggerLookupFromCasFocus}
                                 placeholder="e.g. 64-17-5"
                                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                             />
+                            {placementCasSuggestion.shouldRenderCard && (
+                                <CasSuggestionCard
+                                    state={
+                                        placementCasSuggestion.state === 'checking'
+                                            ? 'checking'
+                                            : placementCasSuggestion.state === 'suggestion'
+                                                ? 'suggestion'
+                                                : placementCasSuggestion.state === 'applied'
+                                                    ? 'applied'
+                                                    : 'unavailable'
+                                    }
+                                    suggestion={placementCasSuggestion.appliedSuggestion || placementCasSuggestion.suggestion}
+                                    inputName={placementName}
+                                    onApply={placementCasSuggestion.applySuggestion}
+                                    onUndo={placementCasSuggestion.undoAppliedSuggestion}
+                                    onDismiss={() => {
+                                        void analyticsService.trackCasSuggestionDismissed({
+                                            sourceScreen: 'fridge_view',
+                                            storageType: 'cabinet',
+                                            sourceItemType: 'cabinet_item',
+                                            chemicalName: placementName,
+                                            casNumber: placementCasSuggestion.suggestion?.casNumber,
+                                            metadata: {
+                                                trigger: 'manual_place',
+                                                confidence: placementCasSuggestion.suggestion?.confidence,
+                                                sources: placementCasSuggestion.suggestion?.sources,
+                                            },
+                                        });
+                                        placementCasSuggestion.dismissSuggestion();
+                                    }}
+                                />
+                            )}
                         </div>
 
                         {/* 크기 */}
@@ -1260,6 +1328,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         type="text"
                                         value={scanName}
                                         onChange={e => setScanName(e.target.value)}
+                                        onBlur={scanCasSuggestion.triggerLookupFromBlur}
                                         placeholder={t('reagent_name_placeholder')}
                                         className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                     />
@@ -1272,9 +1341,42 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         type="text"
                                         value={scanCas}
                                         onChange={e => setScanCas(e.target.value)}
+                                        onFocus={scanCasSuggestion.triggerLookupFromCasFocus}
                                         placeholder="e.g. 64-17-5"
                                         className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                     />
+                                    {scanCasSuggestion.shouldRenderCard && (
+                                        <CasSuggestionCard
+                                            state={
+                                                scanCasSuggestion.state === 'checking'
+                                                    ? 'checking'
+                                                    : scanCasSuggestion.state === 'suggestion'
+                                                        ? 'suggestion'
+                                                        : scanCasSuggestion.state === 'applied'
+                                                            ? 'applied'
+                                                            : 'unavailable'
+                                            }
+                                            suggestion={scanCasSuggestion.appliedSuggestion || scanCasSuggestion.suggestion}
+                                            inputName={scanName}
+                                            onApply={scanCasSuggestion.applySuggestion}
+                                            onUndo={scanCasSuggestion.undoAppliedSuggestion}
+                                            onDismiss={() => {
+                                                void analyticsService.trackCasSuggestionDismissed({
+                                                    sourceScreen: 'fridge_view',
+                                                    storageType: 'cabinet',
+                                                    sourceItemType: 'cabinet_item',
+                                                    chemicalName: scanName,
+                                                    casNumber: scanCasSuggestion.suggestion?.casNumber,
+                                                    metadata: {
+                                                        trigger: 'scan_place',
+                                                        confidence: scanCasSuggestion.suggestion?.confidence,
+                                                        sources: scanCasSuggestion.suggestion?.sources,
+                                                    },
+                                                });
+                                                scanCasSuggestion.dismissSuggestion();
+                                            }}
+                                        />
+                                    )}
                                 </div>
 
                                 {/* Brand + Product Number */}

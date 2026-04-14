@@ -15,9 +15,11 @@ import {
 import * as XLSX from 'xlsx';
 import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
+import { analyticsService } from '../../services/analyticsService';
 import { InventoryFormModal } from './InventoryFormModal';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
 import { CustomDialog } from '../../components/CustomDialog';
+import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
@@ -33,11 +35,19 @@ import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/gues
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
+import { resolveCasSuggestions, type CasResolveItemResult } from '../../services/casSuggestionService';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
+type CasReviewEntry = { item: InventoryItem; suggestion: CasResolveItemResult };
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
+const isBlankCas = (value?: string | null) => !(value || '').trim();
+const getCasReviewCardState = (suggestion: CasResolveItemResult): 'suggestion' | 'unavailable' => (
+    suggestion.status === 'match' && (suggestion.confidence === 'high' || suggestion.confidence === 'medium')
+        ? 'suggestion'
+        : 'unavailable'
+);
 
 function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: InventorySortOption): number {
     if (sortBy === 'expiry_asc') {
@@ -131,6 +141,12 @@ export const InventoryListView: React.FC = () => {
     const [isBulkMoving, setIsBulkMoving] = useState(false);
     const [bulkMoveError, setBulkMoveError] = useState<string | null>(null);
     const [bulkMoveInfo, setBulkMoveInfo] = useState<string | null>(null);
+    const [isCasReviewOpen, setIsCasReviewOpen] = useState(false);
+    const [isCasReviewLoading, setIsCasReviewLoading] = useState(false);
+    const [isApplyingCasReview, setIsApplyingCasReview] = useState(false);
+    const [casReviewEntries, setCasReviewEntries] = useState<CasReviewEntry[]>([]);
+    const [selectedCasReviewIds, setSelectedCasReviewIds] = useState<string[]>([]);
+    const [casReviewError, setCasReviewError] = useState<string | null>(null);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressTriggeredRef = useRef(false);
     const bulkMoveInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -165,6 +181,12 @@ export const InventoryListView: React.FC = () => {
         setBulkDeleteError(null);
         setBulkMoveError(null);
         setBulkMoveInfo(null);
+        setIsCasReviewOpen(false);
+        setIsCasReviewLoading(false);
+        setIsApplyingCasReview(false);
+        setCasReviewEntries([]);
+        setSelectedCasReviewIds([]);
+        setCasReviewError(null);
         setBulkMoveTargetType('other');
         setBulkMoveCabinetId('');
     }, [currentLabId]);
@@ -300,6 +322,16 @@ export const InventoryListView: React.FC = () => {
         }
         return { expiredCount, warningCount };
     }, [items]);
+    const blankCasItems = useMemo(() => items.filter((item) => isBlankCas(item.cas_number)), [items]);
+    const casReviewSuggestedEntries = useMemo(
+        () => casReviewEntries.filter((entry) => getCasReviewCardState(entry.suggestion) === 'suggestion'),
+        [casReviewEntries]
+    );
+    const casReviewBlockedEntries = useMemo(
+        () => casReviewEntries.filter((entry) => entry.suggestion.status !== 'skipped' && getCasReviewCardState(entry.suggestion) === 'unavailable'),
+        [casReviewEntries]
+    );
+    const selectedCasReviewCount = selectedCasReviewIds.length;
 
     const handleEdit = (item: InventoryItem) => {
         setEditingItem(item);
@@ -308,6 +340,135 @@ export const InventoryListView: React.FC = () => {
 
     const handleDeleteClick = (item: InventoryItem) => {
         setItemToDelete(item);
+    };
+
+    const handleOpenCasReview = async () => {
+        if (blankCasItems.length === 0 || isCasReviewLoading) return;
+
+        setIsCasReviewOpen(true);
+        setIsCasReviewLoading(true);
+        setIsApplyingCasReview(false);
+        setCasReviewError(null);
+        setCasReviewEntries([]);
+        setSelectedCasReviewIds([]);
+
+        try {
+            const results = await resolveCasSuggestions(
+                blankCasItems.map((item) => ({
+                    id: item.id,
+                    inputName: item.name,
+                    sourceType: 'inventory_bulk_review',
+                    brand: item.brand || undefined,
+                    productNumber: item.product_number || undefined,
+                    capacity: item.capacity || undefined,
+                }))
+            );
+
+            const itemMap = new Map(blankCasItems.map((item) => [item.id, item] as const));
+            const nextEntries = results
+                .map((suggestion) => {
+                    const item = itemMap.get(suggestion.id);
+                    return item ? { item, suggestion } : null;
+                })
+                .filter((entry): entry is CasReviewEntry => Boolean(entry));
+
+            setCasReviewEntries(nextEntries);
+            setSelectedCasReviewIds(
+                nextEntries
+                    .filter((entry) => entry.suggestion.status === 'match' && entry.suggestion.confidence === 'high' && Boolean(entry.suggestion.casNumber))
+                    .map((entry) => entry.item.id)
+            );
+        } catch (error) {
+            console.error('Failed to resolve bulk CAS suggestions:', error);
+            setCasReviewError('CAS 후보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+        } finally {
+            setIsCasReviewLoading(false);
+        }
+    };
+
+    const handleCloseCasReview = () => {
+        if (isApplyingCasReview) return;
+        setIsCasReviewOpen(false);
+        setIsCasReviewLoading(false);
+        setCasReviewError(null);
+        setCasReviewEntries([]);
+        setSelectedCasReviewIds([]);
+    };
+
+    const toggleCasReviewSelection = (itemId: string) => {
+        setSelectedCasReviewIds((prev) =>
+            prev.includes(itemId)
+                ? prev.filter((id) => id !== itemId)
+                : [...prev, itemId]
+        );
+    };
+
+    const handleApplyCasReview = async () => {
+        if (selectedCasReviewIds.length === 0 || isApplyingCasReview) return;
+
+        const selectedEntries = casReviewSuggestedEntries.filter((entry) => selectedCasReviewIds.includes(entry.item.id) && entry.suggestion.casNumber);
+        if (selectedEntries.length === 0) return;
+
+        setIsApplyingCasReview(true);
+        setCasReviewError(null);
+
+        try {
+            let successCount = 0;
+            let failedCount = 0;
+            const successfulIds = new Set<string>();
+
+            for (const entry of selectedEntries) {
+                try {
+                    await inventoryService.updateItemCasWithLinkedSync(entry.item, entry.suggestion.casNumber);
+                    successCount += 1;
+                    successfulIds.add(entry.item.id);
+                    await analyticsService.trackCommerceIntentEvent({
+                        eventType: entry.item._source === 'cabinet_item' ? 'cabinet_item_updated' : 'inventory_updated',
+                        sourceScreen: 'inventory_list_view',
+                        storageType: entry.item.storage_type,
+                        sourceItemType: entry.item._source || 'inventory',
+                        sourceItemId: entry.item.id,
+                        brandName: entry.item.brand,
+                        productNumber: entry.item.product_number,
+                        quantity: entry.item.quantity,
+                        capacityText: entry.item.capacity,
+                        casNumber: entry.suggestion.casNumber,
+                        casInputMethod: 'bulk_confirmed',
+                        metadata: {
+                            action: 'bulk_cas_review',
+                            canonical_name: entry.suggestion.canonicalName,
+                            localized_name: entry.suggestion.localizedName,
+                            confidence: entry.suggestion.confidence,
+                            sources: entry.suggestion.sources,
+                        },
+                    });
+                } catch (error) {
+                    failedCount += 1;
+                    console.error('Failed to apply bulk CAS suggestion:', error);
+                }
+            }
+
+            await loadData();
+
+            if (successCount > 0) {
+                setBulkMoveInfo(`CAS ${successCount}건을 적용했어요.`);
+            }
+
+            if (failedCount > 0) {
+                setCasReviewError(`${failedCount}개 항목은 적용하지 못했어요. 다시 시도해 주세요.`);
+                setCasReviewEntries((prev) => prev.filter((entry) => !successfulIds.has(entry.item.id)));
+                setSelectedCasReviewIds((prev) => prev.filter((id) => !successfulIds.has(id)));
+                return;
+            }
+
+            setIsCasReviewOpen(false);
+            setIsCasReviewLoading(false);
+            setCasReviewError(null);
+            setCasReviewEntries([]);
+            setSelectedCasReviewIds([]);
+        } finally {
+            setIsApplyingCasReview(false);
+        }
     };
 
     const handleExportExcel = () => {
@@ -1009,6 +1170,15 @@ export const InventoryListView: React.FC = () => {
                     </h1>
                     <div className="flex items-center gap-1.5">
                         <button
+                            onClick={handleOpenCasReview}
+                            disabled={blankCasItems.length === 0 || isCasReviewLoading}
+                            title="빈 CAS 보완"
+                            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 flex items-center gap-1.5 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Search className={`w-4 h-4 lg:w-3.5 lg:h-3.5 ${isCasReviewLoading ? 'animate-pulse' : ''}`} />
+                            <span className="hidden lg:inline whitespace-nowrap">빈 CAS 보완</span>
+                        </button>
+                        <button
                             onClick={handleExportExcel}
                             title={t('inventory_excel_download_view')}
                             className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 flex items-center gap-1.5 transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/40"
@@ -1394,6 +1564,118 @@ export const InventoryListView: React.FC = () => {
                 isConfirmLoading={isBulkMoving}
                 preventCloseWhileLoading={true}
             />
+
+            {isCasReviewOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div
+                        className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
+                        onClick={handleCloseCasReview}
+                    />
+                    <div className="relative z-10 w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-900">빈 CAS 보완</h2>
+                                <p className="mt-1 text-sm text-slate-600">
+                                    빈 CAS {blankCasItems.length}개 중 {casReviewSuggestedEntries.length}개 제안 가능
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleCloseCasReview}
+                                disabled={isApplyingCasReview}
+                                className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                            >
+                                {t('btn_close', '닫기')}
+                            </button>
+                        </div>
+
+                        <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+                            {isCasReviewLoading ? (
+                                <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-slate-500">
+                                    <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+                                    <p>정확히 확인된 CAS 후보를 찾고 있어요.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {casReviewError && (
+                                        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                            {casReviewError}
+                                        </div>
+                                    )}
+
+                                    {casReviewSuggestedEntries.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {casReviewSuggestedEntries.map((entry) => (
+                                                <CasSuggestionCard
+                                                    key={entry.item.id}
+                                                    state="suggestion"
+                                                    suggestion={entry.suggestion}
+                                                    inputName={entry.item.name}
+                                                    actionSlot={(
+                                                        <label className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedCasReviewIds.includes(entry.item.id)}
+                                                                onChange={() => toggleCasReviewSelection(entry.item.id)}
+                                                                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                            />
+                                                            적용
+                                                        </label>
+                                                    )}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : !casReviewError ? (
+                                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-600">
+                                            정확히 확인된 CAS 후보를 찾지 못했어요.
+                                        </div>
+                                    ) : null}
+
+                                    {casReviewBlockedEntries.length > 0 && (
+                                        <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                            <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                                                자동 적용에서 제외된 항목 {casReviewBlockedEntries.length}개
+                                            </summary>
+                                            <div className="mt-3 space-y-3">
+                                                {casReviewBlockedEntries.map((entry) => (
+                                                    <CasSuggestionCard
+                                                        key={`${entry.item.id}:blocked`}
+                                                        state={getCasReviewCardState(entry.suggestion)}
+                                                        suggestion={entry.suggestion}
+                                                        inputName={entry.item.name}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </details>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
+                            <p className="text-sm text-slate-500">
+                                선택한 항목만 CAS를 채우고, 시약명은 바꾸지 않아요.
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleCloseCasReview}
+                                    disabled={isApplyingCasReview}
+                                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                    {t('btn_cancel')}
+                                </button>
+                                <button
+                                    onClick={handleApplyCasReview}
+                                    disabled={selectedCasReviewCount === 0 || isCasReviewLoading || isApplyingCasReview}
+                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isApplyingCasReview && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    선택한 {selectedCasReviewCount}개 적용
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

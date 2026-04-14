@@ -44,6 +44,11 @@ const LIMIT_CONFIGS = {
     ip: { count: 5, window: "1 m" },
     pattern: /^\/api\/kosha/,
   },
+  REAGENTS: {
+    user: { count: 20, window: "1 m" },
+    ip: { count: 5, window: "1 m" },
+    pattern: /^\/api\/reagents\//,
+  },
 } as const
 
 function resolveSupabaseUrl(env: Env): string | null {
@@ -130,6 +135,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   else if (LIMIT_CONFIGS.VOICE.pattern.test(path)) category = 'VOICE'
   else if (LIMIT_CONFIGS.AI.pattern.test(path)) category = 'AI'
   else if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) category = 'KOSHA'
+  else if (LIMIT_CONFIGS.REAGENTS.pattern.test(path)) category = 'REAGENTS'
 
   // If no category matches, we still apply a global safety limit
   const limitConfig = category 

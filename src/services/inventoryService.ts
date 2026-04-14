@@ -122,6 +122,18 @@ interface AtomicDeleteRpcParams {
     p_disposal_reason: string;
 }
 
+interface LinkedCabinetCasSyncInput {
+    source: InventorySource;
+    sourceId?: string | null;
+    cabinetId?: string | null;
+    name: string;
+    brand?: string | null;
+    productNumber?: string | null;
+    capacity?: string | null;
+    previousCasNumber?: string | null;
+    nextCasNumber?: string | null;
+}
+
 // ── Default storage locations ──────────────────────────
 
 const DEFAULT_LOCATIONS: { name: string; icon: string }[] = [
@@ -133,6 +145,14 @@ const DEFAULT_LOCATIONS: { name: string; icon: string }[] = [
 ];
 
 // ── Storage Location Service ───────────────────────────
+
+function normalizeLinkedText(value?: string | null): string {
+    return (value || '').trim().toLowerCase();
+}
+
+function normalizeLinkedCas(value?: string | null): string {
+    return (value || '').replace(/[^0-9-]/g, '').trim();
+}
 
 export const storageLocationService = {
     /**
@@ -622,6 +642,118 @@ export const inventoryService = {
             }
             console.error('[Inventory] atomic update error:', error);
             throw error;
+        }
+    },
+
+    async syncLinkedCabinetCas(input: LinkedCabinetCasSyncInput): Promise<void> {
+        if (!input.cabinetId) return;
+
+        const normalizedName = normalizeLinkedText(input.name);
+        if (!normalizedName) return;
+
+        const normalizedBrand = normalizeLinkedText(input.brand);
+        const normalizedProductNumber = normalizeLinkedText(input.productNumber);
+        const normalizedCapacity = normalizeLinkedText(input.capacity);
+        const normalizedPreviousCas = normalizeLinkedCas(input.previousCasNumber);
+        const nextCasNumber = input.nextCasNumber?.trim() || '';
+
+        const metadataMatches = (row: {
+            name?: string | null;
+            brand?: string | null;
+            product_number?: string | null;
+            capacity?: string | null;
+        }) => (
+            normalizeLinkedText(row.name) === normalizedName
+            && normalizeLinkedText(row.brand) === normalizedBrand
+            && normalizeLinkedText(row.product_number) === normalizedProductNumber
+            && normalizeLinkedText(row.capacity) === normalizedCapacity
+        );
+
+        if (input.source === 'inventory') {
+            const { data, error } = await supabase
+                .from('cabinet_items')
+                .select('id, name, brand, product_number, capacity, cas_no')
+                .eq('cabinet_id', input.cabinetId)
+                .eq('name', input.name);
+
+            if (error) throw error;
+
+            const rows = (data || []) as Array<{
+                id: string;
+                name: string | null;
+                brand: string | null;
+                product_number: string | null;
+                capacity: string | null;
+                cas_no: string | null;
+            }>;
+
+            const strongMatches = rows.filter((row) =>
+                metadataMatches(row)
+                && normalizeLinkedCas(row.cas_no) === normalizedPreviousCas
+                && row.id !== input.sourceId
+            );
+            const softMatches = rows.filter((row) =>
+                metadataMatches(row)
+                && row.id !== input.sourceId
+            );
+            const targetRows = strongMatches.length > 0 ? strongMatches : (softMatches.length === 1 ? softMatches : []);
+
+            for (const row of targetRows) {
+                await inventoryService.updateItem(row.id, { cas_number: nextCasNumber }, 'cabinet_item');
+            }
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('inventory')
+            .select('id, name, brand, product_number, capacity, cas_number')
+            .eq('cabinet_id', input.cabinetId)
+            .eq('storage_type', 'cabinet')
+            .eq('name', input.name);
+
+        if (error) throw error;
+
+        const rows = (data || []) as Array<{
+            id: string;
+            name: string | null;
+            brand: string | null;
+            product_number: string | null;
+            capacity: string | null;
+            cas_number: string | null;
+        }>;
+
+        const strongMatches = rows.filter((row) =>
+            metadataMatches(row)
+            && normalizeLinkedCas(row.cas_number) === normalizedPreviousCas
+            && row.id !== input.sourceId
+        );
+        const softMatches = rows.filter((row) =>
+            metadataMatches(row)
+            && row.id !== input.sourceId
+        );
+        const targetRows = strongMatches.length > 0 ? strongMatches : (softMatches.length === 1 ? softMatches : []);
+
+        for (const row of targetRows) {
+            await inventoryService.updateItem(row.id, { cas_number: nextCasNumber }, 'inventory');
+        }
+    },
+
+    async updateItemCasWithLinkedSync(item: InventoryItem, nextCasNumber?: string | null): Promise<void> {
+        const casToSave = nextCasNumber?.trim() || '';
+        await inventoryService.updateItem(item.id, { cas_number: casToSave }, item._source || 'inventory');
+
+        if ((item.storage_type === 'cabinet' || item._source === 'cabinet_item') && item.cabinet_id) {
+            await inventoryService.syncLinkedCabinetCas({
+                source: item._source || 'inventory',
+                sourceId: item.id,
+                cabinetId: item.cabinet_id,
+                name: item.name,
+                brand: item.brand,
+                productNumber: item.product_number,
+                capacity: item.capacity,
+                previousCasNumber: item.cas_number,
+                nextCasNumber: casToSave,
+            });
         }
     },
 

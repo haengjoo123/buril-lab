@@ -9,9 +9,11 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
 import { supabase } from '../../services/supabaseClient';
 import { AppSelect } from '../../components/AppSelect';
+import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
+import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
 
 interface Props {
     isOpen: boolean;
@@ -48,6 +50,17 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         remaining_percent: 100,
     });
     const isEditingCabinetItem = initialData?._source === 'cabinet_item';
+    const casSuggestion = useCasSuggestion({
+        inputName: formData.name,
+        casNumber: formData.cas_number || '',
+        sourceType: 'inventory_form_modal',
+        brand: formData.brand,
+        productNumber: formData.product_number,
+        capacity: formData.capacity,
+        onApplyCasNumber: (casNumber) => {
+            setFormData(prev => ({ ...prev, cas_number: casNumber }));
+        },
+    });
 
     useEffect(() => {
         if (isOpen) {
@@ -114,6 +127,12 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const currentCasInputMethod = getSuggestedCasInputMethod(
+        casSuggestion.isSuggestedCasApplied,
+        formData.cas_number?.trim() ? 'manual' : 'unknown',
+        casSuggestion.appliedSuggestion?.confidence,
+    );
+
     const hasCommerceSignalChange = (before: InventoryItem, after: CreateInventoryInput) => {
         const normalize = (value?: string | null) => (value || '').trim();
 
@@ -153,11 +172,25 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     || (formData.storage_type === 'cabinet' && (initialData.cabinet_id || '') !== (formData.cabinet_id || ''))
                     || (formData.storage_type === 'other' && (initialData.storage_location_id || '') !== (formData.storage_location_id || ''));
                 const shouldTrackCommerceUpdate = hasCommerceSignalChange(initialData, formData);
+                const casChanged = (initialData.cas_number || '').trim() !== (formData.cas_number || '').trim();
 
                 if (isStorageChanged) {
                     await moveItemStorage(initialData, formData);
                 } else {
                     await inventoryService.updateItem(initialData.id, formData, initialData._source || 'inventory');
+                    if (casChanged && (initialData.storage_type === 'cabinet' || initialData._source === 'cabinet_item')) {
+                        await inventoryService.syncLinkedCabinetCas({
+                            source: initialData._source || 'inventory',
+                            sourceId: initialData.id,
+                            cabinetId: initialData.cabinet_id,
+                            name: initialData.name,
+                            brand: initialData.brand,
+                            productNumber: initialData.product_number,
+                            capacity: initialData.capacity,
+                            previousCasNumber: initialData.cas_number,
+                            nextCasNumber: formData.cas_number,
+                        });
+                    }
                 }
                 if (shouldTrackCommerceUpdate) {
                     await analyticsService.trackCommerceIntentEvent({
@@ -171,7 +204,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                         quantity: formData.quantity,
                         capacityText: formData.capacity,
                         casNumber: formData.cas_number,
-                        casInputMethod: formData.cas_number?.trim() ? 'manual' : 'unknown',
+                        casInputMethod: currentCasInputMethod,
                         metadata: {
                             action: isStorageChanged ? 'move_and_update' : 'update',
                         },
@@ -193,7 +226,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     quantity: formData.quantity,
                     capacityText: formData.capacity,
                     casNumber: formData.cas_number,
-                    casInputMethod: formData.cas_number?.trim() ? 'manual' : 'unknown',
+                    casInputMethod: currentCasInputMethod,
                     metadata: {
                         entry_mode: 'manual_form',
                     },
@@ -526,6 +559,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                         name="name"
                                         value={formData.name}
                                         onChange={handleChange}
+                                        onBlur={casSuggestion.triggerLookupFromBlur}
                                         placeholder={t('inventory_product_name_placeholder')}
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
                                     />
@@ -596,9 +630,44 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                                         name="cas_number"
                                         value={formData.cas_number}
                                         onChange={handleChange}
+                                        onFocus={casSuggestion.triggerLookupFromCasFocus}
                                         placeholder={t('inventory_cas_placeholder')}
                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-slate-900 dark:text-slate-100"
                                     />
+                                    {casSuggestion.shouldRenderCard && (
+                                        <CasSuggestionCard
+                                            state={
+                                                casSuggestion.state === 'checking'
+                                                    ? 'checking'
+                                                    : casSuggestion.state === 'suggestion'
+                                                        ? 'suggestion'
+                                                        : casSuggestion.state === 'applied'
+                                                            ? 'applied'
+                                                            : 'unavailable'
+                                            }
+                                            suggestion={casSuggestion.state === 'applied' ? casSuggestion.appliedSuggestion : casSuggestion.suggestion}
+                                            inputName={formData.name}
+                                            onApply={casSuggestion.applySuggestion}
+                                            onDismiss={async () => {
+                                                if (casSuggestion.suggestion?.casNumber) {
+                                                    await analyticsService.trackCasSuggestionDismissed({
+                                                        sourceScreen: 'inventory_form_modal',
+                                                        storageType: formData.storage_type,
+                                                        sourceItemType: initialData?._source || 'inventory',
+                                                        sourceItemId: initialData?.id || null,
+                                                        chemicalName: formData.name,
+                                                        casNumber: casSuggestion.suggestion.casNumber,
+                                                        metadata: {
+                                                            confidence: casSuggestion.suggestion.confidence,
+                                                            sources: casSuggestion.suggestion.sources,
+                                                        },
+                                                    });
+                                                }
+                                                casSuggestion.dismissSuggestion();
+                                            }}
+                                            onUndo={casSuggestion.undoAppliedSuggestion}
+                                        />
+                                    )}
                                 </div>
 
                                 <div className="flex flex-col gap-2 mt-1">

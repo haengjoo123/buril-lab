@@ -12,9 +12,19 @@ export type CommerceIntentEventType =
     | 'inventory_updated'
     | 'cabinet_item_placed'
     | 'cabinet_item_scanned'
-    | 'cabinet_item_updated';
+    | 'cabinet_item_updated'
+    | 'cas_suggestion_dismissed';
 
-export type CasInputMethod = 'manual' | 'catalog' | 'scan' | 'ocr' | 'voice' | 'unknown';
+export type CasInputMethod =
+    | 'manual'
+    | 'catalog'
+    | 'scan'
+    | 'ocr'
+    | 'voice'
+    | 'unknown'
+    | 'suggested_confirmed'
+    | 'bulk_confirmed'
+    | 'suggestion_dismissed';
 
 interface TrackCommerceIntentInput {
     eventType: CommerceIntentEventType;
@@ -235,5 +245,27 @@ export const analyticsService = {
         if (error) {
             console.warn('[Analytics] Failed to track AI disposal guide view:', error);
         }
+    },
+
+    async trackCasSuggestionDismissed(input: {
+        sourceScreen: string;
+        storageType?: 'cabinet' | 'other';
+        sourceItemType?: 'inventory' | 'cabinet_item' | 'product';
+        sourceItemId?: string | null;
+        chemicalName?: string | null;
+        casNumber?: string | null;
+        metadata?: Record<string, unknown>;
+    }): Promise<void> {
+        await this.trackCommerceIntentEvent({
+            eventType: 'cas_suggestion_dismissed',
+            sourceScreen: input.sourceScreen,
+            storageType: input.storageType,
+            sourceItemType: input.sourceItemType,
+            sourceItemId: input.sourceItemId,
+            brandName: input.chemicalName,
+            casNumber: input.casNumber,
+            casInputMethod: 'suggestion_dismissed',
+            metadata: input.metadata,
+        });
     },
 };

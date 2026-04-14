@@ -16,6 +16,8 @@ import { analyzeChemical } from '../../utils/chemicalAnalyzer';
 import { classifyChemicalWithAI } from '../../services/geminiClassificationService';
 import { ResultCard } from '../../components/ResultCard';
 import type { AnalysisResult } from '../../types';
+import { CasSuggestionCard } from '../../components/CasSuggestionCard';
+import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
 
 type DisposalReason = 'used' | 'expired' | 'broken' | 'other';
 
@@ -78,6 +80,15 @@ export const ReagentEditPanel: React.FC = () => {
         }
         return null;
     }, [selectedReagentId, shelves]);
+    const casSuggestion = useCasSuggestion({
+        inputName: name,
+        casNumber: casNo,
+        sourceType: 'reagent_edit_panel',
+        brand,
+        productNumber,
+        capacity,
+        onApplyCasNumber: setCasNo,
+    });
 
     // Update local state when selection data changes
     useEffect(() => {
@@ -133,6 +144,12 @@ export const ReagentEditPanel: React.FC = () => {
             || normalize(selectedItem.productNumber) !== normalize(productNumber)
             || normalize(selectedItem.casNo) !== normalize(casNo)
             || normalize(selectedItem.capacity) !== normalize(capacity);
+        const casChanged = normalize(selectedItem.casNo) !== normalize(casNo);
+        const casInputMethod = getSuggestedCasInputMethod(
+            casSuggestion.isSuggestedCasApplied,
+            casNo.trim() ? 'manual' : 'unknown',
+            casSuggestion.appliedSuggestion?.confidence,
+        );
 
         const updatePayload = {
             name,
@@ -159,7 +176,6 @@ export const ReagentEditPanel: React.FC = () => {
         });
 
         // If CAS changed and now has a value, trigger PubChem enrichment
-        const casChanged = (casNo || '') !== (selectedItem.casNo || '');
         if (casChanged && casNo) {
             const enrichStore = useFridgeStore.getState();
             enrichStore.enrichReagentGHS(selectedReagentId);
@@ -169,6 +185,19 @@ export const ReagentEditPanel: React.FC = () => {
         setIsSaving(true);
         try {
             await inventoryService.updateItem(selectedReagentId, updatePayload, 'cabinet_item');
+            if (casChanged) {
+                await inventoryService.syncLinkedCabinetCas({
+                    source: 'cabinet_item',
+                    sourceId: selectedReagentId,
+                    cabinetId,
+                    name: selectedItem.name,
+                    brand: selectedItem.brand,
+                    productNumber: selectedItem.productNumber,
+                    capacity: selectedItem.capacity,
+                    previousCasNumber: selectedItem.casNo,
+                    nextCasNumber: casNo,
+                });
+            }
             await saveCabinet();
             if (shouldTrackCommerceUpdate) {
                 await analyticsService.trackCommerceIntentEvent({
@@ -182,7 +211,7 @@ export const ReagentEditPanel: React.FC = () => {
                     quantity: 1,
                     capacityText: capacity,
                     casNumber: casNo,
-                    casInputMethod: casNo.trim() ? 'manual' : 'unknown',
+                    casInputMethod,
                     metadata: {
                         edited_from: 'cabinet_detail',
                     },
@@ -402,6 +431,7 @@ export const ReagentEditPanel: React.FC = () => {
                                     type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
+                                    onBlur={casSuggestion.triggerLookupFromBlur}
                                     className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                                     placeholder={t('cabinet_placeholder_name')}
                                 />
@@ -465,11 +495,46 @@ export const ReagentEditPanel: React.FC = () => {
                                             type="text"
                                             value={casNo}
                                             onChange={(e) => setCasNo(e.target.value)}
+                                            onFocus={casSuggestion.triggerLookupFromCasFocus}
                                             className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
                                             placeholder={t('inventory_cas_placeholder')}
                                         />
                                     </div>
                                 </div>
+                                {casSuggestion.shouldRenderCard && (
+                                    <CasSuggestionCard
+                                        state={
+                                            casSuggestion.state === 'checking'
+                                                ? 'checking'
+                                                : casSuggestion.state === 'suggestion'
+                                                    ? 'suggestion'
+                                                    : casSuggestion.state === 'applied'
+                                                        ? 'applied'
+                                                        : 'unavailable'
+                                        }
+                                        suggestion={casSuggestion.state === 'applied' ? casSuggestion.appliedSuggestion : casSuggestion.suggestion}
+                                        inputName={name}
+                                        onApply={casSuggestion.applySuggestion}
+                                        onDismiss={async () => {
+                                            if (casSuggestion.suggestion?.casNumber) {
+                                                await analyticsService.trackCasSuggestionDismissed({
+                                                    sourceScreen: 'reagent_edit_panel',
+                                                    storageType: 'cabinet',
+                                                    sourceItemType: 'cabinet_item',
+                                                    sourceItemId: selectedReagentId,
+                                                    chemicalName: name,
+                                                    casNumber: casSuggestion.suggestion.casNumber,
+                                                    metadata: {
+                                                        confidence: casSuggestion.suggestion.confidence,
+                                                        sources: casSuggestion.suggestion.sources,
+                                                    },
+                                                });
+                                            }
+                                            casSuggestion.dismissSuggestion();
+                                        }}
+                                        onUndo={casSuggestion.undoAppliedSuggestion}
+                                    />
+                                )}
                                 {casNo && (
                                     <p className="text-[10px] text-gray-400 mt-1 pl-1">
                                         {t('cabinet_pubchem_auto_enrich')}
