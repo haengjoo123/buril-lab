@@ -19,41 +19,12 @@ export default defineConfig(({ command }) => ({
             return 'xlsx-vendor'
           }
 
-          if (id.includes('node_modules/html2canvas')) {
-            return 'html2canvas-vendor'
-          }
-
-          if (id.includes('node_modules/jspdf')) {
-            return 'jspdf-vendor'
-          }
-
-          if (id.includes('node_modules/html2pdf.js')) {
-            return 'html2pdf-vendor'
-          }
-
           if (
-            id.includes('node_modules/@react-three/drei') ||
-            id.includes('node_modules/three-stdlib') ||
-            id.includes('node_modules/camera-controls') ||
-            id.includes('node_modules/meshline') ||
-            id.includes('node_modules/maath') ||
-            id.includes('node_modules/troika') ||
-            id.includes('node_modules/suspend-react') ||
-            id.includes('node_modules/stats-gl')
+            id.includes('node_modules/html2canvas') ||
+            id.includes('node_modules/jspdf') ||
+            id.includes('node_modules/html2pdf.js')
           ) {
-            return 'drei-vendor'
-          }
-
-          if (id.includes('node_modules/@react-three/fiber')) {
-            return 'r3f-vendor'
-          }
-
-          if (id.includes('node_modules/@react-spring/three')) {
-            return 'spring-three-vendor'
-          }
-
-          if (id.includes('node_modules/three')) {
-            return 'three-core-vendor'
+            return 'pdf-vendor'
           }
 
           if (id.includes('node_modules/lucide-react')) {
@@ -66,6 +37,21 @@ export default defineConfig(({ command }) => ({
 
           if (id.includes('node_modules/@supabase/supabase-js')) {
             return 'supabase-vendor'
+          }
+
+          if (
+            id.includes('node_modules/three') ||
+            id.includes('node_modules/@react-three') ||
+            id.includes('node_modules/@react-spring/three') ||
+            id.includes('node_modules/three-stdlib') ||
+            id.includes('node_modules/camera-controls') ||
+            id.includes('node_modules/meshline') ||
+            id.includes('node_modules/maath') ||
+            id.includes('node_modules/troika') ||
+            id.includes('node_modules/suspend-react') ||
+            id.includes('node_modules/stats-gl')
+          ) {
+            return 'three-vendor'
           }
 
           if (
