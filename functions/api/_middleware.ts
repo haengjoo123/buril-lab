@@ -10,6 +10,14 @@ interface Env {
   VITE_SUPABASE_URL?: string
 }
 
+type PagesFunction<E = Env> = (context: {
+  request: Request
+  env: E
+  next: () => Promise<Response>
+  params: Record<string, string | string[]>
+  data: Record<string, unknown>
+}) => Response | Promise<Response>
+
 const supabaseJwksCache = new Map<string, ReturnType<typeof jose.createRemoteJWKSet>>()
 
 /**
