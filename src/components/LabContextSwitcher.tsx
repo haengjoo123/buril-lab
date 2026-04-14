@@ -27,7 +27,7 @@ export const LabContextSwitcher: React.FC = () => {
                 {currentLabId ? (
                     <div className="flex items-center gap-1.5 min-w-0">
                         <Users className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate max-w-[70px] sm:max-w-[150px] whitespace-nowrap">{currentLab?.name || 'Lab'}</span>
+                        <span className="truncate max-w-[70px] sm:max-w-[150px] whitespace-nowrap">{currentLab?.name || t('lab_default_name')}</span>
                     </div>
                 ) : (
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -41,7 +41,12 @@ export const LabContextSwitcher: React.FC = () => {
             {isOpen && (
                 <>
                     {/* Backdrop to close when clicking outside */}
-                    <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} title="Close menu"></div>
+                    <button
+                        type="button"
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsOpen(false)}
+                        aria-label={t('common_close_menu')}
+                    />
 
                     <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 py-2 z-50">
                         <div className="px-3 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -67,7 +72,7 @@ export const LabContextSwitcher: React.FC = () => {
                                     className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 ${currentLabId === member.lab_id ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 font-bold' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
                                 >
                                     <Users className="w-4 h-4 shrink-0" />
-                                    <span className="truncate">{member.lab?.name || 'Unknown'}</span>
+                                    <span className="truncate">{member.lab?.name || t('common_unknown')}</span>
                                     <span className="text-xs text-slate-400 shrink-0 capitalize">({t(`member_role_${member.role}`)})</span>
                                 </button>
                             ))

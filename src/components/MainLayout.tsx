@@ -40,7 +40,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                         className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity min-w-0"
                     >
                         <div className="shrink-0 overflow-hidden rounded-lg">
-                            <img src={logo} alt="Logo" className="w-9 h-9 object-contain" />
+                            <img src={logo} alt={t('app_logo_alt')} className="w-9 h-9 object-contain" />
                         </div>
                         <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white shrink-0 truncate max-w-[100px] sm:max-w-none">{t('app_title')}</h1>
                     </button>

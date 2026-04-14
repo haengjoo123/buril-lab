@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp, X } from 'lucide-react';
 import { ResultCard } from './ResultCard';
 import { MediaProductCard } from './MediaProductCard';
 import { MediaProductFilter } from './MediaProductFilter';
@@ -148,10 +148,11 @@ export function SearchTabView({
               <button
                 type="button"
                 onClick={onReset}
+                aria-label={t('search_reset')}
                 className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200"
               >
-                <span className="sr-only">Reset</span>
-                X
+                <span className="sr-only">{t('search_reset')}</span>
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
@@ -197,7 +198,7 @@ export function SearchTabView({
             {isSuggestionsLoading && suggestions.length === 0 ? (
               <div className="p-4 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                {t('loading_suggestions', 'Loading suggestions...')}
+                {t('search_loading_suggestions')}
               </div>
             ) : (
               <ul className="max-h-60 overflow-y-auto w-full">
@@ -360,10 +361,11 @@ export function SearchTabView({
                         e.stopPropagation();
                         onRemoveSearchHistory(term);
                       }}
+                      aria-label={t('search_remove_history')}
                       className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg text-gray-400 hover:text-red-500 transition-colors"
                     >
-                      <span className="sr-only">Remove</span>
-                      ✕
+                      <span className="sr-only">{t('search_remove_history')}</span>
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 ))}

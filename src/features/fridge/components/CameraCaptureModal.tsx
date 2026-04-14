@@ -90,7 +90,7 @@ export function CameraCaptureModal({ isOpen, onClose, onCapture }: CameraCapture
                         className="w-full h-full object-cover"
                     />
                 ) : (
-                    <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
+                    <img src={capturedImage} alt={t('common_captured_image_alt')} className="w-full h-full object-cover" />
                 )}
             </div>
 

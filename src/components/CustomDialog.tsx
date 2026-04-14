@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { AlertCircle, Check, Loader2, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface DialogProps {
     isOpen: boolean;
@@ -30,14 +31,17 @@ export function CustomDialog({
     inputValue,
     onInputChange,
     inputPlaceholder,
-    confirmText = '확인',
-    cancelText = '취소',
+    confirmText,
+    cancelText,
     onConfirm,
     isDestructive = false,
     isConfirmLoading = false,
     preventCloseWhileLoading = false,
 }: DialogProps) {
+    const { t } = useTranslation();
     const inputRef = useRef<HTMLInputElement>(null);
+    const resolvedConfirmText = confirmText ?? t('btn_confirm');
+    const resolvedCancelText = cancelText ?? t('btn_cancel');
 
     useEffect(() => {
         if (isOpen && type === 'prompt') {
@@ -128,7 +132,7 @@ export function CustomDialog({
                             className="flex-1 px-4 py-2.5 rounded-xl font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
                         >
                             <X className="w-4 h-4" />
-                            {cancelText}
+                            {resolvedCancelText}
                         </button>
                     )}
                     <button
@@ -144,7 +148,7 @@ export function CustomDialog({
                         ) : (
                             type === 'prompt' && !isDestructive && <Check className="w-4 h-4" />
                         )}
-                        {isConfirmLoading ? '처리 중...' : confirmText}
+                        {isConfirmLoading ? t('dialog_processing') : resolvedConfirmText}
                     </button>
                 </div>
             </div>

@@ -465,7 +465,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                            CAS Number
+                            {t('inventory_cas_number')}
                         </label>
                         <input
                             type="text"

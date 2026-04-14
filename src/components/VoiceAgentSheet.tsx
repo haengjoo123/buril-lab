@@ -171,7 +171,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
                 {isRecording && (
                   <div
                     role="status"
-                    aria-label="Microphone input visualizer"
+                    aria-label={t('voice_agent_input_visualizer')}
                     className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm"
                   >
                     <div className="flex items-center gap-1.5" aria-hidden="true">

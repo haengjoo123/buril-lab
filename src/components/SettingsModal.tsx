@@ -18,6 +18,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         const clearSearchHistory = useWasteStore((state) => state.clearSearchHistory);
         const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
     const { t, i18n } = useTranslation();
+    const deleteConfirmPhrase = t('settings_delete_account_confirm_phrase');
 
     const { session, deleteAccount } = useAuth();
     const [dialogConfig, setDialogConfig] = React.useState<{
@@ -54,8 +55,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         setDialogConfig({
             isOpen: true,
             type: 'confirm',
-            title: '초기화',
-            description: '모든 데이터를 초기화하시겠습니까? (장바구니 및 검색 기록)',
+            title: t('settings_reset_data'),
+            description: t('settings_reset_confirm_desc'),
             isDestructive: true,
             onConfirm: () => {
                 clearCart();
@@ -67,8 +68,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 setDialogConfig({
                     isOpen: true,
                     type: 'alert',
-                    title: '초기화 완료',
-                    description: '초기화되었습니다. 페이지를 새로고침합니다.',
+                    title: t('settings_reset_complete_title'),
+                    description: t('settings_reset_complete_desc'),
                     onConfirm: () => window.location.reload()
                 });
             }
@@ -79,15 +80,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         setDialogConfig({
             isOpen: true,
             type: 'confirm',
-            title: '안전 면책 동의 초기화',
-            description: '안전 면책 동의를 초기화하시겠습니까?',
+            title: t('settings_view_guide'),
+            description: t('settings_view_guide_confirm_desc'),
             onConfirm: () => {
                 localStorage.removeItem('buril-safety-acknowledged');
                 setDialogConfig({
                     isOpen: true,
                     type: 'alert',
-                    title: '초기화 완료',
-                    description: '안전 면책 동의가 초기화되었습니다. 메인 화면으로 돌아가면 다시 표시됩니다.',
+                    title: t('settings_view_guide_complete_title'),
+                    description: t('settings_view_guide_complete_desc'),
                     onConfirm: () => window.location.reload()
                 });
             }
@@ -107,7 +108,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             title: t('settings_delete_account'),
             description: t('settings_delete_account_confirm'),
             isDestructive: true,
-            inputPlaceholder: t('settings_delete_account_confirm_input'),
+            inputPlaceholder: t('settings_delete_account_confirm_input', { phrase: deleteConfirmPhrase }),
             onConfirm: async () => {} // Logic is handled in CustomDialog onConfirm prop directly
         });
     };
@@ -295,13 +296,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                     onClick={() => changeLanguage('ko')}
                                     className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${i18n.language === 'ko' ? 'bg-blue-100 text-blue-700 shadow-sm dark:bg-blue-900 dark:text-blue-300' : 'text-gray-400 dark:text-gray-600 hover:text-gray-600'}`}
                                 >
-                                    한국어
+                                    {t('settings_language_option_ko')}
                                 </button>
                                 <button
                                     onClick={() => changeLanguage('en')}
                                     className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${i18n.language === 'en' ? 'bg-blue-100 text-blue-700 shadow-sm dark:bg-blue-900 dark:text-blue-300' : 'text-gray-400 dark:text-gray-600 hover:text-gray-600'}`}
                                 >
-                                    English
+                                    {t('settings_language_option_en')}
                                 </button>
                             </div>
                         </div>
@@ -374,7 +375,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     >
                         {t('settings_privacy_policy', '개인정보처리방침')}
                     </a>
-                    <span>Buril-lab v1.0.0</span>
+                    <span>{t('app_title')} v1.0.0</span>
                 </div>
             </div>
 
@@ -391,9 +392,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 isConfirmLoading={dialogConfig.isConfirmLoading}
                 onConfirm={async () => {
                     if (dialogConfig.type === 'prompt' && dialogConfig.title === t('settings_delete_account')) {
-                        const targetWord = i18n.language === 'ko' ? '탈퇴하겠습니다' : 'delete my account';
-                        if (deleteInputValue !== targetWord) {
-                            alert(t('settings_delete_account_confirm_input'));
+                        if (deleteInputValue !== deleteConfirmPhrase) {
+                            alert(t('settings_delete_account_confirm_input', { phrase: deleteConfirmPhrase }));
                             return;
                         }
                         

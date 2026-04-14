@@ -773,7 +773,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     <h2 className="text-lg font-semibold text-slate-800">
                         {isLoadingCabinet ? (
                             <span className="flex items-center gap-2">
-                                <Loader2 className="w-4 h-4 animate-spin" /> Loading...
+                                <Loader2 className="w-4 h-4 animate-spin" /> {t('cabinet_loading')}
                             </span>
                         ) : cabinetName || t('cabinet_manage')}
                     </h2>
@@ -1289,7 +1289,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 value={placementCas}
                                 onChange={e => setPlacementCas(e.target.value)}
                                 onFocus={placementCasSuggestion.triggerLookupFromCasFocus}
-                                placeholder="e.g. 64-17-5"
+                                placeholder={t('inventory_cas_placeholder')}
                                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                             />
                             {placementCasSuggestion.shouldRenderCard && (
@@ -1516,7 +1516,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         value={scanCas}
                                         onChange={e => setScanCas(e.target.value)}
                                         onFocus={scanCasSuggestion.triggerLookupFromCasFocus}
-                                        placeholder="e.g. 64-17-5"
+                                        placeholder={t('inventory_cas_placeholder')}
                                         className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                     />
                                     {scanCasSuggestion.shouldRenderCard && (
@@ -1630,7 +1630,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             type="text"
                                             value={scanCapacity}
                                             onChange={e => setScanCapacity(e.target.value)}
-                                            placeholder="e.g. 500mL"
+                                            placeholder={t('inventory_capacity_placeholder')}
                                             className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                         />
                                     </div>

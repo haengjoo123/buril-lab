@@ -179,6 +179,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
             {/* Close Button */}
             <button
                 onClick={() => { stopCamera(); onClose(); }}
+                aria-label={t('btn_close')}
                 className="absolute top-5 right-5 text-white/80 hover:text-white p-2 z-30"
             >
                 <X className="w-8 h-8" />
@@ -187,9 +188,9 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
             {/* State-based Header */}
             <div className="absolute top-16 text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-20">
                 {state === 'camera' && t('scanner_guide')}
-                {state === 'preview' && '촬영된 이미지를 확인하세요'}
-                {state === 'processing' && ' 인식 중입니다...'}
-                {state === 'result' && '검색어를 확인하세요'}
+                {state === 'preview' && t('scanner_preview')}
+                {state === 'processing' && t('scanner_processing')}
+                {state === 'result' && t('scanner_result')}
             </div>
 
             {/* Main View Area */}
@@ -229,7 +230,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                 {(state === 'preview' || state === 'processing' || state === 'result') && capturedImage && (
                     <img
                         src={capturedImage}
-                        alt="Captured"
+                        alt={t('common_captured_image_alt')}
                         className={`w-full h-full object-cover transition-opacity duration-300 ${state === 'processing' ? 'opacity-50 blur-sm' : 'opacity-100'}`}
                     />
                 )}
@@ -240,7 +241,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                         <Loader2 className="w-12 h-12 animate-spin mb-4 text-purple-400" />
                         <div className="flex items-center gap-2 text-purple-200 font-medium">
                             <Sparkles className="w-4 h-4" />
-                            <span>Gemini AI 분석중...</span>
+                            <span>{t('scanner_ai_analyzing')}</span>
                         </div>
                     </div>
                 )}
@@ -251,7 +252,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                         <div className="bg-slate-900/80 backdrop-blur-md border border-purple-500/30 rounded-xl p-4 shadow-xl">
                             <div className="flex items-center gap-2 text-purple-300 text-xs mb-2 uppercase tracking-wide font-semibold">
                                 <Sparkles className="w-3 h-3" />
-                                <span>인식된 검색어</span>
+                                <span>{t('scanner_detected_query')}</span>
                             </div>
 
                             <div className="flex items-center gap-3">
@@ -263,7 +264,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="flex-1 text-lg font-bold text-white bg-transparent outline-none border-b border-white/20 focus:border-purple-400 focus:ring-0 pb-1"
-                                    placeholder="검색어를 수정하세요"
+                                    placeholder={t('scanner_edit_query_placeholder')}
                                 />
                             </div>
                         </div>
@@ -273,7 +274,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                             className="w-full flex justify-center items-center gap-2 py-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors font-bold shadow-lg shadow-purple-900/50"
                         >
                             <Check className="w-5 h-5" />
-                            <span>이 검색어로 찾기</span>
+                            <span>{t('scanner_search_with_query')}</span>
                         </button>
                     </div>
                 )}
@@ -301,7 +302,8 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className="p-3 bg-white/20 hover:bg-white/30 rounded-full backdrop-blur-sm transition-colors text-white"
-                                title="사진 업로드"
+                                title={t('scanner_upload_photo')}
+                                aria-label={t('scanner_upload_photo')}
                             >
                                 <ImageIcon className="w-6 h-6" />
                             </button>
@@ -327,7 +329,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                             className="flex items-center gap-2 px-5 py-3 bg-slate-600 hover:bg-slate-500 text-white rounded-full transition-colors font-medium shadow-lg"
                         >
                             <RotateCcw className="w-5 h-5" />
-                            <span>다시 촬영</span>
+                            <span>{t('scanner_retake')}</span>
                         </button>
                         {!error && (
                             <button
@@ -335,7 +337,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                                 className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-full transition-colors font-bold shadow-lg shadow-green-900/40"
                             >
                                 <Sparkles className="w-5 h-5" />
-                                <span>AI 인식하기</span>
+                                <span>{t('scanner_ai_detect')}</span>
                             </button>
                         )}
                     </div>
@@ -358,7 +360,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                     className="absolute top-5 left-5 text-white/80 hover:text-white p-2 z-30 bg-black/40 rounded-full backdrop-blur-md flex items-center gap-2"
                 >
                     <RotateCcw className="w-4 h-4" />
-                    <span className="text-xs font-medium px-1">다시 촬영</span>
+                    <span className="text-xs font-medium px-1">{t('scanner_retake')}</span>
                 </button>
             )}
         </div>

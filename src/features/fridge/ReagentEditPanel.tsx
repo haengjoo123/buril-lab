@@ -583,7 +583,7 @@ export const ReagentEditPanel: React.FC = () => {
                                         value={brand}
                                         onChange={(e) => setBrand(e.target.value)}
                                         className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                                        placeholder="예: Sigma"
+                                        placeholder={t('inventory_brand_placeholder')}
                                     />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
@@ -596,7 +596,7 @@ export const ReagentEditPanel: React.FC = () => {
                                         value={productNumber}
                                         onChange={(e) => setProductNumber(e.target.value)}
                                         className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
-                                        placeholder="예: A1234"
+                                        placeholder={t('inventory_pn_placeholder')}
                                     />
                                 </div>
                             </div>
@@ -623,7 +623,7 @@ export const ReagentEditPanel: React.FC = () => {
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
                                             <FlaskConical size={12} />
-                                            CAS Number
+                                            {t('inventory_cas_number')}
                                         </label>
                                         <input
                                             type="text"

@@ -1018,7 +1018,7 @@ export const WasteLogView: React.FC = () => {
                                         )}
                                         {log.before_data && log.action === 'delete' && (
                                             <div className="mt-2 bg-red-50 dark:bg-red-900/10 p-2 rounded text-[10px] overflow-auto">
-                                                <span className="font-bold text-red-800 dark:text-red-400 mb-1 block">Deleted Data:</span>
+                                                <span className="font-bold text-red-800 dark:text-red-400 mb-1 block">{t('audit_deleted_data')}</span>
                                                 <pre className="text-slate-600 dark:text-slate-400 max-h-24 overflow-y-auto whitespace-pre-wrap">
                                                     {JSON.stringify(log.before_data, null, 2)}
                                                 </pre>

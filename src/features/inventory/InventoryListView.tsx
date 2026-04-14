@@ -1217,9 +1217,9 @@ export const InventoryListView: React.FC = () => {
                             );
                         })()}
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                            {item.cas_number && <span>CAS: {item.cas_number}</span>}
+                            {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
                             {item.brand && <span>{item.brand}</span>}
-                            {item.product_number && <span>PN: {item.product_number}</span>}
+                            {item.product_number && <span>{t('inventory_meta_pn')}: {item.product_number}</span>}
                         </div>
                     </div>
                     <div className="flex flex-col items-end shrink-0">
@@ -1325,7 +1325,7 @@ export const InventoryListView: React.FC = () => {
                                 )}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                {group.uniqueCasNumbers.length === 1 && <span>CAS: {group.uniqueCasNumbers[0]}</span>}
+                                {group.uniqueCasNumbers.length === 1 && <span>{t('inventory_meta_cas')}: {group.uniqueCasNumbers[0]}</span>}
                                 {aliasCount > 0 && (
                                     <span>{t('inventory_group_alias_count', { count: aliasCount })}</span>
                                 )}
@@ -1858,9 +1858,9 @@ export const InventoryListView: React.FC = () => {
                                             );
                                         })()}
                                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                            {item.cas_number && <span>CAS: {item.cas_number}</span>}
+                                            {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
                                             {item.brand && <span>{item.brand}</span>}
-                                            {item.product_number && <span>PN: {item.product_number}</span>}
+                                            {item.product_number && <span>{t('inventory_meta_pn')}: {item.product_number}</span>}
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end shrink-0">
