@@ -233,6 +233,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         const itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'> = {
             id: '', // autoPlaceReagent will assign a new UUID
             reagentId: inventoryId,
+            linkedInventoryItemId: inventoryId,
             name: itemName.trim(),
             width: getWidthForTemplate(template),
             template,
@@ -251,7 +252,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
 
         if (placeResult) {
             // Save the cabinet state with the new item
-            await useFridgeStore.getState().saveCabinet();
+            await useFridgeStore.getState().saveCabinetStrict();
             // Log the activity
             await cabinetService.logActivity(
                 selectedCabinetId,

@@ -168,7 +168,8 @@ export const cabinetService = {
                 .map(item => ({
                     id: item.id,
                     shelfId: item.shelf_id,
-                    reagentId: item.id,
+                    reagentId: item.inventory_item_id || item.id,
+                    linkedInventoryItemId: item.inventory_item_id || undefined,
                     template: normalizeTemplateFromDb(item.template),
                     name: item.name,
                     width: Number(item.width),
@@ -235,6 +236,7 @@ export const cabinetService = {
             brand: i.brand || null,
             notes: i.notes || null,
             cas_no: i.casNo || null,
+            inventory_item_id: i.linkedInventoryItemId || null,
             remaining_percent: i.remaining_percent ?? null
         })));
 

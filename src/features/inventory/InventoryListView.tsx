@@ -849,6 +849,7 @@ export const InventoryListView: React.FC = () => {
 
                 const successShelfLevelById = new Map<string, number>();
                 const cabinetItemNewIdByOldId = new Map<string, string>();
+                const linkedInventoryIdByItemId = new Map<string, string | null>();
 
                 for (const item of moveCandidates) {
                     const sourceGeometry = await getSourcePlacementGeometry(item);
@@ -860,9 +861,20 @@ export const InventoryListView: React.FC = () => {
                         const store = useFridgeStore.getState();
                         await store.loadCabinet(targetCabinet.id);
 
+                        const targetLinkId = item._source === 'inventory'
+                            ? item.id
+                            : (item.linked_inventory_item_id || null);
+                        const needsDeferredLink = Boolean(
+                            targetLinkId
+                            && item.storage_type === 'cabinet'
+                            && item.cabinet_id
+                            && item.cabinet_id !== targetCabinet.id
+                        );
+
                         const placementResult = store.autoPlaceReagent({
                             id: '',
                             reagentId: item.id,
+                            linkedInventoryItemId: needsDeferredLink ? undefined : (targetLinkId || undefined),
                             name: item.name,
                             width,
                             template,
@@ -911,8 +923,21 @@ export const InventoryListView: React.FC = () => {
                             cabinetItemNewIdByOldId.set(item.id, placementResult.itemId);
                         }
 
+                        if (needsDeferredLink && targetLinkId) {
+                            try {
+                                await inventoryService.setCabinetItemInventoryLink(placementResult.itemId, targetLinkId);
+                                useFridgeStore.getState().updateReagent(placementResult.itemId, {
+                                    linkedInventoryItemId: targetLinkId,
+                                    reagentId: targetLinkId,
+                                });
+                            } catch (linkError) {
+                                console.error('Failed to finalize cabinet inventory link after bulk move:', linkError);
+                            }
+                        }
+
                         successIds.push(item.id);
                         successShelfLevelById.set(item.id, placementResult.shelfLevel - 1);
+                        linkedInventoryIdByItemId.set(item.id, targetLinkId);
                     } catch (error) {
                         try {
                             if (placedItemId) {
@@ -966,6 +991,7 @@ export const InventoryListView: React.FC = () => {
                         return {
                             ...item,
                             id: nextId,
+                            linked_inventory_item_id: linkedInventoryIdByItemId.get(item.id) ?? item.linked_inventory_item_id ?? null,
                             storage_type: 'cabinet',
                             cabinet_id: targetCabinet.id,
                             cabinet_name: targetCabinet.name,
@@ -1291,12 +1317,6 @@ export const InventoryListView: React.FC = () => {
                                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
                                     {group.primaryItem.name}
                                 </h3>
-                                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
-                                    {t('inventory_group_total_quantity', { count: group.totalQuantity })}
-                                </span>
-                                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                    {t('inventory_group_card_count', { count: group.cardCount })}
-                                </span>
                                 {expiryAlertCount > 0 && (
                                     <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                                         <AlertTriangle className="h-3 w-3" />
@@ -1314,21 +1334,12 @@ export const InventoryListView: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2 shrink-0">
-                            <button
-                                type="button"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    toggleGroupExpanded(group.id);
-                                }}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700/60"
-                            >
-                                {isExpanded ? t('inventory_group_hide_cards') : t('inventory_group_show_cards')}
-                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                            </button>
+                        <div className="flex flex-col items-end shrink-0">
+                            <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
+                                {t('inventory_group_total_quantity', { count: group.totalQuantity })}
+                            </span>
                             {uniqueCapacities.length === 1 && (
-                                <span className="text-xs text-slate-400 dark:text-slate-500">
+                                <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                                     {uniqueCapacities[0]}
                                 </span>
                             )}
@@ -1347,9 +1358,20 @@ export const InventoryListView: React.FC = () => {
                                 })}
                             </span>
                         )}
-                        <span className="text-xs text-slate-400 dark:text-slate-500">
-                            {isExpanded ? t('inventory_group_hide_cards') : t('inventory_group_show_cards')}
-                        </span>
+                        {!isSelectMode && (
+                            <button
+                                type="button"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleGroupExpanded(group.id);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100"
+                            >
+                                {t('inventory_group_detail_view')}
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -1373,13 +1395,15 @@ export const InventoryListView: React.FC = () => {
         const placement = store.shelves
             .flatMap(shelf => shelf.items)
             .find(placed =>
+                placed.linkedInventoryItemId === item.id ||
                 placed.reagentId === item.id ||
                 (
                     normalizeText(placed.name) === normalizeText(item.name) &&
                     normalizeText(placed.brand) === normalizeText(item.brand) &&
                     normalizeText(placed.productNumber) === normalizeText(item.product_number) &&
                     normalizeText(placed.capacity) === normalizeText(item.capacity) &&
-                    normalizeText(placed.casNo) === normalizeText(item.cas_number)
+                    normalizeText(placed.casNo) === normalizeText(item.cas_number) &&
+                    !placed.linkedInventoryItemId
                 )
             );
 
@@ -1412,14 +1436,18 @@ export const InventoryListView: React.FC = () => {
 
         const shelfItems = store.shelves.flatMap(shelf => shelf.items);
         const placementById = shelfItems.find(placed => placed.id === sourceItem.id);
+        const placementByLinkedInventoryId = sourceItem.linked_inventory_item_id
+            ? shelfItems.find(placed => placed.linkedInventoryItemId === sourceItem.linked_inventory_item_id)
+            : null;
         const placementByFingerprint = shelfItems.find(placed =>
             normalizeText(placed.name) === normalizeText(sourceItem.name) &&
             normalizeText(placed.brand) === normalizeText(sourceItem.brand) &&
             normalizeText(placed.productNumber) === normalizeText(sourceItem.product_number) &&
             normalizeText(placed.capacity) === normalizeText(sourceItem.capacity) &&
-            normalizeText(placed.casNo) === normalizeText(sourceItem.cas_number)
+            normalizeText(placed.casNo) === normalizeText(sourceItem.cas_number) &&
+            !placed.linkedInventoryItemId
         );
-        const placement = placementById || placementByFingerprint;
+        const placement = placementById || placementByLinkedInventoryId || placementByFingerprint;
 
         if (!placement) return false;
 
@@ -1451,14 +1479,16 @@ export const InventoryListView: React.FC = () => {
         if (item.storage_type !== 'cabinet' || !item.cabinet_id) return null;
 
         // 1) DB 원본 우선 조회: id가 정확히 매칭되면 템플릿/너비를 가장 신뢰할 수 있다.
-        const { data: exactRow, error: exactRowError } = await supabase
+        const exactQuery = supabase
             .from('cabinet_items')
             .select('id, template, width')
-            .eq('cabinet_id', item.cabinet_id)
-            .eq('id', item.id)
+            .eq('cabinet_id', item.cabinet_id);
+        const { data: exactRow, error: exactRowError } = await (item._source === 'inventory'
+            ? exactQuery.eq('inventory_item_id', item.id)
+            : exactQuery.eq('id', item.id))
             .maybeSingle();
         if (exactRowError) {
-            console.error('Failed to fetch source cabinet geometry by id:', exactRowError);
+            console.error('Failed to fetch source cabinet geometry by exact link:', exactRowError);
         } else if (exactRow?.template && Number.isFinite(Number(exactRow.width)) && Number(exactRow.width) > 0) {
             return {
                 template: normalizeTemplateFromDb(exactRow.template),
@@ -1469,8 +1499,9 @@ export const InventoryListView: React.FC = () => {
         // 2) id 매칭이 안 될 때, fingerprint로 DB에서 한 번 더 시도
         const { data: fingerprintRows, error: fingerprintError } = await supabase
             .from('cabinet_items')
-            .select('id, template, width, name, brand, product_number, capacity, cas_no')
+            .select('id, inventory_item_id, template, width, name, brand, product_number, capacity, cas_no')
             .eq('cabinet_id', item.cabinet_id)
+            .is('inventory_item_id', null)
             .eq('name', item.name);
         if (fingerprintError) {
             console.error('Failed to fetch source cabinet geometry by fingerprint:', fingerprintError);
@@ -1502,14 +1533,16 @@ export const InventoryListView: React.FC = () => {
         const placement = store.shelves
             .flatMap(shelf => shelf.items)
             .find(placed =>
-                placed.id === item.id ||
-                placed.reagentId === item.id ||
+                (item._source === 'cabinet_item' && placed.id === item.id) ||
+                (item._source === 'inventory' && placed.linkedInventoryItemId === item.id) ||
+                (item._source === 'inventory' && placed.reagentId === item.id) ||
                 (
                     normalizeText(placed.name) === normalizeText(item.name) &&
                     normalizeText(placed.brand) === normalizeText(item.brand) &&
                     normalizeText(placed.productNumber) === normalizeText(item.product_number) &&
                     normalizeText(placed.capacity) === normalizeText(item.capacity) &&
-                    normalizeText(placed.casNo) === normalizeText(item.cas_number)
+                    normalizeText(placed.casNo) === normalizeText(item.cas_number) &&
+                    !placed.linkedInventoryItemId
                 )
             );
         if (!placement) return null;

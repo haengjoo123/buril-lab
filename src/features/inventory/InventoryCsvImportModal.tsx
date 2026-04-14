@@ -546,6 +546,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                     const placed = store.autoPlaceReagent({
                         id: '',
                         reagentId: created.id,
+                        linkedInventoryItemId: created.id,
                         name: input.name,
                         width,
                         template,

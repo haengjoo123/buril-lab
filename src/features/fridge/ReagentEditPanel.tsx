@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2, History } from 'lucide-react';
+import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2, History, Copy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
@@ -18,6 +18,7 @@ import { ResultCard } from '../../components/ResultCard';
 import type { AnalysisResult } from '../../types';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
+import { supabase } from '../../services/supabaseClient';
 
 type DisposalReason = 'used' | 'expired' | 'broken' | 'other';
 
@@ -42,7 +43,8 @@ export const ReagentEditPanel: React.FC = () => {
     const cabinetId = useFridgeStore(s => s.cabinetId);
     const updateReagent = useFridgeStore(s => s.updateReagent);
     const removeReagent = useFridgeStore(s => s.removeReagent);
-    const saveCabinet = useFridgeStore(s => s.saveCabinet);
+    const saveCabinet = useFridgeStore(s => s.saveCabinetStrict);
+    const placeReagentNear = useFridgeStore(s => s.placeReagentNear);
     const setSelectedReagentId = useFridgeStore(s => s.setSelectedReagentId);
 
     const [name, setName] = useState('');
@@ -60,6 +62,8 @@ export const ReagentEditPanel: React.FC = () => {
     const [selectedReason, setSelectedReason] = useState<DisposalReason | null>(null);
     const [isDisposing, setIsDisposing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isCopying, setIsCopying] = useState(false);
+    const [copyToastMessage, setCopyToastMessage] = useState<string | null>(null);
 
     const [remainingPercent, setRemainingPercent] = useState<number>(100);
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -134,6 +138,16 @@ export const ReagentEditPanel: React.FC = () => {
         }
     }, [selectedReagentId]);
 
+    useEffect(() => {
+        if (!copyToastMessage) return;
+
+        const timer = window.setTimeout(() => {
+            setCopyToastMessage(null);
+        }, 2400);
+
+        return () => window.clearTimeout(timer);
+    }, [copyToastMessage]);
+
     if (!selectedReagentId || !selectedItem || !showModalContent) return null;
 
     const handleSave = async () => {
@@ -186,7 +200,13 @@ export const ReagentEditPanel: React.FC = () => {
         setIsSaving(true);
         try {
             await inventoryService.updateItem(selectedReagentId, updatePayload, 'cabinet_item');
-            if (casChanged) {
+            if (selectedItem.linkedInventoryItemId) {
+                await inventoryService.updateItem(selectedItem.linkedInventoryItemId, {
+                    ...updatePayload,
+                    storage_type: 'cabinet',
+                    cabinet_id: cabinetId || undefined,
+                }, 'inventory');
+            } else if (casChanged) {
                 await inventoryService.syncLinkedCabinetCas({
                     source: 'cabinet_item',
                     sourceId: selectedReagentId,
@@ -241,7 +261,13 @@ export const ReagentEditPanel: React.FC = () => {
             // 2. 통합 활동 로그 기록
             await cabinetService.logActivity(cabinetId, 'remove', selectedItem.name, selectedReason);
             // 3. 연결된 재고 항목 삭제
-            await inventoryService.deleteLinkedInventoryByCabinetItemId(cabinetId, selectedItem.name, selectedReason);
+            await inventoryService.deleteLinkedInventoryByCabinetItemId({
+                cabinetId,
+                cabinetItemId: selectedReagentId,
+                linkedInventoryItemId: selectedItem.linkedInventoryItemId,
+                itemName: selectedItem.name,
+                reasonKey: selectedReason,
+            });
             // 4. Remove from store
             removeReagent(selectedReagentId);
             // 5. Save cabinet state
@@ -251,6 +277,110 @@ export const ReagentEditPanel: React.FC = () => {
             console.error('Disposal failed:', err);
         } finally {
             setIsDisposing(false);
+        }
+    };
+
+    const handleCopy = async () => {
+        if (isCopying || !cabinetId || !selectedReagentId) return;
+
+        const sourcePlacementId = selectedReagentId;
+        const sourceItem = {
+            ...selectedItem,
+            hCodes: [...selectedItem.hCodes],
+        };
+
+        setIsCopying(true);
+        setCopyToastMessage(null);
+
+        let createdInventoryId: string | null = null;
+        let placedItemId: string | null = null;
+
+        try {
+            const createdInventory = await inventoryService.createItem({
+                name: sourceItem.name,
+                brand: sourceItem.brand || undefined,
+                product_number: sourceItem.productNumber || undefined,
+                cas_number: sourceItem.casNo || undefined,
+                quantity: 1,
+                capacity: sourceItem.capacity || undefined,
+                storage_type: 'cabinet',
+                cabinet_id: cabinetId,
+                expiry_date: sourceItem.expiryDate || undefined,
+                memo: sourceItem.notes || undefined,
+                remaining_percent: sourceItem.remaining_percent,
+            });
+
+            if (!createdInventory) {
+                throw new Error(t('cabinet_copy_failed'));
+            }
+
+            createdInventoryId = createdInventory.id;
+
+            const placed = placeReagentNear(sourcePlacementId, {
+                reagentId: createdInventory.id,
+                linkedInventoryItemId: createdInventory.id,
+                name: sourceItem.name,
+                width: sourceItem.width,
+                template: sourceItem.template,
+                isAcidic: sourceItem.isAcidic,
+                isBasic: sourceItem.isBasic,
+                hCodes: sourceItem.hCodes,
+                notes: sourceItem.notes,
+                casNo: sourceItem.casNo,
+                capacity: sourceItem.capacity,
+                productNumber: sourceItem.productNumber,
+                brand: sourceItem.brand,
+                expiryDate: sourceItem.expiryDate,
+                remaining_percent: sourceItem.remaining_percent,
+            });
+
+            if (!placed) {
+                const { error } = await supabase
+                    .from('inventory')
+                    .delete()
+                    .eq('id', createdInventory.id);
+                if (error) {
+                    console.error('Failed to rollback copied inventory row after no-space result:', error);
+                }
+                setSelectedReagentId(sourcePlacementId);
+                setCopyToastMessage(t('reagent_no_space'));
+                return;
+            }
+
+            placedItemId = placed.itemId;
+            await saveCabinet();
+
+            cabinetService.logActivity(
+                cabinetId,
+                'add',
+                sourceItem.name,
+                undefined,
+                t('cabinet_copy_activity_memo')
+            ).catch((error) => console.error('Failed to log cabinet copy activity:', error));
+
+            setCopyToastMessage(t('cabinet_copy_success_toast'));
+        } catch (err) {
+            console.error('Failed to copy reagent:', err);
+
+            if (placedItemId) {
+                useFridgeStore.getState().removeReagent(placedItemId);
+                useFridgeStore.getState().setSelectedReagentId(sourcePlacementId);
+                await useFridgeStore.getState().saveCabinet();
+            }
+
+            if (createdInventoryId) {
+                const { error } = await supabase
+                    .from('inventory')
+                    .delete()
+                    .eq('id', createdInventoryId);
+                if (error) {
+                    console.error('Failed to rollback copied inventory row:', error);
+                }
+            }
+
+            setCopyToastMessage(t('cabinet_copy_failed'));
+        } finally {
+            setIsCopying(false);
         }
     };
 
@@ -807,15 +937,23 @@ export const ReagentEditPanel: React.FC = () => {
                         <div className="p-3 border-t bg-gray-50/50 flex items-center justify-between gap-2 shrink-0">
                             <button
                                 onClick={handleDeleteClick}
-                                disabled={isSaving}
+                                disabled={isSaving || isCopying}
                                 className="px-3.5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 transition-colors"
                             >
                                 <Trash2 size={16} />
                                 {t('cabinet_delete')}
                             </button>
                             <button
+                                onClick={handleCopy}
+                                disabled={isSaving || isCopying}
+                                className="px-3.5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {isCopying ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+                                {t('cabinet_copy')}
+                            </button>
+                            <button
                                 onClick={handleSave}
-                                disabled={isSaving}
+                                disabled={isSaving || isCopying}
                                 className="flex-1 px-3.5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
@@ -825,6 +963,12 @@ export const ReagentEditPanel: React.FC = () => {
                     </>
                 )}
             </div>
+
+            {copyToastMessage && (
+                <div className="absolute left-1/2 top-4 -translate-x-1/2 z-40 px-3 py-2 rounded-lg bg-slate-900/90 text-white text-xs font-medium shadow-lg">
+                    {copyToastMessage}
+                </div>
+            )}
 
             {/* Disposal Guide Modal overlay */}
             {analysisResult && (

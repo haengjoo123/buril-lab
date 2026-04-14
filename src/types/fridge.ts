@@ -18,6 +18,7 @@ export interface ReagentTemplate {
 export interface ReagentPlacement {
     id: string; // Unique placement ID
     reagentId: string; // Reference to actual chemical data
+    linkedInventoryItemId?: string; // Exact linked inventory row when available
     name: string; // Display name
     position: number; // 0-100% position on shelf (가로)
     depthPosition?: number; // 0-100% 앞뒤 위치 (미설정 시 50)

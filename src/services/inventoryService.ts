@@ -45,6 +45,7 @@ export interface InventoryItem {
     shelf_level?: number | null;
     storage_location_name?: string | null;
     storage_location_icon?: string | null;
+    linked_inventory_item_id?: string | null;
     _source?: InventorySource;
 }
 
@@ -92,6 +93,7 @@ interface InventoryRowWithRelations extends InventoryRow {
 
 interface CabinetItemRowWithCabinet {
     id: string;
+    inventory_item_id: string | null;
     name: string;
     brand: string | null;
     product_number: string | null;
@@ -126,6 +128,7 @@ interface LinkedCabinetCasSyncInput {
     source: InventorySource;
     sourceId?: string | null;
     cabinetId?: string | null;
+    linkedInventoryItemId?: string | null;
     name: string;
     brand?: string | null;
     productNumber?: string | null;
@@ -152,6 +155,43 @@ function normalizeLinkedText(value?: string | null): string {
 
 function normalizeLinkedCas(value?: string | null): string {
     return (value || '').replace(/[^0-9-]/g, '').trim();
+}
+
+async function getLinkedInventoryIdsForCabinet(cabinetId?: string | null): Promise<Set<string>> {
+    if (!cabinetId) return new Set<string>();
+
+    const { data, error } = await supabase
+        .from('cabinet_items')
+        .select('inventory_item_id')
+        .eq('cabinet_id', cabinetId)
+        .not('inventory_item_id', 'is', null);
+
+    if (error) throw error;
+
+    return new Set(
+        (data || [])
+            .map((row: { inventory_item_id?: string | null }) => row.inventory_item_id)
+            .filter((id): id is string => Boolean(id))
+    );
+}
+
+async function findLinkedCabinetItemIdByInventoryId(
+    inventoryItemId: string,
+    cabinetId?: string | null
+): Promise<string | null> {
+    let query = supabase
+        .from('cabinet_items')
+        .select('id')
+        .eq('inventory_item_id', inventoryItemId);
+
+    if (cabinetId) {
+        query = query.eq('cabinet_id', cabinetId);
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle();
+    if (error) throw error;
+
+    return data?.id || null;
 }
 
 export const storageLocationService = {
@@ -375,7 +415,7 @@ export const inventoryService = {
         let cabQuery = supabase
             .from('cabinet_items')
             .select(`
-                id, name, brand, product_number, cas_no, capacity, expiry_date, notes, created_at,
+                id, inventory_item_id, name, brand, product_number, cas_no, capacity, expiry_date, notes, created_at,
                 cabinet_id, shelf_id, remaining_percent,
                 cabinets!inner ( name, lab_id )
             `);
@@ -394,9 +434,19 @@ export const inventoryService = {
         }
 
         // 동일 스펙 다건을 누락시키지 않기 위해 키 단위 "개수" 기반 dedupe 사용
-        const linkedCountByKey = new Map<string, number>();
+        const cabinetRows = (cabData || []) as CabinetItemRowWithCabinet[];
+        const inventoryItemIdSet = new Set(inventoryItems.map((item) => item.id));
+        const exactLinkedInventoryIds = new Set(
+            cabinetRows
+                .map((row) => row.inventory_item_id)
+                .filter((id): id is string => Boolean(id && inventoryItemIdSet.has(id)))
+        );
+        const legacyLinkedCountByKey = new Map<string, number>();
+
         for (const item of inventoryItems) {
             if (item.storage_type !== 'cabinet') continue;
+            if (exactLinkedInventoryIds.has(item.id)) continue;
+
             const key = buildCabinetItemKey({
                 cabinetId: item.cabinet_id,
                 name: item.name,
@@ -405,12 +455,15 @@ export const inventoryService = {
                 capacity: item.capacity,
                 casNumber: item.cas_number,
             });
-            linkedCountByKey.set(key, (linkedCountByKey.get(key) || 0) + 1);
+            legacyLinkedCountByKey.set(key, (legacyLinkedCountByKey.get(key) || 0) + 1);
         }
 
-        const cabinetRows = (cabData || []) as CabinetItemRowWithCabinet[];
         const cabinetItems: InventoryItem[] = cabinetRows
             .filter((ci) => {
+                if (ci.inventory_item_id && inventoryItemIdSet.has(ci.inventory_item_id)) {
+                    return false;
+                }
+
                 const key = buildCabinetItemKey({
                     cabinetId: ci.cabinet_id,
                     name: ci.name,
@@ -419,9 +472,9 @@ export const inventoryService = {
                     capacity: ci.capacity,
                     casNumber: ci.cas_no,
                 });
-                const remainingLinked = linkedCountByKey.get(key) || 0;
+                const remainingLinked = legacyLinkedCountByKey.get(key) || 0;
                 if (remainingLinked <= 0) return true;
-                linkedCountByKey.set(key, remainingLinked - 1);
+                legacyLinkedCountByKey.set(key, remainingLinked - 1);
                 return false;
             })
             .map((ci) => ({
@@ -448,6 +501,7 @@ export const inventoryService = {
                 cabinet_name: getCabinetRelation(ci.cabinets)?.name || undefined,
                 storage_location_name: undefined,
                 storage_location_icon: undefined,
+                linked_inventory_item_id: ci.inventory_item_id ?? null,
                 _source: 'cabinet_item',
             }));
 
@@ -645,6 +699,40 @@ export const inventoryService = {
         }
     },
 
+    async syncLinkedCabinetItemFromInventory(input: {
+        inventoryItemId: string;
+        cabinetId?: string | null;
+        updates: Partial<CreateInventoryInput>;
+    }): Promise<boolean> {
+        const linkedCabinetItemId = await findLinkedCabinetItemIdByInventoryId(
+            input.inventoryItemId,
+            input.cabinetId
+        );
+        if (!linkedCabinetItemId) return false;
+
+        const cabinetUpdates: Partial<CreateInventoryInput> = {};
+        if (input.updates.name !== undefined) cabinetUpdates.name = input.updates.name;
+        if (input.updates.brand !== undefined) cabinetUpdates.brand = input.updates.brand;
+        if (input.updates.product_number !== undefined) cabinetUpdates.product_number = input.updates.product_number;
+        if (input.updates.cas_number !== undefined) cabinetUpdates.cas_number = input.updates.cas_number;
+        if (input.updates.capacity !== undefined) cabinetUpdates.capacity = input.updates.capacity;
+        if (input.updates.expiry_date !== undefined) cabinetUpdates.expiry_date = input.updates.expiry_date;
+        if (input.updates.memo !== undefined) cabinetUpdates.memo = input.updates.memo;
+        if (input.updates.remaining_percent !== undefined) cabinetUpdates.remaining_percent = input.updates.remaining_percent;
+
+        await inventoryService.updateItem(linkedCabinetItemId, cabinetUpdates, 'cabinet_item');
+        return true;
+    },
+
+    async setCabinetItemInventoryLink(cabinetItemId: string, inventoryItemId: string | null): Promise<void> {
+        const { error } = await supabase
+            .from('cabinet_items')
+            .update({ inventory_item_id: inventoryItemId })
+            .eq('id', cabinetItemId);
+
+        if (error) throw error;
+    },
+
     async syncLinkedCabinetCas(input: LinkedCabinetCasSyncInput): Promise<void> {
         if (!input.cabinetId) return;
 
@@ -670,10 +758,22 @@ export const inventoryService = {
         );
 
         if (input.source === 'inventory') {
+            if (input.sourceId) {
+                const linkedCabinetItemId = await findLinkedCabinetItemIdByInventoryId(
+                    input.sourceId,
+                    input.cabinetId
+                );
+                if (linkedCabinetItemId) {
+                    await inventoryService.updateItem(linkedCabinetItemId, { cas_number: nextCasNumber }, 'cabinet_item');
+                    return;
+                }
+            }
+
             const { data, error } = await supabase
                 .from('cabinet_items')
                 .select('id, name, brand, product_number, capacity, cas_no')
                 .eq('cabinet_id', input.cabinetId)
+                .is('inventory_item_id', null)
                 .eq('name', input.name);
 
             if (error) throw error;
@@ -704,6 +804,12 @@ export const inventoryService = {
             return;
         }
 
+        if (input.linkedInventoryItemId) {
+            await inventoryService.updateItem(input.linkedInventoryItemId, { cas_number: nextCasNumber }, 'inventory');
+            return;
+        }
+
+        const linkedInventoryIds = await getLinkedInventoryIdsForCabinet(input.cabinetId);
         const { data, error } = await supabase
             .from('inventory')
             .select('id, name, brand, product_number, capacity, cas_number')
@@ -725,10 +831,12 @@ export const inventoryService = {
         const strongMatches = rows.filter((row) =>
             metadataMatches(row)
             && normalizeLinkedCas(row.cas_number) === normalizedPreviousCas
+            && !linkedInventoryIds.has(row.id)
             && row.id !== input.sourceId
         );
         const softMatches = rows.filter((row) =>
             metadataMatches(row)
+            && !linkedInventoryIds.has(row.id)
             && row.id !== input.sourceId
         );
         const targetRows = strongMatches.length > 0 ? strongMatches : (softMatches.length === 1 ? softMatches : []);
@@ -747,6 +855,7 @@ export const inventoryService = {
                 source: item._source || 'inventory',
                 sourceId: item.id,
                 cabinetId: item.cabinet_id,
+                linkedInventoryItemId: item.linked_inventory_item_id,
                 name: item.name,
                 brand: item.brand,
                 productNumber: item.product_number,
@@ -799,11 +908,15 @@ export const inventoryService = {
      * Called from cabinet 3D view when a reagent is removed.
      * Cleans up any linked inventory row.
      */
-    async deleteLinkedInventoryByCabinetItemId(
-        cabinetId: string,
-        itemName: string,
-        reasonKey?: DisposalReasonKey
-    ): Promise<void> {
+    async deleteLinkedInventoryByCabinetItemId(input: {
+        cabinetId: string;
+        cabinetItemId?: string | null;
+        linkedInventoryItemId?: string | null;
+        itemName: string;
+        reasonKey?: DisposalReasonKey;
+    }): Promise<void> {
+        const reasonKey = input.reasonKey;
+        const itemName = input.itemName;
         const reasonLabelMap: Record<DisposalReasonKey, string> = {
             used: '사용완료',
             expired: '유효기간 만료',
@@ -815,26 +928,76 @@ export const inventoryService = {
         const { data: cabinetInfo } = await supabase
             .from('cabinets')
             .select('name, lab_id')
-            .eq('id', cabinetId)
+            .eq('id', input.cabinetId)
             .maybeSingle();
 
-        const { data: matchedInventory } = await supabase
+        if (input.linkedInventoryItemId) {
+            const { data: linkedInventory, error: fetchError } = await supabase
+                .from('inventory')
+                .select('id, lab_id, name, cas_number, brand, quantity, capacity, storage_type')
+                .eq('id', input.linkedInventoryItemId)
+                .maybeSingle();
+            if (fetchError) throw fetchError;
+
+            const { error } = await supabase
+                .from('inventory')
+                .delete()
+                .eq('id', input.linkedInventoryItemId);
+            if (error) throw error;
+
+            if (linkedInventory) {
+                try {
+                    const { data: userData } = await supabase.auth.getUser();
+                    await this.logDeleteToWasteLogs({
+                        userId: userData.user?.id || null,
+                        labId: linkedInventory.lab_id || cabinetInfo?.lab_id || null,
+                        chemical: {
+                            id: linkedInventory.id,
+                            name: linkedInventory.name,
+                            cas_number: linkedInventory.cas_number || undefined,
+                            brand: linkedInventory.brand || undefined,
+                            quantity: linkedInventory.quantity,
+                            capacity: linkedInventory.capacity || undefined,
+                            storage_type: linkedInventory.storage_type,
+                        },
+                        location: cabinetInfo?.name || 'Cabinet',
+                        memo: disposalReason,
+                    });
+                } catch (err) {
+                    console.error('[Inventory] exact linked waste_log error (non-fatal):', err);
+                }
+            }
+            return;
+        }
+
+        const linkedInventoryIds = await getLinkedInventoryIdsForCabinet(input.cabinetId);
+
+        const { data: matchedInventoryRows } = await supabase
             .from('inventory')
             .select('id, lab_id, name, cas_number, brand, quantity, capacity, storage_type')
-            .eq('cabinet_id', cabinetId)
+            .eq('cabinet_id', input.cabinetId)
             .eq('storage_type', 'cabinet')
             .eq('name', itemName)
-            .limit(1)
-            .maybeSingle();
+            .order('created_at', { ascending: true });
+
+        const matchedInventory = (matchedInventoryRows || []).find((row: {
+            id: string;
+            lab_id: string | null;
+            name: string;
+            cas_number: string | null;
+            brand: string | null;
+            quantity: number;
+            capacity: string | null;
+            storage_type: 'cabinet' | 'other';
+        }) => !linkedInventoryIds.has(row.id));
 
         if (matchedInventory) {
-            // Delete it
-            await supabase
+            const { error } = await supabase
                 .from('inventory')
                 .delete()
                 .eq('id', matchedInventory.id);
+            if (error) throw error;
 
-            // Add to waste_logs
             try {
                 const { data: userData } = await supabase.auth.getUser();
                 await this.logDeleteToWasteLogs({
@@ -866,7 +1029,7 @@ export const inventoryService = {
                 userId: userData.user?.id || null,
                 labId: currentLabId || cabinetInfo?.lab_id || null,
                 chemical: {
-                    id: `cabinet:${cabinetId}:${itemName}`,
+                    id: `cabinet:${input.cabinetId}:${itemName}`,
                     name: itemName,
                     storage_type: 'cabinet',
                 },

@@ -9,6 +9,7 @@ import type {
 import { cabinetService } from '../services/cabinetService';
 import { lookupGHSByCAS } from '../services/pubchemService';
 import { buildCabinetAutoLayoutPlan } from '../utils/cabinetAutoLayoutPlanner';
+import { findNearbyReagentSlot } from '../utils/findNearbyReagentSlot';
 import {
     CONTAINER_BASE_WIDTHS,
     getItemDepthPct,
@@ -29,8 +30,13 @@ interface FridgeStore extends FridgeState {
     isLoadingCabinet: boolean;
     loadCabinet: (cabinetId: string) => Promise<void>;
     saveCabinet: () => Promise<void>;
+    saveCabinetStrict: () => Promise<void>;
     clearCabinet: () => void;
     autoPlaceReagent: (itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>) => AutoPlaceResult | null;
+    placeReagentNear: (
+        referenceItemId: string,
+        itemData: Omit<ReagentPlacement, 'id' | 'shelfId' | 'position' | 'depthPosition'>
+    ) => AutoPlaceResult | null;
     autoPlaceResult: AutoPlaceResult | null;
     clearAutoPlaceResult: () => void;
     /** Background CAS → H-code enrichment via PubChem */
@@ -129,16 +135,20 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         }
     },
 
-    saveCabinet: async () => {
+    saveCabinetStrict: async () => {
         const state = get();
         if (!state.cabinetId) return;
+        await cabinetService.saveCabinetState(state.cabinetId, state.shelves);
+        await cabinetService.updateCabinet(state.cabinetId, {
+            width: state.cabinetWidth,
+            height: state.cabinetHeight,
+            depth: state.cabinetDepth
+        });
+    },
+
+    saveCabinet: async () => {
         try {
-            await cabinetService.saveCabinetState(state.cabinetId, state.shelves);
-            await cabinetService.updateCabinet(state.cabinetId, {
-                width: state.cabinetWidth,
-                height: state.cabinetHeight,
-                depth: state.cabinetDepth
-            });
+            await get().saveCabinetStrict();
         } catch (err) {
             console.error('Failed to save cabinet', err);
         }
@@ -521,6 +531,71 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
         // No free slot found
         return null;
+    },
+
+    placeReagentNear: (referenceItemId, itemData) => {
+        const state = get();
+        const referenceShelf = state.shelves.find((shelf) =>
+            shelf.items.some((item) => item.id === referenceItemId)
+        );
+        const referenceItem = referenceShelf?.items.find((item) => item.id === referenceItemId);
+        if (!referenceItem || !referenceShelf) return null;
+
+        const slot = findNearbyReagentSlot({
+            shelves: state.shelves,
+            referenceItem,
+            cabinetWidth: state.cabinetWidth,
+            cabinetDepth: state.cabinetDepth,
+        });
+
+        if (!slot) return null;
+
+        const targetShelf = state.shelves.find((shelf) => shelf.id === slot.shelfId);
+        if (!targetShelf) return null;
+
+        const newItem: ReagentPlacement = {
+            ...itemData,
+            shelfId: slot.shelfId,
+            id: uuidv4(),
+            position: slot.position,
+            depthPosition: slot.depthPosition,
+        };
+
+        const result: AutoPlaceResult = {
+            itemId: newItem.id,
+            shelfLevel: targetShelf.level + 1,
+            reagentName: newItem.name,
+        };
+
+        set(st => ({
+            shelves: st.shelves.map(s =>
+                s.id === slot.shelfId
+                    ? { ...s, items: [...s.items, newItem] }
+                    : s
+            ),
+            highlightedItemId: newItem.id,
+            selectedReagentId: newItem.id,
+            autoPlaceResult: result,
+            focusedShelfId: null,
+            ...resetCompatibilityPlanPreview(),
+        }));
+
+        queueMicrotask(() => {
+            set({ focusedShelfId: slot.shelfId });
+        });
+
+        setTimeout(() => {
+            const current = get();
+            if (current.highlightedItemId === newItem.id) {
+                set({ highlightedItemId: null });
+            }
+        }, 4000);
+
+        if (newItem.casNo && newItem.hCodes.length === 0) {
+            get().enrichReagentGHS(newItem.id);
+        }
+
+        return result;
     },
 
     enrichReagentGHS: async (reagentId: string) => {

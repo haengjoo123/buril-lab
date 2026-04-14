@@ -1,5 +1,25 @@
--- Atomic delete RPC for inventory domain
--- Apply in Supabase SQL editor before deploying frontend changes.
+alter table public.cabinet_items
+    add column if not exists inventory_item_id uuid;
+
+do $$
+begin
+    if not exists (
+        select 1
+        from pg_constraint
+        where conname = 'cabinet_items_inventory_item_id_fkey'
+    ) then
+        alter table public.cabinet_items
+            add constraint cabinet_items_inventory_item_id_fkey
+            foreign key (inventory_item_id)
+            references public.inventory(id)
+            on delete set null;
+    end if;
+end
+$$;
+
+create unique index if not exists cabinet_items_inventory_item_id_unique
+    on public.cabinet_items (inventory_item_id)
+    where inventory_item_id is not null;
 
 drop function if exists public.delete_inventory_item_atomic(
     uuid,

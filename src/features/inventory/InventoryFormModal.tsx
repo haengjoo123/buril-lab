@@ -183,7 +183,32 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     await moveItemStorage(initialData, formData);
                 } else {
                     await inventoryService.updateItem(initialData.id, formData, initialData._source || 'inventory');
-                    if (casChanged && (initialData.storage_type === 'cabinet' || initialData._source === 'cabinet_item')) {
+                    if (initialData._source === 'inventory' && initialData.storage_type === 'cabinet' && initialData.cabinet_id) {
+                        const synced = await inventoryService.syncLinkedCabinetItemFromInventory({
+                            inventoryItemId: initialData.id,
+                            cabinetId: initialData.cabinet_id,
+                            updates: formData,
+                        });
+                        if (!synced && casChanged) {
+                            await inventoryService.syncLinkedCabinetCas({
+                                source: initialData._source || 'inventory',
+                                sourceId: initialData.id,
+                                cabinetId: initialData.cabinet_id,
+                                name: initialData.name,
+                                brand: initialData.brand,
+                                productNumber: initialData.product_number,
+                                capacity: initialData.capacity,
+                                previousCasNumber: initialData.cas_number,
+                                nextCasNumber: formData.cas_number,
+                            });
+                        }
+                    } else if (initialData._source === 'cabinet_item' && initialData.linked_inventory_item_id) {
+                        await inventoryService.updateItem(initialData.linked_inventory_item_id, {
+                            ...formData,
+                            storage_type: 'cabinet',
+                            cabinet_id: initialData.cabinet_id || undefined,
+                        }, 'inventory');
+                    } else if (casChanged && (initialData.storage_type === 'cabinet' || initialData._source === 'cabinet_item')) {
                         await inventoryService.syncLinkedCabinetCas({
                             source: initialData._source || 'inventory',
                             sourceId: initialData.id,
@@ -270,9 +295,20 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             const targetStore = useFridgeStore.getState();
             await targetStore.loadCabinet(input.cabinet_id);
 
+            const targetLinkId = sourceItem._source === 'inventory'
+                ? sourceItem.id
+                : (sourceItem.linked_inventory_item_id || null);
+            const needsDeferredLink = Boolean(
+                targetLinkId
+                && sourceItem.storage_type === 'cabinet'
+                && sourceItem.cabinet_id
+                && sourceItem.cabinet_id !== input.cabinet_id
+            );
+
             const placed = targetStore.autoPlaceReagent({
                 id: '',
                 reagentId: sourceItem.id,
+                linkedInventoryItemId: needsDeferredLink ? undefined : (targetLinkId || undefined),
                 name: input.name.trim(),
                 width: geometry.width,
                 template: geometry.template,
@@ -295,6 +331,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             cabinetService.logActivity(input.cabinet_id, 'add', input.name, undefined, input.memo || undefined)
                 .catch(console.error);
 
+            let inventoryUpdated = false;
             try {
                 if (sourceItem._source === 'inventory') {
                     await inventoryService.updateItem(sourceItem.id, {
@@ -302,6 +339,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                         storage_type: 'cabinet',
                         cabinet_id: input.cabinet_id,
                     }, 'inventory');
+                    inventoryUpdated = true;
                 }
 
                 if (sourceItem.storage_type === 'cabinet' && sourceItem.cabinet_id && sourceItem.cabinet_id !== input.cabinet_id) {
@@ -311,7 +349,26 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             } catch (error) {
                 // Roll back target cabinet placement on downstream failures
                 await rollbackPlacementInCabinet(input.cabinet_id, placed.itemId);
+                if (inventoryUpdated && sourceItem._source === 'inventory') {
+                    await inventoryService.updateItem(sourceItem.id, {
+                        storage_type: sourceItem.storage_type,
+                        cabinet_id: sourceItem.storage_type === 'cabinet' ? (sourceItem.cabinet_id || undefined) : undefined,
+                        storage_location_id: sourceItem.storage_type === 'other' ? (sourceItem.storage_location_id || undefined) : undefined,
+                    }, 'inventory');
+                }
                 throw error;
+            }
+
+            if (needsDeferredLink && targetLinkId) {
+                try {
+                    await inventoryService.setCabinetItemInventoryLink(placed.itemId, targetLinkId);
+                    useFridgeStore.getState().updateReagent(placed.itemId, {
+                        linkedInventoryItemId: targetLinkId,
+                        reagentId: targetLinkId,
+                    });
+                } catch (error) {
+                    console.error('Failed to finalize cabinet inventory link after move:', error);
+                }
             }
 
             await analyticsService.trackStorageWarningIgnoredForItem({
@@ -372,15 +429,19 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             await store.loadCabinet(sourceItem.cabinet_id);
             const placement = store.shelves
                 .flatMap(shelf => shelf.items)
-                .find((placed) => placed.id === sourceItem.id
-                    || (placed.reagentId === sourceItem.id)
+                .find((placed) => (
+                    (sourceItem._source === 'cabinet_item' && placed.id === sourceItem.id)
+                    || (sourceItem._source === 'inventory' && placed.linkedInventoryItemId === sourceItem.id)
+                    || (sourceItem._source === 'inventory' && placed.reagentId === sourceItem.id)
                     || (
                         normalizeText(placed.name) === normalizeText(sourceItem.name)
                         && normalizeText(placed.brand) === normalizeText(sourceItem.brand)
                         && normalizeText(placed.productNumber) === normalizeText(sourceItem.product_number)
                         && normalizeText(placed.capacity) === normalizeText(sourceItem.capacity)
                         && normalizeText(placed.casNo) === normalizeText(sourceItem.cas_number)
-                    ));
+                        && !placed.linkedInventoryItemId
+                    )
+                ));
             if (placement) {
                 return {
                     template: placement.template as ReagentTemplateType,
@@ -420,13 +481,16 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         const placement = store.shelves
             .flatMap(shelf => shelf.items)
             .find((placed) =>
-                placed.id === sourceItem.id
+                (sourceItem._source === 'cabinet_item' && placed.id === sourceItem.id)
+                || (sourceItem._source === 'inventory' && placed.linkedInventoryItemId === sourceItem.id)
+                || (sourceItem._source === 'inventory' && placed.reagentId === sourceItem.id)
                 || (
                     normalizeText(placed.name) === normalizeText(sourceItem.name)
                     && normalizeText(placed.brand) === normalizeText(sourceItem.brand)
                     && normalizeText(placed.productNumber) === normalizeText(sourceItem.product_number)
                     && normalizeText(placed.capacity) === normalizeText(sourceItem.capacity)
                     && normalizeText(placed.casNo) === normalizeText(sourceItem.cas_number)
+                    && !placed.linkedInventoryItemId
                 )
             );
         if (!placement) return false;
@@ -884,6 +948,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         const placeResult = useFridgeStore.getState().autoPlaceReagent({
             id: '',
             reagentId: inventoryId,
+            linkedInventoryItemId: inventoryId,
             name: input.name,
             width: getWidthForTemplate(template),
             template,
@@ -901,7 +966,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
 
         if (!placeResult) return false;
 
-        await useFridgeStore.getState().saveCabinet();
+        await useFridgeStore.getState().saveCabinetStrict();
         try {
             await cabinetService.logActivity(input.cabinet_id, 'add', input.name, undefined, input.memo || undefined);
         } catch (error) {
