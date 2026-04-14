@@ -1,67 +1,41 @@
 import type { TFunction } from 'i18next';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-
-type ContainerType = 'A' | 'B' | 'C' | 'D';
+import {
+    CONTAINER_TYPE_OPTIONS,
+    INVENTORY_IMPORT_HEADER_KEYS,
+    getContainerTypeLabel,
+    getContainerTypeOptionLabels,
+    getOtherLocationOptionLabels,
+} from './inventoryImportOptions';
 
 interface InventoryTemplateWorkbookOptions {
     headers: string[];
     t: TFunction;
+    cabinetNames: string[];
 }
 
-interface BottleCardConfig {
-    type: ContainerType;
-    labelKey: string;
-    modelUrl: string;
-    startColumn: number;
-    endColumn: number;
-}
-
-type PreviewImageMap = Record<ContainerType, string | null>;
-
-const BOTTLE_CARD_CONFIGS: BottleCardConfig[] = [
-    {
-        type: 'A',
-        labelKey: 'cabinet_container_amber',
-        modelUrl: '/models/reagents/brown bottle.glb',
-        startColumn: 1,
-        endColumn: 2,
-    },
-    {
-        type: 'B',
-        labelKey: 'cabinet_container_plastic',
-        modelUrl: '/models/reagents/plastic bottle.glb',
-        startColumn: 3,
-        endColumn: 4,
-    },
-    {
-        type: 'C',
-        labelKey: 'cabinet_container_glass',
-        modelUrl: '/models/reagents/glass.glb',
-        startColumn: 5,
-        endColumn: 6,
-    },
-    {
-        type: 'D',
-        labelKey: 'cabinet_container_vial',
-        modelUrl: '/models/reagents/square bottle.glb',
-        startColumn: 7,
-        endColumn: 8,
-    },
-];
+type PreviewImageMap = Record<(typeof CONTAINER_TYPE_OPTIONS)[number]['type'], string | null>;
 
 const IMAGE_RENDER_SIZE = 240;
-const SHEET_COLUMN_COUNT = 10;
 const PREVIEW_SECTION_START_ROW = 3;
 const PREVIEW_SECTION_END_ROW = 8;
 const PREVIEW_LABEL_ROW = 9;
 const GUIDE_START_ROW = 11;
+const VALIDATION_ROW_COUNT = 200;
+const LIST_SHEET_NAME = '_lists';
 const IMAGE_BORDER = {
     top: { style: 'thin', color: { argb: 'FFD7DEE8' } },
     left: { style: 'thin', color: { argb: 'FFD7DEE8' } },
     bottom: { style: 'thin', color: { argb: 'FFD7DEE8' } },
     right: { style: 'thin', color: { argb: 'FFD7DEE8' } },
 } as const;
+const BOTTLE_CARD_LAYOUT = [
+    { type: 'A' as const, startColumn: 1, endColumn: 2 },
+    { type: 'B' as const, startColumn: 3, endColumn: 4 },
+    { type: 'C' as const, startColumn: 5, endColumn: 6 },
+    { type: 'D' as const, startColumn: 7, endColumn: 8 },
+];
 
 let previewImageCachePromise: Promise<PreviewImageMap> | null = null;
 
@@ -88,6 +62,29 @@ function setRangeFill(
             cell.border = IMAGE_BORDER;
         }
     }
+}
+
+function mergeAcrossSheet(
+    worksheet: {
+        mergeCells: (startRow: number, startColumn: number, endRow: number, endColumn: number) => void;
+    },
+    row: number,
+    endColumn: number,
+) {
+    worksheet.mergeCells(row, 1, row, endColumn);
+}
+
+function columnLetterFromIndex(columnIndex: number): string {
+    let index = columnIndex;
+    let result = '';
+
+    while (index > 0) {
+        const remainder = (index - 1) % 26;
+        result = String.fromCharCode(65 + remainder) + result;
+        index = Math.floor((index - 1) / 26);
+    }
+
+    return result;
 }
 
 function disposeRenderer(renderer: THREE.WebGLRenderer) {
@@ -157,7 +154,7 @@ async function renderModelPreviewToPng(modelUrl: string): Promise<string> {
 async function getPreviewImages(): Promise<PreviewImageMap> {
     if (!previewImageCachePromise) {
         previewImageCachePromise = Promise.all(
-            BOTTLE_CARD_CONFIGS.map(async ({ type, modelUrl }) => {
+            CONTAINER_TYPE_OPTIONS.map(async ({ type, modelUrl }) => {
                 try {
                     const previewImage = await renderModelPreviewToPng(modelUrl);
                     return [type, previewImage] as const;
@@ -189,18 +186,98 @@ function downloadBufferAsFile(buffer: BlobPart, filename: string) {
     URL.revokeObjectURL(url);
 }
 
-function mergeAcrossSheet(
-    worksheet: {
-        mergeCells: (startRow: number, startColumn: number, endRow: number, endColumn: number) => void;
+function applyTemplateLists(
+    workbook: {
+        addWorksheet: (name: string) => {
+            state: string;
+            getCell: (row: number, column: number) => { value?: unknown };
+        };
+        definedNames: {
+            add: (range: string, name?: string) => void;
+        };
     },
-    row: number,
+    t: TFunction,
+    cabinetNames: string[],
 ) {
-    worksheet.mergeCells(row, 1, row, SHEET_COLUMN_COUNT);
+    const listWorksheet = workbook.addWorksheet(LIST_SHEET_NAME);
+    listWorksheet.state = 'veryHidden';
+
+    const otherLocationLabels = getOtherLocationOptionLabels(t);
+    const containerLabels = getContainerTypeOptionLabels(t);
+    const cabinetNameValues = cabinetNames.length > 0 ? cabinetNames : [''];
+
+    otherLocationLabels.forEach((label, index) => {
+        listWorksheet.getCell(index + 1, 1).value = label;
+    });
+    cabinetNameValues.forEach((name, index) => {
+        listWorksheet.getCell(index + 1, 2).value = name;
+    });
+    containerLabels.forEach((label, index) => {
+        listWorksheet.getCell(index + 1, 3).value = label;
+    });
+
+    workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$A$1:$A$${otherLocationLabels.length}`, 'other_location_options');
+    workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$B$1:$B$${cabinetNameValues.length}`, 'cabinet_name_options');
+    workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$C$1:$C$${containerLabels.length}`, 'container_type_options');
+}
+
+function applyInputValidations(
+    worksheet: {
+        getCell: (row: number, column: number) => {
+            dataValidation?: object;
+        };
+    },
+    firstInputRow: number,
+) {
+    const storageTypeColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('storage_type') + 1;
+    const storageLocationColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('storage_location') + 1;
+    const containerTypeColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('container_type') + 1;
+
+    const storageTypeColumnLetter = columnLetterFromIndex(storageTypeColumn);
+
+    for (let rowIndex = firstInputRow; rowIndex < firstInputRow + VALIDATION_ROW_COUNT; rowIndex += 1) {
+        worksheet.getCell(rowIndex, storageTypeColumn).dataValidation = {
+            type: 'list',
+            allowBlank: false,
+            showErrorMessage: true,
+            showInputMessage: true,
+            formulae: ['"other,cabinet"'],
+            promptTitle: '보관유형',
+            prompt: 'other 또는 cabinet 중 하나를 선택하세요.',
+            errorTitle: '보관유형',
+            error: '보관유형은 other 또는 cabinet 중 하나여야 합니다.',
+        };
+
+        worksheet.getCell(rowIndex, storageLocationColumn).dataValidation = {
+            type: 'list',
+            allowBlank: false,
+            showErrorMessage: true,
+            showInputMessage: true,
+            formulae: [`INDIRECT(IF($${storageTypeColumnLetter}${rowIndex}="cabinet","cabinet_name_options","other_location_options"))`],
+            promptTitle: '보관위치',
+            prompt: 'other면 냉장고/냉동고/상온보관/벤치/후드 중 선택, cabinet이면 시약장 이름을 선택하세요.',
+            errorTitle: '보관위치',
+            error: '보관유형에 맞는 보관위치를 목록에서 선택하세요.',
+        };
+
+        worksheet.getCell(rowIndex, containerTypeColumn).dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            showErrorMessage: true,
+            showInputMessage: true,
+            formulae: ['container_type_options'],
+            promptTitle: '시약병',
+            prompt: 'storage_type이 cabinet일 때만 선택하세요. other이면 비워두세요.',
+            errorTitle: '시약병',
+            error: '시약병은 갈색병(A), 플라스틱 통(B), 유리병(C), 사각병(D) 중 하나를 선택하세요.',
+        };
+    }
 }
 
 export async function downloadInventoryTemplateWorkbook({
     headers,
     t,
+    cabinetNames,
 }: InventoryTemplateWorkbookOptions): Promise<void> {
     const [{ Workbook }, previewImages] = await Promise.all([
         import('exceljs'),
@@ -212,17 +289,20 @@ export async function downloadInventoryTemplateWorkbook({
     workbook.created = new Date();
     workbook.modified = new Date();
 
+    applyTemplateLists(workbook, t, cabinetNames);
+
     const worksheet = workbook.addWorksheet('Inventory_Template');
     worksheet.columns = [
         { width: 15 },
         { width: 15 },
         { width: 15 },
         { width: 15 },
-        { width: 15 },
-        { width: 15 },
-        { width: 15 },
-        { width: 15 },
+        { width: 10 },
+        { width: 12 },
+        { width: 12 },
         { width: 18 },
+        { width: 18 },
+        { width: 14 },
         { width: 20 },
     ];
 
@@ -233,7 +313,7 @@ export async function downloadInventoryTemplateWorkbook({
     }
     worksheet.getRow(PREVIEW_LABEL_ROW).height = 22;
 
-    mergeAcrossSheet(worksheet, 1);
+    mergeAcrossSheet(worksheet, 1, headers.length);
     const titleCell = worksheet.getCell(1, 1);
     titleCell.value = '병 종류 참고';
     titleCell.font = { bold: true, size: 14, color: { argb: 'FF0F172A' } };
@@ -244,13 +324,13 @@ export async function downloadInventoryTemplateWorkbook({
         fgColor: { argb: 'FFE2E8F0' },
     };
 
-    mergeAcrossSheet(worksheet, 2);
+    mergeAcrossSheet(worksheet, 2, headers.length);
     const descriptionCell = worksheet.getCell(2, 1);
-    descriptionCell.value = '시약장 배치에서 사용하는 4가지 병 모양입니다. 아래 이미지를 보고 어떤 병인지 확인한 뒤 입력 예시를 수정해 주세요.';
+    descriptionCell.value = '시약장 배치에 쓰는 병 4종입니다. cabinet으로 등록할 때는 아래 모양에 맞춰 시약병 열을 선택해 주세요.';
     descriptionCell.font = { size: 10, color: { argb: 'FF475569' } };
     descriptionCell.alignment = { vertical: 'middle', horizontal: 'left' };
 
-    BOTTLE_CARD_CONFIGS.forEach(({ type, labelKey, startColumn, endColumn }) => {
+    BOTTLE_CARD_LAYOUT.forEach(({ type, startColumn, endColumn }) => {
         setRangeFill(
             worksheet,
             PREVIEW_SECTION_START_ROW,
@@ -266,7 +346,7 @@ export async function downloadInventoryTemplateWorkbook({
 
         worksheet.mergeCells(PREVIEW_LABEL_ROW, startColumn, PREVIEW_LABEL_ROW, endColumn);
         const labelCell = worksheet.getCell(PREVIEW_LABEL_ROW, startColumn);
-        labelCell.value = `${t(labelKey)} (${type})`;
+        labelCell.value = getContainerTypeLabel(type, t);
         labelCell.font = { bold: true, size: 10, color: { argb: 'FF1E293B' } };
         labelCell.alignment = { vertical: 'middle', horizontal: 'center' };
         labelCell.fill = {
@@ -280,7 +360,7 @@ export async function downloadInventoryTemplateWorkbook({
         if (!previewImage) {
             worksheet.mergeCells(PREVIEW_SECTION_START_ROW, startColumn, PREVIEW_SECTION_END_ROW, endColumn);
             const placeholderCell = worksheet.getCell(PREVIEW_SECTION_START_ROW, startColumn);
-            placeholderCell.value = t(labelKey);
+            placeholderCell.value = getContainerTypeLabel(type, t);
             placeholderCell.alignment = {
                 vertical: 'middle',
                 horizontal: 'center',
@@ -302,19 +382,19 @@ export async function downloadInventoryTemplateWorkbook({
     });
 
     const guideRows = [
-        `# ${t('inventory_csv_template_guide_title')}`,
-        `# ${t('inventory_csv_template_guide_1')}`,
-        `# ${t('inventory_csv_template_guide_2')}`,
-        `# ${t('inventory_csv_template_guide_3')}`,
-        `# ${t('inventory_csv_template_guide_4_other')}`,
-        `# ${t('inventory_csv_template_guide_4_cabinet')}`,
-        `# ${t('inventory_csv_template_guide_5')}`,
+        '# [안내]',
+        '# 1) 아래 "입력 영역"의 헤더와 순서를 유지해서 작성하세요.',
+        '# 2) storage_type은 other 또는 cabinet 중 하나를 선택하세요.',
+        '# 3) storage_type이 other이면 storage_location에서 냉장고 / 냉동고 / 상온보관 / 벤치 / 후드 중 하나를 선택하세요.',
+        '# 4) storage_type이 cabinet이면 storage_location에 시약장 이름을, 시약병(container_type)에 병 종류를 선택하세요.',
+        '# 5) 시약병(container_type): 갈색병(A) / 플라스틱 통(B) / 유리병(C) / 사각병(D)',
+        '# 6) expiry_date 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
     ];
 
     guideRows.forEach((guideText, index) => {
         const rowNumber = GUIDE_START_ROW + index;
         worksheet.getRow(rowNumber).height = 20;
-        mergeAcrossSheet(worksheet, rowNumber);
+        mergeAcrossSheet(worksheet, rowNumber, headers.length);
         const cell = worksheet.getCell(rowNumber, 1);
         cell.value = guideText;
         cell.font = {
@@ -333,9 +413,9 @@ export async function downloadInventoryTemplateWorkbook({
     });
 
     const inputAreaRow = GUIDE_START_ROW + guideRows.length + 1;
-    mergeAcrossSheet(worksheet, inputAreaRow);
+    mergeAcrossSheet(worksheet, inputAreaRow, headers.length);
     const inputAreaCell = worksheet.getCell(inputAreaRow, 1);
-    inputAreaCell.value = `# ${t('inventory_csv_template_input_area')}`;
+    inputAreaCell.value = '# [입력 영역]';
     inputAreaCell.font = { bold: true, size: 11, color: { argb: 'FF0F172A' } };
     inputAreaCell.alignment = { vertical: 'middle', horizontal: 'left' };
     inputAreaCell.fill = {
@@ -361,9 +441,9 @@ export async function downloadInventoryTemplateWorkbook({
     });
 
     const sampleRows = [
-        ['Acetone', 'Sigma', 'A123', '67-64-1', '1', '500mL', 'other', t('inventory_csv_template_example_location'), '2026-12-31', t('inventory_csv_template_example_memo')],
-        ['Ethanol', 'Daejung', 'E100', '64-17-5', '2', '1L', 'other', t('inventory_csv_template_example_location'), '', ''],
-        ['HCl', 'Junsei', 'HCL500', '7647-01-0', '1', '500mL', 'cabinet', 'A421', '', t('inventory_csv_template_example_cabinet_memo')],
+        ['Acetone', 'Sigma', 'A123', '67-64-1', '1', '500mL', 'other', String(t('loc_fridge')), '', '2026-12-31', String(t('inventory_csv_template_example_memo'))],
+        ['Ethanol', 'Daejung', 'E100', '64-17-5', '2', '1L', 'other', String(t('loc_bench')), '', '', ''],
+        ['HCl', 'Junsei', 'HCL500', '7647-01-0', '1', '500mL', 'cabinet', cabinetNames[0] || 'A421', getContainerTypeLabel('A', t), '', String(t('inventory_csv_template_example_cabinet_memo'))],
     ];
 
     sampleRows.forEach((rowValues, rowIndex) => {
@@ -381,6 +461,8 @@ export async function downloadInventoryTemplateWorkbook({
             };
         });
     });
+
+    applyInputValidations(worksheet, headerRowNumber + 1);
 
     const workbookBuffer = await workbook.xlsx.writeBuffer();
     const workbookBytes = Uint8Array.from(workbookBuffer as unknown as ArrayLike<number>);

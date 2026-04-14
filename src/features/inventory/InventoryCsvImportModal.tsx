@@ -14,8 +14,16 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import { supabase } from '../../services/supabaseClient';
 import { useTranslation } from 'react-i18next';
 import { AppSelect } from '../../components/AppSelect';
+import type { ReagentTemplateType } from '../../types/fridge';
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
+import {
+    INVENTORY_IMPORT_HEADER_KEYS,
+    INVENTORY_IMPORT_TEMPLATE_HEADERS_KO,
+    findOtherLocationOption,
+    normalizeImportToken,
+    parseImportedContainerType,
+} from './inventoryImportOptions';
 
 interface InventoryCsvImportModalProps {
     isOpen: boolean;
@@ -32,6 +40,7 @@ interface ParsedCsvRow {
     rowNumber: number;
     source: Record<string, string>;
     input: CreateInventoryInput | null;
+    selectedTemplate?: ReagentTemplateType;
     status: RowStatus;
     reasons: string[];
     matchedCabinetId?: string;
@@ -46,31 +55,9 @@ interface RawCsvData {
 
 type ColumnMapping = Record<string, string>;
 
-const EXPECTED_HEADERS = [
-    'name',
-    'brand',
-    'product_number',
-    'cas_number',
-    'quantity',
-    'capacity',
-    'storage_type',
-    'storage_location',
-    'expiry_date',
-    'memo',
-];
+const EXPECTED_HEADERS = [...INVENTORY_IMPORT_HEADER_KEYS];
 
-const TEMPLATE_HEADERS_KO = [
-    '시약명',
-    '브랜드',
-    '제품번호',
-    'CAS번호',
-    '수량',
-    '용량',
-    '보관유형',
-    '보관위치',
-    '유효기간',
-    '메모',
-];
+const TEMPLATE_HEADERS_KO = [...INVENTORY_IMPORT_TEMPLATE_HEADERS_KO];
 
 const REQUIRED_MAPPING_KEYS = ['name', 'quantity', 'storage_type', 'storage_location'] as const;
 const OPTIONAL_MAPPING_KEYS = EXPECTED_HEADERS.filter(
@@ -86,6 +73,7 @@ const HEADER_ALIASES: Record<string, string[]> = {
     capacity: ['capacity', '용량'],
     storage_type: ['storage_type', 'storage type', '보관유형', '보관 유형', '보관타입', '보관 타입'],
     storage_location: ['storage_location', 'storage location', '보관위치', '보관 위치', '보관장소', '보관 장소', '위치'],
+    container_type: ['container_type', 'container type', '시약병', '병종류', '병 종류', '용기종류', '용기 종류', '용기타입', '병 타입'],
     expiry_date: ['expiry_date', 'expiry', '유효기간', '만료일'],
     memo: ['memo', '메모', '비고'],
 };
@@ -208,32 +196,33 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     };
 
     const matchLocationId = (rawLocation: string): string | null => {
-        const target = normalize(rawLocation);
-        if (!target) return null;
-        
-        const exact = locations.find(loc => normalize(loc.name) === target);
-        if (exact) return exact.id;
+        const matchedOption = findOtherLocationOption(rawLocation);
+        if (!matchedOption) return null;
 
-        const compact = target.replace(/[^a-z0-9가-힣]/gi, '');
-        const fuzzy = locations.find((loc) => {
-            const translatedName = translateLocationName(loc.name, t);
-            const normalizedName = normalize(loc.name).replace(/[^a-z0-9가-힣]/gi, '');
-            const normalizedTranslated = normalize(translatedName).replace(/[^a-z0-9]/gi, '');
-            return normalizedName === compact || normalizedTranslated === compact;
+        const allowedTokens = new Set(
+            [...matchedOption.aliases, String(t(matchedOption.labelKey))].map(normalizeImportToken),
+        );
+
+        const matchedLocation = locations.find((location) => {
+            const translatedName = translateLocationName(location.name, t);
+            return (
+                allowedTokens.has(normalizeImportToken(location.name)) ||
+                allowedTokens.has(normalizeImportToken(translatedName))
+            );
         });
-        return fuzzy?.id || null;
+
+        return matchedLocation?.id || null;
     };
 
     const matchCabinetId = (rawCabinet: string): string | null => {
         const target = normalize(rawCabinet);
         if (!target) return null;
-        const exact = cabinets.find(cab => normalize(cab.name) === target);
+
+        const exact = cabinets.find((cab) => normalize(cab.name) === target);
         if (exact) return exact.id;
-        const compact = target.replace(/[^a-z0-9가-힣]/gi, '');
-        const fuzzy = cabinets.find((cab) => {
-            const normalizedName = normalize(cab.name).replace(/[^a-z0-9가-힣]/gi, '');
-            return normalizedName === compact;
-        });
+
+        const compact = normalizeImportToken(target);
+        const fuzzy = cabinets.find((cab) => normalizeImportToken(cab.name) === compact);
         return fuzzy?.id || null;
     };
 
@@ -248,6 +237,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const capacity = (source.capacity || '').trim();
         const storageTypeRaw = (source.storage_type || '').trim();
         const storageLocationRaw = (source.storage_location || '').trim();
+        const containerTypeRaw = (source.container_type || '').trim();
         const expiryDateRaw = (source.expiry_date || '').trim();
         const memo = (source.memo || '').trim();
 
@@ -267,6 +257,26 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const cabinetId = storageType === 'cabinet' ? matchCabinetId(storageLocationRaw) : null;
         if (storageType === 'other' && !locationId) reasons.push(t('inventory_csv_reason_other_location_not_found'));
         if (storageType === 'cabinet' && !cabinetId) reasons.push(t('inventory_csv_reason_cabinet_not_found'));
+
+        const selectedTemplate = parseImportedContainerType(containerTypeRaw);
+        if (storageType === 'cabinet' && !containerTypeRaw) {
+            reasons.push(t(
+                'inventory_csv_reason_container_type_required_cabinet',
+                { defaultValue: 'storage_type이 cabinet이면 시약병(container_type)을 선택해야 합니다.' },
+            ));
+        }
+        if (storageType === 'cabinet' && containerTypeRaw && !selectedTemplate) {
+            reasons.push(t(
+                'inventory_csv_reason_container_type_invalid',
+                { defaultValue: '시약병(container_type)은 갈색병(A), 플라스틱 통(B), 유리병(C), 사각병(D) 중 하나여야 합니다.' },
+            ));
+        }
+        if (storageType === 'other' && containerTypeRaw) {
+            reasons.push(t(
+                'inventory_csv_reason_container_type_only_cabinet',
+                { defaultValue: '시약병(container_type)은 storage_type이 cabinet일 때만 입력하세요.' },
+            ));
+        }
 
         const expiryDate = toIsoDate(expiryDateRaw);
         if (expiryDateRaw && !expiryDate) {
@@ -293,6 +303,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             rowNumber,
             source,
             input,
+            selectedTemplate: selectedTemplate || undefined,
             status: reasons.length === 0 ? 'valid' : 'invalid',
             reasons,
             matchedCabinetId: cabinetId || undefined,
@@ -308,6 +319,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             await downloadInventoryTemplateWorkbook({
                 headers: TEMPLATE_HEADERS_KO,
                 t,
+                cabinetNames: cabinets.map((cabinet) => cabinet.name.trim()).filter(Boolean),
             });
         } catch (error) {
             console.error('Failed to download inventory template:', error);
@@ -559,7 +571,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                 }
 
                 if (input.storage_type === 'cabinet' && input.cabinet_id) {
-                    const template = guessTemplateFromCapacity(input.capacity || '');
+                    const template = row.selectedTemplate || guessTemplateFromCapacity(input.capacity || '');
                     const width = getWidthForTemplate(template);
                     const store = useFridgeStore.getState();
                     await store.loadCabinet(input.cabinet_id);
