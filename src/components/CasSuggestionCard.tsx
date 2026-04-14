@@ -2,11 +2,7 @@ import React from 'react';
 import { CheckCircle2, FlaskConical, Loader2, RotateCcw, Sparkles, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import type {
-    CasEvidenceCode,
-    CasResolveItemResult,
-    CasSuggestionSource,
-} from '../services/casSuggestionService';
+import type { CasResolveItemResult } from '../services/casSuggestionService';
 
 type CardState = 'checking' | 'suggestion' | 'applied' | 'unavailable';
 
@@ -19,37 +15,6 @@ interface Props {
     onUndo?: () => void;
     actionSlot?: React.ReactNode;
     className?: string;
-}
-
-const SOURCE_BADGE_STYLES: Record<CasSuggestionSource, string> = {
-    KOSHA: 'bg-blue-50 text-blue-700 border-blue-200',
-    PubChem: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    Wikidata: 'bg-amber-50 text-amber-700 border-amber-200',
-};
-
-function getEvidenceText(t: ReturnType<typeof useTranslation>['t'], code: CasEvidenceCode, inputName: string): string {
-    if (code === 'kosha_exact_name_match') {
-        return t('cas_suggestion_evidence_kosha_exact', `입력한 '${inputName}'과 KOSHA 이름이 정확히 일치했어요.`);
-    }
-    if (code === 'kosha_alias_exact_match') {
-        return t('cas_suggestion_evidence_kosha_alias', `입력한 '${inputName}'이 KOSHA 별칭과 정확히 일치했어요.`);
-    }
-    if (code === 'pubchem_canonical_exact_match') {
-        return t('cas_suggestion_evidence_pubchem_canonical', `입력한 '${inputName}'과 PubChem 정식명이 정확히 일치했어요.`);
-    }
-    if (code === 'pubchem_iupac_exact_match') {
-        return t('cas_suggestion_evidence_pubchem_iupac', `입력한 '${inputName}'과 PubChem IUPAC명이 정확히 일치했어요.`);
-    }
-    if (code === 'pubchem_synonym_exact_match') {
-        return t('cas_suggestion_evidence_pubchem_synonym', `입력한 '${inputName}'이 PubChem 동의어와 정확히 일치했어요.`);
-    }
-    if (code === 'wikidata_title_exact_match') {
-        return t('cas_suggestion_evidence_wikidata_exact', `입력한 '${inputName}'과 Wikidata 제목이 정확히 일치했어요.`);
-    }
-    if (code === 'cas_consensus') {
-        return t('cas_suggestion_evidence_consensus', '여러 출처에서 같은 CAS를 확인했어요.');
-    }
-    return code;
 }
 
 function getUnavailableText(
@@ -218,23 +183,6 @@ export const CasSuggestionCard: React.FC<Props> = ({
                     <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-700">
                         CAS {suggestion.casNumber}
                     </div>
-                    {suggestion.evidence.length > 0 && (
-                        <p className="mt-2 break-keep break-words text-[11px] leading-5 text-slate-600">
-                            {suggestion.evidence.map((item) => getEvidenceText(t, item, inputName)).join(' · ')}
-                        </p>
-                    )}
-                    {suggestion.sources.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                            {suggestion.sources.map((source) => (
-                                <span
-                                    key={source}
-                                    className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${SOURCE_BADGE_STYLES[source]}`}
-                                >
-                                    {source}
-                                </span>
-                            ))}
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
