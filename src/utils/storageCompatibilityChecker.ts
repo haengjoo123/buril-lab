@@ -15,7 +15,13 @@
  * - UC Davis Chemical Safety Guidelines
  */
 
-import type { ReagentPlacement } from '../types/fridge';
+import type {
+    ReagentPlacement,
+    StorageClassification,
+    StorageClassificationConfidence,
+    StorageClassificationEvidence,
+    StoragePlacementGroup,
+} from '../types/fridge';
 
 // ════════════════════════════════════════════
 // Types
@@ -37,21 +43,7 @@ export interface StorageWarning {
  * Storage Compatibility Group
  * Based on OSHA/NFPA hazardous material segregation classes.
  */
-export type StorageGroup =
-    | 'FLAMMABLE'
-    | 'OXIDIZER'
-    | 'INORGANIC_ACID'
-    | 'ORGANIC_ACID'
-    | 'BASE'
-    | 'TOXIC_CYANIDE'
-    | 'TOXIC_SULFIDE'
-    | 'WATER_REACTIVE'
-    | 'PYROPHORIC'
-    | 'EXPLOSIVE'
-    | 'ORGANIC_PEROXIDE'
-    | 'COMPRESSED_GAS'
-    | 'ORGANIC_SOLVENT'
-    | 'GENERAL'; // Non-hazardous or unclassified
+export type StorageGroup = StoragePlacementGroup;
 
 // ════════════════════════════════════════════
 // H-code → Storage Group Mapping
@@ -226,6 +218,49 @@ const ORGANIC_PEROXIDE_PATTERNS = [
 const matchesAny = (text: string, patterns: RegExp[]): boolean =>
     patterns.some(p => p.test(text));
 
+const STORAGE_GROUP_PRIORITY: StorageGroup[] = [
+    'PYROPHORIC',
+    'WATER_REACTIVE',
+    'ORGANIC_PEROXIDE',
+    'EXPLOSIVE',
+    'FLAMMABLE',
+    'OXIDIZER',
+    'TOXIC_CYANIDE',
+    'TOXIC_SULFIDE',
+    'COMPRESSED_GAS',
+    'INORGANIC_ACID',
+    'ORGANIC_ACID',
+    'BASE',
+    'ORGANIC_SOLVENT',
+    'GENERAL',
+];
+
+function hasIdentifyingInfo(item: ReagentPlacement): boolean {
+    const fields = [
+        item.name,
+        item.casNo,
+        item.brand,
+        item.productNumber,
+        item.notes,
+    ];
+    const joined = fields
+        .map((value) => value?.trim() ?? '')
+        .filter(Boolean)
+        .join(' ');
+
+    if (!joined) return false;
+    return !/^(unknown|unidentified|미상|이름\s*없음|\?+)$/i.test(joined);
+}
+
+export function getStorageGroupPriority(group: StorageGroup): number {
+    const index = STORAGE_GROUP_PRIORITY.indexOf(group);
+    return index === -1 ? STORAGE_GROUP_PRIORITY.length : index;
+}
+
+export function getPrimaryStorageGroup(groups: StorageGroup[]): StorageGroup {
+    return [...groups].sort((a, b) => getStorageGroupPriority(a) - getStorageGroupPriority(b))[0] || 'GENERAL';
+}
+
 /**
  * Classify a reagent into one or more storage groups.
  * Uses both H-codes (if available) and name-based pattern matching.
@@ -233,9 +268,21 @@ const matchesAny = (text: string, patterns: RegExp[]): boolean =>
  * A single reagent can belong to multiple groups
  * (e.g., nitric acid = both INORGANIC_ACID and OXIDIZER).
  */
-export function classifyStorageGroups(item: ReagentPlacement): StorageGroup[] {
+export function classifyStoragePlacement(item: ReagentPlacement): StorageClassification {
     const groups = new Set<StorageGroup>();
-    const nameText = `${item.name} ${item.notes || ''} ${item.casNo || ''}`;
+    const evidence = new Set<StorageClassificationEvidence>();
+    const nameText = `${item.name} ${item.notes || ''} ${item.casNo || ''} ${item.brand || ''} ${item.productNumber || ''}`;
+    const isIdentified = hasIdentifyingInfo(item);
+
+    if (!isIdentified) {
+        return {
+            groups: ['GENERAL'],
+            primaryGroup: 'GENERAL',
+            confidence: 'review',
+            evidence: ['insufficient_identity'],
+            needsReview: true,
+        };
+    }
 
     // 1. H-code classification (most reliable)
     if (item.hCodes && item.hCodes.length > 0) {
@@ -243,26 +290,66 @@ export function classifyStorageGroups(item: ReagentPlacement): StorageGroup[] {
             const hGroups = H_CODE_GROUPS[code];
             if (hGroups) hGroups.forEach(g => groups.add(g));
         }
+        if (groups.size > 0) {
+            evidence.add('h_codes');
+            if (item.casNo) evidence.add('cas_number');
+        }
     }
 
     // 2. Name-based classification (supplements H-codes or standalone)
-    if (matchesAny(nameText, INORGANIC_ACID_PATTERNS)) groups.add('INORGANIC_ACID');
-    if (matchesAny(nameText, ORGANIC_ACID_PATTERNS)) groups.add('ORGANIC_ACID');
-    if (matchesAny(nameText, BASE_PATTERNS)) groups.add('BASE');
-    if (matchesAny(nameText, OXIDIZER_PATTERNS)) groups.add('OXIDIZER');
+    let matchedNamePattern = false;
+    if (matchesAny(nameText, INORGANIC_ACID_PATTERNS)) {
+        groups.add('INORGANIC_ACID');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, ORGANIC_ACID_PATTERNS)) {
+        groups.add('ORGANIC_ACID');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, BASE_PATTERNS)) {
+        groups.add('BASE');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, OXIDIZER_PATTERNS)) {
+        groups.add('OXIDIZER');
+        matchedNamePattern = true;
+    }
     if (matchesAny(nameText, ORGANIC_SOLVENT_PATTERNS)) {
         groups.add('ORGANIC_SOLVENT');
         groups.add('FLAMMABLE'); // Most organic solvents are flammable
+        matchedNamePattern = true;
     }
-    if (matchesAny(nameText, CYANIDE_PATTERNS)) groups.add('TOXIC_CYANIDE');
-    if (matchesAny(nameText, SULFIDE_PATTERNS)) groups.add('TOXIC_SULFIDE');
-    if (matchesAny(nameText, WATER_REACTIVE_PATTERNS)) groups.add('WATER_REACTIVE');
-    if (matchesAny(nameText, PYROPHORIC_PATTERNS)) groups.add('PYROPHORIC');
-    if (matchesAny(nameText, ORGANIC_PEROXIDE_PATTERNS)) groups.add('ORGANIC_PEROXIDE');
+    if (matchesAny(nameText, CYANIDE_PATTERNS)) {
+        groups.add('TOXIC_CYANIDE');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, SULFIDE_PATTERNS)) {
+        groups.add('TOXIC_SULFIDE');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, WATER_REACTIVE_PATTERNS)) {
+        groups.add('WATER_REACTIVE');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, PYROPHORIC_PATTERNS)) {
+        groups.add('PYROPHORIC');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, ORGANIC_PEROXIDE_PATTERNS)) {
+        groups.add('ORGANIC_PEROXIDE');
+        matchedNamePattern = true;
+    }
+    if (matchedNamePattern) evidence.add('name_patterns');
 
     // 3. Use isAcidic/isBasic flags from chemical data
-    if (item.isAcidic && groups.size === 0) groups.add('INORGANIC_ACID');
-    if (item.isBasic && groups.size === 0) groups.add('BASE');
+    if (item.isAcidic && groups.size === 0) {
+        groups.add('INORGANIC_ACID');
+        evidence.add('acid_base_flags');
+    }
+    if (item.isBasic && groups.size === 0) {
+        groups.add('BASE');
+        evidence.add('acid_base_flags');
+    }
 
     // 4. Override: if H314 + base detected, reclassify as BASE
     if (groups.has('INORGANIC_ACID') && groups.has('BASE')) {
@@ -272,8 +359,32 @@ export function classifyStorageGroups(item: ReagentPlacement): StorageGroup[] {
         }
     }
 
-    if (groups.size === 0) groups.add('GENERAL');
-    return [...groups];
+    if (groups.size === 0) {
+        groups.add('GENERAL');
+        evidence.add('fallback_general');
+    }
+
+    const resolvedGroups = [...groups];
+    let confidence: StorageClassificationConfidence = 'medium';
+    if (evidence.has('h_codes') || evidence.has('acid_base_flags')) {
+        confidence = 'high';
+    } else if (evidence.has('name_patterns')) {
+        confidence = 'medium';
+    } else if (evidence.has('fallback_general')) {
+        confidence = 'low';
+    }
+
+    return {
+        groups: resolvedGroups,
+        primaryGroup: getPrimaryStorageGroup(resolvedGroups),
+        confidence,
+        evidence: [...evidence],
+        needsReview: confidence === 'low',
+    };
+}
+
+export function classifyStorageGroups(item: ReagentPlacement): StorageGroup[] {
+    return classifyStoragePlacement(item).groups;
 }
 
 // ════════════════════════════════════════════

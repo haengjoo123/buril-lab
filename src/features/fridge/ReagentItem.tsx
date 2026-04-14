@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -8,6 +7,7 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import * as THREE from 'three';
 import { useGLTF, Text } from '@react-three/drei';
 import { getExpiryStatus, type ExpiryLevel } from '../../utils/expiryStatus';
+import { CONTAINER_BASE_WIDTHS } from '../../utils/reagentPlacementMetrics';
 
 interface ReagentItemProps {
     item: ReagentPlacement;
@@ -19,7 +19,7 @@ interface ReagentItemProps {
     dimmed?: boolean;
 }
 
-export const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
+export { CONTAINER_BASE_WIDTHS } from '../../utils/reagentPlacementMetrics';
 
 // --- Geometries are now loaded via GLB models ---
 

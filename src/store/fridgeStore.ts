@@ -1,8 +1,19 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { FridgeState, ShelfData, ReagentPlacement } from '../types/fridge';
+import type {
+    CompatibilityPlanPreview,
+    FridgeState,
+    ReagentPlacement,
+    ShelfData,
+} from '../types/fridge';
 import { cabinetService } from '../services/cabinetService';
 import { lookupGHSByCAS } from '../services/pubchemService';
+import { buildCabinetAutoLayoutPlan } from '../utils/cabinetAutoLayoutPlanner';
+import {
+    CONTAINER_BASE_WIDTHS,
+    getItemDepthPct,
+    getItemVisualWidthPct,
+} from '../utils/reagentPlacementMetrics';
 
 export interface AutoPlaceResult {
     itemId: string;
@@ -26,22 +37,6 @@ interface FridgeStore extends FridgeState {
     enrichReagentGHS: (reagentId: string) => Promise<void>;
 }
 
-const TEMPLATE_DEPTHS = {
-    A: 0.44,
-    B: 0.35,
-    C: 0.44, // 유리병 GLB
-    D: 0.44, // 사각병 GLB (기존 바이알 박스 0.8)
-};
-
-const MESH_BASE_WIDTHS: Record<string, number> = {
-    A: 0.44,
-    B: 0.5,
-    C: 0.44,
-    D: 0.5,
-};
-
-const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
-
 const INITIAL_SHELVES: ShelfData[] = [
     { id: uuidv4(), level: 0, dividers: [], items: [] },
     { id: uuidv4(), level: 1, dividers: [], items: [] },
@@ -54,6 +49,10 @@ const DEFAULT_CABINET_HEIGHT = 9;
 const DEFAULT_CABINET_DEPTH = 2;
 const GHS_QUEUED_ITEM_IDS_BY_CABINET = new Map<string, Set<string>>();
 const GHS_IN_FLIGHT_ITEM_IDS = new Set<string>();
+
+function resetCompatibilityPlanPreview(): { compatibilityPlanPreview: CompatibilityPlanPreview | null } {
+    return { compatibilityPlanPreview: null };
+}
 
 export const useFridgeStore = create<FridgeStore>((set, get) => ({
     shelves: INITIAL_SHELVES,
@@ -75,6 +74,9 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     cabinetName: '',
     isLoadingCabinet: false,
     autoPlaceResult: null as AutoPlaceResult | null,
+    compatibilityPlanPreview: null,
+    isBuildingCompatibilityPlan: false,
+    isApplyingCompatibilityPlan: false,
 
     loadCabinet: async (cabinetId: string) => {
         const previousState = get();
@@ -84,6 +86,9 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             cabinetId,
             cabinetName: isSameCabinet ? previousState.cabinetName : '',
             shelves: isSameCabinet ? previousState.shelves : [],
+            isBuildingCompatibilityPlan: false,
+            isApplyingCompatibilityPlan: false,
+            ...resetCompatibilityPlanPreview(),
         });
         try {
             const { shelves, cabinetName, width, height, depth } = await cabinetService.getCabinetDetails(cabinetId);
@@ -93,7 +98,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 cabinetName,
                 cabinetWidth: width,
                 cabinetHeight: height,
-                cabinetDepth: depth
+                cabinetDepth: depth,
+                ...resetCompatibilityPlanPreview(),
             });
 
             // Background: enrich existing items that have CAS but no H-codes
@@ -162,14 +168,19 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         set({
             cabinetWidth: Math.max(4, Math.min(20, Math.round(newWidth))),
             cabinetHeight: Math.max(2, Math.min(15, Math.round(newHeight))),
+            ...resetCompatibilityPlanPreview(),
         });
     },
 
     setCabinetDepth: (depth) => set({
         cabinetDepth: Math.max(1, Math.min(4, Math.round(depth))),
+        ...resetCompatibilityPlanPreview(),
     }),
 
-    setCabinetAspectRatio: (ratio) => set({ cabinetAspectRatio: ratio }),
+    setCabinetAspectRatio: (ratio) => set({
+        cabinetAspectRatio: ratio,
+        ...resetCompatibilityPlanPreview(),
+    }),
 
     checkCollision: (shelfId, position, width, depthPosition = 50, templateType = 'A', ignoreItemId) => {
         const shelf = get().shelves.find(s => s.id === shelfId);
@@ -181,18 +192,23 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         if (start < 0 || end > 100) return true; // Out of bounds
 
         const state = get();
+        const cabinetWidth = state.cabinetWidth;
         const cabinetDepth = state.cabinetDepth;
 
         // Target item depth/width range (centered)
-        const targetPhysicalDepth = TEMPLATE_DEPTHS[templateType as keyof typeof TEMPLATE_DEPTHS] || 0.5;
-        const targetScale = width / (CONTAINER_BASE_WIDTHS[templateType || 'A'] || 10);
-
-        const targetVisualWidth = (MESH_BASE_WIDTHS[templateType || 'A'] || 0.5) * targetScale;
-        const targetVisualWidthPct = (targetVisualWidth / cabinetDepth) * 100; // actually cabinetWidth, but using generic bounding
+        const targetVisualWidthPct = getItemVisualWidthPct(
+            templateType as keyof typeof CONTAINER_BASE_WIDTHS,
+            width,
+            cabinetWidth
+        );
         const startVis = position + (width / 2) - (targetVisualWidthPct / 2);
         const endVis = position + (width / 2) + (targetVisualWidthPct / 2);
 
-        const targetDepthPct = (targetPhysicalDepth * targetScale / cabinetDepth) * 100;
+        const targetDepthPct = getItemDepthPct(
+            templateType as keyof typeof CONTAINER_BASE_WIDTHS,
+            width,
+            cabinetDepth
+        );
         const targetZStart = depthPosition - (targetDepthPct / 2);
         const targetZEnd = depthPosition + (targetDepthPct / 2);
 
@@ -201,10 +217,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             if (item.id === ignoreItemId) continue;
 
             // X-axis Overlap Check
-            const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
-            const itemVisualWidth = (MESH_BASE_WIDTHS[item.template] || 0.5) * itemScale;
-            // Note: cabinetWidth should really be used here for X axis.
-            const itemVisualWidthPct = (itemVisualWidth / cabinetDepth) * 100;
+            const itemVisualWidthPct = getItemVisualWidthPct(item.template, item.width, cabinetWidth);
             const itemStartVis = item.position + (item.width / 2) - (itemVisualWidthPct / 2);
             const itemEndVis = item.position + (item.width / 2) + (itemVisualWidthPct / 2);
 
@@ -212,8 +225,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
             if (xOverlap) {
                 // Check Z-axis Overlap
-                const itemPhysicalDepth = TEMPLATE_DEPTHS[item.template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
-                const itemDepthPct = (itemPhysicalDepth * itemScale / cabinetDepth) * 100;
+                const itemDepthPct = getItemDepthPct(item.template, item.width, cabinetDepth);
                 const itemZStart = (item.depthPosition ?? 50) - (itemDepthPct / 2);
                 const itemZEnd = (item.depthPosition ?? 50) + (itemDepthPct / 2);
 
@@ -232,14 +244,16 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             level: state.shelves.length,
             dividers: [],
             items: []
-        }]
+        }],
+        ...resetCompatibilityPlanPreview(),
     })),
 
     removeShelf: (shelfId) => set(state => {
         if (state.shelves.length === 0) return state;
         const next = state.shelves.filter(s => s.id !== shelfId);
         return {
-            shelves: next.map((s, i) => ({ ...s, level: i }))
+            shelves: next.map((s, i) => ({ ...s, level: i })),
+            ...resetCompatibilityPlanPreview(),
         };
     }),
 
@@ -248,7 +262,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             const hasNear = s.dividers.some(d => Math.abs(d - position) < 2);
             if (hasNear) return s;
             return { ...s, dividers: [...s.dividers, position].sort((a, b) => a - b) };
-        })
+        }),
+        ...resetCompatibilityPlanPreview(),
     })),
 
     removeVerticalPanel: () => set(state => {
@@ -259,7 +274,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             shelves: state.shelves.map(s => ({
                 ...s,
                 dividers: s.dividers.filter(p => Math.abs(p - maxPos) >= 2)
-            }))
+            })),
+            ...resetCompatibilityPlanPreview(),
         };
     }),
 
@@ -267,7 +283,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         shelves: state.shelves.map(s => s.id === shelfId ? {
             ...s,
             dividers: [...s.dividers, position].sort((a, b) => a - b)
-        } : s)
+        } : s),
+        ...resetCompatibilityPlanPreview(),
     })),
 
     moveDivider: (shelfId, index, newPosition) => set(state => ({
@@ -280,14 +297,16 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             // TODO: Add Logic to not cross other dividers if needed
             newDividers[index] = newPosition;
             return { ...s, dividers: newDividers.sort((a, b) => a - b) };
-        })
+        }),
+        ...resetCompatibilityPlanPreview(),
     })),
 
     removeDivider: (shelfId, index) => set(state => ({
         shelves: state.shelves.map(s => s.id === shelfId ? {
             ...s,
             dividers: s.dividers.filter((_, i) => i !== index)
-        } : s)
+        } : s),
+        ...resetCompatibilityPlanPreview(),
     })),
 
     placeReagent: (shelfId, itemData) => {
@@ -303,7 +322,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             shelves: state.shelves.map(s => s.id === shelfId ? {
                 ...s,
                 items: [...s.items, newItem]
-            } : s)
+            } : s),
+            ...resetCompatibilityPlanPreview(),
         }));
 
         // Background: enrich with PubChem GHS data if CAS is available
@@ -345,7 +365,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                     return { ...s, items: [...s.items, { ...item!, shelfId: newShelfId, position: newPosition, depthPosition: depthPos }] };
                 }
                 return s;
-            })
+            }),
+            ...resetCompatibilityPlanPreview(),
         }));
         return true;
     },
@@ -354,19 +375,83 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         shelves: state.shelves.map(s => ({
             ...s,
             items: s.items.filter(i => i.id !== id)
-        }))
+        })),
+        ...resetCompatibilityPlanPreview(),
     })),
 
     clearCabinet: () => set(state => ({
         shelves: state.shelves.map(s => ({
             ...s,
             items: []
-        }))
+        })),
+        ...resetCompatibilityPlanPreview(),
     })),
 
     setSelectedReagentId: (id) => set({ selectedReagentId: id }),
     setHighlightedItemId: (id) => set({ highlightedItemId: id }),
     clearAutoPlaceResult: () => set({ autoPlaceResult: null }),
+
+    buildCompatibilityPlan: async () => {
+        set({
+            isBuildingCompatibilityPlan: true,
+            ...resetCompatibilityPlanPreview(),
+        });
+
+        try {
+            const itemsNeedingEnrichment = get().shelves
+                .flatMap((shelf) => shelf.items)
+                .filter((item) => item.casNo && (!item.hCodes || item.hCodes.length === 0));
+
+            for (const item of itemsNeedingEnrichment) {
+                await get().enrichReagentGHS(item.id);
+                await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+
+            const refreshedState = get();
+            const preview = buildCabinetAutoLayoutPlan(
+                refreshedState.shelves,
+                refreshedState.cabinetWidth,
+                refreshedState.cabinetHeight,
+                refreshedState.cabinetDepth
+            );
+
+            set({
+                compatibilityPlanPreview: preview,
+            });
+
+            return preview;
+        } catch (err) {
+            console.error('Failed to build compatibility plan', err);
+            return null;
+        } finally {
+            set({ isBuildingCompatibilityPlan: false });
+        }
+    },
+
+    applyCompatibilityPlan: async () => {
+        const preview = get().compatibilityPlanPreview;
+        if (!preview?.canApply) return false;
+
+        set({
+            isApplyingCompatibilityPlan: true,
+            shelves: preview.plannedShelves,
+            ...resetCompatibilityPlanPreview(),
+        });
+
+        try {
+            await get().saveCabinet();
+            return true;
+        } catch (err) {
+            console.error('Failed to apply compatibility plan', err);
+            return false;
+        } finally {
+            set({ isApplyingCompatibilityPlan: false });
+        }
+    },
+
+    clearCompatibilityPlan: () => set({
+        ...resetCompatibilityPlanPreview(),
+    }),
 
     autoPlaceReagent: (itemData) => {
         const state = get();
@@ -407,6 +492,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                             highlightedItemId: newItem.id,
                             autoPlaceResult: result,
                             focusedShelfId: null, // reset first so useEffect always re-fires
+                            ...resetCompatibilityPlanPreview(),
                         }));
 
                         // Set focusedShelfId in next microtask so FridgeScene's useEffect picks up the change
@@ -467,7 +553,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                             }
                             : item
                     ),
-                }))
+                })),
+                ...resetCompatibilityPlanPreview(),
             }));
 
             console.log(
@@ -490,7 +577,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                     item.id === id ? { ...item, ...updates } : item
                 )
             };
-        })
+        }),
+        ...resetCompatibilityPlanPreview(),
     })),
 
     sortShelves: (criteria: 'name' | 'type') => {
@@ -503,18 +591,12 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         const DIVIDER_MARGIN = 2; // 2% margin from dividers
 
         // --- Helper: get visual width percentage for an item ---
-        const getVisualWidthPct = (item: ReagentPlacement) => {
-            const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
-            const visualWidth = (MESH_BASE_WIDTHS[item.template] || 0.5) * itemScale;
-            return (visualWidth / cabinetWidth) * 100;
-        };
+        const getVisualWidthPct = (item: ReagentPlacement) =>
+            getItemVisualWidthPct(item.template, item.width, cabinetWidth);
 
         // --- Helper: get depth percentage for an item ---
-        const getDepthPct = (item: ReagentPlacement) => {
-            const itemPhysicalDepth = TEMPLATE_DEPTHS[item.template as keyof typeof TEMPLATE_DEPTHS] || 0.5;
-            const itemScale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
-            return (itemPhysicalDepth * itemScale / cabinetDepth) * 100 * 1.1; // 10% safety margin
-        };
+        const getDepthPct = (item: ReagentPlacement) =>
+            getItemDepthPct(item.template, item.width, cabinetDepth, 1.1); // 10% safety margin
 
         // --- Helper: build zones for a shelf from its dividers ---
         interface Zone {
@@ -730,6 +812,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 ...shelf,
                 items: shelfResults[shelf.id] || [],
             })),
+            ...resetCompatibilityPlanPreview(),
         });
     }
 }));

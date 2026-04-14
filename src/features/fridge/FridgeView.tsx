@@ -11,6 +11,7 @@ import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
+import { CabinetAutoLayoutPreviewModal } from './components/CabinetAutoLayoutPreviewModal';
 import ReagentModelPreview from './components/ReagentModelPreview';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { supabase } from '../../services/supabaseClient';
@@ -153,6 +154,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         autoPlaceReagent,
         autoPlaceResult,
         clearAutoPlaceResult,
+        compatibilityPlanPreview,
+        isBuildingCompatibilityPlan,
+        isApplyingCompatibilityPlan,
+        buildCompatibilityPlan,
+        applyCompatibilityPlan,
+        clearCompatibilityPlan,
     } = useFridgeStore();
 
     const [showModalContent, setShowModalContent] = useState(false);
@@ -268,6 +275,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     }, [autoPlaceResult, clearAutoPlaceResult, t]);
 
     useEffect(() => {
+        if (!toastMessage) return;
+        const timer = setTimeout(() => setToastMessage(null), 4000);
+        return () => clearTimeout(timer);
+    }, [toastMessage]);
+
+    useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
         const mediaQuery = window.matchMedia('(pointer: coarse)');
         const syncPointerType = () => {
@@ -361,6 +374,35 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const handleOpenStorageCompatBanner = () => {
         if (storageCompatWarningCount === 0) return;
         setStorageCompatBannerReopenToken((current) => current + 1);
+    };
+
+    const handleNameSort = () => {
+        sortShelves('name');
+        void autoSave();
+    };
+
+    const handleBuildCompatibilityPreview = async () => {
+        const preview = await buildCompatibilityPlan();
+        if (!preview) {
+            setToastMessage(t('cabinet_auto_place_failed'));
+        }
+    };
+
+    const handleApplyCompatibilityPreview = async () => {
+        const applied = await applyCompatibilityPlan();
+        if (!applied) {
+            setToastMessage(t('cabinet_auto_place_save_failed'));
+            return;
+        }
+
+        setToastMessage(t('cabinet_auto_place_success'));
+        setSaveStatus('saved');
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
+    };
+
+    const handleCancelCompatibilityPreview = () => {
+        clearCompatibilityPlan();
     };
 
     const handleReagentClick = (item: GenericContainerItem) => {
@@ -774,6 +816,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
                 {/* Storage Compatibility Warning Banner */}
                 <StorageCompatBanner reopenToken={storageCompatBannerReopenToken} />
+                <CabinetAutoLayoutPreviewModal
+                    preview={compatibilityPlanPreview}
+                    isApplying={isApplyingCompatibilityPlan}
+                    onApply={handleApplyCompatibilityPreview}
+                    onCancel={handleCancelCompatibilityPreview}
+                />
 
                 {/* Edit Mode Overlay */}
                 <ReagentEditPanel />
@@ -836,7 +884,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full flex-wrap">
                                         <span className="text-[10px] sm:text-xs text-gray-500 font-medium">{t('cabinet_sort_label')}</span>
                                         <button
-                                            onClick={() => { sortShelves('name'); autoSave(); }}
+                                            onClick={handleNameSort}
                                             disabled={shelves.length === 0}
                                             className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
                                         >
@@ -844,12 +892,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             {t('cabinet_sort_name')}
                                         </button>
                                         <button
-                                            onClick={() => { sortShelves('type'); autoSave(); }}
-                                            disabled={shelves.length === 0}
+                                            onClick={() => void handleBuildCompatibilityPreview()}
+                                            disabled={shelves.every(s => s.items.length === 0) || isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}
                                             className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
                                         >
-                                            <Layers size={12} />
-                                            {t('cabinet_sort_type')}
+                                            {isBuildingCompatibilityPlan ? <Loader2 size={12} className="animate-spin" /> : <Layers size={12} />}
+                                            {isBuildingCompatibilityPlan ? t('cabinet_auto_place_loading') : t('cabinet_auto_place_button')}
                                         </button>
                                         <div className="w-px h-5 bg-gray-200 mx-0.5" />
                                         <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg">
@@ -946,7 +994,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     <h3 className="text-sm font-semibold text-gray-700 whitespace-nowrap shrink-0">{t('cabinet_reagent_tray_title')}</h3>
                                     <div className="flex flex-1 flex-wrap items-center gap-1.5 sm:gap-2 w-full">
                                         <button
-                                            onClick={() => { sortShelves('name'); autoSave(); }}
+                                            onClick={handleNameSort}
                                             disabled={shelves.length === 0}
                                             className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
                                         >
@@ -954,12 +1002,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             {t('cabinet_sort_name')}
                                         </button>
                                         <button
-                                            onClick={() => { sortShelves('type'); autoSave(); }}
-                                            disabled={shelves.length === 0}
+                                            onClick={() => void handleBuildCompatibilityPreview()}
+                                            disabled={shelves.every(s => s.items.length === 0) || isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}
                                             className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
                                         >
-                                            <Layers size={10} />
-                                            {t('cabinet_sort_type')}
+                                            {isBuildingCompatibilityPlan ? <Loader2 size={10} className="animate-spin" /> : <Layers size={10} />}
+                                            {isBuildingCompatibilityPlan ? t('cabinet_auto_place_loading') : t('cabinet_auto_place_button')}
                                         </button>
                                         <button
                                             onClick={handleOpenStorageCompatBanner}
@@ -967,10 +1015,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             className="px-2 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 hover:text-amber-800 hover:border-amber-300 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50 disabled:hover:text-amber-700 disabled:hover:border-amber-200"
                                         >
                                             <ShieldAlert size={10} />
-                                            {t(
-                                                'btn_check_storage_compat',
-                                                i18n.language.startsWith('ko') ? '보관 호환성 확인' : 'Check storage compatibility',
-                                            )}
+                                            {t('btn_check_storage_compat')}
                                         </button>
                                         <button
                                             onClick={() => setIsClearConfirmOpen(true)}

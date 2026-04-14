@@ -16,11 +16,9 @@ import {
 import * as XLSX from 'xlsx';
 import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
-import { analyticsService } from '../../services/analyticsService';
 import { InventoryFormModal } from './InventoryFormModal';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
 import { CustomDialog } from '../../components/CustomDialog';
-import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
@@ -36,11 +34,9 @@ import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/gues
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
-import { resolveCasSuggestions, type CasResolveItemResult } from '../../services/casSuggestionService';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
-type CasReviewEntry = { item: InventoryItem; suggestion: CasResolveItemResult };
 type InventoryGroup = {
     id: string;
     items: InventoryItem[];
@@ -52,13 +48,7 @@ type InventoryGroup = {
 };
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
-const isBlankCas = (value?: string | null) => !(value || '').trim();
 const normalizeGroupCas = (value?: string | null) => (value || '').replace(/[^0-9a-z-]/gi, '').trim().toLowerCase();
-const getCasReviewCardState = (suggestion: CasResolveItemResult): 'suggestion' | 'unavailable' => (
-    suggestion.status === 'match' && (suggestion.confidence === 'high' || suggestion.confidence === 'medium')
-        ? 'suggestion'
-        : 'unavailable'
-);
 
 function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: InventorySortOption): number {
     if (sortBy === 'expiry_asc') {
@@ -228,12 +218,6 @@ export const InventoryListView: React.FC = () => {
     const [isBulkMoving, setIsBulkMoving] = useState(false);
     const [bulkMoveError, setBulkMoveError] = useState<string | null>(null);
     const [bulkMoveInfo, setBulkMoveInfo] = useState<string | null>(null);
-    const [isCasReviewOpen, setIsCasReviewOpen] = useState(false);
-    const [isCasReviewLoading, setIsCasReviewLoading] = useState(false);
-    const [isApplyingCasReview, setIsApplyingCasReview] = useState(false);
-    const [casReviewEntries, setCasReviewEntries] = useState<CasReviewEntry[]>([]);
-    const [selectedCasReviewIds, setSelectedCasReviewIds] = useState<string[]>([]);
-    const [casReviewError, setCasReviewError] = useState<string | null>(null);
     const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressTriggeredRef = useRef(false);
@@ -269,12 +253,6 @@ export const InventoryListView: React.FC = () => {
         setBulkDeleteError(null);
         setBulkMoveError(null);
         setBulkMoveInfo(null);
-        setIsCasReviewOpen(false);
-        setIsCasReviewLoading(false);
-        setIsApplyingCasReview(false);
-        setCasReviewEntries([]);
-        setSelectedCasReviewIds([]);
-        setCasReviewError(null);
         setExpandedGroupIds([]);
         setBulkMoveTargetType('other');
         setBulkMoveCabinetId('');
@@ -412,16 +390,6 @@ export const InventoryListView: React.FC = () => {
         }
         return { expiredCount, warningCount };
     }, [items]);
-    const blankCasItems = useMemo(() => items.filter((item) => isBlankCas(item.cas_number)), [items]);
-    const casReviewSuggestedEntries = useMemo(
-        () => casReviewEntries.filter((entry) => getCasReviewCardState(entry.suggestion) === 'suggestion'),
-        [casReviewEntries]
-    );
-    const casReviewBlockedEntries = useMemo(
-        () => casReviewEntries.filter((entry) => entry.suggestion.status !== 'skipped' && getCasReviewCardState(entry.suggestion) === 'unavailable'),
-        [casReviewEntries]
-    );
-    const selectedCasReviewCount = selectedCasReviewIds.length;
 
     useEffect(() => {
         const visibleGroupIdSet = new Set(
@@ -441,7 +409,7 @@ export const InventoryListView: React.FC = () => {
         setItemToDelete(item);
     };
 
-    const handleOpenCasReview = async () => {
+    /* const handleOpenCasReview = async () => {
         if (blankCasItems.length === 0 || isCasReviewLoading) return;
 
         setIsCasReviewOpen(true);
@@ -570,6 +538,7 @@ export const InventoryListView: React.FC = () => {
         }
     };
 
+    */
     const handleExportExcel = () => {
         const rowsForExport = visibleItems.map((item) => {
 
@@ -1560,6 +1529,7 @@ export const InventoryListView: React.FC = () => {
                         {t('inventory_list_title')}
                     </h1>
                     <div className="flex items-center gap-1.5">
+                        {/*
                         <button
                             onClick={handleOpenCasReview}
                             disabled={blankCasItems.length === 0 || isCasReviewLoading}
@@ -1569,6 +1539,7 @@ export const InventoryListView: React.FC = () => {
                             <Search className={`w-4 h-4 lg:w-3.5 lg:h-3.5 ${isCasReviewLoading ? 'animate-pulse' : ''}`} />
                             <span className="hidden lg:inline whitespace-nowrap">빈 CAS 보완</span>
                         </button>
+                        */}
                         <button
                             onClick={handleExportExcel}
                             title={t('inventory_excel_download_view')}
@@ -1960,7 +1931,7 @@ export const InventoryListView: React.FC = () => {
                 preventCloseWhileLoading={true}
             />
 
-            {isCasReviewOpen && (
+            {/*
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div
                         className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
@@ -2070,7 +2041,7 @@ export const InventoryListView: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            )}
+            */}
         </div>
     );
 };

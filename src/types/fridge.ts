@@ -66,6 +66,59 @@ export interface ShelfData {
     items: ReagentPlacement[];
 }
 
+export type StoragePlacementGroup =
+    | 'FLAMMABLE'
+    | 'OXIDIZER'
+    | 'INORGANIC_ACID'
+    | 'ORGANIC_ACID'
+    | 'BASE'
+    | 'TOXIC_CYANIDE'
+    | 'TOXIC_SULFIDE'
+    | 'WATER_REACTIVE'
+    | 'PYROPHORIC'
+    | 'EXPLOSIVE'
+    | 'ORGANIC_PEROXIDE'
+    | 'COMPRESSED_GAS'
+    | 'ORGANIC_SOLVENT'
+    | 'GENERAL';
+
+export type StorageClassificationConfidence = 'high' | 'medium' | 'low' | 'review';
+
+export type StorageClassificationEvidence =
+    | 'h_codes'
+    | 'acid_base_flags'
+    | 'name_patterns'
+    | 'cas_number'
+    | 'fallback_general'
+    | 'insufficient_identity';
+
+export interface StorageClassification {
+    groups: StoragePlacementGroup[];
+    primaryGroup: StoragePlacementGroup;
+    confidence: StorageClassificationConfidence;
+    evidence: StorageClassificationEvidence[];
+    needsReview: boolean;
+}
+
+export interface CompatibilityPlanIssue {
+    itemId: string;
+    itemName: string;
+    group: StoragePlacementGroup;
+    confidence: StorageClassificationConfidence;
+    messageKey: string;
+}
+
+export interface CompatibilityPlanPreview {
+    plannedShelves: ShelfData[];
+    beforeWarningCount: number;
+    afterWarningCount: number;
+    movedItemCount: number;
+    movedItemIds: string[];
+    reviewItems: CompatibilityPlanIssue[];
+    unplacedItems: CompatibilityPlanIssue[];
+    canApply: boolean;
+}
+
 export interface FridgeState {
     shelves: ShelfData[];
     mode: 'VIEW' | 'EDIT' | 'PLACE';
@@ -117,4 +170,10 @@ export interface FridgeState {
     autoPlaceReagent: (itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>) => { itemId: string; shelfLevel: number; reagentName: string } | null;
     autoPlaceResult: { itemId: string; shelfLevel: number; reagentName: string } | null;
     clearAutoPlaceResult: () => void;
+    compatibilityPlanPreview: CompatibilityPlanPreview | null;
+    isBuildingCompatibilityPlan: boolean;
+    isApplyingCompatibilityPlan: boolean;
+    buildCompatibilityPlan: () => Promise<CompatibilityPlanPreview | null>;
+    applyCompatibilityPlan: () => Promise<boolean>;
+    clearCompatibilityPlan: () => void;
 }
