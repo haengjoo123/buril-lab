@@ -3,104 +3,22 @@ import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
 import { useTranslation } from 'react-i18next';
 import { ShieldAlert, Loader2, Users } from 'lucide-react';
-import type { TFunction } from 'i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { AppSelect } from '../../components/AppSelect';
-import { translateLocationName } from '../../utils/i18nUtils';
 import { MemberManagementPanel } from './MemberManagementPanel';
+import {
+    buildAuditEventDescription,
+    formatAuditActionName,
+    formatAuditEntityName,
+    formatAuditValue,
+    getAuditChangeRows,
+    getAuditDetailSections,
+    isUuidLike,
+} from '../../utils/auditLogFormatting';
 
 type ActionFilter = 'all' | 'create' | 'update' | 'delete';
 type PeriodFilter = 'all' | 'today' | '7d';
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
-const ACTION_KEY: Record<string, string> = {
-    create: 'audit_action_create',
-    update: 'audit_action_update',
-    delete: 'audit_action_delete',
-};
-
-const ENTITY_KEY: Record<string, string> = {
-    inventory: 'audit_entity_inventory',
-    cabinet_item: 'audit_entity_cabinet_item',
-    cabinet_activity: 'audit_entity_cabinet_activity',
-    cabinet: 'audit_entity_cabinet',
-    waste_log: 'audit_entity_waste_log',
-};
-
-const FIELD_KEY: Record<string, string> = {
-    name: 'audit_field_name',
-    quantity: 'audit_field_quantity',
-    capacity: 'audit_field_capacity',
-    expiry_date: 'audit_field_expiry_date',
-    memo: 'audit_field_memo',
-    brand: 'audit_field_brand',
-    product_number: 'audit_field_product_number',
-    cas_number: 'audit_field_cas_number',
-    cas_no: 'audit_field_cas_number',
-    action_type: 'audit_field_action_type',
-    item_name: 'audit_field_item_name',
-    storage_type: 'audit_field_storage_type',
-    cabinet_id: 'audit_field_cabinet_id',
-    storage_location_id: 'audit_field_storage_location_id',
-};
-
-const toSafeText = (value: unknown, t: TFunction): string => {
-    if (value == null) return '-';
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
-    try {
-        return JSON.stringify(value);
-    } catch {
-        return t('audit_complex_data');
-    }
-};
-
-const toRecord = (value: unknown): Record<string, unknown> | null => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    return value as Record<string, unknown>;
-};
-
-const isUuidLike = (value: string): boolean =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-
-const formatFieldName = (key: string, t: TFunction): string => FIELD_KEY[key] ? t(FIELD_KEY[key]) : key;
-const formatActionName = (action: string, t: TFunction): string => ACTION_KEY[action] ? t(ACTION_KEY[action]) : action;
-const formatEntityName = (entityType: string, t: TFunction): string => ENTITY_KEY[entityType] ? t(ENTITY_KEY[entityType]) : entityType;
-
-const buildEventDescription = (log: AuditLog, t: TFunction): string => {
-    const actor = log.actor_name || t('audit_unknown_user');
-    const actionLabel = formatActionName(log.action, t);
-    const entityLabel = formatEntityName(log.entity_type, t);
-    const beforeData = toRecord(log.before_data);
-    const afterData = toRecord(log.after_data);
-
-    const itemName =
-        (afterData?.item_name as string | undefined) ||
-        (afterData?.name as string | undefined) ||
-        (beforeData?.item_name as string | undefined) ||
-        (beforeData?.name as string | undefined);
-
-    const context = log.location_context && !isUuidLike(log.location_context) ? log.location_context : null;
-    const location = translateLocationName(context, t);
-
-    if (itemName && location) {
-        return t('audit_event_item_location', { actor, item: itemName, location, action: actionLabel });
-    }
-    if (itemName) {
-        return t('audit_event_item', { actor, item: itemName, action: actionLabel });
-    }
-    return t('audit_event_entity', { actor, entity: entityLabel, action: actionLabel });
-};
-
-const getChangedFields = (log: AuditLog, t: TFunction): string[] => {
-    const diffData = toRecord(log.diff_data);
-    if (!diffData) return [];
-    return Object.entries(diffData).slice(0, 4).map(([key, rawValue]) => {
-        const valueRecord = toRecord(rawValue);
-        const fromValue = valueRecord?.from;
-        const toValue = valueRecord?.to;
-        return `${formatFieldName(key, t)}: ${toSafeText(fromValue, t)} -> ${toSafeText(toValue, t)}`;
-    });
-};
 
 type AdminTab = 'members' | 'audit';
 
@@ -152,23 +70,18 @@ export const GlobalAuditLogsView: React.FC = () => {
             const trimmedKeyword = keyword.trim().toLowerCase();
             if (!trimmedKeyword) return true;
 
-            const afterData = toRecord(log.after_data);
-            const beforeData = toRecord(log.before_data);
             const searchable = [
                 log.actor_name || '',
                 log.entity_type,
                 log.entity_id,
-                formatActionName(log.action, t),
-                (afterData?.item_name as string | undefined) || '',
-                (afterData?.name as string | undefined) || '',
-                (beforeData?.item_name as string | undefined) || '',
-                (beforeData?.name as string | undefined) || '',
+                formatAuditActionName(log.action, t),
+                buildAuditEventDescription(log, t, i18n.language),
                 log.location_context || '',
             ].join(' ').toLowerCase();
 
             return searchable.includes(trimmedKeyword);
         });
-    }, [actionFilter, entityFilter, keyword, logs, periodFilter, t]);
+    }, [actionFilter, entityFilter, i18n.language, keyword, logs, periodFilter, t]);
 
     const summary = useMemo(() => {
         const actors = new Set(filteredLogs.map(log => log.actor_name).filter(Boolean));
@@ -196,7 +109,7 @@ export const GlobalAuditLogsView: React.FC = () => {
         { value: 'all', label: t('audit_filter_all_entities') },
         ...entityOptions.map((entity) => ({
             value: entity,
-            label: formatEntityName(entity, t),
+            label: formatAuditEntityName(entity, t),
         })),
     ]), [entityOptions, t]);
 
@@ -218,7 +131,7 @@ export const GlobalAuditLogsView: React.FC = () => {
                 : action === 'update'
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-700';
-        return <span className={`px-2 py-0.5 rounded text-xs font-bold ${className}`}>{formatActionName(action, t)}</span>;
+        return <span className={`px-2 py-0.5 rounded text-xs font-bold ${className}`}>{formatAuditActionName(action, t)}</span>;
     };
 
     if (isLoading && activeTab === 'audit') {
@@ -319,59 +232,90 @@ export const GlobalAuditLogsView: React.FC = () => {
                     </div>
 
                     <div className="space-y-3">
-                        {filteredLogs.map(log => (
-                            <div key={log.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2">
-                                <div className="flex justify-between items-start gap-2">
-                                    <div className="flex flex-col gap-1">
-                                        <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">{buildEventDescription(log, t)}</div>
-                                        <div className="text-xs text-slate-500">
-                                            {t('audit_entity_type_label')} {formatEntityName(log.entity_type, t)}
-                                            {log.location_context && !isUuidLike(log.location_context) ? `${t('audit_location_label')}${translateLocationName(log.location_context, t)}` : ''}
+                        {filteredLogs.map(log => {
+                            const changeRows = getAuditChangeRows(log, t, i18n.language).slice(0, 4);
+                            const detailSections = getAuditDetailSections(log, t, i18n.language);
+                            const locationText = typeof log.location_context === 'string' && !isUuidLike(log.location_context)
+                                ? formatAuditValue('location_context', log.location_context, t, i18n.language)
+                                : null;
+                            const detailToggleLabel = expandedLogIds[log.id]
+                                ? (i18n.language.startsWith('ko') ? '상세 닫기' : 'Hide details')
+                                : (i18n.language.startsWith('ko') ? '상세 보기' : 'Show details');
+
+                            return (
+                                <div key={log.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-2">
+                                    <div className="flex justify-between items-start gap-2">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="font-semibold text-sm text-slate-800 dark:text-slate-100">
+                                                {buildAuditEventDescription(log, t, i18n.language)}
+                                            </div>
+                                            <div className="text-xs text-slate-500">
+                                                {t('audit_entity_type_label')} {formatAuditEntityName(log.entity_type, t)}
+                                                {locationText ? `${t('audit_location_label')}${locationText}` : ''}
+                                            </div>
                                         </div>
+                                        <span className="text-xs text-slate-500">
+                                            {new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}
+                                        </span>
                                     </div>
-                                    <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
+                                    <div className="flex items-center gap-2">
+                                        {renderActionChip(log.action)}
+                                        <span className="text-xs text-slate-600 dark:text-slate-300">
+                                            {t('audit_actor_label')} {log.actor_name || t('audit_unknown')}
+                                        </span>
+                                    </div>
+
+                                    {changeRows.length > 0 && (
+                                        <div className="mt-1 bg-slate-50 dark:bg-slate-900 p-2 rounded text-xs">
+                                            <div className="font-medium text-slate-700 dark:text-slate-300 mb-1">{t('audit_change_summary')}</div>
+                                            <div className="space-y-1">
+                                                {changeRows.map((row) => (
+                                                    <div key={row.key} className="flex flex-wrap items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                                                        <span className="font-medium text-slate-500 dark:text-slate-400">{row.label}</span>
+                                                        <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-600 line-through dark:bg-red-950/40 dark:text-red-300">
+                                                            {row.fromText}
+                                                        </span>
+                                                        <span className="text-slate-400">→</span>
+                                                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                                            {row.toText}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {detailSections.length > 0 && (
+                                        <>
+                                            <button
+                                                onClick={() => toggleExpand(log.id)}
+                                                className="text-xs text-blue-600 hover:text-blue-700 w-fit"
+                                            >
+                                                {detailToggleLabel}
+                                            </button>
+
+                                            {expandedLogIds[log.id] && (
+                                                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {detailSections.map((section) => (
+                                                        <div key={section.key} className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-[11px]">
+                                                            <div className="font-semibold text-slate-700 dark:text-slate-300 mb-2">{section.title}</div>
+                                                            <div className="space-y-1.5">
+                                                                {section.rows.map((row) => (
+                                                                    <div key={row.key} className="flex items-start justify-between gap-3">
+                                                                        <span className="text-slate-500 dark:text-slate-400">{row.label}</span>
+                                                                        <span className="text-right text-slate-700 break-all dark:text-slate-200">{row.value}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    {renderActionChip(log.action)}
-                                    <span className="text-xs text-slate-600 dark:text-slate-300">
-                                        {t('audit_actor_label')} {log.actor_name || t('audit_unknown')}
-                                    </span>
-                                </div>
-
-                                {getChangedFields(log, t).length > 0 && (
-                                    <div className="mt-1 bg-slate-50 dark:bg-slate-900 p-2 rounded text-xs">
-                                        <div className="font-medium text-slate-700 dark:text-slate-300 mb-1">{t('audit_change_summary')}</div>
-                                        {getChangedFields(log, t).map((line, index) => (
-                                            <div key={index} className="text-slate-600 dark:text-slate-300">{line}</div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                <button
-                                    onClick={() => toggleExpand(log.id)}
-                                    className="text-xs text-blue-600 hover:text-blue-700 w-fit"
-                                >
-                                    {expandedLogIds[log.id] ? t('audit_detail_hide') : t('audit_detail_show')}
-                                </button>
-
-                                {expandedLogIds[log.id] && (
-                                    <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-[11px]">
-                                            <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">{t('audit_before')}</div>
-                                            <pre className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto">
-                                                {JSON.stringify(log.before_data, null, 2)}
-                                            </pre>
-                                        </div>
-                                        <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-[11px]">
-                                            <div className="font-semibold text-slate-700 dark:text-slate-300 mb-1">{t('audit_after')}</div>
-                                            <pre className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-36 overflow-y-auto">
-                                                {JSON.stringify(log.after_data, null, 2)}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                            );
+                        })}
                         {filteredLogs.length === 0 && (
                             <EmptyState variant="audit" subtitle={t('audit_empty')} />
                         )}
