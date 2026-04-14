@@ -2,6 +2,7 @@ import { XMLParser } from 'fast-xml-parser';
 
 import type {
     CasEvidenceCode,
+    CasResolveCandidateOption,
     CasResolveItemInput,
     CasResolveItemResult,
     CasSuggestionConfidence,
@@ -21,7 +22,7 @@ type Candidate = {
 
 type SourceLookup =
     | { kind: 'none' }
-    | { kind: 'ambiguous' }
+    | { kind: 'ambiguous'; candidates: Candidate[] }
     | { kind: 'match'; candidate: Candidate };
 
 const PUBCHEM_BASE_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
@@ -119,6 +120,27 @@ function mergeCandidate(base: Candidate, additions: Partial<Candidate>): Candida
     };
 }
 
+function toCandidateOptions(candidates: Candidate[]): CasResolveCandidateOption[] {
+    const seen = new Set<string>();
+    const options: CasResolveCandidateOption[] = [];
+
+    for (const candidate of candidates) {
+        const key = `${candidate.casNumber}|${candidate.canonicalName || ''}|${candidate.localizedName || ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        options.push({
+            casNumber: candidate.casNumber,
+            canonicalName: candidate.canonicalName,
+            localizedName: candidate.localizedName,
+            matchedAlias: candidate.matchedAlias,
+            confidence: candidate.confidence,
+        });
+        if (options.length >= 3) break;
+    }
+
+    return options;
+}
+
 async function fetchJson<T>(url: string): Promise<T | null> {
     const response = await fetch(url, {
         headers: {
@@ -190,7 +212,18 @@ async function searchPubChemExact(query: string): Promise<SourceLookup> {
     if (!record) return { kind: 'none' };
 
     if (record.casNumbers.length === 0) return { kind: 'none' };
-    if (record.casNumbers.length > 1) return { kind: 'ambiguous' };
+    if (record.casNumbers.length > 1) {
+        return {
+            kind: 'ambiguous',
+            candidates: record.casNumbers.slice(0, 3).map((casNumber) => ({
+                casNumber,
+                canonicalName: record.title || record.iupacName || query.trim(),
+                evidence: [],
+                sources: ['PubChem'],
+                confidence: 'medium',
+            })),
+        };
+    }
 
     const normalizedQuery = normalizeName(query);
     const matchedCanonical = record.title && normalizeName(record.title) === normalizedQuery;
@@ -387,6 +420,7 @@ async function resolveSingleFallback(item: CasResolveItemInput): Promise<CasReso
         return toResult(item, {
             status: 'ambiguous',
             matchedInput,
+            alternatives: toCandidateOptions(pubchemLookup.candidates),
             evidence: [],
             sources: [],
             confidence: 'low',

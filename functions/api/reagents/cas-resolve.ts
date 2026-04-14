@@ -41,10 +41,19 @@ interface CasResolveItemResult {
   localizedName?: string
   matchedInput: string
   matchedAlias?: string
+  alternatives?: CandidateOption[]
   evidence: CasEvidenceCode[]
   sources: CasSuggestionSource[]
   confidence: CasSuggestionConfidence
   reason?: CasReasonCode
+}
+
+interface CandidateOption {
+  casNumber: string
+  canonicalName?: string
+  localizedName?: string
+  matchedAlias?: string
+  confidence: CasSuggestionConfidence
 }
 
 interface KOSHASearchItem {
@@ -65,7 +74,7 @@ interface Candidate {
 
 type SourceLookup =
   | { kind: 'none' }
-  | { kind: 'ambiguous' }
+  | { kind: 'ambiguous'; candidates: Candidate[] }
   | { kind: 'match'; candidate: Candidate }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -168,6 +177,27 @@ function mergeCandidate(base: Candidate, additions: Partial<Candidate>): Candida
   }
 }
 
+function toCandidateOptions(candidates: Candidate[]): CandidateOption[] {
+  const seen = new Set<string>()
+  const options: CandidateOption[] = []
+
+  for (const candidate of candidates) {
+    const key = `${candidate.casNumber}|${candidate.canonicalName || ''}|${candidate.localizedName || ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    options.push({
+      casNumber: candidate.casNumber,
+      canonicalName: candidate.canonicalName,
+      localizedName: candidate.localizedName,
+      matchedAlias: candidate.matchedAlias,
+      confidence: candidate.confidence,
+    })
+    if (options.length >= 3) break
+  }
+
+  return options
+}
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   const response = await fetch(url, {
     headers: {
@@ -253,7 +283,26 @@ async function searchKoshaExact(query: string, apiKey?: string): Promise<SourceL
 
   const uniqueCasNumbers = unique(exactMatches.map((item) => item.casNumber))
   if (uniqueCasNumbers.length === 0) return { kind: 'none' }
-  if (uniqueCasNumbers.length > 1) return { kind: 'ambiguous' }
+  if (uniqueCasNumbers.length > 1) {
+    return {
+      kind: 'ambiguous',
+      candidates: toCandidateOptions(exactMatches.map((item) => ({
+        casNumber: item.casNumber,
+        localizedName: item.chemNameKor,
+        evidence: [item.evidence],
+        sources: ['KOSHA'],
+        confidence: 'medium',
+      }))).map((option) => ({
+        casNumber: option.casNumber,
+        canonicalName: option.canonicalName,
+        localizedName: option.localizedName,
+        matchedAlias: option.matchedAlias,
+        evidence: [],
+        sources: ['KOSHA'],
+        confidence: option.confidence,
+      })),
+    }
+  }
 
   const winner = exactMatches[0]
   return {
@@ -322,7 +371,16 @@ async function searchPubChemExact(query: string): Promise<SourceLookup> {
     return { kind: 'none' }
   }
   if (record.casNumbers.length > 1) {
-    return { kind: 'ambiguous' }
+    return {
+      kind: 'ambiguous',
+      candidates: record.casNumbers.slice(0, 3).map((casNumber) => ({
+        casNumber,
+        canonicalName: record.title || record.iupacName || query.trim(),
+        evidence: [],
+        sources: ['PubChem'],
+        confidence: 'medium',
+      })),
+    }
   }
 
   const normalizedQuery = normalizeName(query)
@@ -519,9 +577,15 @@ async function resolveSuggestion(input: CasResolveItemInput, env: Env): Promise<
   ])
 
   if (koshaLookup.kind === 'ambiguous' || pubchemLookup.kind === 'ambiguous') {
+    const alternatives = toCandidateOptions([
+      ...(koshaLookup.kind === 'ambiguous' ? koshaLookup.candidates : []),
+      ...(pubchemLookup.kind === 'ambiguous' ? pubchemLookup.candidates : []),
+    ])
+
     return {
       status: 'ambiguous',
       matchedInput,
+      alternatives,
       evidence: [],
       sources: [],
       confidence: 'low',

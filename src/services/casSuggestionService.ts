@@ -19,6 +19,14 @@ export type CasReasonCode =
     | 'source_conflict'
     | 'low_confidence';
 
+export interface CasResolveCandidateOption {
+    casNumber: string;
+    canonicalName?: string;
+    localizedName?: string;
+    matchedAlias?: string;
+    confidence: CasSuggestionConfidence;
+}
+
 export interface CasResolveItemInput {
     id: string;
     inputName: string;
@@ -36,6 +44,7 @@ export interface CasResolveItemResult {
     localizedName?: string;
     matchedInput: string;
     matchedAlias?: string;
+    alternatives?: CasResolveCandidateOption[];
     evidence: CasEvidenceCode[];
     sources: CasSuggestionSource[];
     confidence: CasSuggestionConfidence;

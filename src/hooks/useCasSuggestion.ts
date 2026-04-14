@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     resolveSingleCasSuggestion,
+    type CasResolveCandidateOption,
     type CasResolveItemResult,
     type CasSuggestionConfidence,
 } from '../services/casSuggestionService';
@@ -26,7 +27,7 @@ interface UseCasSuggestionResult {
     triggerLookupFromBlur: () => void;
     triggerLookupFromCasFocus: () => void;
     dismissSuggestion: () => void;
-    applySuggestion: () => void;
+    applySuggestion: (candidate?: CasResolveCandidateOption) => void;
     undoAppliedSuggestion: () => void;
     appliedSuggestion: CasResolveItemResult | null;
     isSuggestedCasApplied: boolean;
@@ -40,8 +41,31 @@ function normalizeLookupName(value?: string | null): string {
 }
 
 function canDisplaySuggestion(result: CasResolveItemResult | null): boolean {
-    if (!result || result.status !== 'match') return false;
-    return result.confidence === 'high' || result.confidence === 'medium';
+    if (!result) return false;
+    if (result.status === 'match') {
+        return result.confidence === 'high' || result.confidence === 'medium';
+    }
+    if (result.status === 'ambiguous') {
+        return (result.alternatives?.length || 0) > 0;
+    }
+    return false;
+}
+
+function materializeCandidateSuggestion(
+    source: CasResolveItemResult,
+    candidate: CasResolveCandidateOption,
+): CasResolveItemResult {
+    return {
+        ...source,
+        status: 'match',
+        casNumber: candidate.casNumber,
+        canonicalName: candidate.canonicalName || source.canonicalName,
+        localizedName: candidate.localizedName || source.localizedName,
+        matchedAlias: candidate.matchedAlias || source.matchedAlias,
+        confidence: candidate.confidence,
+        alternatives: undefined,
+        reason: undefined,
+    };
 }
 
 export function useCasSuggestion({
@@ -176,10 +200,17 @@ export function useCasSuggestion({
         setState('dismissed');
     }, [nameKey]);
 
-    const applySuggestion = useCallback(() => {
-        if (!suggestion?.casNumber) return;
-        onApplyCasNumber(suggestion.casNumber);
-        setAppliedSuggestion(suggestion);
+    const applySuggestion = useCallback((candidate?: CasResolveCandidateOption) => {
+        if (!suggestion) return;
+
+        const selectedSuggestion = candidate
+            ? materializeCandidateSuggestion(suggestion, candidate)
+            : suggestion;
+
+        if (!selectedSuggestion.casNumber) return;
+
+        onApplyCasNumber(selectedSuggestion.casNumber);
+        setAppliedSuggestion(selectedSuggestion);
         setState('applied');
     }, [onApplyCasNumber, suggestion]);
 
