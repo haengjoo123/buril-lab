@@ -13,7 +13,6 @@ import { type Cabinet, cabinetService } from '../../services/cabinetService';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { supabase } from '../../services/supabaseClient';
 import { useTranslation } from 'react-i18next';
-import * as XLSX from 'xlsx';
 import { AppSelect } from '../../components/AppSelect';
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
@@ -299,7 +298,8 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         };
     };
 
-    const handleTemplateDownload = () => {
+    const handleTemplateDownload = async () => {
+        const XLSX = await import('xlsx');
         // Create headers
         const headers = TEMPLATE_HEADERS_KO;
         
@@ -331,7 +331,8 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         XLSX.writeFile(workbook, 'inventory_import_template.xlsx');
     };
 
-    const handleInventoryExcelDownload = () => {
+    const handleInventoryExcelDownload = async () => {
+        const XLSX = await import('xlsx');
         const rowsForExport = items.map((item) => {
             const shelfLabel = item.storage_type === 'cabinet' && typeof item.shelf_level === 'number'
                 ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})`
@@ -379,6 +380,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
 
         try {
             const data = await file.arrayBuffer();
+            const XLSX = await import('xlsx');
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];

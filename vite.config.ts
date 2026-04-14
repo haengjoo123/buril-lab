@@ -11,6 +11,76 @@ export default defineConfig(({ command }) => ({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/xlsx')) {
+            return 'xlsx-vendor'
+          }
+
+          if (id.includes('node_modules/html2canvas')) {
+            return 'html2canvas-vendor'
+          }
+
+          if (id.includes('node_modules/jspdf')) {
+            return 'jspdf-vendor'
+          }
+
+          if (id.includes('node_modules/html2pdf.js')) {
+            return 'html2pdf-vendor'
+          }
+
+          if (
+            id.includes('node_modules/@react-three/drei') ||
+            id.includes('node_modules/three-stdlib') ||
+            id.includes('node_modules/camera-controls') ||
+            id.includes('node_modules/meshline') ||
+            id.includes('node_modules/maath') ||
+            id.includes('node_modules/troika') ||
+            id.includes('node_modules/suspend-react') ||
+            id.includes('node_modules/stats-gl')
+          ) {
+            return 'drei-vendor'
+          }
+
+          if (id.includes('node_modules/@react-three/fiber')) {
+            return 'r3f-vendor'
+          }
+
+          if (id.includes('node_modules/@react-spring/three')) {
+            return 'spring-three-vendor'
+          }
+
+          if (id.includes('node_modules/three')) {
+            return 'three-core-vendor'
+          }
+
+          if (id.includes('node_modules/lucide-react')) {
+            return 'icons-vendor'
+          }
+
+          if (id.includes('node_modules/react-router') || id.includes('node_modules/@remix-run/router')) {
+            return 'router-vendor'
+          }
+
+          if (id.includes('node_modules/@supabase/supabase-js')) {
+            return 'supabase-vendor'
+          }
+
+          if (
+            id.includes('node_modules/@google/genai') ||
+            id.includes('node_modules/openai') ||
+            id.includes('node_modules/axios') ||
+            id.includes('node_modules/cheerio') ||
+            id.includes('node_modules/fast-xml-parser')
+          ) {
+            return 'ai-vendor'
+          }
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

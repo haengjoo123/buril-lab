@@ -13,7 +13,6 @@ import {
     Upload,
     ShieldAlert
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { InventoryFormModal } from './InventoryFormModal';
@@ -539,7 +538,8 @@ export const InventoryListView: React.FC = () => {
     };
 
     */
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
+        const XLSX = await import('xlsx');
         const rowsForExport = visibleItems.map((item) => {
 
             return {

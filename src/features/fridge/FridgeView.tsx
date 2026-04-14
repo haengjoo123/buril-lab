@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { FridgeScene } from './FridgeScene';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert } from 'lucide-react';
@@ -12,7 +11,6 @@ import { cabinetService } from '../../services/cabinetService';
 import { inventoryService } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
 import { CabinetAutoLayoutPreviewModal } from './components/CabinetAutoLayoutPreviewModal';
-import ReagentModelPreview from './components/ReagentModelPreview';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
@@ -22,6 +20,29 @@ import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCas
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 import { checkCabinetCompatibility } from '../../utils/storageCompatibilityChecker';
+
+const FridgeScene = lazy(() =>
+    import('./FridgeScene').then((module) => ({ default: module.FridgeScene }))
+);
+const ReagentModelPreview = lazy(() => import('./components/ReagentModelPreview'));
+
+const SceneLoadingFallback = () => (
+    <div className="absolute inset-0 flex items-center justify-center bg-slate-50/80">
+        <div className="rounded-xl border border-slate-200 bg-white/90 p-3 text-slate-600 shadow-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+        </div>
+    </div>
+);
+
+const ReagentPreviewFallback = ({ width, height }: { width: number; height: number }) => (
+    <div
+        className="flex items-center justify-center rounded-md bg-slate-100 text-slate-400"
+        style={{ width, height }}
+        aria-hidden="true"
+    >
+        <Loader2 className="h-4 w-4 animate-spin" />
+    </div>
+);
 
 export interface FridgeViewProps {
     cabinetId: string;
@@ -119,6 +140,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [isCoarsePointer, setIsCoarsePointer] = useState(false);
     const [storageCompatBannerReopenToken, setStorageCompatBannerReopenToken] = useState(0);
+    const [isCompatibilityPreviewVisible, setIsCompatibilityPreviewVisible] = useState(false);
 
     // 모바일: 시약 내려놓은 직후 발생하는 합성 클릭(ghost click)으로 백드롭이 눌리는 것 방지
     const placementModalOpenedAtRef = React.useRef<number>(0);
@@ -142,6 +164,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setCabinetDimensions,
         setCabinetDepth,
         setCabinetAspectRatio,
+        setFocusedShelfId,
         sortShelves,
         loadCabinet,
         saveCabinet,
@@ -154,6 +177,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         autoPlaceReagent,
         autoPlaceResult,
         clearAutoPlaceResult,
+        setHighlightedItemId,
         compatibilityPlanPreview,
         isBuildingCompatibilityPlan,
         isApplyingCompatibilityPlan,
@@ -281,6 +305,14 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     }, [toastMessage]);
 
     useEffect(() => {
+        if (compatibilityPlanPreview) {
+            setIsCompatibilityPreviewVisible(true);
+            return;
+        }
+        setIsCompatibilityPreviewVisible(false);
+    }, [compatibilityPlanPreview]);
+
+    useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
         const mediaQuery = window.matchMedia('(pointer: coarse)');
         const syncPointerType = () => {
@@ -382,7 +414,17 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     };
 
     const handleBuildCompatibilityPreview = async () => {
+        if (compatibilityPlanPreview) {
+            setIsCompatibilityPreviewVisible(true);
+            return;
+        }
+
         const preview = await buildCompatibilityPlan();
+        if (preview) {
+            setIsCompatibilityPreviewVisible(true);
+            return;
+        }
+
         if (!preview) {
             setToastMessage(t('cabinet_auto_place_failed'));
         }
@@ -402,7 +444,28 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     };
 
     const handleCancelCompatibilityPreview = () => {
+        setIsCompatibilityPreviewVisible(false);
         clearCompatibilityPlan();
+    };
+
+    const handleFocusCompatibilityIssue = (itemId: string) => {
+        const targetItem = shelves.flatMap((shelf) => shelf.items).find((item) => item.id === itemId);
+        if (!targetItem) return;
+
+        setIsCompatibilityPreviewVisible(false);
+        setMode('VIEW');
+        setHighlightedItemId(itemId);
+        setFocusedShelfId(null);
+
+        queueMicrotask(() => {
+            setFocusedShelfId(targetItem.shelfId);
+        });
+
+        setTimeout(() => {
+            if (useFridgeStore.getState().highlightedItemId === itemId) {
+                useFridgeStore.getState().setHighlightedItemId(null);
+            }
+        }, 4000);
     };
 
     const handleReagentClick = (item: GenericContainerItem) => {
@@ -744,7 +807,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
                     </div>
                 )}
-                <FridgeScene />
+                <Suspense fallback={<SceneLoadingFallback />}>
+                    <FridgeScene />
+                </Suspense>
 
                 {showOnboardingGuide && (
                     <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
@@ -817,10 +882,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 {/* Storage Compatibility Warning Banner */}
                 <StorageCompatBanner reopenToken={storageCompatBannerReopenToken} />
                 <CabinetAutoLayoutPreviewModal
-                    preview={compatibilityPlanPreview}
+                    preview={isCompatibilityPreviewVisible ? compatibilityPlanPreview : null}
                     isApplying={isApplyingCompatibilityPlan}
                     onApply={handleApplyCompatibilityPreview}
                     onCancel={handleCancelCompatibilityPreview}
+                    onFocusIssue={handleFocusCompatibilityIssue}
                 />
 
                 {/* Edit Mode Overlay */}
@@ -1053,7 +1119,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                             className={`min-w-[90px] h-[100px] flex flex-col items-center justify-end gap-1 px-2 py-1.5 bg-white border rounded-lg hover:shadow-md hover:border-blue-300 cursor-pointer transition-all shrink-0 group relative ${draggedTemplate?.name === item.name ? 'ring-2 ring-blue-500 ring-offset-1 bg-blue-50' : ''}`}
                                         >
                                             <div className="group-hover:scale-105 transition-transform origin-bottom">
-                                                <ReagentModelPreview type={item.type as 'A' | 'B' | 'C' | 'D'} width={60} height={64} />
+                                                <Suspense fallback={<ReagentPreviewFallback width={60} height={64} />}>
+                                                    <ReagentModelPreview type={item.type as 'A' | 'B' | 'C' | 'D'} width={60} height={64} />
+                                                </Suspense>
                                             </div>
                                             <div className="w-full text-center">
                                                 <span className="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">
@@ -1469,7 +1537,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                                     : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                                                     }`}
                                             >
-                                                <ReagentModelPreview type={opt.type as 'A' | 'B' | 'C' | 'D'} width={36} height={44} />
+                                                <Suspense fallback={<ReagentPreviewFallback width={36} height={44} />}>
+                                                    <ReagentModelPreview type={opt.type as 'A' | 'B' | 'C' | 'D'} width={36} height={44} />
+                                                </Suspense>
                                                 <span className="text-center leading-tight">{opt.label}</span>
                                             </button>
                                         ))}

@@ -435,6 +435,19 @@ export const inventoryService = {
 
         // 동일 스펙 다건을 누락시키지 않기 위해 키 단위 "개수" 기반 dedupe 사용
         const cabinetRows = (cabData || []) as CabinetItemRowWithCabinet[];
+        const linkedCabinetRowByInventoryId = new Map<string, CabinetItemRowWithCabinet>(
+            cabinetRows
+                .filter((row): row is CabinetItemRowWithCabinet & { inventory_item_id: string } => Boolean(row.inventory_item_id))
+                .map((row) => [row.inventory_item_id, row])
+        );
+
+        for (const item of inventoryItems) {
+            if (item.storage_type !== 'cabinet') continue;
+            const linkedCabinetRow = linkedCabinetRowByInventoryId.get(item.id);
+            if (!linkedCabinetRow) continue;
+            item.shelf_id = linkedCabinetRow.shelf_id || null;
+        }
+
         const inventoryItemIdSet = new Set(inventoryItems.map((item) => item.id));
         const exactLinkedInventoryIds = new Set(
             cabinetRows
@@ -507,7 +520,7 @@ export const inventoryService = {
 
         // Resolve shelf levels for cabinet_items (shelf_id -> level)
         const shelfIds = Array.from(new Set(
-            cabinetItems
+            [...inventoryItems, ...cabinetItems]
                 .map(item => item.shelf_id)
                 .filter((id): id is string => Boolean(id))
         ));
@@ -525,7 +538,7 @@ export const inventoryService = {
                 const levelMap = new Map<string, number>(
                     levelRows.map((row) => [row.id, Number(row.level)])
                 );
-                for (const item of cabinetItems) {
+                for (const item of [...inventoryItems, ...cabinetItems]) {
                     if (!item.shelf_id) continue;
                     const level = levelMap.get(item.shelf_id);
                     item.shelf_level = Number.isFinite(level) ? (level as number) : null;

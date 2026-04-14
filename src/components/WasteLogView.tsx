@@ -10,8 +10,6 @@ import type { WasteLogSortBy } from '../services/wasteLogService';
 import { auditService, type AuditLog } from '../services/auditService';
 import { EmptyState } from './EmptyState';
 import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
-import * as XLSX from 'xlsx';
-import html2pdf from 'html2pdf.js';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { AppSelect } from './AppSelect';
 import { translateLocationName } from '../utils/i18nUtils';
@@ -507,6 +505,7 @@ export const WasteLogView: React.FC = () => {
     const handleExportExcel = async (scope: ExportScope) => {
         setIsExporting(true);
         try {
+            const XLSX = await import('xlsx');
             const allLogs = await fetchLogsForExport(scope);
 
             const data = allLogs.map(log => ({
@@ -534,6 +533,7 @@ export const WasteLogView: React.FC = () => {
     const handleExportPDF = async (scope: ExportScope) => {
         setIsExporting(true);
         try {
+            const html2pdf = (await import('html2pdf.js')).default;
             const allLogs = await fetchLogsForExport(scope);
 
             const container = document.createElement('div');

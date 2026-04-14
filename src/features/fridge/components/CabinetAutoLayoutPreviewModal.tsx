@@ -6,13 +6,13 @@ import type {
     CompatibilityPlanPreview,
     StoragePlacementGroup,
 } from '../../../types/fridge';
-import { useFridgeStore } from '../../../store/fridgeStore';
 
 interface CabinetAutoLayoutPreviewModalProps {
     preview: CompatibilityPlanPreview | null;
     isApplying: boolean;
     onApply: () => void | Promise<void>;
     onCancel: () => void;
+    onFocusIssue: (itemId: string) => void;
 }
 
 const STORAGE_GROUP_LABEL_KEYS: Record<StoragePlacementGroup, string> = {
@@ -60,13 +60,14 @@ function IssueList({
     title,
     items,
     emptyLabel,
+    onFocusIssue,
 }: {
     title: string;
     items: CompatibilityPlanIssue[];
     emptyLabel: string;
+    onFocusIssue: (itemId: string) => void;
 }) {
     const { t } = useTranslation();
-    const setHighlightedItemId = useFridgeStore((state) => state.setHighlightedItemId);
 
     return (
         <section className="rounded-2xl border border-slate-200 bg-white">
@@ -86,7 +87,7 @@ function IssueList({
                             <button
                                 key={`${issue.itemId}-${issue.messageKey}`}
                                 type="button"
-                                onClick={() => setHighlightedItemId(issue.itemId)}
+                                onClick={() => onFocusIssue(issue.itemId)}
                                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50"
                             >
                                 <div className="flex items-start justify-between gap-3">
@@ -119,6 +120,7 @@ export const CabinetAutoLayoutPreviewModal: React.FC<CabinetAutoLayoutPreviewMod
     isApplying,
     onApply,
     onCancel,
+    onFocusIssue,
 }) => {
     const { t } = useTranslation();
 
@@ -194,11 +196,13 @@ export const CabinetAutoLayoutPreviewModal: React.FC<CabinetAutoLayoutPreviewMod
                             title={t('cabinet_auto_place_review_items')}
                             items={preview.reviewItems}
                             emptyLabel={t('cabinet_auto_place_empty')}
+                            onFocusIssue={onFocusIssue}
                         />
                         <IssueList
                             title={t('cabinet_auto_place_unplaced_items')}
                             items={preview.unplacedItems}
                             emptyLabel={t('cabinet_auto_place_empty')}
+                            onFocusIssue={onFocusIssue}
                         />
                     </div>
 
