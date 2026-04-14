@@ -78,29 +78,64 @@ export function useCasSuggestion({
     capacity,
     onApplyCasNumber,
 }: UseCasSuggestionParams): UseCasSuggestionResult {
-    const [state, setState] = useState<CasSuggestionUiState>('idle');
-    const [suggestion, setSuggestion] = useState<CasResolveItemResult | null>(null);
+    const [checkingNameKey, setCheckingNameKey] = useState<string | null>(null);
+    const [resolvedSuggestionEntry, setResolvedSuggestionEntry] = useState<{
+        nameKey: string;
+        result: CasResolveItemResult | null;
+    } | null>(null);
     const [appliedSuggestion, setAppliedSuggestion] = useState<CasResolveItemResult | null>(null);
     const [debouncedLookupVersion, setDebouncedLookupVersion] = useState(0);
     const lastResolvedKeyRef = useRef('');
     const lastDismissedKeyRef = useRef('');
-    const lastNameKeyRef = useRef('');
+    const lookupRequestIdRef = useRef(0);
 
     const nameKey = useMemo(() => normalizeLookupName(inputName), [inputName]);
     const casValue = casNumber.trim();
     const appliedCas = appliedSuggestion?.casNumber?.trim() || '';
+    const suggestion = useMemo(() => {
+        if (!enabled || !nameKey || casValue) return null;
+        if (!resolvedSuggestionEntry || resolvedSuggestionEntry.nameKey !== nameKey) return null;
+        return resolvedSuggestionEntry.result;
+    }, [casValue, enabled, nameKey, resolvedSuggestionEntry]);
+    const activeAppliedSuggestion = useMemo(() => {
+        if (!enabled || !appliedSuggestion) return null;
+        if (!casValue || casValue !== appliedCas) return null;
+        return appliedSuggestion;
+    }, [appliedCas, appliedSuggestion, casValue, enabled]);
+    const state = useMemo<CasSuggestionUiState>(() => {
+        if (!enabled) return 'idle';
+        if (activeAppliedSuggestion) return 'applied';
+        if (!nameKey || casValue) return 'idle';
+        if (lastDismissedKeyRef.current === nameKey) return 'dismissed';
+        if (checkingNameKey === nameKey) return 'checking';
+        if (canDisplaySuggestion(suggestion)) return 'suggestion';
+        if (suggestion?.status === 'skipped') return 'idle';
+        return suggestion ? 'unavailable' : 'idle';
+    }, [activeAppliedSuggestion, casValue, checkingNameKey, enabled, nameKey, suggestion]);
 
     const runLookup = useCallback(async () => {
         if (!enabled) return;
         if (!nameKey || casValue) return;
         if (lastDismissedKeyRef.current === nameKey) return;
-        if (lastResolvedKeyRef.current === nameKey && (state === 'suggestion' || state === 'unavailable' || state === 'checking')) return;
+        if (
+            lastResolvedKeyRef.current === nameKey
+            && (
+                checkingNameKey === nameKey
+                || (resolvedSuggestionEntry?.nameKey === nameKey && resolvedSuggestionEntry.result !== null)
+            )
+        ) {
+            return;
+        }
 
-        setState('checking');
+        const requestId = lookupRequestIdRef.current + 1;
+        lookupRequestIdRef.current = requestId;
+        const requestNameKey = nameKey;
+
+        setCheckingNameKey(requestNameKey);
 
         try {
             const result = await resolveSingleCasSuggestion({
-                id: `${sourceType}:${nameKey}`,
+                id: `${sourceType}:${requestNameKey}`,
                 inputName,
                 sourceType,
                 brand,
@@ -108,56 +143,29 @@ export function useCasSuggestion({
                 capacity,
             });
 
-            lastResolvedKeyRef.current = nameKey;
-            setSuggestion(result);
-
-            if (canDisplaySuggestion(result)) {
-                setState('suggestion');
+            if (lookupRequestIdRef.current !== requestId) {
                 return;
             }
 
-            if (result?.status === 'skipped') {
-                setState('idle');
-                return;
-            }
-
-            setState(result ? 'unavailable' : 'idle');
+            lastResolvedKeyRef.current = requestNameKey;
+            setResolvedSuggestionEntry({ nameKey: requestNameKey, result });
         } catch (error) {
             console.warn('[CAS Suggestion] Failed to resolve suggestion:', error);
-            setSuggestion(null);
-            setState('idle');
-        }
-    }, [brand, capacity, casValue, enabled, inputName, nameKey, productNumber, sourceType, state]);
-
-    useEffect(() => {
-        if (!enabled) {
-            setSuggestion(null);
-            setAppliedSuggestion(null);
-            setState('idle');
-            return;
-        }
-
-        if (lastNameKeyRef.current !== nameKey) {
-            lastNameKeyRef.current = nameKey;
-            lastResolvedKeyRef.current = '';
-            if (state !== 'applied') {
-                setSuggestion(null);
-                setState('idle');
+            if (lookupRequestIdRef.current !== requestId) {
+                return;
+            }
+            setResolvedSuggestionEntry(null);
+        } finally {
+            if (lookupRequestIdRef.current === requestId) {
+                setCheckingNameKey((current) => current === requestNameKey ? null : current);
             }
         }
-    }, [enabled, nameKey, state]);
+    }, [brand, capacity, casValue, checkingNameKey, enabled, inputName, nameKey, productNumber, resolvedSuggestionEntry, sourceType]);
 
     useEffect(() => {
         if (!enabled) return;
         if (debouncedLookupVersion === 0) return;
-        if (!nameKey || casValue) {
-            if (state !== 'applied') {
-                setSuggestion(null);
-                setState('idle');
-            }
-            return;
-        }
-
+        if (!nameKey || casValue || state === 'applied') return;
         if (lastDismissedKeyRef.current === nameKey) return;
 
         const timer = window.setTimeout(() => {
@@ -166,17 +174,6 @@ export function useCasSuggestion({
 
         return () => window.clearTimeout(timer);
     }, [casValue, debouncedLookupVersion, enabled, nameKey, runLookup, state]);
-
-    useEffect(() => {
-        if (!appliedSuggestion) return;
-
-        if (!casValue || casValue !== appliedCas) {
-            setAppliedSuggestion(null);
-            if (state === 'applied') {
-                setState('idle');
-            }
-        }
-    }, [appliedCas, appliedSuggestion, casValue, state]);
 
     const markNameInputChanged = useCallback(() => {
         if (!enabled) return;
@@ -197,7 +194,6 @@ export function useCasSuggestion({
 
     const dismissSuggestion = useCallback(() => {
         lastDismissedKeyRef.current = nameKey;
-        setState('dismissed');
     }, [nameKey]);
 
     const applySuggestion = useCallback((candidate?: CasResolveCandidateOption) => {
@@ -211,13 +207,12 @@ export function useCasSuggestion({
 
         onApplyCasNumber(selectedSuggestion.casNumber);
         setAppliedSuggestion(selectedSuggestion);
-        setState('applied');
     }, [onApplyCasNumber, suggestion]);
 
     const undoAppliedSuggestion = useCallback(() => {
         onApplyCasNumber('');
         setAppliedSuggestion(null);
-        setState('idle');
+        setResolvedSuggestionEntry(null);
         lastResolvedKeyRef.current = '';
     }, [onApplyCasNumber]);
 
@@ -236,8 +231,8 @@ export function useCasSuggestion({
         dismissSuggestion,
         applySuggestion,
         undoAppliedSuggestion,
-        appliedSuggestion,
-        isSuggestedCasApplied: Boolean(appliedSuggestion && casValue && casValue === appliedCas),
+        appliedSuggestion: activeAppliedSuggestion,
+        isSuggestedCasApplied: Boolean(activeAppliedSuggestion),
     };
 }
 

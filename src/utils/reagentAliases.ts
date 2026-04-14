@@ -10,7 +10,7 @@ export interface AliasSeedInput {
 }
 
 function stripParentheticalSegments(value: string): string {
-  return value.replace(/\s*[\(\[].*?[\)\]]/g, ' ').replace(/\s+/g, ' ').trim()
+  return value.replace(/\s*(?:\([^)]*\)|\[[^\]]*\])/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 function stripTrailingDescriptors(value: string): string {

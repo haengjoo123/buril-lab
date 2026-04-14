@@ -19,6 +19,8 @@ function createIdleDotTrail(): number[] {
   return Array.from({ length: VOICE_ACTIVITY_DOT_COUNT }, () => 0)
 }
 
+const IDLE_DOT_TRAIL = createIdleDotTrail()
+
 export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetProps) {
   const { t } = useTranslation()
   const {
@@ -49,6 +51,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
   const isBusy = status === 'transcribing' || status === 'querying'
   const isRecording = status === 'recording'
   const isPlaying = status === 'playing'
+  const visibleDotTrail = isRecording ? dotTrail : IDLE_DOT_TRAIL
   const recordingAutoStopSeconds = Math.round(VOICE_RECORDING_MAX_DURATION_MS / 1000)
   const helperMessage = (() => {
     if (status === 'recording') {
@@ -93,7 +96,6 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
 
   useEffect(() => {
     if (!isRecording) {
-      setDotTrail(createIdleDotTrail())
       latestLevelRef.current = 0
       return
     }
@@ -173,9 +175,9 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
                     className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm"
                   >
                     <div className="flex items-center gap-1.5" aria-hidden="true">
-                      {dotTrail.map((level, index) => {
-                        const previousLevel = dotTrail[index - 1] ?? level
-                        const nextLevel = dotTrail[index + 1] ?? 0
+                      {visibleDotTrail.map((level, index) => {
+                        const previousLevel = visibleDotTrail[index - 1] ?? level
+                        const nextLevel = visibleDotTrail[index + 1] ?? 0
                         const smoothedLevel = Math.min(1, level * 0.62 + previousLevel * 0.24 + nextLevel * 0.14)
                         const ageFade = Math.max(0.58, 1 - index * 0.03)
 
@@ -208,6 +210,8 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
                   return
                 }
 
+                setDotTrail(createIdleDotTrail())
+                latestLevelRef.current = 0
                 void startRecording(submitOptions)
               }}
               disabled={!isRecordingSupported || isBusy}

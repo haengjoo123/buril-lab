@@ -26,11 +26,6 @@ type SourceLookup =
     | { kind: 'match'; candidate: Candidate };
 
 const PUBCHEM_BASE_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
-const WIKIDATA_API_URL = 'https://www.wikidata.org/w/api.php';
-const WIKIPEDIA_ENDPOINTS = [
-    { locale: 'ko', url: 'https://ko.wikipedia.org/w/api.php' },
-    { locale: 'en', url: 'https://en.wikipedia.org/w/api.php' },
-] as const;
 const CAS_PATTERN = /^\d{2,7}-\d{2}-\d$/;
 const parser = new XMLParser({
     ignoreAttributes: false,
@@ -47,10 +42,6 @@ function normalizeName(value?: string | null): string {
         .replace(/[.,]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-}
-
-function hasHangul(value: string): boolean {
-    return /[가-힣]/.test(value);
 }
 
 function shouldSkipName(rawName: string): boolean {
@@ -252,20 +243,6 @@ async function searchPubChemExact(query: string): Promise<SourceLookup> {
     };
 }
 
-async function enrichCandidateFromPubChemCas(candidate: Candidate): Promise<Candidate> {
-    const record = await fetchPubChemRecordByLookup(candidate.casNumber);
-    if (!record || !record.casNumbers.includes(candidate.casNumber)) {
-        return candidate;
-    }
-
-    return mergeCandidate(candidate, {
-        canonicalName: record.title || record.iupacName || candidate.canonicalName,
-        evidence: ['cas_consensus'],
-        sources: ['PubChem'],
-        confidence: 'high',
-    });
-}
-
 async function enrichCandidateWithKoshaName(candidate: Candidate): Promise<Candidate> {
     const params = new URLSearchParams({
         searchWrd: candidate.casNumber,
@@ -296,91 +273,6 @@ async function enrichCandidateWithKoshaName(candidate: Candidate): Promise<Candi
         sources: ['KOSHA'],
         confidence: 'high',
     });
-}
-
-async function searchWikidataExact(query: string): Promise<SourceLookup> {
-    const endpoints = hasHangul(query)
-        ? [WIKIPEDIA_ENDPOINTS[0], WIKIPEDIA_ENDPOINTS[1]]
-        : [WIKIPEDIA_ENDPOINTS[1], WIKIPEDIA_ENDPOINTS[0]];
-
-    const normalizedQuery = normalizeName(query);
-
-    for (const endpoint of endpoints) {
-        const queryParams = new URLSearchParams({
-            action: 'query',
-            prop: 'pageprops',
-            titles: query.trim(),
-            redirects: '1',
-            format: 'json',
-            origin: '*',
-        });
-
-        const pageResponse = await fetchJson<{
-            query?: {
-                pages?: Record<string, {
-                    title?: string;
-                    pageprops?: { wikibase_item?: string };
-                }>;
-            };
-        }>(`${endpoint.url}?${queryParams.toString()}`);
-
-        const pages = pageResponse?.query?.pages || {};
-        const page = Object.values(pages)[0];
-        const pageTitle = page?.title?.trim();
-        const entityId = page?.pageprops?.wikibase_item?.trim();
-
-        if (!pageTitle || !entityId || normalizeName(pageTitle) !== normalizedQuery) {
-            continue;
-        }
-
-        const entityParams = new URLSearchParams({
-            action: 'wbgetentities',
-            ids: entityId,
-            props: 'claims|labels',
-            languages: 'ko|en',
-            format: 'json',
-            origin: '*',
-        });
-
-        const entityResponse = await fetchJson<{
-            entities?: Record<string, {
-                claims?: {
-                    P231?: Array<{
-                        mainsnak?: {
-                            datavalue?: { value?: string };
-                        };
-                    }>;
-                };
-                labels?: Record<string, { value?: string }>;
-            }>;
-        }>(`${WIKIDATA_API_URL}?${entityParams.toString()}`);
-
-        const entity = entityResponse?.entities?.[entityId];
-        const claims = entity?.claims?.P231 || [];
-        const casNumbers = unique(
-            claims
-                .map((claim) => normalizeCasNumber(claim?.mainsnak?.datavalue?.value || ''))
-                .filter((value): value is string => Boolean(value)),
-        );
-
-        if (casNumbers.length !== 1) {
-            continue;
-        }
-
-        return {
-            kind: 'match',
-            candidate: {
-                casNumber: casNumbers[0],
-                canonicalName: entity?.labels?.en?.value || entity?.labels?.ko?.value || pageTitle,
-                localizedName: entity?.labels?.ko?.value || undefined,
-                evidence: ['wikidata_title_exact_match'],
-                sources: ['Wikidata'],
-                confidence: 'low',
-            },
-        };
-    }
-
-    return { kind: 'none' };
 }
 
 function toResult(item: CasResolveItemInput, result: Omit<CasResolveItemResult, 'id'>): CasResolveItemResult {
@@ -430,25 +322,6 @@ async function resolveSingleFallback(item: CasResolveItemInput): Promise<CasReso
 
     if (pubchemLookup.kind === 'match') {
         const enriched = await enrichCandidateWithKoshaName(pubchemLookup.candidate);
-        return toResult(item, {
-            status: 'match',
-            matchedInput,
-            casNumber: enriched.casNumber,
-            canonicalName: enriched.canonicalName,
-            localizedName: enriched.localizedName,
-            matchedAlias: enriched.matchedAlias,
-            evidence: enriched.evidence,
-            sources: enriched.sources,
-            confidence: enriched.confidence,
-            reason: enriched.confidence === 'low' ? 'low_confidence' : undefined,
-        });
-    }
-
-    const wikidataLookup = await searchWikidataExact(matchedInput);
-    if (wikidataLookup.kind === 'match') {
-        let enriched = await enrichCandidateFromPubChemCas(wikidataLookup.candidate);
-        enriched = await enrichCandidateWithKoshaName(enriched);
-
         return toResult(item, {
             status: 'match',
             matchedInput,

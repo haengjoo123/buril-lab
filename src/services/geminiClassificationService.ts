@@ -11,6 +11,14 @@ export interface ClassificationResult {
     label: string
 }
 
+interface ClassificationCachePayload {
+    category?: DisposalCategory | 'UNKNOWN' | null
+}
+
+interface ClassificationCacheRow {
+    response_data?: ClassificationCachePayload | null
+}
+
 function generateCacheKey(chemical: Chemical): string {
     const name = chemical.name || '';
     const cas = chemical.casNumber || '';
@@ -30,14 +38,16 @@ export async function classifyChemicalWithAI(chemical: Chemical): Promise<Classi
             .eq('cache_key', cacheKey)
             .maybeSingle();
 
-        if (data && data.response_data && (data.response_data as any).category) {
-            const category = (data.response_data as any).category as DisposalCategory;
-            if (category !== 'UNKNOWN') {
+        const cachedRow = data as ClassificationCacheRow | null;
+        const cachedCategory = cachedRow?.response_data?.category;
+
+        if (cachedCategory) {
+            if (cachedCategory !== 'UNKNOWN') {
                 console.log('[Gemini Classification] Cache hit!');
-                const { binColor, label } = getCategoryDetails(category);
+                const { binColor, label } = getCategoryDetails(cachedCategory);
                 return {
-                    category,
-                    reason: `reason_${category.toLowerCase()}`,
+                    category: cachedCategory,
+                    reason: `reason_${cachedCategory.toLowerCase()}`,
                     isAiEstimated: true,
                     binColor,
                     label,
@@ -52,9 +62,9 @@ export async function classifyChemicalWithAI(chemical: Chemical): Promise<Classi
             { chemical }
         )
 
-        const category = result.category;
+        const aiCategory = result.category;
 
-        if (!category || category === 'UNKNOWN') {
+        if (!aiCategory || aiCategory === 'UNKNOWN') {
             return null
         }
 
@@ -62,14 +72,14 @@ export async function classifyChemicalWithAI(chemical: Chemical): Promise<Classi
         await supabase.from('ai_api_cache').insert({
             api_type: 'classify',
             cache_key: cacheKey,
-            response_data: { category }
+            response_data: { category: aiCategory }
         });
 
-        const { binColor, label } = getCategoryDetails(category)
+        const { binColor, label } = getCategoryDetails(aiCategory)
 
         return {
-            category,
-            reason: `reason_${category.toLowerCase()}`,
+            category: aiCategory,
+            reason: `reason_${aiCategory.toLowerCase()}`,
             isAiEstimated: true,
             binColor,
             label,

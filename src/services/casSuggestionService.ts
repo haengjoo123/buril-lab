@@ -8,9 +8,8 @@ export type CasEvidenceCode =
     | 'pubchem_canonical_exact_match'
     | 'pubchem_iupac_exact_match'
     | 'pubchem_synonym_exact_match'
-    | 'wikidata_title_exact_match'
     | 'cas_consensus';
-export type CasSuggestionSource = 'KOSHA' | 'PubChem' | 'Wikidata';
+export type CasSuggestionSource = 'KOSHA' | 'PubChem';
 export type CasReasonCode =
     | 'missing_name'
     | 'unsupported_name_pattern'

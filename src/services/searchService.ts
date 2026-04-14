@@ -87,7 +87,7 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
     }
 
     // Regex to detect Korean characters
-    const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(query);
+    const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(query);
 
     if (hasKorean) {
         let casToSearch: string | null = null;
@@ -100,13 +100,9 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
             finalNameKo = trimmedQuery;
             console.log(`[Search] Match found in local synonyms: '${trimmedQuery}' -> ${casToSearch}`);
             // Let's resolve koshaId since we skipped KOSHA search
-            try {
-                const koshaResolved = await resolveCasChemical(casToSearch);
-                if (koshaResolved?.chemId) {
-                    koshaId = koshaResolved.chemId;
-                }
-            } catch (e) {
-                // Ignore
+            const koshaResolved = await resolveCasChemical(casToSearch).catch(() => null);
+            if (koshaResolved?.chemId) {
+                koshaId = koshaResolved.chemId;
             }
         } 
         
@@ -129,12 +125,10 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                 finalNameKo = trimmedQuery;
                 console.log(`[Search] Wikipedia resolved '${trimmedQuery}' to CAS ${casToSearch}`);
                 // Try resolving KOSHA ID with this new CAS
-                try {
-                    const koshaResolved = await resolveCasChemical(casToSearch);
-                    if (koshaResolved?.chemId) {
-                        koshaId = koshaResolved.chemId;
-                    }
-                } catch(e) {}
+                const koshaResolved = await resolveCasChemical(casToSearch).catch(() => null);
+                if (koshaResolved?.chemId) {
+                    koshaId = koshaResolved.chemId;
+                }
             }
         }
 

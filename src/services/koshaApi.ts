@@ -120,7 +120,7 @@ export const resolveKoreanChemical = async (keyword: string): Promise<{ casNo: s
         // 1. Strict Match: Only accept exact name or exact name inside parens/before parens
         // e.g. "시트르산(구연산)" -> correctly matches "구연산"
         // "구연산리튬" -> fails to match "구연산"
-        let bestMatch = list.find(item => {
+        const bestMatch = list.find(item => {
             const name = item.chemNameKor?.trim() || "";
             if (name === trimmedKw) return true;
             

@@ -3,7 +3,7 @@
  * Floating banner that shows chemical storage compatibility warnings
  * for the current cabinet. Minimizable, with per-shelf breakdown.
  */
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, ShieldAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useFridgeStore } from '../../../store/fridgeStore';
@@ -19,10 +19,12 @@ interface StorageCompatBannerProps {
 export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopenToken = 0 }) => {
     const { t } = useTranslation();
     const shelves = useFridgeStore(s => s.shelves);
-    const [isExpanded, setIsExpanded] = useState(false);
-    const [isDismissed, setIsDismissed] = useState(false);
+    const [expandedToken, setExpandedToken] = useState<number | null>(null);
+    const [dismissedToken, setDismissedToken] = useState<number | null>(null);
 
     const warningMap = useMemo(() => checkCabinetCompatibility(shelves), [shelves]);
+    const isExpanded = expandedToken === reopenToken;
+    const isDismissed = dismissedToken === reopenToken;
 
     const totalWarnings = useMemo(() => {
         let count = 0;
@@ -39,12 +41,6 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopen
     }, [warningMap]);
 
     // No warnings or dismissed → don't render
-    useEffect(() => {
-        if (reopenToken === 0) return;
-        setIsDismissed(false);
-        setIsExpanded(false);
-    }, [reopenToken]);
-
     if (totalWarnings === 0 || isDismissed) return null;
 
     const hasDanger = dangerCount > 0;
@@ -65,7 +61,7 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopen
                 {/* Header */}
                 <div
                     className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer select-none"
-                    onClick={() => setIsExpanded(!isExpanded)}
+                    onClick={() => setExpandedToken(current => current === reopenToken ? null : reopenToken)}
                 >
                     <div className={`
                         w-8 h-8 rounded-lg flex items-center justify-center shrink-0
@@ -101,7 +97,11 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopen
                             : <ChevronDown className="w-4 h-4 text-slate-400" />
                         }
                         <button
-                            onClick={(e) => { e.stopPropagation(); setIsDismissed(true); }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setDismissedToken(reopenToken);
+                                setExpandedToken(null);
+                            }}
                             className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                         >
                             <X className="w-3.5 h-3.5 text-slate-400" />
@@ -151,7 +151,7 @@ const WarningRow: React.FC<{ warning: StorageWarning }> = ({ warning }) => {
                 }
             `}
             onClick={() => {
-                const ids = [];
+                const ids: string[] = [];
                 if (warning.itemAId) ids.push(warning.itemAId);
                 if (warning.itemBId) ids.push(warning.itemBId);
                 if (ids.length > 0) setHighlightedItemId(ids);

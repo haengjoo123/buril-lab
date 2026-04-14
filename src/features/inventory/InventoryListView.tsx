@@ -5,6 +5,7 @@ import {
     Search,
     Archive,
     MapPin,
+    ChevronDown,
     Loader2,
     AlertTriangle,
     Clock,
@@ -40,9 +41,19 @@ import { resolveCasSuggestions, type CasResolveItemResult } from '../../services
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
 type CasReviewEntry = { item: InventoryItem; suggestion: CasResolveItemResult };
+type InventoryGroup = {
+    id: string;
+    items: InventoryItem[];
+    primaryItem: InventoryItem;
+    totalQuantity: number;
+    cardCount: number;
+    uniqueNames: string[];
+    uniqueCasNumbers: string[];
+};
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
 const isBlankCas = (value?: string | null) => !(value || '').trim();
+const normalizeGroupCas = (value?: string | null) => (value || '').replace(/[^0-9a-z-]/gi, '').trim().toLowerCase();
 const getCasReviewCardState = (suggestion: CasResolveItemResult): 'suggestion' | 'unavailable' => (
     suggestion.status === 'match' && (suggestion.confidence === 'high' || suggestion.confidence === 'medium')
         ? 'suggestion'
@@ -99,6 +110,82 @@ function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: Inven
     return a.name.localeCompare(b.name, 'ko');
 }
 
+function buildInventoryGroups(sourceItems: InventoryItem[], sortBy: InventorySortOption): InventoryGroup[] {
+    if (sourceItems.length === 0) return [];
+
+    const items = [...sourceItems];
+    const parents = items.map((_, index) => index);
+    const findParent = (index: number): number => {
+        let cursor = index;
+        while (parents[cursor] !== cursor) {
+            parents[cursor] = parents[parents[cursor]];
+            cursor = parents[cursor];
+        }
+        return cursor;
+    };
+    const union = (left: number, right: number) => {
+        const leftRoot = findParent(left);
+        const rightRoot = findParent(right);
+        if (leftRoot !== rightRoot) {
+            parents[rightRoot] = leftRoot;
+        }
+    };
+
+    const firstIndexByName = new Map<string, number>();
+    const firstIndexByCas = new Map<string, number>();
+
+    items.forEach((item, index) => {
+        const nameKey = normalizeText(item.name);
+        const casKey = normalizeGroupCas(item.cas_number);
+
+        if (nameKey) {
+            const existingIndex = firstIndexByName.get(nameKey);
+            if (existingIndex !== undefined) {
+                union(existingIndex, index);
+            } else {
+                firstIndexByName.set(nameKey, index);
+            }
+        }
+
+        if (casKey) {
+            const existingIndex = firstIndexByCas.get(casKey);
+            if (existingIndex !== undefined) {
+                union(existingIndex, index);
+            } else {
+                firstIndexByCas.set(casKey, index);
+            }
+        }
+    });
+
+    const groupedItems = new Map<number, InventoryItem[]>();
+    items.forEach((item, index) => {
+        const root = findParent(index);
+        const existingGroup = groupedItems.get(root);
+        if (existingGroup) {
+            existingGroup.push(item);
+            return;
+        }
+        groupedItems.set(root, [item]);
+    });
+
+    return Array.from(groupedItems.values())
+        .map((groupItems) => {
+            const sortedItems = [...groupItems].sort((left, right) => compareInventoryItems(left, right, sortBy));
+            const uniqueNames = Array.from(new Set(sortedItems.map((item) => item.name.trim()).filter(Boolean)));
+            const uniqueCasNumbers = Array.from(new Set(sortedItems.map((item) => (item.cas_number || '').trim()).filter(Boolean)));
+            return {
+                id: sortedItems.map((item) => item.id).sort().join('::'),
+                items: sortedItems,
+                primaryItem: sortedItems[0],
+                totalQuantity: sortedItems.reduce((sum, item) => sum + Math.max(1, item.quantity || 1), 0),
+                cardCount: sortedItems.length,
+                uniqueNames,
+                uniqueCasNumbers,
+            };
+        })
+        .sort((left, right) => compareInventoryItems(left.primaryItem, right.primaryItem, sortBy));
+}
+
 async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promise<void> {
     const state = useFridgeStore.getState();
     if (!state.cabinetId || state.cabinetId !== expectedCabinetId) {
@@ -147,6 +234,7 @@ export const InventoryListView: React.FC = () => {
     const [casReviewEntries, setCasReviewEntries] = useState<CasReviewEntry[]>([]);
     const [selectedCasReviewIds, setSelectedCasReviewIds] = useState<string[]>([]);
     const [casReviewError, setCasReviewError] = useState<string | null>(null);
+    const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressTriggeredRef = useRef(false);
     const bulkMoveInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -187,6 +275,7 @@ export const InventoryListView: React.FC = () => {
         setCasReviewEntries([]);
         setSelectedCasReviewIds([]);
         setCasReviewError(null);
+        setExpandedGroupIds([]);
         setBulkMoveTargetType('other');
         setBulkMoveCabinetId('');
     }, [currentLabId]);
@@ -286,6 +375,7 @@ export const InventoryListView: React.FC = () => {
     const visibleItems = useMemo(() => {
         return [...filteredItems].sort((a, b) => compareInventoryItems(a, b, sortBy));
     }, [filteredItems, sortBy]);
+    const visibleGroups = useMemo(() => buildInventoryGroups(visibleItems, sortBy), [visibleItems, sortBy]);
 
     const sortOptions = useMemo(() => ([
         { value: 'expiry_asc', label: t('inventory_sort_expiry_asc') },
@@ -332,6 +422,15 @@ export const InventoryListView: React.FC = () => {
         [casReviewEntries]
     );
     const selectedCasReviewCount = selectedCasReviewIds.length;
+
+    useEffect(() => {
+        const visibleGroupIdSet = new Set(
+            visibleGroups
+                .filter((group) => group.cardCount > 1)
+                .map((group) => group.id)
+        );
+        setExpandedGroupIds((prev) => prev.filter((groupId) => visibleGroupIdSet.has(groupId)));
+    }, [visibleGroups]);
 
     const handleEdit = (item: InventoryItem) => {
         setEditingItem(item);
@@ -538,13 +637,27 @@ export const InventoryListView: React.FC = () => {
         longPressTimerRef.current = null;
     };
 
-    const startLongPress = (itemId: string) => {
+    const addSelectedIds = (itemIds: string[]) => {
+        setSelectedItemIds((prev) => Array.from(new Set([...prev, ...itemIds])));
+    };
+
+    const toggleSelectionForIds = (itemIds: string[]) => {
+        setSelectedItemIds((prev) => {
+            const isAllSelected = itemIds.every((itemId) => prev.includes(itemId));
+            if (isAllSelected) {
+                return prev.filter((itemId) => !itemIds.includes(itemId));
+            }
+            return Array.from(new Set([...prev, ...itemIds]));
+        });
+    };
+
+    const startLongPress = (itemIds: string | string[]) => {
         if (isSelectMode) return;
         clearLongPressTimer();
         longPressTriggeredRef.current = false;
         longPressTimerRef.current = setTimeout(() => {
             setIsSelectMode(true);
-            setSelectedItemIds(prev => (prev.includes(itemId) ? prev : [...prev, itemId]));
+            addSelectedIds(Array.isArray(itemIds) ? itemIds : [itemIds]);
             setBulkDeleteError(null);
             longPressTriggeredRef.current = true;
         }, 450);
@@ -555,6 +668,14 @@ export const InventoryListView: React.FC = () => {
             prev.includes(itemId)
                 ? prev.filter(id => id !== itemId)
                 : [...prev, itemId]
+        );
+    };
+
+    const toggleGroupExpanded = (groupId: string) => {
+        setExpandedGroupIds((prev) =>
+            prev.includes(groupId)
+                ? prev.filter((id) => id !== groupId)
+                : [...prev, groupId]
         );
     };
 
@@ -1004,6 +1125,276 @@ export const InventoryListView: React.FC = () => {
         );
     };
 
+    const getStorageSummaryText = (item: InventoryItem) => {
+        if (item.storage_type === 'cabinet') {
+            const shelfLabel = typeof item.shelf_level === 'number'
+                ? t('inventory_shelf_level', { level: item.shelf_level + 1 })
+                : '';
+            return `${item.cabinet_name || t('inventory_cabinet_unassigned')}${shelfLabel ? ` · ${shelfLabel}` : ''}`;
+        }
+
+        return `${item.storage_location_icon || '📦'} ${translateLocationName(item.storage_location_name, t) || t('inventory_other_storage')}`;
+    };
+
+    const getGroupBorderClass = (group: InventoryGroup) => {
+        let highestLevel: 'warning' | 'critical' | 'expired' | null = null;
+
+        for (const item of group.items) {
+            const status = getExpiryStatus(item.expiry_date);
+            if (!status || status.level === 'ok') continue;
+            if (status.level === 'expired') return getExpiryCardBorderClass('expired');
+            if (status.level === 'critical') highestLevel = 'critical';
+            if (!highestLevel && status.level === 'warning') highestLevel = 'warning';
+        }
+
+        return highestLevel ? getExpiryCardBorderClass(highestLevel) : '';
+    };
+
+    const renderInventoryCard = (item: InventoryItem, options?: { nested?: boolean }) => {
+        const nested = options?.nested ?? false;
+        const expiryStatus = getExpiryStatus(item.expiry_date);
+        const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
+
+        return (
+            <div
+                key={item.id}
+                onPointerDown={(event) => {
+                    if (nested) event.stopPropagation();
+                    startLongPress([item.id]);
+                }}
+                onPointerUp={clearLongPressTimer}
+                onPointerCancel={clearLongPressTimer}
+                onPointerLeave={clearLongPressTimer}
+                onClick={(event) => {
+                    if (nested) event.stopPropagation();
+                    if (longPressTriggeredRef.current) {
+                        longPressTriggeredRef.current = false;
+                        return;
+                    }
+                    if (isSelectMode) {
+                        toggleItemSelection(item.id);
+                        return;
+                    }
+                    handleEdit(item);
+                }}
+                className={`${nested
+                    ? 'rounded-2xl border bg-slate-50/80 dark:bg-slate-900/30 p-4 shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
+                    : 'bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
+                    } flex flex-col gap-3 transition-colors ${cardBorderClass || 'border-slate-200 dark:border-slate-700'}`}
+            >
+                <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                        {isSelectMode && (
+                            <label
+                                className="inline-flex items-center gap-2 mb-2 text-xs text-slate-500 dark:text-slate-400"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={selectedItemIds.includes(item.id)}
+                                    onChange={() => toggleItemSelection(item.id)}
+                                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                                {t('inventory_select_item')}
+                            </label>
+                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
+                                {item.name}
+                            </h3>
+                            <div className="flex items-center gap-1.5">
+                                {renderExpiryBadge(item)}
+                                {renderRemainingBadge(item)}
+                            </div>
+                        </div>
+                        {(() => {
+                            const hazard = classifyInventoryHazard(item);
+                            if (hazard.level === 'none') return null;
+                            return (
+                                <div className="mt-2 mb-1 flex flex-wrap gap-1">
+                                    {hazard.groupLabelKeys.map(key => (
+                                        <span key={key} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
+                                            <ShieldAlert className="w-2.5 h-2.5" />
+                                            {t(key)}
+                                        </span>
+                                    ))}
+                                </div>
+                            );
+                        })()}
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            {item.cas_number && <span>CAS: {item.cas_number}</span>}
+                            {item.brand && <span>{item.brand}</span>}
+                            {item.product_number && <span>PN: {item.product_number}</span>}
+                        </div>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0">
+                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
+                            {t('inventory_group_total_quantity', { count: item.quantity })}
+                        </span>
+                        {item.capacity && (
+                            <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                {item.capacity}
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
+                    {renderStorageBadge(item)}
+
+                    {!isSelectMode && (
+                        <button
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteClick(item);
+                            }}
+                            disabled={isDeleting || isBulkDeleting}
+                            className="text-xs text-red-500 hover:text-red-700 disabled:text-red-300 disabled:cursor-not-allowed font-medium px-2 py-1"
+                        >
+                            {t('inventory_btn_delete')}
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const renderGroupedInventoryCard = (group: InventoryGroup) => {
+        const isExpanded = expandedGroupIds.includes(group.id);
+        const groupItemIds = group.items.map((item) => item.id);
+        const selectedCount = groupItemIds.filter((itemId) => selectedItemIds.includes(itemId)).length;
+        const isAllSelected = selectedCount === groupItemIds.length;
+        const groupBorderClass = getGroupBorderClass(group);
+        const uniqueStorageLabels = Array.from(new Set(group.items.map(getStorageSummaryText)));
+        const hasSingleStorage = uniqueStorageLabels.length === 1;
+        const aliasCount = Math.max(0, group.uniqueNames.length - 1);
+        const uniqueCapacities = Array.from(new Set(group.items.map((item) => (item.capacity || '').trim()).filter(Boolean)));
+        const expiryAlertCount = group.items.filter((item) => {
+            const status = getExpiryStatus(item.expiry_date);
+            return Boolean(status && status.level !== 'ok');
+        }).length;
+
+        return (
+            <div
+                key={group.id}
+                className={`bg-white dark:bg-slate-800 rounded-xl border shadow-sm ${groupBorderClass || 'border-slate-200 dark:border-slate-700'}`}
+            >
+                <div
+                    onPointerDown={() => startLongPress(groupItemIds)}
+                    onPointerUp={clearLongPressTimer}
+                    onPointerCancel={clearLongPressTimer}
+                    onPointerLeave={clearLongPressTimer}
+                    onClick={() => {
+                        if (longPressTriggeredRef.current) {
+                            longPressTriggeredRef.current = false;
+                            return;
+                        }
+                        if (isSelectMode) {
+                            toggleSelectionForIds(groupItemIds);
+                            return;
+                        }
+                        toggleGroupExpanded(group.id);
+                    }}
+                    className="p-4 flex flex-col gap-3 cursor-pointer"
+                >
+                    <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                            {isSelectMode && (
+                                <label
+                                    className="inline-flex items-center gap-2 mb-2 text-xs text-slate-500 dark:text-slate-400"
+                                    onClick={(event) => event.stopPropagation()}
+                                >
+                                    <input
+                                        ref={(input) => {
+                                            if (input) {
+                                                input.indeterminate = selectedCount > 0 && !isAllSelected;
+                                            }
+                                        }}
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        onChange={() => toggleSelectionForIds(groupItemIds)}
+                                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    {t('inventory_select_item')}
+                                </label>
+                            )}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
+                                    {group.primaryItem.name}
+                                </h3>
+                                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
+                                    {t('inventory_group_total_quantity', { count: group.totalQuantity })}
+                                </span>
+                                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                    {t('inventory_group_card_count', { count: group.cardCount })}
+                                </span>
+                                {expiryAlertCount > 0 && (
+                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        {t('inventory_group_expiry_issue_count', { count: expiryAlertCount })}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                {group.uniqueCasNumbers.length === 1 && <span>CAS: {group.uniqueCasNumbers[0]}</span>}
+                                {aliasCount > 0 && (
+                                    <span>{t('inventory_group_alias_count', { count: aliasCount })}</span>
+                                )}
+                                {isSelectMode && selectedCount > 0 && !isAllSelected && (
+                                    <span>{t('inventory_selected_count', { count: selectedCount })}</span>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                            <button
+                                type="button"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleGroupExpanded(group.id);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                            >
+                                {isExpanded ? t('inventory_group_hide_cards') : t('inventory_group_show_cards')}
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                            {uniqueCapacities.length === 1 && (
+                                <span className="text-xs text-slate-400 dark:text-slate-500">
+                                    {uniqueCapacities[0]}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
+                        {hasSingleStorage ? (
+                            renderStorageBadge(group.primaryItem)
+                        ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                <Package className="w-3.5 h-3.5" />
+                                {t('inventory_group_multi_storage', {
+                                    first: uniqueStorageLabels[0],
+                                    count: uniqueStorageLabels.length - 1,
+                                })}
+                            </span>
+                        )}
+                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                            {isExpanded ? t('inventory_group_hide_cards') : t('inventory_group_show_cards')}
+                        </span>
+                    </div>
+                </div>
+
+                {isExpanded && (
+                    <div className="border-t border-slate-100 px-3 pb-3 pt-3 dark:border-slate-700">
+                        <div className="space-y-3">
+                            {group.items.map((item) => renderInventoryCard(item, { nested: true }))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const removeFromCabinetByInventoryItem = async (item: InventoryItem): Promise<boolean> => {
         if (!item.cabinet_id) return false;
 
@@ -1393,8 +1784,12 @@ export const InventoryListView: React.FC = () => {
                     <div className="flex items-center justify-center py-20">
                         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
                     </div>
-                ) : visibleItems.length > 0 ? (
-                    visibleItems.map(item => {
+                ) : visibleGroups.length > 0 ? (
+                    visibleGroups.map((group) => (
+                        group.cardCount > 1
+                            ? renderGroupedInventoryCard(group)
+                            : renderInventoryCard(group.primaryItem)
+                    )) || visibleItems.map(item => {
                         const expiryStatus = getExpiryStatus(item.expiry_date);
                         const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
 
