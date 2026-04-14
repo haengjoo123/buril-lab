@@ -118,24 +118,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [isCoarsePointer, setIsCoarsePointer] = useState(false);
     const [storageCompatBannerReopenToken, setStorageCompatBannerReopenToken] = useState(0);
-    const placementCasSuggestion = useCasSuggestion({
-        inputName: placementName,
-        casNumber: placementCas,
-        sourceType: 'fridge_manual_placement',
-        brand: placementBrand,
-        productNumber: placementProductNumber,
-        capacity: placementCapacity,
-        onApplyCasNumber: setPlacementCas,
-    });
-    const scanCasSuggestion = useCasSuggestion({
-        inputName: scanName,
-        casNumber: scanCas,
-        sourceType: 'fridge_scan_placement',
-        brand: scanBrand,
-        productNumber: scanProductNumber,
-        capacity: scanCapacity,
-        onApplyCasNumber: setScanCas,
-    });
 
     // 모바일: 시약 내려놓은 직후 발생하는 합성 클릭(ghost click)으로 백드롭이 눌리는 것 방지
     const placementModalOpenedAtRef = React.useRef<number>(0);
@@ -174,6 +156,26 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     } = useFridgeStore();
 
     const [showModalContent, setShowModalContent] = useState(false);
+    const placementCasSuggestion = useCasSuggestion({
+        enabled: Boolean(pendingPlacement && showModalContent),
+        inputName: placementName,
+        casNumber: placementCas,
+        sourceType: 'fridge_manual_placement',
+        brand: placementBrand,
+        productNumber: placementProductNumber,
+        capacity: placementCapacity,
+        onApplyCasNumber: setPlacementCas,
+    });
+    const scanCasSuggestion = useCasSuggestion({
+        enabled: scanDialogOpen && !isScanning,
+        inputName: scanName,
+        casNumber: scanCas,
+        sourceType: 'fridge_scan_placement',
+        brand: scanBrand,
+        productNumber: scanProductNumber,
+        capacity: scanCapacity,
+        onApplyCasNumber: setScanCas,
+    });
     const storageCompatWarningMap = React.useMemo(() => checkCabinetCompatibility(shelves), [shelves]);
     const storageCompatWarningCount = React.useMemo(() => {
         let count = 0;
@@ -1079,7 +1081,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 ref={placementNameInputRef}
                                 type="text"
                                 value={placementName}
-                                onChange={e => setPlacementName(e.target.value)}
+                                onChange={e => {
+                                    placementCasSuggestion.markNameInputChanged();
+                                    setPlacementName(e.target.value);
+                                }}
                                 onBlur={placementCasSuggestion.triggerLookupFromBlur}
                                 placeholder={t('reagent_name_placeholder')}
                                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
@@ -1327,7 +1332,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                         autoFocus
                                         type="text"
                                         value={scanName}
-                                        onChange={e => setScanName(e.target.value)}
+                                        onChange={e => {
+                                            scanCasSuggestion.markNameInputChanged();
+                                            setScanName(e.target.value);
+                                        }}
                                         onBlur={scanCasSuggestion.triggerLookupFromBlur}
                                         placeholder={t('reagent_name_placeholder')}
                                         className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"

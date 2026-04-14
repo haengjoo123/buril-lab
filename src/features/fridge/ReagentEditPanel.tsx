@@ -81,6 +81,7 @@ export const ReagentEditPanel: React.FC = () => {
         return null;
     }, [selectedReagentId, shelves]);
     const casSuggestion = useCasSuggestion({
+        enabled: Boolean(selectedReagentId && showModalContent),
         inputName: name,
         casNumber: casNo,
         sourceType: 'reagent_edit_panel',
@@ -430,7 +431,10 @@ export const ReagentEditPanel: React.FC = () => {
                                 <input
                                     type="text"
                                     value={name}
-                                    onChange={(e) => setName(e.target.value)}
+                                    onChange={(e) => {
+                                        casSuggestion.markNameInputChanged();
+                                        setName(e.target.value);
+                                    }}
                                     onBlur={casSuggestion.triggerLookupFromBlur}
                                     className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                                     placeholder={t('cabinet_placeholder_name')}

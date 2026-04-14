@@ -51,8 +51,13 @@ const RESOLVE_BATCH_SIZE = 25;
 async function resolveCasSuggestionBatch(items: CasResolveItemInput[]): Promise<CasResolveItemResult[]> {
     if (items.length === 0) return [];
 
-    const response = await postJson<CasResolveResponse>('/api/reagents/cas-resolve', { items });
-    return response.items || [];
+    try {
+        const response = await postJson<CasResolveResponse>('/api/reagents/cas-resolve', { items });
+        return response.items || [];
+    } catch {
+        const { resolveCasSuggestionsFallback } = await import('./casSuggestionFallback');
+        return await resolveCasSuggestionsFallback(items);
+    }
 }
 
 export async function resolveCasSuggestions(items: CasResolveItemInput[]): Promise<CasResolveItemResult[]> {
@@ -73,4 +78,3 @@ export async function resolveSingleCasSuggestion(item: CasResolveItemInput): Pro
     const [result] = await resolveCasSuggestions([item]);
     return result || null;
 }
-

@@ -8,6 +8,7 @@ import {
 type CasSuggestionUiState = 'idle' | 'checking' | 'suggestion' | 'applied' | 'dismissed' | 'unavailable';
 
 interface UseCasSuggestionParams {
+    enabled?: boolean;
     inputName: string;
     casNumber: string;
     sourceType: string;
@@ -21,6 +22,7 @@ interface UseCasSuggestionResult {
     state: CasSuggestionUiState;
     suggestion: CasResolveItemResult | null;
     shouldRenderCard: boolean;
+    markNameInputChanged: () => void;
     triggerLookupFromBlur: () => void;
     triggerLookupFromCasFocus: () => void;
     dismissSuggestion: () => void;
@@ -43,6 +45,7 @@ function canDisplaySuggestion(result: CasResolveItemResult | null): boolean {
 }
 
 export function useCasSuggestion({
+    enabled = true,
     inputName,
     casNumber,
     sourceType,
@@ -54,6 +57,7 @@ export function useCasSuggestion({
     const [state, setState] = useState<CasSuggestionUiState>('idle');
     const [suggestion, setSuggestion] = useState<CasResolveItemResult | null>(null);
     const [appliedSuggestion, setAppliedSuggestion] = useState<CasResolveItemResult | null>(null);
+    const [debouncedLookupVersion, setDebouncedLookupVersion] = useState(0);
     const lastResolvedKeyRef = useRef('');
     const lastDismissedKeyRef = useRef('');
     const lastNameKeyRef = useRef('');
@@ -63,6 +67,7 @@ export function useCasSuggestion({
     const appliedCas = appliedSuggestion?.casNumber?.trim() || '';
 
     const runLookup = useCallback(async () => {
+        if (!enabled) return;
         if (!nameKey || casValue) return;
         if (lastDismissedKeyRef.current === nameKey) return;
         if (lastResolvedKeyRef.current === nameKey && (state === 'suggestion' || state === 'unavailable' || state === 'checking')) return;
@@ -98,9 +103,16 @@ export function useCasSuggestion({
             setSuggestion(null);
             setState('idle');
         }
-    }, [brand, capacity, casValue, inputName, nameKey, productNumber, sourceType, state]);
+    }, [brand, capacity, casValue, enabled, inputName, nameKey, productNumber, sourceType, state]);
 
     useEffect(() => {
+        if (!enabled) {
+            setSuggestion(null);
+            setAppliedSuggestion(null);
+            setState('idle');
+            return;
+        }
+
         if (lastNameKeyRef.current !== nameKey) {
             lastNameKeyRef.current = nameKey;
             lastResolvedKeyRef.current = '';
@@ -109,9 +121,11 @@ export function useCasSuggestion({
                 setState('idle');
             }
         }
-    }, [nameKey, state]);
+    }, [enabled, nameKey, state]);
 
     useEffect(() => {
+        if (!enabled) return;
+        if (debouncedLookupVersion === 0) return;
         if (!nameKey || casValue) {
             if (state !== 'applied') {
                 setSuggestion(null);
@@ -127,7 +141,7 @@ export function useCasSuggestion({
         }, 500);
 
         return () => window.clearTimeout(timer);
-    }, [casValue, nameKey, runLookup, state]);
+    }, [casValue, debouncedLookupVersion, enabled, nameKey, runLookup, state]);
 
     useEffect(() => {
         if (!appliedSuggestion) return;
@@ -140,15 +154,22 @@ export function useCasSuggestion({
         }
     }, [appliedCas, appliedSuggestion, casValue, state]);
 
+    const markNameInputChanged = useCallback(() => {
+        if (!enabled) return;
+        setDebouncedLookupVersion((current) => current + 1);
+    }, [enabled]);
+
     const triggerLookupFromBlur = useCallback(() => {
+        if (!enabled) return;
         if (!nameKey || casValue || state === 'applied') return;
         void runLookup();
-    }, [casValue, nameKey, runLookup, state]);
+    }, [casValue, enabled, nameKey, runLookup, state]);
 
     const triggerLookupFromCasFocus = useCallback(() => {
+        if (!enabled) return;
         if (!nameKey || casValue || state === 'applied') return;
         void runLookup();
-    }, [casValue, nameKey, runLookup, state]);
+    }, [casValue, enabled, nameKey, runLookup, state]);
 
     const dismissSuggestion = useCallback(() => {
         lastDismissedKeyRef.current = nameKey;
@@ -178,6 +199,7 @@ export function useCasSuggestion({
         state,
         suggestion,
         shouldRenderCard,
+        markNameInputChanged,
         triggerLookupFromBlur,
         triggerLookupFromCasFocus,
         dismissSuggestion,
@@ -199,4 +221,3 @@ export function getSuggestedCasInputMethod(
 
     return fallback;
 }
-

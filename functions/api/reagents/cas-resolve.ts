@@ -573,17 +573,20 @@ async function resolveSuggestion(input: CasResolveItemInput, env: Env): Promise<
 
   const wikidataLookup = await searchWikidataExact(matchedInput)
   if (wikidataLookup.kind === 'match') {
+    let enriched = await enrichCandidateFromPubChemCas(wikidataLookup.candidate)
+    enriched = await enrichCandidateWithKoshaName(enriched, env.KOSHA_API_KEY)
+
     return {
       status: 'match',
       matchedInput,
-      casNumber: wikidataLookup.candidate.casNumber,
-      canonicalName: wikidataLookup.candidate.canonicalName,
-      localizedName: wikidataLookup.candidate.localizedName,
-      matchedAlias: wikidataLookup.candidate.matchedAlias,
-      evidence: wikidataLookup.candidate.evidence,
-      sources: wikidataLookup.candidate.sources,
-      confidence: wikidataLookup.candidate.confidence,
-      reason: 'low_confidence',
+      casNumber: enriched.casNumber,
+      canonicalName: enriched.canonicalName,
+      localizedName: enriched.localizedName,
+      matchedAlias: enriched.matchedAlias,
+      evidence: enriched.evidence,
+      sources: enriched.sources,
+      confidence: enriched.confidence,
+      reason: enriched.confidence === 'low' ? 'low_confidence' : undefined,
     }
   }
 

@@ -51,6 +51,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
     });
     const isEditingCabinetItem = initialData?._source === 'cabinet_item';
     const casSuggestion = useCasSuggestion({
+        enabled: isOpen,
         inputName: formData.name,
         casNumber: formData.cas_number || '',
         sourceType: 'inventory_form_modal',
@@ -122,6 +123,10 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
             const parsed = parseInt(value, 10);
             setFormData(prev => ({ ...prev, [name]: isNaN(parsed) ? 1 : Math.max(1, parsed) }));
             return;
+        }
+
+        if (name === 'name') {
+            casSuggestion.markNameInputChanged();
         }
 
         setFormData(prev => ({ ...prev, [name]: value }));
