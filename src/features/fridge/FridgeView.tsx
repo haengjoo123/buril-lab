@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
@@ -443,8 +443,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
     };
 
-    const handleCancelCompatibilityPreview = () => {
+    const handleHideCompatibilityPreview = () => {
         setIsCompatibilityPreviewVisible(false);
+    };
+
+    const handleCancelCompatibilityPreview = () => {
+        handleHideCompatibilityPreview();
         clearCompatibilityPlan();
     };
 
@@ -452,7 +456,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         const targetItem = shelves.flatMap((shelf) => shelf.items).find((item) => item.id === itemId);
         if (!targetItem) return;
 
-        setIsCompatibilityPreviewVisible(false);
+        handleHideCompatibilityPreview();
         setMode('VIEW');
         setHighlightedItemId(itemId);
         setFocusedShelfId(null);
@@ -791,7 +795,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                         <button
                             onClick={handleSave}
                             disabled={isSaving || isLoadingCabinet}
-                            title="수동으로 저장"
+                            title={t('cabinet_save_manual')}
                             className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40"
                         >
                             <Save className="w-4 h-4" />
@@ -837,7 +841,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
                                 }`}
                         >
-                            <Layers size={14} /> View
+                            <Layers size={14} /> {t('cabinet_mode_view')}
                         </button>
                         <div className="w-px h-4 bg-gray-200" />
                         <button
@@ -845,7 +849,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
                                 }`}
                         >
-                            <Box size={14} /> Edit
+                            <Box size={14} /> {t('cabinet_mode_edit')}
                         </button>
                         <div className="w-px h-4 bg-gray-200" />
                         <button
@@ -853,10 +857,59 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'
                                 }`}
                         >
-                            <Plus size={14} /> Stock
+                            <Plus size={14} /> {t('cabinet_mode_place')}
                         </button>
                     </div>
                 </div>
+
+                {compatibilityPlanPreview && !isCompatibilityPreviewVisible && (
+                    <div className="pointer-events-none absolute inset-x-0 top-[4.8rem] z-20 flex justify-center px-4">
+                        <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur">
+                            <div className="flex items-center gap-3 px-4 py-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsCompatibilityPreviewVisible(true)}
+                                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                                >
+                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+                                        compatibilityPlanPreview.canApply
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : 'bg-amber-100 text-amber-700'
+                                    }`}>
+                                        <CheckCircle2 className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold text-slate-800">
+                                            {t('cabinet_auto_place_collapsed_title')}
+                                        </p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                                            <span>
+                                                {t('cabinet_auto_place_after')}: {compatibilityPlanPreview.afterWarningCount}
+                                            </span>
+                                            <span>
+                                                {t('cabinet_auto_place_review_items')}: {compatibilityPlanPreview.reviewItems.length}
+                                            </span>
+                                            <span>
+                                                {t('cabinet_auto_place_unplaced_items')}: {compatibilityPlanPreview.unplacedItems.length}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-slate-600">
+                                            {t('cabinet_auto_place_collapsed_desc')}
+                                        </p>
+                                    </div>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCancelCompatibilityPreview}
+                                    className="rounded-xl border border-slate-200 p-2 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                                    aria-label={t('cabinet_auto_place_close')}
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {mode === 'PLACE' && draggedTemplate && !pendingPlacement && (
                     <div className="pointer-events-none absolute inset-x-0 top-[4rem] z-20 flex justify-center px-4">
@@ -899,7 +952,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 <button
                                     onClick={() => setIsEditPanelVisible(false)}
                                     className="absolute top-2 right-2 p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                                    title="패널 숨기기"
+                                    title={t('cabinet_edit_panel_hide')}
                                 >
                                     <ChevronDown size={18} />
                                 </button>
@@ -1035,7 +1088,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             <button
                                 onClick={() => setIsEditPanelVisible(true)}
                                 className="bg-white/90 backdrop-blur pointer-events-auto px-4 py-2 rounded-xl shadow-lg border flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50/50 transition-colors"
-                                title="패널 숨기기"
+                                title={t('cabinet_edit_panel_show')}
                             >
                                 <ChevronUp size={18} />
                                 {t('cabinet_edit_panel_show')}
