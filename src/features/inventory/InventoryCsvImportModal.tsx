@@ -638,7 +638,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     return (
         <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={closeModal} />
-            <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-5xl max-h-[92vh] border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
+            <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-5xl max-h-[92vh] border border-slate-200 dark:border-slate-800 flex flex-col overflow-y-auto">
                 <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                     <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('inventory_csv_title')}</h2>
                     <button
@@ -817,9 +817,9 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                     </div>
                 )}
 
-                <div className="flex-1 overflow-auto px-5 py-4">
+                <div className="px-5 py-4">
                     {isParsing ? (
-                        <div className="h-full min-h-[240px] flex items-center justify-center text-slate-500">
+                        <div className="min-h-[240px] flex items-center justify-center text-slate-500">
                             <Loader2 className="w-5 h-5 animate-spin mr-2" />
                             {t('inventory_csv_parsing')}
                         </div>
@@ -828,7 +828,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
-                            className={`h-full min-h-[240px] rounded-xl border-2 border-dashed flex items-center justify-center text-sm transition-colors ${isDragOver
+                            className={`min-h-[240px] rounded-xl border-2 border-dashed flex items-center justify-center text-sm transition-colors ${isDragOver
                                 ? 'border-emerald-400 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
                                 : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400'
                                 }`}
@@ -838,41 +838,43 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                                 : t('inventory_csv_drop_hint')}
                         </div>
                     ) : (
-                        <table className="w-full text-xs border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                    <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_row')}</th>
-                                    <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_name')}</th>
-                                    <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_qty')}</th>
-                                    <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_type')}</th>
-                                    <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_storage')}</th>
-                                    <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_status')}</th>
-                                    <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_reason')}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.map((row) => (
-                                    <tr key={row.rowNumber} className="text-slate-700 dark:text-slate-200">
-                                        <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.rowNumber}</td>
-                                        <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.name || '-'}</td>
-                                        <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.quantity || '-'}</td>
-                                        <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_type || '-'}</td>
-                                        <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_location || '-'}</td>
-                                        <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">
-                                            {row.status === 'imported' ? (
-                                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
-                                                    <CheckCircle2 className="w-3 h-3" />
-                                                    {t('inventory_csv_status_imported')}
-                                                </span>
-                                            ) : getStatusLabel(row.status, t)}
-                                        </td>
-                                        <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">
-                                            {row.reasons.length > 0 ? row.reasons.join('; ') : '-'}
-                                        </td>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[760px] text-xs border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                        <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_row')}</th>
+                                        <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_name')}</th>
+                                        <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_qty')}</th>
+                                        <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_type')}</th>
+                                        <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_storage')}</th>
+                                        <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_status')}</th>
+                                        <th className="text-left px-2 py-2 border border-slate-200 dark:border-slate-700">{t('inventory_csv_table_reason')}</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {rows.map((row) => (
+                                        <tr key={row.rowNumber} className="text-slate-700 dark:text-slate-200">
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.rowNumber}</td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.name || '-'}</td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.quantity || '-'}</td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_type || '-'}</td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_location || '-'}</td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">
+                                                {row.status === 'imported' ? (
+                                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                                                        <CheckCircle2 className="w-3 h-3" />
+                                                        {t('inventory_csv_status_imported')}
+                                                    </span>
+                                                ) : getStatusLabel(row.status, t)}
+                                            </td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">
+                                                {row.reasons.length > 0 ? row.reasons.join('; ') : '-'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
 
