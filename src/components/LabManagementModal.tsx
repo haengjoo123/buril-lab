@@ -36,6 +36,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     // For settings
     const [settingsName, setSettingsName] = useState('');
     const [settingsPassword, setSettingsPassword] = useState('');
+    const [settingsInstitutionType, setSettingsInstitutionType] = useState('');
+    const [settingsResearchField, setSettingsResearchField] = useState('');
 
     const [isLeaving, setIsLeaving] = useState<string | null>(null); // labId being left
 
@@ -180,6 +182,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         try {
             await labService.updateLab(currentLabId, {
                 name: settingsName,
+                institution_type: settingsInstitutionType.trim() ? settingsInstitutionType.trim() : null,
+                research_field: settingsResearchField.trim() ? settingsResearchField.trim() : null,
                 ...(settingsPassword ? { join_password: settingsPassword } : { join_password: '' })
             });
             const updatedLabs = await labService.getMyLabs();
@@ -223,6 +227,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         const lab = myLabs.find(m => m.lab_id === currentLabId)?.lab as any; // Temporary cast since we didn't add join_password to Lab type globally yet.
         setSettingsName(lab?.name || '');
         setSettingsPassword(lab?.join_password || '');
+        setSettingsInstitutionType(lab?.institution_type || '');
+        setSettingsResearchField(lab?.research_field || '');
         setView('settings');
     };
 
@@ -250,6 +256,27 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         { value: 'physics_semiconductor', label: t('field_physics') },
         { value: 'other_field', label: t('field_other') }
     ];
+
+    const getInstitutionTypeLabel = (institutionType?: string) => {
+        switch (institutionType) {
+            case 'university':
+                return t('inst_uni');
+            case 'research_institute_gov':
+                return t('inst_gov');
+            case 'corporate_rd_large':
+                return t('inst_corp_large');
+            case 'corporate_rd_sme':
+                return t('inst_corp_sme');
+            case 'hospital_clinical':
+                return t('inst_hospital');
+            case 'school_edu':
+                return t('inst_edu');
+            case 'other':
+                return t('inst_other');
+            default:
+                return institutionType?.trim() || null;
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -486,21 +513,32 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                             {searchResults.length > 0 && (
                                 <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
-                                    {searchResults.map(lab => (
-                                        <div
-                                            key={lab.id}
-                                            className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedLabId === lab.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 bg-white dark:bg-slate-900/50'}`}
-                                            onClick={() => setSelectedLabId(lab.id)}
-                                        >
-                                            <div className="flex justify-between items-center">
-                                                <div className="flex items-center gap-2">
-                                                    {lab.has_password && <Lock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
-                                                    <span className="font-medium text-slate-800 dark:text-slate-200">{lab.name}</span>
+                                    {searchResults.map(lab => {
+                                        const institutionTypeLabel = getInstitutionTypeLabel(lab.institution_type);
+
+                                        return (
+                                            <div
+                                                key={lab.id}
+                                                className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedLabId === lab.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 bg-white dark:bg-slate-900/50'}`}
+                                                onClick={() => setSelectedLabId(lab.id)}
+                                            >
+                                                <div className="flex justify-between items-start gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            {lab.has_password && <Lock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
+                                                            <span className="font-medium text-slate-800 dark:text-slate-200 break-words">{lab.name}</span>
+                                                        </div>
+                                                        {institutionTypeLabel && (
+                                                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                                {institutionTypeLabel}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    {selectedLabId === lab.id && <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
                                                 </div>
-                                                {selectedLabId === lab.id && <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
 
@@ -649,11 +687,31 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 />
                                 <p className="text-xs text-slate-500 mt-1">{t('lab_mgmt_form_password_info')}</p>
                             </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_institution_type')}</label>
+                                <AppSelect
+                                    value={settingsInstitutionType}
+                                    onChange={setSettingsInstitutionType}
+                                    options={instOptions}
+                                    className="w-full"
+                                    buttonClassName="w-full bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 min-h-[42px] px-3 py-2 rounded-lg"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_research_field')}</label>
+                                <AppSelect
+                                    value={settingsResearchField}
+                                    onChange={setSettingsResearchField}
+                                    options={fieldOptions}
+                                    className="w-full"
+                                    buttonClassName="w-full bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 min-h-[42px] px-3 py-2 rounded-lg"
+                                />
+                            </div>
                             <div className="flex gap-2 pt-4">
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
                                     {t('btn_cancel')}
                                 </button>
-                                <button type="submit" disabled={isLoading || !settingsName.trim()} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
+                                <button type="submit" disabled={isLoading || !settingsName.trim() || !settingsInstitutionType || !settingsResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_save')}
                                 </button>
                             </div>

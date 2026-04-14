@@ -108,7 +108,15 @@ export const labService = {
         if (error) throw error;
     },
 
-    async updateLab(labId: string, updates: { name?: string; join_password?: string }): Promise<void> {
+    async updateLab(
+        labId: string,
+        updates: {
+            name?: string;
+            join_password?: string;
+            institution_type?: string | null;
+            research_field?: string | null;
+        }
+    ): Promise<void> {
         const { error } = await supabase
             .from('labs')
             .update(updates)

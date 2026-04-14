@@ -29,6 +29,8 @@ const ACTION_KEY: Record<string, string> = {
     delete: 'audit_action_delete',
 };
 
+type AuditActionCategory = 'create' | 'update' | 'delete' | 'activity';
+
 const ENTITY_KEY: Record<string, string> = {
     inventory: 'audit_entity_inventory',
     cabinet_item: 'audit_entity_cabinet_item',
@@ -107,6 +109,26 @@ const toRecord = (value: unknown): JsonRecord | null => {
     }
 
     return value as JsonRecord;
+};
+
+const getCabinetActivityActionType = (
+    log: Pick<AuditLog, 'entity_type' | 'before_data' | 'after_data'>
+): string | null => {
+    if (log.entity_type !== 'cabinet_activity') {
+        return null;
+    }
+
+    const afterData = toRecord(log.after_data);
+    if (typeof afterData?.action_type === 'string' && afterData.action_type.trim()) {
+        return afterData.action_type;
+    }
+
+    const beforeData = toRecord(log.before_data);
+    if (typeof beforeData?.action_type === 'string' && beforeData.action_type.trim()) {
+        return beforeData.action_type;
+    }
+
+    return null;
 };
 
 const shouldHideField = (key: string, value: unknown): boolean => {
@@ -202,8 +224,41 @@ export const formatAuditFieldName = (key: string, t: TFunction, locale: string):
     return titleCaseKey(key);
 };
 
-export const formatAuditActionName = (action: string, t: TFunction): string =>
-    ACTION_KEY[action] ? t(ACTION_KEY[action]) : action;
+export const getAuditActionCategory = (
+    log: Pick<AuditLog, 'action' | 'entity_type' | 'before_data' | 'after_data'>
+): AuditActionCategory => {
+    if (log.entity_type === 'cabinet_activity') {
+        return 'activity';
+    }
+
+    if (log.action === 'create' || log.action === 'update' || log.action === 'delete') {
+        return log.action;
+    }
+
+    return 'activity';
+};
+
+export const formatAuditActionName = (
+    action: string,
+    t: TFunction,
+    log?: Pick<AuditLog, 'entity_type' | 'before_data' | 'after_data'>
+): string => {
+    const activityActionType = log ? getCabinetActivityActionType(log) : null;
+
+    if (activityActionType === 'add') {
+        return t('activity_log_action_add');
+    }
+
+    if (activityActionType === 'remove') {
+        return t('activity_log_action_remove');
+    }
+
+    if (activityActionType === 'clear_all') {
+        return t('activity_log_action_clear_all');
+    }
+
+    return ACTION_KEY[action] ? t(ACTION_KEY[action]) : action;
+};
 
 export const formatAuditEntityName = (entityType: string, t: TFunction): string =>
     ENTITY_KEY[entityType] ? t(ENTITY_KEY[entityType]) : entityType;
@@ -377,7 +432,7 @@ export const buildAuditEventDescription = (
     locale: string
 ): string => {
     const actor = log.actor_name || t('audit_unknown_user');
-    const actionLabel = formatAuditActionName(log.action, t);
+    const actionLabel = formatAuditActionName(log.action, t, log);
     const entityLabel = formatAuditEntityName(log.entity_type, t);
     const beforeData = toRecord(log.before_data);
     const afterData = toRecord(log.after_data);

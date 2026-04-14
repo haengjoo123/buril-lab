@@ -11,6 +11,7 @@ import {
     formatAuditActionName,
     formatAuditEntityName,
     formatAuditValue,
+    getAuditActionCategory,
     getAuditChangeRows,
     getAuditDetailSections,
     isUuidLike,
@@ -53,7 +54,7 @@ export const GlobalAuditLogsView: React.FC = () => {
 
     const filteredLogs = useMemo(() => {
         return logs.filter((log) => {
-            if (actionFilter !== 'all' && log.action !== actionFilter) return false;
+            if (actionFilter !== 'all' && getAuditActionCategory(log) !== actionFilter) return false;
             if (entityFilter !== 'all' && log.entity_type !== entityFilter) return false;
 
             if (periodFilter !== 'all') {
@@ -74,7 +75,7 @@ export const GlobalAuditLogsView: React.FC = () => {
                 log.actor_name || '',
                 log.entity_type,
                 log.entity_id,
-                formatAuditActionName(log.action, t),
+                formatAuditActionName(log.action, t, log),
                 buildAuditEventDescription(log, t, i18n.language),
                 log.location_context || '',
             ].join(' ').toLowerCase();
@@ -87,9 +88,9 @@ export const GlobalAuditLogsView: React.FC = () => {
         const actors = new Set(filteredLogs.map(log => log.actor_name).filter(Boolean));
         return {
             total: filteredLogs.length,
-            create: filteredLogs.filter(log => log.action === 'create').length,
-            update: filteredLogs.filter(log => log.action === 'update').length,
-            delete: filteredLogs.filter(log => log.action === 'delete').length,
+            create: filteredLogs.filter(log => getAuditActionCategory(log) === 'create').length,
+            update: filteredLogs.filter(log => getAuditActionCategory(log) === 'update').length,
+            delete: filteredLogs.filter(log => getAuditActionCategory(log) === 'delete').length,
             actors: actors.size,
         };
     }, [filteredLogs]);
@@ -123,15 +124,28 @@ export const GlobalAuditLogsView: React.FC = () => {
         setExpandedLogIds(prev => ({ ...prev, [logId]: !prev[logId] }));
     };
 
-    const renderActionChip = (action: string) => {
-        const className = action === 'delete'
+    const renderActionChip = (log: AuditLog) => {
+        const activityActionType = typeof log.after_data?.action_type === 'string'
+            ? log.after_data.action_type
+            : typeof log.before_data?.action_type === 'string'
+                ? log.before_data.action_type
+                : null;
+
+        const className = activityActionType === 'remove' || log.action === 'delete'
             ? 'bg-red-100 text-red-700'
-            : action === 'create'
-                ? 'bg-emerald-100 text-emerald-700'
-                : action === 'update'
+            : activityActionType === 'clear_all'
+                ? 'bg-amber-100 text-amber-700'
+                : activityActionType === 'update' || log.action === 'update'
                     ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-700';
-        return <span className={`px-2 py-0.5 rounded text-xs font-bold ${className}`}>{formatAuditActionName(action, t)}</span>;
+                    : activityActionType === 'add' || log.action === 'create'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-gray-100 text-gray-700';
+
+        return (
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${className}`}>
+                {formatAuditActionName(log.action, t, log)}
+            </span>
+        );
     };
 
     if (isLoading && activeTab === 'audit') {
@@ -259,7 +273,7 @@ export const GlobalAuditLogsView: React.FC = () => {
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {renderActionChip(log.action)}
+                                        {renderActionChip(log)}
                                         <span className="text-xs text-slate-600 dark:text-slate-300">
                                             {t('audit_actor_label')} {log.actor_name || t('audit_unknown')}
                                         </span>
