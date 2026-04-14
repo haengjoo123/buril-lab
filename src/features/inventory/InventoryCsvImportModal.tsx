@@ -149,6 +149,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     const [rows, setRows] = useState<ParsedCsvRow[]>([]);
     const [isParsing, setIsParsing] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
+    const [isTemplateDownloading, setIsTemplateDownloading] = useState(false);
     const [isDragOver, setIsDragOver] = useState(false);
     const [globalError, setGlobalError] = useState<string | null>(null);
     const [lastFileName, setLastFileName] = useState('');
@@ -174,7 +175,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     };
 
     const closeModal = () => {
-        if (isParsing || isImporting) return;
+        if (isParsing || isImporting || isTemplateDownloading) return;
         resetState();
         onClose();
     };
@@ -299,6 +300,22 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     };
 
     const handleTemplateDownload = async () => {
+        if (isTemplateDownloading) return;
+        setIsTemplateDownloading(true);
+        setGlobalError(null);
+        try {
+            const { downloadInventoryTemplateWorkbook } = await import('./inventoryTemplateWorkbook');
+            await downloadInventoryTemplateWorkbook({
+                headers: TEMPLATE_HEADERS_KO,
+                t,
+            });
+        } catch (error) {
+            console.error('Failed to download inventory template:', error);
+            setGlobalError('템플릿 다운로드에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+        } finally {
+            setIsTemplateDownloading(false);
+        }
+        /*
         const XLSX = await import('xlsx');
         // Create headers
         const headers = TEMPLATE_HEADERS_KO;
@@ -329,6 +346,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
 
         // Write file
         XLSX.writeFile(workbook, 'inventory_import_template.xlsx');
+        */
     };
 
     const handleInventoryExcelDownload = async () => {
@@ -625,7 +643,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                     <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('inventory_csv_title')}</h2>
                     <button
                         onClick={closeModal}
-                        disabled={isParsing || isImporting}
+                        disabled={isParsing || isImporting || isTemplateDownloading}
                         className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
                     >
                         <X className="w-5 h-5" />
@@ -691,9 +709,14 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
 
                     <button
                         onClick={handleTemplateDownload}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                        disabled={isParsing || isImporting || isTemplateDownloading}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                        <Download className="w-4 h-4" />
+                        {isTemplateDownloading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Download className="w-4 h-4" />
+                        )}
                         {t('inventory_csv_download_template')}
                     </button>
 
@@ -705,7 +728,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                             accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                             className="hidden"
                             onChange={handleFileChange}
-                            disabled={isParsing || isImporting}
+                            disabled={isParsing || isImporting || isTemplateDownloading}
                         />
                     </label>
 

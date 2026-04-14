@@ -838,7 +838,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                     <div className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border rounded-full p-1 flex items-center gap-1">
                         <button
                             onClick={() => setMode('VIEW')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
                                 }`}
                         >
                             <Layers size={14} /> {t('cabinet_mode_view')}
@@ -846,7 +846,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                         <div className="w-px h-4 bg-gray-200" />
                         <button
                             onClick={() => setMode('EDIT')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
                                 }`}
                         >
                             <Box size={14} /> {t('cabinet_mode_edit')}
@@ -854,7 +854,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                         <div className="w-px h-4 bg-gray-200" />
                         <button
                             onClick={() => setMode('PLACE')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'
                                 }`}
                         >
                             <Plus size={14} /> {t('cabinet_mode_place')}

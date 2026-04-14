@@ -32,6 +32,7 @@
     "@use-gesture/react": "^10.3.1",
     "axios": "^1.13.2",
     "cheerio": "^1.2.0",
+    "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.3.3",
     "html2pdf.js": "^0.14.0",
     "i18next": "^25.8.0",
@@ -67,8 +68,8 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
-    "vitest": "^4.0.7",
     "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^4.0.7",
     "xlsx": "^0.18.5"
   }
 }
