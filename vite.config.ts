@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig(() => ({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -70,7 +70,7 @@ export default defineConfig(({ command }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    command === 'build' && VitePWA({
+    VitePWA({
       registerType: 'prompt',
       includeAssets: ['pwa-192.png', 'pwa-512.png', 'pwa-maskable-512.png'],
       manifest: {

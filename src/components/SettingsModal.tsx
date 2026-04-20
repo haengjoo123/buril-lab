@@ -309,7 +309,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                         {/* Feedback Button */}
                         <button
-                            onClick={() => setShowFeedback(true)}
+                            onClick={() => {
+                                if (!session) {
+                                    setDialogConfig({
+                                        isOpen: true,
+                                        type: 'alert',
+                                        title: '로그인이 필요합니다',
+                                        description: '앱 개선 제안은 로그인을 하셔야 접수하실 수 있습니다.',
+                                        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+                                    });
+                                    return;
+                                }
+                                setShowFeedback(true);
+                            }}
                             className="w-full flex items-center justify-between p-4 bg-violet-50 dark:bg-violet-900/10 hover:bg-violet-100 dark:hover:bg-violet-900/20 text-violet-700 dark:text-violet-400 rounded-xl transition-colors text-left"
                         >
                             <div>

@@ -386,7 +386,7 @@ export async function downloadInventoryTemplateWorkbook({
         '# 3) 보관유형이 other이면 보관위치에서 냉장고 / 냉동고 / 상온보관 / 벤치 / 후드 중 하나를 선택하세요.',
         '# 4) 보관유형이 cabinet이면 보관위치에 시약장 이름을, 시약병(container_type)에 병 종류를 선택하세요.',
         '# 5) 시약병(container_type): 갈색병(A) / 플라스틱 통(B) / 유리병(C) / 사각병(D)',
-        '# 6) expiry_date 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
+        '# 6) 유효기한 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
     ];
 
     guideRows.forEach((guideText, index) => {

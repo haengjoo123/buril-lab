@@ -270,7 +270,7 @@ export const FeedbackInboxView: React.FC = () => {
           const isUpdating = updatingState?.id === item.id
           const createdAt = formatDateTime(item.created_at)
           const resolvedAt = formatDateTime(item.resolved_at)
-          const reporter = item.user_email || item.contact || item.user_id || t('feedback_admin_unknown_reporter', '알 수 없음')
+          const reporter = item.user_email || item.contact || t('feedback_admin_unknown_reporter', '알 수 없음')
 
           return (
             <article
@@ -319,13 +319,6 @@ export const FeedbackInboxView: React.FC = () => {
                       {t('feedback_contact_label')}
                     </span>
                     <span className="break-all">{item.contact}</span>
-                  </div>
-                )}
-
-                {item.user_id && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-slate-500 dark:text-slate-400">user_id</span>
-                    <span className="break-all">{item.user_id}</span>
                   </div>
                 )}
 
