@@ -75,7 +75,8 @@ export function useSearchFlow({
   const isSearchTab = useMemo(() => !pathname.startsWith('/logs')
     && !pathname.startsWith('/cabinet')
     && !pathname.startsWith('/inventory')
-    && !pathname.startsWith('/admin'), [pathname]);
+    && !pathname.startsWith('/admin')
+    && !pathname.startsWith('/feedback-admin'), [pathname]);
 
   const performSearch = useCallback(async (searchQuery: string, brand: string = 'all', sort: SortOption = 'relevance') => {
     if (!searchQuery.trim()) return;

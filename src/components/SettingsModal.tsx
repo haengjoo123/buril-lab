@@ -6,12 +6,11 @@ import { CustomDialog } from './CustomDialog';
 import { supabase } from '../services/supabaseClient';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { useAuth } from '../hooks/useAuth';
+import type { FeedbackType } from '../types/feedback';
 
 interface SettingsModalProps {
     onClose: () => void;
 }
-
-type FeedbackType = 'bug' | 'improvement' | 'general';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         const clearCart = useWasteStore((state) => state.clearCart);
@@ -128,6 +127,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 type: feedbackType,
                 message: feedbackMessage.trim(),
                 contact: feedbackContact.trim() || null,
+                user_email: user?.email ?? null,
                 user_id: user?.id ?? null,
                 user_agent: navigator.userAgent,
             });

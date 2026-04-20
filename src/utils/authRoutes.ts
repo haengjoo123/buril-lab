@@ -7,7 +7,8 @@ export function isAuthRequiredPath(pathname: string): boolean {
     pathname.startsWith('/logs') ||
     pathname.startsWith('/cabinet') ||
     pathname.startsWith('/inventory') ||
-    pathname.startsWith('/admin')
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/feedback-admin')
   );
 }
 

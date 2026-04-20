@@ -41,6 +41,9 @@ const InventoryListView = lazy(() =>
 const GlobalAuditLogsView = lazy(() =>
   import('./features/admin/GlobalAuditLogsView').then((module) => ({ default: module.GlobalAuditLogsView }))
 );
+const FeedbackInboxView = lazy(() =>
+  import('./features/admin/FeedbackInboxView').then((module) => ({ default: module.FeedbackInboxView }))
+);
 
 function TabContentFallback() {
   return (
@@ -126,6 +129,7 @@ function App() {
 
   const isLoginRoute = location.pathname === '/login';
   const isPrivacyRoute = location.pathname === '/privacy';
+  const isFeedbackAdminRoute = location.pathname === '/feedback-admin';
 
   useEffect(() => {
     if (session) {
@@ -356,6 +360,27 @@ function App() {
               navigate(`/login?returnTo=${encodeURIComponent(`${location.pathname}${location.search}`)}`)
             }
           />
+        </MainLayout>
+      </>
+    );
+  }
+
+  if (isFeedbackAdminRoute) {
+    return (
+      <>
+        <SafetyDisclaimer />
+
+        {isWelcomeOpen && <OnboardingWelcomeModal />}
+
+        <MainLayout
+          onLogoClick={handleReset}
+          userEmail={user?.email}
+          onSignOut={signOut}
+          hideLabSwitcher
+        >
+          <Suspense fallback={<TabContentFallback />}>
+            <FeedbackInboxView />
+          </Suspense>
         </MainLayout>
       </>
     );
