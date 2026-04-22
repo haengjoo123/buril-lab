@@ -18,6 +18,9 @@ interface InventoryTemplateWorkbookOptions {
 type PreviewImageMap = Record<(typeof CONTAINER_TYPE_OPTIONS)[number]['type'], string | null>;
 
 const IMAGE_RENDER_SIZE = 240;
+const PREVIEW_IMAGE_DISPLAY_SIZE = 132;
+const PREVIEW_IMAGE_COLUMN_OFFSET = 0.37;
+const PREVIEW_IMAGE_ROW_OFFSET = 0.6;
 const PREVIEW_SECTION_START_ROW = 3;
 const PREVIEW_SECTION_END_ROW = 8;
 const PREVIEW_LABEL_ROW = 9;
@@ -373,8 +376,11 @@ export async function downloadInventoryTemplateWorkbook({
         });
 
         worksheet.addImage(imageId, {
-            tl: { col: startColumn - 1 + 0.3, row: PREVIEW_SECTION_START_ROW - 1 + 0.2 },
-            ext: { width: 108, height: 108 },
+            tl: {
+                col: startColumn - 1 + PREVIEW_IMAGE_COLUMN_OFFSET,
+                row: PREVIEW_SECTION_START_ROW - 1 + PREVIEW_IMAGE_ROW_OFFSET,
+            },
+            ext: { width: PREVIEW_IMAGE_DISPLAY_SIZE, height: PREVIEW_IMAGE_DISPLAY_SIZE },
             editAs: 'oneCell',
         });
     });
@@ -386,7 +392,7 @@ export async function downloadInventoryTemplateWorkbook({
         '# 3) 보관유형이 other이면 보관위치에서 냉장고 / 냉동고 / 상온보관 / 벤치 / 후드 중 하나를 선택하세요.',
         '# 4) 보관유형이 cabinet이면 보관위치에 시약장 이름을, 시약병(container_type)에 병 종류를 선택하세요.',
         '# 5) 시약병(container_type): 갈색병(A) / 플라스틱 통(B) / 유리병(C) / 사각병(D)',
-        '# 6) 유효기한 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
+        '# 6) 유효기간 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
     ];
 
     guideRows.forEach((guideText, index) => {

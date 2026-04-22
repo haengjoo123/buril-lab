@@ -82,6 +82,7 @@ export const translations = {
         lab_mgmt_member_kick_confirm: "정말 이 사용자를 강퇴하시겠습니까? (이 작업은 되돌릴 수 없습니다.)",
         lab_mgmt_member_kick_btn: "강퇴",
         lab_mgmt_already_joined: "이미 이 연구실에 가입되어 있습니다.",
+        lab_mgmt_limit_reached: "계정당 최대 {{max}}곳의 연구실에만 가입할 수 있습니다. 관리자 연구실도 포함됩니다.",
         lab_default_name: "연구실",
 
         search_placeholder: "시약명 (예: Acetone) 또는 CAS No.",
@@ -2076,6 +2077,7 @@ export const translations = {
         lab_mgmt_member_kick_confirm: "Are you sure you want to kick this user? (This action cannot be undone.)",
         lab_mgmt_member_kick_btn: "Kick",
         lab_mgmt_already_joined: "You are already a member of this lab.",
+        lab_mgmt_limit_reached: "Each account can join up to {{max}} labs. Admin-owned labs are included.",
         lab_default_name: "Lab",
         lab_leave_error: "Failed to leave the lab.",
 

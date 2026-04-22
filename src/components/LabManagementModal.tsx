@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Plus, Check, Loader2, AlertCircle, Users, Settings, Lock, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { labService } from '../services/labService';
+import { LAB_MEMBERSHIP_LIMIT, isLabMembershipLimitError, labService } from '../services/labService';
 import { useLabStore } from '../store/useLabStore';
 import type { Lab } from '../store/useLabStore';
 
@@ -44,6 +44,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const { myLabs, setMyLabs, currentLabId, setCurrentLabId } = useLabStore();
 
     const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
+    const hasReachedLabLimit = myLabs.length >= LAB_MEMBERSHIP_LIMIT;
+    const labLimitMessage = t('lab_mgmt_limit_reached', { max: LAB_MEMBERSHIP_LIMIT });
 
     const handleLeaveLab = async (labId: string, labName: string) => {
         if (!window.confirm(t('lab_leave_confirm', { name: labName }))) return;
@@ -131,6 +133,10 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!createName.trim() || !createNickname.trim() || !createInstitutionType || !createResearchField) return;
+        if (hasReachedLabLimit) {
+            setError(labLimitMessage);
+            return;
+        }
         setIsLoading(true);
         setError(null);
         try {
@@ -147,7 +153,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             setCurrentLabId(newLab.id);
             onClose();
         } catch (err: any) {
-            setError(err.message || "Failed to create lab");
+            setError(isLabMembershipLimitError(err) ? labLimitMessage : (err.message || "Failed to create lab"));
         } finally {
             setIsLoading(false);
         }
@@ -155,6 +161,10 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     const handleJoin = async () => {
         if (!selectedLabId || !joinNickname.trim()) return;
+        if (hasReachedLabLimit) {
+            setError(labLimitMessage);
+            return;
+        }
         setIsLoading(true);
         setError(null);
         try {
@@ -164,7 +174,9 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             setCurrentLabId(selectedLabId);
             onClose();
         } catch (err: any) {
-            if (err.code === '23505') {
+            if (isLabMembershipLimitError(err)) {
+                setError(labLimitMessage);
+            } else if (err.code === '23505') {
                 setError(t('lab_mgmt_already_joined'));
             } else {
                 setError(err.message || t('lab_leave_error'));
@@ -337,9 +349,16 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     </div>
                                 </button>
                             )}
+                            {hasReachedLabLimit && (
+                                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span>{labLimitMessage}</span>
+                                </div>
+                            )}
                             <button
                                 onClick={() => setView('search')}
-                                className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors border border-slate-200 dark:border-slate-700"
+                                disabled={hasReachedLabLimit}
+                                className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors border border-slate-200 dark:border-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
@@ -353,7 +372,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             </button>
                             <button
                                 onClick={() => setView('create')}
-                                className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors border border-slate-200 dark:border-slate-700"
+                                disabled={hasReachedLabLimit}
+                                className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors border border-slate-200 dark:border-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
@@ -425,6 +445,12 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                     )}
                     {view === 'create' && (
                         <form onSubmit={handleCreate} className="space-y-4">
+                            {hasReachedLabLimit && (
+                                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span>{labLimitMessage}</span>
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_lab_name')}</label>
                                 <input
@@ -482,7 +508,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
                                     {t('btn_cancel')}
                                 </button>
-                                <button type="submit" disabled={isLoading || !createName.trim() || !createNickname.trim() || !createInstitutionType || !createResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
+                                <button type="submit" disabled={isLoading || hasReachedLabLimit || !createName.trim() || !createNickname.trim() || !createInstitutionType || !createResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_create')}
                                 </button>
                             </div>
@@ -491,7 +517,13 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                     {view === 'search' && (
                         <div className="space-y-4">
-            <form onSubmit={handleSearch} className="relative flex gap-2">
+                            {hasReachedLabLimit && (
+                                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span>{labLimitMessage}</span>
+                                </div>
+                            )}
+                            <form onSubmit={handleSearch} className="relative flex gap-2">
                                 <div className="relative flex-1">
                                     <input
                                         type="text"
@@ -571,7 +603,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     </div>
                                     <button
                                         onClick={handleJoin}
-                                        disabled={isLoading || !joinNickname.trim()}
+                                        disabled={isLoading || hasReachedLabLimit || !joinNickname.trim()}
                                         className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center"
                                     >
                                         {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_join')}

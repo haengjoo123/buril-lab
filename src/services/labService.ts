@@ -2,6 +2,34 @@
 import { supabase } from './supabaseClient';
 import type { Lab, LabMember } from '../store/useLabStore';
 
+export const LAB_MEMBERSHIP_LIMIT = 3;
+export const LAB_MEMBERSHIP_LIMIT_ERROR = `계정당 최대 ${LAB_MEMBERSHIP_LIMIT}곳의 연구실에만 가입할 수 있습니다. 관리자 연구실도 포함됩니다.`;
+
+const LAB_MEMBERSHIP_LIMIT_DB_CODE = 'max_lab_memberships_exceeded';
+
+export const isLabMembershipLimitError = (error: unknown): boolean => {
+    if (!error) return false;
+    const message = typeof error === 'string'
+        ? error
+        : [
+            (error as any).message,
+            (error as any).details,
+            (error as any).hint,
+            (error as any).error
+        ].filter(Boolean).join('\n');
+
+    return message.includes(LAB_MEMBERSHIP_LIMIT_DB_CODE)
+        || message.includes(LAB_MEMBERSHIP_LIMIT_ERROR)
+        || message.includes(`maximum of ${LAB_MEMBERSHIP_LIMIT} labs`)
+        || message.includes(`up to ${LAB_MEMBERSHIP_LIMIT} labs`);
+};
+
+const throwIfLabMembershipLimitError = (error: unknown) => {
+    if (isLabMembershipLimitError(error)) {
+        throw new Error(LAB_MEMBERSHIP_LIMIT_ERROR);
+    }
+};
+
 export const labService = {
     async createLab(name: string, password?: string, nickname?: string, institutionType?: string, researchField?: string): Promise<Lab> {
         const { data, error } = await supabase.rpc('create_lab_secure', {
@@ -12,8 +40,14 @@ export const labService = {
             p_research_field: researchField || null
         });
 
-        if (error) throw error;
-        if (!data.success) throw new Error(data.error || "연구실 생성에 실패했습니다.");
+        if (error) {
+            throwIfLabMembershipLimitError(error);
+            throw error;
+        }
+        if (!data.success) {
+            throwIfLabMembershipLimitError(data.error);
+            throw new Error(data.error || "연구실 생성에 실패했습니다.");
+        }
 
         // Fetch the created lab details
         const { data: labData, error: fetchError } = await supabase
@@ -33,9 +67,13 @@ export const labService = {
             p_nickname: nickname || null
         });
 
-        if (error) throw error;
+        if (error) {
+            throwIfLabMembershipLimitError(error);
+            throw error;
+        }
         
         if (!data.success) {
+            throwIfLabMembershipLimitError(data.error);
             if (data.error === 'Already a member') {
                 const err: any = new Error("이미 이 연구실에 가입되어 있습니다.");
                 err.code = '23505'; 
