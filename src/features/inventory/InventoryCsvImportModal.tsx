@@ -362,7 +362,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
     };
 
     const handleInventoryExcelDownload = async () => {
-        const XLSX = await import('xlsx');
+        const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
         const rowsForExport = items.map((item) => {
             const shelfLabel = item.storage_type === 'cabinet' && typeof item.shelf_level === 'number'
                 ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})`
@@ -385,18 +385,14 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             };
         });
 
-        const worksheet = XLSX.utils.json_to_sheet(rowsForExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory');
-
         const today = new Date();
         const dateToken = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-        XLSX.writeFile(workbook, `inventory_list_${dateToken}.xlsx`);
+        await downloadRowsAsXlsx(rowsForExport, 'Inventory', `inventory_list_${dateToken}.xlsx`);
     };
 
     const parseImportFile = async (file: File) => {
         const lowerName = file.name.toLowerCase();
-        const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
+        const isExcel = lowerName.endsWith('.xlsx');
 
         if (!isExcel) {
             setGlobalError(t('inventory_csv_error_only_csv'));
@@ -409,14 +405,8 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         setLastFileName(file.name);
 
         try {
-            const data = await file.arrayBuffer();
-            const XLSX = await import('xlsx');
-            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            
-            // Convert to JSON (array of arrays)
-            const jsonData = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: '' });
+            const { readFirstWorksheetRows } = await import('../../utils/excelFiles');
+            const jsonData = await readFirstWorksheetRows(file);
             
             if (jsonData.length < 1) {
                 setGlobalError(t('inventory_csv_error_no_usable_rows'));
@@ -737,7 +727,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         {t('inventory_csv_upload')}
                         <input
                             type="file"
-                            accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                            accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             className="hidden"
                             onChange={handleFileChange}
                             disabled={isParsing || isImporting || isTemplateDownloading}

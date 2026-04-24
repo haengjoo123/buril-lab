@@ -4,15 +4,13 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-
-// Supabase configuration
-const SUPABASE_URL = 'https://zafxzidbtbryiksemlwc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZnh6aWRidGJyeWlrc2VtbHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3MTU1NzIsImV4cCI6MjA4MjI5MTU3Mn0.DEylxIGynOxzUC-mt5HwJt1gWOqG400QejvKxLdghhw';
+import { getSupabaseScriptConfig } from './supabaseEnv.js';
 
 const OLD_BUCKET = 'media-products';
 const NEW_BUCKET = 'products';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
  * List all files in a bucket (with pagination)

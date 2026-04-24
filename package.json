@@ -46,7 +46,7 @@
     "react-router-dom": "^7.13.1",
     "react-webcam": "^7.2.0",
     "three": "^0.183.2",
-    "uuid": "^13.0.0",
+    "uuid": "^14.0.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
@@ -69,7 +69,6 @@
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
     "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^4.0.7",
-    "xlsx": "^0.18.5"
+    "vitest": "^4.0.7"
   }
 }

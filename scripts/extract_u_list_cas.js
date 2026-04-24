@@ -1,15 +1,21 @@
-import xlsx from 'xlsx';
+import { Workbook } from 'exceljs';
 import fs from 'fs';
 import path from 'path';
 
 const file = path.join(process.cwd(), 'scripts', 'U_List_Extracted.xlsx');
 
-const workbook = xlsx.readFile(file);
-const sheetName = workbook.SheetNames[0];
-const sheet = workbook.Sheets[sheetName];
+const workbook = new Workbook();
+await workbook.xlsx.readFile(file);
+const sheet = workbook.worksheets[0];
 
-// converting to json
-const data = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+const data = [];
+sheet.eachRow({ includeEmpty: true }, (row) => {
+    const values = [];
+    for (let columnIndex = 1; columnIndex <= sheet.columnCount; columnIndex += 1) {
+        values.push(row.getCell(columnIndex).value);
+    }
+    data.push(values);
+});
 
 const casNumbers = new Set();
 data.forEach(row => {

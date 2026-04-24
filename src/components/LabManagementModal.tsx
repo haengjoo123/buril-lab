@@ -36,6 +36,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     // For settings
     const [settingsName, setSettingsName] = useState('');
     const [settingsPassword, setSettingsPassword] = useState('');
+    const [settingsRemovePassword, setSettingsRemovePassword] = useState(false);
     const [settingsInstitutionType, setSettingsInstitutionType] = useState('');
     const [settingsResearchField, setSettingsResearchField] = useState('');
 
@@ -195,9 +196,14 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             await labService.updateLab(currentLabId, {
                 name: settingsName,
                 institution_type: settingsInstitutionType.trim() ? settingsInstitutionType.trim() : null,
-                research_field: settingsResearchField.trim() ? settingsResearchField.trim() : null,
-                ...(settingsPassword ? { join_password: settingsPassword } : { join_password: '' })
+                research_field: settingsResearchField.trim() ? settingsResearchField.trim() : null
             });
+            if (settingsRemovePassword || settingsPassword.trim()) {
+                await labService.updateLabJoinPassword(
+                    currentLabId,
+                    settingsRemovePassword ? '' : settingsPassword
+                );
+            }
             const updatedLabs = await labService.getMyLabs();
             setMyLabs(updatedLabs);
             alert(t('lab_mgmt_settings_saved'));
@@ -236,9 +242,10 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     };
 
     const openSettings = () => {
-        const lab = myLabs.find(m => m.lab_id === currentLabId)?.lab as any; // Temporary cast since we didn't add join_password to Lab type globally yet.
+        const lab = myLabs.find(m => m.lab_id === currentLabId)?.lab;
         setSettingsName(lab?.name || '');
-        setSettingsPassword(lab?.join_password || '');
+        setSettingsPassword('');
+        setSettingsRemovePassword(false);
         setSettingsInstitutionType(lab?.institution_type || '');
         setSettingsResearchField(lab?.research_field || '');
         setView('settings');
@@ -710,14 +717,35 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_password')}</label>
                                 <input
-                                    type="text"
+                                    type="password"
                                     value={settingsPassword}
                                     onChange={e => setSettingsPassword(e.target.value)}
-                                    placeholder={t('lab_mgmt_form_password_placeholder')}
-                                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
-                                    autoComplete="off"
+                                    placeholder={t('lab_mgmt_form_password_update_placeholder', {
+                                        defaultValue: i18n.language.startsWith('ko') ? '새 비밀번호를 입력하면 변경됩니다.' : 'Enter a new password to change it.'
+                                    })}
+                                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100 disabled:opacity-60"
+                                    autoComplete="new-password"
+                                    disabled={settingsRemovePassword}
                                 />
-                                <p className="text-xs text-slate-500 mt-1">{t('lab_mgmt_form_password_info')}</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {t('lab_mgmt_form_password_update_info', {
+                                        defaultValue: i18n.language.startsWith('ko') ? '현재 비밀번호는 표시되지 않습니다. 비워두면 변경하지 않습니다.' : 'The current password is not shown. Leave blank to keep it unchanged.'
+                                    })}
+                                </p>
+                                <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={settingsRemovePassword}
+                                        onChange={e => {
+                                            setSettingsRemovePassword(e.target.checked);
+                                            if (e.target.checked) setSettingsPassword('');
+                                        }}
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    {t('lab_mgmt_form_password_remove', {
+                                        defaultValue: i18n.language.startsWith('ko') ? '입장 비밀번호 제거' : 'Remove join password'
+                                    })}
+                                </label>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_institution_type')}</label>

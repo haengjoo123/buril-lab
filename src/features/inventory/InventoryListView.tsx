@@ -539,7 +539,7 @@ export const InventoryListView: React.FC = () => {
 
     */
     const handleExportExcel = async () => {
-        const XLSX = await import('xlsx');
+        const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
         const rowsForExport = visibleItems.map((item) => {
 
             return {
@@ -557,13 +557,9 @@ export const InventoryListView: React.FC = () => {
             };
         });
 
-        const worksheet = XLSX.utils.json_to_sheet(rowsForExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
-
         const timestamp = new Date().toISOString().split('T')[0];
         const fileName = `inventory_export_${timestamp}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
+        await downloadRowsAsXlsx(rowsForExport, 'Inventory', fileName);
     };
 
     const confirmDelete = async () => {

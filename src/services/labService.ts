@@ -52,7 +52,7 @@ export const labService = {
         // Fetch the created lab details
         const { data: labData, error: fetchError } = await supabase
             .from('labs')
-            .select()
+            .select('id, name, created_by, created_at, institution_type, research_field')
             .eq('id', data.lab_id)
             .single();
 
@@ -91,7 +91,7 @@ export const labService = {
         // Fetch the newly created member to return
         const { data: memberData, error: memberError } = await supabase
             .from('lab_members')
-            .select('*, labs(*)')
+            .select('*, labs(id, name, created_by, created_at, institution_type, research_field)')
             .eq('lab_id', labId)
             .eq('user_id', userData.user.id)
             .single();
@@ -108,7 +108,7 @@ export const labService = {
             .from('lab_members')
             .select(`
                 *,
-                lab:labs(*)
+                lab:labs(id, name, created_by, created_at, institution_type, research_field)
             `)
             .eq('user_id', userData.user.id);
 
@@ -150,7 +150,6 @@ export const labService = {
         labId: string,
         updates: {
             name?: string;
-            join_password?: string;
             institution_type?: string | null;
             research_field?: string | null;
         }
@@ -161,6 +160,18 @@ export const labService = {
             .eq('id', labId);
 
         if (error) throw error;
+    },
+
+    async updateLabJoinPassword(labId: string, password: string): Promise<void> {
+        const { data, error } = await supabase.rpc('set_lab_join_password', {
+            target_lab_id: labId,
+            p_password: password.trim() ? password.trim() : null,
+        });
+
+        if (error) throw error;
+        if (data && data.success === false) {
+            throw new Error(data.error || 'Failed to update lab password');
+        }
     },
 
     async deleteLab(labId: string): Promise<void> {

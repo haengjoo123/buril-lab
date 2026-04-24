@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+﻿/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { fetchWasteLogs, deleteWasteLog } from '../services/wasteLogService';
 import type { WasteLog } from '../types';
@@ -33,6 +33,23 @@ interface GroupedLogSection {
 const PAGE_SIZE = 20;
 const DELETE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ARCHIVE_CUTOFF_DAYS = 90;
+
+const HTML_ESCAPE_MAP: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+};
+
+function escapeHtml(value: unknown): string {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char] || char);
+}
+
+function safeSpreadsheetCell(value: unknown): string {
+    const text = String(value ?? '');
+    return /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
+}
 
 export const WasteLogView: React.FC = () => {
     const { t, i18n } = useTranslation();
@@ -505,23 +522,26 @@ export const WasteLogView: React.FC = () => {
     const handleExportExcel = async (scope: ExportScope) => {
         setIsExporting(true);
         try {
-            const XLSX = await import('xlsx');
+            const { downloadRowsAsXlsx } = await import('../utils/excelFiles');
             const allLogs = await fetchLogsForExport(scope);
 
-            const data = allLogs.map(log => ({
-                "폐기일시": formatDate(log.created_at),
-                "폐기구분": log.disposal_category,
-                "시약명": log.chemicals.map(c => c.chemical?.name || (c as any).name || 'Unknown').join(', '),
-                "총 용량": computeTotalVolume(log) || '',
-                "삭제 위치": getDeletedLocation(log) || '',
-                "처리자": log.handler_name || '',
-                "사유": getDeleteReason(log) || ''
-            }));
+            const data = allLogs.map((log) => ({
+                'Disposed At': formatDate(log.created_at),
+                'Category': log.disposal_category,
+                'Chemicals': log.chemicals.map(c => c.chemical?.name || (c as any).name || 'Unknown').join(', '),
+                'Total Volume': computeTotalVolume(log) || '',
+                'Deleted Location': getDeletedLocation(log) || '',
+                'Handler': log.handler_name || '',
+                'Reason': getDeleteReason(log) || '',
+            })).map((row) => Object.fromEntries(
+                Object.entries(row).map(([key, value]) => [key, safeSpreadsheetCell(value)])
+            ));
 
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "폐기기록");
-            XLSX.writeFile(wb, `폐기기록_${getExportFilenameSuffix(scope)}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            await downloadRowsAsXlsx(
+                data,
+                'Waste Logs',
+                `waste_logs_${getExportFilenameSuffix(scope)}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+            );
         } catch (e) {
             console.error(e);
             setError(t('dispose_error'));
@@ -558,16 +578,16 @@ export const WasteLogView: React.FC = () => {
                     <tbody>
             `;
             allLogs.forEach(log => {
-                const chemicals = log.chemicals.map(c => c.chemical?.name || (c as any).name || 'Unknown').join(', ');
+                const chemicals = escapeHtml(log.chemicals.map(c => c.chemical?.name || (c as any).name || 'Unknown').join(', '));
                 html += `
                     <tr>
-                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${formatDate(log.created_at)}</td>
-                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${log.disposal_category}</td>
+                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${escapeHtml(formatDate(log.created_at))}</td>
+                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${escapeHtml(log.disposal_category)}</td>
                         <td style="border: 1px solid #e5e7eb; padding: 6px;">${chemicals}</td>
-                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${computeTotalVolume(log) || ''}</td>
-                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${getDeletedLocation(log) || ''}</td>
-                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${log.handler_name || ''}</td>
-                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${getDeleteReason(log) || ''}</td>
+                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${escapeHtml(computeTotalVolume(log) || '')}</td>
+                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${escapeHtml(getDeletedLocation(log) || '')}</td>
+                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${escapeHtml(log.handler_name || '')}</td>
+                        <td style="border: 1px solid #e5e7eb; padding: 6px;">${escapeHtml(getDeleteReason(log) || '')}</td>
                     </tr>
                 `;
             });
@@ -1314,3 +1334,4 @@ function startOfWeek(date: Date): Date {
 function startOfMonth(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), 1);
 }
+

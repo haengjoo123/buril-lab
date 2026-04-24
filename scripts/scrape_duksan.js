@@ -9,18 +9,17 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
+import { getSupabaseScriptConfig } from './supabaseEnv.js';
 
 // Configuration
 const API_URL = 'https://api.cacheby.com/search';
 const OUTPUT_FILE = path.join(process.cwd(), 'src/data/duksan_products.json');
 const DELAY_MS = 1000;
 
-// Supabase configuration
-const SUPABASE_URL = 'https://zafxzidbtbryiksemlwc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZnh6aWRidGJyeWlrc2VtbHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3MTU1NzIsImV4cCI6MjA4MjI5MTU3Mn0.DEylxIGynOxzUC-mt5HwJt1gWOqG400QejvKxLdghhw';
 const STORAGE_BUCKET = 'media-products';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Ensure data directory exists
 const dir = path.dirname(OUTPUT_FILE);

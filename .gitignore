@@ -13,6 +13,7 @@ dist
 .env
 .env.e2e
 .env.android
+/android/keystore.properties
 dist-ssr
 *.local
 *.jks

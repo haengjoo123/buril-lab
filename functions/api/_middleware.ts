@@ -51,6 +51,17 @@ const LIMIT_CONFIGS = {
   },
 } as const
 
+const PROTECTED_API_PATTERNS = [
+  /^\/api\/gemini\//,
+  /^\/api\/vision\//,
+  /^\/api\/voice\//,
+  /^\/api\/reagents\//,
+] as const
+
+function isProtectedApiPath(path: string): boolean {
+  return PROTECTED_API_PATTERNS.some((pattern) => pattern.test(path))
+}
+
 function resolveSupabaseUrl(env: Env): string | null {
   return env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim() || null
 }
@@ -110,6 +121,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   let identifier: string = request.headers.get('cf-connecting-ip') || 'anonymous'
   let isUser = false
   let userId = ''
+  let authVerificationFailed = false
 
   const authHeader = request.headers.get('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
@@ -124,9 +136,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
     } catch (err) {
       console.error('JWT Verification failed:', err)
-      // Invalid token - fall back to IP-based limiting but maybe stricter?
-      // For now, we allow the request to proceed with IP-based ID
+      authVerificationFailed = true
     }
+  }
+
+  if (isProtectedApiPath(path) && !isUser) {
+    return new Response(JSON.stringify({
+      error: authVerificationFailed ? 'Invalid authentication token.' : 'Authentication is required.',
+    }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    })
   }
 
   // 2. Resolve Rate Limit Category

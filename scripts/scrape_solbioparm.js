@@ -9,6 +9,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
+import { getSupabaseScriptConfig } from './supabaseEnv.js';
 
 // API Configuration
 const API_URL = 'https://api.cacheby.com/search';
@@ -16,12 +17,10 @@ const BRAND_NAME = '솔바이오팜';
 const BRAND_SLUG = 'solbioparm';
 const OUTPUT_FILE = path.join(process.cwd(), 'src/data/solbioparm_products.json');
 
-// Supabase configuration
-const SUPABASE_URL = 'https://zafxzidbtbryiksemlwc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZnh6aWRidGJyeWlrc2VtbHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3MTU1NzIsImV4cCI6MjA4MjI5MTU3Mn0.DEylxIGynOxzUC-mt5HwJt1gWOqG400QejvKxLdghhw';
 const STORAGE_BUCKET = 'media-products';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -111,7 +110,7 @@ async function uploadImageToSupabase(imageUrl, productId) {
         }
 
         // Return new Supabase URL
-        return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${storagePath}`;
+        return `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${storagePath}`;
     } catch (error) {
         console.error(`Image download error for ${productId}:`, error.message);
         return imageUrl; // Return original URL on error

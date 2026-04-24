@@ -3,6 +3,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
+import { getSupabaseScriptConfig } from './supabaseEnv.js';
 import { randomUUID } from 'crypto';
 
 const CATEGORY_ID = '80013462';
@@ -18,9 +19,8 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const TARGET_PRODUCTS = 1000;
 const FALLBACK_TOTAL_PAGES = 9;
 
-const SUPABASE_URL = 'https://zafxzidbtbryiksemlwc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZnh6aWRidGJyeWlrc2VtbHdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3MTU1NzIsImV4cCI6MjA4MjI5MTU3Mn0.DEylxIGynOxzUC-mt5HwJt1gWOqG400QejvKxLdghhw';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const normalizeName = (value) => value?.toString().toLowerCase().replace(/[^a-z0-9]+/g, '').trim() || '';
