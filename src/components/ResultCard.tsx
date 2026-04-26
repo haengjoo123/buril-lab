@@ -39,6 +39,11 @@ const organicSolventPresets: Array<{
     { id: 'custom', label: '', solventName: '', solventClass: 'organic_unknown', isCustom: true },
 ];
 
+const compactReasonKeyByCategory: Partial<Record<AnalysisResult['category'], string>> = {
+    ORGANIC_NON_HALOGEN: 'result_reason_compact_organic_non_halogen',
+    ORGANIC_HALOGEN: 'result_reason_compact_organic_halogen',
+};
+
 export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequireAuth, secondaryBtnText }) => {
     const { chemical, binColor, reason, isSafe, category, label } = result;
     const addToCart = useWasteStore((state) => state.addToCart);
@@ -161,6 +166,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
     }, [chemical]);
 
     const guideKey = category === 'ACID' && isHF ? 'disposal_guide_ACID_HF' : `disposal_guide_${category}`;
+    const reasonKey = compactReasonKeyByCategory[category] || reason;
 
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-5">
@@ -189,23 +195,31 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                     {renderIcon()}
                 </div>
 
+                <span className="mb-2 inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    {t('result_basis_badge' as any)}
+                </span>
+
                 <h4 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">{t(label as any)}</h4>
 
                 <p className="text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
-                    {t(reason as any, result.reasonParams)}
+                    {t(reasonKey as any, result.reasonParams)}
                 </p>
 
                 {/* Specific Disposal Guide */}
-                <div className="w-full bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 p-4 rounded-xl text-left mb-6 border border-blue-100 dark:border-blue-800/50 animate-in zoom-in-95 duration-300 delay-100">
-                    <p className="font-bold mb-1 text-sm">{t('cart_guide_title')}</p>
-                    <p className="text-sm leading-relaxed whitespace-pre-line">
-                        {t(guideKey as any)}
-                    </p>
-                </div>
-
-                <div className="w-full flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300 mb-6">
-                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
-                    <span>{t('result_pure_basis_notice' as any)}</span>
+                <div className="w-full rounded-xl border border-blue-100 bg-blue-50/80 p-4 text-left text-blue-950 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100 mb-6 animate-in zoom-in-95 duration-300 delay-100">
+                    <div className="flex items-start gap-3">
+                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+                        <div>
+                            <p className="font-bold mb-1 text-sm">{t('result_pure_guide_title' as any)}</p>
+                            <p className="text-sm leading-relaxed whitespace-pre-line">
+                                {t(guideKey as any)}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="mt-3 border-t border-blue-200/70 pt-3 text-xs leading-relaxed text-blue-800 dark:border-blue-800/60 dark:text-blue-200">
+                        <p className="font-semibold">{t('result_solution_notice_title' as any)}</p>
+                        <p className="mt-0.5">{t('result_solution_notice_body' as any)}</p>
+                    </div>
                 </div>
 
                 {/* AI Badge if inferred by Gemini */}
@@ -282,7 +296,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                         className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 whitespace-nowrap"
                     >
                         <Plus className="w-4 h-4" />
-                        {t('btn_add_to_list')}
+                        {t('result_add_to_list_cta' as any)}
                     </button>
                 </div>
             </div>
