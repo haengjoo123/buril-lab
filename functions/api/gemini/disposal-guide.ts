@@ -4,11 +4,53 @@ interface Env {
   GEMINI_API_KEY?: string
 }
 
+interface SolutionContextInput {
+  physicalForm?: string
+  solventClass?: string
+  solventName?: string
+  solventPreset?: string
+  isCustomSolvent?: boolean
+  isSolventVerified?: boolean
+  solventResolution?: string
+  solventCasNumber?: string
+  solventMolecularFormula?: string
+}
+
 interface ChemicalInput {
   name?: string
   casNumber?: string
   molecularFormula?: string
   category?: string
+  solutionContext?: SolutionContextInput
+}
+
+const formatSolutionContext = (context?: SolutionContextInput): string => {
+  if (!context) return '형태: 원액/고체 기준(기존 데이터)'
+
+  if (context.physicalForm === 'neat_or_solid' || context.solventClass === 'none') {
+    return '형태: 원액/고체'
+  }
+
+  if (context.physicalForm === 'aqueous' || context.solventClass === 'aqueous') {
+    return '형태: 물/수용액'
+  }
+
+  if (context.physicalForm === 'mixed_or_unknown' || context.solventClass === 'mixed_or_unknown') {
+    return '형태: 혼합/잘 모름'
+  }
+
+  if (context.physicalForm === 'organic_solvent') {
+    const solventClassLabel =
+      context.solventClass === 'organic_halogen'
+        ? '할로겐 유기용매'
+        : context.solventClass === 'organic_non_halogen'
+          ? '비할로겐 유기용매'
+          : '성상 미확인 유기용매'
+    const verifiedLabel = context.isSolventVerified ? '확인됨' : '미확인'
+    return `형태: 유기용매 / 용매: ${context.solventName || '미입력'} / 성상: ${solventClassLabel} / 검증: ${verifiedLabel}`
+  }
+
+  return '형태: 미확인'
 }
 
 export const onRequestPost = async (context: {
@@ -28,7 +70,7 @@ export const onRequestPost = async (context: {
   }
 
   const chemicalList = chemicals
-    .map((c, i) => `${i + 1}. ${c.name || '(이름 없음)'}${c.molecularFormula ? ` (${c.molecularFormula})` : ''}${c.casNumber ? ` [CAS: ${c.casNumber}]` : ''}`)
+    .map((c, i) => `${i + 1}. ${c.name || '(이름 없음)'}${c.molecularFormula ? ` (${c.molecularFormula})` : ''}${c.casNumber ? ` [CAS: ${c.casNumber}]` : ''} / 기존 분류: ${c.category || 'UNKNOWN'} / ${formatSolutionContext(c.solutionContext)}`)
     .join('\n')
 
   const prompt = `당신은 실험실 폐기물 분류 시스템의 AI 보조입니다. 아래 분류 체계에 따라 시약 혼합물의 폐기 방법을 판단하세요.
@@ -44,6 +86,12 @@ export const onRequestPost = async (context: {
 - 고체 폐기물 — 고형 시약, 오염된 초자류
 - 수계 폐액 — 유기물/중금속/독성 없는 순수 수용액만 해당
 - 특수 유해 폐기물 — 맹독성/고인화성 물질. 안전관리자 인계
+
+## 용매/형태 보정 규칙
+- 기존 분류는 순수 시약/고체 기준이며, 용매 정보가 있으면 실제 폐액 스트림을 함께 고려하세요.
+- 혼합/잘 모름 또는 성상 미확인 유기용매는 확정 분류로 단정하지 말고 안전관리자 확인 필요로 안내하세요.
+- 유기용매가 할로겐성이면 할로겐족 유기 폐액 흐름을 우선 고려하되, 중금속/시안/반응성/특수유해 성분 경고를 유지하세요.
+- 수용액은 산/알칼리/중성/시안/중금속/반응성 분류를 낮추지 말고, 유기물이 수용액에 녹은 경우 수계 유기성 폐액 여부 확인 필요를 언급하세요.
 
 ## 혼합 전용 분류 (혼합물에만 적용)
 - 알칼리 + 유기계 혼합 폐액 — 알칼리+유기 혼합 시, 유기물이 수용성이고 중화 가능한 경우. 희석 후 중화(pH 6-8)하여 수계 배출

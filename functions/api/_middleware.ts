@@ -52,6 +52,7 @@ const LIMIT_CONFIGS = {
 } as const
 
 const PROTECTED_API_PATTERNS = [
+  /^\/api\/account\//,
   /^\/api\/gemini\//,
   /^\/api\/vision\//,
   /^\/api\/voice\//,

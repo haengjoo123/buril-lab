@@ -8,6 +8,7 @@ import { getAIDisposalGuide } from '../services/geminiDisposalGuideService';
 import { X, Trash2, AlertTriangle, AlertOctagon, CheckCircle, Loader2, Sparkles, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from './CustomDialog';
+import type { CartItem } from '../types';
 
 interface CartViewProps {
     onClose: () => void;
@@ -23,6 +24,32 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
     } = useWasteStore();
 
     const { t } = useTranslation();
+
+    const formatSolutionContext = (context?: CartItem['solutionContext']): string | null => {
+        if (!context) return null;
+
+        if (context.physicalForm === 'neat_or_solid') {
+            return t('solution_form_neat_or_solid' as any);
+        }
+
+        if (context.physicalForm === 'aqueous') {
+            return t('solution_form_aqueous' as any);
+        }
+
+        if (context.physicalForm === 'mixed_or_unknown') {
+            return t('solution_form_mixed_or_unknown' as any);
+        }
+
+        const solventName = context.solventName || t('solvent_unknown' as any);
+        const classLabelMap: Partial<Record<NonNullable<CartItem['solutionContext']>['solventClass'], string>> = {
+            organic_halogen: t('solvent_class_halogen' as any),
+            organic_non_halogen: t('solvent_class_non_halogen' as any),
+            organic_unknown: t('solvent_unverified_short' as any),
+        };
+        const classLabel = classLabelMap[context.solventClass];
+        const suffix = classLabel ? ` (${classLabel})` : '';
+        return `${t('solution_form_organic_solvent' as any)}: ${solventName}${suffix}`;
+    };
 
     const mixtureResult = useMemo(() => analyzeMixture(cart), [cart]);
     const compatWarnings = useMemo(() => checkCompatibility(cart), [cart]);
@@ -52,6 +79,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                 casNumber: item.chemical.casNumber,
                 molecularFormula: item.chemical.molecularFormula,
                 category: item.category,
+                solutionContext: item.solutionContext,
             }));
             const result = await getAIDisposalGuide(chemicals, {
                 sourceScreen: 'cart_view',
@@ -134,25 +162,34 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                             {t('cart_empty')}
                         </div>
                     ) : (
-                        cart.map((item) => (
-                            <div key={item.chemical.id} className="flex justify-between items-center p-3 border border-gray-100 dark:border-slate-700 rounded-lg bg-gray-50/50 dark:bg-slate-800/50">
-                                <div>
-                                    <div className="font-semibold text-slate-700 dark:text-slate-300">{item.chemical.name}</div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-500">{t(item.label as any)}</div>
-                                    {(item.volume || item.molarity) && (
-                                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
-                                            {item.volume}{item.volume && item.molarity && ' • '}{item.molarity}
-                                        </div>
-                                    )}
+                        cart.map((item) => {
+                            const solutionContextLabel = formatSolutionContext(item.solutionContext);
+
+                            return (
+                                <div key={item.chemical.id} className="flex justify-between items-center p-3 border border-gray-100 dark:border-slate-700 rounded-lg bg-gray-50/50 dark:bg-slate-800/50">
+                                    <div className="min-w-0 pr-2">
+                                        <div className="font-semibold text-slate-700 dark:text-slate-300">{item.chemical.name}</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-500">{t(item.label as any)}</div>
+                                        {solutionContextLabel && (
+                                            <div className="text-xs text-blue-600 dark:text-blue-300 mt-0.5">
+                                                {t('solution_context_label' as any)}: {solutionContextLabel}
+                                            </div>
+                                        )}
+                                        {(item.volume || item.molarity) && (
+                                            <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
+                                                {item.volume}{item.volume && item.molarity && ' • '}{item.molarity}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => removeFromCart(item.chemical.id)}
+                                        className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 p-2"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => removeFromCart(item.chemical.id)}
-                                    className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 p-2"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
 
                     {/* ── Compatibility Warnings ── */}
@@ -216,6 +253,32 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                                 </div>
                             )}
                         </div>
+
+                        {(mixtureResult.baseLabel || mixtureResult.contextWarnings?.length) && (
+                            <div className="space-y-2 mb-2.5">
+                                {mixtureResult.baseLabel && (
+                                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-2 text-left text-[11px] leading-snug text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                                        <div className="font-semibold">
+                                            {t('mixture_base_basis_label' as any)}: {t(mixtureResult.baseLabel as any)}
+                                        </div>
+                                        {mixtureResult.baseReason && (
+                                            <div className="mt-0.5 opacity-90">
+                                                {t(mixtureResult.baseReason as any)}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {mixtureResult.contextWarnings?.map((warningKey) => (
+                                    <div
+                                        key={warningKey}
+                                        className="rounded-lg border border-amber-100 bg-amber-50 p-2 text-left text-[11px] leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+                                    >
+                                        {t(warningKey as any)}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {!mixtureResult.isSafe && (
                             <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-[11px] p-2 rounded-lg flex items-center gap-2 mb-2.5 text-left border border-red-100 dark:border-red-900/40">

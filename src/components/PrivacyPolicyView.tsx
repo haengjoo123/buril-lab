@@ -12,7 +12,6 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200">
-            {/* Header / Nav */}
             <div className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
                 <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
                     <button
@@ -25,7 +24,6 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
                     <div className="font-semibold text-slate-100">
                         {isKorean ? '개인정보처리방침' : 'Privacy Policy'}
                     </div>
-                    {/* Placeholder to balance the flex layout */}
                     <div className="w-20" />
                 </div>
             </div>
@@ -37,281 +35,11 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
                         {isKorean ? '개인정보처리방침' : 'Privacy Policy'}
                     </h1>
                     <p className="text-sm text-slate-500">
-                        {isKorean ? '최종 수정일: 2026년 4월 3일' : 'Last updated: April 3, 2026'}
+                        {isKorean ? '최종 수정일: 2026년 4월 24일' : 'Last updated: April 24, 2026'}
                     </p>
                 </div>
 
-                {isKorean ? (
-                    <div className="space-y-10 prose prose-invert max-w-none">
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">1. 개요</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed">
-                                BurilLab(이하 "본 앱")은 연구실 시약 관리를 위한 서비스입니다.
-                                본 개인정보처리방침은 본 앱이 사용자의 정보를 어떻게 수집, 사용, 보호하는지에 대해 설명합니다.
-                            </p>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">2. 수집하는 개인정보</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-4">본 앱은 서비스 제공을 위해 최소한의 정보만을 수집합니다.</p>
-                            
-                            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50 mb-6">
-                                <table className="w-full text-left text-sm whitespace-nowrap">
-                                    <thead className="bg-slate-800/50 text-slate-300">
-                                        <tr>
-                                            <th className="px-5 py-3 font-medium border-b border-slate-800">수집 항목</th>
-                                            <th className="px-5 py-3 font-medium border-b border-slate-800">수집 목적</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="text-slate-400">
-                                        <tr>
-                                            <td className="px-5 py-3 border-b border-slate-800/50">이메일 주소</td>
-                                            <td className="px-5 py-3 border-b border-slate-800/50">회원가입 및 로그인 인증</td>
-                                        </tr>
-                                        <tr>
-                                            <td className="px-5 py-3">비밀번호 (암호화 저장)</td>
-                                            <td className="px-5 py-3">계정 보안 및 인증</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-5">
-                                <p className="text-blue-200/80 text-sm m-0">💡 본 앱은 사용자의 위치 정보, 연락처, 사진, 결제 정보 등 민감한 개인정보를 수집하지 않습니다.</p>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">3. 개인정보의 이용 목적</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">수집된 정보는 다음의 목적으로만 사용됩니다:</p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li><strong className="text-slate-300">사용자 인증</strong> — 로그인 및 계정 관리</li>
-                                <li><strong className="text-slate-300">서비스 제공</strong> — 시약 관리 기능 이용</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">4. 개인정보의 제3자 제공</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">
-                                본 앱은 사용자의 개인정보를 제3자에게 판매, 교환, 또는 공유하지 않습니다.
-                                다만, 인증 서비스 운영을 위해 아래의 서비스 제공자를 이용합니다:
-                            </p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li><strong className="text-slate-300">Supabase</strong> — 사용자 인증 및 데이터 저장 (서버: AWS 클라우드)</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">5. 개인정보의 보관 및 파기</h2>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li>사용자의 개인정보는 계정이 유지되는 동안 보관됩니다.</li>
-                                <li>계정 삭제 완료 시, 해당 사용자와 관련된 모든 데이터(이메일, 닉네임, 등록한 시약 데이터, 활동 로그 및 검색 기록)는 즉시 및 영구적으로 삭제됩니다.</li>
-                                <li>비밀번호는 단방향 암호화(해시) 처리되어 저장되며, 원본은 보관되지 않습니다.</li>
-                            </ul>
-                        </section>
-
-                        <section id="delete-account">
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">6. 계정과 관련 데이터의 삭제 방법</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">BurilLab은 사용자가 원할 때 언제든지 직접 계정을 삭제하고 모든 데이터를 파기할 수 있는 권리를 보장합니다.</p>
-                            
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 mb-4">
-                                <h3 className="text-sm font-bold text-white mb-2">A. 앱 내에서 직접 삭제하는 방법 (권장)</h3>
-                                <ol className="list-decimal pl-5 text-slate-400 space-y-1 text-sm">
-                                    <li>BurilLab 앱에 로그인합니다.</li>
-                                    <li>메인 화면 우상단의 '설정(톱니바퀴 아이콘)' 메뉴를 클릭합니다.</li>
-                                    <li>하단의 <span className="text-red-400 font-medium">'계정 탈퇴'</span> 버튼을 클릭합니다.</li>
-                                    <li>화면의 안내에 따라 확인 문구를 입력하면 즉시 계정과 모든 데이터가 삭제됩니다.</li>
-                                </ol>
-                            </div>
-
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-                                <h3 className="text-sm font-bold text-white mb-2">B. 웹 또는 이메일을 통한 삭제 요청</h3>
-                                <p className="text-slate-400 text-sm m-0">
-                                    앱 접근이 불가능한 경우, 고객센터 이메일(<a href="mailto:gudwns999999@gmail.com" className="text-blue-400">gudwns999999@gmail.com</a>)로 
-                                    계정 이메일 주소와 함께 삭제를 요청하시면 본인 확인 절차 후 7일 이내에 모든 데이터를 파기해 드립니다.
-                                </p>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">6. 사용자의 권리</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">사용자는 언제든지 다음의 권리를 행사할 수 있습니다:</p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li>자신의 개인정보 열람 요청</li>
-                                <li>개인정보 수정 요청</li>
-                                <li>계정 삭제 (개인정보 파기) 요청</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">7. 데이터 보안</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">
-                                본 앱은 사용자 데이터 보호를 위해 다음과 같은 보안 조치를 적용하고 있습니다:
-                            </p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li>모든 데이터 전송 시 HTTPS(SSL/TLS) 암호화 적용</li>
-                                <li>비밀번호 단방향 암호화(해시) 저장</li>
-                                <li>Row Level Security(RLS)를 통한 데이터 접근 제어</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">8. 개인정보처리방침 변경</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed">
-                                본 개인정보처리방침은 관련 법령 또는 서비스 변경에 따라 수정될 수 있습니다.
-                                변경 사항은 본 페이지를 통해 공지됩니다.
-                            </p>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">9. 문의</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-4">개인정보 관련 문의사항이 있으시면 아래로 연락해 주세요.</p>
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                                <p className="text-slate-300 text-sm mb-2"><strong className="text-white">서비스명:</strong> BurilLab</p>
-                                <p className="text-slate-300 text-sm m-0">
-                                    <strong className="text-white">이메일:</strong>{' '}
-                                    <a href="mailto:gudwns999999@gmail.com" className="text-blue-400 hover:text-blue-300 hover:underline">
-                                        gudwns999999@gmail.com
-                                    </a>
-                                </p>
-                            </div>
-                        </section>
-                    </div>
-                ) : (
-                    <div className="space-y-10 prose prose-invert max-w-none">
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">1. Overview</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed">
-                                BurilLab ("the App") is a laboratory reagent management service.
-                                This Privacy Policy describes how the App collects, uses, and protects user information.
-                            </p>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">2. Information We Collect</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-4">The App collects only the minimum information necessary to provide the service.</p>
-                            
-                            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50 mb-6">
-                                <table className="w-full text-left text-sm whitespace-nowrap">
-                                    <thead className="bg-slate-800/50 text-slate-300">
-                                        <tr>
-                                            <th className="px-5 py-3 font-medium border-b border-slate-800">Data Collected</th>
-                                            <th className="px-5 py-3 font-medium border-b border-slate-800">Purpose</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="text-slate-400">
-                                        <tr>
-                                            <td className="px-5 py-3 border-b border-slate-800/50">Email address</td>
-                                            <td className="px-5 py-3 border-b border-slate-800/50">Account registration and login authentication</td>
-                                        </tr>
-                                        <tr>
-                                            <td className="px-5 py-3">Password (stored encrypted)</td>
-                                            <td className="px-5 py-3">Account security and authentication</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="bg-blue-900/20 border border-blue-800/50 rounded-xl p-5">
-                                <p className="text-blue-200/80 text-sm m-0">💡 The App does not collect sensitive personal information such as location data, contacts, photos, or payment information.</p>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">3. How We Use Your Information</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">Collected information is used solely for the following purposes:</p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li><strong className="text-slate-300">User Authentication</strong> — Login and account management</li>
-                                <li><strong className="text-slate-300">Service Delivery</strong> — Access to reagent management features</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">4. Third-Party Sharing</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">
-                                The App does not sell, trade, or share user personal information with third parties.
-                                However, the following service providers are used for authentication:
-                            </p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li><strong className="text-slate-300">Supabase</strong> — User authentication and data storage (hosted on AWS Cloud)</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">5. Data Retention and Deletion</h2>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li>Personal information is retained for the duration of the account's existence.</li>
-                                <li>Upon completion of account deletion, all data associated with the user (email, nickname, registered reagent data, activity logs, and search history) is immediately and permanently deleted.</li>
-                                <li>Passwords are stored using one-way encryption (hashing); original passwords are never retained.</li>
-                            </ul>
-                        </section>
-
-                        <section id="delete-account-en">
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">6. How to Delete Your Account and Data</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">BurilLab ensures your right to delete your account and destroy all data at any time.</p>
-                            
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 mb-4">
-                                <h3 className="text-sm font-bold text-white mb-2">A. Deletion via the App (Recommended)</h3>
-                                <ol className="list-decimal pl-5 text-slate-400 space-y-1 text-sm">
-                                    <li>Log in to the BurilLab app.</li>
-                                    <li>Click on the 'Settings (Gear icon)' in the upper right.</li>
-                                    <li>Click the <span className="text-red-400 font-medium">'Delete Account'</span> button at the bottom.</li>
-                                    <li>Follow the prompts and enter the confirmation phrase to immediately delete your account and all data.</li>
-                                </ol>
-                            </div>
-
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-                                <h3 className="text-sm font-bold text-white mb-2">B. Request via Email</h3>
-                                <p className="text-slate-400 text-sm m-0">
-                                    If you cannot access the app, you can request deletion by emailing <a href="mailto:gudwns999999@gmail.com" className="text-blue-400">gudwns999999@gmail.com</a> with 
-                                    your registered email address. We will destroy all data within 7 days after identity verification.
-                                </p>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">6. Your Rights</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">Users may exercise the following rights at any time:</p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li>Request access to their personal information</li>
-                                <li>Request correction of personal information</li>
-                                <li>Request account deletion (data erasure)</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">7. Data Security</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-3">The App implements the following security measures to protect user data:</p>
-                            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
-                                <li>HTTPS (SSL/TLS) encryption for all data transmission</li>
-                                <li>One-way password hashing</li>
-                                <li>Row Level Security (RLS) for data access control</li>
-                            </ul>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">8. Changes to This Policy</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed">
-                                This Privacy Policy may be updated in accordance with applicable laws or service changes.
-                                Any changes will be posted on this page.
-                            </p>
-                        </section>
-
-                        <section>
-                            <h2 className="text-lg font-semibold text-white mb-3 pl-3 border-l-4 border-blue-500">9. Contact Us</h2>
-                            <p className="text-slate-400 text-[15px] leading-relaxed mb-4">For privacy-related inquiries, please contact us at:</p>
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                                <p className="text-slate-300 text-sm mb-2"><strong className="text-white">Service:</strong> BurilLab</p>
-                                <p className="text-slate-300 text-sm m-0">
-                                    <strong className="text-white">Email:</strong>{' '}
-                                    <a href="mailto:gudwns999999@gmail.com" className="text-blue-400 hover:text-blue-300 hover:underline">
-                                        gudwns999999@gmail.com
-                                    </a>
-                                </p>
-                            </div>
-                        </section>
-                    </div>
-                )}
+                {isKorean ? <KoreanPolicy /> : <EnglishPolicy />}
 
                 <div className="mt-16 pt-8 border-t border-slate-800 text-center text-slate-500 text-sm">
                     &copy; 2026 BurilLab. All rights reserved.
@@ -320,3 +48,221 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
         </div>
     );
 };
+
+const Section: React.FC<{ title: string; children: React.ReactNode; id?: string }> = ({ title, children, id }) => (
+    <section id={id} className="space-y-3">
+        <h2 className="text-lg font-semibold text-white pl-3 border-l-4 border-blue-500">{title}</h2>
+        {children}
+    </section>
+);
+
+const InfoTable: React.FC<{ headers: [string, string]; rows: [string, string][] }> = ({ headers, rows }) => (
+    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
+        <table className="w-full text-left text-sm">
+            <thead className="bg-slate-800/50 text-slate-300">
+                <tr>
+                    <th className="px-5 py-3 font-medium border-b border-slate-800">{headers[0]}</th>
+                    <th className="px-5 py-3 font-medium border-b border-slate-800">{headers[1]}</th>
+                </tr>
+            </thead>
+            <tbody className="text-slate-400">
+                {rows.map(([label, purpose]) => (
+                    <tr key={label}>
+                        <td className="px-5 py-3 border-b border-slate-800/50 align-top">{label}</td>
+                        <td className="px-5 py-3 border-b border-slate-800/50 align-top">{purpose}</td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    </div>
+);
+
+const KoreanPolicy: React.FC = () => (
+    <div className="space-y-10 prose prose-invert max-w-none">
+        <Section title="1. 개요">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                BurilLab은 연구실 시약, 보관 위치, 폐기 기록을 관리하기 위한 서비스입니다. 이 방침은 BurilLab이
+                서비스 제공을 위해 어떤 정보를 수집하고 어떻게 사용, 보관, 삭제하는지 설명합니다.
+            </p>
+        </Section>
+
+        <Section title="2. 수집하는 정보">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                BurilLab은 서비스 제공에 필요한 최소한의 정보를 수집합니다.
+            </p>
+            <InfoTable
+                headers={['수집 항목', '이용 목적']}
+                rows={[
+                    ['이메일 주소, 계정 식별자', '회원가입, 로그인, 계정 관리, 고객 지원'],
+                    ['비밀번호', 'Supabase 인증 시스템에서 해시 처리되며 원문은 BurilLab이 보관하지 않음'],
+                    ['연구실, 멤버, 닉네임, 권한 정보', '공동 연구실 관리와 접근 권한 확인'],
+                    ['시약, 시약장, 보관 위치, 폐기 기록, 활동 로그', '시약 재고 관리, 보관 이력 확인, 안전 기록 유지'],
+                    ['검색어, AI 분석 요청 내용, 스캔한 라벨 이미지', '시약 검색, 라벨 인식, AI 분석 기능 제공'],
+                    ['음성 질문 오디오와 전사 결과', '음성 비서 기능 제공. 음성 기능이 활성화된 경우에만 처리'],
+                    ['피드백 내용, 선택 입력한 연락처, 사용자 에이전트', '버그 제보와 개선 요청 처리'],
+                    ['언어, 온보딩, 안전 안내 확인 상태 등 로컬 저장 정보', '기기 내 사용 환경 유지'],
+                ]}
+            />
+        </Section>
+
+        <Section title="3. 정보의 이용">
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>사용자 인증, 계정 유지, 연구실 접근 권한 확인</li>
+                <li>시약 검색, 재고 관리, 시약장 사진 업로드, 폐기 기록 관리</li>
+                <li>AI 라벨 인식, OCR, 음성 비서 등 사용자가 요청한 기능 제공</li>
+                <li>보안, 오류 분석, API 남용 방지, 서비스 품질 개선</li>
+            </ul>
+        </Section>
+
+        <Section title="4. 제3자 처리 서비스">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                BurilLab은 개인정보를 판매하지 않습니다. 다만 서비스 운영을 위해 다음 제공자를 사용할 수 있습니다.
+            </p>
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>Supabase: 인증, 데이터베이스, 파일 저장소</li>
+                <li>Cloudflare Pages Functions: 서버 API 실행과 요청 처리</li>
+                <li>Google Gemini 및 Google Vision API: 이미지 분석, OCR, AI 응답 생성</li>
+                <li>OpenAI API: 음성 전사와 음성 응답 생성 기능이 활성화된 경우</li>
+                <li>Upstash Redis: API 요청 제한과 남용 방지</li>
+            </ul>
+        </Section>
+
+        <Section title="5. 보관 및 삭제">
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>계정 정보와 연구실 데이터는 계정 또는 연구실이 유지되는 동안 보관됩니다.</li>
+                <li>회원 탈퇴 시 개인 검색 기록, 개인 식별 정보, 개인 피드백 식별자는 삭제 또는 익명화됩니다.</li>
+                <li>다른 멤버가 함께 사용하는 연구실 시약장, 재고, 안전 기록은 협업 연속성을 위해 유지될 수 있으며 사용자 식별자는 제거됩니다.</li>
+                <li>법령상 보관이 필요한 정보가 있다면 해당 기간 동안만 보관한 뒤 삭제합니다.</li>
+            </ul>
+        </Section>
+
+        <Section title="6. 계정과 데이터 삭제 방법" id="delete-account">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                사용자는 언제든지 앱 안에서 직접 계정 삭제를 요청할 수 있습니다.
+            </p>
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+                <ol className="list-decimal pl-5 text-slate-400 space-y-1 text-sm">
+                    <li>BurilLab에 로그인합니다.</li>
+                    <li>설정 화면을 엽니다.</li>
+                    <li>회원 탈퇴를 선택하고 확인 문구를 입력합니다.</li>
+                    <li>삭제가 완료되면 계정 접근 권한과 개인 식별 데이터가 제거됩니다.</li>
+                </ol>
+            </div>
+            <p className="text-slate-400 text-sm">
+                앱에 접근할 수 없는 경우, 가입 이메일 주소와 함께{' '}
+                <a href="mailto:gudwns999999@gmail.com" className="text-blue-400">gudwns999999@gmail.com</a>
+                으로 삭제를 요청할 수 있습니다. 본인 확인 후 7일 이내 처리합니다.
+            </p>
+        </Section>
+
+        <Section title="7. 사용자 권리와 문의">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                개인정보 열람, 정정, 삭제, 처리 중지를 요청하려면 아래 연락처로 문의해 주세요.
+            </p>
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+                <p className="text-slate-300 text-sm mb-2"><strong className="text-white">서비스:</strong> BurilLab</p>
+                <p className="text-slate-300 text-sm m-0">
+                    <strong className="text-white">이메일:</strong>{' '}
+                    <a href="mailto:gudwns999999@gmail.com" className="text-blue-400 hover:text-blue-300 hover:underline">
+                        gudwns999999@gmail.com
+                    </a>
+                </p>
+            </div>
+        </Section>
+    </div>
+);
+
+const EnglishPolicy: React.FC = () => (
+    <div className="space-y-10 prose prose-invert max-w-none">
+        <Section title="1. Overview">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                BurilLab is a service for managing laboratory reagents, storage locations, and disposal records.
+                This policy explains what information BurilLab collects and how it is used, retained, and deleted.
+            </p>
+        </Section>
+
+        <Section title="2. Information We Collect">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                BurilLab collects the minimum information needed to provide the service.
+            </p>
+            <InfoTable
+                headers={['Data', 'Purpose']}
+                rows={[
+                    ['Email address and account identifier', 'Sign-up, login, account management, and support'],
+                    ['Password', 'Processed by Supabase authentication using hashing; BurilLab does not store the original password'],
+                    ['Lab, member, nickname, and role information', 'Shared lab management and access control'],
+                    ['Reagent, cabinet, storage location, disposal, and activity records', 'Inventory management, storage history, and safety records'],
+                    ['Search queries, AI request content, and scanned label images', 'Search, label recognition, OCR, and AI analysis features'],
+                    ['Voice question audio and transcription results', 'Voice assistant features, only when voice features are enabled'],
+                    ['Feedback message, optional contact, and user agent', 'Bug reports and improvement requests'],
+                    ['Language, onboarding, and safety acknowledgement stored locally', 'Keeping user preferences on the device'],
+                ]}
+            />
+        </Section>
+
+        <Section title="3. How We Use Information">
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>Authenticate users and manage lab access permissions</li>
+                <li>Provide reagent search, inventory management, cabinet photo upload, and disposal records</li>
+                <li>Process user-requested AI label recognition, OCR, and voice assistant features</li>
+                <li>Improve service quality, investigate errors, protect security, and prevent API abuse</li>
+            </ul>
+        </Section>
+
+        <Section title="4. Service Providers">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                BurilLab does not sell personal information. The following providers may process information to operate the service.
+            </p>
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>Supabase: authentication, database, and file storage</li>
+                <li>Cloudflare Pages Functions: server API execution and request handling</li>
+                <li>Google Gemini and Google Vision API: image analysis, OCR, and AI response generation</li>
+                <li>OpenAI API: speech transcription and spoken responses when voice features are enabled</li>
+                <li>Upstash Redis: API rate limiting and abuse prevention</li>
+            </ul>
+        </Section>
+
+        <Section title="5. Retention and Deletion">
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>Account and lab data are retained while the account or lab remains active.</li>
+                <li>When an account is deleted, personal search history and personally identifying account data are deleted or anonymized.</li>
+                <li>Shared lab cabinets, inventory, and safety records may remain available to other lab members, with the deleted user attribution removed.</li>
+                <li>Information that must be retained by law is kept only for the required period and then deleted.</li>
+            </ul>
+        </Section>
+
+        <Section title="6. How to Delete Your Account and Data" id="delete-account-en">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                You can request account deletion directly in the app at any time.
+            </p>
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+                <ol className="list-decimal pl-5 text-slate-400 space-y-1 text-sm">
+                    <li>Log in to BurilLab.</li>
+                    <li>Open Settings.</li>
+                    <li>Select Delete Account and enter the confirmation phrase.</li>
+                    <li>After deletion, account access and personal identifiers are removed.</li>
+                </ol>
+            </div>
+            <p className="text-slate-400 text-sm">
+                If you cannot access the app, email{' '}
+                <a href="mailto:gudwns999999@gmail.com" className="text-blue-400">gudwns999999@gmail.com</a>
+                {' '}with your registered email address. We will process verified requests within 7 days.
+            </p>
+        </Section>
+
+        <Section title="7. Your Rights and Contact">
+            <p className="text-slate-400 text-[15px] leading-relaxed">
+                To request access, correction, deletion, or restriction of your personal information, contact us below.
+            </p>
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+                <p className="text-slate-300 text-sm mb-2"><strong className="text-white">Service:</strong> BurilLab</p>
+                <p className="text-slate-300 text-sm m-0">
+                    <strong className="text-white">Email:</strong>{' '}
+                    <a href="mailto:gudwns999999@gmail.com" className="text-blue-400 hover:text-blue-300 hover:underline">
+                        gudwns999999@gmail.com
+                    </a>
+                </p>
+            </div>
+        </Section>
+    </div>
+);

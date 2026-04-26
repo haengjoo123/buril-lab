@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
+import { postJson } from '../services/internalApi';
 
 interface AuthState {
     session: Session | null;
@@ -68,10 +69,12 @@ export function useAuth(): UseAuthReturn {
     }, []);
 
     const deleteAccount = useCallback(async () => {
-        const { error } = await supabase.rpc('delete_user');
-        if (error) {
-            return { error: error.message };
+        try {
+            await postJson<{ success: boolean }>('/api/account/delete', {});
+        } catch (error) {
+            return { error: error instanceof Error ? error.message : 'Failed to delete account.' };
         }
+
         await supabase.auth.signOut();
         return { error: null };
     }, []);

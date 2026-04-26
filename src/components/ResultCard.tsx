@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
-import type { AnalysisResult } from '../types';
-import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText, Sparkles } from 'lucide-react';
+import type { AnalysisResult, SolutionContext, SolutionPhysicalForm, SolventClass } from '../types';
+import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText, Sparkles, Info, Loader2 } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { translateGHS } from '../data/ghsCodes';
 import { MsdsModal } from './MsdsModal';
+import { resolveCustomOrganicSolvent } from '../utils/solventClassifier';
 
 interface ResultCardProps {
     result: AnalysisResult;
@@ -15,6 +16,28 @@ interface ResultCardProps {
     /** 커스텀 취소/닫기 버튼 텍스트 (기본값: btn_reset) */
     secondaryBtnText?: string;
 }
+
+const physicalFormOptions: Array<{ value: SolutionPhysicalForm; labelKey: string }> = [
+    { value: 'neat_or_solid', labelKey: 'solution_form_neat_or_solid' },
+    { value: 'aqueous', labelKey: 'solution_form_aqueous' },
+    { value: 'organic_solvent', labelKey: 'solution_form_organic_solvent' },
+    { value: 'mixed_or_unknown', labelKey: 'solution_form_mixed_or_unknown' },
+];
+
+const organicSolventPresets: Array<{
+    id: string;
+    label: string;
+    solventName: string;
+    solventClass: SolventClass;
+    isCustom?: boolean;
+}> = [
+    { id: 'dmso', label: 'DMSO', solventName: 'DMSO', solventClass: 'organic_non_halogen' },
+    { id: 'etoh_meoh', label: 'EtOH/MeOH', solventName: 'EtOH/MeOH', solventClass: 'organic_non_halogen' },
+    { id: 'acetone_acn', label: 'Acetone/ACN', solventName: 'Acetone/ACN', solventClass: 'organic_non_halogen' },
+    { id: 'hexane_toluene', label: 'Hexane/Toluene', solventName: 'Hexane/Toluene', solventClass: 'organic_non_halogen' },
+    { id: 'dcm_chloroform', label: 'DCM/Chloroform', solventName: 'DCM/Chloroform', solventClass: 'organic_halogen' },
+    { id: 'custom', label: '', solventName: '', solventClass: 'organic_unknown', isCustom: true },
+];
 
 export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequireAuth, secondaryBtnText }) => {
     const { chemical, binColor, reason, isSafe, category, label } = result;
@@ -28,6 +51,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
     const [volume, setVolume] = React.useState('');
     const [molarity, setMolarity] = React.useState('');
     const [error, setError] = React.useState('');
+    const [physicalForm, setPhysicalForm] = React.useState<SolutionPhysicalForm>('neat_or_solid');
+    const [solventPreset, setSolventPreset] = React.useState('dmso');
+    const [customSolvent, setCustomSolvent] = React.useState('');
+    const [isResolvingSolvent, setIsResolvingSolvent] = React.useState(false);
 
     // Decide icon based on category/safety
     const renderIcon = () => {
@@ -44,13 +71,79 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
         setVolume('');
         setMolarity('');
         setError('');
+        setPhysicalForm('neat_or_solid');
+        setSolventPreset('dmso');
+        setCustomSolvent('');
+        setIsResolvingSolvent(false);
     };
 
-    const handleConfirm = () => {
+    const buildSolutionContext = async (): Promise<SolutionContext | null> => {
+        if (physicalForm === 'neat_or_solid') {
+            return { physicalForm, solventClass: 'none', solventResolution: 'preset', isSolventVerified: true };
+        }
+
+        if (physicalForm === 'aqueous') {
+            return {
+                physicalForm,
+                solventClass: 'aqueous',
+                solventName: 'Water/Aqueous',
+                solventResolution: 'preset',
+                isSolventVerified: true,
+            };
+        }
+
+        if (physicalForm === 'mixed_or_unknown') {
+            return { physicalForm, solventClass: 'mixed_or_unknown', solventResolution: 'unresolved', isSolventVerified: false };
+        }
+
+        const selectedPreset = organicSolventPresets.find((preset) => preset.id === solventPreset) || organicSolventPresets[0];
+
+        if (selectedPreset.isCustom) {
+            const trimmedCustomSolvent = customSolvent.trim();
+
+            if (!trimmedCustomSolvent) {
+                setError(t('solvent_custom_required' as any));
+                return null;
+            }
+
+            setIsResolvingSolvent(true);
+            const resolvedSolvent = await resolveCustomOrganicSolvent(trimmedCustomSolvent).finally(() => {
+                setIsResolvingSolvent(false);
+            });
+
+            return {
+                physicalForm,
+                solventClass: resolvedSolvent.solventClass,
+                solventName: resolvedSolvent.solventName || trimmedCustomSolvent,
+                solventPreset: selectedPreset.id,
+                isCustomSolvent: true,
+                isSolventVerified: resolvedSolvent.isSolventVerified,
+                solventResolution: resolvedSolvent.solventResolution,
+                solventCasNumber: resolvedSolvent.solventCasNumber,
+                solventMolecularFormula: resolvedSolvent.solventMolecularFormula,
+            };
+        }
+
+        return {
+            physicalForm,
+            solventClass: selectedPreset.solventClass,
+            solventName: selectedPreset.solventName,
+            solventPreset: selectedPreset.id,
+            solventResolution: 'preset',
+            isSolventVerified: true,
+        };
+    };
+
+    const handleConfirm = async () => {
+        setError('');
+        const solutionContext = await buildSolutionContext();
+        if (!solutionContext) return;
+
         addToCart({
             ...result,
             volume: volume.trim() ? `${volume.trim()} mL` : undefined,
-            molarity: molarity.trim()
+            molarity: molarity.trim(),
+            solutionContext,
         });
 
         setIsModalOpen(false);
@@ -108,6 +201,11 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                     <p className="text-sm leading-relaxed whitespace-pre-line">
                         {t(guideKey as any)}
                     </p>
+                </div>
+
+                <div className="w-full flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300 mb-6">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+                    <span>{t('result_pure_basis_notice' as any)}</span>
                 </div>
 
                 {/* AI Badge if inferred by Gemini */}
@@ -192,7 +290,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
             {/* Input Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
                         <div className="p-5 border-b border-gray-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
                             <h3 className="font-bold text-lg text-slate-900 dark:text-white">
                                 {t('btn_add_to_list')}
@@ -203,6 +301,77 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                         </div>
 
                         <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    {t('input_physical_form' as any)}
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {physicalFormOptions.map((option) => {
+                                        const isSelected = physicalForm === option.value;
+                                        return (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setPhysicalForm(option.value)}
+                                                className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${isSelected
+                                                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200'
+                                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                                                    }`}
+                                            >
+                                                {t(option.labelKey as any)}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {physicalForm === 'organic_solvent' && (
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        {t('input_organic_solvent' as any)}
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {organicSolventPresets.map((preset) => {
+                                            const isSelected = solventPreset === preset.id;
+                                            return (
+                                                <button
+                                                    key={preset.id}
+                                                    type="button"
+                                                    onClick={() => setSolventPreset(preset.id)}
+                                                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected
+                                                        ? 'border-blue-500 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-500'
+                                                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-700'
+                                                        }`}
+                                                >
+                                                    {preset.isCustom ? t('solvent_custom' as any) : preset.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {solventPreset === 'custom' && (
+                                        <div className="mt-3 space-y-2">
+                                            <input
+                                                type="text"
+                                                value={customSolvent}
+                                                onChange={(e) => setCustomSolvent(e.target.value)}
+                                                placeholder={t('solvent_custom_placeholder' as any)}
+                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-sm"
+                                            />
+                                            <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+                                                {t('solvent_custom_notice' as any)}
+                                            </p>
+                                            {isResolvingSolvent && (
+                                                <div className="flex items-center gap-2 text-xs font-medium text-blue-600 dark:text-blue-300">
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    {t('solvent_resolving' as any)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                                     {t('input_volume')}
@@ -253,8 +422,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                             </button>
                             <button
                                 onClick={handleConfirm}
-                                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 active:bg-blue-800 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all"
+                                disabled={isResolvingSolvent}
+                                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 active:bg-blue-800 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all disabled:cursor-not-allowed disabled:opacity-70 flex items-center gap-2"
                             >
+                                {isResolvingSolvent && <Loader2 className="h-4 w-4 animate-spin" />}
                                 {t('btn_confirm')}
                             </button>
                         </div>

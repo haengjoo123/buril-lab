@@ -11,6 +11,38 @@ export type DisposalCategory =
     | 'SPECIAL_HAZARD'
     | 'UNKNOWN';
 
+export type SolutionPhysicalForm =
+    | 'neat_or_solid'
+    | 'aqueous'
+    | 'organic_solvent'
+    | 'mixed_or_unknown';
+
+export type SolventClass =
+    | 'aqueous'
+    | 'organic_non_halogen'
+    | 'organic_halogen'
+    | 'organic_unknown'
+    | 'mixed_or_unknown'
+    | 'none';
+
+export type SolventResolutionSource =
+    | 'preset'
+    | 'local_dictionary'
+    | 'external_lookup'
+    | 'unresolved';
+
+export interface SolutionContext {
+    physicalForm: SolutionPhysicalForm;
+    solventClass: SolventClass;
+    solventName?: string;
+    solventPreset?: string;
+    isCustomSolvent?: boolean;
+    isSolventVerified?: boolean;
+    solventResolution?: SolventResolutionSource;
+    solventCasNumber?: string;
+    solventMolecularFormula?: string;
+}
+
 export interface Chemical {
     id: string; // UUID or unique identifier
     name: string; // Official chemical name
@@ -49,9 +81,28 @@ export interface AnalysisResult {
     isAiEstimated?: boolean; // True if the category was inferred by the Gemini API fallback
 }
 
+export type MixtureAnalysisBasis = 'pure' | 'solution' | 'unknown_matrix';
+
+export interface MixtureAnalysisResult {
+    category: DisposalCategory;
+    binColor: string;
+    label: string;
+    reason: string;
+    isSafe: boolean;
+    basis: MixtureAnalysisBasis;
+    baseLabel?: string;
+    baseReason?: string;
+    contextWarnings?: string[];
+    disposalDetails?: {
+        solubility: 'SOLUBLE' | 'INSOLUBLE';
+        neutralization: 'ALLOWED' | 'PROHIBITED';
+    };
+}
+
 export interface CartItem extends AnalysisResult {
     volume?: string; // Input by user (e.g. "500 mL")
     molarity?: string; // Input by user (e.g. "0.1 M")
+    solutionContext?: SolutionContext;
 }
 
 export interface MsdsSection {

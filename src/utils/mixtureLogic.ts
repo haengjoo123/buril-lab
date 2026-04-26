@@ -1,37 +1,111 @@
-import type { AnalysisResult, CartItem, DisposalCategory } from '../types';
+import type {
+    AnalysisResult,
+    CartItem,
+    MixtureAnalysisBasis,
+    MixtureAnalysisResult,
+    SolutionContext,
+} from '../types';
 import { determineDisposal } from './wasteDisposal';
 import { checkCompatibility } from './compatibilityChecker';
 
-export const analyzeMixture = (cart: AnalysisResult[]): {
-    category: DisposalCategory;
-    binColor: string;
-    label: string;
-    reason: string;
-    isSafe: boolean;
-    disposalDetails?: {
-        solubility: 'SOLUBLE' | 'INSOLUBLE';
-        neutralization: 'ALLOWED' | 'PROHIBITED';
-    };
-} => {
+type BaseMixtureResult = Omit<
+    MixtureAnalysisResult,
+    'basis' | 'baseLabel' | 'baseReason' | 'contextWarnings'
+>;
+
+const HIGH_PRIORITY_CATEGORIES = [
+    'SPECIAL_HAZARD',
+    'REACTIVE',
+    'CYANIDE',
+    'HEAVY_METAL',
+] as const;
+
+type HighPriorityCategory = (typeof HIGH_PRIORITY_CATEGORIES)[number];
+
+const HIGH_PRIORITY_RESULT_MAP: Record<HighPriorityCategory, BaseMixtureResult> = {
+    SPECIAL_HAZARD: {
+        category: 'SPECIAL_HAZARD',
+        binColor: 'bg-red-800',
+        label: 'label_special_hazard',
+        reason: 'disposal_guide_SPECIAL_HAZARD',
+        isSafe: false,
+    },
+    REACTIVE: {
+        category: 'REACTIVE',
+        binColor: 'bg-rose-600',
+        label: 'label_reactive',
+        reason: 'disposal_guide_REACTIVE',
+        isSafe: false,
+    },
+    CYANIDE: {
+        category: 'CYANIDE',
+        binColor: 'bg-teal-600',
+        label: 'label_cyanide',
+        reason: 'disposal_guide_CYANIDE',
+        isSafe: false,
+    },
+    HEAVY_METAL: {
+        category: 'HEAVY_METAL',
+        binColor: 'bg-purple-600',
+        label: 'label_heavy_metal',
+        reason: 'disposal_guide_HEAVY_METAL',
+        isSafe: false,
+    },
+};
+
+const withBasis = (
+    result: BaseMixtureResult,
+    basis: MixtureAnalysisBasis,
+): MixtureAnalysisResult => ({
+    ...result,
+    basis,
+});
+
+const withContext = (
+    result: BaseMixtureResult,
+    basis: Exclude<MixtureAnalysisBasis, 'pure'>,
+    baseResult: BaseMixtureResult,
+    contextWarnings: string[] = [],
+): MixtureAnalysisResult => ({
+    ...result,
+    basis,
+    baseLabel: baseResult.label,
+    baseReason: baseResult.reason,
+    contextWarnings: contextWarnings.length > 0 ? contextWarnings : undefined,
+});
+
+const getSolutionContext = (item: AnalysisResult): SolutionContext | undefined => {
+    if ('solutionContext' in item) {
+        return (item as Partial<CartItem>).solutionContext;
+    }
+
+    return undefined;
+};
+
+const findHighPriorityCategory = (cart: AnalysisResult[]): HighPriorityCategory | undefined =>
+    HIGH_PRIORITY_CATEGORIES.find((category) => cart.some((item) => item.category === category));
+
+const hasAnySolutionContext = (contexts: Array<SolutionContext | undefined>): boolean =>
+    contexts.some((context) =>
+        Boolean(context) &&
+        context?.physicalForm !== 'neat_or_solid' &&
+        context?.solventClass !== 'none'
+    );
+
+const analyzePureCategoryMixture = (cart: AnalysisResult[]): BaseMixtureResult => {
     if (cart.length === 0) {
         return {
             category: 'UNKNOWN',
             binColor: 'bg-gray-400',
             label: 'mix_label_unknown',
             reason: 'cart_empty',
-            isSafe: true
+            isSafe: true,
         };
     }
 
-    const hasSpecialHazard = cart.some(item => item.category === 'SPECIAL_HAZARD');
-    if (hasSpecialHazard) {
-        return {
-            category: 'SPECIAL_HAZARD',
-            binColor: 'bg-red-800',
-            label: 'label_special_hazard',
-            reason: 'disposal_guide_SPECIAL_HAZARD',
-            isSafe: false
-        };
+    const highPriorityCategory = findHighPriorityCategory(cart);
+    if (highPriorityCategory) {
+        return HIGH_PRIORITY_RESULT_MAP[highPriorityCategory];
     }
 
     // Priority Level: Higher index = More Strict/Dangerous
@@ -53,6 +127,8 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
     const hasNonHalogenOrganic = cart.some(item => item.category === 'ORGANIC_NON_HALOGEN');
     const hasAcid = cart.some(item => item.category === 'ACID');
     const hasAlkali = cart.some(item => item.category === 'ALKALI');
+    const hasNeutral = cart.some(item => item.category === 'NEUTRAL');
+    const hasSolidWaste = cart.some(item => item.category === 'SOLID_WASTE');
 
     // Helper arrays for specific acids
     const OXIDIZING_ACIDS = ['NITRIC', 'HNO3', 'PERCHLORIC', 'HCLO4'];
@@ -87,7 +163,7 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
             binColor: 'bg-orange-600',
             label: 'mix_label_halogen',
             reason: 'mix_reason_halogen',
-            isSafe: true
+            isSafe: true,
         };
     }
 
@@ -117,8 +193,8 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
                 isSafe: false,
                 disposalDetails: {
                     solubility: solubilityStatus,
-                    neutralization: 'PROHIBITED'
-                }
+                    neutralization: 'PROHIBITED',
+                },
             };
         }
 
@@ -139,8 +215,8 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
             isSafe: neutralizationStatus === 'ALLOWED',
             disposalDetails: {
                 solubility: solubilityStatus,
-                neutralization: neutralizationStatus
-            }
+                neutralization: neutralizationStatus,
+            },
         };
     }
 
@@ -153,7 +229,7 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
                 binColor: 'bg-red-600',
                 label: 'mix_label_warn_oi',
                 reason: 'mix_warn_organic_inorganic',
-                isSafe: false
+                isSafe: false,
             };
         }
         // If Logic falls through here, it means it's just Organic, or Organic + something else not caught?
@@ -165,7 +241,7 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
             binColor: 'bg-yellow-500',
             label: 'mix_label_organic',
             reason: 'mix_reason_organic',
-            isSafe: true
+            isSafe: true,
         };
     }
 
@@ -176,7 +252,7 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
             binColor: 'bg-purple-600', // Warning color
             label: 'mix_label_warn_aa',
             reason: 'mix_warn_acid_alkali',
-            isSafe: false
+            isSafe: false,
         };
     }
 
@@ -188,7 +264,7 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
                 binColor: 'bg-red-700',
                 label: 'mix_label_warn_hf',
                 reason: 'mix_warn_hf',
-                isSafe: false
+                isSafe: false,
             };
         }
 
@@ -198,7 +274,7 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
                 binColor: 'bg-red-700',
                 label: 'mix_label_warn_incompatible_acids',
                 reason: 'mix_warn_incompatible_acids',
-                isSafe: false
+                isSafe: false,
             };
         }
 
@@ -207,7 +283,7 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
             binColor: 'bg-red-500',
             label: 'mix_label_acid',
             reason: 'mix_reason_acid',
-            isSafe: true
+            isSafe: true,
         };
     }
 
@@ -217,7 +293,27 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
             binColor: 'bg-blue-500',
             label: 'mix_label_alkali',
             reason: 'mix_reason_alkali',
-            isSafe: true
+            isSafe: true,
+        };
+    }
+
+    if (hasNeutral && cart.every((item) => item.category === 'NEUTRAL')) {
+        return {
+            category: 'NEUTRAL',
+            binColor: 'bg-green-500',
+            label: 'label_neutral',
+            reason: 'disposal_guide_NEUTRAL',
+            isSafe: true,
+        };
+    }
+
+    if (hasSolidWaste && cart.every((item) => item.category === 'SOLID_WASTE')) {
+        return {
+            category: 'SOLID_WASTE',
+            binColor: 'bg-stone-500',
+            label: 'label_solid_waste',
+            reason: 'disposal_guide_SOLID_WASTE',
+            isSafe: true,
         };
     }
 
@@ -227,6 +323,159 @@ export const analyzeMixture = (cart: AnalysisResult[]): {
         binColor: 'bg-gray-400',
         label: 'mix_label_unknown',
         reason: 'mix_unknown',
-        isSafe: false
+        isSafe: false,
     };
+};
+
+export const analyzeMixture = (cart: AnalysisResult[]): MixtureAnalysisResult => {
+    const baseResult = analyzePureCategoryMixture(cart);
+
+    if (cart.length === 0) {
+        return withBasis(baseResult, 'pure');
+    }
+
+    const contexts = cart.map(getSolutionContext);
+    const hasUnknownMatrix = contexts.some((context) =>
+        context?.physicalForm === 'mixed_or_unknown' ||
+        context?.solventClass === 'mixed_or_unknown'
+    );
+    const hasUnknownOrganicSolvent = contexts.some((context) =>
+        context?.physicalForm === 'organic_solvent' &&
+        context?.solventClass === 'organic_unknown'
+    );
+    const highPriorityCategory = findHighPriorityCategory(cart);
+    const hasSolutionContext = hasAnySolutionContext(contexts);
+    const hasHalogenOrganicSolvent = contexts.some((context) =>
+        context?.physicalForm === 'organic_solvent' &&
+        context?.solventClass === 'organic_halogen'
+    );
+    const hasNonHalogenOrganicSolvent = contexts.some((context) =>
+        context?.physicalForm === 'organic_solvent' &&
+        context?.solventClass === 'organic_non_halogen'
+    );
+    const hasAqueous = contexts.some((context) =>
+        context?.physicalForm === 'aqueous' ||
+        context?.solventClass === 'aqueous'
+    );
+    const hasAcidOrAlkaliSolute = cart.some((item) =>
+        item.category === 'ACID' ||
+        item.category === 'ALKALI'
+    );
+    const hasOrganicSolute = cart.some((item) =>
+        item.category === 'ORGANIC_HALOGEN' ||
+        item.category === 'ORGANIC_NON_HALOGEN'
+    );
+
+    if (hasUnknownMatrix) {
+        return withContext(
+            {
+                category: 'UNKNOWN',
+                binColor: 'bg-amber-600',
+                label: 'mix_label_unknown_matrix',
+                reason: 'mix_reason_unknown_matrix',
+                isSafe: false,
+            },
+            'unknown_matrix',
+            baseResult,
+            ['mix_context_warning_unknown_matrix'],
+        );
+    }
+
+    if (hasUnknownOrganicSolvent) {
+        return withContext(
+            {
+                category: 'UNKNOWN',
+                binColor: 'bg-amber-600',
+                label: 'mix_label_organic_solvent_unknown',
+                reason: 'mix_reason_organic_solvent_unknown',
+                isSafe: false,
+            },
+            'unknown_matrix',
+            baseResult,
+            ['mix_context_warning_solvent_unverified'],
+        );
+    }
+
+    if (highPriorityCategory) {
+        const highPriorityResult = HIGH_PRIORITY_RESULT_MAP[highPriorityCategory];
+
+        if (!hasSolutionContext) {
+            return withBasis(highPriorityResult, 'pure');
+        }
+
+        return withContext(
+            highPriorityResult,
+            'solution',
+            baseResult,
+            ['mix_context_warning_hazard_with_solvent'],
+        );
+    }
+
+    if (hasHalogenOrganicSolvent) {
+        return withContext(
+            {
+                category: 'ORGANIC_HALOGEN',
+                binColor: 'bg-orange-600',
+                label: 'mix_label_halogen',
+                reason: 'mix_reason_halogen_solvent_context',
+                isSafe: !hasAcidOrAlkaliSolute,
+            },
+            'solution',
+            baseResult,
+            hasAcidOrAlkaliSolute
+                ? ['mix_context_warning_solvent_override', 'mix_context_warning_organic_inorganic_context']
+                : ['mix_context_warning_solvent_override'],
+        );
+    }
+
+    if (hasNonHalogenOrganicSolvent) {
+        if (hasAcidOrAlkaliSolute) {
+            return withContext(
+                {
+                    category: 'UNKNOWN',
+                    binColor: 'bg-red-600',
+                    label: 'mix_label_warn_oi',
+                    reason: 'mix_warn_organic_inorganic',
+                    isSafe: false,
+                },
+                'solution',
+                baseResult,
+                ['mix_context_warning_solvent_override'],
+            );
+        }
+
+        return withContext(
+            {
+                category: 'ORGANIC_NON_HALOGEN',
+                binColor: 'bg-yellow-500',
+                label: 'mix_label_organic',
+                reason: 'mix_reason_organic_solvent_context',
+                isSafe: true,
+            },
+            'solution',
+            baseResult,
+            ['mix_context_warning_solvent_override'],
+        );
+    }
+
+    if (hasAqueous) {
+        if (hasOrganicSolute) {
+            return withContext(
+                {
+                    category: 'UNKNOWN',
+                    binColor: 'bg-cyan-700',
+                    label: 'mix_label_aqueous_organic_check',
+                    reason: 'mix_reason_aqueous_organic_check',
+                    isSafe: false,
+                },
+                'solution',
+                baseResult,
+                ['mix_context_warning_aqueous_no_downgrade'],
+            );
+        }
+
+        return withBasis(baseResult, 'solution');
+    }
+
+    return withBasis(baseResult, 'pure');
 };

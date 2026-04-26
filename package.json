@@ -6,19 +6,25 @@
   "scripts": {
     "dev": "vite",
     "assets:generate": "node scripts/generate-app-assets.mjs",
+    "assets:capacitor": "npx @capacitor/assets generate --ios --android --assetPath resources --iconBackgroundColor \"#0f172a\" --iconBackgroundColorDark \"#0f172a\" --splashBackgroundColor \"#0f172a\" --splashBackgroundColorDark \"#0f172a\"",
     "build": "tsc -b && vite build",
     "build:android": "npm run build && npx cap sync android",
+    "build:ios": "npm run build && npx cap sync ios",
     "android:open": "npx cap open android",
     "android:sync": "npx cap sync android",
     "android:run": "npm run build:android && npx cap run android",
+    "ios:open": "npx cap open ios",
+    "ios:sync": "npx cap sync ios",
+    "ios:run": "npm run build:ios && npx cap run ios",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@capacitor/android": "^8.2.0",
-    "@capacitor/cli": "^8.2.0",
-    "@capacitor/core": "^8.2.0",
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^8.3.1",
+    "@capacitor/core": "^8.3.1",
+    "@capacitor/ios": "^8.3.1",
     "@google/genai": "^1.42.0",
     "@react-spring/three": "^10.0.3",
     "@react-spring/web": "^10.0.3",
@@ -50,6 +56,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@eslint/js": "^9.39.1",
     "@tailwindcss/vite": "^4.1.18",
     "@types/node": "^24.10.1",
