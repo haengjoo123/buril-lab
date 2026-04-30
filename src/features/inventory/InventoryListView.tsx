@@ -11,12 +11,18 @@ import {
     Clock,
     Download,
     Upload,
-    ShieldAlert
+    ShieldAlert,
+    Camera,
+    PackagePlus,
+    CheckCircle2,
+    X,
+    Trash2
 } from 'lucide-react';
-import { inventoryService, storageLocationService, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
+import { inventoryService, storageLocationService, type CreateInventoryInput, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { InventoryFormModal } from './InventoryFormModal';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
+import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
 import { CustomDialog } from '../../components/CustomDialog';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
@@ -33,6 +39,7 @@ import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/gues
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
+import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
@@ -44,6 +51,12 @@ type InventoryGroup = {
     cardCount: number;
     uniqueNames: string[];
     uniqueCasNumbers: string[];
+};
+type InventoryScanResultItem = {
+    id: string;
+    imageSrc: string;
+    result: ReagentScanResult;
+    createdAt: number;
 };
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
@@ -200,8 +213,19 @@ export const InventoryListView: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<InventorySortOption>('expiry_asc');
     const [hazardFilter, setHazardFilter] = useState(false);
+    const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+    const [initialDraft, setInitialDraft] = useState<Partial<CreateInventoryInput> | null>(null);
+    const [formEntryMode, setFormEntryMode] = useState<'manual_form' | 'scan_prefill'>('manual_form');
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [scanQueueItems, setScanQueueItems] = useState<CameraCaptureQueueItem[]>([]);
+    const [scanResults, setScanResults] = useState<InventoryScanResultItem[]>([]);
+    const [isScanResultsOpen, setIsScanResultsOpen] = useState(false);
+    const [activeScanResultId, setActiveScanResultId] = useState<string | null>(null);
+    const [scanToastMessage, setScanToastMessage] = useState<string | null>(null);
+    const scanPendingTasksRef = useRef<{ id: string; imageSrc: string }[]>([]);
+    const scanActiveCountRef = useRef(0);
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -277,6 +301,12 @@ export const InventoryListView: React.FC = () => {
             setBulkMoveError(null);
         }, 3000);
     }, [bulkDeleteError, bulkMoveError]);
+
+    useEffect(() => {
+        if (!scanToastMessage) return;
+        const timer = setTimeout(() => setScanToastMessage(null), 3200);
+        return () => clearTimeout(timer);
+    }, [scanToastMessage]);
 
     useEffect(() => {
         return () => {
@@ -400,7 +430,107 @@ export const InventoryListView: React.FC = () => {
     }, [visibleGroups]);
 
     const handleEdit = (item: InventoryItem) => {
+        setInitialDraft(null);
+        setFormEntryMode('manual_form');
         setEditingItem(item);
+        setIsFormOpen(true);
+    };
+
+    const handleCloseForm = () => {
+        setIsFormOpen(false);
+        setEditingItem(null);
+        setInitialDraft(null);
+        setFormEntryMode('manual_form');
+        setActiveScanResultId(null);
+    };
+
+    const handleFormSaved = () => {
+        loadData();
+        if (activeScanResultId) {
+            setScanResults((prev) => prev.filter((item) => item.id !== activeScanResultId));
+            setScanQueueItems((prev) => prev.filter((item) => item.id !== activeScanResultId));
+            setActiveScanResultId(null);
+        }
+    };
+
+    const handleOpenManualRegistration = () => {
+        setInitialDraft(null);
+        setFormEntryMode('manual_form');
+        setEditingItem(null);
+        setIsAddMenuOpen(false);
+        setIsFormOpen(true);
+    };
+
+    const handleOpenScanRegistration = () => {
+        setIsAddMenuOpen(false);
+        setIsCameraOpen(true);
+    };
+
+    const updateScanQueueItem = (id: string, updates: Partial<CameraCaptureQueueItem>) => {
+        setScanQueueItems((prev) => prev.map((item) => (
+            item.id === id ? { ...item, ...updates } : item
+        )));
+    };
+
+    const processScanTask = async (task: { id: string; imageSrc: string }) => {
+        try {
+            const result = await scanReagentLabel(task.imageSrc);
+            if (!result.success) {
+                throw new Error(result.error || t('inventory_scan_error_default'));
+            }
+
+            updateScanQueueItem(task.id, { status: 'success', label: result.name || t('scan_unknown_reagent') });
+            setScanResults((prev) => [
+                ...prev,
+                { id: task.id, imageSrc: task.imageSrc, result, createdAt: Date.now() },
+            ]);
+            setScanToastMessage(t('inventory_scan_result_ready', { name: result.name || t('scan_unknown_reagent') }));
+        } catch (error) {
+            console.error('Inventory scan registration failed:', error);
+            const message = error instanceof Error ? error.message : t('inventory_scan_error_default');
+            updateScanQueueItem(task.id, { status: 'error', label: t('scan_failed') });
+            setScanToastMessage(message);
+        }
+    };
+
+    const runNextScanTasks = () => {
+        const MAX_PARALLEL_SCANS = 3;
+        while (scanActiveCountRef.current < MAX_PARALLEL_SCANS && scanPendingTasksRef.current.length > 0) {
+            const task = scanPendingTasksRef.current.shift();
+            if (!task) return;
+            scanActiveCountRef.current += 1;
+            void processScanTask(task).finally(() => {
+                scanActiveCountRef.current -= 1;
+                runNextScanTasks();
+            });
+        }
+    };
+
+    const handleScanCapture = (imageSrc: string) => {
+        const id = `inventory-scan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        setScanQueueItems((prev) => [...prev, { id, imageSrc, status: 'processing' }]);
+        scanPendingTasksRef.current.push({ id, imageSrc });
+        runNextScanTasks();
+    };
+
+    const handleOpenScanResultForm = (item: InventoryScanResultItem) => {
+        const defaultStorageType = locations.length > 0 ? 'other' : 'cabinet';
+        setInitialDraft({
+            name: item.result.name || '',
+            brand: item.result.brand || '',
+            product_number: item.result.productNumber || '',
+            cas_number: item.result.casNumber || '',
+            quantity: 1,
+            capacity: item.result.capacity || '',
+            storage_type: defaultStorageType,
+            storage_location_id: defaultStorageType === 'other' ? (locations[0]?.id || '') : '',
+            expiry_date: item.result.expiryDate || '',
+            remaining_percent: 100,
+        });
+        setFormEntryMode('scan_prefill');
+        setEditingItem(null);
+        setActiveScanResultId(item.id);
+        setIsScanResultsOpen(false);
         setIsFormOpen(true);
     };
 
@@ -1893,20 +2023,147 @@ export const InventoryListView: React.FC = () => {
             </div>
 
             {/* FAB */}
+            {isAddMenuOpen && (
+                <>
+                    <button
+                        type="button"
+                        aria-label={t('inventory_add_menu_close')}
+                        onClick={() => setIsAddMenuOpen(false)}
+                        className="absolute inset-0 z-10 cursor-default bg-slate-900/5 dark:bg-black/10"
+                    />
+                    <div className="absolute bottom-40 right-5 z-20 flex max-w-[calc(100vw-2.5rem)] flex-col items-end gap-3">
+                        <button
+                            type="button"
+                            onClick={handleOpenScanRegistration}
+                            className="animate-slide-up flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 active:translate-y-0 dark:border-blue-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-blue-700 dark:hover:text-blue-300"
+                        >
+                            <span className="whitespace-nowrap">{t('inventory_add_menu_scan')}</span>
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/25">
+                                <Camera className="h-5 w-5" />
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleOpenManualRegistration}
+                            className="animate-slide-up flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:text-emerald-700 active:translate-y-0 dark:border-emerald-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
+                            style={{ animationDelay: '60ms' }}
+                        >
+                            <span className="whitespace-nowrap">{t('inventory_add_menu_manual')}</span>
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
+                                <PackagePlus className="h-5 w-5" />
+                            </span>
+                        </button>
+                    </div>
+                </>
+            )}
             <button
-                onClick={() => { setEditingItem(null); setIsFormOpen(true); }}
-                className="absolute bottom-24 right-5 w-14 h-14 bg-emerald-500 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-emerald-600 active:scale-95 transition-all z-10"
+                type="button"
+                aria-label={t('inventory_add_menu_open')}
+                aria-expanded={isAddMenuOpen}
+                onClick={() => setIsAddMenuOpen((open) => !open)}
+                className={`absolute bottom-24 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 ${isAddMenuOpen
+                    ? 'rotate-45 bg-slate-800 shadow-slate-900/20 hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white'
+                    : 'bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-600'
+                    }`}
             >
                 <Plus className="w-6 h-6" />
             </button>
 
+            <CameraCaptureModal
+                isOpen={isCameraOpen}
+                onClose={() => setIsCameraOpen(false)}
+                mode="continuous"
+                queueItems={scanQueueItems}
+                onQueueCapture={handleScanCapture}
+            />
+
+            {scanResults.length > 0 && !isScanResultsOpen && !isFormOpen && (
+                <button
+                    type="button"
+                    onClick={() => setIsScanResultsOpen(true)}
+                    className="absolute bottom-24 left-5 z-30 flex h-14 items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 text-sm font-bold text-emerald-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-slate-800 dark:text-emerald-300"
+                >
+                    <CheckCircle2 className="h-5 w-5" />
+                    {t('inventory_scan_result_count', { count: scanResults.length })}
+                </button>
+            )}
+
+            {isScanResultsOpen && (
+                <div className="fixed inset-0 z-[95] flex items-end justify-center p-0 pointer-events-none">
+                    <div className="absolute inset-0 bg-slate-900/30 pointer-events-auto" onClick={() => setIsScanResultsOpen(false)} />
+                    <div className="relative w-full max-w-[430px] max-h-[62vh] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl pointer-events-auto dark:border-slate-700 dark:bg-slate-900 animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">{t('inventory_scan_results_title')}</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{t('inventory_scan_results_desc')}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsScanResultsOpen(false)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="max-h-[48vh] overflow-y-auto p-4 space-y-3">
+                            {scanResults.map((item) => (
+                                <div key={item.id} className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+                                    <img src={item.imageSrc} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                                                    {item.result.name || t('scan_unknown_reagent')}
+                                                </p>
+                                                <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+                                                    {[item.result.casNumber && `CAS ${item.result.casNumber}`, item.result.capacity, item.result.brand].filter(Boolean).join(' / ') || t('inventory_scan_result_no_meta')}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setScanResults((prev) => prev.filter((result) => result.id !== item.id));
+                                                    setScanQueueItems((prev) => prev.filter((result) => result.id !== item.id));
+                                                }}
+                                                className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                                                aria-label={t('inventory_scan_result_delete')}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenScanResultForm(item)}
+                                            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+                                        >
+                                            <PackagePlus className="h-3.5 w-3.5" />
+                                            {t('inventory_scan_result_open_form')}
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {scanToastMessage && (
+                <div className="fixed top-20 left-1/2 z-[130] w-max max-w-[90vw] -translate-x-1/2 animate-in slide-in-from-top-4 fade-in duration-300">
+                    <div className="rounded-full bg-emerald-600 px-5 py-3 text-center text-sm font-medium text-white shadow-lg">
+                        {scanToastMessage}
+                    </div>
+                </div>
+            )}
+
             {/* Modal */}
             <InventoryFormModal
                 isOpen={isFormOpen}
-                onClose={() => setIsFormOpen(false)}
+                onClose={handleCloseForm}
                 locations={locations}
                 initialData={editingItem}
-                onSaved={loadData}
+                initialDraft={initialDraft}
+                entryMode={formEntryMode}
+                onSaved={handleFormSaved}
             />
 
             <InventoryCsvImportModal

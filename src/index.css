@@ -34,5 +34,78 @@ input, select, button, textarea {
 }
 
 .animate-slide-up {
-  animation: slide-up 0.3s ease-out;
+  animation: slide-up 0.3s ease-out both;
+}
+
+@keyframes scan-queue-in {
+  0% {
+    opacity: 0;
+    transform: translate(80px, -90px) scale(1.8) rotate(-2deg);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-4px, 2px) scale(0.96) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes scan-queue-success {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes scan-queue-error {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-2px);
+  }
+  40% {
+    transform: translateX(2px);
+  }
+  60% {
+    transform: translateX(-1px);
+  }
+  80% {
+    transform: translateX(1px);
+  }
+}
+
+.scan-queue-thumb {
+  animation: scan-queue-in 0.34s cubic-bezier(0.18, 0.9, 0.25, 1.08) both;
+}
+
+.scan-queue-success {
+  animation: scan-queue-success 0.38s ease-out both;
+}
+
+.scan-queue-error {
+  animation: scan-queue-error 0.36s ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-queue-thumb,
+  .scan-queue-success,
+  .scan-queue-error {
+    animation: fade-in-reduced 0.18s ease-out both;
+  }
+}
+
+@keyframes fade-in-reduced {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

@@ -4,7 +4,7 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
-import { CameraCaptureModal } from './components/CameraCaptureModal';
+import { CameraCaptureModal, type CameraCaptureQueueItem } from './components/CameraCaptureModal';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
@@ -120,11 +120,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
     // Scan & Auto-Place State
     const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [scanQueueItems, setScanQueueItems] = useState<CameraCaptureQueueItem[]>([]);
+    const scanPendingTasksRef = React.useRef<{ id: string; imageSrc: string }[]>([]);
+    const scanActiveCountRef = React.useRef(0);
+    const scanPlacementQueueRef = React.useRef<Promise<void>>(Promise.resolve());
     const [isScanning, setIsScanning] = useState(false);
     const [scanResult, setScanResult] = useState<ReagentScanResult | null>(null);
     const [scanDialogOpen, setScanDialogOpen] = useState(false);
-
-    // Scan dialog fields
     const [scanName, setScanName] = useState('');
     const [scanCas, setScanCas] = useState('');
     const [scanContainerType, setScanContainerType] = useState<ReagentTemplateType>('A');
@@ -595,99 +597,61 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         setIsReagentTrayVisible(true);
     };
 
-    // ====== Scan Flow ======
-    const handleScanCapture = async (file: File) => {
-        setIsScanning(true);
-        setScanDialogOpen(true);
+    // ====== Scan Queue Flow ======
+    const updateScanQueueItem = React.useCallback((id: string, updates: Partial<CameraCaptureQueueItem>) => {
+        setScanQueueItems((prev) => prev.map((item) => (
+            item.id === id ? { ...item, ...updates } : item
+        )));
+    }, []);
 
-        try {
-            // Convert file to base64
-            const reader = new FileReader();
-            const base64 = await new Promise<string>((resolve, reject) => {
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-
-            const result = await scanReagentLabel(base64);
-            setScanResult(result);
-
-            if (result.success) {
-                setScanName(result.name || '');
-                setScanCas(result.casNumber || '');
-                setScanContainerType(normalizeTemplateFromDb(result.suggestedContainerType));
-                setScanCapacity(result.capacity || '');
-                setScanExpiry(result.expiryDate || '');
-                setScanBrand(result.brand || '');
-                setScanProductNumber(result.productNumber || '');
-                setScanRemainingPercent(100);
-            }
-        } catch (err) {
-            console.error('Scan failed:', err);
-            setScanResult({ name: '', suggestedContainerType: 'A', success: false, error: String(err) });
-        } finally {
-            setIsScanning(false);
-        }
-    };
-
-    const handleScanAutoPlace = () => {
+    const autoPlaceScannedReagent = React.useCallback(async (scan: ReagentScanResult, queueItemId: string) => {
         const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
-        const baseWidth = CONTAINER_BASE_WIDTHS[scanContainerType] || 8;
-        const finalWidth = baseWidth * scanSize;
-        const scanFallbackInputMethod =
-            scanResult?.casNumber?.trim() && scanCas.trim() === scanResult.casNumber.trim()
-                ? 'scan'
-                : (scanCas.trim() ? 'manual' : 'unknown');
-        const scanCasInputMethod = getSuggestedCasInputMethod(
-            scanCasSuggestion.isSuggestedCasApplied,
-            scanFallbackInputMethod,
-            scanCasSuggestion.appliedSuggestion?.confidence,
-        );
-        const finalName = scanName.trim() || '이름 없음';
+        const containerType = normalizeTemplateFromDb(scan.suggestedContainerType);
+        const finalName = scan.name?.trim() || t('scan_unknown_reagent');
 
         const result = autoPlaceReagent({
             id: '',
             reagentId: 'scan-' + Date.now(),
             name: finalName,
-            width: finalWidth,
-            template: scanContainerType,
+            width: CONTAINER_BASE_WIDTHS[containerType] || 8,
+            template: containerType,
             isAcidic: false,
             isBasic: false,
             hCodes: [],
-            notes: scanMemo || undefined,
-            casNo: scanCas || undefined,
-            expiryDate: scanExpiry || undefined,
-            capacity: scanCapacity || undefined,
-            brand: scanBrand || undefined,
-            productNumber: scanProductNumber || undefined,
-            remaining_percent: scanRemainingPercent,
+            casNo: scan.casNumber || undefined,
+            expiryDate: scan.expiryDate || undefined,
+            capacity: scan.capacity || undefined,
+            brand: scan.brand || undefined,
+            productNumber: scan.productNumber || undefined,
+            remaining_percent: 100,
         });
 
         if (!result) {
-            // Show error toast: no space
-            setToastMessage(t('reagent_no_space'));
+            throw new Error(t('reagent_no_space'));
         } else {
             // 자동저장 + 스캔 등록 로그 (병렬)
-            autoSave();
+            await autoSave();
+            updateScanQueueItem(queueItemId, { status: 'success', label: finalName });
+            setToastMessage(t('scan_auto_place_done', { name: finalName }));
             void analyticsService.trackCommerceIntentEvent({
                 eventType: 'cabinet_item_scanned',
                 sourceScreen: 'fridge_view',
                 storageType: 'cabinet',
                 sourceItemType: 'cabinet_item',
                 sourceItemId: result.itemId,
-                brandName: scanBrand || undefined,
-                productNumber: scanProductNumber || undefined,
+                brandName: scan.brand || undefined,
+                productNumber: scan.productNumber || undefined,
                 quantity: 1,
-                capacityText: scanCapacity || undefined,
-                casNumber: scanCas || undefined,
-                casInputMethod: scanCasInputMethod,
+                capacityText: scan.capacity || undefined,
+                casNumber: scan.casNumber || undefined,
+                casInputMethod: scan.casNumber ? 'scan' : 'unknown',
                 metadata: {
                     placement_mode: 'scan_auto_place',
                 },
             });
             const currentCabinetId = useFridgeStore.getState().cabinetId;
             if (currentCabinetId) {
-                const memo = [scanCas && `CAS: ${scanCas}`, scanCapacity && `용량: ${scanCapacity}`].filter(Boolean).join(', ');
+                const memo = [scan.casNumber && `CAS: ${scan.casNumber}`, scan.capacity && `Capacity: ${scan.capacity}`].filter(Boolean).join(', ');
                 cabinetService.logActivity(currentCabinetId, 'add', finalName, undefined, memo || undefined)
                     .catch(err => console.error('Failed to log scan-add activity:', err));
                 void analyticsService.trackStorageWarningIgnoredForItem({
@@ -700,35 +664,55 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             }
         }
 
-        // Reset scan dialog
-        setScanDialogOpen(false);
-        setScanResult(null);
-        setScanName('');
-        setScanCas('');
-        setScanContainerType('A');
-        setScanSize(1.0);
-        setScanCapacity('');
-        setScanExpiry('');
-        setScanMemo('');
-        setScanBrand('');
-        setScanProductNumber('');
-    };
+    }, [autoPlaceReagent, autoSave, t, updateScanQueueItem]);
 
-    const handleScanCancel = () => {
+    const processScanTask = React.useCallback(async (task: { id: string; imageSrc: string }) => {
+        try {
+            const scan = await scanReagentLabel(task.imageSrc);
+            if (!scan.success) {
+                throw new Error(scan.error || t('inventory_scan_error_default'));
+            }
+
+            const placementJob = scanPlacementQueueRef.current.then(() => autoPlaceScannedReagent(scan, task.id));
+            scanPlacementQueueRef.current = placementJob.catch(() => undefined);
+            await placementJob;
+        } catch (error) {
+            console.error('Queued cabinet scan failed:', error);
+            const message = error instanceof Error ? error.message : t('inventory_scan_error_default');
+            updateScanQueueItem(task.id, { status: 'error', label: t('scan_failed') });
+            setToastMessage(message);
+        }
+    }, [autoPlaceScannedReagent, t, updateScanQueueItem]);
+
+    const runNextScanTasks = React.useCallback(() => {
+        const MAX_PARALLEL_SCANS = 3;
+        while (scanActiveCountRef.current < MAX_PARALLEL_SCANS && scanPendingTasksRef.current.length > 0) {
+            const task = scanPendingTasksRef.current.shift();
+            if (!task) return;
+            scanActiveCountRef.current += 1;
+            void processScanTask(task).finally(() => {
+                scanActiveCountRef.current -= 1;
+                runNextScanTasks();
+            });
+        }
+    }, [processScanTask]);
+
+    const handleScanCapture = React.useCallback((imageSrc: string) => {
+        const id = `scan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        setScanQueueItems((prev) => [...prev, { id, imageSrc, status: 'processing' }]);
+        scanPendingTasksRef.current.push({ id, imageSrc });
+        runNextScanTasks();
+    }, [runNextScanTasks]);
+
+    const handleScanCancel = React.useCallback(() => {
         setScanDialogOpen(false);
         setScanResult(null);
-        setScanName('');
-        setScanCas('');
-        setScanContainerType('A');
-        setScanSize(1.0);
-        setScanCapacity('');
-        setScanExpiry('');
-        setScanMemo('');
-        setScanBrand('');
-        setScanProductNumber('');
-        setScanRemainingPercent(100);
         setIsScanning(false);
-    };
+    }, []);
+
+    const handleScanAutoPlace = React.useCallback(() => {
+        handleScanCancel();
+    }, [handleScanCancel]);
 
     // Generic containers for the placement tray (labels match ReagentEditPanel: cabinet_container_*)
     const genericContainers: GenericContainerItem[] = [
@@ -1458,7 +1442,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             <CameraCaptureModal
                 isOpen={isCameraOpen}
                 onClose={() => setIsCameraOpen(false)}
-                onCapture={handleScanCapture}
+                mode="continuous"
+                queueItems={scanQueueItems}
+                onQueueCapture={handleScanCapture}
             />
 
             {/* Scan Result Dialog */}

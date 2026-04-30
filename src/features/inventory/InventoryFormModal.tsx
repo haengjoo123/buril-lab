@@ -20,10 +20,20 @@ interface Props {
     onClose: () => void;
     locations: StorageLocation[];
     initialData?: InventoryItem | null;
+    initialDraft?: Partial<CreateInventoryInput> | null;
+    entryMode?: 'manual_form' | 'scan_prefill';
     onSaved: () => void;
 }
 
-export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations, initialData, onSaved }) => {
+export const InventoryFormModal: React.FC<Props> = ({
+    isOpen,
+    onClose,
+    locations,
+    initialData,
+    initialDraft = null,
+    entryMode = 'manual_form',
+    onSaved,
+}) => {
     const { t, i18n } = useTranslation();
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -90,24 +100,28 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     remaining_percent: initialData.remaining_percent ?? 100,
                 });
             } else {
+                const defaultStorageType = locations.length > 0 ? 'other' : 'cabinet';
+                const draftStorageType = initialDraft?.storage_type || defaultStorageType;
                 setFormData({
-                    name: '',
-                    brand: '',
-                    product_number: '',
-                    cas_number: '',
-                    quantity: 1,
-                    capacity: '',
-                    storage_type: locations.length > 0 ? 'other' : 'cabinet',
-                    cabinet_id: '',
-                    storage_location_id: locations.length > 0 ? locations[0].id : '',
-                    expiry_date: '',
-                    memo: '',
-                    remaining_percent: 100,
+                    name: initialDraft?.name || '',
+                    brand: initialDraft?.brand || '',
+                    product_number: initialDraft?.product_number || '',
+                    cas_number: initialDraft?.cas_number || '',
+                    quantity: initialDraft?.quantity ?? 1,
+                    capacity: initialDraft?.capacity || '',
+                    storage_type: draftStorageType,
+                    cabinet_id: draftStorageType === 'cabinet' ? (initialDraft?.cabinet_id || '') : '',
+                    storage_location_id: draftStorageType === 'other'
+                        ? (initialDraft?.storage_location_id || (locations.length > 0 ? locations[0].id : ''))
+                        : '',
+                    expiry_date: initialDraft?.expiry_date || '',
+                    memo: initialDraft?.memo || '',
+                    remaining_percent: initialDraft?.remaining_percent ?? 100,
                 });
             }
             setError(null);
         }
-    }, [isOpen, initialData, locations]);
+    }, [isOpen, initialData, locations, initialDraft]);
 
     useEffect(() => {
         return () => {
@@ -132,9 +146,13 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const scanDraftCasNumber = entryMode === 'scan_prefill' ? (initialDraft?.cas_number || '').trim() : '';
+    const fallbackCasInputMethod = formData.cas_number?.trim()
+        ? (scanDraftCasNumber && formData.cas_number.trim() === scanDraftCasNumber ? 'scan' : 'manual')
+        : 'unknown';
     const currentCasInputMethod = getSuggestedCasInputMethod(
         casSuggestion.isSuggestedCasApplied,
-        formData.cas_number?.trim() ? 'manual' : 'unknown',
+        fallbackCasInputMethod,
         casSuggestion.appliedSuggestion?.confidence,
     );
 
@@ -258,7 +276,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     casNumber: formData.cas_number,
                     casInputMethod: currentCasInputMethod,
                     metadata: {
-                        entry_mode: 'manual_form',
+                        entry_mode: entryMode,
                     },
                 });
 
@@ -549,6 +567,11 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
         formData.cabinet_id,
         formData.storage_location_id
     );
+    const modalTitle = initialData
+        ? t('inventory_modal_title_edit')
+        : entryMode === 'scan_prefill'
+            ? t('inventory_modal_title_scan')
+            : t('inventory_modal_title_add');
     const cabinetOptions = cabinets.map((cab) => ({
         value: cab.id,
         label: cab.name,
@@ -605,7 +628,7 @@ export const InventoryFormModal: React.FC<Props> = ({ isOpen, onClose, locations
                     <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-800">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
                             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                                {initialData ? t('inventory_modal_title_edit') : t('inventory_modal_title_add')}
+                                {modalTitle}
                             </h2>
                             <button onClick={onClose} className="p-1 -mr-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <X className="w-5 h-5" />
