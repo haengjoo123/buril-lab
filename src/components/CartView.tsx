@@ -53,6 +53,25 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
 
     const mixtureResult = useMemo(() => analyzeMixture(cart), [cart]);
     const compatWarnings = useMemo(() => checkCompatibility(cart), [cart]);
+    const selectedSolventLabel = useMemo(() => {
+        const solventNames = cart
+            .map((item) => item.solutionContext)
+            .filter((context) => context?.physicalForm === 'organic_solvent' && context.solventName)
+            .map((context) => context!.solventName!.trim())
+            .filter(Boolean);
+
+        return Array.from(new Set(solventNames)).join(', ');
+    }, [cart]);
+
+    const isSolventAdjustedGuide = Boolean(
+        selectedSolventLabel &&
+        (
+            mixtureResult.reason === 'mix_reason_organic_solvent_context' ||
+            mixtureResult.reason === 'mix_reason_halogen_solvent_context'
+        )
+    );
+    const mixtureReasonText = useMemo(() => t(mixtureResult.reason as any), [mixtureResult.reason, t]);
+    const hasGuideEvidence = Boolean(mixtureResult.baseLabel || mixtureResult.contextWarnings?.length);
 
     // Dispose flow state
     const [showDisposeModal, setShowDisposeModal] = useState(false);
@@ -65,6 +84,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
 
     // AI Guide local UI state
     const [aiExpanded, setAiExpanded] = useState(true);
+    const [showGuideEvidence, setShowGuideEvidence] = useState(false);
 
 
 
@@ -236,8 +256,34 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                         <h4 className="text-xs text-gray-400 dark:text-gray-500 mb-2 font-medium uppercase tracking-tight">{t('cart_guide_title')}</h4>
 
                         <div className={`p-3.5 rounded-xl ${mixtureResult.binColor} text-white shadow-md mb-2.5`}>
-                            <div className="font-bold text-base mb-0.5">{t(mixtureResult.label as any)}</div>
-                            <div className="text-[13px] opacity-90 leading-snug">{t(mixtureResult.reason as any)}</div>
+                            {isSolventAdjustedGuide ? (
+                                <>
+                                    <div className="mb-3 flex justify-center">
+                                        <div className="inline-flex max-w-full flex-col items-center rounded-full bg-white/20 px-3 py-1.5 text-white/95 ring-1 ring-white/25">
+                                            <span className="text-[10px] font-semibold leading-none opacity-80">
+                                                {t('mixture_basis_solvent_label' as any)}
+                                            </span>
+                                            <span className="mt-1 max-w-full break-words text-center text-sm font-extrabold leading-tight">
+                                                {selectedSolventLabel}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-[11px] font-semibold leading-none opacity-80">
+                                        {t('mixture_final_stream_label' as any)}
+                                    </div>
+                                    <div className="mt-1 break-keep text-[19px] font-extrabold leading-tight">
+                                        {t(mixtureResult.label as any)}
+                                    </div>
+                                    <div className="mt-2 text-[12px] leading-snug opacity-90">
+                                        {t('mixture_solvent_adjusted_helper' as any)}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="font-bold text-base mb-0.5">{t(mixtureResult.label as any)}</div>
+                                    <div className="text-[13px] opacity-90 leading-snug">{mixtureReasonText}</div>
+                                </>
+                            )}
 
                             {/* Detailed Disposal Info for Alkali+Organic */}
                             {(mixtureResult as any).disposalDetails && (
@@ -254,29 +300,42 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                             )}
                         </div>
 
-                        {(mixtureResult.baseLabel || mixtureResult.contextWarnings?.length) && (
-                            <div className="space-y-2 mb-2.5">
-                                {mixtureResult.baseLabel && (
-                                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-2 text-left text-[11px] leading-snug text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
-                                        <div className="font-semibold">
-                                            {t('mixture_base_basis_label' as any)}: {t(mixtureResult.baseLabel as any)}
-                                        </div>
-                                        {mixtureResult.baseReason && (
-                                            <div className="mt-0.5 opacity-90">
-                                                {t(mixtureResult.baseReason as any)}
+                        {hasGuideEvidence && (
+                            <div className="mb-2.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGuideEvidence((value) => !value)}
+                                    className="mx-auto flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                >
+                                    {showGuideEvidence ? t('mixture_evidence_hide' as any) : t('mixture_evidence_show' as any)}
+                                    {showGuideEvidence ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                </button>
+
+                                {showGuideEvidence && (
+                                    <div className="mt-2 space-y-1.5">
+                                        {mixtureResult.baseLabel && (
+                                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-left text-[11px] leading-snug text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+                                                <div className="font-semibold">
+                                                    {t('mixture_base_basis_label' as any)}: {t(mixtureResult.baseLabel as any)}
+                                                </div>
+                                                {mixtureResult.baseReason && (
+                                                    <div className="mt-0.5 opacity-90">
+                                                        {t(mixtureResult.baseReason as any)}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
+
+                                        {mixtureResult.contextWarnings?.map((warningKey) => (
+                                            <div
+                                                key={warningKey}
+                                                className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-left text-[11px] leading-snug text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300"
+                                            >
+                                                {t(warningKey as any)}
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
-
-                                {mixtureResult.contextWarnings?.map((warningKey) => (
-                                    <div
-                                        key={warningKey}
-                                        className="rounded-lg border border-amber-100 bg-amber-50 p-2 text-left text-[11px] leading-snug text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
-                                    >
-                                        {t(warningKey as any)}
-                                    </div>
-                                ))}
                             </div>
                         )}
 

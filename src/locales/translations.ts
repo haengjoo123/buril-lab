@@ -352,6 +352,11 @@ export const translations = {
         mix_label_alkali_organic: "알칼리 + 유기계 혼합 폐액",
         mix_label_reactive_organic: "반응성 유기 혼합 폐액",
         mixture_base_basis_label: "원액/고체 기준",
+        mixture_basis_solvent_label: "기준 용매",
+        mixture_final_stream_label: "최종 폐기 흐름",
+        mixture_solvent_adjusted_helper: "선택한 용매 성상을 반영한 결과입니다.",
+        mixture_evidence_show: "분류 근거 보기",
+        mixture_evidence_hide: "분류 근거 닫기",
 
         // Disposal Details
         detail_solubility: "유기상 용해도",
@@ -1413,6 +1418,11 @@ export const translations = {
         mix_label_alkali_organic: "Alkali + Organic Mixture",
         mix_label_reactive_organic: "Reactive Organic Mixed Waste",
         mixture_base_basis_label: "Neat/Solid Basis",
+        mixture_basis_solvent_label: "Basis Solvent",
+        mixture_final_stream_label: "Final Waste Stream",
+        mixture_solvent_adjusted_helper: "Result reflects the selected solvent class.",
+        mixture_evidence_show: "Show Classification Basis",
+        mixture_evidence_hide: "Hide Classification Basis",
 
         // Disposal Details
         detail_solubility: "Organic Solubility",
