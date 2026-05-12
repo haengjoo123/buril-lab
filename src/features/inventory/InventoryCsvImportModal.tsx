@@ -17,6 +17,7 @@ import { AppSelect } from '../../components/AppSelect';
 import type { ReagentTemplateType } from '../../types/fridge';
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
+import { getShelfSectionCount, normalizeShelfDividers } from '../../utils/shelfSections';
 import {
     INVENTORY_IMPORT_HEADER_KEYS,
     INVENTORY_IMPORT_TEMPLATE_HEADERS_KO,
@@ -41,9 +42,23 @@ interface ParsedCsvRow {
     source: Record<string, string>;
     input: CreateInventoryInput | null;
     selectedTemplate?: ReagentTemplateType;
+    targetShelfLevel?: number;
+    targetSectionIndex?: number;
     status: RowStatus;
     reasons: string[];
     matchedCabinetId?: string;
+}
+
+interface CabinetImportShelf {
+    id: string;
+    level: number;
+    sectionCount: number;
+}
+
+interface CabinetImportPlacement {
+    cabinetId: string;
+    cabinetName: string;
+    shelves: CabinetImportShelf[];
 }
 
 type CsvStep = 'upload' | 'mapping' | 'preview' | 'success';
@@ -73,6 +88,8 @@ const HEADER_ALIASES: Record<string, string[]> = {
     capacity: ['capacity', '용량'],
     storage_type: ['storage_type', 'storage type', '보관유형', '보관 유형', '보관타입', '보관 타입'],
     storage_location: ['storage_location', 'storage location', '보관위치', '보관 위치', '보관장소', '보관 장소', '위치'],
+    shelf_level: ['shelf_level', 'shelf level', 'shelf', '선반', '선반층', '선반 층', '층'],
+    shelf_section: ['shelf_section', 'shelf section', 'section', '칸', '구역', '구획', '선반칸', '선반 칸'],
     container_type: ['container_type', 'container type', '시약병', '병종류', '병 종류', '용기종류', '용기 종류', '용기타입', '병 타입'],
     expiry_date: ['expiry_date', 'expiry', '유효기간', '만료일'],
     memo: ['memo', '메모', '비고'],
@@ -96,6 +113,17 @@ const parseStorageType = (raw: string): 'other' | 'cabinet' | null => {
     const normalized = normalize(raw);
     if (!normalized) return 'other';
     return STORAGE_TYPE_ALIAS_MAP[raw.trim()] || STORAGE_TYPE_ALIAS_MAP[normalized] || null;
+};
+
+const parseOptionalPositiveInteger = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    const match = trimmed.match(/\d+/);
+    if (!match) return null;
+
+    const value = Number.parseInt(match[0], 10);
+    return Number.isInteger(value) && value > 0 ? value : null;
 };
 
 // CSV support has been removed in favor of Excel (.xlsx)
@@ -151,6 +179,26 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const failedCount = rows.filter(r => r.status === 'failed').length;
         return { validCount, invalidCount, importedCount, failedCount };
     }, [rows]);
+
+    const getRowStorageDisplay = (row: ParsedCsvRow): string => {
+        const parts = [row.source.storage_location || '-'];
+        if (row.source.shelf_level) {
+            const rawShelfLevel = row.source.shelf_level.trim();
+            parts.push(/^\d+$/.test(rawShelfLevel)
+                ? t('inventory_shelf_level', { level: rawShelfLevel })
+                : rawShelfLevel);
+        }
+        if (row.source.shelf_section) {
+            const rawShelfSection = row.source.shelf_section.trim();
+            parts.push(/^\d+$/.test(rawShelfSection)
+                ? t(
+                    'inventory_shelf_section',
+                    { section: rawShelfSection, defaultValue: '{{section}}번 칸' },
+                )
+                : rawShelfSection);
+        }
+        return parts.join(' / ');
+    };
 
     const resetState = () => {
         setStep('upload');
@@ -226,7 +274,48 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         return fuzzy?.id || null;
     };
 
-    const buildRow = (rowNumber: number, source: Record<string, string>): ParsedCsvRow => {
+    const fetchCabinetPlacements = async (): Promise<CabinetImportPlacement[]> => {
+        const cabinetIds = cabinets.map((cabinet) => cabinet.id).filter(Boolean);
+        if (cabinetIds.length === 0) return [];
+
+        const { data, error } = await supabase
+            .from('cabinet_shelves')
+            .select('id, cabinet_id, level, dividers')
+            .in('cabinet_id', cabinetIds)
+            .order('level', { ascending: true });
+
+        if (error) throw error;
+
+        const shelvesByCabinet = new Map<string, CabinetImportShelf[]>();
+        (data || []).forEach((row) => {
+            const cabinetId = String(row.cabinet_id || '');
+            if (!cabinetId) return;
+            const shelf: CabinetImportShelf = {
+                id: String(row.id),
+                level: Number(row.level) || 0,
+                sectionCount: getShelfSectionCount(normalizeShelfDividers(row.dividers)),
+            };
+            const shelves = shelvesByCabinet.get(cabinetId) || [];
+            shelves.push(shelf);
+            shelvesByCabinet.set(cabinetId, shelves);
+        });
+
+        return cabinets.map((cabinet) => {
+            const shelves = (shelvesByCabinet.get(cabinet.id) || [])
+                .sort((a, b) => a.level - b.level);
+            return {
+                cabinetId: cabinet.id,
+                cabinetName: cabinet.name,
+                shelves,
+            };
+        });
+    };
+
+    const buildRow = (
+        rowNumber: number,
+        source: Record<string, string>,
+        cabinetPlacementsById: Map<string, CabinetImportPlacement>,
+    ): ParsedCsvRow => {
         const reasons: string[] = [];
 
         const name = (source.name || '').trim();
@@ -237,6 +326,8 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const capacity = (source.capacity || '').trim();
         const storageTypeRaw = (source.storage_type || '').trim();
         const storageLocationRaw = (source.storage_location || '').trim();
+        const shelfLevelRaw = (source.shelf_level || '').trim();
+        const shelfSectionRaw = (source.shelf_section || '').trim();
         const containerTypeRaw = (source.container_type || '').trim();
         const expiryDateRaw = (source.expiry_date || '').trim();
         const memo = (source.memo || '').trim();
@@ -257,6 +348,55 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const cabinetId = storageType === 'cabinet' ? matchCabinetId(storageLocationRaw) : null;
         if (storageType === 'other' && !locationId) reasons.push(t('inventory_csv_reason_other_location_not_found'));
         if (storageType === 'cabinet' && !cabinetId) reasons.push(t('inventory_csv_reason_cabinet_not_found'));
+
+        const requestedShelfLevel = parseOptionalPositiveInteger(shelfLevelRaw);
+        const requestedSectionIndex = parseOptionalPositiveInteger(shelfSectionRaw);
+        if (shelfLevelRaw && !requestedShelfLevel) {
+            reasons.push(t(
+                'inventory_csv_reason_shelf_level_invalid',
+                { defaultValue: '선반은 1 이상의 숫자로 입력하세요.' },
+            ));
+        }
+        if (shelfSectionRaw && !requestedSectionIndex) {
+            reasons.push(t(
+                'inventory_csv_reason_shelf_section_invalid',
+                { defaultValue: '칸은 1 이상의 숫자로 입력하세요.' },
+            ));
+        }
+        if (storageType === 'other' && (shelfLevelRaw || shelfSectionRaw)) {
+            reasons.push(t(
+                'inventory_csv_reason_shelf_only_cabinet',
+                { defaultValue: '선반/칸은 storage_type이 cabinet일 때만 입력하세요.' },
+            ));
+        }
+        if (storageType === 'cabinet' && requestedSectionIndex && !requestedShelfLevel) {
+            reasons.push(t(
+                'inventory_csv_reason_section_requires_shelf',
+                { defaultValue: '칸을 지정하려면 선반도 함께 입력하세요.' },
+            ));
+        }
+
+        const cabinetPlacement = cabinetId ? cabinetPlacementsById.get(cabinetId) : null;
+        const matchedShelf = storageType === 'cabinet' && requestedShelfLevel && cabinetPlacement
+            ? cabinetPlacement.shelves.find((shelf) => shelf.level + 1 === requestedShelfLevel)
+            : null;
+        if (storageType === 'cabinet' && requestedShelfLevel && cabinetPlacement && !matchedShelf) {
+            reasons.push(t(
+                'inventory_csv_reason_shelf_level_not_found',
+                { defaultValue: '선택한 시약장에 해당 선반이 없습니다.' },
+            ));
+        }
+        if (
+            storageType === 'cabinet'
+            && requestedSectionIndex
+            && matchedShelf
+            && requestedSectionIndex > matchedShelf.sectionCount
+        ) {
+            reasons.push(t(
+                'inventory_csv_reason_shelf_section_not_found',
+                { defaultValue: '선택한 선반에 해당 칸이 없습니다.' },
+            ));
+        }
 
         const selectedTemplate = parseImportedContainerType(containerTypeRaw);
         if (storageType === 'cabinet' && !containerTypeRaw) {
@@ -304,6 +444,8 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             source,
             input,
             selectedTemplate: selectedTemplate || undefined,
+            targetShelfLevel: matchedShelf ? matchedShelf.level : undefined,
+            targetSectionIndex: matchedShelf && requestedSectionIndex ? requestedSectionIndex : undefined,
             status: reasons.length === 0 ? 'valid' : 'invalid',
             reasons,
             matchedCabinetId: cabinetId || undefined,
@@ -315,11 +457,19 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         setIsTemplateDownloading(true);
         setGlobalError(null);
         try {
+            const cabinetPlacements = await fetchCabinetPlacements();
             const { downloadInventoryTemplateWorkbook } = await import('./inventoryTemplateWorkbook');
             await downloadInventoryTemplateWorkbook({
                 headers: TEMPLATE_HEADERS_KO,
                 t,
                 cabinetNames: cabinets.map((cabinet) => cabinet.name.trim()).filter(Boolean),
+                cabinetPlacements: cabinetPlacements.map((cabinet) => ({
+                    cabinetName: cabinet.cabinetName,
+                    shelves: cabinet.shelves.map((shelf) => ({
+                        level: shelf.level,
+                        sectionCount: shelf.sectionCount,
+                    })),
+                })),
             });
         } catch (error) {
             console.error('Failed to download inventory template:', error);
@@ -514,7 +664,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         await parseCsvFile(droppedFile);
     };
 
-    const handleRunValidation = () => {
+    const handleRunValidation = async () => {
         if (!rawCsvData) return;
 
         const required = ['name', 'quantity', 'storage_type', 'storage_location'];
@@ -524,17 +674,30 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             return;
         }
 
-        const parsedRows: ParsedCsvRow[] = rawCsvData.rows.map(({ rowNumber, values }) => {
-            const source: Record<string, string> = {};
-            EXPECTED_HEADERS.forEach((key) => {
-                source[key] = valueByMapping(values, rawCsvData.headers, key);
+        setIsParsing(true);
+        try {
+            const cabinetPlacements = await fetchCabinetPlacements();
+            const cabinetPlacementsById = new Map(cabinetPlacements.map((cabinet) => [cabinet.cabinetId, cabinet]));
+            const parsedRows: ParsedCsvRow[] = rawCsvData.rows.map(({ rowNumber, values }) => {
+                const source: Record<string, string> = {};
+                EXPECTED_HEADERS.forEach((key) => {
+                    source[key] = valueByMapping(values, rawCsvData.headers, key);
+                });
+                return buildRow(rowNumber, source, cabinetPlacementsById);
             });
-            return buildRow(rowNumber, source);
-        });
 
-        setRows(parsedRows);
-        setGlobalError(null);
-        setStep('preview');
+            setRows(parsedRows);
+            setGlobalError(null);
+            setStep('preview');
+        } catch (error) {
+            console.error('Failed to validate import rows:', error);
+            setGlobalError(t(
+                'inventory_csv_error_cabinet_positions_failed',
+                { defaultValue: '시약장 선반/칸 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' },
+            ));
+        } finally {
+            setIsParsing(false);
+        }
     };
 
     const handleImportValidRows = async () => {
@@ -565,7 +728,17 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                     const width = getWidthForTemplate(template);
                     const store = useFridgeStore.getState();
                     await store.loadCabinet(input.cabinet_id);
-                    const placed = store.autoPlaceReagent({
+                    const targetShelf = typeof row.targetShelfLevel === 'number'
+                        ? useFridgeStore.getState().shelves.find((shelf) => shelf.level === row.targetShelfLevel)
+                        : null;
+                    if (typeof row.targetShelfLevel === 'number' && !targetShelf) {
+                        await supabase.from('inventory').delete().eq('id', created.id);
+                        throw new Error(t(
+                            'inventory_csv_error_shelf_changed',
+                            { defaultValue: '지정한 선반을 현재 시약장에서 찾을 수 없습니다. 템플릿을 다시 내려받아 확인해 주세요.' },
+                        ));
+                    }
+                    const placed = useFridgeStore.getState().autoPlaceReagent({
                         id: '',
                         reagentId: created.id,
                         linkedInventoryItemId: created.id,
@@ -581,7 +754,10 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         productNumber: input.product_number || undefined,
                         brand: input.brand || undefined,
                         expiryDate: input.expiry_date || undefined,
-                    });
+                    }, targetShelf ? {
+                        shelfId: targetShelf.id,
+                        sectionIndex: row.targetSectionIndex,
+                    } : undefined);
                     if (!placed) {
                         await supabase.from('inventory').delete().eq('id', created.id);
                         throw new Error(t('inventory_csv_error_no_cabinet_space'));
@@ -860,7 +1036,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.name || '-'}</td>
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.quantity || '-'}</td>
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_type || '-'}</td>
-                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_location || '-'}</td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{getRowStorageDisplay(row)}</td>
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">
                                                 {row.status === 'imported' ? (
                                                     <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">

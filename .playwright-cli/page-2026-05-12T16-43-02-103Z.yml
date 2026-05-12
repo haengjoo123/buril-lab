@@ -1,0 +1,108 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - img [ref=e4]
+    - generic [ref=e7]: Buril-lab
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - img [ref=e10]
+        - text: 실험실 폐시약 검색
+      - heading "폐시약 처리를 검색 한 번으로" [level=1] [ref=e13]:
+        - text: 폐시약 처리를
+        - text: 검색 한 번으로
+      - paragraph [ref=e14]: 시약명·CAS 번호 입력 즉시 안전한 폐기 기준을 안내합니다.
+    - generic [ref=e15]:
+      - generic [ref=e16]: 시약명 검색
+      - generic [ref=e17]: CAS No.
+      - generic [ref=e18]: 음성 입력
+  - generic [ref=e21]:
+    - img [ref=e22]
+    - generic [ref=e25]: Buril-lab
+    - generic [ref=e26]:
+      - generic [ref=e27]:
+        - img [ref=e28]
+        - text: MSDS·GHS 확인
+      - heading "분류 기준과 위험 정보를 한눈에" [level=1] [ref=e31]:
+        - text: 분류 기준과
+        - text: 위험 정보를 한눈에
+      - paragraph [ref=e32]: 유기계/무기계, 할로겐 여부, GHS 정보를 한 화면에서 확인하세요.
+    - generic [ref=e33]:
+      - generic [ref=e34]: 폐액 분류
+      - generic [ref=e35]: MSDS
+      - generic [ref=e36]: GHS
+    - generic [ref=e39]:
+      - text: Acetone
+      - generic [ref=e40]: 유기계
+  - generic [ref=e41]:
+    - img [ref=e42]
+    - generic [ref=e45]: Buril-lab
+    - generic [ref=e46]:
+      - generic [ref=e47]:
+        - img [ref=e48]
+        - text: 라벨 스캔
+      - heading "시약 라벨을 찍어서 바로 검색" [level=1] [ref=e51]:
+        - text: 시약 라벨을
+        - text: 찍어서 바로 검색
+      - paragraph [ref=e52]: 이름을 길게 입력하지 않아도 카메라로 빠르게 시작합니다.
+    - generic [ref=e53]:
+      - generic [ref=e54]: 카메라 인식
+      - generic [ref=e55]: 라벨 검색
+  - generic [ref=e58]:
+    - img [ref=e59]
+    - generic [ref=e62]: Buril-lab
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - img [ref=e65]
+        - text: 폐기 기록
+      - heading "처리 이력을 깔끔하게 보관" [level=1] [ref=e66]:
+        - text: 처리 이력을
+        - text: 깔끔하게 보관
+      - paragraph [ref=e67]: 최근 기록과 보관 기록을 나눠 연구실 폐기 이력을 추적합니다.
+    - generic [ref=e68]:
+      - generic [ref=e69]: 최근 7·30·90일
+      - generic [ref=e70]: 검색·정렬
+      - generic [ref=e71]: 내보내기
+  - generic [ref=e74]:
+    - img [ref=e75]
+    - generic [ref=e78]: Buril-lab
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - img [ref=e81]
+        - text: 시약장 관리
+      - heading "연구실 시약장을 한눈에 관리" [level=1] [ref=e85]:
+        - text: 연구실 시약장을
+        - text: 한눈에 관리
+      - paragraph [ref=e86]: 공간별 시약장, 재고, 폐기 이력을 하나의 흐름으로 연결합니다.
+    - generic [ref=e87]:
+      - generic [ref=e88]: 시약장 목록
+      - generic [ref=e89]: 재고 연결
+      - generic [ref=e90]: 이력 확인
+  - generic [ref=e93]:
+    - img [ref=e94]
+    - generic [ref=e97]: Buril-lab
+    - generic [ref=e98]:
+      - generic [ref=e99]:
+        - img [ref=e100]
+        - text: 선반 시각화
+      - heading "실제 선반처럼 배치하고 확인" [level=1] [ref=e102]:
+        - text: 실제 선반처럼
+        - text: 배치하고 확인
+      - paragraph [ref=e103]: 칸별 위치를 시각화해 시약을 찾고 정리하는 시간을 줄입니다.
+    - generic [ref=e104]:
+      - generic [ref=e105]: 보기
+      - generic [ref=e106]: 편집
+      - generic [ref=e107]: 배치
+  - generic [ref=e110]:
+    - img [ref=e111]
+    - generic [ref=e114]: Buril-lab
+    - generic [ref=e115]:
+      - generic [ref=e116]:
+        - img [ref=e117]
+        - text: 재고 목록
+      - heading "유효기한까지 놓치지 않는 재고" [level=1] [ref=e121]:
+        - text: 유효기한까지
+        - text: 놓치지 않는 재고
+      - paragraph [ref=e122]: 시약명·브랜드·CAS 검색과 엑셀 가져오기/내보내기를 지원합니다.
+    - generic [ref=e123]:
+      - generic [ref=e124]: 유효기한 정렬
+      - generic [ref=e125]: 엑셀 가져오기
+      - generic [ref=e126]: 빠른 등록

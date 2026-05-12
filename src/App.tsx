@@ -10,6 +10,7 @@ const Scanner = lazy(() => import('./components/Scanner'));
 
 import { CartView } from './components/CartView';
 import { AuthView } from './components/AuthView';
+import { ResetPasswordView } from './components/ResetPasswordView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import type { CabinetSearchResult } from './services/cabinetService';
@@ -55,7 +56,7 @@ function TabContentFallback() {
 
 function App() {
   const { t, i18n } = useTranslation();
-  const { session, user, isLoading: isAuthLoading, signIn, signUp, signOut } = useAuth();
+  const { session, user, isLoading: isAuthLoading, signIn, signUp, requestPasswordReset, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -128,6 +129,7 @@ function App() {
   });
 
   const isLoginRoute = location.pathname === '/login';
+  const isResetPasswordRoute = location.pathname === '/reset-password';
   const isPrivacyRoute = location.pathname === '/privacy';
   const isFeedbackAdminRoute = location.pathname === '/feedback-admin';
 
@@ -146,11 +148,11 @@ function App() {
 
   useEffect(() => {
     if (isAuthLoading || session) return;
-    if (isLoginRoute) return;
+    if (isLoginRoute || isResetPasswordRoute) return;
     if (!isAuthRequiredPath(location.pathname)) return;
     const returnTo = `${location.pathname}${location.search}`;
     navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
-  }, [isAuthLoading, session, isLoginRoute, location.pathname, location.search, navigate]);
+  }, [isAuthLoading, session, isLoginRoute, isResetPasswordRoute, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (isAuthLoading || !session) return;
@@ -275,6 +277,10 @@ function App() {
     return <PrivacyPolicyView onBack={() => navigate(-1)} />;
   }
 
+  if (isResetPasswordRoute) {
+    return <ResetPasswordView />;
+  }
+
   const guestRedirectingToLogin =
     !session && !isLoginRoute && isAuthRequiredPath(location.pathname);
 
@@ -292,6 +298,7 @@ function App() {
       <AuthView
         onSignIn={signIn}
         onSignUp={signUp}
+        onRequestPasswordReset={requestPasswordReset}
         authPrompt={showAuthPrompt ? t('auth_required_for_feature') : undefined}
         onBackToSearch={() => navigate('/')}
       />

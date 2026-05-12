@@ -177,30 +177,43 @@ export function useSearchFlow({
   useEffect(() => {
     if (!isSearchTab) return;
 
+    const trimmedQuery = query.trim();
+
     // Don't search if query is too short, or if it matches the last executed search (meaning the user already searched it)
-    if (query.trim().length < 2 || query.trim() === lastSearchQuery) {
+    if (trimmedQuery.length < 2 || trimmedQuery === lastSearchQuery.trim()) {
       setSuggestions([]);
       setIsSuggestionsLoading(false);
       return;
     }
 
+    let isActive = true;
+
     const timer = setTimeout(async () => {
       setIsSuggestionsLoading(true);
       try {
         // 한글 입력은 KOSHA, 그 외는 PubChem을 사용해 자동완성 품질을 맞춘다.
-        const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(query);
+        const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(trimmedQuery);
         const newSuggestions = hasKorean
-          ? await fetchKoshaSuggestions(query)
-          : await fetchPubchemSuggestions(query);
-        setSuggestions(newSuggestions);
+          ? await fetchKoshaSuggestions(trimmedQuery)
+          : await fetchPubchemSuggestions(trimmedQuery);
+        if (isActive) {
+          setSuggestions(newSuggestions);
+        }
       } catch {
-        setSuggestions([]);
+        if (isActive) {
+          setSuggestions([]);
+        }
       } finally {
-        setIsSuggestionsLoading(false);
+        if (isActive) {
+          setIsSuggestionsLoading(false);
+        }
       }
     }, 300); // 300ms debounce
 
-    return () => clearTimeout(timer);
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
   }, [query, lastSearchQuery, isSearchTab]);
 
   const clearSuggestions = useCallback(() => {

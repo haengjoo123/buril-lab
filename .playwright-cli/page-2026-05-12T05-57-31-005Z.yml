@@ -1,0 +1,29 @@
+- generic [ref=e76]:
+  - button "검색 화면으로 돌아가기" [ref=e77]:
+    - img [ref=e78]
+    - text: 검색 화면으로 돌아가기
+  - generic [ref=e80]:
+    - img [ref=e82]
+    - heading "Buril-lab" [level=1] [ref=e84]
+    - paragraph [ref=e85]: 실험실 폐기물 관리 시스템
+  - generic [ref=e86]:
+    - generic [ref=e87]:
+      - button "로그인" [ref=e88]
+      - button "회원가입" [ref=e89]
+    - generic [ref=e90]:
+      - generic [ref=e91]:
+        - generic [ref=e92]: 이메일
+        - generic [ref=e93]:
+          - img [ref=e94]
+          - textbox "email@example.com" [ref=e97]: gudwns999999@naver.com
+      - generic [ref=e98]:
+        - generic [ref=e99]: 비밀번호
+        - generic [ref=e100]:
+          - img [ref=e101]
+          - textbox "••••••••" [ref=e104]: gudwns77!
+      - generic [ref=e111]: Invalid login credentials
+      - button "로그인" [ref=e105]:
+        - img [ref=e112]
+        - text: 로그인
+  - link "개인정보처리방침" [ref=e110] [cursor=pointer]:
+    - /url: /privacy

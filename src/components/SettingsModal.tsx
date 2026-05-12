@@ -1,5 +1,5 @@
 import React from 'react';
-import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2, UserMinus } from 'lucide-react';
+import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2, UserMinus, KeyRound } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from './CustomDialog';
@@ -19,7 +19,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const { t, i18n } = useTranslation();
     const deleteConfirmPhrase = t('settings_delete_account_confirm_phrase');
 
-    const { session, deleteAccount } = useAuth();
+    const { session, updatePassword, deleteAccount } = useAuth();
     const [dialogConfig, setDialogConfig] = React.useState<{
         isOpen: boolean;
         type: 'alert' | 'confirm' | 'prompt';
@@ -33,6 +33,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     }>({ isOpen: false, type: 'alert', title: '', description: '' });
 
     const [deleteInputValue, setDeleteInputValue] = React.useState('');
+    const [showPasswordChange, setShowPasswordChange] = React.useState(false);
+    const [accountPassword, setAccountPassword] = React.useState('');
+    const [accountPasswordConfirm, setAccountPasswordConfirm] = React.useState('');
+    const [passwordChangeError, setPasswordChangeError] = React.useState('');
+    const [passwordChangeSuccess, setPasswordChangeSuccess] = React.useState('');
+    const [isChangingPassword, setIsChangingPassword] = React.useState(false);
 
     // Feedback state
     const [showFeedback, setShowFeedback] = React.useState(false);
@@ -110,6 +116,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             inputPlaceholder: t('settings_delete_account_confirm_input', { phrase: deleteConfirmPhrase }),
             onConfirm: async () => {} // Logic is handled in CustomDialog onConfirm prop directly
         });
+    };
+
+    const handlePasswordChangeSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setPasswordChangeError('');
+        setPasswordChangeSuccess('');
+
+        if (!accountPassword.trim() || !accountPasswordConfirm.trim()) {
+            setPasswordChangeError(t('settings_password_change_empty'));
+            return;
+        }
+
+        if (accountPassword !== accountPasswordConfirm) {
+            setPasswordChangeError(t('auth_error_password_mismatch'));
+            return;
+        }
+
+        if (accountPassword.length < 6) {
+            setPasswordChangeError(t('auth_error_password_short'));
+            return;
+        }
+
+        setIsChangingPassword(true);
+        try {
+            const { error } = await updatePassword(accountPassword);
+            if (error) {
+                setPasswordChangeError(error);
+                return;
+            }
+
+            setAccountPassword('');
+            setAccountPasswordConfirm('');
+            setShowPasswordChange(false);
+            setPasswordChangeSuccess(t('settings_password_change_success'));
+        } catch {
+            setPasswordChangeError(t('settings_password_change_error'));
+        } finally {
+            setIsChangingPassword(false);
+        }
     };
 
     const handleFeedbackSubmit = async (e: React.FormEvent) => {
@@ -330,6 +375,83 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             </div>
                             <MessageSquarePlus className="w-5 h-5 flex-shrink-0 ml-2" />
                         </button>
+
+                        {session && (
+                            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowPasswordChange(prev => !prev);
+                                        setPasswordChangeError('');
+                                        setPasswordChangeSuccess('');
+                                        setAccountPassword('');
+                                        setAccountPasswordConfirm('');
+                                    }}
+                                    className="w-full flex items-center justify-between p-4 text-slate-700 dark:text-slate-200 hover:bg-white/70 dark:hover:bg-slate-800 transition-colors text-left"
+                                >
+                                    <div>
+                                        <span className="font-medium block">{t('settings_password_change')}</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 block">{t('settings_password_change_desc')}</span>
+                                    </div>
+                                    <KeyRound className="w-5 h-5 flex-shrink-0 ml-2 text-slate-500" />
+                                </button>
+
+                                {showPasswordChange && (
+                                    <form onSubmit={handlePasswordChangeSubmit} className="px-4 pb-4 space-y-3">
+                                        <input
+                                            type="password"
+                                            value={accountPassword}
+                                            onChange={e => {
+                                                setAccountPassword(e.target.value);
+                                                setPasswordChangeError('');
+                                                setPasswordChangeSuccess('');
+                                            }}
+                                            placeholder={t('auth_new_password')}
+                                            autoComplete="new-password"
+                                            disabled={isChangingPassword}
+                                            className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700 transition-colors disabled:opacity-60"
+                                        />
+                                        <input
+                                            type="password"
+                                            value={accountPasswordConfirm}
+                                            onChange={e => {
+                                                setAccountPasswordConfirm(e.target.value);
+                                                setPasswordChangeError('');
+                                                setPasswordChangeSuccess('');
+                                            }}
+                                            placeholder={t('auth_password_confirm')}
+                                            autoComplete="new-password"
+                                            disabled={isChangingPassword}
+                                            className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700 transition-colors disabled:opacity-60"
+                                        />
+
+                                        {passwordChangeError && (
+                                            <p className="text-xs text-red-500">{passwordChangeError}</p>
+                                        )}
+
+                                        <button
+                                            type="submit"
+                                            disabled={isChangingPassword}
+                                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl font-medium text-sm transition-colors"
+                                        >
+                                            {isChangingPassword ? (
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            ) : (
+                                                <KeyRound className="w-4 h-4" />
+                                            )}
+                                            {isChangingPassword ? t('dialog_processing') : t('settings_password_change_submit')}
+                                        </button>
+                                    </form>
+                                )}
+                            </div>
+                        )}
+
+                        {passwordChangeSuccess && (
+                            <div className="flex gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-700 dark:text-emerald-300">
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                <span>{passwordChangeSuccess}</span>
+                            </div>
+                        )}
 
                         <hr className="border-gray-100 dark:border-slate-800 my-2" />
 

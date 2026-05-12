@@ -1,0 +1,92 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - button "Buril-lab 로고 Buril-lab" [ref=e4]:
+      - img "Buril-lab 로고" [ref=e6]
+      - heading "Buril-lab" [level=1] [ref=e7]
+    - generic [ref=e8]:
+      - button "개인 공간" [ref=e10]:
+        - generic [ref=e11]:
+          - img [ref=e12]
+          - generic [ref=e15]: 개인 공간
+        - img [ref=e16]
+      - button "설정" [active] [ref=e18]:
+        - img [ref=e19]
+      - button "로그아웃" [ref=e22]:
+        - img [ref=e23]
+  - main [ref=e26]:
+    - generic [ref=e27]:
+      - heading "폐기 기록" [level=2] [ref=e30]
+      - generic [ref=e31]:
+        - button "최근 기록" [ref=e32]
+        - button "보관 기록" [ref=e33]
+      - generic [ref=e34]:
+        - generic [ref=e35]: 기록 관리 방식
+        - generic [ref=e36]: 최근 기록은 빠른 조회를 위해 최근 7, 30, 90일로 나뉘며, 폐기 기록 24시간 이내에만 삭제가 허용됩니다.
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - button "최근 7일" [ref=e39]
+          - button "최근 30일" [ref=e40]
+          - button "최근 90일" [ref=e41]
+        - generic [ref=e42]:
+          - generic [ref=e43]:
+            - img [ref=e44]
+            - textbox "분류, 처리자, 메모, 시약명 검색" [ref=e47]
+          - button "최신순" [ref=e49]:
+            - generic [ref=e50]: 최신순
+            - img [ref=e51]
+      - generic [ref=e53]:
+        - img [ref=e55]
+        - heading "아직 폐기 기록이 없습니다" [level=3] [ref=e67]
+        - paragraph [ref=e68]: 검색 탭에서 시약을 폐기 처리하면 이곳에 기록됩니다.
+  - navigation [ref=e69]:
+    - button "검색" [ref=e70]:
+      - img [ref=e71]
+      - text: 검색
+    - button "기록" [ref=e74]:
+      - img [ref=e75]
+      - text: 기록
+    - button "시약장" [ref=e78]:
+      - img [ref=e79]
+      - text: 시약장
+    - button "재고" [ref=e82]:
+      - img [ref=e83]
+      - text: 재고
+  - generic [ref=e88]:
+    - generic [ref=e89]:
+      - heading "설정" [level=3] [ref=e90]
+      - button [ref=e91]:
+        - img [ref=e92]
+    - generic [ref=e95]:
+      - generic [ref=e96]:
+        - generic [ref=e97]:
+          - img [ref=e98]
+          - generic [ref=e101]: 언어 설정 (Language)
+        - generic [ref=e102]:
+          - button "한국어" [ref=e103]
+          - button "English" [ref=e104]
+      - button "앱 개선 제안하기 버그 제보나 개선 아이디어를 자유롭게 남겨주세요." [ref=e105]:
+        - generic [ref=e106]:
+          - generic [ref=e107]: 앱 개선 제안하기
+          - generic [ref=e108]: 버그 제보나 개선 아이디어를 자유롭게 남겨주세요.
+        - img [ref=e109]
+      - separator [ref=e111]
+      - button "앱 초기화" [ref=e112]:
+        - generic [ref=e113]: 앱 초기화
+        - img [ref=e114]
+      - paragraph [ref=e117]: 저장된 장바구니, 검색 기록, 동의 내역을 모두 삭제합니다.
+      - separator [ref=e118]
+      - button "안전 가이드 다시보기" [ref=e119]:
+        - generic [ref=e120]: 안전 가이드 다시보기
+        - img [ref=e121]
+      - button "온보딩 다시보기" [ref=e124]:
+        - generic [ref=e125]: 온보딩 다시보기
+        - img [ref=e126]
+      - separator [ref=e128]
+      - button "회원 탈퇴" [ref=e129]:
+        - generic [ref=e130]: 회원 탈퇴
+        - img [ref=e131]
+      - paragraph [ref=e134]: 계정 접근 권한과 개인 식별 데이터를 삭제합니다. 공유 연구실 기록은 사용자 정보가 제거된 상태로 유지될 수 있습니다.
+    - generic [ref=e135]:
+      - link "개인정보처리방침" [ref=e136] [cursor=pointer]:
+        - /url: /privacy
+      - generic [ref=e137]: Buril-lab v1.0.0

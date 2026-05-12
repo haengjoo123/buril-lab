@@ -3,6 +3,9 @@ import Webcam from 'react-webcam';
 import { X, Check, RotateCcw, Camera, Upload, Loader2, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+const MAX_CAPTURE_DIMENSION = 1920;
+const JPEG_CAPTURE_QUALITY = 0.95;
+
 export interface CameraCaptureQueueItem {
     id: string;
     imageSrc: string;
@@ -17,6 +20,30 @@ interface CameraCaptureModalProps {
     mode?: 'confirm' | 'continuous';
     queueItems?: CameraCaptureQueueItem[];
     onQueueCapture?: (imageSrc: string) => void;
+}
+
+function captureVideoFrame(video: HTMLVideoElement): string | null {
+    if (!video.videoWidth || !video.videoHeight) {
+        return null;
+    }
+
+    const scale = Math.min(1, MAX_CAPTURE_DIMENSION / Math.max(video.videoWidth, video.videoHeight));
+    const width = Math.round(video.videoWidth * scale);
+    const height = Math.round(video.videoHeight * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+        return null;
+    }
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(video, 0, 0, width, height);
+
+    return canvas.toDataURL('image/jpeg', JPEG_CAPTURE_QUALITY);
 }
 
 export function CameraCaptureModal({
@@ -35,13 +62,16 @@ export function CameraCaptureModal({
     const isContinuous = mode === 'continuous';
 
     const handleCapture = useCallback(() => {
-        const imageSrc = webcamRef.current?.getScreenshot();
+        const video = webcamRef.current?.video;
+        const imageSrc = video ? captureVideoFrame(video) : null;
         if (imageSrc) {
             setShowFlash(true);
             setTimeout(() => setShowFlash(false), 150);
             setCapturedImage(imageSrc);
+        } else {
+            alert(t('scanner_error_cam'));
         }
-    }, [webcamRef]);
+    }, [t]);
 
     const handleRetake = () => {
         setCapturedImage(null);
@@ -156,10 +186,12 @@ export function CameraCaptureModal({
                         audio={false}
                         ref={webcamRef}
                         screenshotFormat="image/jpeg"
+                        screenshotQuality={1}
+                        forceScreenshotSourceSize
                         videoConstraints={{
                             facingMode: 'environment',
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 }
+                            width: { ideal: 3840 },
+                            height: { ideal: 2160 }
                         }}
                         className="w-full h-full object-cover"
                     />

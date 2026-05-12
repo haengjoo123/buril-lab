@@ -1,6 +1,7 @@
 import { generateGeminiText, json } from './_utils'
+import { readAICache, stableCacheKey, writeAICache, type AICacheEnv } from './_cache'
 
-interface Env {
+interface Env extends AICacheEnv {
   GEMINI_API_KEY?: string
 }
 
@@ -17,6 +18,30 @@ const VALID_CATEGORIES = [
   'UNKNOWN',
 ] as const
 
+type ValidCategory = typeof VALID_CATEGORIES[number]
+
+interface ChemicalInput {
+  name?: string
+  molecularFormula?: string
+  casNumber?: string
+}
+
+interface ClassificationCachePayload {
+  category?: ValidCategory | null
+}
+
+function isValidCategory(value: unknown): value is ValidCategory {
+  return typeof value === 'string' && (VALID_CATEGORIES as readonly string[]).includes(value)
+}
+
+function generateCacheKey(chemical: ChemicalInput): string {
+  return stableCacheKey('classify:v1', {
+    name: chemical.name || '',
+    casNumber: chemical.casNumber || '',
+    molecularFormula: chemical.molecularFormula || '',
+  })
+}
+
 export const onRequestPost = async (context: {
   request: Request
   env: Env
@@ -26,15 +51,18 @@ export const onRequestPost = async (context: {
   }
 
   const { chemical } = await context.request.json() as {
-    chemical?: {
-      name?: string
-      molecularFormula?: string
-      casNumber?: string
-    }
+    chemical?: ChemicalInput
   }
 
   if (!chemical?.name?.trim()) {
     return json({ error: 'Chemical name is required.' }, { status: 400 })
+  }
+
+  const cacheKey = generateCacheKey(chemical)
+  const cached = await readAICache<ClassificationCachePayload>(context.env, 'classify', cacheKey)
+
+  if (isValidCategory(cached?.category) && cached.category !== 'UNKNOWN') {
+    return json({ category: cached.category, responseSource: 'cache' })
   }
 
   const prompt = `Analyze the following chemical substance and assign it to EXACTLY ONE of these disposal categories:
@@ -68,7 +96,11 @@ Return ONLY the category name as a plain string. No other text.`
     const normalizedText = rawText.toUpperCase()
     const category = VALID_CATEGORIES.find((value) => normalizedText.includes(value)) || 'UNKNOWN'
 
-    return json({ category })
+    if (category !== 'UNKNOWN') {
+      await writeAICache(context.env, 'classify', cacheKey, { category })
+    }
+
+    return json({ category, responseSource: 'ai' })
   } catch (error) {
     return json(
       {

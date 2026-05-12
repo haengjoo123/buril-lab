@@ -1,0 +1,21 @@
+- generic [ref=e4]:
+  - button "검색 화면으로 돌아가기" [ref=e5]:
+    - img [ref=e6]
+    - text: 검색 화면으로 돌아가기
+  - generic [ref=e8]:
+    - img [ref=e10]
+    - heading "비밀번호 재설정" [level=1] [ref=e41]
+    - paragraph [ref=e13]: 가입한 이메일로 비밀번호 재설정 링크를 보내드립니다.
+  - generic [ref=e14]:
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]: 이메일
+        - generic [ref=e21]:
+          - img [ref=e22]
+          - textbox "email@example.com" [ref=e25]
+      - button "재설정 메일 보내기" [ref=e42]:
+        - img [ref=e43]
+        - text: 재설정 메일 보내기
+    - button "로그인으로 돌아가기" [active] [ref=e46]
+  - link "개인정보처리방침" [ref=e40] [cursor=pointer]:
+    - /url: /privacy

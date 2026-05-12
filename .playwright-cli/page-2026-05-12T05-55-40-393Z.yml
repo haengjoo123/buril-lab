@@ -1,0 +1,39 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - button "Buril-lab 로고 Buril-lab" [ref=e4]:
+      - img "Buril-lab 로고" [ref=e6]
+      - heading "Buril-lab" [level=1] [ref=e7]
+    - generic [ref=e8]:
+      - button "로그인" [ref=e9]
+      - button "설정" [ref=e10]:
+        - img [ref=e11]
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "실험실 폐시약, 안전하게 처리하세요." [level=2] [ref=e17]:
+          - text: 실험실 폐시약,
+          - text: 안전하게 처리하세요.
+        - paragraph [ref=e18]: 사진을 찍거나 시약명을 검색하여 올바른 폐기 방법을 확인하세요.
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - img [ref=e23]
+          - 'textbox "시약명 (예: Acetone) 또는 CAS No." [ref=e27]'
+        - generic [ref=e28]:
+          - button "스캔하기" [ref=e29]:
+            - img [ref=e30]
+            - generic [ref=e33]: 스캔하기
+          - button "검색" [disabled] [ref=e34]:
+            - img [ref=e35]
+  - navigation [ref=e37]:
+    - button "검색" [ref=e38]:
+      - img [ref=e39]
+      - text: 검색
+    - button "기록" [ref=e42]:
+      - img [ref=e43]
+      - text: 기록
+    - button "시약장" [ref=e46]:
+      - img [ref=e47]
+      - text: 시약장
+    - button "재고" [ref=e50]:
+      - img [ref=e51]
+      - text: 재고

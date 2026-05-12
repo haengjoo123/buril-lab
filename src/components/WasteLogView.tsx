@@ -13,6 +13,12 @@ import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { AppSelect } from './AppSelect';
 import { translateLocationName } from '../utils/i18nUtils';
+import {
+    buildAuditEventDescription,
+    formatAuditActionName,
+    getAuditChangeRows,
+    getAuditDetailSections,
+} from '../utils/auditLogFormatting';
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
@@ -355,7 +361,14 @@ export const WasteLogView: React.FC = () => {
             ? (primaryChemicalName || log.disposal_category)
             : log.disposal_category;
         const canDeleteThisLog = isDeleteAllowedForLog(log);
-        const deleteBlockedMessage = getDeleteBlockedMessage(log);
+        const firstChemical = log.chemicals?.[0] as any;
+        const firstChemicalName = firstChemical?.chemical?.name || firstChemical?.name || null;
+        const shouldCompactSingleDeleteLog = Boolean(
+            deleteReason &&
+            log.chemicals.length === 1 &&
+            firstChemicalName &&
+            firstChemicalName === displayTitle
+        );
 
         return (
             <div
@@ -364,14 +377,14 @@ export const WasteLogView: React.FC = () => {
             >
                 <button
                     onClick={() => setExpandedId(isExpanded ? null : log.id)}
-                    className="w-full p-4 text-left flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-slate-750 transition-colors"
+                    className="w-full p-4 text-left flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-slate-750 transition-colors"
                 >
-                    <div className={`w-3 h-3 rounded-full flex-shrink-0 ${getCategoryColor(log.disposal_category)}`} />
+                    <div className={`mt-1.5 w-3 h-3 rounded-full flex-shrink-0 ${getCategoryColor(log.disposal_category)}`} />
 
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate">
+                        <div className="flex flex-col gap-1">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="min-w-0 break-words text-sm font-semibold leading-5 text-slate-800 dark:text-slate-200">
                                     {displayTitle}
                                 </span>
                                 {deletedLocation && (
@@ -380,63 +393,86 @@ export const WasteLogView: React.FC = () => {
                                     </span>
                                 )}
                             </div>
-                            <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                                {formatDate(log.created_at)}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            <span>{t('log_chemicals_count', { count: log.chemicals.length })}</span>
-                            {totalVol && <span>• {totalVol}</span>}
-                            {log.handler_name && <span>• {log.handler_name}</span>}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                <span className="whitespace-nowrap">{t('log_chemicals_count', { count: log.chemicals.length })}</span>
+                                {totalVol && <span className="whitespace-nowrap">• {totalVol}</span>}
+                                {log.handler_name && <span className="min-w-0 break-words">• {log.handler_name}</span>}
+                                <span className="whitespace-nowrap text-slate-400 dark:text-slate-500 sm:ml-auto">
+                                    {formatDate(log.created_at)}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
                     {isExpanded
-                        ? <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                        : <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        ? <ChevronUp className="mt-1 w-4 h-4 text-slate-400 flex-shrink-0" />
+                        : <ChevronDown className="mt-1 w-4 h-4 text-slate-400 flex-shrink-0" />
                     }
                 </button>
 
                 {isExpanded && (
                     <div className="px-4 pb-4 border-t border-gray-100 dark:border-slate-700">
-                        <div className="space-y-2 mt-3">
-                            {log.chemicals.map((chem, idx) => (
-                                <div
-                                    key={idx}
-                                    className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-slate-750 rounded-lg text-sm"
-                                >
-                                    <div>
-                                        <div className="font-medium text-slate-700 dark:text-slate-300">
-                                            {chem.chemical?.name || (chem as any).name || 'Unknown'}
+                        {!shouldCompactSingleDeleteLog && (
+                            <div className="space-y-2 mt-3">
+                                {log.chemicals.map((chem, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-slate-750 rounded-lg text-sm"
+                                    >
+                                        <div>
+                                            <div className="font-medium text-slate-700 dark:text-slate-300">
+                                                {chem.chemical?.name || (chem as any).name || 'Unknown'}
+                                            </div>
+                                            <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                                                {chem.label && t(chem.label as any)}
+                                            </div>
                                         </div>
-                                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                                            {chem.label && t(chem.label as any)}
-                                        </div>
+                                        {(chem.volume || chem.molarity) && (
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                                {chem.volume}{chem.volume && chem.molarity && ' • '}{chem.molarity}
+                                            </div>
+                                        )}
+                                        {(chem as any).id && (
+                                            <button
+                                                onClick={() => setViewingAuditLogForId((chem as any).id)}
+                                                className="mt-1.5 flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
+                                            >
+                                                <History className="w-3 h-3" /> {t('log_view_diff')}
+                                            </button>
+                                        )}
                                     </div>
-                                    {(chem.volume || chem.molarity) && (
-                                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                                            {chem.volume}{chem.volume && chem.molarity && ' • '}{chem.molarity}
-                                        </div>
-                                    )}
-                                    {(chem as any).id && (
-                                        <button
-                                            onClick={() => setViewingAuditLogForId((chem as any).id)}
-                                            className="mt-1.5 flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
-                                        >
-                                            <History className="w-3 h-3" /> {t('log_view_diff')}
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-
-                        {deleteReason && (
-                            <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-700/30 rounded-lg text-sm text-slate-700 dark:text-slate-300">
-                                <span className="font-medium">{t('log_disposal_reason')}:</span> {deleteReason}
+                                ))}
                             </div>
                         )}
 
-                        {canDeleteThisLog ? (
+                        {deleteReason && (
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 dark:bg-slate-700/30 rounded-lg text-sm text-slate-700 dark:text-slate-300">
+                                <div className="min-w-0">
+                                    <span className="font-medium">{t('log_disposal_reason')}:</span> {deleteReason}
+                                </div>
+                                {shouldCompactSingleDeleteLog && firstChemical?.id && (
+                                    <button
+                                        onClick={() => setViewingAuditLogForId(firstChemical.id)}
+                                        className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
+                                    >
+                                        <History className="w-3 h-3" /> {t('log_view_diff')}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        {!deleteReason && shouldCompactSingleDeleteLog && firstChemical?.id && (
+                            <div className="mt-3 flex justify-end">
+                                <button
+                                    onClick={() => setViewingAuditLogForId(firstChemical.id)}
+                                    className="flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
+                                >
+                                    <History className="w-3 h-3" /> {t('log_view_diff')}
+                                </button>
+                            </div>
+                        )}
+
+                        {canDeleteThisLog && (
                             <button
                                 onClick={() => setDeleteId(log.id)}
                                 className="mt-3 w-full py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
@@ -444,17 +480,12 @@ export const WasteLogView: React.FC = () => {
                                 <Trash2 className="w-3.5 h-3.5" />
                                 {t('log_delete') || '삭제'}
                             </button>
-                        ) : deleteBlockedMessage ? (
-                            <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 text-center py-2">
-                                {deleteBlockedMessage}
-                            </div>
-                        ) : null}
+                        )}
                     </div>
                 )}
             </div>
         );
-    }, [expandedId, formatDate, getDeleteBlockedMessage, getDeletedLocation, isDeleteAllowedForLog, t]);
-
+    }, [expandedId, formatDate, getDeletedLocation, isDeleteAllowedForLog, t]);
     const openExportDialog = (format: ExportFormat) => {
         setIsExportMenuOpen(false);
         setExportFormat(format);
@@ -1017,35 +1048,84 @@ export const WasteLogView: React.FC = () => {
                             ) : auditLogs.length === 0 ? (
                                 <p className="text-center text-sm text-slate-500 py-8">{t('audit_no_logs')}</p>
                             ) : (
-                                auditLogs.map(log => (
-                                    <div key={log.id} className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="font-semibold">{log.action.toUpperCase()}</span>
-                                            <span className="text-xs text-slate-500">{new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}</span>
-                                        </div>
-                                        {log.actor_name && <div className="text-xs text-slate-500 mb-2">{t('audit_actor_label')}: {log.actor_name}</div>}
-                                        {log.diff_data && Object.keys(log.diff_data).length > 0 && (
-                                            <div className="mt-1 flex flex-col gap-1 text-[11px] font-mono">
-                                                {Object.entries(log.diff_data).map(([k, v]: [string, any]) => (
-                                                    <div key={k} className="flex gap-2">
-                                                        <span className="text-slate-500 w-20 shrink-0">{k}:</span>
-                                                        <span className="text-red-500/80 line-through truncate">{JSON.stringify(v.from)}</span>
-                                                        <span>→</span>
-                                                        <span className="text-emerald-600 truncate">{JSON.stringify(v.to)}</span>
+                                auditLogs.map(log => {
+                                    const auditLocale = i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US';
+                                    const actionLabel = formatAuditActionName(log.action, t, log);
+                                    const changeRows = getAuditChangeRows(log, t, i18n.language);
+                                    const detailSections = getAuditDetailSections(log, t, i18n.language);
+                                    const deletedSection = detailSections.find((section) => section.key === 'before');
+                                    const actionTone = log.action === 'delete'
+                                        ? 'bg-red-50 text-red-700 ring-red-100 dark:bg-red-950/30 dark:text-red-300 dark:ring-red-900/50'
+                                        : log.action === 'update'
+                                            ? 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-950/30 dark:text-blue-300 dark:ring-blue-900/50'
+                                            : 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50';
+
+                                    return (
+                                        <div key={log.id} className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                                            <div className="flex flex-col gap-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${actionTone}`}>
+                                                                {actionLabel}
+                                                            </span>
+                                                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                                                {new Date(log.created_at).toLocaleString(auditLocale)}
+                                                            </span>
+                                                        </div>
+                                                        <p className="mt-2 break-words font-medium leading-5 text-slate-800 dark:text-slate-100">
+                                                            {buildAuditEventDescription(log, t, i18n.language)}
+                                                        </p>
                                                     </div>
-                                                ))}
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                                    <span>{t('audit_actor_label')} {log.actor_name || t('audit_unknown')}</span>
+                                                </div>
+
+                                                {changeRows.length > 0 && (
+                                                    <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900/60">
+                                                        <div className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                            {t('audit_change_summary')}
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            {changeRows.map((row) => (
+                                                                <div key={row.key} className="grid gap-1 text-xs sm:grid-cols-[96px_1fr]">
+                                                                    <span className="font-medium text-slate-500 dark:text-slate-400">{row.label}</span>
+                                                                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                                        <span className="min-w-0 break-words rounded bg-red-50 px-1.5 py-0.5 text-red-600 line-through dark:bg-red-950/40 dark:text-red-300">
+                                                                            {row.fromText}
+                                                                        </span>
+                                                                        <span className="text-slate-400">→</span>
+                                                                        <span className="min-w-0 break-words rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                                                            {row.toText}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {log.action === 'delete' && deletedSection && (
+                                                    <div className="rounded-lg border border-red-100 bg-red-50/70 p-3 dark:border-red-900/50 dark:bg-red-950/20">
+                                                        <div className="mb-2 text-xs font-semibold text-red-700 dark:text-red-300">
+                                                            {t('audit_deleted_data')}
+                                                        </div>
+                                                        <div className="grid gap-2">
+                                                            {deletedSection.rows.map((row) => (
+                                                                <div key={row.key} className="grid gap-1 text-xs sm:grid-cols-[96px_1fr]">
+                                                                    <span className="font-medium text-slate-500 dark:text-slate-400">{row.label}</span>
+                                                                    <span className="break-words text-slate-800 dark:text-slate-100">{row.value}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                        {log.before_data && log.action === 'delete' && (
-                                            <div className="mt-2 bg-red-50 dark:bg-red-900/10 p-2 rounded text-[10px] overflow-auto">
-                                                <span className="font-bold text-red-800 dark:text-red-400 mb-1 block">{t('audit_deleted_data')}</span>
-                                                <pre className="text-slate-600 dark:text-slate-400 max-h-24 overflow-y-auto whitespace-pre-wrap">
-                                                    {JSON.stringify(log.before_data, null, 2)}
-                                                </pre>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))
+                                        </div>
+                                    );
+                                })
                             )}
                         </div>
                     </div>

@@ -87,6 +87,11 @@ export function SearchTabView({
   const hasOtherResults = mediaProducts.length > 0 || cabinetResults.length > 0;
   const hasSearchResults = Boolean(result) || hasOtherResults;
   const showChemicalNotFoundNotice = !isLoading && !result && hasOtherResults && !!lastSearchQuery;
+  const normalizedQuery = query.trim();
+  const shouldShowAutocomplete =
+    normalizedQuery.length >= 2 &&
+    normalizedQuery !== lastSearchQuery &&
+    (suggestions.length > 0 || isSuggestionsLoading);
 
   return (
     <div className="p-5 flex flex-col gap-6" style={{ paddingBottom: cartCount > 0 ? '100px' : undefined }}>
@@ -193,7 +198,7 @@ export function SearchTabView({
         </div>
 
         {/* Autocomplete Dropdown */}
-        {(suggestions.length > 0 || isSuggestionsLoading) && query.length >= 2 && !result && mediaProducts.length === 0 && cabinetResults.length === 0 && (
+        {shouldShowAutocomplete && (
           <div className="absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
             {isSuggestionsLoading && suggestions.length === 0 ? (
               <div className="p-4 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 gap-2">

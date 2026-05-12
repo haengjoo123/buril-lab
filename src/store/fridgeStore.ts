@@ -15,11 +15,17 @@ import {
     getItemDepthPct,
     getItemVisualWidthPct,
 } from '../utils/reagentPlacementMetrics';
+import { getShelfSectionByIndex } from '../utils/shelfSections';
 
 export interface AutoPlaceResult {
     itemId: string;
     shelfLevel: number;
     reagentName: string;
+}
+
+interface AutoPlaceOptions {
+    shelfId?: string;
+    sectionIndex?: number;
 }
 
 interface FridgeStore extends FridgeState {
@@ -32,7 +38,10 @@ interface FridgeStore extends FridgeState {
     saveCabinet: () => Promise<void>;
     saveCabinetStrict: () => Promise<void>;
     clearCabinet: () => void;
-    autoPlaceReagent: (itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>) => AutoPlaceResult | null;
+    autoPlaceReagent: (
+        itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>,
+        options?: AutoPlaceOptions
+    ) => AutoPlaceResult | null;
     placeReagentNear: (
         referenceItemId: string,
         itemData: Omit<ReagentPlacement, 'id' | 'shelfId' | 'position' | 'depthPosition'>
@@ -463,17 +472,30 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         ...resetCompatibilityPlanPreview(),
     }),
 
-    autoPlaceReagent: (itemData) => {
+    autoPlaceReagent: (itemData, options) => {
         const state = get();
         const width = itemData.width;
         const template = itemData.template;
         const STEP = 2; // scan in 2% increments
 
         // Try shelves from bottom (level 0) to top
-        const sortedShelves = [...state.shelves].sort((a, b) => a.level - b.level);
+        const sortedShelves = [...state.shelves]
+            .filter((shelf) => !options?.shelfId || shelf.id === options.shelfId)
+            .sort((a, b) => a.level - b.level);
 
         for (const shelf of sortedShelves) {
-            for (let pos = 2; pos <= 100 - width - 2; pos += STEP) {
+            const section = options?.sectionIndex
+                ? getShelfSectionByIndex(shelf.dividers, options.sectionIndex)
+                : null;
+            if (options?.sectionIndex && !section) continue;
+
+            const zoneStart = section?.start ?? 0;
+            const zoneEnd = section?.end ?? 100;
+            const startPosition = zoneStart + 2;
+            const endPosition = zoneEnd - width - 2;
+            if (endPosition < startPosition) continue;
+
+            for (let pos = startPosition; pos <= endPosition; pos += STEP) {
                 // Try center depth first (50), then front (80), then back (20)
                 for (const depthPos of [50, 80, 20]) {
                     const collision = state.checkCollision(shelf.id, pos, width, depthPos, template);

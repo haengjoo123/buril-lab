@@ -1,10 +1,10 @@
 import { postJson } from './internalApi'
 import { analyticsService } from './analyticsService'
-import { supabase } from './supabaseClient'
 import type { SolutionContext } from '../types'
 
 export interface DisposalGuideResult {
     guide: string
+    responseSource?: 'cache' | 'ai'
 }
 
 export interface DisposalGuideChemicalInput {
@@ -56,53 +56,9 @@ export async function getAIDisposalGuide(
     }
 ): Promise<DisposalGuideResult> {
     const cacheKey = generateCacheKey(chemicals);
-    let responseSource: 'cache' | 'ai' = 'ai';
 
-    // 1. Check cache
-    try {
-        const { data } = await supabase
-            .from('ai_api_cache')
-            .select('response_data')
-            .eq('api_type', 'disposal_guide')
-            .eq('cache_key', cacheKey)
-            .maybeSingle();
-
-        if (data && data.response_data && (data.response_data as DisposalGuideResult).guide) {
-            console.log('[Gemini Disposal Guide] Cache hit!');
-            responseSource = 'cache';
-            const cachedResult = data.response_data as DisposalGuideResult;
-            void analyticsService.trackAIDisposalGuideView({
-                chemicals,
-                sourceScreen: context?.sourceScreen || 'unknown',
-                triggerSource: context?.triggerSource || 'user_request',
-                metadata: {
-                    ...context?.metadata,
-                    cache_key: cacheKey,
-                    response_source: responseSource,
-                },
-            });
-            return cachedResult;
-        }
-    } catch (err) {
-        console.warn('[Gemini Disposal Guide] Failed to read cache:', err);
-    }
-
-    // 2. Not cached, request from AI
-    console.log('[Gemini Disposal Guide] Cache miss, requesting AI...');
+    console.log('[Gemini Disposal Guide] Requesting disposal guide...');
     const result = await postJson<DisposalGuideResult>('/api/gemini/disposal-guide', { chemicals });
-
-    // 3. Save to cache
-    try {
-        if (result && result.guide) {
-            await supabase.from('ai_api_cache').insert({
-                api_type: 'disposal_guide',
-                cache_key: cacheKey,
-                response_data: result
-            });
-        }
-    } catch (err) {
-        console.warn('[Gemini Disposal Guide] Failed to save cache:', err);
-    }
 
     void analyticsService.trackAIDisposalGuideView({
         chemicals,
@@ -111,7 +67,7 @@ export async function getAIDisposalGuide(
         metadata: {
             ...context?.metadata,
             cache_key: cacheKey,
-            response_source: responseSource,
+            response_source: result.responseSource || 'ai',
         },
     });
 

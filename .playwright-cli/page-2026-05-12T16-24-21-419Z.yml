@@ -1,0 +1,47 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - button "Buril-lab 로고 Buril-lab" [ref=e4]:
+      - img "Buril-lab 로고" [ref=e6]
+      - heading "Buril-lab" [level=1] [ref=e7]
+    - generic [ref=e8]:
+      - button "개인 공간" [ref=e10]:
+        - generic [ref=e11]:
+          - img [ref=e12]
+          - generic [ref=e15]: 개인 공간
+        - img [ref=e16]
+      - button "설정" [ref=e18]:
+        - img [ref=e19]
+      - button "로그아웃" [ref=e22]:
+        - img [ref=e23]
+  - main [ref=e26]:
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - button [ref=e95]:
+            - img [ref=e96]
+          - heading "테스트 이름" [level=2] [ref=e98]
+        - button "수동으로 저장" [ref=e100]:
+          - img [ref=e101]
+      - generic [ref=e110]:
+        - button "보기" [ref=e111]:
+          - img [ref=e112]
+          - text: 보기
+        - button "편집" [ref=e117]:
+          - img [ref=e118]
+          - text: 편집
+        - button "배치" [ref=e122]:
+          - img [ref=e123]
+          - text: 배치
+  - navigation [ref=e74]:
+    - button "검색" [ref=e75]:
+      - img [ref=e76]
+      - text: 검색
+    - button "기록" [ref=e79]:
+      - img [ref=e80]
+      - text: 기록
+    - button "시약장" [ref=e83]:
+      - img [ref=e84]
+      - text: 시약장
+    - button "재고" [ref=e87]:
+      - img [ref=e88]
+      - text: 재고

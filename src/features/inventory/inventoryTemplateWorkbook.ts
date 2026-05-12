@@ -13,6 +13,15 @@ interface InventoryTemplateWorkbookOptions {
     headers: string[];
     t: TFunction;
     cabinetNames: string[];
+    cabinetPlacements?: CabinetTemplatePlacement[];
+}
+
+export interface CabinetTemplatePlacement {
+    cabinetName: string;
+    shelves: Array<{
+        level: number;
+        sectionCount: number;
+    }>;
 }
 
 type PreviewImageMap = Record<(typeof CONTAINER_TYPE_OPTIONS)[number]['type'], string | null>;
@@ -27,6 +36,7 @@ const PREVIEW_LABEL_ROW = 9;
 const GUIDE_START_ROW = 11;
 const VALIDATION_ROW_COUNT = 200;
 const LIST_SHEET_NAME = '_lists';
+const CABINET_POSITIONS_SHEET_NAME = '시약장_위치';
 const IMAGE_BORDER = {
     top: { style: 'thin', color: { argb: 'FFD7DEE8' } },
     left: { style: 'thin', color: { argb: 'FFD7DEE8' } },
@@ -201,6 +211,7 @@ function applyTemplateLists(
     },
     t: TFunction,
     cabinetNames: string[],
+    cabinetPlacements: CabinetTemplatePlacement[] = [],
 ) {
     const listWorksheet = workbook.addWorksheet(LIST_SHEET_NAME);
     listWorksheet.state = 'veryHidden';
@@ -208,6 +219,17 @@ function applyTemplateLists(
     const otherLocationLabels = getOtherLocationOptionLabels(t);
     const containerLabels = getContainerTypeOptionLabels(t);
     const cabinetNameValues = cabinetNames.length > 0 ? cabinetNames : [''];
+    const storageTypeValues = ['기타', '시약장'];
+    const maxShelfLevel = Math.max(
+        4,
+        ...cabinetPlacements.flatMap((cabinet) => cabinet.shelves.map((shelf) => shelf.level + 1)),
+    );
+    const maxSectionCount = Math.max(
+        1,
+        ...cabinetPlacements.flatMap((cabinet) => cabinet.shelves.map((shelf) => shelf.sectionCount)),
+    );
+    const shelfLevelValues = Array.from({ length: maxShelfLevel }, (_, index) => String(index + 1));
+    const shelfSectionValues = Array.from({ length: maxSectionCount }, (_, index) => String(index + 1));
 
     otherLocationLabels.forEach((label, index) => {
         listWorksheet.getCell(index + 1, 1).value = label;
@@ -218,10 +240,22 @@ function applyTemplateLists(
     containerLabels.forEach((label, index) => {
         listWorksheet.getCell(index + 1, 3).value = label;
     });
+    shelfLevelValues.forEach((label, index) => {
+        listWorksheet.getCell(index + 1, 4).value = label;
+    });
+    shelfSectionValues.forEach((label, index) => {
+        listWorksheet.getCell(index + 1, 5).value = label;
+    });
+    storageTypeValues.forEach((label, index) => {
+        listWorksheet.getCell(index + 1, 6).value = label;
+    });
 
     workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$A$1:$A$${otherLocationLabels.length}`, 'other_location_options');
     workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$B$1:$B$${cabinetNameValues.length}`, 'cabinet_name_options');
     workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$C$1:$C$${containerLabels.length}`, 'container_type_options');
+    workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$D$1:$D$${shelfLevelValues.length}`, 'shelf_level_options');
+    workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$E$1:$E$${shelfSectionValues.length}`, 'shelf_section_options');
+    workbook.definedNames.add(`'${LIST_SHEET_NAME}'!$F$1:$F$${storageTypeValues.length}`, 'storage_type_options');
 }
 
 function applyInputValidations(
@@ -234,6 +268,8 @@ function applyInputValidations(
 ) {
     const storageTypeColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('storage_type') + 1;
     const storageLocationColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('storage_location') + 1;
+    const shelfLevelColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('shelf_level') + 1;
+    const shelfSectionColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('shelf_section') + 1;
     const containerTypeColumn = INVENTORY_IMPORT_HEADER_KEYS.indexOf('container_type') + 1;
 
     const storageTypeColumnLetter = columnLetterFromIndex(storageTypeColumn);
@@ -244,11 +280,11 @@ function applyInputValidations(
             allowBlank: false,
             showErrorMessage: true,
             showInputMessage: true,
-            formulae: ['"other,cabinet"'],
+            formulae: ['storage_type_options'],
             promptTitle: '보관유형',
-            prompt: 'other 또는 cabinet 중 하나를 선택하세요.',
+            prompt: '기타 또는 시약장 중 하나를 선택하세요.',
             errorTitle: '보관유형',
-            error: '보관유형은 other 또는 cabinet 중 하나여야 합니다.',
+            error: '보관유형은 기타 또는 시약장 중 하나여야 합니다.',
         };
 
         worksheet.getCell(rowIndex, storageLocationColumn).dataValidation = {
@@ -256,11 +292,35 @@ function applyInputValidations(
             allowBlank: false,
             showErrorMessage: true,
             showInputMessage: true,
-            formulae: [`INDIRECT(IF($${storageTypeColumnLetter}${rowIndex}="cabinet","cabinet_name_options","other_location_options"))`],
+            formulae: [`INDIRECT(IF(OR($${storageTypeColumnLetter}${rowIndex}="시약장",$${storageTypeColumnLetter}${rowIndex}="cabinet"),"cabinet_name_options","other_location_options"))`],
             promptTitle: '보관위치',
-            prompt: 'other면 냉장고/냉동고/상온보관/벤치/후드 중 선택, cabinet이면 시약장 이름을 선택하세요.',
+            prompt: '기타이면 냉장고/냉동고/상온보관/벤치/후드 중 선택, 시약장이면 시약장 이름을 선택하세요.',
             errorTitle: '보관위치',
             error: '보관유형에 맞는 보관위치를 목록에서 선택하세요.',
+        };
+
+        worksheet.getCell(rowIndex, shelfLevelColumn).dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            showErrorMessage: true,
+            showInputMessage: true,
+            formulae: ['shelf_level_options'],
+            promptTitle: '선반',
+            prompt: '시약장으로 등록할 때 원하는 선반 번호를 입력하세요. 비워두면 자동 배치됩니다.',
+            errorTitle: '선반',
+            error: '선반은 숫자 목록에서 선택하세요.',
+        };
+
+        worksheet.getCell(rowIndex, shelfSectionColumn).dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            showErrorMessage: true,
+            showInputMessage: true,
+            formulae: ['shelf_section_options'],
+            promptTitle: '칸',
+            prompt: '선반 안에서 왼쪽부터 몇 번째 칸인지 선택하세요. 비워두면 선반 전체에서 자동 배치됩니다.',
+            errorTitle: '칸',
+            error: '칸은 숫자 목록에서 선택하세요.',
         };
 
         worksheet.getCell(rowIndex, containerTypeColumn).dataValidation = {
@@ -270,7 +330,7 @@ function applyInputValidations(
             showInputMessage: true,
             formulae: ['container_type_options'],
             promptTitle: '시약병',
-            prompt: 'storage_type이 cabinet일 때만 선택하세요. other이면 비워두세요.',
+            prompt: '보관유형이 시약장일 때만 선택하세요. 기타이면 비워두세요.',
             errorTitle: '시약병',
             error: '시약병은 갈색병(A), 플라스틱 통(B), 유리병(C), 사각병(D) 중 하나를 선택하세요.',
         };
@@ -281,6 +341,7 @@ export async function downloadInventoryTemplateWorkbook({
     headers,
     t,
     cabinetNames,
+    cabinetPlacements = [],
 }: InventoryTemplateWorkbookOptions): Promise<void> {
     const [{ Workbook }, previewImages] = await Promise.all([
         import('exceljs'),
@@ -302,6 +363,8 @@ export async function downloadInventoryTemplateWorkbook({
         { width: 12 },
         { width: 12 },
         { width: 18 },
+        { width: 10 },
+        { width: 10 },
         { width: 18 },
         { width: 14 },
         { width: 20 },
@@ -327,7 +390,7 @@ export async function downloadInventoryTemplateWorkbook({
 
     mergeAcrossSheet(worksheet, 2, headers.length);
     const descriptionCell = worksheet.getCell(2, 1);
-    descriptionCell.value = '시약장 배치에 쓰는 병 4종입니다. cabinet으로 등록할 때는 아래 모양에 맞춰 시약병 열을 선택해 주세요.';
+    descriptionCell.value = '시약장 배치에 쓰는 병 4종입니다. 보관유형을 시약장으로 등록할 때는 아래 모양에 맞춰 시약병 열을 선택해 주세요.';
     descriptionCell.font = { size: 10, color: { argb: 'FF475569' } };
     descriptionCell.alignment = { vertical: 'middle', horizontal: 'left' };
 
@@ -388,11 +451,13 @@ export async function downloadInventoryTemplateWorkbook({
     const guideRows = [
         '# [안내]',
         '# 1) 아래 "입력 영역"의 헤더와 순서를 유지해서 작성하세요.',
-        '# 2) 보관유형은 other 또는 cabinet 중 하나를 선택하세요.',
-        '# 3) 보관유형이 other이면 보관위치에서 냉장고 / 냉동고 / 상온보관 / 벤치 / 후드 중 하나를 선택하세요.',
-        '# 4) 보관유형이 cabinet이면 보관위치에 시약장 이름을, 시약병(container_type)에 병 종류를 선택하세요.',
-        '# 5) 시약병(container_type): 갈색병(A) / 플라스틱 통(B) / 유리병(C) / 사각병(D)',
-        '# 6) 유효기간 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
+        '# 2) 보관유형은 기타 또는 시약장 중 하나를 선택하세요.',
+        '# 3) 보관유형이 기타이면 보관위치에서 냉장고 / 냉동고 / 상온보관 / 벤치 / 후드 중 하나를 선택하세요.',
+        '# 4) 보관유형이 시약장이면 보관위치에 시약장 이름을, 시약병에 병 종류를 선택하세요.',
+        '# 5) 선반/칸은 시약장일 때만 입력하세요. 칸은 해당 선반에서 왼쪽부터 1, 2, 3... 순서입니다.',
+        `# 6) 선반/칸을 비워두면 시약장 전체에서 자동 배치됩니다. 가능한 위치는 ${CABINET_POSITIONS_SHEET_NAME} 시트를 참고하세요.`,
+        '# 7) 시약병(container_type): 갈색병(A) / 플라스틱 통(B) / 유리병(C) / 사각병(D)',
+        '# 8) 유효기간 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
     ];
 
     guideRows.forEach((guideText, index) => {
@@ -445,9 +510,9 @@ export async function downloadInventoryTemplateWorkbook({
     });
 
     const sampleRows = [
-        ['Acetone', 'Sigma', 'A123', '67-64-1', '1', '500mL', 'other', String(t('loc_fridge')), '', '2026-12-31', String(t('inventory_csv_template_example_memo'))],
-        ['Ethanol', 'Daejung', 'E100', '64-17-5', '2', '1L', 'other', String(t('loc_bench')), '', '', ''],
-        ['HCl', 'Junsei', 'HCL500', '7647-01-0', '1', '500mL', 'cabinet', cabinetNames[0] || 'A421', getContainerTypeLabel('A', t), '', String(t('inventory_csv_template_example_cabinet_memo'))],
+        ['Acetone', 'Sigma', 'A123', '67-64-1', '1', '500mL', '기타', String(t('loc_fridge')), '', '', '', '2026-12-31', String(t('inventory_csv_template_example_memo'))],
+        ['Ethanol', 'Daejung', 'E100', '64-17-5', '2', '1L', '기타', String(t('loc_bench')), '', '', '', '', ''],
+        ['HCl', 'Junsei', 'HCL500', '7647-01-0', '1', '500mL', '시약장', cabinetNames[0] || 'A421', '1', '1', getContainerTypeLabel('A', t), '', String(t('inventory_csv_template_example_cabinet_memo'))],
     ];
 
     sampleRows.forEach((rowValues, rowIndex) => {
@@ -467,7 +532,48 @@ export async function downloadInventoryTemplateWorkbook({
     });
 
     applyInputValidations(worksheet, headerRowNumber + 1);
-    applyTemplateLists(workbook, t, cabinetNames);
+    applyTemplateLists(workbook, t, cabinetNames, cabinetPlacements);
+
+    const referenceWorksheet = workbook.addWorksheet(CABINET_POSITIONS_SHEET_NAME);
+    referenceWorksheet.columns = [
+        { header: '시약장', key: 'cabinet', width: 24 },
+        { header: '선반', key: 'shelf', width: 12 },
+        { header: '칸', key: 'section', width: 12 },
+        { header: '입력 예시', key: 'example', width: 34 },
+    ];
+    referenceWorksheet.getRow(1).height = 24;
+    referenceWorksheet.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF0F172A' },
+        };
+        cell.border = IMAGE_BORDER;
+    });
+
+    const referenceRows = cabinetPlacements.flatMap((cabinet) =>
+        cabinet.shelves.flatMap((shelf) =>
+            Array.from({ length: Math.max(1, shelf.sectionCount) }, (_, sectionIndex) => [
+                cabinet.cabinetName,
+                `${shelf.level + 1}`,
+                `${sectionIndex + 1}`,
+                `${cabinet.cabinetName} / ${shelf.level + 1}층 / ${sectionIndex + 1}번 칸`,
+            ]),
+        ),
+    );
+
+    const rowsToAdd = referenceRows.length > 0
+        ? referenceRows
+        : [['등록된 시약장 없음', '', '', '']];
+    rowsToAdd.forEach((values) => {
+        const row = referenceWorksheet.addRow(values);
+        row.eachCell((cell) => {
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+            cell.border = IMAGE_BORDER;
+        });
+    });
 
     const workbookBuffer = await workbook.xlsx.writeBuffer();
     const workbookBytes = Uint8Array.from(workbookBuffer as unknown as ArrayLike<number>);
