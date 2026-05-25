@@ -171,6 +171,10 @@ function App() {
   }, [i18n.language]);
 
   useEffect(() => {
+    document.title = t('app_title');
+  }, [i18n.language, t]);
+
+  useEffect(() => {
     const handleSafetyAcknowledged = () => setIsSafetyAcknowledged(true);
     window.addEventListener('buril:safety-acknowledged', handleSafetyAcknowledged);
 

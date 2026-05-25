@@ -18,21 +18,21 @@ export const LabContextSwitcher: React.FC = () => {
     const currentLab = myLabs.find(m => m.lab_id === currentLabId)?.lab;
 
     return (
-        <div className="relative">
+        <div className="relative min-w-0 max-w-[128px]">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1.5 rounded-md transition-colors whitespace-nowrap overflow-hidden"
+                className="flex max-w-full items-center gap-1 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 px-2 py-1.5 rounded-md transition-colors whitespace-nowrap overflow-hidden"
                 title={t('lab_switcher_title')}
             >
                 {currentLabId ? (
                     <div className="flex items-center gap-1.5 min-w-0">
                         <Users className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate max-w-[70px] sm:max-w-[150px] whitespace-nowrap">{currentLab?.name || t('lab_default_name')}</span>
+                        <span className="truncate whitespace-nowrap">{currentLab?.name || t('lab_default_name')}</span>
                     </div>
                 ) : (
                     <div className="flex items-center gap-1.5 min-w-0">
                         <User className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate max-w-[85px] sm:max-w-none whitespace-nowrap">{t('lab_personal_space')}</span>
+                        <span className="truncate whitespace-nowrap">{t('lab_personal_space')}</span>
                     </div>
                 )}
                 <ChevronDown className="w-3.5 h-3.5 shrink-0" />

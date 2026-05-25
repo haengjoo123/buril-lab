@@ -2,7 +2,7 @@ export type Language = 'ko' | 'en';
 
 export const translations = {
     ko: {
-        app_title: "Buril-lab",
+        app_title: "버릴랩",
         app_subtitle_1: "실험실 폐시약,",
         app_subtitle_2: "안전하게",
         app_subtitle_3: "처리하세요.",
@@ -105,7 +105,7 @@ export const translations = {
         common_unknown: "알 수 없음",
         common_close_menu: "메뉴 닫기",
         common_captured_image_alt: "촬영된 이미지",
-        app_logo_alt: "Buril-lab 로고",
+        app_logo_alt: "버릴랩 로고",
         btn_check_storage_compat: "보관 호환성 확인",
         btn_check_disposal_guide: "폐기가이드 확인",
         analyzing_guide: "가이드 불러오는 중...",
@@ -197,7 +197,7 @@ export const translations = {
         onboarding_close_guide: "온보딩 안내 닫기",
         onboarding_acknowledge: "확인했어요",
         onboarding_welcome_badge: "Quick Start",
-        onboarding_welcome_title: "Buril-lab 사용 흐름을 빠르게 익혀보세요",
+        onboarding_welcome_title: "버릴랩 사용 흐름을 빠르게 익혀보세요",
         onboarding_welcome_desc: "처음 쓰는 사람도 길을 잃지 않도록, 가장 자주 쓰는 기능과 탭별 역할만 짧게 안내합니다.",
         onboarding_skip_all: "건너뛰기",
         onboarding_prev: "이전",
@@ -1157,7 +1157,7 @@ export const translations = {
         voice_agent_error_rate_limited: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요."
     },
     en: {
-        app_title: "Buril-lab",
+        app_title: "Buril Lab",
         app_subtitle_1: "Lab Waste,",
         app_subtitle_2: "Dispose Safely",
         app_subtitle_3: ".",
@@ -1193,7 +1193,7 @@ export const translations = {
         common_unknown: "Unknown",
         common_close_menu: "Close menu",
         common_captured_image_alt: "Captured image",
-        app_logo_alt: "Buril-lab logo",
+        app_logo_alt: "Buril Lab logo",
         btn_check_storage_compat: "Check storage compatibility",
         btn_check_disposal_guide: "Check Disposal Guide",
         analyzing_guide: "Analyzing Guide...",
@@ -1285,7 +1285,7 @@ export const translations = {
         onboarding_close_guide: "Close onboarding tip",
         onboarding_acknowledge: "Got it",
         onboarding_welcome_badge: "Quick Start",
-        onboarding_welcome_title: "Learn the Buril-lab flow quickly",
+        onboarding_welcome_title: "Learn the Buril Lab flow quickly",
         onboarding_welcome_desc: "A short introduction to the main workflows and what each tab is for.",
         onboarding_skip_all: "Skip",
         onboarding_prev: "Back",

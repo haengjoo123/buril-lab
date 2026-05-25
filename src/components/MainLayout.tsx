@@ -34,17 +34,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <div className="w-full max-w-[430px] h-full bg-white dark:bg-slate-900 shadow-xl relative flex flex-col overflow-hidden transition-colors duration-300">
 
                 {/* Header */}
-                <header className="px-3 sm:px-5 py-4 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50 transition-colors duration-300">
+                <header className="px-3 sm:px-5 py-4 flex items-center gap-2 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50 transition-colors duration-300">
                     <button
                         onClick={onLogoClick}
-                        className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity min-w-0"
+                        className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity min-w-0 shrink-0"
                     >
                         <div className="shrink-0 overflow-hidden rounded-lg">
                             <img src={logo} alt={t('app_logo_alt')} className="w-9 h-9 object-contain" />
                         </div>
-                        <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white shrink-0 truncate max-w-[100px] sm:max-w-none">{t('app_title')}</h1>
+                        <h1 className="text-xl font-bold tracking-tight text-slate-800 dark:text-white truncate max-w-[104px]">{t('app_title')}</h1>
                     </button>
-                    <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+                    <div className="flex flex-1 items-center justify-end gap-1 sm:gap-2 min-w-0">
                         {!hideLabSwitcher && <LabContextSwitcher />}
                         {onLoginClick && (
                             <button
