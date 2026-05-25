@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import type { AnalysisResult, SolutionContext, SolutionPhysicalForm, SolventClass } from '../types';
-import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText, Sparkles, Info, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { translateGHS } from '../data/ghsCodes';
@@ -155,18 +155,20 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
         onReset(); // Clear current view
     };
 
-    const isHF = React.useMemo(() => {
-        const nameUpper = chemical.name?.toUpperCase() || '';
-        const formulaUpper = chemical.molecularFormula?.toUpperCase() || '';
-        return chemical.casNumber === '7664-39-3' ||
-            nameUpper.includes('HYDROFLUORIC') ||
-            nameUpper.includes('불산') ||
-            nameUpper.includes('플루오린화 수소') ||
-            formulaUpper === 'HF';
-    }, [chemical]);
-
-    const guideKey = category === 'ACID' && isHF ? 'disposal_guide_ACID_HF' : `disposal_guide_${category}`;
     const reasonKey = compactReasonKeyByCategory[category] || reason;
+    const hazardStatements = chemical.ghs?.hazardStatements;
+    const ghsStatements = React.useMemo(() => {
+        if (!hazardStatements) return [];
+        return Array.from(new Set(
+            hazardStatements.map(h => translateGHS(h, i18n.language as any))
+        ));
+    }, [hazardStatements, i18n.language]);
+    const ghsCodes = React.useMemo(() => {
+        if (!hazardStatements) return [];
+        return Array.from(new Set(
+            hazardStatements.flatMap(statement => statement.match(/H\d{3}/g) || [])
+        ));
+    }, [hazardStatements]);
 
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-5">
@@ -188,10 +190,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
             </div>
 
             {/* Body: Disposal Guide */}
-            <div className="p-6 flex flex-col items-center text-center">
+            <div className="p-5 flex flex-col items-center text-center">
 
                 {/* Bin Visual */}
-                <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-4 shadow-md ${binColor} transition-colors`}>
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-3 shadow-md ${binColor} transition-colors`}>
                     {renderIcon()}
                 </div>
 
@@ -199,32 +201,19 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                     {t('result_basis_badge' as any)}
                 </span>
 
-                <h4 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">{t(label as any)}</h4>
+                <h4 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-1">{t(label as any)}</h4>
 
-                <p className="text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
                     {t(reasonKey as any, result.reasonParams)}
                 </p>
 
-                {/* Specific Disposal Guide */}
-                <div className="w-full rounded-xl border border-blue-100 bg-blue-50/80 p-4 text-left text-blue-950 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100 mb-6 animate-in zoom-in-95 duration-300 delay-100">
-                    <div className="flex items-start gap-3">
-                        <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
-                        <div>
-                            <p className="font-bold mb-1 text-sm">{t('result_pure_guide_title' as any)}</p>
-                            <p className="text-sm leading-relaxed whitespace-pre-line">
-                                {t(guideKey as any)}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="mt-3 border-t border-blue-200/70 pt-3 text-xs leading-relaxed text-blue-800 dark:border-blue-800/60 dark:text-blue-200">
-                        <p className="font-semibold">{t('result_solution_notice_title' as any)}</p>
-                        <p className="mt-0.5">{t('result_solution_notice_body' as any)}</p>
-                    </div>
-                </div>
+                <p className="mb-4 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {t('result_solution_notice_short' as any)}
+                </p>
 
                 {/* AI Badge if inferred by Gemini */}
                 {result.isAiEstimated && (
-                    <div className="flex items-center gap-1.5 justify-center w-full mb-6 animate-in fade-in duration-300 delay-200">
+                    <div className="flex items-center gap-1.5 justify-center w-full mb-4 animate-in fade-in duration-300 delay-200">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-200 dark:border-purple-800/50">
                             <Sparkles className="w-3.5 h-3.5" />
                             {t('label_ai_classified')}
@@ -234,49 +223,45 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
 
                 {/* MSDS / GHS Information */}
                 {chemical.ghs && (
-                    <div className="w-full mb-6 p-4 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 rounded-xl text-left animate-in zoom-in-95 duration-300">
-                        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-100 dark:border-orange-900/30">
-                            <AlertTriangle className={`w-5 h-5 ${chemical.ghs.signal === 'Danger' ? 'text-red-600 dark:text-red-500' : 'text-orange-500'}`} />
-                            <span className={`font-bold text-sm ${chemical.ghs.signal === 'Danger' ? 'text-red-600 dark:text-red-500' : 'text-orange-600 dark:text-orange-400'}`}>
-                                {t('safety_ghs')}
+                    <div className="w-full mb-4 rounded-xl border border-orange-100 bg-orange-50 p-3 text-left dark:border-orange-900/30 dark:bg-orange-900/10 animate-in zoom-in-95 duration-300">
+                        <button
+                            type="button"
+                            onClick={() => setIsGhsExpanded(!isGhsExpanded)}
+                            className="flex w-full items-center gap-2 text-left"
+                            aria-expanded={isGhsExpanded}
+                            aria-label={t('safety_ghs' as any)}
+                        >
+                            <AlertTriangle className={`h-4 w-4 shrink-0 ${chemical.ghs.signal === 'Danger' ? 'text-red-600 dark:text-red-500' : 'text-orange-500'}`} />
+                            <span className={`text-sm font-bold ${chemical.ghs.signal === 'Danger' ? 'text-red-600 dark:text-red-500' : 'text-orange-600 dark:text-orange-400'}`}>
+                                {t('safety_ghs_short' as any)}
                             </span>
-                            <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-bold ${chemical.ghs.signal === 'Danger' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300'}`}>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${chemical.ghs.signal === 'Danger' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300'}`}>
                                 {chemical.ghs.signal.toUpperCase()}
                             </span>
-                        </div>
-                        <ul className="space-y-1 text-xs text-slate-700 dark:text-slate-300 transition-all">
-                            {(() => {
-                                // Deduplicate translated statements
-                                const uniqueStatements = Array.from(new Set(
-                                    chemical.ghs.hazardStatements.map(h => translateGHS(h, i18n.language as any))
-                                ));
-
-                                return (
-                                    <>
-                                        {uniqueStatements.slice(0, isGhsExpanded ? undefined : 3).map((statement, idx) => (
-                                            <li key={`${statement}-${idx}`} className="flex items-start gap-2">
-                                                <span className="mt-1.5 w-1 h-1 rounded-full bg-slate-400 flex-shrink-0" />
-                                                <span>{statement}</span>
-                                            </li>
-                                        ))}
-                                        {uniqueStatements.length > 3 && (
-                                            <li
-                                                onClick={() => setIsGhsExpanded(!isGhsExpanded)}
-                                                className="text-xs text-slate-400 pt-1 text-center cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                                            >
-                                                {isGhsExpanded ? t('btn_close') : `+ ${uniqueStatements.length - 3} more`}
-                                            </li>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </ul>
+                            {ghsCodes.length > 0 && (
+                                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                    {ghsCodes.slice(0, 4).join(', ')}
+                                    {ghsCodes.length > 4 ? ` +${ghsCodes.length - 4}` : ''}
+                                </span>
+                            )}
+                            <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isGhsExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isGhsExpanded && (
+                            <ul className="mt-3 space-y-1 border-t border-orange-100 pt-3 text-xs text-slate-700 dark:border-orange-900/30 dark:text-slate-300">
+                                {ghsStatements.map((statement, idx) => (
+                                    <li key={`${statement}-${idx}`} className="flex items-start gap-2">
+                                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-400" />
+                                        <span>{statement}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                     </div>
                 )}
 
                 {/* Safety Warning if needed */}
                 {!isSafe && (
-                    <div className="w-full bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 p-3 rounded-lg flex items-start gap-2 text-sm text-left mb-6 border border-red-100 dark:border-red-900/50">
+                    <div className="w-full bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-200 p-3 rounded-lg flex items-start gap-2 text-sm text-left mb-4 border border-red-100 dark:border-red-900/50">
                         <AlertTriangle className="w-5 h-5 flex-shrink-0" />
                         <span>
                             {t('safety_uncertain')}

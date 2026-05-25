@@ -1,30 +1,376 @@
-import type { AnalysisResult, Chemical, DisposalCategory } from '../types';
+import type { AnalysisHazardWarning, AnalysisResult, Chemical, DisposalCategory } from '../types';
 import pListCas from '../data/p_list_cas.json';
+import uListCas from '../data/u_list_cas.json';
 
+type ElementCounts = Record<string, number>;
+
+const HALOGENS = ['F', 'Cl', 'Br', 'I'] as const;
+const HEAVY_METALS = [
+    'Ag', 'Cd', 'Pb', 'Hg', 'Cr', 'As', 'Ni', 'Cu', 'Zn', 'Ba',
+    'Be', 'Co', 'Mn', 'Os', 'Sb', 'Tl', 'Pd', 'Pt', 'Rh', 'Ru',
+    'Ir', 'Au', 'Sn', 'Se', 'Mo', 'V',
+] as const;
+const CARBIDE_COUNTERIONS = [
+    'Li', 'Na', 'K', 'Rb', 'Cs',
+    'Mg', 'Ca', 'Sr', 'Ba',
+    'Al', 'Be', 'B', 'Si',
+    'Ti', 'Zr', 'V', 'W', 'Fe',
+] as const;
+const CARBONATE_COUNTERIONS = [
+    'Li', 'Na', 'K', 'Rb', 'Cs',
+    'Mg', 'Ca', 'Sr', 'Ba',
+    'Al', 'Be', 'Fe', 'Cu', 'Zn',
+    'Ni', 'Co', 'Mn', 'Ag', 'Cd', 'Pb',
+] as const;
+const ALKALI_METALS = ['Li', 'Na', 'K', 'Rb', 'Cs'] as const;
+
+const REACTIVE_H_CODES = new Set([
+    // Explosives / desensitized explosives
+    'H200', 'H201', 'H202', 'H203', 'H204', 'H205', 'H206', 'H207', 'H208',
+    // Self-reactive substances and organic peroxides
+    'H240', 'H241', 'H242',
+    // Pyrophoric / self-heating / water-reactive
+    'H250', 'H251', 'H252', 'H260', 'H261',
+    // Oxidizing gases, liquids, and solids
+    'H270', 'H271', 'H272',
+]);
+
+const FATAL_ACUTE_TOXICITY_H_CODES = new Set(['H300', 'H310', 'H330']);
+const ACUTE_TOXICITY_H_CODES = new Set(['H300', 'H301', 'H310', 'H311', 'H330', 'H331']);
+const CMR_H_CODES = new Set(['H340', 'H341', 'H350', 'H351', 'H360', 'H361', 'H362']);
+const ENVIRONMENTAL_H_CODES = new Set(['H400', 'H401', 'H402', 'H410', 'H411', 'H412', 'H413', 'H420']);
+const TARGET_ORGAN_H_CODES = new Set(['H370', 'H371', 'H372', 'H373']);
+
+const REACTIVE_NAME_PATTERNS = [
+    /\bperoxide\b/i,
+    /\bsuperoxide\b/i,
+    /\bhydroperoxide\b/i,
+    /\bnitrate\b/i,
+    /\bnitrite\b/i,
+    /\bhypochlorite\b/i,
+    /\bchlorite\b/i,
+    /\bchlorate\b/i,
+    /\bbromate\b/i,
+    /\bperchlorate\b/i,
+    /\bperiodate\b/i,
+    /\biodate\b/i,
+    /\bpermanganate\b/i,
+    /\bpersulfate\b/i,
+    /\bperoxydisulfate\b/i,
+    /\bperacetic\s+acid\b/i,
+    /perbenzoic\s+acid/i,
+    /\bperoxy/i,
+    /\bperoxy\s*acid\b/i,
+    /\bazide\b/i,
+    /\bdiazomethane\b/i,
+    /\bhydrazine\b/i,
+    /\bpicric\b/i,
+    /\bnitric\s+acid\b/i,
+    /\bperchloric\s+acid\b/i,
+    /\bchromic\s+acid\b/i,
+    /\bborohydride\b/i,
+    /\baluminum\s+hydride\b/i,
+    /\baluminium\s+hydride\b/i,
+    /\blithium\s+alum(?:in)?ium\s+hydride\b/i,
+    /\b(?:sodium|potassium|lithium|calcium)\s+hydride\b/i,
+    /\b(?:sodium|potassium|lithium)\s+amide\b/i,
+    /\blithium\s+diisopropylamide\b/i,
+    /\bLDA\b/i,
+    /\b(?:n-|sec-|tert-|t-)?butyllithium\b/i,
+    /\borganolithium\b/i,
+    /\b(?:methyl|ethyl|phenyl|vinyl|allyl|isopropyl|tert-butyl|benzyl)magnesium\s+(?:bromide|chloride|iodide)\b/i,
+    /\bDIBAL-?H\b/i,
+    /\bdiisobutylalum(?:in)?ium\s+hydride\b/i,
+    /\bsodium\s+metal\b/i,
+    /\bpotassium\s+metal\b/i,
+];
+
+const CYANIDE_NAME_PATTERNS = [
+    /\bcyanide\b/i,
+    /\bcyanid\b/i,
+    /\bferricyanide\b/i,
+    /\bferrocyanide\b/i,
+    /\bthiocyanate\b/i,
+];
+
+const SULFIDE_NAME_PATTERNS = [
+    /\bsulfide\b/i,
+    /\bsulphide\b/i,
+    /\bhydrogen\s+sulfide\b/i,
+];
+
+const INORGANIC_CARBON_NAME_PATTERNS = [
+    /\bcarbonate\b/i,
+    /\bbicarbonate\b/i,
+    /\bcarbon\s+monoxide\b/i,
+    /\bcarbon\s+dioxide\b/i,
+    /\bcarbide\b/i,
+    /\bcyanide\b/i,
+    /\bferricyanide\b/i,
+    /\bferrocyanide\b/i,
+    /\bthiocyanate\b/i,
+];
+
+const ALKALI_NAME_PATTERNS = [
+    /\bhydroxide\b/i,
+    /\bammonia\b/i,
+    /\bammonium\s+hydroxide\b/i,
+    /\bbase\b/i,
+    /\balkali\b/i,
+    /\b(?:sodium|potassium)\s+bicarbonate\b/i,
+    /\b(?:sodium|potassium)\s+carbonate\b/i,
+];
+
+const ACID_NAME_PATTERNS = [
+    /\bsulfuric\s+acid\b/i,
+    /\bsulphuric\s+acid\b/i,
+    /\bhydrochloric\s+acid\b/i,
+    /\bhydrofluoric\s+acid\b/i,
+    /\bhydrobromic\s+acid\b/i,
+    /\bhydroiodic\s+acid\b/i,
+    /\bphosphoric\s+acid\b/i,
+    /\bboric\s+acid\b/i,
+    /\bchromic\s+acid\b/i,
+    /\binorganic\s+acid\b/i,
+    /\bHCl\b/i,
+    /\bHF\b/i,
+];
+
+const SOLID_NAME_PATTERNS = [
+    /\bpowder\b/i,
+    /\bresin\b/i,
+    /\bsand\b/i,
+    /\bpellet\b/i,
+    /\bbead\b/i,
+    /\blump\b/i,
+    /\bcrystal\b/i,
+];
+
+const hydrateSeparators = /[.\u00b7\u2022]/g;
 
 // Helper: Parse molecular formula into element counts
 // e.g., "C6H12O6" -> { C: 6, H: 12, O: 6 }
-export const parseFormula = (formula: string): Record<string, number> => {
-    const elements: Record<string, number> = {};
-    const regex = /([A-Z][a-z]?)(\d*)/g;
-    let match;
+export const parseFormula = (formula: string): ElementCounts => {
+    const totals: ElementCounts = {};
+    const normalized = formula.replace(/\s+/g, '').replace(hydrateSeparators, '.');
 
-    while ((match = regex.exec(formula)) !== null) {
-        // Avoid infinite loops if regex matches empty string at end
-        if (match.index === regex.lastIndex) {
-            regex.lastIndex++;
+    const addElements = (target: ElementCounts, source: ElementCounts, multiplier = 1) => {
+        for (const [element, count] of Object.entries(source)) {
+            target[element] = (target[element] || 0) + count * multiplier;
+        }
+    };
+
+    const readNumber = (segment: string, start: number): { value: number; next: number } => {
+        let end = start;
+        while (/\d/.test(segment[end] || '')) end++;
+        return {
+            value: end > start ? parseInt(segment.slice(start, end), 10) : 1,
+            next: end,
+        };
+    };
+
+    const parseSegment = (segment: string): ElementCounts => {
+        const stack: ElementCounts[] = [{}];
+        let index = 0;
+
+        while (index < segment.length) {
+            const char = segment[index];
+
+            if (char === '(' || char === '[') {
+                stack.push({});
+                index++;
+                continue;
+            }
+
+            if (char === ')' || char === ']') {
+                const group = stack.pop() || {};
+                const multiplier = readNumber(segment, index + 1);
+                addElements(stack[stack.length - 1], group, multiplier.value);
+                index = multiplier.next;
+                continue;
+            }
+
+            if (/[A-Z]/.test(char)) {
+                let end = index + 1;
+                if (/[a-z]/.test(segment[end] || '')) end++;
+                const element = segment.slice(index, end);
+                const count = readNumber(segment, end);
+                stack[stack.length - 1][element] = (stack[stack.length - 1][element] || 0) + count.value;
+                index = count.next;
+                continue;
+            }
+
+            index++;
         }
 
-        // match[0] is full match (e.g. "Cl2")
-        // match[1] is element (e.g. "Cl")
-        // match[2] is count (e.g. "2" or "")
-        if (match[1]) {
-            const element = match[1];
-            const count = match[2] ? parseInt(match[2], 10) : 1;
-            elements[element] = (elements[element] || 0) + count;
-        }
+        return stack[0];
+    };
+
+    for (const rawPart of normalized.split('.')) {
+        if (!rawPart) continue;
+        const coefficient = rawPart.match(/^(\d+)(?=[A-Z([])/);
+        const multiplier = coefficient ? parseInt(coefficient[1], 10) : 1;
+        const part = coefficient ? rawPart.slice(coefficient[1].length) : rawPart;
+        addElements(totals, parseSegment(part), multiplier);
     }
-    return elements;
+
+    return totals;
+};
+
+export const extractHCodes = (statements: string[] = []): string[] => {
+    const codes = new Set<string>();
+    for (const statement of statements) {
+        const matches = statement.match(/H\d{3}/g) || [];
+        matches.forEach(code => codes.add(code));
+    }
+    return [...codes];
+};
+
+export const buildHazardWarnings = (hCodes: string[] = [], chemical?: Chemical): AnalysisHazardWarning[] => {
+    const warningSpecs: Array<{
+        code: AnalysisHazardWarning['code'];
+        hCodes: Set<string>;
+        labelKey: string;
+        descriptionKey: string;
+    }> = [
+        {
+            code: 'acute_toxic',
+            hCodes: ACUTE_TOXICITY_H_CODES,
+            labelKey: 'hazard_warning_acute_toxic',
+            descriptionKey: 'hazard_warning_acute_toxic_desc',
+        },
+        {
+            code: 'carcinogen_mutagen_reprotoxic',
+            hCodes: CMR_H_CODES,
+            labelKey: 'hazard_warning_cmr',
+            descriptionKey: 'hazard_warning_cmr_desc',
+        },
+        {
+            code: 'target_organ_toxic',
+            hCodes: TARGET_ORGAN_H_CODES,
+            labelKey: 'hazard_warning_target_organ',
+            descriptionKey: 'hazard_warning_target_organ_desc',
+        },
+        {
+            code: 'environmental_hazard',
+            hCodes: ENVIRONMENTAL_H_CODES,
+            labelKey: 'hazard_warning_environmental',
+            descriptionKey: 'hazard_warning_environmental_desc',
+        },
+    ];
+
+    const warnings: AnalysisHazardWarning[] = warningSpecs
+        .map((spec) => ({
+            code: spec.code,
+            hCodes: hCodes.filter(code => spec.hCodes.has(code)),
+            labelKey: spec.labelKey,
+            descriptionKey: spec.descriptionKey,
+        }))
+        .filter(warning => warning.hCodes.length > 0);
+
+    if (chemical?.casNumber && uListCas.includes(chemical.casNumber)) {
+        warnings.push({
+            code: 'u_listed_waste',
+            hCodes: [],
+            labelKey: 'hazard_warning_u_listed',
+            descriptionKey: 'hazard_warning_u_listed_desc',
+            evidenceLabel: `CAS ${chemical.casNumber}`,
+        });
+    }
+
+    return warnings;
+};
+
+const matchesAny = (text: string, patterns: RegExp[]): boolean =>
+    patterns.some(pattern => pattern.test(text));
+
+const hasAnyElement = (elements: ElementCounts, candidates: readonly string[]): boolean =>
+    candidates.some(element => Boolean(elements[element]));
+
+const normalizedFormula = (formula: string): string =>
+    formula.replace(/\s+/g, '').replace(hydrateSeparators, '.');
+
+const isLikelyCyanideFormula = (formula: string): boolean => {
+    const normalized = normalizedFormula(formula);
+    return /\bH?CN\b/i.test(normalized) ||
+        /CN(?:\)|\d|$)/i.test(normalized) ||
+        /SCN(?:\)|\d|$)/i.test(normalized);
+};
+
+const isLikelySulfideFormula = (elements: ElementCounts): boolean => {
+    const sulfideCounterions = ['H', 'Li', 'Na', 'K', 'Mg', 'Ca', 'Ba', 'Fe', 'Zn', 'Cd', 'Pb', 'Hg', 'Cu'];
+    return Boolean(elements.S) &&
+        !elements.O &&
+        !elements.C &&
+        hasAnyElement(elements, sulfideCounterions);
+};
+
+const isFormulaExactly = (formula: string, candidates: readonly string[]): boolean => {
+    const normalized = normalizedFormula(formula).toUpperCase();
+    return candidates.some(candidate => normalized === candidate.toUpperCase());
+};
+
+const hasInorganicPhosphateCore = (elements: ElementCounts): boolean =>
+    Boolean(elements.P) &&
+    (elements.O || 0) >= 4 &&
+    !elements.C;
+
+const hasAlkaliMetalCounterion = (elements: ElementCounts): boolean =>
+    hasAnyElement(elements, ALKALI_METALS);
+
+const isAlkaliPhosphateSalt = (name: string, formula: string, elements: ElementCounts): boolean => {
+    if (!hasInorganicPhosphateCore(elements) || !hasAlkaliMetalCounterion(elements)) return false;
+
+    const isNamedPhosphate = /\b(?:ortho)?phosphate\b/i.test(name);
+    const hasBasicPhosphateName = /\b(?:di[-\s]?(?:sodium|potassium|lithium)|(?:sodium|potassium|lithium)\s+phosphate\s+dibasic|dibasic|hydrogen\s+(?:ortho)?phosphate|monohydrogen\s+(?:ortho)?phosphate|tri[-\s]?(?:sodium|potassium|lithium)|(?:sodium|potassium|lithium)\s+phosphate\s+tribasic|tribasic)\b/i.test(name);
+    if (isNamedPhosphate && hasBasicPhosphateName) return true;
+
+    return isFormulaExactly(formula, ['Li2HPO4', 'Na2HPO4', 'K2HPO4', 'Li3PO4', 'Na3PO4', 'K3PO4']);
+};
+
+const isAcidPhosphateSalt = (name: string, formula: string, elements: ElementCounts): boolean => {
+    if (!hasInorganicPhosphateCore(elements) || !hasAlkaliMetalCounterion(elements)) return false;
+
+    const isNamedPhosphate = /\b(?:ortho)?phosphate\b/i.test(name);
+    const hasAcidPhosphateName = /\b(?:mono[-\s]?(?:sodium|potassium|lithium)|(?:sodium|potassium|lithium)\s+phosphate\s+monobasic|monobasic|dihydrogen\s+(?:ortho)?phosphate|biphosphate)\b/i.test(name);
+    if (isNamedPhosphate && hasAcidPhosphateName) return true;
+
+    return isFormulaExactly(formula, ['LiH2PO4', 'NaH2PO4', 'KH2PO4']);
+};
+
+export const isInorganicCarbonFormula = (formula: string, name = ''): boolean => {
+    const elements = parseFormula(formula);
+    const normalized = normalizedFormula(formula);
+    const elementNames = Object.keys(elements);
+
+    if (!elements.C) return false;
+    if (matchesAny(name, INORGANIC_CARBON_NAME_PATTERNS)) return true;
+    if (isLikelyCyanideFormula(normalized)) return true;
+    if (isFormulaExactly(normalized, ['CO', 'CO2', 'H2CO3'])) return true;
+
+    const nonCarbonOxygenHydrogenElements = elementNames.filter(element => !['C', 'O', 'H'].includes(element));
+    const isCarbonateLike = elements.C === 1 &&
+        (elements.O || 0) >= 3 &&
+        nonCarbonOxygenHydrogenElements.length > 0 &&
+        !elements.N &&
+        !hasAnyElement(elements, HALOGENS) &&
+        nonCarbonOxygenHydrogenElements.every(element =>
+            (CARBONATE_COUNTERIONS as readonly string[]).includes(element)
+        );
+    if (isCarbonateLike) return true;
+
+    const hasMetalCounterion = hasAnyElement(elements, CARBIDE_COUNTERIONS);
+    const isCarbideLike = Boolean(elements.C) &&
+        hasMetalCounterion &&
+        !elements.H &&
+        !elements.O &&
+        !elements.N;
+    return isCarbideLike;
+};
+
+export const isLikelyOrganicByFormula = (formula: string, name = ''): boolean => {
+    const elements = parseFormula(formula);
+    return Boolean(elements.C) && !isInorganicCarbonFormula(formula, name);
 };
 
 // Helper: Determine disposal category details
@@ -55,67 +401,74 @@ export const getCategoryDetails = (category: DisposalCategory): { binColor: stri
     }
 };
 
+const buildResult = (
+    chemical: Chemical,
+    category: DisposalCategory,
+    reason: string,
+    reasonParams?: Record<string, string | number>,
+): AnalysisResult => {
+    const { binColor, label } = getCategoryDetails(category);
+    const hazardWarnings = buildHazardWarnings(extractHCodes(chemical.ghs?.hazardStatements), chemical);
+    return {
+        chemical,
+        category,
+        binColor,
+        label,
+        reason,
+        reasonParams,
+        isSafe: category !== 'UNKNOWN',
+        hazardWarnings: hazardWarnings.length > 0 ? hazardWarnings : undefined,
+    };
+};
+
 export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     // 0. P-List Check (Highest Priority)
     if (chemical.casNumber && pListCas.includes(chemical.casNumber)) {
-        const { binColor, label } = getCategoryDetails('SPECIAL_HAZARD');
-        return {
-            chemical,
-            category: 'SPECIAL_HAZARD',
-            binColor,
-            label,
-            reason: 'reason_special_hazard',
-            isSafe: true // Safety verified as "definitely dangerous and clearly classified"
-        };
+        return buildResult(chemical, 'SPECIAL_HAZARD', 'reason_special_hazard');
     }
 
     const elements = parseFormula(chemical.molecularFormula || '');
-    const formulaStr = chemical.molecularFormula || '';
-    const nameUpper = chemical.name.toUpperCase();
+    const formula = chemical.molecularFormula || '';
+    const name = chemical.name || '';
+    const hCodes = extractHCodes(chemical.ghs?.hazardStatements);
+    const hasReactiveHCode = hCodes.some(code => REACTIVE_H_CODES.has(code));
+    const hasFatalAcuteToxicityHCode = hCodes.some(code => FATAL_ACUTE_TOXICITY_H_CODES.has(code));
+    const hasHalogen = hasAnyElement(elements, HALOGENS);
+    const hasHeavyMetal = hasAnyElement(elements, HEAVY_METALS);
+    const isOrganic = isLikelyOrganicByFormula(formula, name);
 
-    // 1. Organic detection: Presence of Carbon (C)
-    const hasCarbon = !!elements['C'];
-
-    // Ensure properties exist and sync isOrganic
-    if (!chemical.properties) chemical.properties = { isOrganic: hasCarbon, isHalogenated: false };
-    chemical.properties.isOrganic = hasCarbon;
-
-    // 2. Halogen detection: F, Cl, Br, I
-    const halogens = ['F', 'Cl', 'Br', 'I'];
-    const hasHalogen = halogens.some(h => !!elements[h]);
+    chemical.properties = {
+        ...chemical.properties,
+        isOrganic,
+        isHalogenated: isOrganic && hasHalogen,
+    };
 
     let category: DisposalCategory = 'UNKNOWN';
     let reason = '';
     let reasonParams: Record<string, string | number> | undefined;
 
-    // --- Strict Evaluation Priority ---
-
-    // 1. Reactive / Oxidizer
-    const reactiveKeywords = ['PEROXIDE', 'NITRATE', 'CHLORATE', 'PERMANGANATE', 'AZIDE', 'PERCHLORATE', 'HYDRAZINE', 'PICRIC', 'NITRIC ACID', 'PERCHLORIC ACID'];
-    const isReactive = reactiveKeywords.some(kw => nameUpper.includes(kw)) || formulaStr.includes('HNO3') || formulaStr.includes('HClO4');
-
-    // 2. Cyanide / Sulfide
-    const isCyanide = nameUpper.includes('CYANIDE') || formulaStr.includes('CN') || formulaStr.includes('(CN)') || nameUpper.includes('SULFIDE') || formulaStr.includes('S2-');
-
-    // 3. Heavy Metals (using regex with word boundaries to avoid partial matches like "CO")
-    const heavyMetalRegex = /\b(Ag|Cd|Pb|Hg|Cr|As|Ni|Cu|Zn|Ba)\b/;
-    const isHeavyMetal = heavyMetalRegex.test(formulaStr);
-
-    // 6. Solid Waste (evaluated later but defined here)
-    const solidKeywords = ['POWDER', 'RESIN', 'SAND', 'PELLET', 'BEAD', 'LUMP', 'CRYSTAL'];
-    const isSolid = solidKeywords.some(kw => nameUpper.includes(kw));
+    const isReactive = hasReactiveHCode ||
+        matchesAny(name, REACTIVE_NAME_PATTERNS) ||
+        isFormulaExactly(formula, ['HNO3', 'HClO4', 'NaBH4', 'LiAlH4', 'NaH', 'KH', 'LiH', 'CaH2']);
+    const isCyanideOrSulfide = matchesAny(name, CYANIDE_NAME_PATTERNS) ||
+        matchesAny(name, SULFIDE_NAME_PATTERNS) ||
+        isLikelyCyanideFormula(formula) ||
+        isLikelySulfideFormula(elements);
+    const isSolid = matchesAny(name, SOLID_NAME_PATTERNS);
 
     if (isReactive) {
         category = 'REACTIVE';
         reason = 'reason_reactive';
-    } else if (isCyanide) {
+    } else if (isCyanideOrSulfide) {
         category = 'CYANIDE';
         reason = 'reason_cyanide';
-    } else if (isHeavyMetal) {
+    } else if (hasFatalAcuteToxicityHCode) {
+        category = 'SPECIAL_HAZARD';
+        reason = 'reason_special_hazard';
+    } else if (hasHeavyMetal) {
         category = 'HEAVY_METAL';
         reason = 'reason_heavy_metal';
-    } else if (hasCarbon) {
-        // Organic Logic
+    } else if (isOrganic) {
         if (hasHalogen) {
             category = 'ORGANIC_HALOGEN';
             reason = 'reason_organic_halogen';
@@ -124,7 +477,6 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
             reason = 'reason_organic_non_halogen';
         }
     } else {
-        // Inorganic Logic
         if (chemical.properties?.ph !== undefined) {
             if (chemical.properties.ph < 7) {
                 category = 'ACID';
@@ -142,10 +494,16 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         }
 
         if (category === 'UNKNOWN') {
-            if (nameUpper.includes('ACID') || nameUpper.includes('SULFURIC') || nameUpper.includes('HYDROCHLORIC') || nameUpper.includes('NITRIC')) {
+            if (isAcidPhosphateSalt(name, formula, elements)) {
+                category = 'ACID';
+                reason = 'reason_acid_phosphate_salt';
+            } else if (isAlkaliPhosphateSalt(name, formula, elements)) {
+                category = 'ALKALI';
+                reason = 'reason_alkali_phosphate_salt';
+            } else if (matchesAny(name, ACID_NAME_PATTERNS)) {
                 category = 'ACID';
                 reason = 'reason_acid_keyword';
-            } else if (nameUpper.includes('HYDROXIDE') || nameUpper.includes('AMMONIA') || nameUpper.includes('BASE')) {
+            } else if (matchesAny(name, ALKALI_NAME_PATTERNS)) {
                 category = 'ALKALI';
                 reason = 'reason_alkali_keyword';
             }
@@ -158,15 +516,5 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         reason = 'reason_solid_waste';
     }
 
-    const { binColor, label } = getCategoryDetails(category);
-
-    return {
-        chemical,
-        category,
-        binColor,
-        label,
-        reason: reason || 'reason_unknown',
-        reasonParams,
-        isSafe: category !== 'UNKNOWN'
-    };
+    return buildResult(chemical, category, reason || 'reason_unknown', reasonParams);
 };

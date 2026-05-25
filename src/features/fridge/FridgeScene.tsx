@@ -195,6 +195,7 @@ export const FridgeScene: React.FC = () => {
     const cameraConfig = useCabinetCamera(cabinetWidth, cabinetHeight, mode, containerAspect);
     const [shelfFocusTarget, setShelfFocusTarget] = useState<[number, number, number] | null>(null);
     const [cameraStateId, setCameraStateId] = useState(0);
+    const lastAutoFocusKeyRef = useRef<string | null>(null);
     const focusedShelfId = useFridgeStore((state) => state.focusedShelfId);
     const setFocusedShelfId = useFridgeStore((state) => state.setFocusedShelfId);
     const GROUP_OFFSET_Y = -0.5;
@@ -237,16 +238,38 @@ export const FridgeScene: React.FC = () => {
 
     // Auto-focus when navigated from search, or after auto-placement in PLACE mode
     useEffect(() => {
-        if (focusedShelfId && (mode === 'VIEW' || mode === 'PLACE')) {
-            const shelfIndex = floatingShelves.findIndex(s => s.id === focusedShelfId);
-            if (shelfIndex !== -1) {
-                setShelfFocusTarget([0, GROUP_OFFSET_Y + getShelfY(shelfIndex), 0]);
-                setCameraStateId(id => id + 1);
-            } else if (floorShelf && focusedShelfId === floorShelf.id) {
-                setShelfFocusTarget([0, GROUP_OFFSET_Y + (SHELF_BOTTOM_Y + 0.02), 0]);
-                setCameraStateId(id => id + 1);
-            }
+        if (!focusedShelfId || (mode !== 'VIEW' && mode !== 'PLACE')) {
+            lastAutoFocusKeyRef.current = null;
+            return;
         }
+
+        const shelfIndex = floatingShelves.findIndex(s => s.id === focusedShelfId);
+        const shelfY = shelfIndex !== -1
+            ? getShelfY(shelfIndex)
+            : floorShelf && focusedShelfId === floorShelf.id
+                ? SHELF_BOTTOM_Y + 0.02
+                : null;
+
+        if (shelfY == null) {
+            lastAutoFocusKeyRef.current = null;
+            return;
+        }
+
+        const nextTarget: [number, number, number] = [0, GROUP_OFFSET_Y + shelfY, 0];
+        const focusKey = `${mode}:${focusedShelfId}:${nextTarget.map(value => value.toFixed(3)).join(':')}`;
+        if (lastAutoFocusKeyRef.current === focusKey) return;
+
+        lastAutoFocusKeyRef.current = focusKey;
+        setShelfFocusTarget(current => {
+            if (
+                current &&
+                current.every((value, index) => Math.abs(value - nextTarget[index]) < 0.001)
+            ) {
+                return current;
+            }
+            return nextTarget;
+        });
+        setCameraStateId(id => id + 1);
     }, [focusedShelfId, mode, floatingShelves, floorShelf, getShelfY]);
 
     // highlightedItemId is managed externally (App.tsx sets it, user interaction clears it)
@@ -312,6 +335,7 @@ export const FridgeScene: React.FC = () => {
         }
         return { ...cameraConfig, target: effectiveTarget };
     }, [shelfFocusTarget, effectiveTarget, cameraConfig, isPlaceMode, isTopDownView, cabinetWidth, cabinetDepth, containerAspect]);
+    const orbitTarget = effectiveCameraConfig.target;
 
     return (
         <div ref={containerRef} className="w-full bg-gray-100 relative" style={{ height: 'calc(100dvh - 7rem)' }}>
@@ -389,13 +413,13 @@ export const FridgeScene: React.FC = () => {
                         maxPolarAngle={Math.PI / 2}
                         minDistance={cameraConfig.minDistance}
                         maxDistance={cameraConfig.maxDistance}
-                        target={effectiveTarget}
+                        target={orbitTarget}
                         enableRotate={!isPlaceMode && !draggedItem}
                         enablePan={!draggedItem && !isTouchPlacementSelection}
                         enableZoom={!draggedItem && !isTouchPlacementSelection}
                         touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
                     />
-                    <SyncOrbitTarget target={effectiveTarget} />
+                    <SyncOrbitTarget target={orbitTarget} />
                 </Suspense>
             </Canvas>
 

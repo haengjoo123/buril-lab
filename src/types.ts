@@ -70,6 +70,21 @@ export interface Chemical {
     koshaId?: number; // Added to support fetching KOSHA MSDS details
 }
 
+export type AnalysisHazardWarningCode =
+    | 'acute_toxic'
+    | 'carcinogen_mutagen_reprotoxic'
+    | 'environmental_hazard'
+    | 'target_organ_toxic'
+    | 'u_listed_waste';
+
+export interface AnalysisHazardWarning {
+    code: AnalysisHazardWarningCode;
+    hCodes: string[];
+    labelKey: string;
+    descriptionKey: string;
+    evidenceLabel?: string;
+}
+
 export interface AnalysisResult {
     chemical: Chemical;
     category: DisposalCategory;
@@ -79,6 +94,7 @@ export interface AnalysisResult {
     reasonParams?: Record<string, string | number>; // Dynamic params for translation
     isSafe: boolean; // False if requires manual verification
     isAiEstimated?: boolean; // True if the category was inferred by the Gemini API fallback
+    hazardWarnings?: AnalysisHazardWarning[];
 }
 
 export type MixtureAnalysisBasis = 'pure' | 'solution' | 'unknown_matrix';

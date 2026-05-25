@@ -365,6 +365,9 @@ export const analyzeMixture = (cart: AnalysisResult[]): MixtureAnalysisResult =>
         item.category === 'ORGANIC_HALOGEN' ||
         item.category === 'ORGANIC_NON_HALOGEN'
     );
+    const hasHalogenOrganicSolute = cart.some((item) =>
+        item.category === 'ORGANIC_HALOGEN'
+    );
 
     if (hasUnknownMatrix) {
         return withContext(
@@ -441,6 +444,21 @@ export const analyzeMixture = (cart: AnalysisResult[]): MixtureAnalysisResult =>
                 'solution',
                 baseResult,
                 ['mix_context_warning_solvent_override'],
+            );
+        }
+
+        if (hasHalogenOrganicSolute) {
+            return withContext(
+                {
+                    category: 'ORGANIC_HALOGEN',
+                    binColor: 'bg-orange-600',
+                    label: 'mix_label_halogen',
+                    reason: 'mix_reason_halogen_solute_context',
+                    isSafe: true,
+                },
+                'solution',
+                baseResult,
+                ['mix_context_warning_halogen_solute'],
             );
         }
 
