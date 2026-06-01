@@ -152,7 +152,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none">
+        <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none lg:items-stretch lg:justify-end">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/50 pointer-events-auto"
@@ -161,7 +161,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
 
             {/* Sheet Content */}
             <div
-                className="relative z-10 w-full max-w-[430px] bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col max-h-[90vh] animate-in slide-in-from-bottom duration-300"
+                className="relative z-10 flex max-h-[90vh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl pointer-events-auto animate-in slide-in-from-bottom duration-300 dark:bg-slate-900 lg:h-full lg:max-h-none lg:w-[440px] lg:max-w-[440px] lg:rounded-none lg:border-l lg:border-slate-200 lg:slide-in-from-right dark:lg:border-slate-800"
                 onClick={(e) => e.stopPropagation()}
             >
 
@@ -176,7 +176,7 @@ export const CartView: React.FC<CartViewProps> = ({ onClose, onDisposed }) => {
                 </div>
 
                 {/* List of Chemicals */}
-                <div className="flex-shrink overflow-y-auto p-4 space-y-3 min-h-[80px] max-h-[150px]">
+                <div className="flex-shrink overflow-y-auto p-4 space-y-3 min-h-[80px] max-h-[150px] lg:max-h-[260px]">
                     {cart.length === 0 ? (
                         <div className="text-center text-gray-400 dark:text-gray-500 py-10">
                             {t('cart_empty')}

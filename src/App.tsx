@@ -140,11 +140,12 @@ function App() {
   }, [session, loadSearchHistory]);
 
   useEffect(() => {
+    if (isAuthLoading) return;
     if (session) return;
     if (useLabStore.getState().currentLabId !== null) {
       useLabStore.getState().clearLabState();
     }
-  }, [session]);
+  }, [isAuthLoading, session]);
 
   useEffect(() => {
     if (isAuthLoading || session) return;
@@ -331,12 +332,16 @@ function App() {
           onLogoClick={handleReset}
           hideLabSwitcher
           onLoginClick={() => navigate('/login')}
+          activeTab={activeTab}
+          isAdmin={false}
+          onTabClick={handleTabClick}
           bottomNav={
             <BottomTabNav activeTab={activeTab} isAdmin={false} onTabClick={handleTabClick} />
           }
         >
           <SearchTabView
             cartCount={0}
+            showRecentWasteLogs={false}
             query={query}
             lastSearchQuery={lastSearchQuery}
             isLoading={isLoading}
@@ -388,6 +393,9 @@ function App() {
           userEmail={user?.email}
           onSignOut={signOut}
           hideLabSwitcher
+          activeTab={activeTab}
+          isAdmin={isAdmin}
+          onTabClick={handleTabClick}
         >
           <Suspense fallback={<TabContentFallback />}>
             <FeedbackInboxView />
@@ -426,9 +434,19 @@ function App() {
         />
       )}
 
-      <MainLayout onLogoClick={handleReset} userEmail={user?.email} onSignOut={signOut} bottomNav={
-        <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} />
-      }>
+      <MainLayout
+        onLogoClick={handleReset}
+        userEmail={user?.email}
+        onSignOut={signOut}
+        activeTab={activeTab}
+        isAdmin={isAdmin}
+        onTabClick={handleTabClick}
+        cartCount={cart.length}
+        onCartClick={() => setIsCartOpen(true)}
+        bottomNav={
+          <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} />
+        }
+      >
         <Suspense fallback={<TabContentFallback />}>
           {activeTab === 'cabinet' ? (
             <div className="h-full">
@@ -450,6 +468,10 @@ function App() {
           ) : (
             <SearchTabView
               cartCount={cart.length}
+              cartItems={cart}
+              onOpenCart={() => setIsCartOpen(true)}
+              showRecentWasteLogs
+              onOpenLogs={() => navigate('/logs')}
               query={query}
               lastSearchQuery={lastSearchQuery}
               isLoading={isLoading}
@@ -491,7 +513,8 @@ function App() {
         {cart.length > 0 && !isCartOpen && (
           <button
             onClick={() => setIsCartOpen(true)}
-            className={`absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} w-14 h-14 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-90 transition-transform animate-in fade-in slide-in-from-bottom-4`}
+            className={`absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition-transform animate-in fade-in slide-in-from-bottom-4 active:scale-90 dark:bg-slate-100 dark:text-slate-900 lg:hidden`}
+            aria-label={`${t('cart_title')} ${cart.length}`}
           >
             <ShoppingBag className="w-6 h-6" />
             <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold border-2 border-white dark:border-slate-900 text-white">{cart.length}</span>

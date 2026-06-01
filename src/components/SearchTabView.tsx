@@ -1,14 +1,34 @@
-import type { FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp, X } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight } from 'lucide-react';
 import { ResultCard } from './ResultCard';
 import { MediaProductCard } from './MediaProductCard';
 import { MediaProductFilter } from './MediaProductFilter';
 import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
-import type { AnalysisResult } from '../types';
+import type { AnalysisResult, CartItem, WasteLog } from '../types';
 import type { CabinetSearchResult } from '../services/cabinetService';
 import type { MediaProduct, SortOption } from '../services/mediaProductService';
 import { useOnboardingStore } from '../store/useOnboardingStore';
+import { fetchWasteLogs } from '../services/wasteLogService';
+
+type WasteLogChemicalEntry = Partial<CartItem> & {
+  chemical?: Partial<CartItem['chemical']> | null;
+  name?: unknown;
+};
+
+const getWasteLogChemicalName = (item: WasteLogChemicalEntry | null | undefined): string | null => {
+  const nestedName = item?.chemical?.name;
+  if (typeof nestedName === 'string' && nestedName.trim()) {
+    return nestedName.trim();
+  }
+
+  const directName = item?.name;
+  if (typeof directName === 'string' && directName.trim()) {
+    return directName.trim();
+  }
+
+  return null;
+};
 
 interface SearchTabViewProps {
   cartCount: number;
@@ -44,6 +64,10 @@ interface SearchTabViewProps {
   onClearSuggestions?: () => void;
   onRequireAuth?: () => void;
   onOpenVoiceAgent?: () => void;
+  cartItems?: CartItem[];
+  onOpenCart?: () => void;
+  showRecentWasteLogs?: boolean;
+  onOpenLogs?: () => void;
 }
 
 export function SearchTabView({
@@ -80,8 +104,16 @@ export function SearchTabView({
   onClearSuggestions,
   onRequireAuth,
   onOpenVoiceAgent,
+  cartItems = [],
+  onOpenCart,
+  showRecentWasteLogs = false,
+  onOpenLogs,
 }: SearchTabViewProps) {
   const { t } = useTranslation();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [recentWasteLogs, setRecentWasteLogs] = useState<WasteLog[]>([]);
+  const [isWasteLogsLoading, setIsWasteLogsLoading] = useState(false);
+  const [wasteLogsError, setWasteLogsError] = useState(false);
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
   const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
   const hasOtherResults = mediaProducts.length > 0 || cabinetResults.length > 0;
@@ -92,9 +124,67 @@ export function SearchTabView({
     normalizedQuery.length >= 2 &&
     normalizedQuery !== lastSearchQuery &&
     (suggestions.length > 0 || isSuggestionsLoading);
+  const visibleCartItems = useMemo(() => cartItems.slice(0, 3), [cartItems]);
+  const hiddenCartCount = Math.max(0, cartItems.length - visibleCartItems.length);
+
+  useEffect(() => {
+    if (!showRecentWasteLogs) {
+      setRecentWasteLogs([]);
+      setWasteLogsError(false);
+      setIsWasteLogsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsWasteLogsLoading(true);
+    setWasteLogsError(false);
+
+    fetchWasteLogs(3, 0, { sortBy: 'created_at', sortOrder: 'desc' })
+      .then(({ logs }) => {
+        if (!isMounted) return;
+        setRecentWasteLogs(logs);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setRecentWasteLogs([]);
+        setWasteLogsError(true);
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setIsWasteLogsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [showRecentWasteLogs]);
+
+  const formatWasteLogDate = (isoDate: string): string => {
+    const date = new Date(isoDate);
+    if (Number.isNaN(date.getTime())) return '';
+
+    return new Intl.DateTimeFormat('ko-KR', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  };
+
+  const getWasteLogTitle = (log: WasteLog): string => {
+    const names = (log.chemicals ?? [])
+      .map((item) => getWasteLogChemicalName(item))
+      .filter((name): name is string => Boolean(name));
+
+    if (names.length === 0) return log.disposal_category;
+    if (names.length === 1) return names[0];
+    return `${names[0]} 외 ${names.length - 1}개`;
+  };
 
   return (
-    <div className="p-5 flex flex-col gap-6" style={{ paddingBottom: cartCount > 0 ? '100px' : undefined }}>
+    <div className={`p-5 lg:p-8 ${cartCount > 0 ? 'pb-28 lg:pb-8' : ''}`}>
+      <div className="mx-auto flex w-full max-w-[1320px] flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
+        <div className="flex min-w-0 flex-col gap-6">
       {showOnboardingGuide && (
         <OnboardingGuideCard
           icon={<Search className="h-5 w-5" />}
@@ -110,27 +200,49 @@ export function SearchTabView({
       )}
 
       {!result && (
-        <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-tight">
+        <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500 lg:hidden">
+          <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 lg:text-4xl lg:tracking-tight">
             {t('app_subtitle_1')}<br />
             <span className="text-blue-600 dark:text-blue-400">{t('app_subtitle_2')}</span> {t('app_subtitle_3')}
           </h2>
-          <p className="mt-2 text-slate-500 dark:text-slate-400 text-sm">
+          <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400 lg:text-base">
             {t('app_desc')}
           </p>
         </section>
       )}
 
+      <section className="hidden lg:block">
+        <h2 className="text-4xl font-bold tracking-tight text-slate-950 dark:text-slate-100">
+          {t('tab_search')}
+        </h2>
+        <p className="mt-3 text-base text-slate-600 dark:text-slate-400">
+          {t('app_desc')}
+        </p>
+      </section>
+
       <form onSubmit={onSearchSubmit} className="relative group z-20">
         <div
-          className={`rounded-[1.5rem] border bg-white dark:bg-slate-800 px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] ${error
+          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 lg:rounded-[28px] lg:p-3 ${error
             ? 'border-red-300 dark:border-red-900/50'
             : 'border-slate-100 dark:border-slate-700/70'
             }`}
         >
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 transition-colors lg:min-h-[76px] lg:rounded-[24px] lg:border lg:px-3 lg:py-2 ${
+            error
+              ? 'lg:border-red-200 lg:bg-red-50'
+              : 'lg:border-slate-200 lg:bg-slate-50/80 lg:ring-1 lg:ring-white lg:group-focus-within:border-blue-300 lg:group-focus-within:bg-white lg:group-focus-within:ring-blue-100'
+          }`}>
+            <button
+              type="button"
+              onClick={onOpenScanner}
+              aria-label={t('btn_scan')}
+              className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 lg:inline-flex"
+            >
+              <Camera className="h-5 w-5 stroke-[2.2]" />
+            </button>
+
             <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center transition-colors ${error
+              className={`flex h-10 w-10 shrink-0 items-center justify-center transition-colors lg:hidden ${error
                 ? 'text-red-500 dark:text-red-400'
                 : 'text-slate-400 group-focus-within:text-blue-500 dark:text-slate-500 dark:group-focus-within:text-blue-400'
                 }`}
@@ -140,13 +252,14 @@ export function SearchTabView({
 
             <div className="min-w-0 flex-1">
               <input
+                ref={searchInputRef}
                 type="text"
                 value={query}
                 onChange={(e) => onQueryChange(e.target.value)}
-                className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
-                placeholder={t('search_placeholder')}
-                disabled={isLoading}
-              />
+              className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400"
+              placeholder={t('search_placeholder')}
+              disabled={isLoading}
+            />
             </div>
 
             {!isLoading && (query.trim() || hasSearchResults) && (
@@ -154,15 +267,38 @@ export function SearchTabView({
                 type="button"
                 onClick={onReset}
                 aria-label={t('search_reset')}
-                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200 lg:hover:bg-slate-200/70 lg:hover:text-slate-700"
               >
                 <span className="sr-only">{t('search_reset')}</span>
                 <X className="h-4 w-4" />
               </button>
             )}
+            <div className="hidden items-center gap-1 lg:flex">
+              {query.trim() && (
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-950/30 transition-all duration-300 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label={t('lab_mgmt_search_btn')}
+                >
+                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5 stroke-[2.4]" />}
+                </button>
+              )}
+              {onOpenVoiceAgent && (
+                <button
+                  type="button"
+                  onClick={onOpenVoiceAgent}
+                  disabled={isLoading}
+                  aria-label={t('voice_agent_cta_speak')}
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Mic className="h-5 w-5 stroke-[2.3]" />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2 lg:hidden">
             <button
               type="button"
               onClick={onOpenScanner}
@@ -195,6 +331,7 @@ export function SearchTabView({
               <ArrowUp className="w-5 h-5 stroke-[2.5]" />
             </button>
           </div>
+
         </div>
 
         {/* Autocomplete Dropdown */}
@@ -337,8 +474,25 @@ export function SearchTabView({
         </div>
       ) : (
         <div className={`flex flex-col gap-6 transition-opacity duration-300 ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+          <section className="hidden lg:block">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('search_preview_title', '검색 결과 미리보기')}</h3>
+            </div>
+            <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="max-w-md text-center">
+                <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-blue-50 text-blue-300 dark:bg-blue-950/30 dark:text-blue-700">
+                  <Search className="h-16 w-16" />
+                </div>
+                <h4 className="mt-6 text-2xl font-bold text-slate-900 dark:text-slate-100">{t('search_preview_empty_title', '검색을 시작해 보세요')}</h4>
+                <p className="mt-3 text-base leading-7 text-slate-500 dark:text-slate-400">
+                  {t('search_preview_empty_desc', '시약명, 제품명, CAS 번호 또는 사진을 입력하면 폐기 방법과 주의사항을 안내해 드립니다.')}
+                </p>
+              </div>
+            </div>
+          </section>
+
           {recentSearches.length > 0 && (
-            <section>
+            <section className="lg:hidden">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-200">{t('guide_example')}</h3>
                 <button
@@ -379,6 +533,152 @@ export function SearchTabView({
           )}
         </div>
       )}
+        </div>
+
+        <aside className="hidden flex-col gap-5 lg:flex">
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('guide_example')}</h3>
+              {recentSearches.length > 0 && (
+                <button
+                  onClick={onClearSearchHistory}
+                  className="text-xs font-semibold text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  {t('recent_clear')}
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {recentSearches.length > 0 ? recentSearches.slice(0, 6).map((term) => (
+                <button
+                  key={term}
+                  type="button"
+                  onClick={() => onSuggestionClick(term)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-3 text-left text-sm font-semibold text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-800 dark:text-slate-200 dark:hover:border-blue-900/60 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
+                >
+                  <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span className="min-w-0 flex-1 truncate">{term}</span>
+                  <ArrowUp className="h-4 w-4 rotate-45 text-slate-300" />
+                </button>
+              )) : (
+                <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+                  {t('search_placeholder')}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  {t('cart_title')}
+                </h3>
+              </div>
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                {cartCount}
+              </span>
+            </div>
+
+            {visibleCartItems.length > 0 ? (
+              <div className="space-y-2">
+                {visibleCartItems.map((item) => (
+                  <div
+                    key={item.chemical.id}
+                    className="rounded-lg border border-slate-100 px-3 py-3 dark:border-slate-800"
+                  >
+                    <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                      {item.chemical.name}
+                    </div>
+                    <div className="mt-1 truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {t(item.label as any)}
+                    </div>
+                  </div>
+                ))}
+                {hiddenCartCount > 0 && (
+                  <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-center text-xs font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    +{hiddenCartCount}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+                {t('cart_empty')}
+              </div>
+            )}
+
+            {cartCount > 0 && onOpenCart && (
+              <button
+                type="button"
+                onClick={onOpenCart}
+                className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 text-sm font-bold text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                {t('cart_title')}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  {t('tab_logs')}
+                </h3>
+              </div>
+              {onOpenLogs && (
+                <button
+                  type="button"
+                  onClick={onOpenLogs}
+                  className="text-xs font-semibold text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  {t('log_view_details', '기록 보기')}
+                </button>
+              )}
+            </div>
+
+            {isWasteLogsLoading ? (
+              <div className="flex min-h-28 items-center justify-center text-slate-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            ) : wasteLogsError ? (
+              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+                {t('common_load_failed', '불러오지 못했습니다.')}
+              </div>
+            ) : recentWasteLogs.length > 0 ? (
+              <div className="space-y-2">
+                {recentWasteLogs.map((log) => (
+                  <button
+                    key={log.id}
+                    type="button"
+                    onClick={onOpenLogs}
+                    className="flex w-full items-start gap-3 rounded-lg border border-slate-100 px-3 py-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50 dark:border-slate-800 dark:hover:border-emerald-900/60 dark:hover:bg-emerald-950/20"
+                  >
+                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                        {getWasteLogTitle(log)}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">
+                        {log.disposal_category}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[11px] font-semibold text-slate-400">
+                      {formatWasteLogDate(log.created_at)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+                {t('log_empty', '아직 폐기 기록이 없습니다.')}
+              </div>
+            )}
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }
