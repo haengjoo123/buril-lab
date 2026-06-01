@@ -12,7 +12,7 @@ interface ImageActionMenuProps {
 
 export function ImageActionMenu({ isOpen, onClose, onSelectCamera, onSelectGallery, hasImage, onDeleteImage
 }: ImageActionMenuProps) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     if (!isOpen) return null;
 
     return (
@@ -25,7 +25,12 @@ export function ImageActionMenu({ isOpen, onClose, onSelectCamera, onSelectGalle
             >
                 <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
                     <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-lg">{t('cabinet_image_select_title')}</h3>
-                    <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+                        aria-label={t('common_close_menu')}
+                    >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -68,8 +73,12 @@ export function ImageActionMenu({ isOpen, onClose, onSelectCamera, onSelectGalle
                                     <Trash2 className="w-6 h-6" />
                                 </div>
                                 <div className="text-left flex-1">
-                                    <div className="font-medium text-red-600 dark:text-red-400 text-base">사진 삭제</div>
-                                    <div className="text-sm text-slate-500 dark:text-slate-400">현재 사진을 제거합니다</div>
+                                    <div className="font-medium text-red-600 dark:text-red-400 text-base">
+                                        {i18n.language.startsWith('ko') ? '사진 삭제' : 'Delete photo'}
+                                    </div>
+                                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                                        {i18n.language.startsWith('ko') ? '현재 사진을 제거합니다' : 'Remove the current photo'}
+                                    </div>
                                 </div>
                             </button>
                         </>

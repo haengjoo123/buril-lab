@@ -40,6 +40,9 @@ import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
+import { useIsDesktop } from '../../hooks/useIsDesktop';
+import { lookupGHSByCAS, type PubChemGHSResult } from '../../services/pubchemService';
+import { getPictogramUrl } from '../../data/ghsCodes';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
@@ -58,9 +61,19 @@ type InventoryScanResultItem = {
     result: ReagentScanResult;
     createdAt: number;
 };
+type InventoryGhsState =
+    | { status: 'loading' }
+    | { status: 'loaded'; result: PubChemGHSResult }
+    | { status: 'error'; error?: string };
+type InventoryGhsPictogram = {
+    label: string;
+    url: string;
+};
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
 const normalizeGroupCas = (value?: string | null) => (value || '').replace(/[^0-9a-z-]/gi, '').trim().toLowerCase();
+const normalizeGhsCas = (value?: string | null) => (value || '').replace(/\s+/g, '').trim();
+const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
 function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: InventorySortOption): number {
     if (sortBy === 'expiry_asc') {
@@ -202,10 +215,11 @@ async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promi
 }
 
 export const InventoryListView: React.FC = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.inventory);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const { currentLabId } = useLabStore();
+    const isDesktop = useIsDesktop();
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [locations, setLocations] = useState<StorageLocation[]>([]);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
@@ -242,9 +256,13 @@ export const InventoryListView: React.FC = () => {
     const [bulkMoveError, setBulkMoveError] = useState<string | null>(null);
     const [bulkMoveInfo, setBulkMoveInfo] = useState<string | null>(null);
     const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
+    const [selectedDesktopItemId, setSelectedDesktopItemId] = useState<string | null>(null);
+    const [inventoryGhsByCas, setInventoryGhsByCas] = useState<Record<string, InventoryGhsState>>({});
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressTriggeredRef = useRef(false);
     const bulkMoveInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const inventoryGhsByCasRef = useRef<Record<string, InventoryGhsState>>({});
+    const inventoryGhsInFlightRef = useRef<Set<string>>(new Set());
     const bulkErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadData = async () => {
@@ -383,6 +401,10 @@ export const InventoryListView: React.FC = () => {
         return [...filteredItems].sort((a, b) => compareInventoryItems(a, b, sortBy));
     }, [filteredItems, sortBy]);
     const visibleGroups = useMemo(() => buildInventoryGroups(visibleItems, sortBy), [visibleItems, sortBy]);
+    const selectedDesktopItem = useMemo(
+        () => visibleItems.find((item) => item.id === selectedDesktopItemId) || visibleItems[0] || null,
+        [selectedDesktopItemId, visibleItems]
+    );
 
     const sortOptions = useMemo(() => ([
         { value: 'expiry_asc', label: t('inventory_sort_expiry_asc') },
@@ -420,6 +442,37 @@ export const InventoryListView: React.FC = () => {
         return { expiredCount, warningCount };
     }, [items]);
 
+    const totalInventoryQuantity = useMemo(() => (
+        items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+    ), [items]);
+
+    const inventoryDesktopStats = useMemo(() => ([
+        {
+            label: t('log_range_all'),
+            value: items.length,
+            Icon: Package,
+            tone: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-300',
+        },
+        {
+            label: t('inventory_quantity'),
+            value: totalInventoryQuantity,
+            Icon: Archive,
+            tone: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-300',
+        },
+        {
+            label: t('inventory_hazard_filter'),
+            value: hazardSummary,
+            Icon: ShieldAlert,
+            tone: 'text-red-600 bg-red-50 dark:bg-red-950/30 dark:text-red-300',
+        },
+        {
+            label: t('expiry_summary_title'),
+            value: expirySummary.expiredCount + expirySummary.warningCount,
+            Icon: AlertTriangle,
+            tone: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300',
+        },
+    ]), [expirySummary.expiredCount, expirySummary.warningCount, hazardSummary, items.length, t, totalInventoryQuantity]);
+
     useEffect(() => {
         const visibleGroupIdSet = new Set(
             visibleGroups
@@ -428,6 +481,82 @@ export const InventoryListView: React.FC = () => {
         );
         setExpandedGroupIds((prev) => prev.filter((groupId) => visibleGroupIdSet.has(groupId)));
     }, [visibleGroups]);
+
+    useEffect(() => {
+        if (visibleItems.length === 0) {
+            setSelectedDesktopItemId(null);
+            return;
+        }
+        if (!selectedDesktopItemId || !visibleItems.some((item) => item.id === selectedDesktopItemId)) {
+            setSelectedDesktopItemId(visibleItems[0].id);
+        }
+    }, [selectedDesktopItemId, visibleItems]);
+
+    useEffect(() => {
+        inventoryGhsByCasRef.current = inventoryGhsByCas;
+    }, [inventoryGhsByCas]);
+
+    useEffect(() => {
+        const casNumbersToLoad = Array.from(new Set(
+            visibleItems
+                .map((item) => normalizeGhsCas(item.cas_number))
+                .filter((cas): cas is string => Boolean(cas && /^\d{1,7}-\d{2}-\d$/.test(cas)))
+        )).filter((cas) => (
+            (!inventoryGhsByCasRef.current[cas] || inventoryGhsByCasRef.current[cas].status === 'loading')
+            && !inventoryGhsInFlightRef.current.has(cas)
+        ));
+
+        if (casNumbersToLoad.length === 0) return;
+
+        let isCancelled = false;
+        casNumbersToLoad.forEach((cas) => inventoryGhsInFlightRef.current.add(cas));
+        setInventoryGhsByCas((prev) => {
+            const next = { ...prev };
+            casNumbersToLoad.forEach((cas) => {
+                next[cas] = { status: 'loading' };
+            });
+            inventoryGhsByCasRef.current = next;
+            return next;
+        });
+
+        const loadGhsPictograms = async () => {
+            for (const cas of casNumbersToLoad) {
+                try {
+                    const result = await lookupGHSByCAS(cas, { labId: currentLabId });
+                    if (!isCancelled) {
+                        const nextState: InventoryGhsState = { status: 'loaded', result };
+                        setInventoryGhsByCas((prev) => {
+                            const next = { ...prev, [cas]: nextState };
+                            inventoryGhsByCasRef.current = next;
+                            return next;
+                        });
+                    }
+                } catch (err) {
+                    if (!isCancelled) {
+                        const nextState: InventoryGhsState = {
+                            status: 'error',
+                            error: err instanceof Error ? err.message : String(err),
+                        };
+                        setInventoryGhsByCas((prev) => {
+                            const next = { ...prev, [cas]: nextState };
+                            inventoryGhsByCasRef.current = next;
+                            return next;
+                        });
+                    }
+                } finally {
+                    inventoryGhsInFlightRef.current.delete(cas);
+                }
+
+                await wait(150);
+            }
+        };
+
+        void loadGhsPictograms();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [currentLabId, visibleItems]);
 
     const handleEdit = (item: InventoryItem) => {
         setInitialDraft(null);
@@ -711,19 +840,25 @@ export const InventoryListView: React.FC = () => {
         return selectedItemIds.filter(id => filteredIdSet.has(id)).length;
     }, [visibleItems, selectedItemIds]);
 
-    const toggleSelectMode = () => {
-        if (isSelectMode) {
-            setIsSelectMode(false);
-            setSelectedItemIds([]);
-            setBulkDeleteError(null);
-            setBulkMoveError(null);
-            setBulkMoveInfo(null);
-            return;
-        }
-        setIsSelectMode(true);
+    const clearSelectionFeedback = () => {
         setBulkDeleteError(null);
         setBulkMoveError(null);
         setBulkMoveInfo(null);
+    };
+
+    const exitSelectMode = () => {
+        setIsSelectMode(false);
+        setSelectedItemIds([]);
+        clearSelectionFeedback();
+    };
+
+    const toggleSelectMode = () => {
+        if (isSelectMode) {
+            exitSelectMode();
+            return;
+        }
+        setIsSelectMode(true);
+        clearSelectionFeedback();
     };
 
     const clearLongPressTimer = () => {
@@ -737,13 +872,17 @@ export const InventoryListView: React.FC = () => {
     };
 
     const toggleSelectionForIds = (itemIds: string[]) => {
-        setSelectedItemIds((prev) => {
-            const isAllSelected = itemIds.every((itemId) => prev.includes(itemId));
-            if (isAllSelected) {
-                return prev.filter((itemId) => !itemIds.includes(itemId));
-            }
-            return Array.from(new Set([...prev, ...itemIds]));
-        });
+        const isAllSelected = itemIds.every((itemId) => selectedItemIds.includes(itemId));
+        const nextSelectedIds = isAllSelected
+            ? selectedItemIds.filter((itemId) => !itemIds.includes(itemId))
+            : Array.from(new Set([...selectedItemIds, ...itemIds]));
+
+        if (nextSelectedIds.length === 0) {
+            exitSelectMode();
+            return;
+        }
+
+        setSelectedItemIds(nextSelectedIds);
     };
 
     const startLongPress = (itemIds: string | string[]) => {
@@ -759,11 +898,16 @@ export const InventoryListView: React.FC = () => {
     };
 
     const toggleItemSelection = (itemId: string) => {
-        setSelectedItemIds(prev =>
-            prev.includes(itemId)
-                ? prev.filter(id => id !== itemId)
-                : [...prev, itemId]
-        );
+        const nextSelectedIds = selectedItemIds.includes(itemId)
+            ? selectedItemIds.filter(id => id !== itemId)
+            : [...selectedItemIds, itemId];
+
+        if (nextSelectedIds.length === 0) {
+            exitSelectMode();
+            return;
+        }
+
+        setSelectedItemIds(nextSelectedIds);
     };
 
     const toggleGroupExpanded = (groupId: string) => {
@@ -779,10 +923,15 @@ export const InventoryListView: React.FC = () => {
         const filteredIds = visibleItems.map(item => item.id);
         const isAllSelected = filteredIds.every(id => selectedItemIds.includes(id));
         if (isAllSelected) {
-            setSelectedItemIds(prev => prev.filter(id => !filteredIds.includes(id)));
+            const nextSelectedIds = selectedItemIds.filter(id => !filteredIds.includes(id));
+            if (nextSelectedIds.length === 0) {
+                exitSelectMode();
+                return;
+            }
+            setSelectedItemIds(nextSelectedIds);
             return;
         }
-        setSelectedItemIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+        setSelectedItemIds(Array.from(new Set([...selectedItemIds, ...filteredIds])));
     };
 
     const handleOpenBulkDeleteConfirm = () => {
@@ -1177,18 +1326,20 @@ export const InventoryListView: React.FC = () => {
             const shelfLabel = typeof item.shelf_level === 'number'
                 ? t('inventory_shelf_level', { level: item.shelf_level + 1 })
                 : '';
+            const storageLabel = `${item.cabinet_name || t('inventory_cabinet_unassigned')}${shelfLabel ? ` · ${shelfLabel}` : ''}`;
             return (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    <Archive className="w-3.5 h-3.5" />
-                    {item.cabinet_name || t('inventory_cabinet_unassigned')}{shelfLabel ? ` · ${shelfLabel}` : ''}
+                <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
+                    <Archive className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{storageLabel}</span>
                 </span>
             );
         }
 
+        const storageLabel = `${item.storage_location_icon || '📦'} ${translateLocationName(item.storage_location_name, t) || t('inventory_other_storage')}`;
         return (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                <MapPin className="w-3.5 h-3.5" />
-                {item.storage_location_icon || '📦'} {translateLocationName(item.storage_location_name, t) || t('inventory_other_storage')}
+            <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{storageLabel}</span>
             </span>
         );
     };
@@ -1246,6 +1397,84 @@ export const InventoryListView: React.FC = () => {
         );
     };
 
+    const getInventoryGhsState = (item: InventoryItem): InventoryGhsState | null => {
+        const cas = normalizeGhsCas(item.cas_number);
+        return cas ? (inventoryGhsByCas[cas] || null) : null;
+    };
+
+    const getInventoryGhsPictograms = (item: InventoryItem): InventoryGhsPictogram[] => {
+        const ghsState = getInventoryGhsState(item);
+        if (ghsState?.status !== 'loaded') return [];
+
+        const seenUrls = new Set<string>();
+        return ghsState.result.pictograms
+            .map((label) => ({ label, url: getPictogramUrl(label) }))
+            .filter((image): image is InventoryGhsPictogram => {
+                if (!image.url || seenUrls.has(image.url)) return false;
+                seenUrls.add(image.url);
+                return true;
+            });
+    };
+
+    const renderGhsPictograms = (
+        item: InventoryItem,
+        hazard: ReturnType<typeof classifyInventoryHazard>,
+        options?: { variant?: 'table' | 'detail' },
+    ) => {
+        const ghsState = getInventoryGhsState(item);
+        const pictograms = getInventoryGhsPictograms(item);
+        const isDetail = options?.variant === 'detail';
+        const visiblePictograms = isDetail ? pictograms : pictograms.slice(0, 4);
+
+        if (visiblePictograms.length > 0) {
+            const detailColumnCount = Math.min(visiblePictograms.length, 6);
+            const gridCols = visiblePictograms.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
+            const gridGap = isDetail ? 'gap-2' : 'gap-0.5';
+            const iconSize = isDetail ? 'h-9 w-9' : (visiblePictograms.length <= 2 ? 'h-6 w-6' : 'h-5 w-5');
+            const iconRadius = isDetail ? 'rounded-md' : 'rounded-sm';
+            const iconPadding = isDetail ? 'p-1' : 'p-0.5';
+            const hiddenCount = isDetail ? 0 : Math.max(0, pictograms.length - visiblePictograms.length);
+            const gridClassName = isDetail
+                ? `inline-grid ${gridGap} align-middle`
+                : `inline-grid ${gridCols} ${gridGap} align-middle`;
+            const gridStyle = isDetail
+                ? { gridTemplateColumns: `repeat(${detailColumnCount}, minmax(0, max-content))` }
+                : undefined;
+            const title = [
+                ...visiblePictograms.map((image) => image.label),
+                hiddenCount > 0 ? `+${hiddenCount}` : null,
+            ].filter(Boolean).join(', ');
+
+            return (
+                <div
+                    className={gridClassName}
+                    style={gridStyle}
+                    title={title}
+                >
+                    {visiblePictograms.map((image) => (
+                        <img
+                            key={image.url}
+                            src={image.url}
+                            alt={image.label}
+                            className={`${iconSize} ${iconRadius} border border-red-100 bg-white object-contain ${iconPadding} shadow-sm`}
+                            loading="lazy"
+                        />
+                    ))}
+                </div>
+            );
+        }
+
+        if (ghsState?.status === 'loading') {
+            return <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label={t('msds_loading')} />;
+        }
+
+        if (hazard.level === 'none') {
+            return <span className="text-xs text-slate-400">-</span>;
+        }
+
+        return <ShieldAlert className="h-4 w-4 text-red-500" />;
+    };
+
     const getStorageSummaryText = (item: InventoryItem) => {
         if (item.storage_type === 'cabinet') {
             const shelfLabel = typeof item.shelf_level === 'number'
@@ -1296,12 +1525,16 @@ export const InventoryListView: React.FC = () => {
                         toggleItemSelection(item.id);
                         return;
                     }
+                    if (isDesktop) {
+                        setSelectedDesktopItemId(item.id);
+                        return;
+                    }
                     handleEdit(item);
                 }}
                 className={`${nested
                     ? 'rounded-2xl border bg-slate-50/80 dark:bg-slate-900/30 p-4 shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
                     : 'bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
-                    } flex flex-col gap-3 transition-colors ${cardBorderClass || 'border-slate-200 dark:border-slate-700'}`}
+                    } flex flex-col gap-3 transition-colors ${selectedDesktopItemId === item.id ? 'lg:border-emerald-400 lg:ring-2 lg:ring-emerald-500/30' : cardBorderClass || 'border-slate-200 dark:border-slate-700'}`}
             >
                 <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
@@ -1679,15 +1912,20 @@ export const InventoryListView: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+        <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)]">
             {/* Header */}
-            <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 pt-4 pb-3 flex-shrink-0">
+            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-800 lg:col-start-1 lg:row-start-1 lg:border-b-0 lg:border-r lg:border-slate-200 lg:bg-slate-50 lg:px-6 lg:pb-3 lg:pt-6 dark:lg:border-slate-800 dark:lg:bg-slate-900">
                 <div className="flex items-center justify-between gap-2">
-                    <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 shrink-0 whitespace-nowrap">
-                        <Package className="w-6 h-6 text-emerald-500" />
-                        {t('inventory_list_title')}
-                    </h1>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <h1 className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xl font-bold text-slate-800 dark:text-slate-100 lg:text-2xl">
+                            <Package className="w-6 h-6 text-emerald-500" />
+                            {t('inventory_list_title')}
+                        </h1>
+                        <span className="hidden rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50 lg:inline-flex">
+                            {t('log_records_count', { count: items.length })}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 lg:gap-2">
                         {/*
                         <button
                             onClick={handleOpenCasReview}
@@ -1700,9 +1938,25 @@ export const InventoryListView: React.FC = () => {
                         </button>
                         */}
                         <button
+                            onClick={handleOpenScanRegistration}
+                            title={t('inventory_add_menu_scan')}
+                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30 lg:inline-flex"
+                        >
+                            <Camera className="h-3.5 w-3.5" />
+                            <span className="whitespace-nowrap">{t('inventory_add_menu_scan')}</span>
+                        </button>
+                        <button
+                            onClick={handleOpenManualRegistration}
+                            title={t('inventory_add_menu_manual')}
+                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 lg:inline-flex"
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span className="whitespace-nowrap">{t('inventory_add_menu_manual')}</span>
+                        </button>
+                        <button
                             onClick={handleExportExcel}
                             title={t('inventory_excel_download_view')}
-                            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 flex items-center gap-1.5 transition-colors hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 lg:h-9 lg:bg-white lg:px-3 lg:font-bold dark:lg:bg-slate-900"
                         >
                             <Download className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
                             <span className="hidden lg:inline whitespace-nowrap">{t('inventory_excel_download_view')}</span>
@@ -1710,7 +1964,7 @@ export const InventoryListView: React.FC = () => {
                         <button
                             onClick={() => setIsCsvImportOpen(true)}
                             title={t('inventory_csv_manage_button')}
-                            className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 flex items-center gap-1.5 transition-colors hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                            className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40 sm:px-3 sm:py-1.5 lg:h-9 lg:px-3 lg:font-bold"
                         >
                             <Upload className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
                             <span className="hidden lg:inline whitespace-nowrap">{t('inventory_csv_manage_button')}</span>
@@ -1735,7 +1989,7 @@ export const InventoryListView: React.FC = () => {
                 )}
 
                 {/* Search Bar */}
-                <div className="mt-4 relative">
+                <div className="mt-4 relative lg:hidden">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                         type="text"
@@ -1745,7 +1999,7 @@ export const InventoryListView: React.FC = () => {
                         className="w-full h-[42px] pl-9 pr-4 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                     />
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-2">
+                <div className="mt-3 flex items-center justify-end gap-2 lg:hidden">
                     <div className="flex items-center gap-2 min-w-0">
                         {/* Hazard Filter */}
                         {hazardSummary > 0 && (
@@ -1778,7 +2032,7 @@ export const InventoryListView: React.FC = () => {
                     </div>
                 </div>
                 {isSelectMode && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="mt-3 flex flex-wrap items-center gap-2 lg:hidden">
                         <button
                             onClick={toggleSelectMode}
                             className="px-3 py-1.5 rounded-lg text-xs font-semibold border bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200"
@@ -1794,7 +2048,7 @@ export const InventoryListView: React.FC = () => {
                                 : t('inventory_select_all_filtered')}
                         </button>
                         <button
-                            onClick={() => setSelectedItemIds([])}
+                            onClick={exitSelectMode}
                             className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200"
                         >
                             {t('inventory_clear_selection')}
@@ -1865,44 +2119,46 @@ export const InventoryListView: React.FC = () => {
                     </div>
                 )}
                 {isSelectMode && (
-                    <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                    <p className="mt-4 text-xs text-slate-500 dark:text-slate-400 lg:hidden">
                         {t('inventory_selected_count', { count: selectedItemIds.length })}
                     </p>
                 )}
                 {bulkDeleteError && (
-                    <p className="mt-4 text-xs text-red-600 dark:text-red-400">
+                    <p className="mt-4 text-xs text-red-600 dark:text-red-400 lg:hidden">
                         {bulkDeleteError}
                     </p>
                 )}
                 {bulkMoveError && (
-                    <p className="mt-4 text-xs text-red-600 dark:text-red-400">
+                    <p className="mt-4 text-xs text-red-600 dark:text-red-400 lg:hidden">
                         {bulkMoveError}
                     </p>
                 )}
                 {bulkMoveInfo && (
-                    <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+                    <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300 lg:hidden">
                         {bulkMoveInfo}
                     </p>
                 )}
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-3">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4 pb-24 lg:col-start-1 lg:row-start-2 lg:border-r lg:border-slate-200 lg:px-6 lg:pb-6 lg:pt-0 dark:lg:border-slate-800">
                 {/* Expiry Summary Banner */}
                 {!isLoading && (expirySummary.expiredCount > 0 || expirySummary.warningCount > 0) && (
-                    <div className="flex items-start gap-3 p-3.5 rounded-xl border bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/30 dark:to-amber-950/30 border-red-200/60 dark:border-red-900/40 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-start gap-3 rounded-lg border border-red-200/60 bg-red-50 p-3.5 animate-in fade-in slide-in-from-top-2 duration-300 dark:border-red-900/40 dark:bg-red-950/30">
                         <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
                         <div className="flex flex-col gap-2 text-sm">
                             <span className="font-semibold text-slate-800 dark:text-slate-100">{t('expiry_summary_title')}</span>
                             <div className="flex flex-wrap gap-2 text-xs">
                                 {expirySummary.expiredCount > 0 && (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-medium">
-                                        🔴 {t('expiry_summary_expired', { count: expirySummary.expiredCount })}
+                                        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                                        {t('expiry_summary_expired', { count: expirySummary.expiredCount })}
                                     </span>
                                 )}
                                 {expirySummary.warningCount > 0 && (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 font-medium">
-                                        🟡 {t('expiry_summary_warning', { count: expirySummary.warningCount })}
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                        {t('expiry_summary_warning', { count: expirySummary.warningCount })}
                                     </span>
                                 )}
                             </div>
@@ -1914,113 +2170,375 @@ export const InventoryListView: React.FC = () => {
                     <div className="flex items-center justify-center py-20">
                         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
                     </div>
-                ) : visibleGroups.length > 0 ? (
-                    visibleGroups.map((group) => (
-                        group.cardCount > 1
-                            ? renderGroupedInventoryCard(group)
-                            : renderInventoryCard(group.primaryItem)
-                    )) || visibleItems.map(item => {
-                        const expiryStatus = getExpiryStatus(item.expiry_date);
-                        const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
-
-                        return (
-                            <div
-                                key={item.id}
-                                onPointerDown={() => startLongPress(item.id)}
-                                onPointerUp={clearLongPressTimer}
-                                onPointerCancel={clearLongPressTimer}
-                                onPointerLeave={clearLongPressTimer}
-                                onClick={() => {
-                                    if (longPressTriggeredRef.current) {
-                                        longPressTriggeredRef.current = false;
-                                        return;
-                                    }
-                                    if (isSelectMode) {
-                                        toggleItemSelection(item.id);
-                                        return;
-                                    }
-                                    handleEdit(item);
-                                }}
-                                className={`bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm flex flex-col gap-3 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors ${cardBorderClass || 'border-slate-200 dark:border-slate-700'
-                                    }`}
-                            >
-                                <div className="flex justify-between items-start gap-2">
-                                    <div className="flex-1 min-w-0">
-                                        {isSelectMode && (
-                                            <label
-                                                className="inline-flex items-center gap-2 mb-2 text-xs text-slate-500 dark:text-slate-400"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedItemIds.includes(item.id)}
-                                                    onChange={() => toggleItemSelection(item.id)}
-                                                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                                />
-                                                {t('inventory_select_item')}
-                                            </label>
-                                        )}
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
-                                                {item.name}
-                                            </h3>
-                                            <div className="flex items-center gap-1.5">
-                                                {renderExpiryBadge(item)}
-                                                {renderRemainingBadge(item)}
-                                            </div>
-                                        </div>
-                                        {(() => {
-                                            const hazard = classifyInventoryHazard(item);
-                                            if (hazard.level === 'none') return null;
-                                            return (
-                                                <div className="mt-2 mb-1 flex flex-wrap gap-1">
-                                                    {hazard.groupLabelKeys.map(key => (
-                                                        <span key={key} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
-                                                            <ShieldAlert className="w-2.5 h-2.5" />
-                                                            {t(key)}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            );
-                                        })()}
-                                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                            {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
-                                            {item.brand && <span>{item.brand}</span>}
-                                            {item.product_number && <span>{t('inventory_meta_pn')}: {item.product_number}</span>}
-                                        </div>
+                ) : (
+                    <>
+                        <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
+                            <div className="border-b border-slate-200 p-3 dark:border-slate-800">
+                                <div className="grid grid-cols-[minmax(280px,1fr)_auto_auto_auto] items-center gap-2">
+                                    <div className="relative min-w-0">
+                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            placeholder={t('inventory_search_placeholder')}
+                                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-900 shadow-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                        />
                                     </div>
-                                    <div className="flex flex-col items-end shrink-0">
-                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
-                                            {item.quantity}개
-                                        </span>
-                                        {item.capacity && (
-                                            <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                                {item.capacity}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
-                                    {renderStorageBadge(item)}
-
-                                    {!isSelectMode && (
+                                    {hazardSummary > 0 && (
                                         <button
-                                            onPointerDown={(e) => e.stopPropagation()}
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(item); }}
-                                            disabled={isDeleting || isBulkDeleting}
-                                            className="text-xs text-red-500 hover:text-red-700 disabled:text-red-300 disabled:cursor-not-allowed font-medium px-2 py-1"
+                                            type="button"
+                                            onClick={() => setHazardFilter(!hazardFilter)}
+                                            className={`flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition-colors ${hazardFilter
+                                                ? 'border-red-300 bg-red-50 text-red-700 ring-2 ring-red-500/10 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:border-red-200 hover:text-red-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
+                                                }`}
                                         >
-                                            {t('inventory_btn_delete')}
+                                            <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
+                                            <span>{t('inventory_hazard_filter')}</span>
+                                            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                {hazardSummary}
+                                            </span>
                                         </button>
                                     )}
+                                    <AppSelect
+                                        value={sortBy}
+                                        onChange={(value) => setSortBy(value as InventorySortOption)}
+                                        options={sortOptions}
+                                        align="right"
+                                        className="min-w-[168px]"
+                                        buttonClassName="min-w-[168px] bg-white dark:bg-slate-950 !h-10 !rounded-lg !shadow-sm !text-xs !py-0"
+                                        menuClassName="w-max min-w-[180px]"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={toggleSelectMode}
+                                        className={`flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition-colors ${isSelectMode
+                                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
+                                            }`}
+                                    >
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        {isSelectMode ? t('inventory_exit_select_mode') : t('inventory_enter_select_mode')}
+                                    </button>
                                 </div>
                             </div>
-                        );
-                    })
-                ) : (
-                    <EmptyState variant={searchQuery ? 'inventory_search' : 'inventory'} />
+
+                            {isSelectMode && (
+                                <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/50">
+                                    <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                        {t('inventory_selected_count', { count: selectedItemIds.length })}
+                                    </span>
+                                    <button
+                                        onClick={handleSelectAllFiltered}
+                                        className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                    >
+                                        {selectedFilteredCount === visibleItems.length && visibleItems.length > 0
+                                            ? t('inventory_unselect_all_filtered')
+                                            : t('inventory_select_all_filtered')}
+                                    </button>
+                                    <button
+                                        onClick={exitSelectMode}
+                                        className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                    >
+                                        {t('inventory_clear_selection')}
+                                    </button>
+                                    <button
+                                        onClick={handleOpenBulkDeleteConfirm}
+                                        disabled={selectedItemIds.length === 0 || isBulkDeleting || isBulkMoving}
+                                        className="h-8 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                                    >
+                                        {isBulkDeleting
+                                            ? t('inventory_bulk_delete_running')
+                                            : t('inventory_bulk_delete_btn', { count: selectedItemIds.length })}
+                                    </button>
+                                    <div className="ml-auto flex min-w-0 items-center gap-2">
+                                        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+                                            <button
+                                                onClick={() => setBulkMoveTargetType('cabinet')}
+                                                className={`h-8 px-2.5 text-xs font-semibold ${bulkMoveTargetType === 'cabinet'
+                                                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                                                    : 'bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-200'
+                                                    }`}
+                                            >
+                                                {t('inventory_bulk_move_target_cabinet')}
+                                            </button>
+                                            <button
+                                                onClick={() => setBulkMoveTargetType('other')}
+                                                className={`h-8 border-l border-slate-200 px-2.5 text-xs font-semibold dark:border-slate-700 ${bulkMoveTargetType === 'other'
+                                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                                    : 'bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-200'
+                                                    }`}
+                                            >
+                                                {t('inventory_bulk_move_target_other')}
+                                            </button>
+                                        </div>
+                                        {bulkMoveTargetType === 'other' ? (
+                                            <AppSelect
+                                                value={bulkMoveLocationId}
+                                                onChange={setBulkMoveLocationId}
+                                                options={bulkMoveLocationOptions}
+                                                size="sm"
+                                                className="min-w-[132px]"
+                                                buttonClassName="min-w-[132px] bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-200"
+                                            />
+                                        ) : (
+                                            <AppSelect
+                                                value={bulkMoveCabinetId}
+                                                onChange={setBulkMoveCabinetId}
+                                                options={bulkMoveCabinetOptions}
+                                                size="sm"
+                                                className="min-w-[132px]"
+                                                buttonClassName="min-w-[132px] bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-200"
+                                            />
+                                        )}
+                                        <button
+                                            onClick={handleOpenBulkMoveConfirm}
+                                            disabled={
+                                                selectedItemIds.length === 0 ||
+                                                isBulkMoving ||
+                                                (bulkMoveTargetType === 'other' ? !bulkMoveLocationId : !bulkMoveCabinetId)
+                                            }
+                                            className="h-8 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                        >
+                                            {isBulkMoving
+                                                ? t('inventory_bulk_move_running')
+                                                : t('inventory_bulk_move_btn', { count: selectedItemIds.length })}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {(bulkDeleteError || bulkMoveError || bulkMoveInfo) && (
+                                <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold dark:border-slate-800">
+                                    {bulkDeleteError && <span className="text-red-600 dark:text-red-400">{bulkDeleteError}</span>}
+                                    {bulkMoveError && <span className="text-red-600 dark:text-red-400">{bulkMoveError}</span>}
+                                    {bulkMoveInfo && <span className="text-emerald-700 dark:text-emerald-300">{bulkMoveInfo}</span>}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-4 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50/70 dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-950/40">
+                                {inventoryDesktopStats.map(({ label, value, Icon, tone }) => (
+                                    <div key={label} className="flex items-center gap-3 px-4 py-3">
+                                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone}`}>
+                                            <Icon className="h-4 w-4" />
+                                        </span>
+                                        <div className="min-w-0">
+                                            <div className="truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">{label}</div>
+                                            <div className="mt-0.5 text-lg font-bold leading-none text-slate-900 dark:text-slate-100">
+                                                {value.toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="overflow-x-auto">
+                            {visibleItems.length > 0 ? (
+                                <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+                                    <colgroup>
+                                        <col className="w-10" />
+                                        <col />
+                                        <col className="w-36" />
+                                        <col className="w-14" />
+                                        <col className="w-24" />
+                                        <col className="w-28" />
+                                        <col className="w-20" />
+                                    </colgroup>
+                                    <thead className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                                        <tr>
+                                            <th className="whitespace-nowrap px-3 py-2.5">
+                                                <span className="sr-only">{t('inventory_select_item')}</span>
+                                            </th>
+                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_csv_table_name')}</th>
+                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_csv_table_storage')}</th>
+                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_quantity')}</th>
+                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_error_expiry_label')}</th>
+                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_capacity')}</th>
+                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_hazard_filter')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {visibleItems.map((item) => {
+                                            const hazard = classifyInventoryHazard(item);
+                                            const isSelected = selectedDesktopItem?.id === item.id;
+                                            return (
+                                                <tr
+                                                    key={item.id}
+                                                    onClick={() => {
+                                                        if (isSelectMode) {
+                                                            toggleItemSelection(item.id);
+                                                            return;
+                                                        }
+                                                        setSelectedDesktopItemId(item.id);
+                                                    }}
+                                                    className={`cursor-pointer transition-colors ${
+                                                        isSelected
+                                                            ? 'bg-emerald-50/80 dark:bg-emerald-950/20'
+                                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/70'
+                                                    }`}
+                                                >
+                                                    <td className="px-3 py-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedItemIds.includes(item.id)}
+                                                            onChange={(event) => {
+                                                                event.stopPropagation();
+                                                                if (!isSelectMode) setIsSelectMode(true);
+                                                                toggleItemSelection(item.id);
+                                                            }}
+                                                            onClick={(event) => event.stopPropagation()}
+                                                            className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-3">
+                                                        <div className="min-w-0">
+                                                            <div className="truncate font-semibold text-slate-900 dark:text-slate-100">{item.name}</div>
+                                                            <div className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                                                                {[item.cas_number, item.brand, item.product_number].filter(Boolean).join(' · ') || t('common_unknown')}
+                                                            </div>
+                                                            <div className="mt-1 flex items-center gap-1.5">
+                                                                {renderExpiryBadge(item)}
+                                                                {renderRemainingBadge(item)}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="min-w-0 px-3 py-3">{renderStorageBadge(item)}</td>
+                                                    <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">{item.quantity}</td>
+                                                    <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600 dark:text-slate-300">{item.expiry_date || '-'}</td>
+                                                    <td
+                                                        className="truncate whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300"
+                                                        title={item.capacity || undefined}
+                                                    >
+                                                        {item.capacity || '-'}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-center align-middle">
+                                                        {renderGhsPictograms(item, hazard)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="p-8">
+                                    <EmptyState variant={searchQuery ? 'inventory_search' : 'inventory'} />
+                                </div>
+                            )}
+                            </div>
+                            <div className="flex items-center justify-between border-t border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                                <span>{t('log_records_count', { count: visibleItems.length })}</span>
+                                <span>{t('inventory_selected_count', { count: selectedItemIds.length })}</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 lg:hidden">
+                            {visibleGroups.length > 0 ? (
+                                visibleGroups.map((group) => (
+                                    group.cardCount > 1
+                                        ? renderGroupedInventoryCard(group)
+                                        : renderInventoryCard(group.primaryItem)
+                                ))
+                            ) : (
+                                <EmptyState variant={searchQuery ? 'inventory_search' : 'inventory'} />
+                            )}
+                        </div>
+                    </>
                 )}
+
             </div>
+
+            <aside className="hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('inventory_group_detail_view')}</h2>
+                </div>
+
+                {selectedDesktopItem ? (
+                    <div className="space-y-4 py-4">
+                        <div>
+                            <div className="inline-flex rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                {t('inventory_select_item')}
+                            </div>
+                            <h3 className="mt-3 break-words text-lg font-bold leading-tight text-slate-900 dark:text-slate-100">
+                                {selectedDesktopItem.name}
+                            </h3>
+                            <p className="mt-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                                {selectedDesktopItem.cas_number ? `${t('inventory_meta_cas')}: ${selectedDesktopItem.cas_number}` : t('common_unknown')}
+                            </p>
+                        </div>
+
+                        <div className="space-y-2.5 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+                            {[
+                                [t('inventory_brand'), selectedDesktopItem.brand || '-'],
+                                [t('inventory_product_number'), selectedDesktopItem.product_number || '-'],
+                                [t('inventory_capacity'), selectedDesktopItem.capacity || '-'],
+                                [t('inventory_quantity'), selectedDesktopItem.quantity],
+                                [t('inventory_error_expiry_label'), selectedDesktopItem.expiry_date || '-'],
+                                [t('inventory_remaining_amount'), `${selectedDesktopItem.remaining_percent ?? 100}%`],
+                            ].map(([label, value]) => (
+                                <div key={String(label)} className="flex items-start justify-between gap-4">
+                                    <span className="shrink-0 text-slate-500 dark:text-slate-400">{label}</span>
+                                    <span className="text-right font-semibold text-slate-800 dark:text-slate-100">{value}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('inventory_csv_table_storage')}</h4>
+                            <div className="mt-3">{renderStorageBadge(selectedDesktopItem)}</div>
+                        </div>
+
+                        <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('inventory_hazard_filter')}</h4>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {(() => {
+                                    const hazard = classifyInventoryHazard(selectedDesktopItem);
+                                    const ghsState = getInventoryGhsState(selectedDesktopItem);
+                                    const pictograms = getInventoryGhsPictograms(selectedDesktopItem);
+
+                                    if (pictograms.length > 0 || ghsState?.status === 'loading') {
+                                        return renderGhsPictograms(selectedDesktopItem, hazard, { variant: 'detail' });
+                                    }
+
+                                    return hazard.level === 'none' ? (
+                                        <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                            {t('status_allowed')}
+                                        </span>
+                                    ) : hazard.groupLabelKeys.map((key) => (
+                                        <span key={key} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+                                            <ShieldAlert className="h-3.5 w-3.5" />
+                                            {t(key)}
+                                        </span>
+                                    ));
+                                })()}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => handleEdit(selectedDesktopItem)}
+                                className="rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-700"
+                            >
+                                {t('cabinet_card_edit')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleDeleteClick(selectedDesktopItem)}
+                                disabled={isDeleting || isBulkDeleting}
+                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-bold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                            >
+                                {t('inventory_btn_delete')}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex min-h-[20rem] items-center justify-center text-center text-sm text-slate-400">
+                        {t('inventory_select_item')}
+                    </div>
+                )}
+            </aside>
 
             {/* FAB */}
             {isAddMenuOpen && (
@@ -2029,9 +2547,9 @@ export const InventoryListView: React.FC = () => {
                         type="button"
                         aria-label={t('inventory_add_menu_close')}
                         onClick={() => setIsAddMenuOpen(false)}
-                        className="absolute inset-0 z-10 cursor-default bg-slate-900/5 dark:bg-black/10"
+                        className="absolute inset-0 z-10 cursor-default bg-slate-900/5 dark:bg-black/10 lg:hidden"
                     />
-                    <div className="absolute bottom-40 right-5 z-20 flex max-w-[calc(100vw-2.5rem)] flex-col items-end gap-3">
+                    <div className="absolute bottom-40 right-5 z-20 flex max-w-[calc(100vw-2.5rem)] flex-col items-end gap-3 lg:hidden">
                         <button
                             type="button"
                             onClick={handleOpenScanRegistration}
@@ -2061,7 +2579,7 @@ export const InventoryListView: React.FC = () => {
                 aria-label={t('inventory_add_menu_open')}
                 aria-expanded={isAddMenuOpen}
                 onClick={() => setIsAddMenuOpen((open) => !open)}
-                className={`absolute bottom-24 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 ${isAddMenuOpen
+                className={`absolute bottom-24 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 lg:hidden ${isAddMenuOpen
                     ? 'rotate-45 bg-slate-800 shadow-slate-900/20 hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white'
                     : 'bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-600'
                     }`}
@@ -2081,7 +2599,7 @@ export const InventoryListView: React.FC = () => {
                 <button
                     type="button"
                     onClick={() => setIsScanResultsOpen(true)}
-                    className="absolute bottom-24 left-5 z-30 flex h-14 items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 text-sm font-bold text-emerald-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-slate-800 dark:text-emerald-300"
+                    className="absolute bottom-24 left-5 z-30 flex h-14 items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 text-sm font-bold text-emerald-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-slate-800 dark:text-emerald-300 lg:hidden"
                 >
                     <CheckCircle2 className="h-5 w-5" />
                     {t('inventory_scan_result_count', { count: scanResults.length })}

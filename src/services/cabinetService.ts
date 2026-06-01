@@ -501,7 +501,7 @@ export interface DisposalLog {
     disposed_at: string;
 }
 
-export type ActivityActionType = 'add' | 'remove' | 'clear_all';
+export type ActivityActionType = 'add' | 'remove' | 'clear_all' | 'update';
 
 export interface ActivityLog {
     id: string;

@@ -36,7 +36,11 @@ const CONTAINER_TYPES: { type: ReagentTemplateType; label: string; icon: string 
     { type: 'D', label: 'cabinet_container_vial', icon: '🧴' },
 ];
 
-export const ReagentEditPanel: React.FC = () => {
+interface ReagentEditPanelProps {
+    variant?: 'floating' | 'desktop-aside';
+}
+
+export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'floating' }) => {
     const { t, i18n } = useTranslation();
     const selectedReagentId = useFridgeStore(s => s.selectedReagentId);
     const shelves = useFridgeStore(s => s.shelves);
@@ -446,9 +450,13 @@ export const ReagentEditPanel: React.FC = () => {
         return keyMap[key] || key;
     };
 
+    const panelClassName = variant === 'desktop-aside'
+        ? 'relative flex h-full min-h-0 w-full flex-col overflow-hidden rounded-none border-0 bg-white shadow-none dark:bg-slate-900'
+        : 'absolute left-1/2 top-2 z-30 flex max-h-[calc(100%-4.5rem)] w-[calc(100%-32px)] max-w-[320px] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white/95 shadow-xl backdrop-blur animate-in slide-in-from-bottom duration-200';
+
     return (
         <>
-            <div className={`absolute left-1/2 -translate-x-1/2 top-2 w-[calc(100%-32px)] max-w-[320px] max-h-[calc(100%-4.5rem)] bg-white/95 backdrop-blur shadow-xl rounded-xl border border-gray-200 flex flex-col overflow-hidden z-30 animate-in slide-in-from-bottom duration-200`}>
+            <div className={panelClassName}>
                 {/* Header */}
                 <div className="flex items-center justify-between p-3 border-b bg-gray-50/50 flex-shrink-0">
                     <div className="flex items-center gap-2 text-gray-800 font-semibold">

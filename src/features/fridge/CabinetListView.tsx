@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useEffect, useState, useRef } from 'react';
-import { Loader2, Plus, X, Beaker } from 'lucide-react';
-import { cabinetService, type Cabinet } from '../../services/cabinetService';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { AlertTriangle, ArrowRight, Camera, Clock, Edit2, FileEdit, Loader2, PackagePlus, Plus, Trash2, X, Beaker, Search } from 'lucide-react';
+import { cabinetService, type ActivityActionType, type Cabinet } from '../../services/cabinetService';
+import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
 import { CabinetCard } from './components/CabinetCard';
 import { CustomDialog } from '../../components/CustomDialog';
@@ -15,19 +16,45 @@ import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
+import { useIsDesktop } from '../../hooks/useIsDesktop';
 
 interface CabinetListViewProps {
     onSelectCabinet: (cabinetId: string) => void;
 }
 
+type CabinetListStats = {
+    inventoryCount: number;
+    historyCount: number;
+};
+
+type CabinetActivityAction = ActivityActionType | 'update';
+
+type CabinetActivityFeedItem = {
+    id: string;
+    actionType: CabinetActivityAction;
+    itemName: string;
+    reason?: string;
+    memo?: string;
+    actorName?: string;
+    occurredAt: string;
+    isPhotoChange?: boolean;
+    isMove?: boolean;
+};
+
 export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetList);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedCabinetId, setSelectedCabinetId] = useState<string | null>(null);
+    const [cabinetSearchQuery, setCabinetSearchQuery] = useState('');
+    const [cabinetStats, setCabinetStats] = useState<Record<string, CabinetListStats>>({});
+    const [activityFeed, setActivityFeed] = useState<Record<string, CabinetActivityFeedItem[]>>({});
+    const [isActivityFeedLoading, setIsActivityFeedLoading] = useState(false);
+    const isDesktop = useIsDesktop();
 
     const { currentLabId, myLabs } = useLabStore();
     const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
@@ -110,15 +137,163 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         setDisposalLogModal({ isOpen: true, cabinetId: cabinet.id, cabinetName: cabinet.name });
     };
 
+    const getTextField = (data: Record<string, unknown> | null, keys: string[]) => {
+        if (!data) return undefined;
+        for (const key of keys) {
+            const value = data[key];
+            if (typeof value === 'string' && value.trim()) return value;
+        }
+        return undefined;
+    };
+
+    const includesAny = (values: Array<string | undefined | null>, patterns: RegExp[]) => (
+        values.some((value) => typeof value === 'string' && patterns.some((pattern) => pattern.test(value)))
+    );
+
+    const isMoveActivity = (item: Pick<CabinetActivityFeedItem, 'reason' | 'memo' | 'itemName'>) => (
+        includesAny([item.reason, item.memo, item.itemName], [/이동/i, /move/i])
+    );
+
+    const isPhotoActivity = (item: Pick<CabinetActivityFeedItem, 'reason' | 'memo' | 'itemName'>) => (
+        includesAny([item.reason, item.memo, item.itemName], [/사진/i, /photo/i, /image/i])
+    );
+
+    const mapAuditLogToFeedItem = (log: AuditLog): CabinetActivityFeedItem => {
+        const diffKeys = log.diff_data ? Object.keys(log.diff_data) : [];
+        const afterActionType = getTextField(log.after_data, ['action_type']);
+        const beforeName = getTextField(log.before_data, ['name', 'item_name']);
+        const afterName = getTextField(log.after_data, ['name', 'item_name']);
+        const actionType: CabinetActivityAction = afterActionType === 'clear_all'
+            ? 'clear_all'
+            : log.action === 'create'
+                ? 'add'
+                : log.action === 'delete'
+                    ? 'remove'
+                    : 'update';
+        const itemName = afterName || beforeName || t('tab_cabinet');
+        const item = {
+            id: `audit-${log.id}`,
+            actionType,
+            itemName,
+            reason: getTextField(log.after_data, ['reason']) || getTextField(log.before_data, ['reason']) || undefined,
+            memo: getTextField(log.after_data, ['memo']) || getTextField(log.before_data, ['memo']) || log.location_context || undefined,
+            actorName: log.actor_name || undefined,
+            occurredAt: log.created_at,
+            isPhotoChange: log.entity_type === 'cabinet' && (diffKeys.includes('image_url') || Boolean(getTextField(log.after_data, ['image_url']))),
+            isMove: diffKeys.includes('cabinet_id') || includesAny([log.location_context, beforeName, afterName], [/이동/i, /move/i]),
+        };
+
+        return {
+            ...item,
+            isPhotoChange: item.isPhotoChange || isPhotoActivity(item),
+            isMove: item.isMove || isMoveActivity(item),
+        };
+    };
+
+    const loadCabinetActivityFeed = async (cabinetId: string) => {
+        setIsActivityFeedLoading(true);
+        try {
+            const [activityRes, auditRes] = await Promise.allSettled([
+                cabinetService.getActivityLogs(cabinetId),
+                auditService.getCabinetAuditLogs(cabinetId, 20),
+            ]);
+
+            const nextFeed: CabinetActivityFeedItem[] = [];
+            if (activityRes.status === 'fulfilled') {
+                nextFeed.push(...activityRes.value.map((log) => {
+                    const item = {
+                        id: `activity-${log.id}`,
+                        actionType: log.action_type,
+                        itemName: log.item_name,
+                        reason: log.reason,
+                        memo: log.memo,
+                        actorName: log.performed_by_nickname || log.performed_by_email,
+                        occurredAt: log.performed_at,
+                    };
+
+                    return {
+                        ...item,
+                        isPhotoChange: isPhotoActivity(item),
+                        isMove: isMoveActivity(item),
+                    };
+                }));
+            }
+
+            if (auditRes.status === 'fulfilled') {
+                nextFeed.push(...auditRes.value.map(mapAuditLogToFeedItem));
+            }
+
+            nextFeed.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+            setActivityFeed((prev) => ({ ...prev, [cabinetId]: nextFeed.slice(0, 4) }));
+        } catch (err) {
+            console.error('Failed to load cabinet activity feed:', err);
+            setActivityFeed((prev) => ({ ...prev, [cabinetId]: [] }));
+        } finally {
+            setIsActivityFeedLoading(false);
+        }
+    };
+
+    const loadCabinetStats = async (cabinetIds: string[]) => {
+        if (cabinetIds.length === 0) {
+            setCabinetStats({});
+            return;
+        }
+
+        const nextStats = cabinetIds.reduce<Record<string, CabinetListStats>>((acc, id) => {
+            acc[id] = { inventoryCount: 0, historyCount: 0 };
+            return acc;
+        }, {});
+
+        try {
+            const { data, error } = await supabase
+                .from('cabinet_items')
+                .select('cabinet_id')
+                .in('cabinet_id', cabinetIds);
+
+            if (error) throw error;
+
+            (data || []).forEach((row) => {
+                const cabinetId = row.cabinet_id;
+                if (cabinetId && nextStats[cabinetId]) {
+                    nextStats[cabinetId].inventoryCount += 1;
+                }
+            });
+        } catch (err) {
+            console.error('Failed to load cabinet inventory counts:', err);
+        }
+
+        try {
+            const { data, error } = await supabase
+                .from('cabinet_activity_logs')
+                .select('cabinet_id')
+                .in('cabinet_id', cabinetIds);
+
+            if (error) throw error;
+
+            (data || []).forEach((row) => {
+                const cabinetId = row.cabinet_id;
+                if (cabinetId && nextStats[cabinetId]) {
+                    nextStats[cabinetId].historyCount += 1;
+                }
+            });
+        } catch (err) {
+            console.error('Failed to load cabinet history counts:', err);
+        }
+
+        setCabinetStats(nextStats);
+    };
+
     const loadCabinets = async () => {
         try {
             setIsLoading(true);
             setError(null);
             const data = await cabinetService.getCabinets();
             setCabinets(data);
+            await loadCabinetStats(data.map((cabinet) => cabinet.id));
         } catch (err) {
             console.error(err);
             setError(t('cabinet_list_load_error'));
+            setCabinetStats({});
         } finally {
             setIsLoading(false);
         }
@@ -138,6 +313,8 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
 
         const channel = supabase.channel('cabinets_realtime_list')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'cabinets' }, handleChange)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cabinet_items' }, handleChange)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cabinet_activity_logs' }, handleChange)
             .subscribe();
 
         return () => {
@@ -145,6 +322,101 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             clearTimeout(reloadTimeout);
         };
     }, [currentLabId]);
+
+    const filteredCabinets = useMemo(() => {
+        const normalized = cabinetSearchQuery.trim().toLowerCase();
+        return cabinets.filter((cabinet) => {
+            if (!normalized) return true;
+            return [
+                cabinet.name,
+                cabinet.location || '',
+                `${cabinet.width}x${cabinet.height}`,
+            ].join(' ').toLowerCase().includes(normalized);
+        });
+    }, [cabinetSearchQuery, cabinets]);
+
+    useEffect(() => {
+        if (filteredCabinets.length === 0) {
+            setSelectedCabinetId(null);
+            return;
+        }
+        if (!selectedCabinetId || !filteredCabinets.some((cabinet) => cabinet.id === selectedCabinetId)) {
+            setSelectedCabinetId(filteredCabinets[0].id);
+        }
+    }, [filteredCabinets, selectedCabinetId]);
+
+    const selectedCabinet = filteredCabinets.find((cabinet) => cabinet.id === selectedCabinetId) || filteredCabinets[0];
+    const selectedActivities = selectedCabinet ? activityFeed[selectedCabinet.id] || [] : [];
+    const selectedHistoryCount = selectedCabinet ? cabinetStats[selectedCabinet.id]?.historyCount ?? 0 : 0;
+
+    useEffect(() => {
+        if (!selectedCabinet?.id) return;
+        void loadCabinetActivityFeed(selectedCabinet.id);
+    }, [selectedCabinet?.id, selectedHistoryCount]);
+
+    const formatActivityDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US', {
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        }).replace(/\.$/, '');
+    };
+
+    const getActivityPresentation = (activity: CabinetActivityFeedItem) => {
+        if (activity.isPhotoChange) {
+            return {
+                icon: Camera,
+                label: i18n.language.startsWith('ko') ? '사진 변경' : 'Photo changed',
+                iconClassName: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300',
+                detail: activity.memo || activity.itemName,
+            };
+        }
+
+        if (activity.isMove) {
+            return {
+                icon: ArrowRight,
+                label: i18n.language.startsWith('ko') ? '시약 이동' : 'Moved',
+                iconClassName: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300',
+                detail: activity.memo || activity.reason || activity.itemName,
+            };
+        }
+
+        switch (activity.actionType) {
+            case 'add':
+                return {
+                    icon: PackagePlus,
+                    label: i18n.language.startsWith('ko') ? '재고 추가' : 'Stock added',
+                    iconClassName: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300',
+                    detail: activity.memo || activity.itemName,
+                };
+            case 'remove':
+                return {
+                    icon: Trash2,
+                    label: i18n.language.startsWith('ko') ? '재고 삭제' : 'Stock removed',
+                    iconClassName: 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300',
+                    detail: activity.reason || activity.memo || activity.itemName,
+                };
+            case 'clear_all':
+                return {
+                    icon: AlertTriangle,
+                    label: t('activity_log_action_clear_all'),
+                    iconClassName: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300',
+                    detail: activity.itemName,
+                };
+            case 'update':
+            default:
+                return {
+                    icon: FileEdit,
+                    label: i18n.language.startsWith('ko') ? '정보 수정' : 'Updated',
+                    iconClassName: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300',
+                    detail: activity.memo || activity.itemName,
+                };
+        }
+    };
 
     const handleCreate = () => {
         setFormDialogConfig({
@@ -173,6 +445,13 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 await cabinetService.createCabinet(name, location);
             } else if (formDialogConfig.mode === 'edit' && formDialogConfig.cabinetId) {
                 await cabinetService.updateCabinet(formDialogConfig.cabinetId, { name, location });
+                cabinetService.logActivity(
+                    formDialogConfig.cabinetId,
+                    'update',
+                    t('cabinet_card_edit'),
+                    undefined,
+                    location ? `${name} · ${location}` : name
+                ).catch((logError) => console.error('Failed to log cabinet edit activity:', logError));
             }
             closeFormDialog();
             await loadCabinets();
@@ -202,7 +481,15 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
 
         try {
             await cabinetService.uploadCabinetImage(cabinetId, file);
+            await cabinetService.logActivity(
+                cabinetId,
+                'update',
+                t('cabinet_card_change_photo'),
+                undefined,
+                t('cabinet_image_gallery')
+            );
             await loadCabinets();
+            await loadCabinetActivityFeed(cabinetId);
         } catch (err) {
             console.error('이미지 업로드 실패:', err);
             alert(t('cabinet_image_upload_error'));
@@ -216,7 +503,15 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         if (!cabinetId) return;
         try {
             await cabinetService.uploadCabinetImage(cabinetId, file);
+            await cabinetService.logActivity(
+                cabinetId,
+                'update',
+                t('cabinet_card_change_photo'),
+                undefined,
+                t('cabinet_image_camera')
+            );
             await loadCabinets();
+            await loadCabinetActivityFeed(cabinetId);
         } catch (err) {
             console.error('카메라 이미지 업로드 실패:', err);
             alert(t('cabinet_image_upload_error'));
@@ -260,16 +555,53 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     }
 
     return (
-        <div className="h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto p-5 pb-32">
-            <div className="max-w-md mx-auto flex flex-col gap-6">
-                <header className="flex justify-between items-center mt-4">
+        <div className="h-full overflow-y-auto bg-slate-50 p-5 pb-32 dark:bg-slate-950 lg:p-8 lg:pb-8">
+            <div className="mx-auto flex max-w-md flex-col gap-6 lg:grid lg:max-w-[1320px] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
+                <div className="flex min-w-0 flex-col gap-6">
+                <header className="mt-4 flex items-center justify-between gap-4 lg:mt-2">
                     <div>
-                        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 lg:text-3xl lg:tracking-tight">
                             {currentLabId ? `${myLabs.find(m => m.lab_id === currentLabId)?.lab?.name || t('cabinet_lab_fallback')}${t('cabinet_lab_suffix')}` : t('cabinet_my_cabinets')}
                         </h2>
                         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{t('cabinet_list_desc')}</p>
                     </div>
+                    {canCreateCabinet && (
+                        <button
+                            type="button"
+                            onClick={handleCreate}
+                            disabled={isCreating}
+                            className="hidden h-11 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50 lg:inline-flex"
+                        >
+                            {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                            {t('cabinet_create_new')}
+                        </button>
+                    )}
                 </header>
+
+                <section className="hidden flex-col gap-4 lg:flex">
+                    <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-3">
+                        <label className="relative">
+                            <span className="sr-only">{t('cabinet_search_placeholder', '시약장 이름 또는 위치 검색')}</span>
+                            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={cabinetSearchQuery}
+                                onChange={(event) => setCabinetSearchQuery(event.target.value)}
+                                placeholder={t('cabinet_search_placeholder', '시약장 이름 또는 위치 검색')}
+                                className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+                            />
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCabinetSearchQuery('');
+                            }}
+                            disabled={!cabinetSearchQuery}
+                            className="h-11 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                        >
+                            {t('btn_reset')}
+                        </button>
+                    </div>
+                </section>
 
                 {showOnboardingGuide && (
                     <OnboardingGuideCard
@@ -291,22 +623,38 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                     </div>
                 )}
 
-                <div className="flex flex-col gap-4 min-w-0">
-                    {cabinets.map(cabinet => (
-                        <div key={cabinet.id} className="min-w-0">
+                <div className="flex min-w-0 flex-col gap-4">
+                    {filteredCabinets.map(cabinet => {
+                        const isSelected = selectedCabinet?.id === cabinet.id;
+
+                        return (
+                        <div
+                            key={cabinet.id}
+                            className={`min-w-0 rounded-lg transition-all ${isSelected ? '' : 'lg:hover:-translate-y-0.5'}`}
+                        >
                             <CabinetCard
                                 cabinet={cabinet}
-                                onClick={() => onSelectCabinet(cabinet.id)}
-                                onEdit={canCreateCabinet ? (e) => handleEdit(e, cabinet) : undefined}
+                                isSelected={isSelected}
+                                onClick={() => {
+                                    if (isDesktop) {
+                                        setSelectedCabinetId(cabinet.id);
+                                        return;
+                                    }
+                                    onSelectCabinet(cabinet.id);
+                                }}
+                                onEdit={(e) => handleEdit(e, cabinet)}
                                 onDelete={canCreateCabinet ? (e) => handleDelete(e, cabinet.id) : undefined}
                                 onImageClick={(e) => handleImageClick(e, cabinet.id)}
                                 onInventory={(e) => handleInventory(e, cabinet)}
                                 onDisposalLog={(e) => handleDisposalLog(e, cabinet)}
+                                onManage={() => onSelectCabinet(cabinet.id)}
+                                inventoryCount={cabinetStats[cabinet.id]?.inventoryCount ?? 0}
+                                historyCount={cabinetStats[cabinet.id]?.historyCount ?? 0}
                             />
                         </div>
-                    ))}
+                    )})}
 
-                    {cabinets.length === 0 && !error && (
+                    {filteredCabinets.length === 0 && !error && (
                         <EmptyState variant="cabinet" />
                     )}
 
@@ -327,6 +675,146 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                         </button>
                     )}
                 </div>
+                </div>
+
+                <aside className="hidden flex-col gap-5 lg:flex">
+                    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-4">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('tab_cabinet')}</h3>
+                            {selectedCabinet && (
+                                <button
+                                    type="button"
+                                    onClick={() => onSelectCabinet(selectedCabinet.id)}
+                                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+                                >
+                                    {t('cabinet_manage')}
+                                </button>
+                            )}
+                        </div>
+
+                        {selectedCabinet ? (
+                            <div className="mt-5 space-y-5">
+                                <div className="flex gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleImageClick(e, selectedCabinet.id)}
+                                        className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-slate-100 text-slate-400 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+                                        title={t('cabinet_card_change_photo')}
+                                        aria-label={t('cabinet_card_change_photo')}
+                                    >
+                                        {selectedCabinet.image_url ? (
+                                            <>
+                                                <img src={selectedCabinet.image_url} alt={selectedCabinet.name} className="h-full w-full object-cover" />
+                                                <span className="absolute inset-0 flex items-center justify-center bg-slate-950/45 opacity-0 transition-opacity group-hover:opacity-100">
+                                                    <Camera className="h-6 w-6 text-white" />
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <div className="flex h-full w-full items-center justify-center">
+                                                <Camera className="h-8 w-8" />
+                                            </div>
+                                        )}
+                                    </button>
+                                    <div className="min-w-0 flex-1">
+                                        <h4 className="truncate text-xl font-bold text-slate-900 dark:text-slate-100">{selectedCabinet.name}</h4>
+                                        {selectedCabinet.location && (
+                                            <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">{selectedCabinet.location}</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-4 divide-x divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleInventory(e, selectedCabinet)}
+                                        className="flex flex-col items-center gap-1 px-2 py-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:text-slate-300 dark:hover:bg-emerald-950/20"
+                                    >
+                                        <Beaker className="h-5 w-5" />
+                                        {t('tab_inventory')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleDisposalLog(e, selectedCabinet)}
+                                        className="flex flex-col items-center gap-1 px-2 py-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-orange-50 hover:text-orange-700 dark:text-slate-300 dark:hover:bg-orange-950/20"
+                                    >
+                                        <Clock className="h-5 w-5" />
+                                        {t('cabinet_dispose_log_btn')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleImageClick(e, selectedCabinet.id)}
+                                        className="flex flex-col items-center gap-1 px-2 py-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-slate-300 dark:hover:bg-blue-950/20"
+                                    >
+                                        <Camera className="h-5 w-5" />
+                                        <span className="whitespace-nowrap">{i18n.language.startsWith('ko') ? '사진 변경' : 'Photo'}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleEdit(e, selectedCabinet)}
+                                        className="flex flex-col items-center gap-1 px-2 py-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-slate-300 dark:hover:bg-blue-950/20"
+                                    >
+                                        <Edit2 className="h-5 w-5" />
+                                        {t('cabinet_card_edit')}
+                                    </button>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                                            {i18n.language.startsWith('ko') ? '최근 활동' : 'Recent activity'}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDisposalLog(e, selectedCabinet)}
+                                            className="text-xs font-bold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+                                        >
+                                            {i18n.language.startsWith('ko') ? '전체 보기' : 'View all'}
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-4 space-y-3">
+                                        {isActivityFeedLoading ? (
+                                            <div className="flex items-center justify-center py-6">
+                                                <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                                            </div>
+                                        ) : selectedActivities.length === 0 ? (
+                                            <div className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                                                {t('activity_log_empty')}
+                                            </div>
+                                        ) : selectedActivities.map((activity) => {
+                                            const presentation = getActivityPresentation(activity);
+                                            const ActivityIcon = presentation.icon;
+
+                                            return (
+                                                <div key={activity.id} className="flex min-w-0 items-start gap-3">
+                                                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${presentation.iconClassName}`}>
+                                                        <ActivityIcon className="h-4 w-4" />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{presentation.label}</div>
+                                                        {presentation.detail && (
+                                                            <div className="mt-0.5 truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+                                                                {presentation.detail}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="shrink-0 text-right">
+                                                        <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{formatActivityDate(activity.occurredAt)}</div>
+                                                        {activity.actorName && (
+                                                            <div className="mt-1 max-w-[88px] truncate text-xs text-slate-400 dark:text-slate-500">{activity.actorName}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <EmptyState variant="cabinet" />
+                        )}
+                    </section>
+                </aside>
             </div>
 
             <CustomDialog
@@ -368,7 +856,15 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                     if (!cabinetId) return;
                     try {
                         await cabinetService.updateCabinet(cabinetId, { image_url: '' });
+                        await cabinetService.logActivity(
+                            cabinetId,
+                            'update',
+                            t('cabinet_card_change_photo'),
+                            undefined,
+                            i18n.language.startsWith('ko') ? '사진 삭제' : 'Photo removed'
+                        );
                         await loadCabinets();
+                        await loadCabinetActivityFeed(cabinetId);
                     } catch (err) {
                         console.error('이미지 삭제 실패:', err);
                     }

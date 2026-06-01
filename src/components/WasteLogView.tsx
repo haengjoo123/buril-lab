@@ -1,7 +1,7 @@
 ﻿/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { fetchWasteLogs, deleteWasteLog } from '../services/wasteLogService';
-import type { WasteLog } from '../types';
+import type { DisposalCategory, WasteLog } from '../types';
 import { useTranslation } from 'react-i18next';
 import { Trash2, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download } from 'lucide-react';
 import { CustomDialog } from './CustomDialog';
@@ -13,12 +13,14 @@ import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { AppSelect } from './AppSelect';
 import { translateLocationName } from '../utils/i18nUtils';
+import { useIsDesktop } from '../hooks/useIsDesktop';
 import {
     buildAuditEventDescription,
     formatAuditActionName,
     getAuditChangeRows,
     getAuditDetailSections,
 } from '../utils/auditLogFormatting';
+import { getCategoryDetails } from '../utils/chemicalAnalyzer';
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
@@ -39,6 +41,19 @@ interface GroupedLogSection {
 const PAGE_SIZE = 20;
 const DELETE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ARCHIVE_CUTOFF_DAYS = 90;
+const DISPOSAL_CATEGORY_VALUES = new Set<string>([
+    'ACID',
+    'ALKALI',
+    'NEUTRAL',
+    'ORGANIC_HALOGEN',
+    'ORGANIC_NON_HALOGEN',
+    'HEAVY_METAL',
+    'CYANIDE',
+    'REACTIVE',
+    'SOLID_WASTE',
+    'SPECIAL_HAZARD',
+    'UNKNOWN',
+]);
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
     '&': '&amp;',
@@ -59,6 +74,7 @@ function safeSpreadsheetCell(value: unknown): string {
 
 export const WasteLogView: React.FC = () => {
     const { t, i18n } = useTranslation();
+    const isDesktop = useIsDesktop();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.logs);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const currentLabId = useLabStore(state => state.currentLabId);
@@ -89,6 +105,7 @@ export const WasteLogView: React.FC = () => {
     const [customExportStartDate, setCustomExportStartDate] = useState('');
     const [customExportEndDate, setCustomExportEndDate] = useState('');
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+    const [selectedDesktopLogId, setSelectedDesktopLogId] = useState<string | null>(null);
     const exportOptionsContainerRef = useRef<HTMLDivElement>(null);
     const customExportSectionRef = useRef<HTMLDivElement>(null);
 
@@ -240,6 +257,20 @@ export const WasteLogView: React.FC = () => {
         [filteredLogs, sortOrder, sortBy, t, i18n.language]
     );
     const hasMoreLogs = logs.length < totalCount;
+    const selectedDesktopLog = useMemo(
+        () => filteredLogs.find((log) => log.id === selectedDesktopLogId) || filteredLogs[0] || null,
+        [filteredLogs, selectedDesktopLogId]
+    );
+
+    useEffect(() => {
+        if (filteredLogs.length === 0) {
+            setSelectedDesktopLogId(null);
+            return;
+        }
+        if (!selectedDesktopLogId || !filteredLogs.some((log) => log.id === selectedDesktopLogId)) {
+            setSelectedDesktopLogId(filteredLogs[0].id);
+        }
+    }, [filteredLogs, selectedDesktopLogId]);
 
     const sortOptions = useMemo(() => ([
         { value: 'created_at-desc', label: t('log_sort_date_desc') },
@@ -350,6 +381,11 @@ export const WasteLogView: React.FC = () => {
         return cleaned || null;
     };
 
+    const formatDisposalCategory = useCallback((category: string): string => {
+        if (!DISPOSAL_CATEGORY_VALUES.has(category)) return category;
+        return t(getCategoryDetails(category as DisposalCategory).label);
+    }, [t]);
+
     const renderLogCard = useCallback((log: WasteLog) => {
         const isExpanded = expandedId === log.id;
         const totalVol = computeTotalVolume(log);
@@ -359,7 +395,7 @@ export const WasteLogView: React.FC = () => {
         const locationBadgeClass = getLocationBadgeClass(deletedLocation);
         const displayTitle = log.disposal_category.startsWith('기타')
             ? (primaryChemicalName || log.disposal_category)
-            : log.disposal_category;
+            : formatDisposalCategory(log.disposal_category);
         const canDeleteThisLog = isDeleteAllowedForLog(log);
         const firstChemical = log.chemicals?.[0] as any;
         const firstChemicalName = firstChemical?.chemical?.name || firstChemical?.name || null;
@@ -376,7 +412,12 @@ export const WasteLogView: React.FC = () => {
                 className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden transition-all"
             >
                 <button
-                    onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                    onClick={() => {
+                        if (isDesktop) {
+                            setSelectedDesktopLogId(log.id);
+                        }
+                        setExpandedId(isExpanded ? null : log.id);
+                    }}
                     className="w-full p-4 text-left flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-slate-750 transition-colors"
                 >
                     <div className={`mt-1.5 w-3 h-3 rounded-full flex-shrink-0 ${getCategoryColor(log.disposal_category)}`} />
@@ -485,7 +526,7 @@ export const WasteLogView: React.FC = () => {
                 )}
             </div>
         );
-    }, [expandedId, formatDate, getDeletedLocation, isDeleteAllowedForLog, t]);
+    }, [expandedId, formatDate, formatDisposalCategory, getDeletedLocation, isDeleteAllowedForLog, isDesktop, t]);
     const openExportDialog = (format: ExportFormat) => {
         setIsExportMenuOpen(false);
         setExportFormat(format);
@@ -666,7 +707,9 @@ export const WasteLogView: React.FC = () => {
     };
 
     return (
-        <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
+        <div className="p-5 lg:p-8" style={{ paddingBottom: '100px' }}>
+            <div className="mx-auto grid w-full max-w-[1320px] grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
+                <div className="flex min-w-0 flex-col gap-4">
             {showOnboardingGuide && (
                 <OnboardingGuideCard
                     icon={<History className="h-5 w-5" />}
@@ -844,46 +887,80 @@ export const WasteLogView: React.FC = () => {
             )}
 
             {/* Log Cards */}
-            <div className="space-y-3">
-                {sortBy === 'created_at' ? groupedSections.map(section => {
-                    const isExpanded = expandedSections[section.key] ?? false;
-
-                    return (
-                        <div
-                            key={section.key}
-                            className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/60"
-                        >
-                            <button
-                                type="button"
-                                onClick={() => setExpandedSections(prev => ({
-                                    ...prev,
-                                    [section.key]: !isExpanded,
-                                }))}
-                                className="flex w-full items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 text-left dark:border-slate-700"
-                            >
-                                <div>
-                                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                                        {section.title}
-                                    </div>
-                                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        {section.subtitle}
-                                        {section.totalVolumeMl > 0 && ` • ${section.totalVolumeMl} mL`}
-                                    </div>
-                                </div>
-                                {isExpanded
-                                    ? <ChevronUp className="h-4 w-4 text-slate-400" />
-                                    : <ChevronDown className="h-4 w-4 text-slate-400" />
-                                }
-                            </button>
-
-                            {isExpanded && (
-                                <div className="space-y-3 p-3">
-                                    {section.logs.map(renderLogCard)}
-                                </div>
-                            )}
+            <div className="lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-5">
+                {sortBy === 'created_at' && groupedSections.length > 0 && (
+                    <aside className="hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
+                        <div className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('log_tab_recent')}</div>
+                        <div className="relative mt-4 space-y-1 border-l border-slate-200 pl-4 dark:border-slate-700">
+                            {groupedSections.slice(0, 8).map((section) => {
+                                const isExpanded = expandedSections[section.key] ?? false;
+                                return (
+                                    <button
+                                        key={section.key}
+                                        type="button"
+                                        onClick={() => setExpandedSections(prev => ({
+                                            ...prev,
+                                            [section.key]: true,
+                                        }))}
+                                        className={`relative w-full rounded-lg px-3 py-3 text-left transition-colors ${
+                                            isExpanded
+                                                ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        <span className={`absolute -left-[21px] top-4 h-2.5 w-2.5 rounded-full ${
+                                            isExpanded ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                                        }`} />
+                                        <span className="block text-sm font-bold">{section.title}</span>
+                                        <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">{section.subtitle}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
-                    );
-                }) : filteredLogs.map(renderLogCard)}
+                    </aside>
+                )}
+
+                <div className="space-y-3">
+                    {sortBy === 'created_at' ? groupedSections.map(section => {
+                        const isExpanded = expandedSections[section.key] ?? false;
+
+                        return (
+                            <div
+                                key={section.key}
+                                className="overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/60"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => setExpandedSections(prev => ({
+                                        ...prev,
+                                        [section.key]: !isExpanded,
+                                    }))}
+                                    className="flex w-full items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 text-left dark:border-slate-700"
+                                >
+                                    <div>
+                                        <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                                            {section.title}
+                                        </div>
+                                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                            {section.subtitle}
+                                            {section.totalVolumeMl > 0 && ` • ${section.totalVolumeMl} mL`}
+                                        </div>
+                                    </div>
+                                    {isExpanded
+                                        ? <ChevronUp className="h-4 w-4 text-slate-400" />
+                                        : <ChevronDown className="h-4 w-4 text-slate-400" />
+                                    }
+                                </button>
+
+                                {isExpanded && (
+                                    <div className="space-y-3 p-3">
+                                        {section.logs.map(renderLogCard)}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    }) : filteredLogs.map(renderLogCard)}
+                </div>
             </div>
 
             {/* Load More */}
@@ -906,6 +983,78 @@ export const WasteLogView: React.FC = () => {
                     <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
                 </div>
             )}
+                </div>
+
+                <aside className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-slate-800">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('log_title')}</h3>
+                            {selectedDesktopLog && (
+                                <p className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-300">ID: {selectedDesktopLog.id.slice(0, 12)}</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {selectedDesktopLog ? (
+                        <div className="space-y-5 py-5">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className={`h-3 w-3 rounded-full ${getCategoryColor(selectedDesktopLog.disposal_category)}`} />
+                                    <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100">{formatDisposalCategory(selectedDesktopLog.disposal_category)}</h4>
+                                </div>
+                                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{formatDate(selectedDesktopLog.created_at)}</p>
+                            </div>
+
+                            <div className="space-y-3 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-800">
+                                {[
+                                    [t('log_handler_label', '작업자'), selectedDesktopLog.handler_name || t('common_unknown')],
+                                    [t('input_volume'), computeTotalVolume(selectedDesktopLog) || '-'],
+                                    [t('log_chemicals_count', { count: selectedDesktopLog.chemicals.length }), selectedDesktopLog.chemicals.length],
+                                    [t('log_disposal_reason'), getDeleteReason(selectedDesktopLog) || '-'],
+                                ].map(([label, value]) => (
+                                    <div key={String(label)} className="flex items-start justify-between gap-4">
+                                        <span className="shrink-0 text-slate-500 dark:text-slate-400">{label}</span>
+                                        <span className="text-right font-semibold text-slate-800 dark:text-slate-100">{value}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('log_chemicals_count', { count: selectedDesktopLog.chemicals.length })}</h4>
+                                <div className="mt-3 space-y-2">
+                                    {selectedDesktopLog.chemicals.map((chemical, index) => (
+                                        <div key={index} className="rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
+                                            <div className="font-semibold text-slate-800 dark:text-slate-100">
+                                                {chemical.chemical?.name || (chemical as any).name || 'Unknown'}
+                                            </div>
+                                            {(chemical.volume || chemical.molarity) && (
+                                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                    {chemical.volume}{chemical.volume && chemical.molarity && ' / '}{chemical.molarity}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('audit_item_origin_history')}</h4>
+                                <button
+                                    type="button"
+                                    onClick={() => setViewingAuditLogForId((selectedDesktopLog.chemicals?.[0] as any)?.id || selectedDesktopLog.id)}
+                                    className="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
+                                >
+                                    {t('log_view_diff')}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex min-h-[20rem] items-center justify-center text-center text-sm text-slate-400">
+                            {t('log_empty')}
+                        </div>
+                    )}
+                </aside>
+            </div>
 
             <CustomDialog
                 isOpen={canDeleteLogs && !!deleteId}

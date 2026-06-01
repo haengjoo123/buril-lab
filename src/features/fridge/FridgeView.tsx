@@ -16,6 +16,7 @@ import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
+import { useIsDesktop } from '../../hooks/useIsDesktop';
 
 import type { ReagentTemplateType } from '../../types/fridge';
 import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
@@ -97,6 +98,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
+    const isDesktop = useIsDesktop();
     const [verticalPanelPos, setVerticalPanelPos] = useState(50);
     const [isEditPanelVisible, setIsEditPanelVisible] = useState(false);
     const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(false);
@@ -186,6 +188,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         buildCompatibilityPlan,
         applyCompatibilityPlan,
         clearCompatibilityPlan,
+        selectedReagentId,
     } = useFridgeStore();
 
     const [showModalContent, setShowModalContent] = useState(false);
@@ -789,7 +792,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             </div>
 
             {/* Main 3D Viewport */}
-            <div className="flex-1 relative w-full h-full">
+            <div className="relative h-full w-full flex-1 lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_380px] lg:bg-slate-100 dark:lg:bg-slate-950">
+                <div className="relative min-h-0 overflow-hidden">
                 {isLoadingCabinet && (
                     <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20">
                         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -927,7 +931,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 />
 
                 {/* Edit Mode Overlay */}
-                <ReagentEditPanel />
+                {!isDesktop && <ReagentEditPanel />}
                 {mode === 'EDIT' && (
                     <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20">
                         {isEditPanelVisible ? (
@@ -1181,6 +1185,27 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                         )}
                     </div>
                 )}
+                </div>
+
+                <aside className="hidden min-h-0 border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
+                    {selectedReagentId ? (
+                        <ReagentEditPanel variant="desktop-aside" />
+                    ) : (
+                        <div className="flex h-full flex-col">
+                            <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+                                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('cabinet_edit_title')}</h3>
+                                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('cabinet_place_instruction_select')}</p>
+                            </div>
+                            <div className="flex flex-1 items-center justify-center p-8 text-center">
+                                <div>
+                                    <Box className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+                                    <p className="mt-3 text-sm font-semibold text-slate-600 dark:text-slate-300">{t('cabinet_reagent_tray_title')}</p>
+                                    <p className="mt-1 text-xs leading-5 text-slate-400 dark:text-slate-500">{t('cabinet_place_instruction_desktop')}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </aside>
             </div>
 
             <CustomDialog

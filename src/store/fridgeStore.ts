@@ -8,6 +8,7 @@ import type {
 } from '../types/fridge';
 import { cabinetService } from '../services/cabinetService';
 import { lookupGHSByCAS } from '../services/pubchemService';
+import { useLabStore } from './useLabStore';
 import { buildCabinetAutoLayoutPlan } from '../utils/cabinetAutoLayoutPlanner';
 import { findNearbyReagentSlot } from '../utils/findNearbyReagentSlot';
 import {
@@ -633,7 +634,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         GHS_IN_FLIGHT_ITEM_IDS.add(reagentId);
 
         try {
-            const result = await lookupGHSByCAS(targetItem.casNo);
+            const { currentLabId } = useLabStore.getState();
+            const result = await lookupGHSByCAS(targetItem.casNo, { labId: currentLabId });
             if (!result.success || result.hCodes.length === 0) return;
 
             // Update the reagent with GHS data

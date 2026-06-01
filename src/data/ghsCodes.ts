@@ -119,10 +119,37 @@ export const GHS_PICTOGRAMS: Record<string, string> = {
     "GHS09": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS09.svg", // Environment
 };
 
+const GHS_PICTOGRAM_ALIASES: Record<string, string> = {
+    'exploding bomb': 'GHS01',
+    'explosive': 'GHS01',
+    'flame': 'GHS02',
+    'flammable': 'GHS02',
+    'flame over circle': 'GHS03',
+    'oxidizer': 'GHS03',
+    'oxidizing': 'GHS03',
+    'gas cylinder': 'GHS04',
+    'compressed gas': 'GHS04',
+    'corrosion': 'GHS05',
+    'corrosive': 'GHS05',
+    'skull and crossbones': 'GHS06',
+    'acute toxicity': 'GHS06',
+    'exclamation mark': 'GHS07',
+    'irritant': 'GHS07',
+    'health hazard': 'GHS08',
+    'environment': 'GHS09',
+    'environmental hazard': 'GHS09',
+};
+
 export const getPictogramUrl = (code: string): string | undefined => {
     // Input format: "GHS01" or "GHS01.gif" or full URL
     if (code.startsWith('http') || code.startsWith('data:image')) return code;
 
     const cleanCode = code.replace(/\.(gif|svg|png|jpg)$/i, '').trim();
-    return GHS_PICTOGRAMS[cleanCode];
+    const codeMatch = cleanCode.match(/GHS\d{2}/i);
+    if (codeMatch) {
+        return GHS_PICTOGRAMS[codeMatch[0].toUpperCase()];
+    }
+
+    const aliasCode = GHS_PICTOGRAM_ALIASES[cleanCode.toLowerCase()];
+    return aliasCode ? GHS_PICTOGRAMS[aliasCode] : undefined;
 };

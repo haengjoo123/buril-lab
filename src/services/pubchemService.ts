@@ -10,6 +10,8 @@
  * Results are cached in-memory to avoid redundant API calls.
  */
 
+import { supabase } from './supabaseClient';
+
 // ═══════════════════════════════════════
 // Types
 // ═══════════════════════════════════════
@@ -26,11 +28,204 @@ export interface PubChemGHSResult {
     error?: string;
 }
 
+export interface LookupGHSOptions {
+    labId?: string | null;
+}
+
+interface ServerGhsCacheScope {
+    scopeType: 'lab' | 'user';
+    scopeId: string;
+}
+
+interface ServerGhsCacheRow {
+    result: unknown;
+    result_version?: number | null;
+}
+
 // ═══════════════════════════════════════
 // In-memory Cache
 // ═══════════════════════════════════════
 
 const cache = new Map<string, PubChemGHSResult>();
+const PERSISTED_CACHE_PREFIX = 'buril:pubchem-ghs:v1:';
+const SERVER_CACHE_RESULT_VERSION = 1;
+const serverCacheWriteKeys = new Set<string>();
+let hasLoggedServerCacheReadError = false;
+let hasLoggedServerCacheWriteError = false;
+
+function getPersistentCache(): Storage | null {
+    if (typeof window === 'undefined') return null;
+
+    try {
+        return window.localStorage;
+    } catch {
+        return null;
+    }
+}
+
+function asStringArray(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function normalizeCachedResult(value: unknown): PubChemGHSResult | null {
+    if (!value || typeof value !== 'object') return null;
+
+    const candidate = value as Partial<PubChemGHSResult>;
+    if (typeof candidate.success !== 'boolean') return null;
+
+    return {
+        cid: typeof candidate.cid === 'number' ? candidate.cid : 0,
+        name: typeof candidate.name === 'string' ? candidate.name : '',
+        hCodes: asStringArray(candidate.hCodes),
+        pictograms: asStringArray(candidate.pictograms),
+        signalWord: typeof candidate.signalWord === 'string' ? candidate.signalWord : null,
+        isAcidic: Boolean(candidate.isAcidic),
+        isBasic: Boolean(candidate.isBasic),
+        success: candidate.success,
+        error: typeof candidate.error === 'string' ? candidate.error : undefined,
+    };
+}
+
+function readPersistedResult(cas: string): PubChemGHSResult | null {
+    const storage = getPersistentCache();
+    if (!storage) return null;
+
+    try {
+        const raw = storage.getItem(`${PERSISTED_CACHE_PREFIX}${cas}`);
+        if (!raw) return null;
+
+        const parsed = JSON.parse(raw) as { result?: unknown };
+        return normalizeCachedResult(parsed.result);
+    } catch {
+        return null;
+    }
+}
+
+function writePersistedResult(cas: string, result: PubChemGHSResult): void {
+    const storage = getPersistentCache();
+    if (!storage) return;
+
+    try {
+        storage.setItem(`${PERSISTED_CACHE_PREFIX}${cas}`, JSON.stringify({
+            cachedAt: new Date().toISOString(),
+            result,
+        }));
+    } catch {
+        // Local cache is an optimization; failures should not block the UI.
+    }
+}
+
+async function resolveServerCacheScope(options?: LookupGHSOptions): Promise<ServerGhsCacheScope | null> {
+    const labId = options?.labId?.trim();
+    if (labId) {
+        return { scopeType: 'lab', scopeId: labId };
+    }
+
+    try {
+        const { data, error } = await supabase.auth.getUser();
+        if (error || !data.user?.id) return null;
+        return { scopeType: 'user', scopeId: data.user.id };
+    } catch {
+        return null;
+    }
+}
+
+function getServerCacheWriteKey(cas: string, scope: ServerGhsCacheScope): string {
+    return `${scope.scopeType}:${scope.scopeId}:${cas}`;
+}
+
+async function readServerCachedResult(cas: string, scope: ServerGhsCacheScope | null): Promise<PubChemGHSResult | null> {
+    if (!scope) return null;
+
+    try {
+        const { data, error } = await supabase
+            .from('ghs_cas_cache')
+            .select('result, result_version')
+            .eq('scope_type', scope.scopeType)
+            .eq('scope_id', scope.scopeId)
+            .eq('cas_number', cas)
+            .limit(1)
+            .maybeSingle();
+
+        if (error) {
+            if (!hasLoggedServerCacheReadError) {
+                console.warn('[PubChem] Supabase GHS cache read failed:', error.message);
+                hasLoggedServerCacheReadError = true;
+            }
+            return null;
+        }
+
+        const row = data as ServerGhsCacheRow | null;
+        if (!row || row.result_version !== SERVER_CACHE_RESULT_VERSION) return null;
+
+        const result = normalizeCachedResult(row.result);
+        if (result) {
+            serverCacheWriteKeys.add(getServerCacheWriteKey(cas, scope));
+        }
+        return result;
+    } catch (error) {
+        if (!hasLoggedServerCacheReadError) {
+            console.warn('[PubChem] Supabase GHS cache read failed:', error);
+            hasLoggedServerCacheReadError = true;
+        }
+        return null;
+    }
+}
+
+async function writeServerCachedResult(
+    cas: string,
+    result: PubChemGHSResult,
+    scope: ServerGhsCacheScope | null,
+): Promise<void> {
+    if (!scope) return;
+
+    const writeKey = getServerCacheWriteKey(cas, scope);
+    if (serverCacheWriteKeys.has(writeKey)) return;
+
+    try {
+        const { error } = await supabase
+            .from('ghs_cas_cache')
+            .upsert({
+                scope_type: scope.scopeType,
+                scope_id: scope.scopeId,
+                cas_number: cas,
+                result,
+                result_version: SERVER_CACHE_RESULT_VERSION,
+                source: 'pubchem',
+            }, {
+                onConflict: 'scope_type,scope_id,cas_number',
+            });
+
+        if (error) {
+            if (!hasLoggedServerCacheWriteError) {
+                console.warn('[PubChem] Supabase GHS cache write failed:', error.message);
+                hasLoggedServerCacheWriteError = true;
+            }
+            return;
+        }
+
+        serverCacheWriteKeys.add(writeKey);
+    } catch (error) {
+        if (!hasLoggedServerCacheWriteError) {
+            console.warn('[PubChem] Supabase GHS cache write failed:', error);
+            hasLoggedServerCacheWriteError = true;
+        }
+    }
+}
+
+async function seedServerCachedResultIfMissing(
+    cas: string,
+    result: PubChemGHSResult,
+    scope: ServerGhsCacheScope | null,
+): Promise<void> {
+    if (!scope) return;
+    if (serverCacheWriteKeys.has(getServerCacheWriteKey(cas, scope))) return;
+
+    const existingResult = await readServerCachedResult(cas, scope);
+    if (existingResult) return;
+
+    await writeServerCachedResult(cas, result, scope);
+}
 
 // ═══════════════════════════════════════
 // API Base URLs
@@ -242,7 +437,7 @@ function findGHSInformation(sections: any[]): any[] {
  * @param casNumber - CAS Registry Number (e.g. "67-64-1" for acetone)
  * @returns GHS classification data including H-codes
  */
-export async function lookupGHSByCAS(casNumber: string): Promise<PubChemGHSResult> {
+export async function lookupGHSByCAS(casNumber: string, options?: LookupGHSOptions): Promise<PubChemGHSResult> {
     // Normalize
     const cas = normalizeCAS(casNumber);
     if (!cas) {
@@ -259,9 +454,27 @@ export async function lookupGHSByCAS(casNumber: string): Promise<PubChemGHSResul
         };
     }
 
+    const serverScope = await resolveServerCacheScope(options);
+
     // Check cache
     if (cache.has(cas)) {
-        return cache.get(cas)!;
+        const cachedResult = cache.get(cas)!;
+        void seedServerCachedResultIfMissing(cas, cachedResult, serverScope);
+        return cachedResult;
+    }
+
+    const persistedResult = readPersistedResult(cas);
+    if (persistedResult) {
+        cache.set(cas, persistedResult);
+        void seedServerCachedResultIfMissing(cas, persistedResult, serverScope);
+        return persistedResult;
+    }
+
+    const serverResult = await readServerCachedResult(cas, serverScope);
+    if (serverResult) {
+        cache.set(cas, serverResult);
+        writePersistedResult(cas, serverResult);
+        return serverResult;
     }
 
     // Step 1: CAS → CID
@@ -279,6 +492,8 @@ export async function lookupGHSByCAS(casNumber: string): Promise<PubChemGHSResul
             error: `CAS "${cas}" not found in PubChem`,
         };
         cache.set(cas, failResult);
+        writePersistedResult(cas, failResult);
+        await writeServerCachedResult(cas, failResult, serverScope);
         return failResult;
     }
 
@@ -298,6 +513,8 @@ export async function lookupGHSByCAS(casNumber: string): Promise<PubChemGHSResul
 
     // Cache the result
     cache.set(cas, result);
+    writePersistedResult(cas, result);
+    await writeServerCachedResult(cas, result, serverScope);
 
     console.log(`[PubChem] ${cas} → CID:${cid} | H-codes: [${result.hCodes.join(', ')}] | ${result.name}`);
 
