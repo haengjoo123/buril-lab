@@ -226,21 +226,21 @@ export function SearchTabView({
 
       <form onSubmit={onSearchSubmit} className="relative group z-20">
         <div
-          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 lg:rounded-[28px] lg:p-3 ${error
+          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:group-focus-within:translate-y-0 lg:group-focus-within:shadow-none dark:lg:bg-transparent ${error
             ? 'border-red-300 dark:border-red-900/50'
             : 'border-slate-100 dark:border-slate-700/70'
             }`}
         >
           <div className={`flex items-center gap-3 transition-colors lg:min-h-[76px] lg:rounded-[24px] lg:border lg:px-3 lg:py-2 ${
             error
-              ? 'lg:border-red-200 lg:bg-red-50'
-              : 'lg:border-slate-200 lg:bg-slate-50/80 lg:ring-1 lg:ring-white lg:group-focus-within:border-blue-300 lg:group-focus-within:bg-white lg:group-focus-within:ring-blue-100'
+              ? 'lg:border-red-200 lg:bg-red-50 dark:lg:border-red-900/60 dark:lg:bg-red-950/30'
+              : 'lg:border-slate-200 lg:bg-slate-50/80 lg:ring-1 lg:ring-white lg:group-focus-within:border-blue-300 lg:group-focus-within:bg-white lg:group-focus-within:ring-blue-100 dark:lg:border-slate-700/70 dark:lg:bg-slate-900/70 dark:lg:ring-slate-700/50 dark:lg:group-focus-within:border-blue-500/60 dark:lg:group-focus-within:bg-slate-900 dark:lg:group-focus-within:ring-blue-500/20'
           }`}>
             <button
               type="button"
               onClick={onOpenScanner}
               aria-label={t('btn_scan')}
-              className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 lg:inline-flex"
+              className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 lg:inline-flex"
             >
               <Camera className="h-5 w-5 stroke-[2.2]" />
             </button>
@@ -260,7 +260,7 @@ export function SearchTabView({
                 type="text"
                 value={query}
                 onChange={(e) => onQueryChange(e.target.value)}
-              className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400"
+              className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400 dark:lg:text-slate-100 dark:lg:placeholder:text-slate-500"
               placeholder={t('search_placeholder')}
               disabled={isLoading}
             />
@@ -294,7 +294,7 @@ export function SearchTabView({
                   onClick={onOpenVoiceAgent}
                   disabled={isLoading}
                   aria-label={t('voice_agent_cta_speak')}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300"
                 >
                   <Mic className="h-5 w-5 stroke-[2.3]" />
                 </button>
@@ -480,16 +480,16 @@ export function SearchTabView({
         <div className={`flex flex-col gap-6 transition-opacity duration-300 ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
           <section className="hidden lg:block">
             <div className="mb-4">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('search_preview_title', '검색 결과 미리보기')}</h3>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('search_preview_title')}</h3>
             </div>
             <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="max-w-md text-center">
                 <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full bg-blue-50 text-blue-300 dark:bg-blue-950/30 dark:text-blue-700">
                   <Search className="h-16 w-16" />
                 </div>
-                <h4 className="mt-6 text-2xl font-bold text-slate-900 dark:text-slate-100">{t('search_preview_empty_title', '검색을 시작해 보세요')}</h4>
+                <h4 className="mt-6 text-2xl font-bold text-slate-900 dark:text-slate-100">{t('search_preview_empty_title')}</h4>
                 <p className="mt-3 text-base leading-7 text-slate-500 dark:text-slate-400">
-                  {t('search_preview_empty_desc', '시약명, 제품명, CAS 번호 또는 사진을 입력하면 폐기 방법과 주의사항을 안내해 드립니다.')}
+                  {t('search_preview_empty_desc')}
                 </p>
               </div>
             </div>
@@ -638,7 +638,7 @@ export function SearchTabView({
                   onClick={onOpenLogs}
                   className="text-xs font-semibold text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
                 >
-                  {t('log_view_details', '기록 보기')}
+                  {t('log_view_details')}
                 </button>
               )}
             </div>
@@ -649,7 +649,7 @@ export function SearchTabView({
               </div>
             ) : wasteLogsError ? (
               <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
-                {t('common_load_failed', '불러오지 못했습니다.')}
+                {t('common_load_failed')}
               </div>
             ) : recentWasteLogs.length > 0 ? (
               <div className="space-y-2">
@@ -677,7 +677,7 @@ export function SearchTabView({
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
-                {t('log_empty', '아직 폐기 기록이 없습니다.')}
+                {t('log_empty')}
               </div>
             )}
           </section>

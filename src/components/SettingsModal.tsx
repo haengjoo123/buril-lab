@@ -1,11 +1,12 @@
 import React from 'react';
-import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2, UserMinus, KeyRound } from 'lucide-react';
+import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2, UserMinus, KeyRound, Moon, Sun } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from './CustomDialog';
 import { supabase } from '../services/supabaseClient';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { useAuth } from '../hooks/useAuth';
+import { useThemeMode } from '../hooks/useThemeMode';
 import type { FeedbackType } from '../types/feedback';
 
 interface SettingsModalProps {
@@ -20,6 +21,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const deleteConfirmPhrase = t('settings_delete_account_confirm_phrase');
 
     const { session, updatePassword, deleteAccount } = useAuth();
+    const { isDarkMode, toggleThemeMode } = useThemeMode();
     const [dialogConfig, setDialogConfig] = React.useState<{
         isOpen: boolean;
         type: 'alert' | 'confirm' | 'prompt';
@@ -205,17 +207,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     ];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="flex w-full max-w-[380px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm animate-in fade-in duration-200 sm:p-5">
+            <div className="flex w-full max-w-[360px] max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 dark:bg-slate-900 sm:max-w-[380px] sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-2xl">
 
-                <div className="shrink-0 p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center">
-                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">
+                <div className="flex shrink-0 items-center justify-between border-b border-gray-100 p-3.5 dark:border-slate-800 sm:p-4">
+                    <h3 className="text-base font-bold text-slate-800 dark:text-white sm:text-lg">
                         {showFeedback ? t('feedback_title') : t('settings_title')}
                     </h3>
                     <button
                         type="button"
                         onClick={showFeedback ? handleCloseFeedback : onClose}
-                        className="shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                        className="shrink-0 rounded-full p-1 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800"
                         aria-label={t('btn_close')}
                     >
                         <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
@@ -224,7 +226,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                 {/* ── Feedback Panel ── */}
                 {showFeedback ? (
-                    <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
+                    <div className="min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-4">
                         {submitSuccess ? (
                             /* Success State */
                             <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
@@ -246,7 +248,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             </div>
                         ) : (
                             /* Feedback Form */
-                            <form onSubmit={handleFeedbackSubmit} className="space-y-4">
+                            <form onSubmit={handleFeedbackSubmit} className="space-y-3 sm:space-y-4">
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
                                     {t('feedback_desc')}
                                 </p>
@@ -331,10 +333,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </div>
                 ) : (
                     /* ── Settings Panel ── */
-                    <div className="min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3">
+                    <div className="min-h-0 space-y-2.5 overflow-y-auto overscroll-contain p-3 sm:space-y-3 sm:p-4">
                         {/* Language Switcher */}
-                        <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl mb-2">
-                            <div className="flex items-center gap-2 mb-3 text-slate-700 dark:text-slate-300 font-medium">
+                        <div className="rounded-xl bg-gray-50 p-3 dark:bg-slate-800 sm:p-4">
+                            <div className="mb-2.5 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 sm:mb-3 sm:text-base">
                                 <Globe className="w-4 h-4" />
                                 <span>{t('settings_language')}</span>
                             </div>
@@ -354,6 +356,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             </div>
                         </div>
 
+                        <button
+                            type="button"
+                            onClick={toggleThemeMode}
+                            className="flex w-full items-center justify-between rounded-xl bg-slate-50 p-3 text-left text-slate-700 transition-colors hover:bg-slate-100 dark:bg-slate-800/70 dark:text-slate-200 dark:hover:bg-slate-800 sm:p-4"
+                            aria-pressed={isDarkMode}
+                        >
+                            <span className="flex min-w-0 items-center gap-2.5">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500 shadow-sm dark:bg-slate-900 dark:text-slate-300">
+                                    {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-semibold">{t('theme_dark_mode')}</span>
+                                    <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                                        {isDarkMode ? t('theme_mode_on') : t('theme_mode_off')}
+                                    </span>
+                                </span>
+                            </span>
+                            <span className={`flex h-5 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors ${isDarkMode ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                <span className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isDarkMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </span>
+                        </button>
+
                         {/* Feedback Button */}
                         <button
                             onClick={() => {
@@ -369,7 +393,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 }
                                 setShowFeedback(true);
                             }}
-                            className="w-full flex items-center justify-between p-4 bg-violet-50 dark:bg-violet-900/10 hover:bg-violet-100 dark:hover:bg-violet-900/20 text-violet-700 dark:text-violet-400 rounded-xl transition-colors text-left"
+                            className="flex w-full items-center justify-between rounded-xl bg-violet-50 p-3 text-left text-violet-700 transition-colors hover:bg-violet-100 dark:bg-violet-900/10 dark:text-violet-400 dark:hover:bg-violet-900/20 sm:p-4"
                         >
                             <div>
                                 <span className="font-medium block">{t('feedback_btn')}</span>
@@ -389,7 +413,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                         setAccountPassword('');
                                         setAccountPasswordConfirm('');
                                     }}
-                                    className="w-full flex items-center justify-between p-4 text-slate-700 dark:text-slate-200 hover:bg-white/70 dark:hover:bg-slate-800 transition-colors text-left"
+                                    className="flex w-full items-center justify-between p-3 text-left text-slate-700 transition-colors hover:bg-white/70 dark:text-slate-200 dark:hover:bg-slate-800 sm:p-4"
                                 >
                                     <div>
                                         <span className="font-medium block">{t('settings_password_change')}</span>
@@ -449,17 +473,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         )}
 
                         {passwordChangeSuccess && (
-                            <div className="flex gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-700 dark:text-emerald-300">
+                            <div className="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-300">
                                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                                 <span>{passwordChangeSuccess}</span>
                             </div>
                         )}
 
-                        <hr className="border-gray-100 dark:border-slate-800 my-2" />
+                        <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
 
                         <button
                             onClick={handleResetData}
-                            className="w-full flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-700 dark:text-red-400 rounded-xl transition-colors text-left"
+                            className="flex w-full items-center justify-between rounded-xl bg-red-50 p-3 text-left text-red-700 transition-colors hover:bg-red-100 dark:bg-red-900/10 dark:text-red-400 dark:hover:bg-red-900/20 sm:p-4"
                         >
                             <span className="font-medium">{t('settings_reset_data')}</span>
                             <RotateCcw className="w-5 h-5" />
@@ -468,11 +492,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             {t('settings_reset_desc')}
                         </p>
 
-                        <hr className="border-gray-100 dark:border-slate-800 my-2" />
+                        <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
 
                         <button
                             onClick={handleViewDisclaimer}
-                            className="w-full flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl transition-colors text-left"
+                            className="flex w-full items-center justify-between rounded-xl bg-blue-50 p-3 text-left text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-900/10 dark:text-blue-400 dark:hover:bg-blue-900/20 sm:p-4"
                         >
                             <span className="font-medium">{t('settings_view_guide')}</span>
                             <ShieldCheck className="w-5 h-5" />
@@ -480,7 +504,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                         <button
                             onClick={handleReplayOnboarding}
-                            className="w-full flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl transition-colors text-left"
+                            className="flex w-full items-center justify-between rounded-xl bg-emerald-50 p-3 text-left text-emerald-700 transition-colors hover:bg-emerald-100 dark:bg-emerald-900/10 dark:text-emerald-400 dark:hover:bg-emerald-900/20 sm:p-4"
                         >
                             <span className="font-medium">{t('settings_replay_onboarding')}</span>
                             <Lightbulb className="w-5 h-5" />
@@ -488,10 +512,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                         {session && (
                             <>
-                                <hr className="border-gray-100 dark:border-slate-800 my-2" />
+                                <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
                                 <button
                                     onClick={handleDeleteAccount}
-                                    className="w-full flex items-center justify-between p-4 bg-red-50/50 dark:bg-red-950/20 hover:bg-red-50 dark:hover:bg-red-900/40 text-red-600 dark:text-red-500 rounded-xl transition-colors text-left"
+                                    className="flex w-full items-center justify-between rounded-xl bg-red-50/50 p-3 text-left text-red-600 transition-colors hover:bg-red-50 dark:bg-red-950/20 dark:text-red-500 dark:hover:bg-red-900/40 sm:p-4"
                                 >
                                     <span className="font-medium text-sm">{t('settings_delete_account')}</span>
                                     <UserMinus className="w-4 h-4 opacity-70" />
@@ -504,7 +528,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </div>
                 )}
 
-                <div className="shrink-0 p-4 bg-gray-50 dark:bg-slate-950/50 flex flex-col items-center gap-2 text-xs text-gray-400 dark:text-gray-600">
+                <div className="flex shrink-0 flex-col items-center gap-1.5 bg-gray-50 p-3 text-xs text-gray-400 dark:bg-slate-950/50 dark:text-gray-600 sm:gap-2 sm:p-4">
                     <a
                         href="/privacy"
                         className="hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2 transition-colors"

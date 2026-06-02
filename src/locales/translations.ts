@@ -92,6 +92,9 @@ export const translations = {
         search_reset: "검색 초기화",
         search_loading_suggestions: "검색어 추천을 불러오는 중...",
         search_remove_history: "검색 기록 삭제",
+        search_preview_title: "검색 결과 미리보기",
+        search_preview_empty_title: "검색을 시작해 보세요",
+        search_preview_empty_desc: "시약명, 제품명, CAS 번호 또는 사진을 입력하면 폐기 방법과 주의사항을 안내해 드립니다.",
 
         btn_scan: "스캔하기",
         btn_settings: "설정",
@@ -105,6 +108,7 @@ export const translations = {
         common_unknown: "알 수 없음",
         common_close_menu: "메뉴 닫기",
         common_captured_image_alt: "촬영된 이미지",
+        common_load_failed: "불러오지 못했습니다.",
         app_logo_alt: "버릴랩 로고",
         btn_check_storage_compat: "보관 호환성 확인",
         btn_check_disposal_guide: "폐기가이드 확인",
@@ -179,6 +183,9 @@ export const translations = {
 
         // Settings
         settings_title: "설정",
+        theme_dark_mode: "다크 모드",
+        theme_mode_on: "켜짐",
+        theme_mode_off: "꺼짐",
         settings_reset_data: "앱 초기화",
         settings_reset_desc: "저장된 장바구니, 검색 기록, 동의 내역을 모두 삭제합니다.",
         settings_view_guide: "안전 가이드 다시보기",
@@ -543,6 +550,7 @@ export const translations = {
         tab_center: "통합센터",
         log_title: "폐기 기록",
         log_empty: "아직 폐기 기록이 없습니다.",
+        log_view_details: "기록 보기",
         log_search_empty: "검색 결과가 없습니다.",
         log_search_placeholder: "분류, 처리자, 메모, 시약명 검색",
         log_tab_recent: "최근 기록",
@@ -691,6 +699,7 @@ export const translations = {
         cabinet_lab_fallback: "연구실",
         cabinet_my_cabinets: "나의 시약장",
         cabinet_list_desc: "관리할 시약장을 선택하거나 새로 만드세요.",
+        cabinet_search_placeholder: "시약장 이름 또는 위치 검색",
         cabinet_empty: "아직 등록된 시약장이 없습니다.",
         cabinet_create_new: "새 시약장 만들기",
         cabinet_create_title: "새 시약장 생성",
@@ -743,6 +752,16 @@ export const translations = {
         activity_log_filter_all: "전체",
         activity_log_empty: "활동 기록이 없습니다.",
         activity_log_count: "총 {{count}}건",
+        cabinet_recent_activity_title: "최근 활동",
+        cabinet_activity_view_all: "전체 보기",
+        cabinet_activity_photo_short: "사진 변경",
+        cabinet_activity_photo_changed: "사진 변경",
+        cabinet_activity_moved: "시약 이동",
+        cabinet_activity_stock_added: "재고 추가",
+        cabinet_activity_stock_removed: "재고 삭제",
+        cabinet_activity_updated: "정보 수정",
+        cabinet_activity_detail_removed_from_inventory: "재고 목록에서 삭제",
+        cabinet_activity_detail_photo_removed: "사진 삭제",
 
         // FridgeView
         reagent_info_title: "시약 정보 입력",
@@ -1199,6 +1218,9 @@ export const translations = {
         search_reset: "Reset search",
         search_loading_suggestions: "Loading suggestions...",
         search_remove_history: "Remove search history",
+        search_preview_title: "Search Results Preview",
+        search_preview_empty_title: "Start a Search",
+        search_preview_empty_desc: "Enter a reagent name, product name, CAS number, or photo to see disposal guidance and precautions.",
 
         btn_scan: "Scan",
         btn_settings: "Settings",
@@ -1212,6 +1234,7 @@ export const translations = {
         common_unknown: "Unknown",
         common_close_menu: "Close menu",
         common_captured_image_alt: "Captured image",
+        common_load_failed: "Failed to load.",
         app_logo_alt: "Buril Lab logo",
         btn_check_storage_compat: "Check storage compatibility",
         btn_check_disposal_guide: "Check Disposal Guide",
@@ -1246,7 +1269,7 @@ export const translations = {
         result_add_to_list_cta: "Add",
         msg_input_required: "Please enter volume.",
 
-        guide_example: "Recent History,",
+        guide_example: "Recent History",
         recent_clear: "Clear",
 
         // Result Card
@@ -1286,6 +1309,9 @@ export const translations = {
 
         // Settings
         settings_title: "Settings",
+        theme_dark_mode: "Dark Mode",
+        theme_mode_on: "On",
+        theme_mode_off: "Off",
         settings_reset_data: "Reset App Data",
         settings_reset_desc: "Clears cart, history, and consents.",
         settings_view_guide: "View Safety Guide",
@@ -1650,6 +1676,7 @@ export const translations = {
         tab_center: "Safety Center",
         log_title: "Disposal Records",
         log_empty: "No disposal records yet.",
+        log_view_details: "View Records",
         log_search_empty: "No search results.",
         log_search_placeholder: "Search by category, handler, memo, or chemical name",
         log_tab_recent: "Recent records",
@@ -1798,6 +1825,7 @@ export const translations = {
         cabinet_lab_fallback: "Lab",
         cabinet_my_cabinets: "My Cabinets",
         cabinet_list_desc: "Select a cabinet to manage or create a new one.",
+        cabinet_search_placeholder: "Search cabinet name or location",
         cabinet_empty: "No cabinets registered yet.",
         cabinet_create_new: "Create New Cabinet",
         cabinet_create_title: "Create New Cabinet",
@@ -1850,6 +1878,16 @@ export const translations = {
         activity_log_filter_all: "All",
         activity_log_empty: "No activity records.",
         activity_log_count: "Total {{count}} records",
+        cabinet_recent_activity_title: "Recent activity",
+        cabinet_activity_view_all: "View all",
+        cabinet_activity_photo_short: "Photo",
+        cabinet_activity_photo_changed: "Photo changed",
+        cabinet_activity_moved: "Moved",
+        cabinet_activity_stock_added: "Stock added",
+        cabinet_activity_stock_removed: "Stock removed",
+        cabinet_activity_updated: "Updated",
+        cabinet_activity_detail_removed_from_inventory: "Removed from inventory list",
+        cabinet_activity_detail_photo_removed: "Photo removed",
 
         // FridgeView
         reagent_info_title: "Enter Reagent Info",

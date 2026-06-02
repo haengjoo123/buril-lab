@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
 import { Box, ClipboardList, Moon, Package, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import logo from '../assets/burillab_app_icon.png';
 import type { AppTab } from '../hooks/useAppUiState';
 import { LabContextSwitcher } from './LabContextSwitcher';
+import { useThemeMode } from '../hooks/useThemeMode';
 
 interface DesktopSideNavProps {
   activeTab: AppTab;
@@ -38,20 +38,7 @@ export function DesktopSideNav({
   onLogoClick,
 }: DesktopSideNavProps) {
   const { t } = useTranslation();
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window === 'undefined') return false;
-
-    const storedTheme = window.localStorage.getItem('buril-theme');
-    if (storedTheme === 'dark') return true;
-    if (storedTheme === 'light') return false;
-
-    return document.documentElement.classList.contains('dark');
-  });
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDarkMode);
-    window.localStorage.setItem('buril-theme', isDarkMode ? 'dark' : 'light');
-  }, [isDarkMode]);
+  const { isDarkMode, toggleThemeMode } = useThemeMode();
 
   const navItems: Array<{
     tab: AppTab;
@@ -110,12 +97,12 @@ export function DesktopSideNav({
         </button>
         <button
           type="button"
-          onClick={() => setIsDarkMode((value) => !value)}
+          onClick={toggleThemeMode}
           className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           aria-pressed={isDarkMode}
         >
           {isDarkMode ? <Sun className="h-5 w-5 shrink-0" /> : <Moon className="h-5 w-5 shrink-0" />}
-          <span className="min-w-0 flex-1 text-left">{t('theme_dark_mode', '다크 모드')}</span>
+          <span className="min-w-0 flex-1 text-left">{t('theme_dark_mode')}</span>
           <span className={`flex h-5 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors ${isDarkMode ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'}`}>
             <span className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isDarkMode ? 'translate-x-5' : 'translate-x-0'}`} />
           </span>

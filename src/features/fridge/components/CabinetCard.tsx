@@ -76,13 +76,13 @@ export function CabinetCard({
             }`}
         >
             <div
-                className="relative h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-slate-100 group/image dark:bg-slate-700 lg:h-full lg:min-h-[148px] lg:w-full lg:rounded-none lg:rounded-l-2xl lg:border-r lg:border-slate-100 dark:lg:border-slate-700"
+                className="relative min-h-[112px] w-20 shrink-0 self-stretch cursor-pointer overflow-hidden rounded-xl bg-slate-100 group/image dark:bg-slate-700 lg:h-auto lg:min-h-[148px] lg:w-full lg:rounded-none lg:rounded-l-2xl lg:border-r lg:border-slate-100 dark:lg:border-slate-700"
                 onClick={handleImageClick}
                 title={t('cabinet_card_change_photo')}
             >
                 {cabinet.image_url ? (
                     <>
-                        <img src={cabinet.image_url} alt={cabinet.name} className="h-full w-full object-cover" />
+                        <img src={cabinet.image_url} alt={cabinet.name} className="absolute inset-0 h-full w-full object-cover" />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/image:opacity-100">
                             <Camera className="h-6 w-6 text-white" />
                         </div>

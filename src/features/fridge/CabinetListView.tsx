@@ -366,22 +366,42 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         }).replace(/\.$/, '');
     };
 
+    const localizeActivityDetail = (detail?: string) => {
+        if (!detail?.trim()) return undefined;
+
+        const detailKeyByValue: Record<string, string> = {
+            '재고 목록에서 삭제': 'cabinet_activity_detail_removed_from_inventory',
+            'Removed from inventory list': 'cabinet_activity_detail_removed_from_inventory',
+            '사진 삭제': 'cabinet_activity_detail_photo_removed',
+            'Photo removed': 'cabinet_activity_detail_photo_removed',
+            '복사 생성': 'cabinet_copy_activity_memo',
+            'Created by copy': 'cabinet_copy_activity_memo',
+        };
+
+        const key = detailKeyByValue[detail.trim()];
+        return key ? t(key) : detail;
+    };
+
+    const getActivityDetail = (...details: Array<string | undefined>) => (
+        localizeActivityDetail(details.find((detail) => Boolean(detail?.trim())))
+    );
+
     const getActivityPresentation = (activity: CabinetActivityFeedItem) => {
         if (activity.isPhotoChange) {
             return {
                 icon: Camera,
-                label: i18n.language.startsWith('ko') ? '사진 변경' : 'Photo changed',
+                label: t('cabinet_activity_photo_changed'),
                 iconClassName: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300',
-                detail: activity.memo || activity.itemName,
+                detail: getActivityDetail(activity.memo, activity.itemName),
             };
         }
 
         if (activity.isMove) {
             return {
                 icon: ArrowRight,
-                label: i18n.language.startsWith('ko') ? '시약 이동' : 'Moved',
+                label: t('cabinet_activity_moved'),
                 iconClassName: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300',
-                detail: activity.memo || activity.reason || activity.itemName,
+                detail: getActivityDetail(activity.memo, activity.reason, activity.itemName),
             };
         }
 
@@ -389,31 +409,31 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             case 'add':
                 return {
                     icon: PackagePlus,
-                    label: i18n.language.startsWith('ko') ? '재고 추가' : 'Stock added',
+                    label: t('cabinet_activity_stock_added'),
                     iconClassName: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300',
-                    detail: activity.memo || activity.itemName,
+                    detail: getActivityDetail(activity.memo, activity.itemName),
                 };
             case 'remove':
                 return {
                     icon: Trash2,
-                    label: i18n.language.startsWith('ko') ? '재고 삭제' : 'Stock removed',
+                    label: t('cabinet_activity_stock_removed'),
                     iconClassName: 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300',
-                    detail: activity.reason || activity.memo || activity.itemName,
+                    detail: getActivityDetail(activity.reason, activity.memo, activity.itemName),
                 };
             case 'clear_all':
                 return {
                     icon: AlertTriangle,
                     label: t('activity_log_action_clear_all'),
                     iconClassName: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300',
-                    detail: activity.itemName,
+                    detail: getActivityDetail(activity.itemName),
                 };
             case 'update':
             default:
                 return {
                     icon: FileEdit,
-                    label: i18n.language.startsWith('ko') ? '정보 수정' : 'Updated',
+                    label: t('cabinet_activity_updated'),
                     iconClassName: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300',
-                    detail: activity.memo || activity.itemName,
+                    detail: getActivityDetail(activity.memo, activity.itemName),
                 };
         }
     };
@@ -581,12 +601,12 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 <section className="hidden flex-col gap-4 lg:flex">
                     <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-3">
                         <label className="relative">
-                            <span className="sr-only">{t('cabinet_search_placeholder', '시약장 이름 또는 위치 검색')}</span>
+                            <span className="sr-only">{t('cabinet_search_placeholder')}</span>
                             <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                             <input
                                 value={cabinetSearchQuery}
                                 onChange={(event) => setCabinetSearchQuery(event.target.value)}
-                                placeholder={t('cabinet_search_placeholder', '시약장 이름 또는 위치 검색')}
+                                placeholder={t('cabinet_search_placeholder')}
                                 className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
                             />
                         </label>
@@ -746,7 +766,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                         className="flex flex-col items-center gap-1 px-2 py-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-slate-300 dark:hover:bg-blue-950/20"
                                     >
                                         <Camera className="h-5 w-5" />
-                                        <span className="whitespace-nowrap">{i18n.language.startsWith('ko') ? '사진 변경' : 'Photo'}</span>
+                                        <span className="whitespace-nowrap">{t('cabinet_activity_photo_short')}</span>
                                     </button>
                                     <button
                                         type="button"
@@ -761,14 +781,14 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                 <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                                            {i18n.language.startsWith('ko') ? '최근 활동' : 'Recent activity'}
+                                            {t('cabinet_recent_activity_title')}
                                         </div>
                                         <button
                                             type="button"
                                             onClick={(e) => handleDisposalLog(e, selectedCabinet)}
                                             className="text-xs font-bold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
                                         >
-                                            {i18n.language.startsWith('ko') ? '전체 보기' : 'View all'}
+                                            {t('cabinet_activity_view_all')}
                                         </button>
                                     </div>
 
@@ -861,7 +881,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                             'update',
                             t('cabinet_card_change_photo'),
                             undefined,
-                            i18n.language.startsWith('ko') ? '사진 삭제' : 'Photo removed'
+                            t('cabinet_activity_detail_photo_removed')
                         );
                         await loadCabinets();
                         await loadCabinetActivityFeed(cabinetId);
