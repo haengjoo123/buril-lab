@@ -42,7 +42,7 @@ import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import { lookupGHSByCAS, type PubChemGHSResult } from '../../services/pubchemService';
-import { getPictogramUrl } from '../../data/ghsCodes';
+import { getPictogramCode, getPictogramUrl } from '../../data/ghsCodes';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
@@ -68,6 +68,7 @@ type InventoryGhsState =
 type InventoryGhsPictogram = {
     label: string;
     url: string;
+    code?: string;
 };
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
@@ -367,6 +368,20 @@ export const InventoryListView: React.FC = () => {
         }
     }, [cabinets, bulkMoveCabinetId]);
 
+    const getInventoryGhsState = (item: InventoryItem): InventoryGhsState | null => {
+        const cas = normalizeGhsCas(item.cas_number);
+        return cas ? (inventoryGhsByCas[cas] || null) : null;
+    };
+
+    const getInventoryGhsHCodes = (item: InventoryItem): string[] => {
+        const ghsState = getInventoryGhsState(item);
+        return ghsState?.status === 'loaded' ? ghsState.result.hCodes : [];
+    };
+
+    const classifyInventoryItemHazard = (item: InventoryItem) => (
+        classifyInventoryHazard(item, { hCodes: getInventoryGhsHCodes(item) })
+    );
+
     const filteredItems = useMemo(() => {
         const normalizedQuery = searchQuery.trim().toLowerCase();
         let result = items;
@@ -381,20 +396,20 @@ export const InventoryListView: React.FC = () => {
         }
 
         if (hazardFilter) {
-            result = result.filter(item => classifyInventoryHazard(item).level === 'high');
+            result = result.filter(item => classifyInventoryItemHazard(item).level === 'high');
         }
 
         return result;
-    }, [items, searchQuery, hazardFilter]);
+    }, [items, searchQuery, hazardFilter, inventoryGhsByCas]);
 
     // Hazard summary for showing count
     const hazardSummary = useMemo(() => {
         let count = 0;
         for (const item of items) {
-            if (classifyInventoryHazard(item).level === 'high') count++;
+            if (classifyInventoryItemHazard(item).level === 'high') count++;
         }
         return count;
-    }, [items]);
+    }, [items, inventoryGhsByCas]);
 
     // 만료/위치 우선으로 빠르게 확인할 수 있게 화면 전용 정렬 목록을 만든다.
     const visibleItems = useMemo(() => {
@@ -498,7 +513,7 @@ export const InventoryListView: React.FC = () => {
 
     useEffect(() => {
         const casNumbersToLoad = Array.from(new Set(
-            visibleItems
+            items
                 .map((item) => normalizeGhsCas(item.cas_number))
                 .filter((cas): cas is string => Boolean(cas && /^\d{1,7}-\d{2}-\d$/.test(cas)))
         )).filter((cas) => (
@@ -556,7 +571,7 @@ export const InventoryListView: React.FC = () => {
         return () => {
             isCancelled = true;
         };
-    }, [currentLabId, visibleItems]);
+    }, [currentLabId, items]);
 
     const handleEdit = (item: InventoryItem) => {
         setInitialDraft(null);
@@ -1155,7 +1170,7 @@ export const InventoryListView: React.FC = () => {
                             template,
                             isAcidic: false,
                             isBasic: false,
-                            hCodes: [],
+                            hCodes: getInventoryGhsHCodes(item),
                             notes: item.memo || undefined,
                             casNo: item.cas_number || undefined,
                             expiryDate: item.expiry_date || undefined,
@@ -1397,22 +1412,18 @@ export const InventoryListView: React.FC = () => {
         );
     };
 
-    const getInventoryGhsState = (item: InventoryItem): InventoryGhsState | null => {
-        const cas = normalizeGhsCas(item.cas_number);
-        return cas ? (inventoryGhsByCas[cas] || null) : null;
-    };
-
     const getInventoryGhsPictograms = (item: InventoryItem): InventoryGhsPictogram[] => {
         const ghsState = getInventoryGhsState(item);
         if (ghsState?.status !== 'loaded') return [];
 
         const seenUrls = new Set<string>();
         return ghsState.result.pictograms
-            .map((label) => ({ label, url: getPictogramUrl(label) }))
-            .filter((image): image is InventoryGhsPictogram => {
-                if (!image.url || seenUrls.has(image.url)) return false;
-                seenUrls.add(image.url);
-                return true;
+            .flatMap((label): InventoryGhsPictogram[] => {
+                const url = getPictogramUrl(label);
+                if (!url || seenUrls.has(url)) return [];
+                seenUrls.add(url);
+                const code = getPictogramCode(label);
+                return [{ label, url, ...(code ? { code } : {}) }];
             });
     };
 
@@ -1441,7 +1452,7 @@ export const InventoryListView: React.FC = () => {
                 ? { gridTemplateColumns: `repeat(${detailColumnCount}, minmax(0, max-content))` }
                 : undefined;
             const title = [
-                ...visiblePictograms.map((image) => image.label),
+                ...visiblePictograms.map((image) => image.code ? t(`ghs_pictogram_${image.code}`) : image.label),
                 hiddenCount > 0 ? `+${hiddenCount}` : null,
             ].filter(Boolean).join(', ');
 
@@ -1449,17 +1460,33 @@ export const InventoryListView: React.FC = () => {
                 <div
                     className={gridClassName}
                     style={gridStyle}
-                    title={title}
+                    aria-label={title}
                 >
-                    {visiblePictograms.map((image) => (
-                        <img
-                            key={image.url}
-                            src={image.url}
-                            alt={image.label}
-                            className={`${iconSize} ${iconRadius} border border-red-100 bg-white object-contain ${iconPadding} shadow-sm`}
-                            loading="lazy"
-                        />
-                    ))}
+                    {visiblePictograms.map((image) => {
+                        const tooltipLabel = image.code ? t(`ghs_pictogram_${image.code}`) : image.label;
+
+                        return (
+                            <span
+                                key={image.url}
+                                className={`group/ghs relative inline-flex ${iconSize} ${iconRadius}`}
+                                tabIndex={0}
+                                aria-label={tooltipLabel}
+                            >
+                                <img
+                                    src={image.url}
+                                    alt={tooltipLabel}
+                                    className={`h-full w-full ${iconRadius} border border-red-100 bg-white object-contain ${iconPadding} shadow-sm`}
+                                    loading="lazy"
+                                />
+                                <span
+                                    role="tooltip"
+                                    className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-950 px-2 py-1 text-[11px] font-bold text-white shadow-lg ring-1 ring-white/10 group-hover/ghs:block group-focus-visible/ghs:block dark:bg-slate-50 dark:text-slate-950"
+                                >
+                                    {tooltipLabel}
+                                </span>
+                            </span>
+                        );
+                    })}
                 </div>
             );
         }
@@ -1562,7 +1589,7 @@ export const InventoryListView: React.FC = () => {
                             </div>
                         </div>
                         {(() => {
-                            const hazard = classifyInventoryHazard(item);
+                            const hazard = classifyInventoryItemHazard(item);
                             if (hazard.level === 'none') return null;
                             return (
                                 <div className="mt-2 mb-1 flex flex-wrap gap-1">
@@ -2361,7 +2388,7 @@ export const InventoryListView: React.FC = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                         {visibleItems.map((item) => {
-                                            const hazard = classifyInventoryHazard(item);
+                                            const hazard = classifyInventoryItemHazard(item);
                                             const isSelected = selectedDesktopItem?.id === item.id;
                                             return (
                                                 <tr
@@ -2493,7 +2520,7 @@ export const InventoryListView: React.FC = () => {
                             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('inventory_hazard_filter')}</h4>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {(() => {
-                                    const hazard = classifyInventoryHazard(selectedDesktopItem);
+                                    const hazard = classifyInventoryItemHazard(selectedDesktopItem);
                                     const ghsState = getInventoryGhsState(selectedDesktopItem);
                                     const pictograms = getInventoryGhsPictograms(selectedDesktopItem);
 

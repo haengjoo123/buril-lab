@@ -1,9 +1,10 @@
 /**
  * Inventory Hazard Classifier
  * ════════════════════════════
- * Classifies inventory items by hazard level using chemical name/CAS patterns.
+ * Classifies inventory items by hazard level using chemical name/CAS patterns
+ * and optional GHS H-codes when the caller has them available.
  * Adapts the StorageCompatibilityChecker's classification logic
- * to work with InventoryItem (which lacks H-codes and GHS data).
+ * to work with InventoryItem.
  *
  * This enables filtering high-risk reagents directly from the
  * inventory list without requiring cabinet placement data.
@@ -37,11 +38,18 @@ export interface HazardClassification {
     groupLabelKeys: string[];
 }
 
+export interface InventoryHazardClassificationOptions {
+    hCodes?: string[];
+}
+
 /**
  * Classify an inventory item's hazard level by adapting it
- * to a minimal ReagentPlacement for pattern-based classification.
+ * to a minimal ReagentPlacement for pattern-based and H-code classification.
  */
-export function classifyInventoryHazard(item: InventoryItem): HazardClassification {
+export function classifyInventoryHazard(
+    item: InventoryItem,
+    options: InventoryHazardClassificationOptions = {},
+): HazardClassification {
     // Create a minimal adapter compatible with classifyStorageGroups
     const pseudoPlacement: ReagentPlacement = {
         id: item.id,
@@ -53,7 +61,7 @@ export function classifyInventoryHazard(item: InventoryItem): HazardClassificati
         shelfId: '',
         isAcidic: false,
         isBasic: false,
-        hCodes: [],
+        hCodes: options.hCodes || [],
         notes: item.memo || '',
         casNo: item.cas_number || '',
         capacity: item.capacity || '',
@@ -89,6 +97,9 @@ export function classifyInventoryHazard(item: InventoryItem): HazardClassificati
 /**
  * Quick check whether an inventory item is classified as hazardous.
  */
-export function isHazardousItem(item: InventoryItem): boolean {
-    return classifyInventoryHazard(item).level === 'high';
+export function isHazardousItem(
+    item: InventoryItem,
+    options: InventoryHazardClassificationOptions = {},
+): boolean {
+    return classifyInventoryHazard(item, options).level === 'high';
 }

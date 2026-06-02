@@ -140,16 +140,20 @@ const GHS_PICTOGRAM_ALIASES: Record<string, string> = {
     'environmental hazard': 'GHS09',
 };
 
+export const getPictogramCode = (code: string): string | undefined => {
+    const cleanCode = code.replace(/\.(gif|svg|png|jpg)$/i, '').trim();
+    const codeMatch = cleanCode.match(/GHS\d{2}/i);
+    if (codeMatch) {
+        return codeMatch[0].toUpperCase();
+    }
+
+    return GHS_PICTOGRAM_ALIASES[cleanCode.toLowerCase()];
+};
+
 export const getPictogramUrl = (code: string): string | undefined => {
     // Input format: "GHS01" or "GHS01.gif" or full URL
     if (code.startsWith('http') || code.startsWith('data:image')) return code;
 
-    const cleanCode = code.replace(/\.(gif|svg|png|jpg)$/i, '').trim();
-    const codeMatch = cleanCode.match(/GHS\d{2}/i);
-    if (codeMatch) {
-        return GHS_PICTOGRAMS[codeMatch[0].toUpperCase()];
-    }
-
-    const aliasCode = GHS_PICTOGRAM_ALIASES[cleanCode.toLowerCase()];
-    return aliasCode ? GHS_PICTOGRAMS[aliasCode] : undefined;
+    const pictogramCode = getPictogramCode(code);
+    return pictogramCode ? GHS_PICTOGRAMS[pictogramCode] : undefined;
 };
