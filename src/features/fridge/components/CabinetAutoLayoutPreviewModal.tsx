@@ -23,6 +23,8 @@ const STORAGE_GROUP_LABEL_KEYS: Record<StoragePlacementGroup, string> = {
     BASE: 'storage_group_base',
     TOXIC_CYANIDE: 'storage_group_cyanide',
     TOXIC_SULFIDE: 'storage_group_sulfide',
+    TOXIC_AZIDE: 'storage_group_azide',
+    ACUTE_TOXIC: 'storage_group_acute_toxic',
     WATER_REACTIVE: 'storage_group_water_reactive',
     PYROPHORIC: 'storage_group_pyrophoric',
     EXPLOSIVE: 'storage_group_explosive',

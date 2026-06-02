@@ -75,6 +75,8 @@ export type StoragePlacementGroup =
     | 'BASE'
     | 'TOXIC_CYANIDE'
     | 'TOXIC_SULFIDE'
+    | 'TOXIC_AZIDE'
+    | 'ACUTE_TOXIC'
     | 'WATER_REACTIVE'
     | 'PYROPHORIC'
     | 'EXPLOSIVE'

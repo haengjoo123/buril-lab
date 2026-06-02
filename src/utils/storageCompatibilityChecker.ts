@@ -67,6 +67,8 @@ const H_CODE_GROUPS: Record<string, StorageGroup[]> = {
     H203: ['EXPLOSIVE'], H204: ['EXPLOSIVE'], H205: ['EXPLOSIVE'],
     // Compressed gas
     H280: ['COMPRESSED_GAS'], H281: ['COMPRESSED_GAS'],
+    // Fatal acute toxicity
+    H300: ['ACUTE_TOXIC'], H310: ['ACUTE_TOXIC'], H330: ['ACUTE_TOXIC'],
     // Corrosive (need further context: acid or base)
     H314: ['INORGANIC_ACID'], // Default to acid; overridden by name detection
 };
@@ -177,6 +179,12 @@ const SULFIDE_PATTERNS = [
     /\bNa2S\b/, /\bFeS\b/, /\bH2S\b/,
 ];
 
+/** Azide compounds */
+const AZIDE_PATTERNS = [
+    /azide/i, /아자이드/i, /아지드/i,
+    /sodium\s*azide/i, /\bNaN3\b/i,
+];
+
 /** Water-reactive materials */
 const WATER_REACTIVE_PATTERNS = [
     /sodium\s*metal/i, /금속\s*나트륨/i,
@@ -227,6 +235,8 @@ const STORAGE_GROUP_PRIORITY: StorageGroup[] = [
     'OXIDIZER',
     'TOXIC_CYANIDE',
     'TOXIC_SULFIDE',
+    'TOXIC_AZIDE',
+    'ACUTE_TOXIC',
     'COMPRESSED_GAS',
     'INORGANIC_ACID',
     'ORGANIC_ACID',
@@ -325,6 +335,10 @@ export function classifyStoragePlacement(item: ReagentPlacement): StorageClassif
     }
     if (matchesAny(nameText, SULFIDE_PATTERNS)) {
         groups.add('TOXIC_SULFIDE');
+        matchedNamePattern = true;
+    }
+    if (matchesAny(nameText, AZIDE_PATTERNS)) {
+        groups.add('TOXIC_AZIDE');
         matchedNamePattern = true;
     }
     if (matchesAny(nameText, WATER_REACTIVE_PATTERNS)) {
@@ -427,6 +441,8 @@ const STORAGE_RULES: StorageRule[] = [
     { ruleId: 'store_acid_cyanide', groupA: 'INORGANIC_ACID', groupB: 'TOXIC_CYANIDE', severity: 'DANGER', messageKey: 'storage_acid_cyanide' },
     // 5. Acid + Sulfide → H2S toxic gas
     { ruleId: 'store_acid_sulfide', groupA: 'INORGANIC_ACID', groupB: 'TOXIC_SULFIDE', severity: 'DANGER', messageKey: 'storage_acid_sulfide' },
+    { ruleId: 'store_inorgacid_azide', groupA: 'INORGANIC_ACID', groupB: 'TOXIC_AZIDE', severity: 'DANGER', messageKey: 'storage_acid_azide' },
+    { ruleId: 'store_orgacid_azide', groupA: 'ORGANIC_ACID', groupB: 'TOXIC_AZIDE', severity: 'DANGER', messageKey: 'storage_acid_azide' },
     // 6. Pyrophoric + Any flammable/oxidizer → Spontaneous ignition
     { ruleId: 'store_pyro_flam', groupA: 'PYROPHORIC', groupB: 'FLAMMABLE', severity: 'DANGER', messageKey: 'storage_pyro_flam' },
     { ruleId: 'store_pyro_oxid', groupA: 'PYROPHORIC', groupB: 'OXIDIZER', severity: 'DANGER', messageKey: 'storage_pyro_danger' },
@@ -593,6 +609,8 @@ export function getStorageGroupLabels(groups: StorageGroup[]): string[] {
         BASE: 'storage_group_base',
         TOXIC_CYANIDE: 'storage_group_cyanide',
         TOXIC_SULFIDE: 'storage_group_sulfide',
+        TOXIC_AZIDE: 'storage_group_azide',
+        ACUTE_TOXIC: 'storage_group_acute_toxic',
         WATER_REACTIVE: 'storage_group_water_reactive',
         PYROPHORIC: 'storage_group_pyrophoric',
         EXPLOSIVE: 'storage_group_explosive',
