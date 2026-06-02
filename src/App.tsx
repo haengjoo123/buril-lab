@@ -5,6 +5,7 @@ import { SearchTabView } from './components/SearchTabView';
 import { BottomTabNav } from './components/BottomTabNav';
 import { VoiceAgentSheet } from './components/VoiceAgentSheet';
 import { openVoiceAgentSheet } from './components/openVoiceAgentSheet';
+import { GatewayLanding } from './components/GatewayLanding';
 
 const Scanner = lazy(() => import('./components/Scanner'));
 
@@ -23,7 +24,15 @@ import { useOnboardingStore } from './store/useOnboardingStore';
 import { useTranslation } from 'react-i18next';
 import { Loader2, ShoppingBag } from 'lucide-react';
 import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
+import { SafetyCenterShell } from './features/safety-center/SafetyCenterShell';
 import { isAuthRequiredPath, sanitizeReturnTo } from './utils/authRoutes';
+import {
+  getLegacyLabAppRedirect,
+  isOpsPath,
+  isLabAppPath,
+  isSafetyCenterPath,
+  labAppRoute,
+} from './utils/appRoutes';
 import { focusCabinetItem } from './services/cabinetFocusService';
 import type { VoiceQueryResponse, VoiceUiAction } from './utils/voiceAgent';
 
@@ -42,13 +51,24 @@ const InventoryListView = lazy(() =>
 const GlobalAuditLogsView = lazy(() =>
   import('./features/admin/GlobalAuditLogsView').then((module) => ({ default: module.GlobalAuditLogsView }))
 );
-const FeedbackInboxView = lazy(() =>
-  import('./features/admin/FeedbackInboxView').then((module) => ({ default: module.FeedbackInboxView }))
+const SafetyCenterWorkspace = lazy(() =>
+  import('./features/safety-center/SafetyCenterWorkspace').then((module) => ({ default: module.SafetyCenterWorkspace }))
+);
+const OpsConsoleView = lazy(() =>
+  import('./features/ops/OpsConsoleView').then((module) => ({ default: module.OpsConsoleView }))
 );
 
 function TabContentFallback() {
   return (
     <div className="h-full min-h-[16rem] flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+    </div>
+  );
+}
+
+function FullScreenLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
       <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
     </div>
   );
@@ -132,6 +152,14 @@ function App() {
   const isResetPasswordRoute = location.pathname === '/reset-password';
   const isPrivacyRoute = location.pathname === '/privacy';
   const isFeedbackAdminRoute = location.pathname === '/feedback-admin';
+  const isGatewayRoute = location.pathname === '/';
+  const isLabRoute = isLabAppPath(location.pathname);
+  const isCenterRoute = isSafetyCenterPath(location.pathname);
+  const isOpsRoute = isOpsPath(location.pathname);
+  const legacyLabAppRedirect = getLegacyLabAppRedirect(location.pathname);
+  const legacyOpsRedirect = isFeedbackAdminRoute ? '/ops/feedback' : null;
+  const rootSearchRedirect = isGatewayRoute && searchParams.has('q') ? labAppRoute() : null;
+  const labAppRedirectTarget = legacyLabAppRedirect ?? rootSearchRedirect;
 
   useEffect(() => {
     if (session) {
@@ -148,18 +176,48 @@ function App() {
   }, [isAuthLoading, session]);
 
   useEffect(() => {
+    if (!labAppRedirectTarget) return;
+    navigate(`${labAppRedirectTarget}${location.search}`, { replace: true });
+  }, [labAppRedirectTarget, location.search, navigate]);
+
+  useEffect(() => {
+    if (!legacyOpsRedirect) return;
+    navigate(legacyOpsRedirect, { replace: true });
+  }, [legacyOpsRedirect, navigate]);
+
+  useEffect(() => {
+    if (isAuthLoading || labAppRedirectTarget || legacyOpsRedirect) return;
+    if (isGatewayRoute || isLoginRoute || isResetPasswordRoute || isPrivacyRoute || isFeedbackAdminRoute || isCenterRoute || isOpsRoute || isLabRoute) return;
+    navigate(labAppRoute(), { replace: true });
+  }, [
+    isAuthLoading,
+    labAppRedirectTarget,
+    legacyOpsRedirect,
+    isGatewayRoute,
+    isLoginRoute,
+    isResetPasswordRoute,
+    isPrivacyRoute,
+    isFeedbackAdminRoute,
+    isCenterRoute,
+    isOpsRoute,
+    isLabRoute,
+    navigate,
+  ]);
+
+  useEffect(() => {
     if (isAuthLoading || session) return;
+    if (labAppRedirectTarget) return;
     if (isLoginRoute || isResetPasswordRoute) return;
     if (!isAuthRequiredPath(location.pathname)) return;
     const returnTo = `${location.pathname}${location.search}`;
     navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
-  }, [isAuthLoading, session, isLoginRoute, isResetPasswordRoute, location.pathname, location.search, navigate]);
+  }, [isAuthLoading, session, labAppRedirectTarget, isLoginRoute, isResetPasswordRoute, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (isAuthLoading || !session) return;
     if (!isLoginRoute) return;
     const raw = searchParams.get('returnTo');
-    const destination = sanitizeReturnTo(raw) ?? '/';
+    const destination = sanitizeReturnTo(raw) ?? labAppRoute();
     navigate(destination, { replace: true });
   }, [isAuthLoading, session, isLoginRoute, navigate, searchParams]);
 
@@ -193,11 +251,11 @@ function App() {
   }, [session, isSafetyAcknowledged, isWelcomeOpen, hasCompletedWelcome, hasSkippedOnboarding, openWelcome]);
 
   useEffect(() => {
-    if (location.pathname !== '/cabinet' || searchParams.get('id') || !locationState?.cabinetId) {
+    if (location.pathname !== labAppRoute('/cabinet') || searchParams.get('id') || !locationState?.cabinetId) {
       return;
     }
 
-    navigate(`/cabinet?id=${locationState.cabinetId}`, {
+    navigate(labAppRoute(`/cabinet?id=${locationState.cabinetId}`), {
       replace: true,
       state: locationState,
     });
@@ -205,12 +263,12 @@ function App() {
 
   const handleNavigateToCabinet = useCallback((cabinetId: string, itemId: string) => {
     if (!session) {
-      const returnTo = `/cabinet?id=${cabinetId}`;
+      const returnTo = labAppRoute(`/cabinet?id=${cabinetId}`);
       navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       return;
     }
 
-    navigate(`/cabinet?id=${cabinetId}`, {
+    navigate(labAppRoute(`/cabinet?id=${cabinetId}`), {
       state: { cabinetId, itemId },
     });
 
@@ -219,12 +277,12 @@ function App() {
 
   const handleCabinetSearchResultClick = useCallback(async (item: CabinetSearchResult) => {
     if (!session) {
-      const returnTo = `/cabinet?id=${item.cabinetId}`;
+      const returnTo = labAppRoute(`/cabinet?id=${item.cabinetId}`);
       navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       return;
     }
 
-    navigate(`/cabinet?id=${item.cabinetId}`);
+    navigate(labAppRoute(`/cabinet?id=${item.cabinetId}`));
     await focusCabinetItem({
       cabinetId: item.cabinetId,
       itemId: item.itemId,
@@ -239,7 +297,7 @@ function App() {
         return;
       }
 
-      navigate(`/?q=${encodeURIComponent(searchQuery)}`);
+      navigate(`${labAppRoute()}?q=${encodeURIComponent(searchQuery)}`);
       return;
     }
 
@@ -251,7 +309,7 @@ function App() {
       return;
     }
 
-    navigate(`/cabinet?id=${action.cabinetId}`, {
+    navigate(labAppRoute(`/cabinet?id=${action.cabinetId}`), {
       state: {
         cabinetId: action.cabinetId,
         itemId: action.highlightItemId,
@@ -271,11 +329,7 @@ function App() {
   };
 
   if (isAuthLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-      </div>
-    );
+    return <FullScreenLoader />;
   }
 
   if (isPrivacyRoute) {
@@ -286,15 +340,28 @@ function App() {
     return <ResetPasswordView />;
   }
 
+  if (labAppRedirectTarget) {
+    return <FullScreenLoader />;
+  }
+
+  if (isGatewayRoute) {
+    return (
+      <GatewayLanding
+        isAuthenticated={!!session}
+        userEmail={user?.email}
+        onNavigateToApp={() => navigate(labAppRoute())}
+        onNavigateToCenter={() => navigate('/center')}
+        onLoginClick={() => navigate('/login')}
+        onSignOut={session ? signOut : undefined}
+      />
+    );
+  }
+
   const guestRedirectingToLogin =
     !session && !isLoginRoute && isAuthRequiredPath(location.pathname);
 
   if (guestRedirectingToLogin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-      </div>
-    );
+    return <FullScreenLoader />;
   }
 
   if (!session && isLoginRoute) {
@@ -312,95 +379,53 @@ function App() {
 
   if (!session) {
     return (
-      <>
-        <SafetyDisclaimer />
-
-        {isScanning && (
-          <Suspense fallback={
-            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-              <Loader2 className="w-10 h-10 text-white animate-spin" />
-            </div>
-          }>
-            <Scanner
-              onScan={handleScan}
-              onClose={() => setIsScanning(false)}
-            />
-          </Suspense>
-        )}
-
-        <MainLayout
-          onLogoClick={handleReset}
-          hideLabSwitcher
-          onLoginClick={() => navigate('/login')}
-          activeTab={activeTab}
-          isAdmin={false}
-          onTabClick={handleTabClick}
-          bottomNav={
-            <BottomTabNav activeTab={activeTab} isAdmin={false} onTabClick={handleTabClick} />
-          }
-        >
-          <SearchTabView
-            cartCount={0}
-            showRecentWasteLogs={false}
-            query={query}
-            lastSearchQuery={lastSearchQuery}
-            isLoading={isLoading}
-            isAiAnalyzing={isAiAnalyzing}
-            error={error}
-            result={result}
-            mediaProducts={mediaProducts}
-            mediaBrands={mediaBrands}
-            mediaCount={mediaCount}
-            cabinetResults={cabinetResults}
-            showAllProducts={showAllProducts}
-            selectedBrand={selectedBrand}
-            sortBy={sortBy}
-            recentSearches={recentSearches}
-            onQueryChange={setQuery}
-            onSearchSubmit={handleSearch}
-            onReset={handleReset}
-            onSuggestionClick={navigateWithFreshFilters}
-            onOpenScanner={() => setIsScanning(true)}
-            onClearSearchHistory={clearSearchHistory}
-            onRemoveSearchHistory={removeSearchHistory}
-            onCabinetResultClick={handleCabinetSearchResultClick}
-            onBrandChange={handleBrandChange}
-            onSortChange={handleSortChange}
-            onClearFilters={handleClearFilters}
-            onToggleShowAllProducts={() => setShowAllProducts(!showAllProducts)}
-            onNavigateToCabinet={handleNavigateToCabinet}
-            suggestions={suggestions}
-            isSuggestionsLoading={isSuggestionsLoading}
-            onClearSuggestions={clearSuggestions}
-            onRequireAuth={() =>
-              navigate(`/login?returnTo=${encodeURIComponent(`${location.pathname}${location.search}`)}`)
-            }
-          />
-        </MainLayout>
-      </>
+      <GatewayLanding
+        isAuthenticated={false}
+        onNavigateToApp={() => navigate(labAppRoute())}
+        onNavigateToCenter={() => navigate('/center')}
+        onLoginClick={() => navigate('/login')}
+      />
     );
   }
 
-  if (isFeedbackAdminRoute) {
+  if (isOpsRoute) {
     return (
       <>
         <SafetyDisclaimer />
 
         {isWelcomeOpen && <OnboardingWelcomeModal />}
 
-        <MainLayout
-          onLogoClick={handleReset}
+        <Suspense fallback={<FullScreenLoader />}>
+          <OpsConsoleView
+            userEmail={user?.email}
+            onSignOut={signOut}
+            onExitToApp={() => navigate(labAppRoute())}
+          />
+        </Suspense>
+      </>
+    );
+  }
+
+  if (isFeedbackAdminRoute) {
+    return <FullScreenLoader />;
+  }
+
+  if (isCenterRoute) {
+    return (
+      <>
+        <SafetyDisclaimer />
+
+        {isWelcomeOpen && <OnboardingWelcomeModal />}
+
+        <SafetyCenterShell
           userEmail={user?.email}
           onSignOut={signOut}
-          hideLabSwitcher
-          activeTab={activeTab}
-          isAdmin={isAdmin}
-          onTabClick={handleTabClick}
+          onExitToLab={() => navigate(labAppRoute())}
         >
           <Suspense fallback={<TabContentFallback />}>
-            <FeedbackInboxView />
+            <SafetyCenterWorkspace />
           </Suspense>
-        </MainLayout>
+        </SafetyCenterShell>
       </>
     );
   }
@@ -429,7 +454,7 @@ function App() {
           onClose={() => setIsCartOpen(false)}
           onDisposed={() => {
             incrementLogRefreshKey();
-            navigate('/logs');
+            navigate(labAppRoute('/logs'));
           }}
         />
       )}
@@ -453,10 +478,10 @@ function App() {
               {activeCabinetId ? (
                 <FridgeView
                   cabinetId={activeCabinetId}
-                  onBack={() => navigate('/cabinet')}
+                  onBack={() => navigate(labAppRoute('/cabinet'))}
                 />
               ) : (
-                <CabinetListView onSelectCabinet={(id) => navigate(`/cabinet?id=${id}`)} />
+                <CabinetListView onSelectCabinet={(id) => navigate(labAppRoute(`/cabinet?id=${id}`))} />
               )}
             </div>
           ) : activeTab === 'logs' ? (
@@ -471,7 +496,7 @@ function App() {
               cartItems={cart}
               onOpenCart={() => setIsCartOpen(true)}
               showRecentWasteLogs
-              onOpenLogs={() => navigate('/logs')}
+              onOpenLogs={() => navigate(labAppRoute('/logs'))}
               query={query}
               lastSearchQuery={lastSearchQuery}
               isLoading={isLoading}

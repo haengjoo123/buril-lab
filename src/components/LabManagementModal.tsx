@@ -25,6 +25,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const [createName, setCreateName] = useState('');
     const [createPassword, setCreatePassword] = useState('');
     const [createNickname, setCreateNickname] = useState('');
+    const [createInstitutionName, setCreateInstitutionName] = useState('');
     const [createInstitutionType, setCreateInstitutionType] = useState('');
     const [createResearchField, setCreateResearchField] = useState('');
 
@@ -37,6 +38,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const [settingsName, setSettingsName] = useState('');
     const [settingsPassword, setSettingsPassword] = useState('');
     const [settingsRemovePassword, setSettingsRemovePassword] = useState(false);
+    const [settingsInstitutionName, setSettingsInstitutionName] = useState('');
     const [settingsInstitutionType, setSettingsInstitutionType] = useState('');
     const [settingsResearchField, setSettingsResearchField] = useState('');
 
@@ -133,7 +135,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!createName.trim() || !createNickname.trim() || !createInstitutionType || !createResearchField) return;
+        if (!createName.trim() || !createNickname.trim() || !createInstitutionName.trim() || !createInstitutionType || !createResearchField) return;
         if (hasReachedLabLimit) {
             setError(labLimitMessage);
             return;
@@ -146,7 +148,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                 createPassword, 
                 createNickname,
                 createInstitutionType.trim() ? createInstitutionType.trim() : undefined,
-                createResearchField.trim() ? createResearchField.trim() : undefined
+                createResearchField.trim() ? createResearchField.trim() : undefined,
+                createInstitutionName.trim() ? createInstitutionName.trim() : undefined
             );
             // update state
             const updatedLabs = await labService.getMyLabs();
@@ -195,6 +198,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         try {
             await labService.updateLab(currentLabId, {
                 name: settingsName,
+                institution_name: settingsInstitutionName.trim() ? settingsInstitutionName.trim() : null,
                 institution_type: settingsInstitutionType.trim() ? settingsInstitutionType.trim() : null,
                 research_field: settingsResearchField.trim() ? settingsResearchField.trim() : null
             });
@@ -246,6 +250,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         setSettingsName(lab?.name || '');
         setSettingsPassword('');
         setSettingsRemovePassword(false);
+        setSettingsInstitutionName(lab?.institution_name || '');
         setSettingsInstitutionType(lab?.institution_type || '');
         setSettingsResearchField(lab?.research_field || '');
         setView('settings');
@@ -481,6 +486,20 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 />
                             </div>
                             <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">소속 기관명</label>
+                                <input
+                                    type="text"
+                                    value={createInstitutionName}
+                                    onChange={e => setCreateInstitutionName(e.target.value)}
+                                    placeholder="예: 릴랩대학교"
+                                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+                                    required
+                                />
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    통합 안전관리센터 연결 후보를 식별하는 기준입니다.
+                                </p>
+                            </div>
+                            <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_institution_type')}</label>
                                 <AppSelect
                                     value={createInstitutionType}
@@ -515,7 +534,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
                                     {t('btn_cancel')}
                                 </button>
-                                <button type="submit" disabled={isLoading || hasReachedLabLimit || !createName.trim() || !createNickname.trim() || !createInstitutionType || !createResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
+                                <button type="submit" disabled={isLoading || hasReachedLabLimit || !createName.trim() || !createNickname.trim() || !createInstitutionName.trim() || !createInstitutionType || !createResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_create')}
                                 </button>
                             </div>
@@ -715,6 +734,20 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 />
                             </div>
                             <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">소속 기관명</label>
+                                <input
+                                    type="text"
+                                    value={settingsInstitutionName}
+                                    onChange={e => setSettingsInstitutionName(e.target.value)}
+                                    placeholder="예: 릴랩대학교"
+                                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+                                    required
+                                />
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    같은 기관의 승인된 통합센터에서 연결 요청 후보로 찾을 때 사용됩니다.
+                                </p>
+                            </div>
+                            <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_password')}</label>
                                 <input
                                     type="password"
@@ -771,7 +804,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
                                     {t('btn_cancel')}
                                 </button>
-                                <button type="submit" disabled={isLoading || !settingsName.trim() || !settingsInstitutionType || !settingsResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
+                                <button type="submit" disabled={isLoading || !settingsName.trim() || !settingsInstitutionName.trim() || !settingsInstitutionType || !settingsResearchField} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex justify-center items-center">
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('lab_mgmt_btn_save')}
                                 </button>
                             </div>

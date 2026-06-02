@@ -15,6 +15,26 @@ interface SaveWasteLogParams {
     memo?: string;
 }
 
+function normalizeWasteLogChemicals(value: unknown): CartItem[] {
+    if (!Array.isArray(value)) return [];
+
+    return value.filter((item): item is CartItem => (
+        item !== null &&
+        typeof item === 'object' &&
+        !Array.isArray(item)
+    ));
+}
+
+function normalizeWasteLogRow(row: unknown): WasteLog {
+    const log = row as WasteLog & { chemicals?: unknown };
+
+    return {
+        ...log,
+        chemicals: normalizeWasteLogChemicals(log.chemicals),
+        disposal_category: log.disposal_category || 'UNKNOWN',
+    };
+}
+
 /**
  * Save a waste disposal record to Supabase
  */
@@ -48,7 +68,7 @@ export async function saveWasteLog(params: SaveWasteLogParams): Promise<WasteLog
         throw error;
     }
 
-    return data as WasteLog;
+    return normalizeWasteLogRow(data);
 }
 
 /** 정렬 기준 */
@@ -127,7 +147,7 @@ export async function fetchWasteLogs(
     }
 
     return {
-        logs: (data || []) as WasteLog[],
+        logs: (data || []).map(normalizeWasteLogRow),
         count: count || 0,
     };
 }

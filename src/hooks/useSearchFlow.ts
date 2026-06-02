@@ -10,6 +10,7 @@ import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from 
 import { analyzeChemical } from '../utils/chemicalAnalyzer';
 import { classifyChemicalWithAI } from '../services/geminiClassificationService';
 import type { AnalysisResult } from '../types';
+import { getLabAppScopedPath, labAppRoute } from '../utils/appRoutes';
 
 interface UseSearchFlowParams {
   pathname: string;
@@ -72,11 +73,16 @@ export function useSearchFlow({
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
 
   const urlQuery = useMemo(() => searchParams.get('q'), [searchParams]);
-  const isSearchTab = useMemo(() => !pathname.startsWith('/logs')
-    && !pathname.startsWith('/cabinet')
-    && !pathname.startsWith('/inventory')
-    && !pathname.startsWith('/admin')
-    && !pathname.startsWith('/feedback-admin'), [pathname]);
+  const isSearchTab = useMemo(() => {
+    const appPathname = getLabAppScopedPath(pathname);
+    return !appPathname.startsWith('/logs')
+      && !appPathname.startsWith('/cabinet')
+      && !appPathname.startsWith('/inventory')
+      && !appPathname.startsWith('/admin')
+      && !pathname.startsWith('/center')
+      && !pathname.startsWith('/ops')
+      && !pathname.startsWith('/feedback-admin');
+  }, [pathname]);
 
   const performSearch = useCallback(async (searchQuery: string, brand: string = 'all', sort: SortOption = 'relevance') => {
     if (!searchQuery.trim()) return;
@@ -249,10 +255,10 @@ export function useSearchFlow({
     setSelectedBrand('all');
     setSortBy('relevance');
     if (!normalized) {
-      navigate('/');
+      navigate(labAppRoute());
       return;
     }
-    navigate(`/?q=${encodeURIComponent(normalized)}`);
+    navigate(`${labAppRoute()}?q=${encodeURIComponent(normalized)}`);
   }, [navigate]);
 
   const handleSearch = useCallback((e?: FormEvent) => {
@@ -261,7 +267,7 @@ export function useSearchFlow({
   }, [navigateWithFreshFilters, query]);
 
   const handleReset = useCallback(() => {
-    navigate('/');
+    navigate(labAppRoute());
   }, [navigate]);
 
   return {

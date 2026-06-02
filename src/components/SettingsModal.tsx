@@ -205,16 +205,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     ];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-[380px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="flex w-full max-w-[380px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
 
-                <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center">
+                <div className="shrink-0 p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center">
                     <h3 className="font-bold text-lg text-slate-800 dark:text-white">
                         {showFeedback ? t('feedback_title') : t('settings_title')}
                     </h3>
                     <button
+                        type="button"
                         onClick={showFeedback ? handleCloseFeedback : onClose}
-                        className="p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                        className="shrink-0 p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                        aria-label={t('btn_close')}
                     >
                         <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                     </button>
@@ -222,7 +224,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                 {/* ── Feedback Panel ── */}
                 {showFeedback ? (
-                    <div className="p-4">
+                    <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
                         {submitSuccess ? (
                             /* Success State */
                             <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
@@ -329,7 +331,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </div>
                 ) : (
                     /* ── Settings Panel ── */
-                    <div className="p-4 space-y-3">
+                    <div className="min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3">
                         {/* Language Switcher */}
                         <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl mb-2">
                             <div className="flex items-center gap-2 mb-3 text-slate-700 dark:text-slate-300 font-medium">
@@ -502,7 +504,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </div>
                 )}
 
-                <div className="p-4 bg-gray-50 dark:bg-slate-950/50 flex flex-col items-center gap-2 text-xs text-gray-400 dark:text-gray-600">
+                <div className="shrink-0 p-4 bg-gray-50 dark:bg-slate-950/50 flex flex-col items-center gap-2 text-xs text-gray-400 dark:text-gray-600">
                     <a
                         href="/privacy"
                         className="hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2 transition-colors"

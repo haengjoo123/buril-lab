@@ -128,31 +128,35 @@ export function SearchTabView({
   const hiddenCartCount = Math.max(0, cartItems.length - visibleCartItems.length);
 
   useEffect(() => {
-    if (!showRecentWasteLogs) {
-      setRecentWasteLogs([]);
-      setWasteLogsError(false);
-      setIsWasteLogsLoading(false);
-      return;
-    }
-
     let isMounted = true;
-    setIsWasteLogsLoading(true);
-    setWasteLogsError(false);
 
-    fetchWasteLogs(3, 0, { sortBy: 'created_at', sortOrder: 'desc' })
-      .then(({ logs }) => {
+    const loadRecentWasteLogs = async () => {
+      if (!showRecentWasteLogs) {
+        setRecentWasteLogs([]);
+        setWasteLogsError(false);
+        setIsWasteLogsLoading(false);
+        return;
+      }
+
+      setIsWasteLogsLoading(true);
+      setWasteLogsError(false);
+
+      try {
+        const { logs } = await fetchWasteLogs(3, 0, { sortBy: 'created_at', sortOrder: 'desc' });
         if (!isMounted) return;
         setRecentWasteLogs(logs);
-      })
-      .catch(() => {
+      } catch {
         if (!isMounted) return;
         setRecentWasteLogs([]);
         setWasteLogsError(true);
-      })
-      .finally(() => {
-        if (!isMounted) return;
-        setIsWasteLogsLoading(false);
-      });
+      } finally {
+        if (isMounted) {
+          setIsWasteLogsLoading(false);
+        }
+      }
+    };
+
+    void Promise.resolve().then(loadRecentWasteLogs);
 
     return () => {
       isMounted = false;
@@ -592,7 +596,7 @@ export function SearchTabView({
                       {item.chemical.name}
                     </div>
                     <div className="mt-1 truncate text-xs font-medium text-slate-500 dark:text-slate-400">
-                      {t(item.label as any)}
+                      {t(item.label)}
                     </div>
                   </div>
                 ))}

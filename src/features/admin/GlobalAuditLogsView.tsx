@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
 import { useTranslation } from 'react-i18next';
-import { ShieldAlert, Loader2, Users } from 'lucide-react';
+import { Building2, ShieldAlert, Loader2, Users } from 'lucide-react';
 import { EmptyState } from '../../components/EmptyState';
 import { AppSelect } from '../../components/AppSelect';
 import { MemberManagementPanel } from './MemberManagementPanel';
+import { LabSafetyCenterPanel } from './LabSafetyCenterPanel';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import {
     buildAuditEventDescription,
@@ -22,7 +23,7 @@ type ActionFilter = 'all' | 'create' | 'update' | 'delete';
 type PeriodFilter = 'all' | 'today' | '7d';
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-type AdminTab = 'members' | 'audit';
+type AdminTab = 'members' | 'center' | 'audit';
 
 export const GlobalAuditLogsView: React.FC = () => {
     const { t, i18n } = useTranslation();
@@ -207,11 +208,24 @@ export const GlobalAuditLogsView: React.FC = () => {
                     <ShieldAlert className="w-4 h-4" />
                     {t('admin_tab_audit')}
                 </button>
+                <button
+                    onClick={() => setActiveTab('center')}
+                    className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'center'
+                            ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                            : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    <Building2 className="w-4 h-4" />
+                    센터 연결
+                </button>
             </div>
 
             {/* Tab content */}
             {activeTab === 'members' ? (
                 <MemberManagementPanel />
+            ) : activeTab === 'center' ? (
+                <LabSafetyCenterPanel />
             ) : (
                 <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
                     <div className="flex items-center justify-between">

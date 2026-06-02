@@ -7,6 +7,7 @@ export interface FeedbackAdminEnv {
   VITE_SUPABASE_URL?: string
   VITE_SUPABASE_ANON_KEY?: string
   FEEDBACK_ADMIN_EMAILS?: string
+  OPS_ADMIN_EMAILS?: string
 }
 
 export interface FeedbackAdminIdentity {
@@ -102,9 +103,11 @@ function createSupabaseAdminClient(env: FeedbackAdminEnv) {
   })
 }
 
-function parseFeedbackAdminEmails(raw: string | undefined): Set<string> {
+function parseAdminEmails(...rawValues: Array<string | undefined>): Set<string> {
   return new Set(
-    (raw || '')
+    rawValues
+      .filter(Boolean)
+      .join(',')
       .split(',')
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
@@ -144,11 +147,11 @@ export async function requireFeedbackAdmin(
     }
   }
 
-  const allowlist = parseFeedbackAdminEmails(env.FEEDBACK_ADMIN_EMAILS)
+  const allowlist = parseAdminEmails(env.OPS_ADMIN_EMAILS, env.FEEDBACK_ADMIN_EMAILS)
   if (allowlist.size === 0) {
     return {
       ok: false,
-      response: json({ error: 'Feedback admin allowlist is not configured.' }, { status: 500 }),
+      response: json({ error: 'Operator admin allowlist is not configured.' }, { status: 500 }),
     }
   }
 
@@ -156,7 +159,7 @@ export async function requireFeedbackAdmin(
   if (!email || !allowlist.has(email)) {
     return {
       ok: false,
-      response: json({ error: 'This page is only available to allowlisted feedback admins.' }, { status: 403 }),
+      response: json({ error: 'This page is only available to allowlisted operators.' }, { status: 403 }),
     }
   }
 

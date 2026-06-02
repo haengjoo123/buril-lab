@@ -1,9 +1,10 @@
-/**
- * 로그인 없이 접근 가능한 경로(검색 홈 등)와 로그인 필수 경로 구분
- */
+import { isLabAppPath, isOpsPath, isSafetyCenterPath } from './appRoutes';
 
 export function isAuthRequiredPath(pathname: string): boolean {
   return (
+    isLabAppPath(pathname) ||
+    isSafetyCenterPath(pathname) ||
+    isOpsPath(pathname) ||
     pathname.startsWith('/logs') ||
     pathname.startsWith('/cabinet') ||
     pathname.startsWith('/inventory') ||

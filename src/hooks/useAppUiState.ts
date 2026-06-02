@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
+import { getLabAppScopedPath, labAppRoute } from '../utils/appRoutes';
 
 export type AppTab = 'search' | 'logs' | 'cabinet' | 'inventory' | 'admin';
 
@@ -25,10 +26,11 @@ interface UseAppUiStateResult {
 }
 
 function getActiveTab(pathname: string): AppTab {
-  if (pathname.startsWith('/logs')) return 'logs';
-  if (pathname.startsWith('/cabinet')) return 'cabinet';
-  if (pathname.startsWith('/inventory')) return 'inventory';
-  if (pathname.startsWith('/admin')) return 'admin';
+  const appPathname = getLabAppScopedPath(pathname);
+  if (appPathname.startsWith('/logs')) return 'logs';
+  if (appPathname.startsWith('/cabinet')) return 'cabinet';
+  if (appPathname.startsWith('/inventory')) return 'inventory';
+  if (appPathname.startsWith('/admin')) return 'admin';
   return 'search';
 }
 
@@ -64,8 +66,9 @@ export function useAppUiState({
     previousLabIdRef.current = currentLabId;
     lastCabinetIdRef.current = null;
 
-    if (pathname.startsWith('/cabinet')) {
-      navigate('/cabinet');
+    const appPathname = getLabAppScopedPath(pathname);
+    if (appPathname.startsWith('/cabinet')) {
+      navigate(labAppRoute('/cabinet'));
     }
   }, [currentLabId, navigate, pathname]);
 
@@ -73,38 +76,38 @@ export function useAppUiState({
     if (!isAuthenticated && tab !== 'search') {
       const returnTo =
         tab === 'logs'
-          ? '/logs'
+          ? labAppRoute('/logs')
           : tab === 'cabinet'
             ? lastCabinetIdRef.current
-              ? `/cabinet?id=${lastCabinetIdRef.current}`
-              : '/cabinet'
+              ? labAppRoute(`/cabinet?id=${lastCabinetIdRef.current}`)
+              : labAppRoute('/cabinet')
             : tab === 'inventory'
-              ? '/inventory'
-              : tab === 'admin'
-                ? '/admin'
-                : '/';
+              ? labAppRoute('/inventory')
+            : tab === 'admin'
+                ? labAppRoute('/admin')
+                : labAppRoute();
       navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       return;
     }
 
     switch (tab) {
       case 'search':
-        navigate(lastSearchQuery ? `/?q=${encodeURIComponent(lastSearchQuery)}` : '/');
+        navigate(lastSearchQuery ? `${labAppRoute()}?q=${encodeURIComponent(lastSearchQuery)}` : labAppRoute());
         break;
       case 'logs':
-        navigate('/logs');
+        navigate(labAppRoute('/logs'));
         break;
       case 'cabinet':
-        navigate(lastCabinetIdRef.current ? `/cabinet?id=${lastCabinetIdRef.current}` : '/cabinet');
+        navigate(lastCabinetIdRef.current ? labAppRoute(`/cabinet?id=${lastCabinetIdRef.current}`) : labAppRoute('/cabinet'));
         break;
       case 'inventory':
-        navigate('/inventory');
+        navigate(labAppRoute('/inventory'));
         break;
       case 'admin':
-        navigate('/admin');
+        navigate(labAppRoute('/admin'));
         break;
       default:
-        navigate('/');
+        navigate(labAppRoute());
         break;
     }
   }, [isAuthenticated, lastSearchQuery, navigate]);

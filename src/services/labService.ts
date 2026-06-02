@@ -6,17 +6,31 @@ export const LAB_MEMBERSHIP_LIMIT = 3;
 export const LAB_MEMBERSHIP_LIMIT_ERROR = `계정당 최대 ${LAB_MEMBERSHIP_LIMIT}곳의 연구실에만 가입할 수 있습니다. 관리자 연구실도 포함됩니다.`;
 
 const LAB_MEMBERSHIP_LIMIT_DB_CODE = 'max_lab_memberships_exceeded';
+const LAB_SELECT = 'id, name, created_by, created_at, institution_type, research_field';
+const LAB_SELECT_WITH_INSTITUTION_NAME = `id, name, created_by, created_at, institution_name, institution_type, research_field`;
+const LAB_MEMBER_SELECT = `
+                *,
+                lab:labs(${LAB_SELECT})
+            `;
+const LAB_MEMBER_SELECT_WITH_INSTITUTION_NAME = `
+                *,
+                lab:labs(${LAB_SELECT_WITH_INSTITUTION_NAME})
+            `;
+
+const getErrorText = (error: unknown): string => {
+    if (!error) return '';
+    if (typeof error === 'string') return error;
+    return [
+        (error as any).message,
+        (error as any).details,
+        (error as any).hint,
+        (error as any).error
+    ].filter(Boolean).join('\n');
+};
 
 export const isLabMembershipLimitError = (error: unknown): boolean => {
     if (!error) return false;
-    const message = typeof error === 'string'
-        ? error
-        : [
-            (error as any).message,
-            (error as any).details,
-            (error as any).hint,
-            (error as any).error
-        ].filter(Boolean).join('\n');
+    const message = getErrorText(error);
 
     return message.includes(LAB_MEMBERSHIP_LIMIT_DB_CODE)
         || message.includes(LAB_MEMBERSHIP_LIMIT_ERROR)
@@ -30,15 +44,87 @@ const throwIfLabMembershipLimitError = (error: unknown) => {
     }
 };
 
+const isMissingInstitutionNameColumnError = (error: unknown): boolean => {
+    const message = getErrorText(error);
+    return ((error as any)?.code === '42703' || message.includes('column'))
+        && message.includes('institution_name');
+};
+
+const isMissingInstitutionNameRpcArgumentError = (error: unknown): boolean => {
+    const message = getErrorText(error);
+    return message.includes('create_lab_secure')
+        && message.includes('p_institution_name')
+        && (message.includes('Could not find the function') || (error as any)?.code === 'PGRST202');
+};
+
+const fetchLabById = async (labId: string): Promise<Lab> => {
+    const { data, error } = await supabase
+        .from('labs')
+        .select(LAB_SELECT_WITH_INSTITUTION_NAME)
+        .eq('id', labId)
+        .single();
+
+    if (error && isMissingInstitutionNameColumnError(error)) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+            .from('labs')
+            .select(LAB_SELECT)
+            .eq('id', labId)
+            .single();
+
+        if (fallbackError) throw fallbackError;
+        return fallbackData as Lab;
+    }
+
+    if (error) throw error;
+    return data as Lab;
+};
+
+const fetchMyLabMemberships = async (userId: string): Promise<LabMember[]> => {
+    const { data, error } = await supabase
+        .from('lab_members')
+        .select(LAB_MEMBER_SELECT_WITH_INSTITUTION_NAME)
+        .eq('user_id', userId);
+
+    if (error && isMissingInstitutionNameColumnError(error)) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+            .from('lab_members')
+            .select(LAB_MEMBER_SELECT)
+            .eq('user_id', userId);
+
+        if (fallbackError) throw fallbackError;
+        return fallbackData as LabMember[];
+    }
+
+    if (error) throw error;
+    return data as LabMember[];
+};
+
 export const labService = {
-    async createLab(name: string, password?: string, nickname?: string, institutionType?: string, researchField?: string): Promise<Lab> {
-        const { data, error } = await supabase.rpc('create_lab_secure', {
+    async createLab(
+        name: string,
+        password?: string,
+        nickname?: string,
+        institutionType?: string,
+        researchField?: string,
+        institutionName?: string
+    ): Promise<Lab> {
+        const createLabParams = {
             p_name: name,
             p_password: password || null,
             p_nickname: nickname || null,
             p_institution_type: institutionType || null,
             p_research_field: researchField || null
-        });
+        };
+        const createLabParamsWithInstitutionName = {
+            ...createLabParams,
+            p_institution_name: institutionName || null
+        };
+
+        let { data, error } = await supabase.rpc('create_lab_secure', createLabParamsWithInstitutionName);
+
+        if (error && isMissingInstitutionNameRpcArgumentError(error)) {
+            ({ data, error } = await supabase.rpc('create_lab_secure', createLabParams));
+        }
 
         if (error) {
             throwIfLabMembershipLimitError(error);
@@ -49,15 +135,7 @@ export const labService = {
             throw new Error(data.error || "연구실 생성에 실패했습니다.");
         }
 
-        // Fetch the created lab details
-        const { data: labData, error: fetchError } = await supabase
-            .from('labs')
-            .select('id, name, created_by, created_at, institution_type, research_field')
-            .eq('id', data.lab_id)
-            .single();
-
-        if (fetchError) throw fetchError;
-        return labData as Lab;
+        return fetchLabById(data.lab_id);
     },
 
     async joinLab(labId: string, password?: string, nickname?: string): Promise<LabMember> {
@@ -89,12 +167,21 @@ export const labService = {
         if (!userData.user) throw new Error("가입 후 사용자 정보를 불러올 수 없습니다.");
 
         // Fetch the newly created member to return
-        const { data: memberData, error: memberError } = await supabase
+        let { data: memberData, error: memberError } = await supabase
             .from('lab_members')
-            .select('*, labs(id, name, created_by, created_at, institution_type, research_field)')
+            .select(LAB_MEMBER_SELECT_WITH_INSTITUTION_NAME)
             .eq('lab_id', labId)
             .eq('user_id', userData.user.id)
             .single();
+
+        if (memberError && isMissingInstitutionNameColumnError(memberError)) {
+            ({ data: memberData, error: memberError } = await supabase
+                .from('lab_members')
+                .select(LAB_MEMBER_SELECT)
+                .eq('lab_id', labId)
+                .eq('user_id', userData.user.id)
+                .single());
+        }
 
         if (memberError) throw memberError;
         return memberData as LabMember;
@@ -104,16 +191,7 @@ export const labService = {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) return [];
 
-        const { data, error } = await supabase
-            .from('lab_members')
-            .select(`
-                *,
-                lab:labs(id, name, created_by, created_at, institution_type, research_field)
-            `)
-            .eq('user_id', userData.user.id);
-
-        if (error) throw error;
-        return data as LabMember[];
+        return fetchMyLabMemberships(userData.user.id);
     },
 
     async searchLabs(query: string): Promise<(Lab & { has_password?: boolean })[]> {
@@ -150,6 +228,7 @@ export const labService = {
         labId: string,
         updates: {
             name?: string;
+            institution_name?: string | null;
             institution_type?: string | null;
             research_field?: string | null;
         }
@@ -158,6 +237,21 @@ export const labService = {
             .from('labs')
             .update(updates)
             .eq('id', labId);
+
+        if (error && isMissingInstitutionNameColumnError(error) && 'institution_name' in updates) {
+            const fallbackUpdates = { ...updates };
+            delete fallbackUpdates.institution_name;
+
+            if (Object.keys(fallbackUpdates).length === 0) return;
+
+            const { error: fallbackError } = await supabase
+                .from('labs')
+                .update(fallbackUpdates)
+                .eq('id', labId);
+
+            if (fallbackError) throw fallbackError;
+            return;
+        }
 
         if (error) throw error;
     },

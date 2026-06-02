@@ -1,11 +1,266 @@
-import { defineConfig } from 'vite'
+import { Buffer } from 'node:buffer'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
+type AdminIdentity = {
+  id: string
+  email: string
+}
+
+type LocalAdminContext = {
+  adminClient: SupabaseClient
+  identity: AdminIdentity
+}
+
+const feedbackSelectFields = [
+  'id',
+  'type',
+  'message',
+  'contact',
+  'user_email',
+  'user_id',
+  'user_agent',
+  'created_at',
+  'status',
+  'resolved_at',
+  'resolved_by',
+].join(', ')
+
+const safetyCenterSelectFields = [
+  'id',
+  'institution_name',
+  'institution_domain',
+  'center_name',
+  'status',
+  'created_by',
+  'approved_by',
+  'approved_at',
+  'created_at',
+  'updated_at',
+].join(', ')
+
+function sendJson(response: ServerResponse, status: number, data: unknown) {
+  response.statusCode = status
+  response.setHeader('Content-Type', 'application/json; charset=utf-8')
+  response.end(JSON.stringify(data))
+}
+
+function parseAdminEmails(...rawValues: Array<string | undefined>): Set<string> {
+  return new Set(
+    rawValues
+      .filter(Boolean)
+      .join(',')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  )
+}
+
+function getHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function getSupabaseConfig(env: Record<string, string>) {
+  return {
+    url: env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim(),
+    anonKey: env.SUPABASE_ANON_KEY?.trim() || env.VITE_SUPABASE_ANON_KEY?.trim(),
+    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
+  }
+}
+
+async function readJsonBody<TBody>(request: IncomingMessage): Promise<TBody> {
+  const chunks: Buffer[] = []
+
+  for await (const chunk of request) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+  }
+
+  const raw = Buffer.concat(chunks).toString('utf8')
+  return (raw ? JSON.parse(raw) : {}) as TBody
+}
+
+async function requireLocalAdmin(
+  request: IncomingMessage,
+  env: Record<string, string>,
+): Promise<{ ok: true; context: LocalAdminContext } | { ok: false; status: number; error: string }> {
+  const authHeader = getHeaderValue(request.headers.authorization)
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { ok: false, status: 401, error: 'Authentication is required.' }
+  }
+
+  const { url, anonKey, serviceRoleKey } = getSupabaseConfig(env)
+  if (!url || !anonKey) {
+    return { ok: false, status: 500, error: 'Supabase URL or anon key is not configured.' }
+  }
+
+  if (!serviceRoleKey) {
+    return { ok: false, status: 500, error: 'Supabase service role key is not configured.' }
+  }
+
+  const userClient = createClient(url, anonKey, {
+    global: {
+      headers: {
+        Authorization: authHeader,
+      },
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+
+  const { data, error } = await userClient.auth.getUser()
+  if (error || !data.user) {
+    return { ok: false, status: 401, error: 'Authentication is required.' }
+  }
+
+  const allowlist = parseAdminEmails(env.OPS_ADMIN_EMAILS, env.FEEDBACK_ADMIN_EMAILS)
+  if (allowlist.size === 0) {
+    return { ok: false, status: 500, error: 'Operator admin allowlist is not configured.' }
+  }
+
+  const email = data.user.email?.trim().toLowerCase()
+  if (!email || !allowlist.has(email)) {
+    return { ok: false, status: 403, error: 'This page is only available to allowlisted operators.' }
+  }
+
+  return {
+    ok: true,
+    context: {
+      adminClient: createClient(url, serviceRoleKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }),
+      identity: {
+        id: data.user.id,
+        email,
+      },
+    },
+  }
+}
+
+function localAdminApiPlugin(env: Record<string, string>): Plugin {
+  return {
+    name: 'buril-local-admin-api',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const pathname = new URL(request.url || '/', 'http://localhost').pathname
+
+        if (!pathname.startsWith('/api/admin/feedback/') && !pathname.startsWith('/api/admin/safety-centers/')) {
+          next()
+          return
+        }
+
+        if (request.method !== 'POST') {
+          sendJson(response, 405, { error: 'Method not allowed.' })
+          return
+        }
+
+        const auth = await requireLocalAdmin(request, env)
+        if (!auth.ok) {
+          sendJson(response, auth.status, { error: auth.error })
+          return
+        }
+
+        try {
+          if (pathname === '/api/admin/feedback/list') {
+            const { data, error } = await auth.context.adminClient
+              .from('feedback')
+              .select(feedbackSelectFields)
+              .order('created_at', { ascending: false })
+              .limit(200)
+
+            sendJson(response, error ? 500 : 200, error ? { error: error.message } : { items: data || [] })
+            return
+          }
+
+          if (pathname === '/api/admin/feedback/status') {
+            const body = await readJsonBody<{ feedbackId?: string; status?: string }>(request)
+            const feedbackId = body.feedbackId?.trim()
+            const status = body.status?.trim()
+
+            if (!feedbackId || !status || !['new', 'in_progress', 'resolved'].includes(status)) {
+              sendJson(response, 400, { error: 'feedbackId and a valid status are required.' })
+              return
+            }
+
+            const nowIso = new Date().toISOString()
+            const { data, error } = await auth.context.adminClient
+              .from('feedback')
+              .update({
+                status,
+                updated_at: nowIso,
+                resolved_at: status === 'resolved' ? nowIso : null,
+                resolved_by: status === 'resolved' ? auth.context.identity.id : null,
+              })
+              .eq('id', feedbackId)
+              .select(feedbackSelectFields)
+              .single()
+
+            sendJson(response, error ? (error.code === 'PGRST116' ? 404 : 500) : 200, error ? { error: error.message } : { item: data })
+            return
+          }
+
+          if (pathname === '/api/admin/safety-centers/list') {
+            const { data, error } = await auth.context.adminClient
+              .from('safety_centers')
+              .select(safetyCenterSelectFields)
+              .order('created_at', { ascending: false })
+              .limit(200)
+
+            sendJson(response, error ? 500 : 200, error ? { error: error.message } : { items: data || [] })
+            return
+          }
+
+          if (pathname === '/api/admin/safety-centers/status') {
+            const body = await readJsonBody<{ centerId?: string; status?: string }>(request)
+            const centerId = body.centerId?.trim()
+            const status = body.status?.trim()
+
+            if (!centerId || !status || !['pending', 'approved', 'rejected'].includes(status)) {
+              sendJson(response, 400, { error: 'centerId and a valid status are required.' })
+              return
+            }
+
+            const nowIso = new Date().toISOString()
+            const { data, error } = await auth.context.adminClient
+              .from('safety_centers')
+              .update({
+                status,
+                approved_by: status === 'approved' ? auth.context.identity.id : null,
+                approved_at: status === 'approved' ? nowIso : null,
+                updated_at: nowIso,
+              })
+              .eq('id', centerId)
+              .select(safetyCenterSelectFields)
+              .single()
+
+            sendJson(response, error ? (error.code === 'PGRST116' ? 404 : 500) : 200, error ? { error: error.message } : { item: data })
+            return
+          }
+
+          sendJson(response, 404, { error: 'Admin API route was not found.' })
+        } catch (error) {
+          sendJson(response, 500, { error: error instanceof Error ? error.message : 'Admin API request failed.' })
+        }
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
-export default defineConfig(() => ({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -68,6 +323,7 @@ export default defineConfig(() => ({
     },
   },
   plugins: [
+    localAdminApiPlugin(env),
     react(),
     tailwindcss(),
     VitePWA({
@@ -212,4 +468,5 @@ export default defineConfig(() => ({
       },
     },
   },
-}))
+  }
+})
