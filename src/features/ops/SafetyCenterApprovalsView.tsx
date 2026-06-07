@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { Building2, CheckCircle2, Clock, Loader2, RefreshCw, Search, ShieldAlert, XCircle } from 'lucide-react'
+import { Building2, CheckCircle2, Clock, ExternalLink, FileText, Loader2, RefreshCw, Search, ShieldAlert, XCircle } from 'lucide-react'
 import { AppSelect } from '../../components/AppSelect'
 import {
+  getSafetyCenterVerificationDocumentUrl,
   listSafetyCenterApprovals,
   OpsAdminApiError,
   updateSafetyCenterApprovalStatus,
@@ -37,6 +38,12 @@ function formatDateTime(value: string | null): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (!bytes) return '-'
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
 
 function SummaryCard({
@@ -74,6 +81,7 @@ export function SafetyCenterApprovalsView() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending')
   const [keyword, setKeyword] = useState('')
   const [updating, setUpdating] = useState<{ id: string; status: SafetyCenterStatus } | null>(null)
+  const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null)
 
   const loadItems = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
     if (mode === 'initial') {
@@ -145,6 +153,25 @@ export function SafetyCenterApprovalsView() {
       setError(updateError instanceof Error ? updateError.message : '승인 상태를 변경하지 못했습니다.')
     } finally {
       setUpdating(null)
+    }
+  }, [])
+
+  const handleOpenDocument = useCallback(async (item: SafetyCenterApprovalItem) => {
+    if (!item.verification_document_path) {
+      setError('이 센터 요청에는 승인 증빙 문서가 첨부되어 있지 않습니다.')
+      return
+    }
+
+    setOpeningDocumentId(item.id)
+    setError(null)
+
+    try {
+      const { url } = await getSafetyCenterVerificationDocumentUrl(item.id)
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (documentError) {
+      setError(documentError instanceof Error ? documentError.message : '증빙 문서 링크를 만들지 못했습니다.')
+    } finally {
+      setOpeningDocumentId(null)
     }
   }, [])
 
@@ -231,6 +258,8 @@ export function SafetyCenterApprovalsView() {
       <div className="grid gap-3">
         {filteredItems.map((item) => {
           const isUpdating = updating?.id === item.id
+          const isOpeningDocument = openingDocumentId === item.id
+          const hasVerificationDocument = Boolean(item.verification_document_path)
 
           return (
             <article key={item.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -251,13 +280,32 @@ export function SafetyCenterApprovalsView() {
                     <span>승인자: {item.approved_by ?? '-'}</span>
                     <span>승인일: {formatDateTime(item.approved_at)}</span>
                   </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+                    <div className={`flex min-w-0 items-center gap-2 ${hasVerificationDocument ? 'text-slate-700' : 'text-red-600'}`}>
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {hasVerificationDocument
+                          ? `${item.verification_document_name ?? '증빙 문서'} · ${formatFileSize(item.verification_document_size)} · ${formatDateTime(item.verification_document_uploaded_at)}`
+                          : '증빙 문서 없음'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleOpenDocument(item)}
+                      disabled={!hasVerificationDocument || isOpeningDocument}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isOpeningDocument ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                      문서 열기
+                    </button>
+                  </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
                   {item.status !== 'approved' && (
                     <button
                       type="button"
                       onClick={() => void handleStatusChange(item.id, 'approved')}
-                      disabled={Boolean(isUpdating)}
+                      disabled={Boolean(isUpdating) || !hasVerificationDocument}
                       className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isUpdating && updating?.status === 'approved' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}

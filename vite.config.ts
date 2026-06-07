@@ -40,6 +40,11 @@ const safetyCenterSelectFields = [
   'created_by',
   'approved_by',
   'approved_at',
+  'verification_document_path',
+  'verification_document_name',
+  'verification_document_mime_type',
+  'verification_document_size',
+  'verification_document_uploaded_at',
   'created_at',
   'updated_at',
 ].join(', ')
@@ -231,6 +236,25 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
             }
 
             const nowIso = new Date().toISOString()
+
+            if (status === 'approved') {
+              const { data: existingCenter, error: fetchError } = await auth.context.adminClient
+                .from('safety_centers')
+                .select('id, verification_document_path')
+                .eq('id', centerId)
+                .single()
+
+              if (fetchError) {
+                sendJson(response, fetchError.code === 'PGRST116' ? 404 : 500, { error: fetchError.message })
+                return
+              }
+
+              if (!existingCenter?.verification_document_path) {
+                sendJson(response, 400, { error: 'Verification document is required before approving a safety center.' })
+                return
+              }
+            }
+
             const { data, error } = await auth.context.adminClient
               .from('safety_centers')
               .update({
@@ -244,6 +268,47 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
               .single()
 
             sendJson(response, error ? (error.code === 'PGRST116' ? 404 : 500) : 200, error ? { error: error.message } : { item: data })
+            return
+          }
+
+          if (pathname === '/api/admin/safety-centers/document-url') {
+            const body = await readJsonBody<{ centerId?: string }>(request)
+            const centerId = body.centerId?.trim()
+
+            if (!centerId) {
+              sendJson(response, 400, { error: 'centerId is required.' })
+              return
+            }
+
+            const { data: center, error: fetchError } = await auth.context.adminClient
+              .from('safety_centers')
+              .select('verification_document_path, verification_document_name')
+              .eq('id', centerId)
+              .single()
+
+            if (fetchError) {
+              sendJson(response, fetchError.code === 'PGRST116' ? 404 : 500, { error: fetchError.message })
+              return
+            }
+
+            if (!center?.verification_document_path) {
+              sendJson(response, 404, { error: 'Verification document is not attached.' })
+              return
+            }
+
+            const { data: signedUrl, error: signedUrlError } = await auth.context.adminClient.storage
+              .from('safety-center-verifications')
+              .createSignedUrl(center.verification_document_path, 60, {
+                download: center.verification_document_name || undefined,
+              })
+
+            sendJson(
+              response,
+              signedUrlError ? 500 : 200,
+              signedUrlError
+                ? { error: signedUrlError.message }
+                : { url: signedUrl.signedUrl, expiresIn: 60, fileName: center.verification_document_name },
+            )
             return
           }
 

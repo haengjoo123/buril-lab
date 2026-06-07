@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { v4 as uuidv4 } from 'uuid';
 import type {
   LabSafetyCenterLinkRequest,
   LabSafetyCenterRequest,
@@ -15,6 +16,33 @@ import type {
   SafetyCenterRiskItem,
   SafetyCenterWasteLog,
 } from '../features/safety-center/types';
+
+const SAFETY_CENTER_VERIFICATION_BUCKET = 'safety-center-verifications';
+export const SAFETY_CENTER_VERIFICATION_MAX_BYTES = 10 * 1024 * 1024;
+export const SAFETY_CENTER_VERIFICATION_ACCEPT = '.pdf,.hwp,.hwpx,.doc,.docx,.png,.jpg,.jpeg';
+
+const VERIFICATION_DOCUMENT_MIME_BY_EXTENSION: Record<string, string> = {
+  pdf: 'application/pdf',
+  hwp: 'application/x-hwp',
+  hwpx: 'application/vnd.hancom.hwpx',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+};
+
+const VERIFICATION_DOCUMENT_ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/x-hwp',
+  'application/haansofthwp',
+  'application/vnd.hancom.hwp',
+  'application/vnd.hancom.hwpx',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/png',
+  'image/jpeg',
+]);
 
 type SupabaseLikeError = {
   code?: string;
@@ -42,6 +70,7 @@ export interface CreateSafetyCenterInput {
   institutionName: string;
   institutionDomain: string;
   centerName: string;
+  verificationDocument: File;
 }
 
 export interface CreateSafetyCenterRequestInput {
@@ -64,6 +93,48 @@ export interface LogSafetyCenterExportInput {
   rowCount: number;
 }
 
+function getFileExtension(fileName: string): string {
+  return fileName.split('.').pop()?.trim().toLowerCase() ?? '';
+}
+
+function getVerificationDocumentMimeType(file: File): string {
+  const browserMimeType = file.type.trim().toLowerCase();
+  if (VERIFICATION_DOCUMENT_ALLOWED_MIME_TYPES.has(browserMimeType)) {
+    return browserMimeType;
+  }
+
+  return VERIFICATION_DOCUMENT_MIME_BY_EXTENSION[getFileExtension(file.name)] ?? browserMimeType;
+}
+
+function sanitizeStorageFileName(fileName: string): string {
+  const extension = getFileExtension(fileName);
+  const baseName = fileName.replace(/\.[^.]+$/, '');
+  const sanitizedBaseName = baseName
+    .normalize('NFKD')
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+
+  return `${sanitizedBaseName || 'document'}${extension ? `.${extension}` : ''}`;
+}
+
+function buildVerificationDocumentPath(userId: string, centerId: string, fileName: string): string {
+  return `${userId}/${centerId}/${uuidv4()}-${sanitizeStorageFileName(fileName)}`;
+}
+
+export function validateSafetyCenterVerificationDocument(file: File): string | null {
+  if (file.size > SAFETY_CENTER_VERIFICATION_MAX_BYTES) {
+    return '증빙 문서는 10MB 이하 파일만 업로드할 수 있습니다.';
+  }
+
+  const extension = getFileExtension(file.name);
+  if (!VERIFICATION_DOCUMENT_MIME_BY_EXTENSION[extension]) {
+    return 'PDF, HWP, HWPX, DOC, DOCX, PNG, JPG 파일만 업로드할 수 있습니다.';
+  }
+
+  return null;
+}
+
 export const safetyCenterService = {
   async getMyCenters(): Promise<SafetyCenter[]> {
     const { data, error } = await supabase.rpc('get_my_safety_centers');
@@ -75,6 +146,11 @@ export const safetyCenterService = {
   },
 
   async createCenter(input: CreateSafetyCenterInput): Promise<string> {
+    const documentValidationError = validateSafetyCenterVerificationDocument(input.verificationDocument);
+    if (documentValidationError) {
+      throw new Error(documentValidationError);
+    }
+
     const { data, error } = await supabase.rpc('create_safety_center', {
       p_institution_name: input.institutionName,
       p_institution_domain: input.institutionDomain,
@@ -82,7 +158,40 @@ export const safetyCenterService = {
     });
 
     if (error) throw error;
-    return data as string;
+
+    const centerId = data as string;
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      throw userError ?? new Error('Authentication is required.');
+    }
+
+    const documentMimeType = getVerificationDocumentMimeType(input.verificationDocument);
+    const documentPath = buildVerificationDocumentPath(userData.user.id, centerId, input.verificationDocument.name);
+
+    const { error: uploadError } = await supabase.storage
+      .from(SAFETY_CENTER_VERIFICATION_BUCKET)
+      .upload(documentPath, input.verificationDocument, {
+        cacheControl: '3600',
+        contentType: documentMimeType,
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { error: attachError } = await supabase.rpc('attach_safety_center_verification_document', {
+      p_center_id: centerId,
+      p_path: documentPath,
+      p_name: input.verificationDocument.name,
+      p_mime_type: documentMimeType,
+      p_size: input.verificationDocument.size,
+    });
+
+    if (attachError) {
+      await supabase.storage.from(SAFETY_CENTER_VERIFICATION_BUCKET).remove([documentPath]);
+      throw attachError;
+    }
+
+    return centerId;
   },
 
   async getCenterMembers(centerId: string): Promise<SafetyCenterMember[]> {

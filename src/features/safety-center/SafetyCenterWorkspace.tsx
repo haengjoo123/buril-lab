@@ -21,7 +21,11 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { safetyCenterService } from '../../services/safetyCenterService';
+import {
+  SAFETY_CENTER_VERIFICATION_ACCEPT,
+  safetyCenterService,
+  validateSafetyCenterVerificationDocument,
+} from '../../services/safetyCenterService';
 import {
   assessRiskItem,
   buildSafetyCenterDashboardSummary,
@@ -64,11 +68,59 @@ interface RequestDraft {
   targetId?: string | null;
 }
 
+type SupabaseLikeError = {
+  code?: string;
+  message?: string;
+  details?: string;
+};
+
+const VERIFICATION_REQUIREMENTS = [
+  '기관명',
+  '신청자 이름, 소속 부서, 직책',
+  '신청자가 통합 안전관리센터를 개설하거나 운영할 권한이 있다는 내용',
+  '요청하는 센터명 또는 서비스 이용 목적',
+  '기관 도메인 또는 공식 홈페이지',
+  '발행일',
+  '부서장/기관 담당자/안전관리 책임자 등의 이름, 서명, 직인, 또는 확인 가능한 연락처',
+];
+
 const DATASET_LABELS: Record<DatasetKey, string> = {
   risks: '위험 재고 목록',
   waste: '폐기 기록',
   audit: '감사 로그',
 };
+
+function normalizeInstitutionDomain(value: string): string {
+  return value
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .split('/')[0]
+    .toLowerCase();
+}
+
+function getCreateCenterErrorMessage(error: unknown): string {
+  const err = error as SupabaseLikeError | null | undefined;
+  const message = [err?.message, err?.details].filter(Boolean).join('\n');
+
+  if (err?.code === 'PGRST202' || err?.code === '42883' || message.includes('Could not find the function')) {
+    return '센터 개설 기능의 DB 마이그레이션이 아직 적용되지 않았습니다. Supabase 마이그레이션을 적용한 뒤 다시 시도해 주세요.';
+  }
+
+  if (message.includes('Bucket not found') || message.includes('safety-center-verifications')) {
+    return '증빙 문서 저장소가 아직 준비되지 않았습니다. Supabase 마이그레이션과 Storage 버킷 설정을 확인해 주세요.';
+  }
+
+  if (err?.code === '42501') {
+    return '센터 개설 요청을 처리할 권한이 없습니다. 다시 로그인한 뒤 시도해 주세요.';
+  }
+
+  if (err?.code === '22023') {
+    return '기관명, 기관 도메인, 센터명을 모두 입력해 주세요.';
+  }
+
+  return '센터 개설 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
 
 function formatDate(value?: string | null): string {
   if (!value) return '-';
@@ -81,6 +133,11 @@ function formatDateTime(value?: string | null): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 function statusTone(status: SafetyCenterRequest['status']): string {
@@ -580,18 +637,50 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
   const [institutionName, setInstitutionName] = useState('');
   const [institutionDomain, setInstitutionDomain] = useState('');
   const [centerName, setCenterName] = useState('');
+  const [verificationDocument, setVerificationDocument] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleVerificationDocumentChange = (file: File | null) => {
+    setError(null);
+
+    if (!file) {
+      setVerificationDocument(null);
+      return;
+    }
+
+    const validationError = validateSafetyCenterVerificationDocument(file);
+    if (validationError) {
+      setVerificationDocument(null);
+      setError(validationError);
+      return;
+    }
+
+    setVerificationDocument(file);
+  };
 
   const handleCreate = async () => {
     setIsCreating(true);
     setError(null);
+    const normalizedInstitutionDomain = normalizeInstitutionDomain(institutionDomain);
+
+    if (!verificationDocument) {
+      setError('관장/부서장 명의의 센터 개설 요청 공문 또는 담당자 지정서를 업로드해 주세요.');
+      setIsCreating(false);
+      return;
+    }
+
     try {
-      await safetyCenterService.createCenter({ institutionName, institutionDomain, centerName });
+      await safetyCenterService.createCenter({
+        institutionName: institutionName.trim(),
+        institutionDomain: normalizedInstitutionDomain,
+        centerName: centerName.trim(),
+        verificationDocument,
+      });
       onCreated();
     } catch (err) {
       console.error(err);
-      setError('센터 개설 요청을 저장하지 못했습니다. 마이그레이션 적용 여부를 확인해 주세요.');
+      setError(getCreateCenterErrorMessage(err));
     } finally {
       setIsCreating(false);
     }
@@ -643,11 +732,48 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
         </label>
       </div>
 
+      <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div>
+            <h3 className="text-sm font-medium text-slate-950 dark:text-white">승인 증빙 문서</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              관장/부서장 명의의 센터 개설 요청 공문 또는 담당자 지정서를 업로드해 주세요. 기관별 양식은 달라도 괜찮지만 아래 항목이 확인되어야 합니다.
+            </p>
+            <ul className="mt-3 grid gap-2 text-sm text-slate-600 dark:text-slate-300 md:grid-cols-2">
+              {VERIFICATION_REQUIREMENTS.map((requirement) => (
+                <li key={requirement} className="flex gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>{requirement}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <label className="flex min-h-44 cursor-pointer flex-col justify-center rounded-lg border border-dashed border-slate-300 px-4 py-5 text-center transition-colors hover:border-blue-300 hover:bg-blue-50/40 dark:border-slate-700 dark:hover:border-blue-500/60 dark:hover:bg-blue-950/20">
+            <input
+              type="file"
+              accept={SAFETY_CENTER_VERIFICATION_ACCEPT}
+              onChange={(event) => handleVerificationDocumentChange(event.target.files?.[0] ?? null)}
+              className="sr-only"
+            />
+            <FileText className="mx-auto h-8 w-8 text-blue-600" />
+            <span className="mt-3 text-sm font-medium text-slate-900 dark:text-slate-100">
+              {verificationDocument ? verificationDocument.name : '증빙 문서 선택'}
+            </span>
+            <span className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              {verificationDocument
+                ? `${formatFileSize(verificationDocument.size)} · 다시 선택하려면 클릭`
+                : 'PDF, HWP, HWPX, DOC, DOCX, PNG, JPG · 최대 10MB'}
+            </span>
+          </label>
+        </div>
+      </div>
+
       <div className="mt-6 flex justify-end">
         <button
           type="button"
           onClick={handleCreate}
-          disabled={isCreating || !institutionName.trim() || !institutionDomain.trim() || !centerName.trim()}
+          disabled={isCreating || !institutionName.trim() || !institutionDomain.trim() || !centerName.trim() || !verificationDocument}
           className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isCreating && <Loader2 className="h-4 w-4 animate-spin" />}

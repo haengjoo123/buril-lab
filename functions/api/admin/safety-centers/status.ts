@@ -42,6 +42,24 @@ export const onRequestPost = async (context: {
 
   const nowIso = new Date().toISOString()
   const { adminClient, identity } = auth.context
+
+  if (status === 'approved') {
+    const { data: existingCenter, error: fetchError } = await adminClient
+      .from('safety_centers')
+      .select('id, verification_document_path')
+      .eq('id', centerId)
+      .single()
+
+    if (fetchError) {
+      const statusCode = fetchError.code === 'PGRST116' ? 404 : 500
+      return json({ error: fetchError.message }, { status: statusCode })
+    }
+
+    if (!existingCenter?.verification_document_path) {
+      return json({ error: 'Verification document is required before approving a safety center.' }, { status: 400 })
+    }
+  }
+
   const { data, error } = await adminClient
     .from('safety_centers')
     .update({
@@ -63,4 +81,3 @@ export const onRequestPost = async (context: {
     item: data as SafetyCenterAdminRow,
   })
 }
-

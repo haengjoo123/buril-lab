@@ -21,6 +21,11 @@ export interface SafetyCenterApprovalItem {
   created_by: string
   approved_by: string | null
   approved_at: string | null
+  verification_document_path: string | null
+  verification_document_name: string | null
+  verification_document_mime_type: string | null
+  verification_document_size: number | null
+  verification_document_uploaded_at: string | null
   created_at: string
   updated_at: string
 }
@@ -35,6 +40,12 @@ interface SafetyCenterListResponse {
 
 interface SafetyCenterStatusResponse {
   item: SafetyCenterApprovalItem
+}
+
+interface SafetyCenterDocumentUrlResponse {
+  url: string
+  expiresIn: number
+  fileName: string | null
 }
 
 async function createAuthHeaders(): Promise<Record<string, string>> {
@@ -96,3 +107,8 @@ export async function updateSafetyCenterApprovalStatus(
   return payload.item
 }
 
+export async function getSafetyCenterVerificationDocumentUrl(centerId: string): Promise<SafetyCenterDocumentUrlResponse> {
+  return await postOpsAdminJson<SafetyCenterDocumentUrlResponse>('/api/admin/safety-centers/document-url', {
+    centerId,
+  })
+}
