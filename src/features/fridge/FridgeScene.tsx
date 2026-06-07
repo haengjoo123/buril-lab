@@ -9,6 +9,7 @@ import { CabinetFrame } from './CabinetFrame';
 import { ResponsiveCamera } from './ResponsiveCamera';
 import { Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useThemeMode } from '../../hooks/useThemeMode';
 
 /** OrbitControls target가 변경될 때 동기화 (prop만으로는 갱신이 안 될 수 있음) */
 function SyncOrbitTarget({ target }: { target: [number, number, number] }) {
@@ -102,6 +103,7 @@ function useCabinetCamera(
 
 export const FridgeScene: React.FC = () => {
     const { t } = useTranslation();
+    const { isDarkMode } = useThemeMode();
     // Canvas 컨테이너의 실제 크기로 aspect ratio 추적 (window 크기 대신)
     // → F12 개발자도구, 사이드바 등으로 뷰포트가 변해도 정확한 비율 유지
     const containerRef = useRef<HTMLDivElement>(null);
@@ -193,6 +195,16 @@ export const FridgeScene: React.FC = () => {
     }, [floatingShelves.length, cabinetHeight]);
 
     const cameraConfig = useCabinetCamera(cabinetWidth, cabinetHeight, mode, containerAspect);
+    const sceneTheme = useMemo(() => ({
+        background: isDarkMode ? '#0f172a' : '#f3f4f6',
+        ambientIntensity: isDarkMode ? 0.92 : 0.5,
+        fillIntensity: isDarkMode ? 0.75 : 0.25,
+        hemisphereIntensity: isDarkMode ? 0.55 : 0,
+        spotIntensity: isDarkMode ? 1.45 : 1,
+        spotColor: isDarkMode ? '#dbeafe' : '#ffffff',
+        shadowColor: isDarkMode ? '#020617' : '#111827',
+        shadowOpacity: isDarkMode ? 0.18 : 0.4,
+    }), [isDarkMode]);
     const [shelfFocusTarget, setShelfFocusTarget] = useState<[number, number, number] | null>(null);
     const [cameraStateId, setCameraStateId] = useState(0);
     const lastAutoFocusKeyRef = useRef<string | null>(null);
@@ -338,13 +350,14 @@ export const FridgeScene: React.FC = () => {
     const orbitTarget = effectiveCameraConfig.target;
 
     return (
-        <div ref={containerRef} className="w-full bg-gray-100 relative" style={{ height: 'calc(100dvh - 7rem)' }}>
+        <div ref={containerRef} className="w-full relative bg-gray-100 transition-colors dark:bg-slate-950" style={{ height: 'calc(100dvh - 7rem)' }}>
             <Canvas
                 shadows="percentage"
                 camera={{ position: cameraConfig.position, fov: 52 }}
                 gl={{ preserveDrawingBuffer: true }}
             >
                 <Suspense fallback={null}>
+                    <color attach="background" args={[sceneTheme.background]} />
                     <ResponsiveCamera
                         cabinetWidth={cabinetWidth}
                         cabinetHeight={cabinetHeight}
@@ -352,8 +365,26 @@ export const FridgeScene: React.FC = () => {
                         cameraStateId={cameraStateId}
                     />
                     <Environment preset="city" />
-                    <ambientLight intensity={0.5} />
-                    <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} shadow-mapSize={[512, 512]} castShadow />
+                    <ambientLight intensity={sceneTheme.ambientIntensity} />
+                    <hemisphereLight
+                        color="#e0f2fe"
+                        groundColor="#1e293b"
+                        intensity={sceneTheme.hemisphereIntensity}
+                    />
+                    <directionalLight
+                        position={[0, 5, 8]}
+                        intensity={sceneTheme.fillIntensity}
+                        color={sceneTheme.spotColor}
+                    />
+                    <spotLight
+                        position={[10, 10, 10]}
+                        angle={0.15}
+                        penumbra={1}
+                        intensity={sceneTheme.spotIntensity}
+                        color={sceneTheme.spotColor}
+                        shadow-mapSize={[512, 512]}
+                        castShadow
+                    />
 
                     <group position={[0, -0.5, 0]}>
                         <CabinetFrame
@@ -362,6 +393,7 @@ export const FridgeScene: React.FC = () => {
                             cabinetHeight={cabinetHeight}
                             dimmed={isPlaceMode && focusedShelfId != null}
                             hideTop={isTopDownView}
+                            isDarkMode={isDarkMode}
                         />
                         {/* 바닥면 (floor shelf) */}
                         {floorShelf && (() => {
@@ -380,6 +412,7 @@ export const FridgeScene: React.FC = () => {
                                     onShelfFocus={(localY) => handleShelfFocus(floorShelf.id, localY)}
                                     shelfHeight={0.05}
                                     isDimmed={isPlaceMode && focusedShelfId != null && floorShelf.id !== focusedShelfId}
+                                    isDarkMode={isDarkMode}
                                 />
                             );
                         })()}
@@ -400,13 +433,22 @@ export const FridgeScene: React.FC = () => {
                                     cellHeight={cellHeight}
                                     onShelfFocus={(localY) => handleShelfFocus(shelf.id, localY)}
                                     isDimmed={isPlaceMode && focusedShelfId != null && shelf.id !== focusedShelfId}
+                                    isDarkMode={isDarkMode}
                                 />
                             );
                         })}
 
                     </group>
 
-                    <ContactShadows position={[0, -1, 0]} opacity={0.4} scale={Math.max(10, cabinetWidth * 1.5)} blur={2.5} far={4} frames={1} />
+                    <ContactShadows
+                        position={[0, -1, 0]}
+                        opacity={sceneTheme.shadowOpacity}
+                        color={sceneTheme.shadowColor}
+                        scale={Math.max(10, cabinetWidth * 1.5)}
+                        blur={2.5}
+                        far={4}
+                        frames={1}
+                    />
                     <OrbitControls
                         makeDefault
                         minPolarAngle={isTopDownView ? 0 : Math.PI / 6}
@@ -429,7 +471,7 @@ export const FridgeScene: React.FC = () => {
                     onClick={() => setIsTopDownView(prev => !prev)}
                     className={`absolute top-16 right-4 z-20 flex items-center gap-1.5 px-3 py-2 rounded-full shadow-lg border text-xs font-medium transition-all ${isTopDownView
                         ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700'
-                        : 'bg-white/90 backdrop-blur text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
+                        : 'bg-white/90 text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:bg-slate-900/90 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 dark:hover:border-blue-500/70'
                         }`}
                     title={t('topdown_view')}
                 >

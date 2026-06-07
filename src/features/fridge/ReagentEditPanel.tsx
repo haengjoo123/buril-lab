@@ -10,7 +10,7 @@ import type { ReagentTemplateType } from '../../types/fridge';
 import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
 import { classifyStorageGroups, checkShelfCompatibility, getStorageGroupLabels } from '../../utils/storageCompatibilityChecker';
-import { AlertTriangle, FlaskConical, BookOpen } from 'lucide-react';
+import { AlertTriangle, FlaskConical, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { searchChemical } from '../../services/searchService';
 import { analyzeChemical } from '../../utils/chemicalAnalyzer';
 import { classifyChemicalWithAI } from '../../services/geminiClassificationService';
@@ -35,6 +35,8 @@ const CONTAINER_TYPES: { type: ReagentTemplateType; label: string; icon: string 
     { type: 'C', label: 'cabinet_container_glass', icon: '🧪' },
     { type: 'D', label: 'cabinet_container_vial', icon: '🧴' },
 ];
+
+const STORAGE_WARNING_PREVIEW_LIMIT = 3;
 
 interface ReagentEditPanelProps {
     variant?: 'floating' | 'desktop-aside';
@@ -68,6 +70,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
     const [isSaving, setIsSaving] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [copyToastMessage, setCopyToastMessage] = useState<string | null>(null);
+    const [isStorageWarningsExpanded, setIsStorageWarningsExpanded] = useState(false);
 
     const [remainingPercent, setRemainingPercent] = useState<number>(100);
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -119,12 +122,14 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
     useEffect(() => {
         if (selectedReagentId) {
             setShowModalContent(false);
+            setIsStorageWarningsExpanded(false);
             const timer = setTimeout(() => {
                 setShowModalContent(true);
             }, 300);
             return () => clearTimeout(timer);
         } else {
             setShowModalContent(false);
+            setIsStorageWarningsExpanded(false);
         }
     }, [selectedReagentId]);
 
@@ -452,14 +457,18 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
     const panelClassName = variant === 'desktop-aside'
         ? 'relative flex h-full min-h-0 w-full flex-col overflow-hidden rounded-none border-0 bg-white shadow-none dark:bg-slate-900'
-        : 'absolute left-1/2 top-2 z-30 flex max-h-[calc(100%-4.5rem)] w-[calc(100%-32px)] max-w-[320px] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white/95 shadow-xl backdrop-blur animate-in slide-in-from-bottom duration-200';
+        : 'absolute left-1/2 top-2 z-30 flex max-h-[calc(100%-4.5rem)] w-[calc(100%-32px)] max-w-[320px] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-xl backdrop-blur animate-in slide-in-from-bottom duration-200 dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/40';
+    const labelClassName = 'text-xs font-medium text-slate-600 dark:text-slate-300';
+    const iconLabelClassName = `${labelClassName} flex items-center gap-1`;
+    const inputClassName = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500';
+    const inputMonoClassName = `${inputClassName} font-mono`;
 
     return (
         <>
             <div className={panelClassName}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-3 border-b bg-gray-50/50 flex-shrink-0">
-                    <div className="flex items-center gap-2 text-gray-800 font-semibold">
+                <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/95">
+                    <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
                         {showDisposalView ? (
                             <>
                                 <Trash2 size={18} className="text-red-500" />
@@ -474,7 +483,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                     </div>
                     <button
                         onClick={handleClose}
-                        className="p-1 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                        className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                     >
                         <X size={18} />
                     </button>
@@ -484,16 +493,16 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                     <>
                         {/* Disposal Reason Selection */}
                         <div className="p-3 flex flex-col gap-2 overflow-y-auto">
-                            <p className="text-xs text-gray-500 mb-1">
-                                <span className="font-medium text-gray-700">{selectedItem.name}</span> — {t('cabinet_dispose_reason_desc')}
+                            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">
+                                <span className="font-medium text-slate-700 dark:text-slate-200">{selectedItem.name}</span> — {t('cabinet_dispose_reason_desc')}
                             </p>
                             {REASONS.map(reason => (
                                 <button
                                     key={reason.key}
                                     onClick={() => setSelectedReason(reason.key)}
                                     className={`w-full px-3 py-2.5 text-sm rounded-lg border transition-all flex items-center gap-2.5 ${selectedReason === reason.key
-                                        ? 'border-red-400 bg-red-50 text-red-700 ring-1 ring-red-300'
-                                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                                        ? 'border-red-400 bg-red-50 text-red-700 ring-1 ring-red-300 dark:border-red-500/70 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-500/40'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700'
                                         }`}
                                 >
                                     <span className="text-base">{reason.icon}</span>
@@ -506,7 +515,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                         </div>
 
                         {/* Disposal Confirm Button */}
-                        <div className="p-3 border-t bg-gray-50/50 shrink-0">
+                        <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
                             <button
                                 onClick={confirmDisposal}
                                 disabled={!selectedReason || isDisposing}
@@ -520,7 +529,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                 ) : (
                     <>
                         {/* Scrollable Content */}
-                        <div className="p-3 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0">
+                        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 text-slate-800 dark:text-slate-100">
                             {/* Expiry Alert Banner — shown at top only for urgent states */}
                             {expiryStatus && (expiryStatus.level === 'expired' || expiryStatus.level === 'critical' || expiryStatus.level === 'warning') && (
                                 <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${
@@ -536,10 +545,10 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                             )}
 
                             {/* Info Read-only */}
-                            <div className="text-xs text-gray-500 flex flex-col gap-1">
+                            <div className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
                                 <div className="flex justify-between items-center">
                                     <span>{t('cabinet_label_location')}</span>
-                                    <span className="font-medium text-gray-700 flex items-center gap-1">
+                                    <span className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-200">
                                         <MapPin size={10} />
                                         {t('cabinet_shelf_level', { level: selectedItem.shelfLevel + 1 })}
                                         {' · '}
@@ -555,7 +564,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                             {/* Name Input */}
                             <div className="flex flex-col gap-1.5">
                                 <div className="flex items-center justify-between">
-                                    <label className="text-xs font-medium text-gray-600">{t('cabinet_reagent_name')}</label>
+                                    <label className={labelClassName}>{t('cabinet_reagent_name')}</label>
                                     <button
                                         type="button"
                                         onClick={handleCheckDisposalGuide}
@@ -574,7 +583,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                         setName(e.target.value);
                                     }}
                                     onBlur={casSuggestion.triggerLookupFromBlur}
-                                    className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                    className={inputClassName}
                                     placeholder={t('cabinet_placeholder_name')}
                                 />
                             </div>
@@ -582,7 +591,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                             {/* Brand & Product Number Row */}
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                    <label className={iconLabelClassName}>
                                         <Package size={11} />
                                         {t('inventory_brand')}
                                     </label>
@@ -590,12 +599,12 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                         type="text"
                                         value={brand}
                                         onChange={(e) => setBrand(e.target.value)}
-                                        className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                        className={inputClassName}
                                         placeholder={t('inventory_brand_placeholder')}
                                     />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                    <label className={iconLabelClassName}>
                                         <Tag size={11} />
                                         {t('inventory_product_number')}
                                     </label>
@@ -603,7 +612,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                         type="text"
                                         value={productNumber}
                                         onChange={(e) => setProductNumber(e.target.value)}
-                                        className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
+                                        className={inputMonoClassName}
                                         placeholder={t('inventory_pn_placeholder')}
                                     />
                                 </div>
@@ -615,7 +624,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                 <div className="grid grid-cols-2 gap-2">
                                     {/* Capacity Input */}
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                        <label className={iconLabelClassName}>
                                             <Beaker size={12} />
                                             {t('inventory_capacity')}
                                         </label>
@@ -623,13 +632,13 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                             type="text"
                                             value={capacity}
                                             onChange={(e) => setCapacity(e.target.value)}
-                                            className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                            className={inputClassName}
                                             placeholder={t('inventory_capacity_placeholder')}
                                         />
                                     </div>
                                     {/* CAS Number Input */}
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                        <label className={iconLabelClassName}>
                                             <FlaskConical size={12} />
                                             {t('inventory_cas_number')}
                                         </label>
@@ -638,7 +647,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                             value={casNo}
                                             onChange={(e) => setCasNo(e.target.value)}
                                             onFocus={casSuggestion.triggerLookupFromCasFocus}
-                                            className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
+                                            className={inputMonoClassName}
                                             placeholder={t('inventory_cas_placeholder')}
                                         />
                                     </div>
@@ -678,7 +687,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                     />
                                 )}
                                 {casNo && (
-                                    <p className="text-[10px] text-gray-400 mt-1 pl-1">
+                                    <p className="mt-1 pl-1 text-[10px] text-slate-400 dark:text-slate-500">
                                         {t('cabinet_pubchem_auto_enrich')}
                                     </p>
                                 )}
@@ -743,7 +752,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
                             {/* Container Type Selection */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                <label className={iconLabelClassName}>
                                     {t('cabinet_label_type')}
                                 </label>
                                 <div className="grid grid-cols-4 gap-1.5">
@@ -757,8 +766,8 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                                 }
                                             }}
                                             className={`flex items-center justify-center px-1.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all min-h-[44px] ${template === ct.type
-                                                ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300'
-                                                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                                ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300 dark:border-blue-500 dark:bg-blue-500/20 dark:text-blue-200 dark:ring-blue-500/40'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700'
                                                 }`}
                                         >
                                             <span className="leading-tight text-center">{t(ct.label)}</span>
@@ -769,7 +778,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
                             {/* Container Size (Width) Input */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                <label className={iconLabelClassName}>
                                     {t('cabinet_container_size', '용기 크기')}
                                 </label>
                                 <div className="flex items-center gap-2">
@@ -780,9 +789,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                         step="0.5"
                                         value={width}
                                         onChange={(e) => setWidth(parseFloat(e.target.value))}
-                                        className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                        className="h-1.5 flex-1 cursor-pointer appearance-none rounded-lg bg-slate-200 accent-blue-500 dark:bg-slate-700"
                                     />
-                                    <span className="text-xs text-gray-500 w-8 text-right">{width}</span>
+                                    <span className="w-8 text-right text-xs text-slate-500 dark:text-slate-400">{width}</span>
                                 </div>
                             </div>
 
@@ -790,7 +799,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
                             {/* Expiry Date Input */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                                <label className={iconLabelClassName}>
                                     <CalendarClock size={12} />
                                     {t('inventory_error_expiry_label')}
                                 </label>
@@ -800,13 +809,13 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                         value={expiryDate}
                                         onChange={(e) => setExpiryDate(e.target.value)}
                                         lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
-                                        className="flex-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                        className={`${inputClassName} flex-1`}
                                     />
                                     {expiryDate && (
                                         <button
                                             type="button"
                                             onClick={() => setExpiryDate('')}
-                                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                                             title={t('cabinet_delete_expiry')}
                                         >
                                             <X size={14} />
@@ -822,12 +831,12 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
                             {/* Notes Input */}
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-medium text-gray-600">{t('cabinet_notes')}</label>
+                                <label className={labelClassName}>{t('cabinet_notes')}</label>
                                 <textarea
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
                                     rows={2}
-                                    className="w-full px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
+                                    className={`${inputClassName} resize-none`}
                                     placeholder={t('cabinet_placeholder_notes')}
                                 />
                             </div>
@@ -840,20 +849,24 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                 const shelfWarnings = currentShelf ? checkShelfCompatibility(currentShelf.items).filter(
                                     w => w.itemA === selectedItem.name || w.itemB === selectedItem.name
                                 ) : [];
+                                const visibleShelfWarnings = isStorageWarningsExpanded
+                                    ? shelfWarnings
+                                    : shelfWarnings.slice(0, STORAGE_WARNING_PREVIEW_LIMIT);
+                                const hiddenShelfWarningCount = Math.max(0, shelfWarnings.length - STORAGE_WARNING_PREVIEW_LIMIT);
 
                                 if (groupLabels.length === 0 && shelfWarnings.length === 0) return null;
 
                                 return (
-                                    <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+                                    <div className="flex flex-col gap-2 border-t border-slate-200 pt-2 dark:border-slate-800">
                                         {/* Storage Group Tags */}
                                         {groupLabels.length > 0 && (
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                                                <label className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                                                     {t('cabinet_storage_group')}
                                                 </label>
                                                 <div className="flex flex-wrap gap-1">
                                                     {groupLabels.map(key => (
-                                                        <span key={key} className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                                        <span key={key} className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                                                             {t(key)}
                                                         </span>
                                                     ))}
@@ -864,20 +877,20 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                         {/* Shelf Compatibility Warnings */}
                                         {shelfWarnings.length > 0 && (
                                             <div className="flex flex-col gap-1.5">
-                                                {shelfWarnings.map((w, i) => {
+                                                {visibleShelfWarnings.map((w, i) => {
                                                     const isDanger = w.severity === 'DANGER';
                                                     const otherName = w.itemA === selectedItem.name ? w.itemB : w.itemA;
                                                     return (
                                                         <div
                                                             key={`${w.ruleId}-${i}`}
                                                             className={`flex items-start gap-1.5 p-2 rounded-lg text-[11px] leading-relaxed ${isDanger
-                                                                ? 'bg-red-50 text-red-700 border border-red-200'
-                                                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                                                ? 'bg-red-50 text-red-700 border border-red-200 dark:border-red-500/40 dark:bg-red-950/35 dark:text-red-200'
+                                                                : 'bg-amber-50 text-amber-700 border border-amber-200 dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-200'
                                                                 }`}
                                                         >
                                                             <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isDanger ? 'text-red-500' : 'text-amber-500'}`} />
                                                             <div>
-                                                                <span className={`font-bold mr-1 ${isDanger ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                <span className={`font-bold mr-1 ${isDanger ? 'text-red-600 dark:text-red-300' : 'text-amber-600 dark:text-amber-300'}`}>
                                                                     {isDanger ? t('storage_compat_danger') : t('storage_compat_warning')}
                                                                 </span>
                                                                 <span className="font-semibold">{otherName}</span>
@@ -887,6 +900,22 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                                                         </div>
                                                     );
                                                 })}
+                                                {hiddenShelfWarningCount > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsStorageWarningsExpanded(current => !current)}
+                                                        className="mt-0.5 flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                                                    >
+                                                        {isStorageWarningsExpanded ? (
+                                                            <ChevronUp className="h-3.5 w-3.5" />
+                                                        ) : (
+                                                            <ChevronDown className="h-3.5 w-3.5" />
+                                                        )}
+                                                        {isStorageWarningsExpanded
+                                                            ? t('cabinet_storage_warnings_collapse')
+                                                            : t('cabinet_storage_warnings_show_more', { count: hiddenShelfWarningCount })}
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -942,11 +971,11 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                         </div>
 
                         {/* Footer Actions */}
-                        <div className="p-3 border-t bg-gray-50/50 flex items-center justify-between gap-2 shrink-0">
+                        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
                             <button
                                 onClick={handleDeleteClick}
                                 disabled={isSaving || isCopying}
-                                className="px-3.5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-1.5 transition-colors"
+                                className="flex items-center gap-1.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                             >
                                 <Trash2 size={16} />
                                 {t('cabinet_delete')}
@@ -954,7 +983,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                             <button
                                 onClick={handleCopy}
                                 disabled={isSaving || isCopying}
-                                className="px-3.5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="flex items-center gap-1.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800"
                             >
                                 {isCopying ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
                                 {t('cabinet_copy')}

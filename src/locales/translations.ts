@@ -633,6 +633,8 @@ export const translations = {
         cabinet_mode_edit: "편집",
         cabinet_mode_place: "배치",
         cabinet_save_manual: "수동으로 저장",
+        cabinet_undo_layout: "되돌리기",
+        cabinet_redo_layout: "다시 실행",
         cabinet_edit_panel_show: "편집 패널 보기",
         cabinet_edit_panel_hide: "편집 패널 숨기기",
         cabinet_reagent_tray_show: "시약 선택창 보기",
@@ -800,6 +802,8 @@ export const translations = {
         cabinet_pubchem_auto_enrich: "저장 시 GHS 위험 정보를 자동 조회합니다",
         cabinet_delete_expiry: "유효기간 삭제",
         cabinet_storage_group: "보관 분류",
+        cabinet_storage_warnings_show_more: "경고 {{count}}개 더 보기",
+        cabinet_storage_warnings_collapse: "접기",
         cabinet_saving: "저장 중...",
 
         // Scan & Auto-Place
@@ -1771,6 +1775,8 @@ export const translations = {
         cabinet_mode_edit: "Edit",
         cabinet_mode_place: "Stock",
         cabinet_save_manual: "Save manually",
+        cabinet_undo_layout: "Undo",
+        cabinet_redo_layout: "Redo",
         cabinet_edit_panel_show: "Show edit panel",
         cabinet_edit_panel_hide: "Hide edit panel",
         cabinet_reagent_tray_show: "Show reagent tray",
@@ -1938,6 +1944,8 @@ export const translations = {
         cabinet_pubchem_auto_enrich: "GHS hazard info will be auto-enriched on save",
         cabinet_delete_expiry: "Delete expiry date",
         cabinet_storage_group: "Storage Group",
+        cabinet_storage_warnings_show_more: "Show {{count}} more warnings",
+        cabinet_storage_warnings_collapse: "Collapse",
         cabinet_saving: "Saving...",
 
         // Scan & Auto-Place

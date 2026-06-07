@@ -17,6 +17,7 @@ interface ReagentItemProps {
     isValid?: boolean;
     /** PLACE 모드에서 비선택 선반의 시약 비활성화 시각 처리 */
     dimmed?: boolean;
+    isDarkMode?: boolean;
 }
 
 export { CONTAINER_BASE_WIDTHS } from '../../utils/reagentPlacementMetrics';
@@ -212,7 +213,7 @@ useGLTF.preload('/models/reagents/plastic bottle.glb');
 useGLTF.preload('/models/reagents/glass.glb');
 useGLTF.preload('/models/reagents/square bottle.glb');
 
-export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shelfDepth = 2, isGhost, isValid = true, dimmed = false }) => {
+export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shelfDepth = 2, isGhost, isValid = true, dimmed = false, isDarkMode = false }) => {
     const setDraggedItem = useFridgeStore(s => s.setDraggedItem);
     const draggedItem = useFridgeStore(s => s.draggedItem);
     const highlightedItemId = useFridgeStore(s => s.highlightedItemId);
@@ -317,6 +318,8 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
     }, [item.template, scale]);
 
     const showLabel = !isGhost && !isBeingDragged && !dimmed;
+    const labelColor = isDarkMode ? '#e2e8f0' : '#1e293b';
+    const labelOutlineColor = isDarkMode ? '#020617' : '#ffffff';
 
     // 카메라 극각(polar angle) 기반 텍스트 방향 및 실제 모델 높이 감지
     const labelGroupRef = useRef<THREE.Group>(null);
@@ -397,13 +400,13 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
                 <group ref={labelGroupRef} position={[0, labelY, 0]}>
                     <Text
                         fontSize={0.16} // 사이즈 고정
-                        color="#1e293b"
+                        color={labelColor}
                         anchorX="center"
                         anchorY="middle"
                         maxWidth={1.5}
                         textAlign="center"
                         outlineWidth={0.02}
-                        outlineColor="#ffffff"
+                        outlineColor={labelOutlineColor}
                         font="/fonts/NotoSansKR-Medium.ttf"
                         position-z={0} // Z-fighting 방지 및 정위치 확보
                     >

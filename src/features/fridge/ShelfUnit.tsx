@@ -19,6 +19,7 @@ interface ShelfUnitProps {
     shelfHeight?: number;
     /** PLACE 모드에서 비선택 선반 시각적 비활성화 */
     isDimmed?: boolean;
+    isDarkMode?: boolean;
 }
 
 const DEFAULT_SHELF_HEIGHT = 0.2;
@@ -37,7 +38,8 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
     cellHeight,
     onShelfFocus,
     shelfHeight = DEFAULT_SHELF_HEIGHT,
-    isDimmed = false
+    isDimmed = false,
+    isDarkMode = false
 }) => {
     const { t } = useTranslation();
     const { draggedTemplate, draggedItem, shelves, moveReagent, setDraggedTemplate, setDraggedItem, setPendingPlacement } = useFridgeStore();
@@ -224,7 +226,9 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         document.body.style.cursor = 'default';
     };
 
-    const shelfColor = ghostPos !== null ? '#f8f6f3' : '#e8e6e1';
+    const shelfColor = isDarkMode
+        ? (ghostPos !== null ? '#334155' : '#263244')
+        : (ghostPos !== null ? '#f8f6f3' : '#e8e6e1');
     const shelfOpacity = isDimmed ? 0.35 : 1;
 
     return (
@@ -251,6 +255,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
                     shelfWidth={shelfWidth}
                     shelfDepth={shelfDepth}
                     dimmed={isDimmed}
+                    isDarkMode={isDarkMode}
                 />
             ))}
 
@@ -289,6 +294,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
                     shelfDepth={shelfDepth}
                     height={cellHeight}
                     dimmed={isDimmed}
+                    isDarkMode={isDarkMode}
                 />
             ))}
         </group>

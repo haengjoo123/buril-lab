@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X } from 'lucide-react';
+import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X, Undo2, Redo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from './components/CameraCaptureModal';
@@ -28,8 +28,8 @@ const FridgeScene = lazy(() =>
 const ReagentModelPreview = lazy(() => import('./components/ReagentModelPreview'));
 
 const SceneLoadingFallback = () => (
-    <div className="absolute inset-0 flex items-center justify-center bg-slate-50/80">
-        <div className="rounded-xl border border-slate-200 bg-white/90 p-3 text-slate-600 shadow-sm">
+    <div className="absolute inset-0 flex items-center justify-center bg-slate-50/80 dark:bg-slate-950/80">
+        <div className="rounded-xl border border-slate-200 bg-white/90 p-3 text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
             <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
         </div>
     </div>
@@ -37,7 +37,7 @@ const SceneLoadingFallback = () => (
 
 const ReagentPreviewFallback = ({ width, height }: { width: number; height: number }) => (
     <div
-        className="flex items-center justify-center rounded-md bg-slate-100 text-slate-400"
+        className="flex items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
         style={{ width, height }}
         aria-hidden="true"
     >
@@ -189,6 +189,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         applyCompatibilityPlan,
         clearCompatibilityPlan,
         selectedReagentId,
+        layoutUndoStack,
+        layoutRedoStack,
+        undoCabinetLayout,
+        redoCabinetLayout,
     } = useFridgeStore();
 
     const [showModalContent, setShowModalContent] = useState(false);
@@ -369,6 +373,22 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const isLayoutHistoryBusy = isSaving || isLoadingCabinet || saveStatus === 'saving';
+    const canUndoLayout = layoutUndoStack.length > 0 && !isLayoutHistoryBusy;
+    const canRedoLayout = layoutRedoStack.length > 0 && !isLayoutHistoryBusy;
+
+    const handleUndoLayout = async () => {
+        if (!canUndoLayout) return;
+        const changed = undoCabinetLayout();
+        if (changed) await autoSave();
+    };
+
+    const handleRedoLayout = async () => {
+        if (!canRedoLayout) return;
+        const changed = redoCabinetLayout();
+        if (changed) await autoSave();
     };
 
     const handleClearCabinet = async () => {
@@ -745,19 +765,19 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     ];
 
     return (
-        <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-hidden">
+        <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-hidden dark:bg-slate-950">
             {/* Header Toolbar */}
-            <div className="flex justify-between items-center px-4 py-3 bg-white shadow-sm z-30 relative shrink-0">
+            <div className="flex justify-between items-center px-4 py-3 bg-white shadow-sm z-30 relative shrink-0 dark:border-b dark:border-slate-800 dark:bg-slate-950">
                 <div className="flex items-center gap-3">
                     {onBack && (
                         <button
                             onClick={onBack}
-                            className="p-2 -ml-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
+                            className="p-2 -ml-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800"
                         >
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                     )}
-                    <h2 className="text-lg font-semibold text-slate-800">
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
                         {isLoadingCabinet ? (
                             <span className="flex items-center gap-2">
                                 <Loader2 className="w-4 h-4 animate-spin" /> {t('cabinet_loading')}
@@ -767,6 +787,26 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 </div>
                 <div className="flex items-center gap-2">
                     {/* 저장 상태 인디케이터 */}
+                    <button
+                        type="button"
+                        onClick={() => void handleUndoLayout()}
+                        disabled={!canUndoLayout}
+                        title={t('cabinet_undo_layout')}
+                        aria-label={t('cabinet_undo_layout')}
+                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    >
+                        <Undo2 className="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void handleRedoLayout()}
+                        disabled={!canRedoLayout}
+                        title={t('cabinet_redo_layout')}
+                        aria-label={t('cabinet_redo_layout')}
+                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    >
+                        <Redo2 className="h-4 w-4" />
+                    </button>
 
                     {saveStatus === 'saving' ? (
                         <span className="flex items-center gap-1.5 text-sm text-slate-400">
@@ -783,7 +823,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             onClick={handleSave}
                             disabled={isSaving || isLoadingCabinet}
                             title={t('cabinet_save_manual')}
-                            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40"
+                            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40 dark:hover:text-slate-100 dark:hover:bg-slate-800"
                         >
                             <Save className="w-4 h-4" />
                         </button>
@@ -795,7 +835,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             <div className="relative h-full w-full flex-1 lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_380px] lg:bg-slate-100 dark:lg:bg-slate-950">
                 <div className="relative min-h-0 overflow-hidden">
                 {isLoadingCabinet && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20">
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20 dark:bg-slate-950/50">
                         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
                     </div>
                 )}
@@ -823,26 +863,26 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
                 {/* Mode Switcher - Floating Pill */}
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
-                    <div className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border rounded-full p-1 flex items-center gap-1">
+                    <div className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border border-slate-200 rounded-full p-1 flex items-center gap-1 dark:border-slate-700 dark:bg-slate-900/90">
                         <button
                             onClick={() => setMode('VIEW')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
                                 }`}
                         >
                             <Layers size={14} /> {t('cabinet_mode_view')}
                         </button>
-                        <div className="w-px h-4 bg-gray-200" />
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
                         <button
                             onClick={() => setMode('EDIT')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
                                 }`}
                         >
                             <Box size={14} /> {t('cabinet_mode_edit')}
                         </button>
-                        <div className="w-px h-4 bg-gray-200" />
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
                         <button
                             onClick={() => setMode('PLACE')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-100'
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700 dark:bg-emerald-500/20 dark:text-emerald-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
                                 }`}
                         >
                             <Plus size={14} /> {t('cabinet_mode_place')}

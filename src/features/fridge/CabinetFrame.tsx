@@ -8,6 +8,7 @@ interface CabinetFrameProps {
     dimmed?: boolean;
     /** 탑뷰 모드 시 상판을 숨겨서 위에서 내려다볼 수 있게 함 */
     hideTop?: boolean;
+    isDarkMode?: boolean;
 }
 
 const WALL = 0.12;
@@ -21,6 +22,7 @@ export const CabinetFrame: React.FC<CabinetFrameProps> = ({
     cabinetHeight,
     dimmed = false,
     hideTop = false,
+    isDarkMode = false,
 }) => {
     const bottomY = BOTTOM_Y;
     const topY = bottomY + cabinetHeight;
@@ -30,10 +32,40 @@ export const CabinetFrame: React.FC<CabinetFrameProps> = ({
 
     const opacity = dimmed ? DIM_OPACITY : 1;
     // transparent는 항상 true로 두고 opacity만 변경 (동적 토글 시 반영 안 됨)
-    const wallMat = { color: '#e4e4e7', roughness: 0.6, metalness: 0.15, transparent: true, opacity, depthWrite: !dimmed };
-    const innerPanelMat = { color: '#ebe9e4', roughness: 0.7, metalness: 0.1, transparent: true, opacity, depthWrite: !dimmed };
-    const backPanelMat = { color: '#dde4ee', roughness: 0.8, metalness: 0.05, transparent: true, opacity, depthWrite: !dimmed };
-    const frameMat = { color: '#3b82f6', roughness: 0.4, metalness: 0.3, transparent: true, opacity, depthWrite: !dimmed };
+    const wallMat = {
+        color: isDarkMode ? '#1e293b' : '#e4e4e7',
+        roughness: 0.6,
+        metalness: 0.15,
+        transparent: true,
+        opacity,
+        depthWrite: !dimmed
+    };
+    const innerPanelMat = {
+        color: isDarkMode ? '#273449' : '#ebe9e4',
+        roughness: 0.7,
+        metalness: 0.1,
+        transparent: true,
+        opacity,
+        depthWrite: !dimmed
+    };
+    const backPanelMat = {
+        color: isDarkMode ? '#162033' : '#dde4ee',
+        roughness: 0.8,
+        metalness: 0.05,
+        transparent: true,
+        opacity,
+        depthWrite: !dimmed
+    };
+    const frameMat = {
+        color: isDarkMode ? '#60a5fa' : '#3b82f6',
+        emissive: isDarkMode ? '#1d4ed8' : '#000000',
+        emissiveIntensity: isDarkMode ? 0.08 : 0,
+        roughness: 0.4,
+        metalness: 0.3,
+        transparent: true,
+        opacity,
+        depthWrite: !dimmed
+    };
 
     // 각 패널이 겹치지 않도록 영역 분리
     // Z축 구간: [뒷면 패널] [좌우 벽 + 상하판] [전면 프레임]
@@ -42,7 +74,7 @@ export const CabinetFrame: React.FC<CabinetFrameProps> = ({
     const sideDepth = framBackZ - backFrontZ;        // 좌우벽이 차지하는 깊이
     const sideCenterZ = (backFrontZ + framBackZ) / 2;
 
-    const matKey = dimmed ? 'dimmed' : 'normal';
+    const matKey = `${isDarkMode ? 'dark' : 'light'}-${dimmed ? 'dimmed' : 'normal'}`;
     return (
         <group>
             {/* 뒷면 패널 - 구분되는 파란빛 회색 */}

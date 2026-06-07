@@ -124,6 +124,8 @@ export interface CompatibilityPlanPreview {
 
 export interface FridgeState {
     shelves: ShelfData[];
+    layoutUndoStack: ShelfData[][];
+    layoutRedoStack: ShelfData[][];
     mode: 'VIEW' | 'EDIT' | 'PLACE';
     draggedItem: DragItem | null;
     pendingPlacement: PendingPlacement | null;
@@ -151,6 +153,8 @@ export interface FridgeState {
     placeReagent: (shelfId: string, item: Omit<ReagentPlacement, 'shelfId'>) => boolean;
     moveReagent: (id: string, newShelfId: string, newPosition: number, newDepthPosition?: number) => boolean;
     removeReagent: (id: string) => void;
+    undoCabinetLayout: () => boolean;
+    redoCabinetLayout: () => boolean;
     setMode: (mode: 'VIEW' | 'EDIT' | 'PLACE') => void;
     setSearchQuery: (query: string) => void;
     setDraggedTemplate: (template: ReagentTemplate | null) => void;

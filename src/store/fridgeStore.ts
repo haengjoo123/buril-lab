@@ -17,6 +17,11 @@ import {
     getItemVisualWidthPct,
 } from '../utils/reagentPlacementMetrics';
 import { getShelfSectionByIndex } from '../utils/shelfSections';
+import {
+    createCabinetLayoutHistoryChange,
+    redoCabinetLayoutHistory,
+    undoCabinetLayoutHistory,
+} from '../utils/cabinetLayoutHistory';
 
 export interface AutoPlaceResult {
     itemId: string;
@@ -70,8 +75,49 @@ function resetCompatibilityPlanPreview(): { compatibilityPlanPreview: Compatibil
     return { compatibilityPlanPreview: null };
 }
 
+function getLayoutTransientCleanup(state: FridgeStore, shelves: ShelfData[]): Partial<FridgeStore> {
+    const shelfIds = new Set(shelves.map((shelf) => shelf.id));
+    const itemIds = new Set(shelves.flatMap((shelf) => shelf.items.map((item) => item.id)));
+    const patch: Partial<FridgeStore> = {};
+
+    if (state.selectedReagentId && !itemIds.has(state.selectedReagentId)) {
+        patch.selectedReagentId = null;
+    }
+    if (typeof state.highlightedItemId === 'string' && !itemIds.has(state.highlightedItemId)) {
+        patch.highlightedItemId = null;
+    }
+    if (Array.isArray(state.highlightedItemId)) {
+        const nextHighlightedIds = state.highlightedItemId.filter((id) => itemIds.has(id));
+        patch.highlightedItemId = nextHighlightedIds.length > 0 ? nextHighlightedIds : null;
+    }
+    if (state.draggedItem && !itemIds.has(state.draggedItem.id)) {
+        patch.draggedItem = null;
+    }
+    if (state.focusedShelfId && !shelfIds.has(state.focusedShelfId)) {
+        patch.focusedShelfId = null;
+    }
+    if (state.pendingPlacement && !shelfIds.has(state.pendingPlacement.shelfId)) {
+        patch.pendingPlacement = null;
+    }
+
+    return patch;
+}
+
+function createLayoutStorePatch(state: FridgeStore, shelves: ShelfData[]): Partial<FridgeStore> | null {
+    const historyChange = createCabinetLayoutHistoryChange(state, shelves);
+    if (!historyChange) return null;
+
+    return {
+        ...historyChange,
+        ...getLayoutTransientCleanup(state, historyChange.shelves),
+        ...resetCompatibilityPlanPreview(),
+    };
+}
+
 export const useFridgeStore = create<FridgeStore>((set, get) => ({
     shelves: INITIAL_SHELVES,
+    layoutUndoStack: [],
+    layoutRedoStack: [],
     mode: 'VIEW',
     draggedItem: null,
     draggedTemplate: null,
@@ -104,6 +150,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             shelves: isSameCabinet ? previousState.shelves : [],
             isBuildingCompatibilityPlan: false,
             isApplyingCompatibilityPlan: false,
+            layoutUndoStack: [],
+            layoutRedoStack: [],
             ...resetCompatibilityPlanPreview(),
         });
         try {
@@ -115,6 +163,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 cabinetWidth: width,
                 cabinetHeight: height,
                 cabinetDepth: depth,
+                layoutUndoStack: [],
+                layoutRedoStack: [],
                 ...resetCompatibilityPlanPreview(),
             });
 
@@ -258,57 +308,49 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         return false;
     },
 
-    addShelf: () => set(state => ({
-        shelves: [...state.shelves, {
+    addShelf: () => set(state => {
+        const nextShelves = [...state.shelves, {
             id: uuidv4(),
             level: state.shelves.length,
             dividers: [],
             items: []
-        }],
-        ...resetCompatibilityPlanPreview(),
-    })),
+        }];
+        return createLayoutStorePatch(state, nextShelves) ?? state;
+    }),
 
     removeShelf: (shelfId) => set(state => {
         if (state.shelves.length === 0) return state;
         const next = state.shelves.filter(s => s.id !== shelfId);
-        return {
-            shelves: next.map((s, i) => ({ ...s, level: i })),
-            ...resetCompatibilityPlanPreview(),
-        };
+        return createLayoutStorePatch(state, next.map((s, i) => ({ ...s, level: i }))) ?? state;
     }),
 
     addVerticalPanel: (position = 50) => set(state => ({
-        shelves: state.shelves.map(s => {
+        ...(createLayoutStorePatch(state, state.shelves.map(s => {
             const hasNear = s.dividers.some(d => Math.abs(d - position) < 2);
             if (hasNear) return s;
             return { ...s, dividers: [...s.dividers, position].sort((a, b) => a - b) };
-        }),
-        ...resetCompatibilityPlanPreview(),
+        })) ?? {}),
     })),
 
     removeVerticalPanel: () => set(state => {
         const allPositions = state.shelves.flatMap(s => s.dividers);
         if (allPositions.length === 0) return state;
         const maxPos = Math.max(...allPositions);
-        return {
-            shelves: state.shelves.map(s => ({
-                ...s,
-                dividers: s.dividers.filter(p => Math.abs(p - maxPos) >= 2)
-            })),
-            ...resetCompatibilityPlanPreview(),
-        };
+        return createLayoutStorePatch(state, state.shelves.map(s => ({
+            ...s,
+            dividers: s.dividers.filter(p => Math.abs(p - maxPos) >= 2)
+        }))) ?? state;
     }),
 
     addDivider: (shelfId, position) => set(state => ({
-        shelves: state.shelves.map(s => s.id === shelfId ? {
+        ...(createLayoutStorePatch(state, state.shelves.map(s => s.id === shelfId ? {
             ...s,
             dividers: [...s.dividers, position].sort((a, b) => a - b)
-        } : s),
-        ...resetCompatibilityPlanPreview(),
+        } : s)) ?? {}),
     })),
 
     moveDivider: (shelfId, index, newPosition) => set(state => ({
-        shelves: state.shelves.map(s => {
+        ...(createLayoutStorePatch(state, state.shelves.map(s => {
             if (s.id !== shelfId) return s;
             const newDividers = [...s.dividers];
             // Clamp between neighbors or 0-100
@@ -317,16 +359,14 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             // TODO: Add Logic to not cross other dividers if needed
             newDividers[index] = newPosition;
             return { ...s, dividers: newDividers.sort((a, b) => a - b) };
-        }),
-        ...resetCompatibilityPlanPreview(),
+        })) ?? {}),
     })),
 
     removeDivider: (shelfId, index) => set(state => ({
-        shelves: state.shelves.map(s => s.id === shelfId ? {
+        ...(createLayoutStorePatch(state, state.shelves.map(s => s.id === shelfId ? {
             ...s,
             dividers: s.dividers.filter((_, i) => i !== index)
-        } : s),
-        ...resetCompatibilityPlanPreview(),
+        } : s)) ?? {}),
     })),
 
     placeReagent: (shelfId, itemData) => {
@@ -339,11 +379,10 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         };
 
         set(state => ({
-            shelves: state.shelves.map(s => s.id === shelfId ? {
+            ...(createLayoutStorePatch(state, state.shelves.map(s => s.id === shelfId ? {
                 ...s,
                 items: [...s.items, newItem]
-            } : s),
-            ...resetCompatibilityPlanPreview(),
+            } : s)) ?? {}),
         }));
 
         // Background: enrich with PubChem GHS data if CAS is available
@@ -373,7 +412,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         const depthPos = newDepthPosition ?? item.depthPosition ?? 50;
 
         set(state => ({
-            shelves: state.shelves.map(s => {
+            ...(createLayoutStorePatch(state, state.shelves.map(s => {
                 if (s.id === oldShelfId && s.id === newShelfId) {
                     return {
                         ...s,
@@ -385,31 +424,62 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                     return { ...s, items: [...s.items, { ...item!, shelfId: newShelfId, position: newPosition, depthPosition: depthPos }] };
                 }
                 return s;
-            }),
-            ...resetCompatibilityPlanPreview(),
+            })) ?? {}),
         }));
         return true;
     },
 
     removeReagent: (id) => set(state => ({
-        shelves: state.shelves.map(s => ({
+        ...(createLayoutStorePatch(state, state.shelves.map(s => ({
             ...s,
             items: s.items.filter(i => i.id !== id)
-        })),
-        ...resetCompatibilityPlanPreview(),
+        }))) ?? {}),
     })),
 
     clearCabinet: () => set(state => ({
-        shelves: state.shelves.map(s => ({
+        ...(createLayoutStorePatch(state, state.shelves.map(s => ({
             ...s,
             items: []
-        })),
-        ...resetCompatibilityPlanPreview(),
+        }))) ?? {}),
     })),
 
     setSelectedReagentId: (id) => set({ selectedReagentId: id }),
     setHighlightedItemId: (id) => set({ highlightedItemId: id }),
     clearAutoPlaceResult: () => set({ autoPlaceResult: null }),
+
+    undoCabinetLayout: () => {
+        const state = get();
+        const historyChange = undoCabinetLayoutHistory(state);
+        if (!historyChange) return false;
+
+        set({
+            ...historyChange,
+            ...getLayoutTransientCleanup(state, historyChange.shelves),
+            draggedItem: null,
+            draggedTemplate: null,
+            pendingPlacement: null,
+            autoPlaceResult: null,
+            ...resetCompatibilityPlanPreview(),
+        });
+        return true;
+    },
+
+    redoCabinetLayout: () => {
+        const state = get();
+        const historyChange = redoCabinetLayoutHistory(state);
+        if (!historyChange) return false;
+
+        set({
+            ...historyChange,
+            ...getLayoutTransientCleanup(state, historyChange.shelves),
+            draggedItem: null,
+            draggedTemplate: null,
+            pendingPlacement: null,
+            autoPlaceResult: null,
+            ...resetCompatibilityPlanPreview(),
+        });
+        return true;
+    },
 
     buildCompatibilityPlan: async () => {
         set({
@@ -452,11 +522,10 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         const preview = get().compatibilityPlanPreview;
         if (!preview?.canApply) return false;
 
-        set({
+        set(state => ({
             isApplyingCompatibilityPlan: true,
-            shelves: preview.plannedShelves,
-            ...resetCompatibilityPlanPreview(),
-        });
+            ...(createLayoutStorePatch(state, preview.plannedShelves) ?? resetCompatibilityPlanPreview()),
+        }));
 
         try {
             await get().saveCabinet();
@@ -517,15 +586,14 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                         };
 
                         set(st => ({
-                            shelves: st.shelves.map(s =>
+                            ...(createLayoutStorePatch(st, st.shelves.map(s =>
                                 s.id === shelf.id
                                     ? { ...s, items: [...s.items, newItem] }
                                     : s
-                            ),
+                            )) ?? {}),
                             highlightedItemId: newItem.id,
                             autoPlaceResult: result,
                             focusedShelfId: null, // reset first so useEffect always re-fires
-                            ...resetCompatibilityPlanPreview(),
                         }));
 
                         // Set focusedShelfId in next microtask so FridgeScene's useEffect picks up the change
@@ -591,16 +659,15 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         };
 
         set(st => ({
-            shelves: st.shelves.map(s =>
+            ...(createLayoutStorePatch(st, st.shelves.map(s =>
                 s.id === slot.shelfId
                     ? { ...s, items: [...s.items, newItem] }
                     : s
-            ),
+            )) ?? {}),
             highlightedItemId: newItem.id,
             selectedReagentId: newItem.id,
             autoPlaceResult: result,
             focusedShelfId: null,
-            ...resetCompatibilityPlanPreview(),
         }));
 
         queueMicrotask(() => {
@@ -906,12 +973,11 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         }
 
         // 5. Update state
-        set({
-            shelves: currentState.shelves.map(shelf => ({
+        set(state => ({
+            ...(createLayoutStorePatch(state, currentState.shelves.map(shelf => ({
                 ...shelf,
                 items: shelfResults[shelf.id] || [],
-            })),
-            ...resetCompatibilityPlanPreview(),
-        });
+            }))) ?? {}),
+        }));
     }
 }));
