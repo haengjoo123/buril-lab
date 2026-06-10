@@ -1,5 +1,6 @@
 import { useEffect, useCallback, lazy, Suspense, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { MainLayout } from './components/MainLayout';
 import { SearchTabView } from './components/SearchTabView';
 import { BottomTabNav } from './components/BottomTabNav';
@@ -57,6 +58,8 @@ const SafetyCenterWorkspace = lazy(() =>
 const OpsConsoleView = lazy(() =>
   import('./features/ops/OpsConsoleView').then((module) => ({ default: module.OpsConsoleView }))
 );
+
+const isNativeApp = Capacitor.isNativePlatform();
 
 function TabContentFallback() {
   return (
@@ -130,6 +133,11 @@ function App() {
     addSearchHistory,
   });
 
+  const isAuthenticated = !!session;
+  const navigateToLogin = useCallback((returnTo: string = `${location.pathname}${location.search}`) => {
+    navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }, [location.pathname, location.search, navigate]);
+
   const {
     activeTab,
     isScanning,
@@ -145,7 +153,7 @@ function App() {
     currentLabId,
     lastSearchQuery,
     navigate,
-    isAuthenticated: !!session,
+    isAuthenticated,
   });
 
   const isLoginRoute = location.pathname === '/login';
@@ -158,8 +166,9 @@ function App() {
   const isOpsRoute = isOpsPath(location.pathname);
   const legacyLabAppRedirect = getLegacyLabAppRedirect(location.pathname);
   const legacyOpsRedirect = isFeedbackAdminRoute ? '/ops/feedback' : null;
+  const nativeGatewayRedirect = isNativeApp && isGatewayRoute ? labAppRoute() : null;
   const rootSearchRedirect = isGatewayRoute && searchParams.has('q') ? labAppRoute() : null;
-  const labAppRedirectTarget = legacyLabAppRedirect ?? rootSearchRedirect;
+  const labAppRedirectTarget = legacyLabAppRedirect ?? nativeGatewayRedirect ?? rootSearchRedirect;
 
   useEffect(() => {
     if (session) {
@@ -309,6 +318,11 @@ function App() {
       return;
     }
 
+    if (!session) {
+      navigateToLogin(labAppRoute(`/cabinet?id=${action.cabinetId}`));
+      return;
+    }
+
     navigate(labAppRoute(`/cabinet?id=${action.cabinetId}`), {
       state: {
         cabinetId: action.cabinetId,
@@ -321,7 +335,7 @@ function App() {
       itemId: action.highlightItemId,
       shelfId: action.shelfId,
     });
-  }, [navigate]);
+  }, [navigate, navigateToLogin, session]);
 
   const handleScan = (scannedText: string) => {
     setIsScanning(false);
@@ -372,12 +386,12 @@ function App() {
         onSignUp={signUp}
         onRequestPasswordReset={requestPasswordReset}
         authPrompt={showAuthPrompt ? t('auth_required_for_feature') : undefined}
-        onBackToSearch={() => navigate('/')}
+        onBackToSearch={() => navigate(labAppRoute(), { replace: true })}
       />
     );
   }
 
-  if (!session) {
+  if (!session && !isLabRoute) {
     return (
       <GatewayLanding
         isAuthenticated={false}
@@ -449,7 +463,7 @@ function App() {
         </Suspense>
       )}
 
-      {isCartOpen && (
+      {isCartOpen && isAuthenticated && (
         <CartView
           onClose={() => setIsCartOpen(false)}
           onDisposed={() => {
@@ -462,12 +476,20 @@ function App() {
       <MainLayout
         onLogoClick={handleReset}
         userEmail={user?.email}
-        onSignOut={signOut}
+        onSignOut={isAuthenticated ? signOut : undefined}
+        onLoginClick={!isAuthenticated ? () => navigateToLogin() : undefined}
         activeTab={activeTab}
         isAdmin={isAdmin}
         onTabClick={handleTabClick}
         cartCount={cart.length}
-        onCartClick={() => setIsCartOpen(true)}
+        onCartClick={() => {
+          if (!isAuthenticated) {
+            navigateToLogin(labAppRoute());
+            return;
+          }
+
+          setIsCartOpen(true);
+        }}
         bottomNav={
           <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} />
         }
@@ -494,9 +516,23 @@ function App() {
             <SearchTabView
               cartCount={cart.length}
               cartItems={cart}
-              onOpenCart={() => setIsCartOpen(true)}
-              showRecentWasteLogs
-              onOpenLogs={() => navigate(labAppRoute('/logs'))}
+              onOpenCart={() => {
+                if (!isAuthenticated) {
+                  navigateToLogin(labAppRoute());
+                  return;
+                }
+
+                setIsCartOpen(true);
+              }}
+              showRecentWasteLogs={isAuthenticated}
+              onOpenLogs={() => {
+                if (!isAuthenticated) {
+                  navigateToLogin(labAppRoute('/logs'));
+                  return;
+                }
+
+                navigate(labAppRoute('/logs'));
+              }}
               query={query}
               lastSearchQuery={lastSearchQuery}
               isLoading={isLoading}
@@ -527,6 +563,7 @@ function App() {
               suggestions={suggestions}
               isSuggestionsLoading={isSuggestionsLoading}
               onClearSuggestions={clearSuggestions}
+              onRequireAuth={!isAuthenticated ? () => navigateToLogin() : undefined}
               onOpenVoiceAgent={() => openVoiceAgentSheet({
                 screen: 'search',
                 language: i18n.language.startsWith('ko') ? 'ko' : 'en',
@@ -537,7 +574,14 @@ function App() {
 
         {cart.length > 0 && !isCartOpen && (
           <button
-            onClick={() => setIsCartOpen(true)}
+            onClick={() => {
+              if (!isAuthenticated) {
+                navigateToLogin(labAppRoute());
+                return;
+              }
+
+              setIsCartOpen(true);
+            }}
             className={`absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition-transform animate-in fade-in slide-in-from-bottom-4 active:scale-90 dark:bg-slate-100 dark:text-slate-900 lg:hidden`}
             aria-label={`${t('cart_title')} ${cart.length}`}
           >

@@ -18,6 +18,53 @@ type PagesFunction<E = Env> = (context: {
   data: Record<string, unknown>
 }) => Response | Promise<Response>
 
+const ALLOWED_CORS_ORIGINS = [
+  'https://app.buril-lab.local',
+  'https://localhost',
+  'http://localhost',
+  'http://127.0.0.1',
+] as const
+
+function isAllowedCorsOrigin(origin: string | null): origin is string {
+  if (!origin) return false
+
+  if (ALLOWED_CORS_ORIGINS.includes(origin as typeof ALLOWED_CORS_ORIGINS[number])) {
+    return true
+  }
+
+  return (
+    /^https:\/\/(?:[a-z0-9-]+\.)?buril-lab\.pages\.dev$/i.test(origin) ||
+    /^https?:\/\/localhost:\d+$/i.test(origin) ||
+    /^https?:\/\/127\.0\.0\.1:\d+$/i.test(origin)
+  )
+}
+
+function getCorsHeaders(request: Request): HeadersInit {
+  const origin = request.headers.get('Origin')
+
+  if (!isAllowedCorsOrigin(origin)) {
+    return { Vary: 'Origin' }
+  }
+
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
+  }
+}
+
+function withCors(response: Response, request: Request): Response {
+  const headers = getCorsHeaders(request)
+
+  for (const [key, value] of Object.entries(headers)) {
+    response.headers.set(key, value)
+  }
+
+  return response
+}
+
 const supabaseJwksCache = new Map<string, ReturnType<typeof jose.createRemoteJWKSet>>()
 
 /**
@@ -118,6 +165,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return next()
   }
 
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: getCorsHeaders(request),
+    })
+  }
+
   // 1. Identify User or IP
   let identifier: string = request.headers.get('cf-connecting-ip') || 'anonymous'
   let isUser = false
@@ -142,14 +196,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   if (isProtectedApiPath(path) && !isUser) {
-    return new Response(JSON.stringify({
-      error: authVerificationFailed ? 'Invalid authentication token.' : 'Authentication is required.',
-    }), {
-      status: 401,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-    })
+    return withCors(
+      new Response(JSON.stringify({
+        error: authVerificationFailed ? 'Invalid authentication token.' : 'Authentication is required.',
+      }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+      }),
+      request,
+    )
   }
 
   // 2. Resolve Rate Limit Category
@@ -182,18 +239,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const { success, limit, remaining, reset } = await ratelimit.limit(identifier)
 
     if (!success) {
-      return new Response(JSON.stringify({ 
-        error: 'Too many requests. Please try again later.',
-        retryAt: new Date(reset).toISOString()
-      }), {
-        status: 429,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RateLimit-Limit': limit.toString(),
-          'X-RateLimit-Remaining': remaining.toString(),
-          'X-RateLimit-Reset': reset.toString(),
-        }
-      })
+      return withCors(
+        new Response(JSON.stringify({ 
+          error: 'Too many requests. Please try again later.',
+          retryAt: new Date(reset).toISOString()
+        }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': limit.toString(),
+            'X-RateLimit-Remaining': remaining.toString(),
+            'X-RateLimit-Reset': reset.toString(),
+          }
+        }),
+        request,
+      )
     }
 
     // 4. Proceed to the actual function
@@ -204,10 +264,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     response.headers.set('X-RateLimit-Remaining', remaining.toString())
     response.headers.set('X-RateLimit-Reset', reset.toString())
 
-    return response
+    return withCors(response, request)
   } catch (err) {
     console.error('Rate Limiting Error:', err)
     // If Redis is down, we allow the request to pass (fail open)
-    return next()
+    const response = await next()
+    return withCors(response, request)
   }
 }

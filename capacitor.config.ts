@@ -10,7 +10,9 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: false,
   },
   server: {
-    androidScheme: 'http',
+    hostname: 'app.buril-lab.local',
+    androidScheme: 'https',
+    appStartPath: '/app',
   },
 }
 

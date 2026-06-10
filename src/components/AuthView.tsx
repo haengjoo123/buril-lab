@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, CheckCircle2, FlaskConical, Info, Loader2, Lock, LogIn, Mail, UserPlus } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Info, Loader2, Lock, LogIn, Mail, UserPlus } from 'lucide-react';
+import logo from '../assets/burillab_app_icon.png';
 
 type AuthMode = 'signIn' | 'signUp' | 'reset';
 
@@ -119,9 +120,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 )}
 
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/25 mb-4">
-                        <FlaskConical className="w-8 h-8 text-white" />
-                    </div>
+                    <img
+                        src={logo}
+                        alt={t('app_logo_alt')}
+                        className="mx-auto mb-4 h-16 w-16 rounded-2xl object-contain shadow-lg shadow-slate-900/10 dark:shadow-black/30"
+                    />
                     <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
                         {isReset ? t('auth_reset_title') : t('app_title')}
                     </h1>

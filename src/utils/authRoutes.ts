@@ -1,14 +1,20 @@
-import { isLabAppPath, isOpsPath, isSafetyCenterPath } from './appRoutes';
+import { getLabAppScopedPath, isLabAppPath, isOpsPath, isSafetyCenterPath } from './appRoutes';
+
+const protectedLabAppPathPrefixes = ['/logs', '/cabinet', '/inventory', '/admin'];
+
+function matchesPathPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
 
 export function isAuthRequiredPath(pathname: string): boolean {
+  const appScopedPathname = isLabAppPath(pathname)
+    ? getLabAppScopedPath(pathname)
+    : pathname;
+
   return (
-    isLabAppPath(pathname) ||
     isSafetyCenterPath(pathname) ||
     isOpsPath(pathname) ||
-    pathname.startsWith('/logs') ||
-    pathname.startsWith('/cabinet') ||
-    pathname.startsWith('/inventory') ||
-    pathname.startsWith('/admin') ||
+    protectedLabAppPathPrefixes.some((prefix) => matchesPathPrefix(appScopedPathname, prefix)) ||
     pathname.startsWith('/feedback-admin')
   );
 }

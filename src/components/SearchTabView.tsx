@@ -624,63 +624,65 @@ export function SearchTabView({
             )}
           </section>
 
-          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  {t('tab_logs')}
-                </h3>
-              </div>
-              {onOpenLogs && (
-                <button
-                  type="button"
-                  onClick={onOpenLogs}
-                  className="text-xs font-semibold text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
-                >
-                  {t('log_view_details')}
-                </button>
-              )}
-            </div>
-
-            {isWasteLogsLoading ? (
-              <div className="flex min-h-28 items-center justify-center text-slate-400">
-                <Loader2 className="h-5 w-5 animate-spin" />
-              </div>
-            ) : wasteLogsError ? (
-              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
-                {t('common_load_failed')}
-              </div>
-            ) : recentWasteLogs.length > 0 ? (
-              <div className="space-y-2">
-                {recentWasteLogs.map((log) => (
+          {showRecentWasteLogs && (
+            <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    {t('tab_logs')}
+                  </h3>
+                </div>
+                {onOpenLogs && (
                   <button
-                    key={log.id}
                     type="button"
                     onClick={onOpenLogs}
-                    className="flex w-full items-start gap-3 rounded-lg border border-slate-100 px-3 py-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50 dark:border-slate-800 dark:hover:border-emerald-900/60 dark:hover:bg-emerald-950/20"
+                    className="text-xs font-semibold text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
                   >
-                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-bold text-slate-800 dark:text-slate-100">
-                        {getWasteLogTitle(log)}
-                      </span>
-                      <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">
-                        {log.disposal_category}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-[11px] font-semibold text-slate-400">
-                      {formatWasteLogDate(log.created_at)}
-                    </span>
+                    {t('log_view_details')}
                   </button>
-                ))}
+                )}
               </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
-                {t('log_empty')}
-              </div>
-            )}
-          </section>
+
+              {isWasteLogsLoading ? (
+                <div className="flex min-h-28 items-center justify-center text-slate-400">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                </div>
+              ) : wasteLogsError ? (
+                <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+                  {t('common_load_failed')}
+                </div>
+              ) : recentWasteLogs.length > 0 ? (
+                <div className="space-y-2">
+                  {recentWasteLogs.map((log) => (
+                    <button
+                      key={log.id}
+                      type="button"
+                      onClick={onOpenLogs}
+                      className="flex w-full items-start gap-3 rounded-lg border border-slate-100 px-3 py-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50 dark:border-slate-800 dark:hover:border-emerald-900/60 dark:hover:bg-emerald-950/20"
+                    >
+                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                          {getWasteLogTitle(log)}
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">
+                          {log.disposal_category}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[11px] font-semibold text-slate-400">
+                        {formatWasteLogDate(log.created_at)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+                  {t('log_empty')}
+                </div>
+              )}
+            </section>
+          )}
         </aside>
       </div>
     </div>

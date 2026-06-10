@@ -39,6 +39,215 @@ input, select, button, textarea {
   animation: slide-up 0.3s ease-out both;
 }
 
+.native-launch-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(244, 248, 255, 0.95), rgba(255, 255, 255, 1) 46%, rgba(240, 246, 255, 0.96)),
+    #ffffff;
+  animation: native-splash-exit 1.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: none;
+}
+
+.native-launch-splash::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, transparent, black 18%, black 76%, transparent);
+}
+
+.native-launch-splash__stage {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 1.05rem;
+  transform: translateY(-1.25rem);
+}
+
+.native-launch-splash__mark-shell {
+  position: relative;
+  width: clamp(7rem, 30vw, 9.5rem);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  animation: native-splash-mark-in 0.72s cubic-bezier(0.18, 0.9, 0.24, 1.15) both;
+}
+
+.native-launch-splash__mark-shell::before {
+  content: "";
+  position: absolute;
+  inset: 11%;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 22px 48px rgba(15, 23, 42, 0.14),
+    inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+  transform: rotate(-7deg);
+}
+
+.native-launch-splash__mark {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 16px rgba(15, 23, 42, 0.16));
+  user-select: none;
+}
+
+.native-launch-splash__accent {
+  position: absolute;
+  z-index: 1;
+  border-radius: 999px;
+  opacity: 0;
+  transform-origin: center;
+  animation: native-splash-accent 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.native-launch-splash__accent--red {
+  width: 58%;
+  height: 0.45rem;
+  top: 17%;
+  right: 5%;
+  background: #e11d20;
+  transform: rotate(29deg) scaleX(0.2);
+}
+
+.native-launch-splash__accent--yellow {
+  width: 46%;
+  height: 0.45rem;
+  left: 2%;
+  bottom: 25%;
+  background: #f4dc24;
+  transform: rotate(47deg) scaleX(0.2);
+  animation-delay: 0.08s;
+}
+
+.native-launch-splash__accent--blue {
+  width: 46%;
+  height: 0.45rem;
+  right: 5%;
+  bottom: 23%;
+  background: #11158c;
+  transform: rotate(-46deg) scaleX(0.2);
+  animation-delay: 0.14s;
+}
+
+.native-launch-splash__wordmark {
+  color: #0f172a;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0;
+  animation: native-splash-wordmark 0.48s ease-out 0.3s both;
+}
+
+.native-launch-splash__progress {
+  width: 5.5rem;
+  height: 0.2rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+  opacity: 0;
+  animation: native-splash-progress-in 0.24s ease-out 0.42s both;
+}
+
+.native-launch-splash__progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #e11d20, #f4dc24 52%, #11158c);
+  transform: translateX(-100%);
+  animation: native-splash-progress 0.68s cubic-bezier(0.22, 1, 0.36, 1) 0.48s both;
+}
+
+@keyframes native-splash-mark-in {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.84) rotate(-4deg);
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.04) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes native-splash-accent {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--accent-rotation, 0deg)) scaleX(0.2);
+  }
+  100% {
+    opacity: 0.9;
+    transform: rotate(var(--accent-rotation, 0deg)) scaleX(1);
+  }
+}
+
+.native-launch-splash__accent--red {
+  --accent-rotation: 29deg;
+}
+
+.native-launch-splash__accent--yellow {
+  --accent-rotation: 47deg;
+}
+
+.native-launch-splash__accent--blue {
+  --accent-rotation: -46deg;
+}
+
+@keyframes native-splash-wordmark {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes native-splash-progress-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes native-splash-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes native-splash-exit {
+  0%,
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes scan-queue-in {
   0% {
     opacity: 0;
@@ -96,6 +305,16 @@ input, select, button, textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .native-launch-splash,
+  .native-launch-splash__mark-shell,
+  .native-launch-splash__accent,
+  .native-launch-splash__wordmark,
+  .native-launch-splash__progress,
+  .native-launch-splash__progress span {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+
   .scan-queue-thumb,
   .scan-queue-success,
   .scan-queue-error {

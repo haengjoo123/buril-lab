@@ -4,7 +4,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { getInternalApiUrl } from './apiUrl';
 
 
-const BASE_URL = getInternalApiUrl('/api/kosha');
+const getKoshaBaseUrl = () => getInternalApiUrl('/api/kosha');
 
 // KOSHA API Types (Internal)
 import type { MsdsSection } from '../types';
@@ -34,7 +34,7 @@ export const fetchKoshaPH = async (chemId: number | string): Promise<number | un
         const paddedId = String(chemId).padStart(6, '0');
         console.log(`[KOSHA] Fetching PH for chemId: ${paddedId} (Original: ${chemId})`);
 
-        const res = await axios.get(`${BASE_URL}/chemdetail09`, {
+        const res = await axios.get(`${getKoshaBaseUrl()}/chemdetail09`, {
             params: {
                 chemId: paddedId,
             }
@@ -97,7 +97,7 @@ export const resolveKoreanChemical = async (keyword: string): Promise<{ casNo: s
         console.log(`[KOSHA] Resolving: ${keyword}`);
 
         // 1. Search for Chemical
-        const searchRes = await axios.get(`${BASE_URL}/chemlist`, {
+        const searchRes = await axios.get(`${getKoshaBaseUrl()}/chemlist`, {
             params: {
                 searchWrd: keyword,
                 searchCnd: 0, // 0 = Korean Name
@@ -171,7 +171,7 @@ export const fetchKoshaSuggestions = async (keyword: string, limit: number = 5):
     }
 
     try {
-        const searchRes = await axios.get(`${BASE_URL}/chemlist`, {
+        const searchRes = await axios.get(`${getKoshaBaseUrl()}/chemlist`, {
             params: {
                 searchWrd: trimmedKeyword,
                 searchCnd: 0, // 0 = Korean Name
@@ -219,7 +219,7 @@ export const resolveCasChemical = async (casNo: string): Promise<{ chemId: numbe
         console.log(`[KOSHA] Resolving CAS: ${casNo}`);
 
         // Search for Chemical by CAS
-        const searchRes = await axios.get(`${BASE_URL}/chemlist`, {
+        const searchRes = await axios.get(`${getKoshaBaseUrl()}/chemlist`, {
             params: {
                 searchWrd: casNo,
                 searchCnd: 1, // 1 = CAS No (Confirmed by doc)
@@ -281,7 +281,7 @@ export const fetchKoshaMsds = async (chemId: number): Promise<MsdsSection[]> => 
     // Create array of promises for 16 sections
     const promises = Array.from({ length: 16 }, (_, i) => {
         const detailNum = String(i + 1).padStart(2, '0'); // 01, 02, ... 16
-        return axios.get(`${BASE_URL}/chemdetail${detailNum}`, {
+        return axios.get(`${getKoshaBaseUrl()}/chemdetail${detailNum}`, {
             params: {
                 chemId: paddedId,
             }
