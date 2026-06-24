@@ -375,7 +375,6 @@ export default defineConfig(({ mode }) => {
           }
 
           if (
-            id.includes('node_modules/@google/genai') ||
             id.includes('node_modules/openai') ||
             id.includes('node_modules/axios') ||
             id.includes('node_modules/cheerio') ||
@@ -455,21 +454,6 @@ export default defineConfig(({ mode }) => {
               expiration: {
                 maxEntries: 50,
                 maxAgeSeconds: 60 * 60 * 24 // 24 hours
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          // Supabase API — NetworkFirst
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-api-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 // 1 hour
               },
               cacheableResponse: {
                 statuses: [0, 200]

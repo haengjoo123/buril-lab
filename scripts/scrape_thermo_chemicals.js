@@ -19,8 +19,8 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const TARGET_PRODUCTS = 1000;
 const FALLBACK_TOTAL_PAGES = 9;
 
-const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const { supabaseUrl, supabaseServiceRoleKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const normalizeName = (value) => value?.toString().toLowerCase().replace(/[^a-z0-9]+/g, '').trim() || '';

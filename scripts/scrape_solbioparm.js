@@ -19,8 +19,8 @@ const OUTPUT_FILE = path.join(process.cwd(), 'src/data/solbioparm_products.json'
 
 const STORAGE_BUCKET = 'media-products';
 
-const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const { supabaseUrl, supabaseServiceRoleKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // Rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));

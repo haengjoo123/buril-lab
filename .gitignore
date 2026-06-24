@@ -53,3 +53,10 @@ git_log*.txt
 lint_*.txt
 scene_changes*.txt
 tmp_results*.txt
+
+# fastlane generated output
+/fastlane/build/
+/fastlane/report.xml
+/fastlane/Preview.html
+/fastlane/screenshots/
+/fastlane/test_output/

@@ -30,8 +30,8 @@ const STORAGE_BUCKET = 'media-products';
 const MAX_PAGES = 15; // User said 8 pages, set higher just in case
 
 
-const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const { supabaseUrl, supabaseServiceRoleKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // Helper functions
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

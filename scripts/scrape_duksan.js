@@ -18,8 +18,8 @@ const DELAY_MS = 1000;
 
 const STORAGE_BUCKET = 'media-products';
 
-const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const { supabaseUrl, supabaseServiceRoleKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // Ensure data directory exists
 const dir = path.dirname(OUTPUT_FILE);

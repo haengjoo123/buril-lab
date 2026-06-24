@@ -25,8 +25,8 @@ const DETAIL_RETRIES = 3;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36';
 const TARGET_PRODUCTS = 592;
 
-const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const { supabaseUrl, supabaseServiceRoleKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 

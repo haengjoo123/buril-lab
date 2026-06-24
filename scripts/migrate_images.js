@@ -9,8 +9,8 @@ import { getSupabaseScriptConfig } from './supabaseEnv.js';
 const OLD_BUCKET = 'media-products';
 const NEW_BUCKET = 'products';
 
-const { supabaseUrl, supabaseAnonKey } = getSupabaseScriptConfig();
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const { supabaseUrl, supabaseServiceRoleKey } = getSupabaseScriptConfig();
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 /**
  * List all files in a bucket (with pagination)
