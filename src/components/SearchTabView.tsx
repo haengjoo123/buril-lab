@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight } from 'lucide-react';
 import { ResultCard } from './ResultCard';
@@ -68,6 +68,7 @@ interface SearchTabViewProps {
   onOpenCart?: () => void;
   showRecentWasteLogs?: boolean;
   onOpenLogs?: () => void;
+  onSearchFocusChange?: (isFocused: boolean) => void;
 }
 
 export function SearchTabView({
@@ -108,9 +109,14 @@ export function SearchTabView({
   onOpenCart,
   showRecentWasteLogs = false,
   onOpenLogs,
+  onSearchFocusChange,
 }: SearchTabViewProps) {
   const { t } = useTranslation();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchFormRef = useRef<HTMLFormElement>(null);
+  const blurTimeoutRef = useRef<number | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [autocompleteMaxHeight, setAutocompleteMaxHeight] = useState(240);
   const [recentWasteLogs, setRecentWasteLogs] = useState<WasteLog[]>([]);
   const [isWasteLogsLoading, setIsWasteLogsLoading] = useState(false);
   const [wasteLogsError, setWasteLogsError] = useState(false);
@@ -126,6 +132,102 @@ export function SearchTabView({
     (suggestions.length > 0 || isSuggestionsLoading);
   const visibleCartItems = useMemo(() => cartItems.slice(0, 3), [cartItems]);
   const hiddenCartCount = Math.max(0, cartItems.length - visibleCartItems.length);
+
+  const setSearchFocus = useCallback((isFocused: boolean) => {
+    setIsSearchFocused(isFocused);
+    onSearchFocusChange?.(isFocused);
+  }, [onSearchFocusChange]);
+
+  const updateAutocompleteMaxHeight = useCallback(() => {
+    if (!searchFormRef.current) return;
+
+    const viewport = window.visualViewport;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const formBottom = searchFormRef.current.getBoundingClientRect().bottom;
+    const availableHeight = viewportTop + viewportHeight - formBottom - 18;
+    const nextHeight = Math.max(144, Math.min(360, Math.floor(availableHeight)));
+
+    setAutocompleteMaxHeight(nextHeight);
+  }, []);
+
+  const handleInputFocus = useCallback(() => {
+    if (blurTimeoutRef.current !== null) {
+      window.clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+
+    setSearchFocus(true);
+    window.setTimeout(() => {
+      searchFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      updateAutocompleteMaxHeight();
+    }, 80);
+  }, [setSearchFocus, updateAutocompleteMaxHeight]);
+
+  const handleInputBlur = useCallback(() => {
+    blurTimeoutRef.current = window.setTimeout(() => {
+      setSearchFocus(false);
+      blurTimeoutRef.current = null;
+    }, 120);
+  }, [setSearchFocus]);
+
+  const handleFormSubmit = useCallback((event?: FormEvent) => {
+    searchInputRef.current?.blur();
+    setSearchFocus(false);
+    onSearchSubmit(event);
+  }, [onSearchSubmit, setSearchFocus]);
+
+  const handleSuggestionSelect = useCallback((term: string) => {
+    searchInputRef.current?.blur();
+    setSearchFocus(false);
+    onSuggestionClick(term);
+    onClearSuggestions?.();
+  }, [onClearSuggestions, onSuggestionClick, setSearchFocus]);
+
+  useEffect(() => {
+    if (!isSearchFocused || !shouldShowAutocomplete) return;
+
+    updateAutocompleteMaxHeight();
+    const viewport = window.visualViewport;
+    viewport?.addEventListener('resize', updateAutocompleteMaxHeight);
+    viewport?.addEventListener('scroll', updateAutocompleteMaxHeight);
+    window.addEventListener('resize', updateAutocompleteMaxHeight);
+    window.addEventListener('scroll', updateAutocompleteMaxHeight, true);
+
+    return () => {
+      viewport?.removeEventListener('resize', updateAutocompleteMaxHeight);
+      viewport?.removeEventListener('scroll', updateAutocompleteMaxHeight);
+      window.removeEventListener('resize', updateAutocompleteMaxHeight);
+      window.removeEventListener('scroll', updateAutocompleteMaxHeight, true);
+    };
+  }, [isSearchFocused, shouldShowAutocomplete, updateAutocompleteMaxHeight]);
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current !== null) {
+        window.clearTimeout(blurTimeoutRef.current);
+      }
+      onSearchFocusChange?.(false);
+    };
+  }, [onSearchFocusChange]);
+
+  useEffect(() => {
+    if (!isSearchFocused) return;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      if (!searchFormRef.current) return;
+      if (event.target instanceof Node && searchFormRef.current.contains(event.target)) return;
+
+      searchInputRef.current?.blur();
+      setSearchFocus(false);
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
+    };
+  }, [isSearchFocused, setSearchFocus]);
 
   useEffect(() => {
     let isMounted = true;
@@ -186,24 +288,34 @@ export function SearchTabView({
   };
 
   return (
-    <div className={`p-5 lg:p-8 ${cartCount > 0 ? 'pb-28 lg:pb-8' : ''}`}>
+    <div
+      className={`p-5 transition-[padding] duration-300 lg:p-8 ${isSearchFocused ? 'pt-3 pb-6' : cartCount > 0 ? 'pb-28 lg:pb-8' : ''}`}
+      onPointerDown={(event) => {
+        if (!isSearchFocused || !searchFormRef.current) return;
+        if (event.target instanceof Node && searchFormRef.current.contains(event.target)) return;
+        searchInputRef.current?.blur();
+        setSearchFocus(false);
+      }}
+    >
       <div className="mx-auto flex w-full max-w-[1320px] flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
         <div className="flex min-w-0 flex-col gap-6">
       {showOnboardingGuide && (
-        <OnboardingGuideCard
-          icon={<Search className="h-5 w-5" />}
-          title={t('onboarding_search_title')}
-          description={t('onboarding_search_desc')}
-          points={[
-            t('onboarding_search_point_1'),
-            t('onboarding_search_point_2'),
-            t('onboarding_search_point_3'),
-          ]}
-          onDismiss={() => markGuideSeen('search')}
-        />
+        <div className={isSearchFocused ? 'hidden lg:block' : ''}>
+          <OnboardingGuideCard
+            icon={<Search className="h-5 w-5" />}
+            title={t('onboarding_search_title')}
+            description={t('onboarding_search_desc')}
+            points={[
+              t('onboarding_search_point_1'),
+              t('onboarding_search_point_2'),
+              t('onboarding_search_point_3'),
+            ]}
+            onDismiss={() => markGuideSeen('search')}
+          />
+        </div>
       )}
 
-      {!result && (
+      {!result && !isSearchFocused && (
         <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500 lg:hidden">
           <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 lg:text-4xl lg:tracking-tight">
             {t('app_subtitle_1')}<br />
@@ -224,7 +336,11 @@ export function SearchTabView({
         </p>
       </section>
 
-      <form onSubmit={onSearchSubmit} className="relative group z-20">
+      <form
+        ref={searchFormRef}
+        onSubmit={handleFormSubmit}
+        className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 lg:static' : ''}`}
+      >
         <div
           className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:group-focus-within:translate-y-0 lg:group-focus-within:shadow-none dark:lg:bg-transparent ${error
             ? 'border-red-300 dark:border-red-900/50'
@@ -260,6 +376,8 @@ export function SearchTabView({
                 type="text"
                 value={query}
                 onChange={(e) => onQueryChange(e.target.value)}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
               className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400 dark:lg:text-slate-100 dark:lg:placeholder:text-slate-500"
               placeholder={t('search_placeholder')}
               disabled={isLoading}
@@ -340,23 +458,23 @@ export function SearchTabView({
 
         {/* Autocomplete Dropdown */}
         {shouldShowAutocomplete && (
-          <div className="absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+          <div
+            className={`absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isSearchFocused ? '' : 'max-h-60'}`}
+            style={isSearchFocused ? { maxHeight: `${autocompleteMaxHeight}px` } : undefined}
+          >
             {isSuggestionsLoading && suggestions.length === 0 ? (
               <div className="p-4 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 {t('search_loading_suggestions')}
               </div>
             ) : (
-              <ul className="max-h-60 overflow-y-auto w-full">
+              <ul className="max-h-full overflow-y-auto w-full">
                 {suggestions.map((sug) => (
                   <li key={sug}>
                     <button
                       type="button"
                       className="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-gray-100 dark:border-slate-700/50 last:border-0 transition-colors flex items-center gap-3"
-                      onClick={() => {
-                        onSuggestionClick(sug);
-                        if (onClearSuggestions) onClearSuggestions();
-                      }}
+                      onClick={() => handleSuggestionSelect(sug)}
                     >
                       <Search className="w-4 h-4 text-gray-400" />
                       {sug}
@@ -495,7 +613,7 @@ export function SearchTabView({
             </div>
           </section>
 
-          {recentSearches.length > 0 && (
+          {recentSearches.length > 0 && !isSearchFocused && (
             <section className="lg:hidden">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-200">{t('guide_example')}</h3>

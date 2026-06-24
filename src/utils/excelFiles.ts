@@ -1,18 +1,6 @@
 type RowValue = string | number | boolean | Date | null | undefined;
 
-function downloadBufferAsFile(buffer: ArrayBuffer, fileName: string) {
-    const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-}
+const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 function toSafeWorkbookValue(value: unknown): RowValue {
     if (value instanceof Date) return value;
@@ -70,7 +58,11 @@ export async function downloadRowsAsXlsx(
 
     const workbookBuffer = await workbook.xlsx.writeBuffer();
     const workbookBytes = Uint8Array.from(workbookBuffer as unknown as ArrayLike<number>);
-    downloadBufferAsFile(workbookBytes.buffer, fileName);
+    const { exportBlobPartAsFile } = await import('./fileExport');
+    await exportBlobPartAsFile(workbookBytes.buffer, {
+        fileName,
+        mimeType: XLSX_MIME_TYPE,
+    });
 }
 
 export async function readFirstWorksheetRows(file: File): Promise<unknown[][]> {

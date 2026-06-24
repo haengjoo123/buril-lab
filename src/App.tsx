@@ -90,6 +90,7 @@ function App() {
   const cart = useWasteStore((state) => state.cart);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
   const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
+  const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
   const currentLabId = useLabStore((state) => state.currentLabId);
   const myLabs = useLabStore((state) => state.myLabs);
   const currentRole = myLabs.find((membership) => membership.lab_id === currentLabId)?.role;
@@ -155,6 +156,12 @@ function App() {
     navigate,
     isAuthenticated,
   });
+
+  useEffect(() => {
+    if (activeTab !== 'search') {
+      setIsSearchInputFocused(false);
+    }
+  }, [activeTab]);
 
   const isLoginRoute = location.pathname === '/login';
   const isResetPasswordRoute = location.pathname === '/reset-password';
@@ -444,6 +451,8 @@ function App() {
     );
   }
 
+  const shouldHideMobileSearchChrome = activeTab === 'search' && isSearchInputFocused;
+
   return (
     <>
       <SafetyDisclaimer />
@@ -491,7 +500,9 @@ function App() {
           setIsCartOpen(true);
         }}
         bottomNav={
-          <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} />
+          shouldHideMobileSearchChrome ? null : (
+            <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} />
+          )
         }
       >
         <Suspense fallback={<TabContentFallback />}>
@@ -563,6 +574,7 @@ function App() {
               suggestions={suggestions}
               isSuggestionsLoading={isSuggestionsLoading}
               onClearSuggestions={clearSuggestions}
+              onSearchFocusChange={setIsSearchInputFocused}
               onRequireAuth={!isAuthenticated ? () => navigateToLogin() : undefined}
               onOpenVoiceAgent={() => openVoiceAgentSheet({
                 screen: 'search',
@@ -572,7 +584,7 @@ function App() {
           )}
         </Suspense>
 
-        {cart.length > 0 && !isCartOpen && (
+        {cart.length > 0 && !isCartOpen && !shouldHideMobileSearchChrome && (
           <button
             onClick={() => {
               if (!isAuthenticated) {

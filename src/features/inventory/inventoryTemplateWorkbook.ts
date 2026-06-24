@@ -8,6 +8,7 @@ import {
     getContainerTypeOptionLabels,
     getOtherLocationOptionLabels,
 } from './inventoryImportOptions';
+import { exportBlobPartAsFile } from '../../utils/fileExport';
 
 interface InventoryTemplateWorkbookOptions {
     headers: string[];
@@ -187,17 +188,7 @@ async function getPreviewImages(): Promise<PreviewImageMap> {
     return previewImageCachePromise;
 }
 
-function downloadBufferAsFile(buffer: BlobPart, filename: string) {
-    const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
-}
+const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 function applyTemplateLists(
     workbook: {
@@ -577,5 +568,8 @@ export async function downloadInventoryTemplateWorkbook({
 
     const workbookBuffer = await workbook.xlsx.writeBuffer();
     const workbookBytes = Uint8Array.from(workbookBuffer as unknown as ArrayLike<number>);
-    downloadBufferAsFile(workbookBytes.buffer, 'inventory_import_template.xlsx');
+    await exportBlobPartAsFile(workbookBytes.buffer, {
+        fileName: 'inventory_import_template.xlsx',
+        mimeType: XLSX_MIME_TYPE,
+    });
 }
