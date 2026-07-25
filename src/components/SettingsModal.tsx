@@ -1,4 +1,5 @@
 import React from 'react';
+import { Capacitor } from '@capacitor/core';
 import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2, UserMinus, KeyRound, Moon, Sun } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +9,9 @@ import { useOnboardingStore } from '../store/useOnboardingStore';
 import { useAuth } from '../hooks/useAuth';
 import { useThemeMode } from '../hooks/useThemeMode';
 import type { FeedbackType } from '../types/feedback';
+import { analyticsService } from '../services/analyticsService';
+
+const onboardingPlatform = Capacitor.isNativePlatform() ? 'native' : 'web';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -104,6 +108,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const handleReplayOnboarding = () => {
         resetOnboarding();
+        void analyticsService.trackOnboardingEvent({
+            eventType: 'replayed',
+            sourceScreen: 'settings',
+            platform: onboardingPlatform,
+            metadata: {
+                language: i18n.language,
+            },
+        });
         onClose();
     };
 

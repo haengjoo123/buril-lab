@@ -15,6 +15,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
     <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 border-t border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:hidden">
       <button
         onClick={() => onTabClick('search')}
+        data-onboarding-target="nav-search"
         className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'search'
           ? 'text-blue-600 dark:text-blue-400'
           : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
@@ -25,6 +26,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
       </button>
       <button
         onClick={() => onTabClick('logs')}
+        data-onboarding-target="nav-logs"
         className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'logs'
           ? 'text-blue-600 dark:text-blue-400'
           : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
@@ -35,6 +37,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
       </button>
       <button
         onClick={() => onTabClick('cabinet')}
+        data-onboarding-target="nav-cabinet"
         className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'cabinet'
           ? 'text-blue-600 dark:text-blue-400'
           : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
@@ -45,6 +48,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
       </button>
       <button
         onClick={() => onTabClick('inventory')}
+        data-onboarding-target="nav-inventory"
         className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${activeTab === 'inventory'
           ? 'text-blue-600 dark:text-blue-400'
           : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, lazy, Suspense, useState } from 'react';
+import { useEffect, useCallback, lazy, Suspense, useRef, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { MainLayout } from './components/MainLayout';
@@ -18,13 +18,13 @@ import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import type { CabinetSearchResult } from './services/cabinetService';
 import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
-import { useAppUiState } from './hooks/useAppUiState';
+import { useAppUiState, type AppTab } from './hooks/useAppUiState';
 import { useSearchFlow } from './hooks/useSearchFlow';
 import { useLabStore } from './store/useLabStore';
-import { useOnboardingStore } from './store/useOnboardingStore';
+import { useOnboardingStore, type OnboardingMissionKey } from './store/useOnboardingStore';
 import { useTranslation } from 'react-i18next';
 import { Loader2, ShoppingBag } from 'lucide-react';
-import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
+import { OnboardingMissionPanel } from './components/onboarding/OnboardingMissionPanel';
 import { SafetyCenterShell } from './features/safety-center/SafetyCenterShell';
 import { isAuthRequiredPath, sanitizeReturnTo } from './utils/authRoutes';
 import {
@@ -35,6 +35,7 @@ import {
   labAppRoute,
 } from './utils/appRoutes';
 import { focusCabinetItem } from './services/cabinetFocusService';
+import { analyticsService } from './services/analyticsService';
 import type { VoiceQueryResponse, VoiceUiAction } from './utils/voiceAgent';
 
 const WasteLogView = lazy(() =>
@@ -60,6 +61,7 @@ const OpsConsoleView = lazy(() =>
 );
 
 const isNativeApp = Capacitor.isNativePlatform();
+const onboardingPlatform = isNativeApp ? 'native' : 'web';
 
 function TabContentFallback() {
   return (
@@ -91,6 +93,7 @@ function App() {
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
   const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
+  const [isOnboardingRemoteChecked, setIsOnboardingRemoteChecked] = useState(false);
   const currentLabId = useLabStore((state) => state.currentLabId);
   const myLabs = useLabStore((state) => state.myLabs);
   const currentRole = myLabs.find((membership) => membership.lab_id === currentLabId)?.role;
@@ -98,8 +101,13 @@ function App() {
   const isWelcomeOpen = useOnboardingStore((state) => state.isWelcomeOpen);
   const hasCompletedWelcome = useOnboardingStore((state) => state.hasCompletedWelcome);
   const hasSkippedOnboarding = useOnboardingStore((state) => state.hasSkippedOnboarding);
+  const hasCompletedMissionOnboarding = useOnboardingStore((state) => state.hasCompletedMissionOnboarding);
   const syncVersion = useOnboardingStore((state) => state.syncVersion);
+  const setActiveOnboardingUser = useOnboardingStore((state) => state.setActiveUser);
+  const applyRemoteOnboardingProgress = useOnboardingStore((state) => state.applyRemoteOnboardingProgress);
   const openWelcome = useOnboardingStore((state) => state.openWelcome);
+  const markMissionCompleted = useOnboardingStore((state) => state.markMissionCompleted);
+  const activeOnboardingUserId = session?.user?.id ?? user?.id ?? null;
 
   const {
     query,
@@ -156,6 +164,12 @@ function App() {
     navigate,
     isAuthenticated,
   });
+  const wasOnboardingOpenRef = useRef(false);
+  const onboardingBaselineRef = useRef({
+    result,
+    cartCount: cart.length,
+  });
+  const previousOnboardingTabRef = useRef(activeTab);
 
   useEffect(() => {
     if (activeTab !== 'search') {
@@ -242,6 +256,34 @@ function App() {
   }, [syncVersion]);
 
   useEffect(() => {
+    setActiveOnboardingUser(activeOnboardingUserId);
+  }, [activeOnboardingUserId, setActiveOnboardingUser]);
+
+  useEffect(() => {
+    if (!session || !activeOnboardingUserId) {
+      setIsOnboardingRemoteChecked(true);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsOnboardingRemoteChecked(false);
+
+    void analyticsService.getOnboardingProgress().then((progress) => {
+      if (isCancelled) return;
+
+      if (progress) {
+        applyRemoteOnboardingProgress(activeOnboardingUserId, progress);
+      }
+
+      setIsOnboardingRemoteChecked(true);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeOnboardingUserId, applyRemoteOnboardingProgress, session]);
+
+  useEffect(() => {
     document.documentElement.lang = i18n.language.startsWith('ko') ? 'ko' : 'en';
   }, [i18n.language]);
 
@@ -259,12 +301,129 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!session || !isSafetyAcknowledged || isWelcomeOpen || hasCompletedWelcome || hasSkippedOnboarding) {
+    if (
+      !session ||
+      !isSafetyAcknowledged ||
+      !isOnboardingRemoteChecked ||
+      !isLabRoute ||
+      isWelcomeOpen ||
+      hasCompletedWelcome ||
+      hasCompletedMissionOnboarding ||
+      hasSkippedOnboarding
+    ) {
       return;
     }
 
     openWelcome();
-  }, [session, isSafetyAcknowledged, isWelcomeOpen, hasCompletedWelcome, hasSkippedOnboarding, openWelcome]);
+  }, [
+    session,
+    isSafetyAcknowledged,
+    isOnboardingRemoteChecked,
+    isLabRoute,
+    isWelcomeOpen,
+    hasCompletedWelcome,
+    hasCompletedMissionOnboarding,
+    hasSkippedOnboarding,
+    openWelcome,
+  ]);
+
+  const completeOnboardingMission = useCallback((mission: OnboardingMissionKey, sourceScreen: string) => {
+    const onboardingState = useOnboardingStore.getState();
+    if (
+      onboardingState.hasSkippedOnboarding ||
+      onboardingState.hasCompletedMissionOnboarding ||
+      onboardingState.completedMissions[mission]
+    ) {
+      return;
+    }
+
+    markMissionCompleted(mission);
+
+    void analyticsService.trackOnboardingEvent({
+      eventType: 'step_completed',
+      stepKey: mission,
+      sourceScreen,
+      platform: onboardingPlatform,
+      metadata: {
+        active_tab: activeTab,
+        cart_count: cart.length,
+      },
+    });
+
+    if (mission === 'search') {
+      void analyticsService.trackOnboardingEvent({
+        eventType: 'first_value_reached',
+        stepKey: mission,
+        sourceScreen,
+        platform: onboardingPlatform,
+        metadata: {
+          query: lastSearchQuery || query,
+        },
+      });
+    }
+  }, [activeTab, cart.length, lastSearchQuery, markMissionCompleted, query]);
+
+  useEffect(() => {
+    if (isWelcomeOpen && !wasOnboardingOpenRef.current) {
+      onboardingBaselineRef.current = {
+        result,
+        cartCount: cart.length,
+      };
+      previousOnboardingTabRef.current = activeTab;
+    }
+
+    if (!isWelcomeOpen) {
+      previousOnboardingTabRef.current = activeTab;
+    }
+
+    wasOnboardingOpenRef.current = isWelcomeOpen;
+  }, [activeTab, cart.length, isWelcomeOpen, result]);
+
+  useEffect(() => {
+    if (
+      !isWelcomeOpen ||
+      !result ||
+      result === onboardingBaselineRef.current.result
+    ) {
+      return;
+    }
+
+    completeOnboardingMission('search', 'search');
+  }, [completeOnboardingMission, isWelcomeOpen, result]);
+
+  useEffect(() => {
+    if (!isWelcomeOpen || cart.length <= onboardingBaselineRef.current.cartCount) return;
+    completeOnboardingMission('disposal', 'search');
+  }, [cart.length, completeOnboardingMission, isWelcomeOpen]);
+
+  useEffect(() => {
+    if (!isWelcomeOpen) {
+      previousOnboardingTabRef.current = activeTab;
+      return;
+    }
+
+    if (previousOnboardingTabRef.current === activeTab) return;
+    previousOnboardingTabRef.current = activeTab;
+
+    if (activeTab === 'cabinet') {
+      completeOnboardingMission('cabinet', 'cabinet');
+      return;
+    }
+
+    if (activeTab === 'inventory') {
+      completeOnboardingMission('inventory', 'inventory');
+    }
+  }, [activeTab, completeOnboardingMission, isWelcomeOpen]);
+
+  const handleOnboardingNavigateTab = useCallback((tab: AppTab) => {
+    handleTabClick(tab);
+
+    if (tab === 'cabinet') {
+      completeOnboardingMission('cabinet', 'cabinet');
+    } else if (tab === 'inventory') {
+      completeOnboardingMission('inventory', 'inventory');
+    }
+  }, [completeOnboardingMission, handleTabClick]);
 
   useEffect(() => {
     if (location.pathname !== labAppRoute('/cabinet') || searchParams.get('id') || !locationState?.cabinetId) {
@@ -414,8 +573,6 @@ function App() {
       <>
         <SafetyDisclaimer />
 
-        {isWelcomeOpen && <OnboardingWelcomeModal />}
-
         <Suspense fallback={<FullScreenLoader />}>
           <OpsConsoleView
             userEmail={user?.email}
@@ -436,8 +593,6 @@ function App() {
       <>
         <SafetyDisclaimer />
 
-        {isWelcomeOpen && <OnboardingWelcomeModal />}
-
         <SafetyCenterShell
           userEmail={user?.email}
           onSignOut={signOut}
@@ -457,7 +612,17 @@ function App() {
     <>
       <SafetyDisclaimer />
 
-      {isWelcomeOpen && <OnboardingWelcomeModal />}
+      {isWelcomeOpen && !isScanning && (
+        <OnboardingMissionPanel
+          activeTab={activeTab}
+          cartCount={cart.length}
+          hasSearchResult={Boolean(result)}
+          isNativeApp={isNativeApp}
+          onRunSampleSearch={() => navigateWithFreshFilters('Acetone')}
+          onOpenScanner={() => setIsScanning(true)}
+          onNavigateTab={handleOnboardingNavigateTab}
+        />
+      )}
 
       {isScanning && (
         <Suspense fallback={
@@ -561,6 +726,11 @@ function App() {
               onQueryChange={setQuery}
               onSearchSubmit={handleSearch}
               onReset={handleReset}
+              onResultAddConfirmed={() => {
+                if (isWelcomeOpen) {
+                  completeOnboardingMission('disposal', 'search');
+                }
+              }}
               onSuggestionClick={navigateWithFreshFilters}
               onOpenScanner={() => setIsScanning(true)}
               onClearSearchHistory={clearSearchHistory}

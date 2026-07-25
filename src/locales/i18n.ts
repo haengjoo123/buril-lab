@@ -13,12 +13,12 @@ i18n
     },
     supportedLngs: ['en', 'ko'],
     load: 'languageOnly',
-    fallbackLng: 'ko',
+    fallbackLng: 'en',
     interpolation: {
       escapeValue: false, // React already safeguards from XSS
     },
     detection: {
-      order: ['localStorage'],
+      order: ['localStorage', 'navigator'],
       caches: ['localStorage'],
     },
   });

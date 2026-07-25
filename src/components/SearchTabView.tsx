@@ -49,6 +49,7 @@ interface SearchTabViewProps {
   onQueryChange: (value: string) => void;
   onSearchSubmit: (e?: FormEvent) => void;
   onReset: () => void;
+  onResultAddConfirmed?: () => void;
   onSuggestionClick: (term: string) => void;
   onOpenScanner: () => void;
   onClearSearchHistory: () => void;
@@ -90,6 +91,7 @@ export function SearchTabView({
   onQueryChange,
   onSearchSubmit,
   onReset,
+  onResultAddConfirmed,
   onSuggestionClick,
   onOpenScanner,
   onClearSearchHistory,
@@ -339,6 +341,7 @@ export function SearchTabView({
       <form
         ref={searchFormRef}
         onSubmit={handleFormSubmit}
+        data-onboarding-target="search-box"
         className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 lg:static' : ''}`}
       >
         <div
@@ -378,6 +381,7 @@ export function SearchTabView({
                 onChange={(e) => onQueryChange(e.target.value)}
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
+                data-onboarding-target="search-input"
               className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400 dark:lg:text-slate-100 dark:lg:placeholder:text-slate-500"
               placeholder={t('search_placeholder')}
               disabled={isLoading}
@@ -546,7 +550,12 @@ export function SearchTabView({
                   {t('search_results_chemical')}
                 </h3>
               )}
-              <ResultCard result={result} onReset={onReset} onRequireAuth={onRequireAuth} />
+              <ResultCard
+                result={result}
+                onReset={onReset}
+                onAddConfirmed={onResultAddConfirmed}
+                onRequireAuth={onRequireAuth}
+              />
             </div>
           )}
 

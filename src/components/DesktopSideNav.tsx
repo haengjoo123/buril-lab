@@ -76,6 +76,7 @@ export function DesktopSideNav({
               key={item.tab}
               type="button"
               onClick={() => onTabClick(item.tab)}
+              data-onboarding-target={`nav-${item.tab}`}
               className={navItemClasses(isActive, item.tone)}
               aria-current={isActive ? 'page' : undefined}
             >

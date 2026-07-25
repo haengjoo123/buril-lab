@@ -863,7 +863,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
                 {/* Mode Switcher - Floating Pill */}
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
-                    <div className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border border-slate-200 rounded-full p-1 flex items-center gap-1 dark:border-slate-700 dark:bg-slate-900/90">
+                    <div
+                        data-onboarding-target="cabinet-mode-switcher"
+                        className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border border-slate-200 rounded-full p-1 flex items-center gap-1 dark:border-slate-700 dark:bg-slate-900/90"
+                    >
                         <button
                             onClick={() => setMode('VIEW')}
                             className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'

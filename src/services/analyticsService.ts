@@ -5,6 +5,11 @@ import {
     checkShelfCompatibility,
     type StorageWarning,
 } from '../utils/storageCompatibilityChecker';
+import {
+    ONBOARDING_MISSION_ORDER,
+    type OnboardingMissionKey,
+    type OnboardingRemoteProgress,
+} from '../store/useOnboardingStore';
 import { supabase } from './supabaseClient';
 
 export type CommerceIntentEventType =
@@ -25,6 +30,19 @@ export type CasInputMethod =
     | 'suggested_confirmed'
     | 'bulk_confirmed'
     | 'suggestion_dismissed';
+
+export type OnboardingEventType =
+    | 'shown'
+    | 'step_completed'
+    | 'skipped'
+    | 'first_value_reached'
+    | 'replayed';
+
+export type OnboardingStepKey =
+    | 'search'
+    | 'disposal'
+    | 'cabinet'
+    | 'inventory';
 
 interface TrackCommerceIntentInput {
     eventType: CommerceIntentEventType;
@@ -61,6 +79,20 @@ interface TrackAIDisposalGuideViewInput {
     sourceScreen: string;
     triggerSource: string;
     metadata?: Record<string, unknown>;
+}
+
+interface TrackOnboardingEventInput {
+    eventType: OnboardingEventType;
+    stepKey?: OnboardingStepKey;
+    sourceScreen: string;
+    platform: 'web' | 'native';
+    metadata?: Record<string, unknown>;
+}
+
+interface OnboardingEventRow {
+    event_type: OnboardingEventType;
+    step_key: OnboardingStepKey | null;
+    created_at: string;
 }
 
 function normalizeText(value?: string | null): string | null {
@@ -125,7 +157,72 @@ async function getTrackingContext(): Promise<{ userId: string | null; labId: str
     };
 }
 
+function buildRemoteOnboardingProgress(rows: OnboardingEventRow[]): OnboardingRemoteProgress {
+    const latestReplayAt = rows.find((row) => row.event_type === 'replayed')?.created_at;
+    const latestReplayTime = latestReplayAt ? new Date(latestReplayAt).getTime() : null;
+    const epochRows = latestReplayTime
+        ? rows.filter((row) => new Date(row.created_at).getTime() > latestReplayTime)
+        : rows;
+    const completedMissions = epochRows.reduce<Partial<Record<OnboardingMissionKey, boolean>>>((acc, row) => {
+        if (row.event_type !== 'step_completed') return acc;
+        if (!row.step_key || !ONBOARDING_MISSION_ORDER.includes(row.step_key)) return acc;
+
+        acc[row.step_key] = true;
+        return acc;
+    }, {});
+    const hasCompletedMissionOnboarding = ONBOARDING_MISSION_ORDER.every((mission) => completedMissions[mission]);
+    const hasSkippedOnboarding =
+        !hasCompletedMissionOnboarding &&
+        epochRows.some((row) => row.event_type === 'skipped');
+
+    return {
+        completedMissions,
+        hasCompletedMissionOnboarding,
+        hasSkippedOnboarding,
+    };
+}
+
 export const analyticsService = {
+    async getOnboardingProgress(): Promise<OnboardingRemoteProgress | null> {
+        const { userId } = await getTrackingContext();
+        if (!userId) return null;
+
+        const { data, error } = await supabase
+            .from('onboarding_events')
+            .select('event_type, step_key, created_at')
+            .eq('user_id', userId)
+            .in('event_type', ['step_completed', 'skipped', 'replayed'])
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            console.warn('[Analytics] Failed to load onboarding progress:', error);
+            return null;
+        }
+
+        return buildRemoteOnboardingProgress((data || []) as OnboardingEventRow[]);
+    },
+
+    async trackOnboardingEvent(input: TrackOnboardingEventInput): Promise<void> {
+        const { userId, labId } = await getTrackingContext();
+        if (!userId) return;
+
+        const row = {
+            event_type: input.eventType,
+            step_key: input.stepKey || null,
+            source_screen: input.sourceScreen,
+            platform: input.platform,
+            metadata: input.metadata || {},
+            user_id: userId,
+            lab_id: labId,
+        };
+
+        const { error } = await supabase.from('onboarding_events').insert(row);
+        if (error) {
+            console.warn('[Analytics] Failed to track onboarding event:', error);
+        }
+    },
+
     async trackCommerceIntentEvent(input: TrackCommerceIntentInput): Promise<void> {
         const { userId, labId } = await getTrackingContext();
         if (!userId) return;

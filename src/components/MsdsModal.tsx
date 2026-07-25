@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Chemical, MsdsSection } from '../types';
 import { fetchKoshaMsds } from '../services/koshaApi';
@@ -77,8 +78,8 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    return createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden border border-gray-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
 
                 {/* Header */}
@@ -130,7 +131,8 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

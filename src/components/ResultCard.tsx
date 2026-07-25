@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import type { AnalysisResult, SolutionContext, SolutionPhysicalForm, SolventClass } from '../types';
 import { AlertTriangle, CheckCircle, HelpCircle, Plus, FileText, Sparkles, Loader2, ChevronDown } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
@@ -11,6 +12,7 @@ import { resolveCustomOrganicSolvent } from '../utils/solventClassifier';
 interface ResultCardProps {
     result: AnalysisResult;
     onReset: () => void;
+    onAddConfirmed?: () => void;
     /** 비로그인 시 폐기 목록 담기 대신 호출 */
     onRequireAuth?: () => void;
     /** 커스텀 취소/닫기 버튼 텍스트 (기본값: btn_reset) */
@@ -44,7 +46,7 @@ const compactReasonKeyByCategory: Partial<Record<AnalysisResult['category'], str
     ORGANIC_HALOGEN: 'result_reason_compact_organic_halogen',
 };
 
-export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequireAuth, secondaryBtnText }) => {
+export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onAddConfirmed, onRequireAuth, secondaryBtnText }) => {
     const { chemical, binColor, reason, isSafe, category, label } = result;
     const addToCart = useWasteStore((state) => state.addToCart);
     const { t, i18n } = useTranslation();
@@ -151,6 +153,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
             solutionContext,
         });
 
+        onAddConfirmed?.();
         setIsModalOpen(false);
         onReset(); // Clear current view
     };
@@ -171,7 +174,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
     }, [hazardStatements]);
 
     return (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-5">
+        <div
+            data-onboarding-target="result-card"
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-5"
+        >
             {/* Header: Chemical Info */}
             <div className="p-5 bg-slate-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center gap-3">
                 <div className="min-w-0 flex-1">
@@ -182,6 +188,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                 </div>
                 <button
                     onClick={() => setIsMsdsOpen(true)}
+                    data-onboarding-target="msds-button"
                     className="shrink-0 flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
                 >
                     <FileText className="w-3.5 h-3.5" />
@@ -278,6 +285,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                     </button>
                     <button
                         onClick={handleAddClick}
+                        data-onboarding-target="add-to-list-button"
                         className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 whitespace-nowrap"
                     >
                         <Plus className="w-4 h-4" />
@@ -287,8 +295,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
             </div>
 
             {/* Input Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            {isModalOpen && createPortal(
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
                         <div className="p-5 border-b border-gray-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
                             <h3 className="font-bold text-lg text-slate-900 dark:text-white">
@@ -429,7 +437,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({ result, onReset, onRequi
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* MSDS Modal */}

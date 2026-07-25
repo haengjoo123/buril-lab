@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
     Package,
     Plus,
@@ -368,19 +368,19 @@ export const InventoryListView: React.FC = () => {
         }
     }, [cabinets, bulkMoveCabinetId]);
 
-    const getInventoryGhsState = (item: InventoryItem): InventoryGhsState | null => {
+    const getInventoryGhsState = useCallback((item: InventoryItem): InventoryGhsState | null => {
         const cas = normalizeGhsCas(item.cas_number);
         return cas ? (inventoryGhsByCas[cas] || null) : null;
-    };
+    }, [inventoryGhsByCas]);
 
-    const getInventoryGhsHCodes = (item: InventoryItem): string[] => {
+    const getInventoryGhsHCodes = useCallback((item: InventoryItem): string[] => {
         const ghsState = getInventoryGhsState(item);
         return ghsState?.status === 'loaded' ? ghsState.result.hCodes : [];
-    };
+    }, [getInventoryGhsState]);
 
-    const classifyInventoryItemHazard = (item: InventoryItem) => (
+    const classifyInventoryItemHazard = useCallback((item: InventoryItem) => (
         classifyInventoryHazard(item, { hCodes: getInventoryGhsHCodes(item) })
-    );
+    ), [getInventoryGhsHCodes]);
 
     const filteredItems = useMemo(() => {
         const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -400,7 +400,7 @@ export const InventoryListView: React.FC = () => {
         }
 
         return result;
-    }, [items, searchQuery, hazardFilter, inventoryGhsByCas]);
+    }, [items, searchQuery, hazardFilter, classifyInventoryItemHazard]);
 
     // Hazard summary for showing count
     const hazardSummary = useMemo(() => {
@@ -409,7 +409,7 @@ export const InventoryListView: React.FC = () => {
             if (classifyInventoryItemHazard(item).level === 'high') count++;
         }
         return count;
-    }, [items, inventoryGhsByCas]);
+    }, [items, classifyInventoryItemHazard]);
 
     // 만료/위치 우선으로 빠르게 확인할 수 있게 화면 전용 정렬 목록을 만든다.
     const visibleItems = useMemo(() => {
@@ -1952,7 +1952,10 @@ export const InventoryListView: React.FC = () => {
                             {t('log_records_count', { count: items.length })}
                         </span>
                     </div>
-                    <div className="flex items-center gap-1.5 lg:gap-2">
+                    <div
+                        data-onboarding-target="inventory-tools"
+                        className="flex items-center gap-1.5 lg:gap-2"
+                    >
                         {/*
                         <button
                             onClick={handleOpenCasReview}

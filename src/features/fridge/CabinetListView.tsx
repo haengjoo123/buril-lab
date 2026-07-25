@@ -578,7 +578,10 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         <div className="h-full overflow-y-auto bg-slate-50 p-5 pb-32 dark:bg-slate-950 lg:p-8 lg:pb-8">
             <div className="mx-auto flex max-w-md flex-col gap-6 lg:grid lg:max-w-[1320px] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
                 <div className="flex min-w-0 flex-col gap-6">
-                <header className="mt-4 flex items-center justify-between gap-4 lg:mt-2">
+                <header
+                    data-onboarding-target="cabinet-list-header"
+                    className="mt-4 flex items-center justify-between gap-4 lg:mt-2"
+                >
                     <div>
                         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 lg:text-3xl lg:tracking-tight">
                             {currentLabId ? `${myLabs.find(m => m.lab_id === currentLabId)?.lab?.name || t('cabinet_lab_fallback')}${t('cabinet_lab_suffix')}` : t('cabinet_my_cabinets')}
