@@ -19,6 +19,7 @@ import {
 } from '../../../src/utils/voiceAgent'
 import { getExpiryStatus } from '../../../src/utils/expiryStatus'
 import { dedupeAliasTerms } from '../../../src/utils/reagentAliases'
+import { normalizeCasNumber } from '../../../src/utils/casNumber'
 import {
   buildVoiceLookupVariants,
   sanitizeVoiceReagentQuery,
@@ -102,6 +103,7 @@ const AMBIGUITY_SCORE_WINDOW = 15
 const VALID_INTENTS: VoiceAgentIntent[] = ['location', 'expiration', 'remaining', 'disposal']
 const MAX_QUERY_ALIASES = 6
 const CANDIDATE_ALIAS_CONFIDENCE_THRESHOLD = 0.72
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const INTENT_HINTS: Array<{ intent: VoiceAgentIntent; patterns: RegExp[] }> = [
   {
     intent: 'expiration',
@@ -391,7 +393,7 @@ async function extractIntent(
       intent,
       reagentQuery,
       queryAliases,
-      casNumber: extracted.casNumber?.trim() || undefined,
+      casNumber: normalizeCasNumber(extracted.casNumber) || undefined,
       language,
       confidence,
     }
@@ -474,6 +476,10 @@ function dedupeMatches(matches: VoiceMatch[]): VoiceMatch[] {
 
     return !cabinetKeys.has(buildDeduplicationKey(match))
   })
+}
+
+export function filterVoiceMatchesToLab(matches: VoiceMatch[], labId: string): VoiceMatch[] {
+  return matches.filter((match) => match.labId === labId)
 }
 
 function buildCandidateTerms(match: VoiceMatch, aliasMap: Map<string, string[]>): string[] {
@@ -604,6 +610,7 @@ function buildClarification(
 
 async function insertFeedback(
   supabase: ReturnType<typeof createSupabaseUserClient>,
+  labId: string,
   payload: {
     rawInput: string
     normalizedQuery?: string
@@ -624,6 +631,7 @@ async function insertFeedback(
     selected_match_source: payload.selectedMatchSource || null,
     selected_match_id: payload.selectedMatchId || null,
     metadata: payload.metadata || {},
+    lab_id: labId,
   })
 
   if (error) {
@@ -747,8 +755,34 @@ export const onRequestPost = async (context: {
     return json({ error: `Text must be ${MAX_QUERY_LENGTH} characters or fewer.` }, { status: 400 })
   }
 
+  const requestedLabId = body.context?.labId?.trim()
+  if (!requestedLabId || !UUID_PATTERN.test(requestedLabId)) {
+    return json({ error: 'A valid current lab is required.' }, { status: 400 })
+  }
+  const labId = requestedLabId.toLowerCase()
+
   try {
     const supabase = createSupabaseUserClient(context.env, authHeader)
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) {
+      return json({ error: 'Authentication is required.' }, { status: 401 })
+    }
+
+    const { data: membership, error: membershipError } = await supabase
+      .from('lab_members')
+      .select('lab_id')
+      .eq('lab_id', labId)
+      .eq('user_id', userData.user.id)
+      .maybeSingle()
+
+    if (membershipError) {
+      throw new Error(membershipError.message)
+    }
+
+    if (!membership) {
+      return json({ error: 'You do not have access to the selected lab.' }, { status: 403 })
+    }
+
     const extracted = await extractIntent(
       context.env.GEMINI_API_KEY,
       rawText,
@@ -772,9 +806,10 @@ export const onRequestPost = async (context: {
           remaining_percent,
           cabinet_id,
           shelf_id,
-          cabinets ( name, lab_id ),
+          cabinets!inner ( name, lab_id ),
           cabinet_shelves ( level )
         `)
+        .eq('cabinets.lab_id', labId)
         .limit(MATCH_LIMIT),
       supabase
         .from('inventory')
@@ -794,6 +829,7 @@ export const onRequestPost = async (context: {
           cabinets ( name ),
           storage_locations ( name, icon )
         `)
+        .eq('lab_id', labId)
         .limit(MATCH_LIMIT),
       supabase
         .from('reagent_aliases')
@@ -805,6 +841,7 @@ export const onRequestPost = async (context: {
           normalized_alias,
           cas_number
         `)
+        .eq('lab_id', labId)
         .limit(MATCH_LIMIT * 20),
     ])
 
@@ -820,10 +857,10 @@ export const onRequestPost = async (context: {
       throw new Error(aliasRowsResult.error.message)
     }
 
-    const allMatches = dedupeMatches([
+    const allMatches = filterVoiceMatchesToLab(dedupeMatches([
       ...((cabinetItemsResult.data || []) as CabinetItemRow[]).map(mapCabinetItem),
       ...((inventoryResult.data || []) as InventoryRow[]).map(mapInventoryRow),
-    ])
+    ]), labId)
     const aliasMap = buildAliasMap(
       allMatches,
       (aliasRowsResult.data || []) as ReagentAliasRow[],
@@ -891,7 +928,7 @@ export const onRequestPost = async (context: {
 
     if (!topMatch) {
       const clarification = buildClarification('no_match', extracted.reagentQuery, language, [])
-      await insertFeedback(supabase, {
+      await insertFeedback(supabase, labId, {
         rawInput: rawText,
         normalizedQuery: extracted.reagentQuery,
         intent: extracted.intent,
@@ -929,7 +966,7 @@ export const onRequestPost = async (context: {
         closeMatches.map(({ match }) => match),
       )
 
-      await insertFeedback(supabase, {
+      await insertFeedback(supabase, labId, {
         rawInput: rawText,
         normalizedQuery: extracted.reagentQuery,
         intent: extracted.intent,

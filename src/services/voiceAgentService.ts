@@ -21,7 +21,15 @@ export interface VoiceQueryFeedbackInput {
 }
 
 export async function queryVoiceAgent(payload: VoiceQueryRequest): Promise<VoiceQueryResponse> {
-  return postJson<VoiceQueryResponse>('/api/voice/query', payload)
+  const { currentLabId } = useLabStore.getState()
+
+  return postJson<VoiceQueryResponse>('/api/voice/query', {
+    ...payload,
+    context: {
+      ...payload.context,
+      labId: currentLabId || undefined,
+    },
+  })
 }
 
 export async function submitVoiceQueryFeedback(input: VoiceQueryFeedbackInput): Promise<void> {

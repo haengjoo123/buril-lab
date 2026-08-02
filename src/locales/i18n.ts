@@ -18,7 +18,8 @@ i18n
       escapeValue: false, // React already safeguards from XSS
     },
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['querystring', 'localStorage', 'navigator'],
+      lookupQuerystring: 'lng',
       caches: ['localStorage'],
     },
   });

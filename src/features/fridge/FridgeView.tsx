@@ -5,10 +5,14 @@ import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVer
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from './components/CameraCaptureModal';
-import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
+import {
+    canAutoPlaceReagentScan,
+    scanReagentLabel,
+    type ReagentScanResult,
+} from '../../services/geminiReagentScanService';
 import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
-import { inventoryService } from '../../services/inventoryService';
+import { inventoryService, type InventoryItem } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
 import { CabinetAutoLayoutPreviewModal } from './components/CabinetAutoLayoutPreviewModal';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
@@ -17,9 +21,9 @@ import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuide
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
+import type { WasteBatchDisposalReason } from './reagentDisposalFlow';
 
 import type { ReagentTemplateType } from '../../types/fridge';
-import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
 import { checkCabinetCompatibility } from '../../utils/storageCompatibilityChecker';
 
 const FridgeScene = lazy(() =>
@@ -48,6 +52,10 @@ const ReagentPreviewFallback = ({ width, height }: { width: number; height: numb
 export interface FridgeViewProps {
     cabinetId: string;
     onBack?: () => void;
+    onStartWasteBatch?: (
+        item: InventoryItem,
+        options?: { reason?: WasteBatchDisposalReason },
+    ) => Promise<void>;
 }
 
 interface GenericContainerItem {
@@ -58,6 +66,11 @@ interface GenericContainerItem {
     chemicalData: {
         name: string;
     };
+}
+
+interface PendingScanReview {
+    queueItemId: string;
+    scan: ReagentScanResult;
 }
 
 const NumberInput = ({ value, min, max, onChange, className }: { value: number; min: number; max: number; onChange: (v: number) => void; className?: string }) => {
@@ -94,7 +107,7 @@ const NumberInput = ({ value, min, max, onChange, className }: { value: number; 
     );
 };
 
-export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => {
+export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onStartWasteBatch }) => {
     const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
@@ -126,12 +139,14 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     const scanPendingTasksRef = React.useRef<{ id: string; imageSrc: string }[]>([]);
     const scanActiveCountRef = React.useRef(0);
     const scanPlacementQueueRef = React.useRef<Promise<void>>(Promise.resolve());
+    const pendingScanReviewsRef = React.useRef<PendingScanReview[]>([]);
+    const activeScanReviewRef = React.useRef<PendingScanReview | null>(null);
     const [isScanning, setIsScanning] = useState(false);
     const [scanResult, setScanResult] = useState<ReagentScanResult | null>(null);
     const [scanDialogOpen, setScanDialogOpen] = useState(false);
     const [scanName, setScanName] = useState('');
     const [scanCas, setScanCas] = useState('');
-    const [scanContainerType, setScanContainerType] = useState<ReagentTemplateType>('A');
+    const [scanContainerType, setScanContainerType] = useState<ReagentTemplateType | null>(null);
     const [scanSize, setScanSize] = useState<number>(1.0);
     const [scanCapacity, setScanCapacity] = useState('');
     const [scanExpiry, setScanExpiry] = useState('');
@@ -627,26 +642,110 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
         )));
     }, []);
 
-    const autoPlaceScannedReagent = React.useCallback(async (scan: ReagentScanResult, queueItemId: string) => {
+    const resetScanReviewForm = React.useCallback(() => {
+        setScanName('');
+        setScanCas('');
+        setScanContainerType(null);
+        setScanSize(1.0);
+        setScanCapacity('');
+        setScanExpiry('');
+        setScanMemo('');
+        setScanBrand('');
+        setScanProductNumber('');
+        setScanRemainingPercent(100);
+    }, []);
+
+    const openScanReview = React.useCallback((review: PendingScanReview) => {
+        const { scan } = review;
+        const containerType = scan.suggestedContainerType;
+        setScanResult(scan);
+        setScanName(scan.name || '');
+        setScanCas(scan.casNumber || '');
+        setScanContainerType(
+            containerType && ['A', 'B', 'C', 'D'].includes(containerType)
+                ? containerType
+                : null
+        );
+        setScanSize(1.0);
+        setScanCapacity(scan.capacity || '');
+        setScanExpiry(scan.expiryDate || '');
+        setScanMemo('');
+        setScanBrand(scan.brand || '');
+        setScanProductNumber(scan.productNumber || '');
+        setScanRemainingPercent(100);
+        setIsScanning(false);
+        setIsCameraOpen(false);
+        setScanDialogOpen(true);
+    }, []);
+
+    const openNextScanReview = React.useCallback(() => {
+        if (activeScanReviewRef.current) return;
+        const next = pendingScanReviewsRef.current.shift();
+        if (!next) {
+            setScanDialogOpen(false);
+            return;
+        }
+
+        activeScanReviewRef.current = next;
+        openScanReview(next);
+    }, [openScanReview]);
+
+    const enqueueScanReview = React.useCallback((scan: ReagentScanResult, queueItemId: string) => {
+        pendingScanReviewsRef.current.push({ scan, queueItemId });
+        updateScanQueueItem(queueItemId, {
+            status: 'processing',
+            label: t('scan_review_required', '확인 필요'),
+        });
+        setIsCameraOpen(false);
+        openNextScanReview();
+    }, [openNextScanReview, t, updateScanQueueItem]);
+
+    const completeActiveScanReview = React.useCallback(() => {
+        activeScanReviewRef.current = null;
+        setScanResult(null);
+        setIsScanning(false);
+        resetScanReviewForm();
+        setScanDialogOpen(false);
+        openNextScanReview();
+    }, [openNextScanReview, resetScanReviewForm]);
+
+    const autoPlaceScannedReagent = React.useCallback(async (
+        scan: ReagentScanResult,
+        queueItemId: string,
+        options?: {
+            size?: number;
+            notes?: string;
+            remainingPercent?: number;
+            placementMode?: 'scan_auto_place' | 'scan_review_confirmed';
+        }
+    ) => {
         const CONTAINER_BASE_WIDTHS: Record<string, number> = { A: 8, B: 10, C: 8, D: 10 };
-        const containerType = normalizeTemplateFromDb(scan.suggestedContainerType);
-        const finalName = scan.name?.trim() || t('scan_unknown_reagent');
+        const containerType = scan.suggestedContainerType;
+        if (!containerType || !['A', 'B', 'C', 'D'].includes(containerType)) {
+            throw new Error(t('scan_review_required', '용기 종류를 확인해 주세요.'));
+        }
+
+        const finalName = scan.name.trim();
+        if (!finalName) {
+            throw new Error(t('scan_review_required', '시약 이름을 확인해 주세요.'));
+        }
 
         const result = autoPlaceReagent({
             id: '',
             reagentId: 'scan-' + Date.now(),
             name: finalName,
-            width: CONTAINER_BASE_WIDTHS[containerType] || 8,
+            width: (CONTAINER_BASE_WIDTHS[containerType] || 8) * (options?.size || 1),
             template: containerType,
             isAcidic: false,
             isBasic: false,
             hCodes: [],
+            notes: options?.notes || undefined,
             casNo: scan.casNumber || undefined,
             expiryDate: scan.expiryDate || undefined,
             capacity: scan.capacity || undefined,
             brand: scan.brand || undefined,
             productNumber: scan.productNumber || undefined,
-            remaining_percent: 100,
+            remaining_percent: options?.remainingPercent ?? 100,
         });
 
         if (!result) {
@@ -669,12 +768,16 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 casNumber: scan.casNumber || undefined,
                 casInputMethod: scan.casNumber ? 'scan' : 'unknown',
                 metadata: {
-                    placement_mode: 'scan_auto_place',
+                    placement_mode: options?.placementMode || 'scan_auto_place',
                 },
             });
             const currentCabinetId = useFridgeStore.getState().cabinetId;
             if (currentCabinetId) {
-                const memo = [scan.casNumber && `CAS: ${scan.casNumber}`, scan.capacity && `Capacity: ${scan.capacity}`].filter(Boolean).join(', ');
+                const memo = [
+                    scan.casNumber && `CAS: ${scan.casNumber}`,
+                    scan.capacity && `Capacity: ${scan.capacity}`,
+                    options?.notes,
+                ].filter(Boolean).join(', ');
                 cabinetService.logActivity(currentCabinetId, 'add', finalName, undefined, memo || undefined)
                     .catch(err => console.error('Failed to log scan-add activity:', err));
                 void analyticsService.trackStorageWarningIgnoredForItem({
@@ -696,6 +799,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 throw new Error(scan.error || t('inventory_scan_error_default'));
             }
 
+            if (!canAutoPlaceReagentScan(scan)) {
+                enqueueScanReview(scan, task.id);
+                return;
+            }
+
             const placementJob = scanPlacementQueueRef.current.then(() => autoPlaceScannedReagent(scan, task.id));
             scanPlacementQueueRef.current = placementJob.catch(() => undefined);
             await placementJob;
@@ -705,7 +813,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             updateScanQueueItem(task.id, { status: 'error', label: t('scan_failed') });
             setToastMessage(message);
         }
-    }, [autoPlaceScannedReagent, t, updateScanQueueItem]);
+    }, [autoPlaceScannedReagent, enqueueScanReview, t, updateScanQueueItem]);
 
     const runNextScanTasks = React.useCallback(() => {
         const MAX_PARALLEL_SCANS = 3;
@@ -728,14 +836,81 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
     }, [runNextScanTasks]);
 
     const handleScanCancel = React.useCallback(() => {
+        const activeReview = activeScanReviewRef.current;
+        if (activeReview) {
+            updateScanQueueItem(activeReview.queueItemId, {
+                status: 'error',
+                label: t('scan_review_cancelled', '확인 취소'),
+            });
+        }
+        activeScanReviewRef.current = null;
         setScanDialogOpen(false);
         setScanResult(null);
         setIsScanning(false);
-    }, []);
+        resetScanReviewForm();
+        openNextScanReview();
+    }, [openNextScanReview, resetScanReviewForm, t, updateScanQueueItem]);
 
-    const handleScanAutoPlace = React.useCallback(() => {
-        handleScanCancel();
-    }, [handleScanCancel]);
+    const handleScanAutoPlace = React.useCallback(async () => {
+        const activeReview = activeScanReviewRef.current;
+        if (!activeReview || !scanResult || !scanName.trim() || !scanContainerType) return;
+
+        const confirmedScan: ReagentScanResult = {
+            ...scanResult,
+            name: scanName.trim(),
+            casNumber: scanCas.trim() || undefined,
+            suggestedContainerType: scanContainerType,
+            capacity: scanCapacity.trim() || undefined,
+            expiryDate: scanExpiry || undefined,
+            brand: scanBrand.trim() || undefined,
+            productNumber: scanProductNumber.trim() || undefined,
+            reviewRequired: false,
+            reviewReasons: [],
+            success: true,
+        };
+
+        setIsScanning(true);
+        try {
+            const placementJob = scanPlacementQueueRef.current.then(() => autoPlaceScannedReagent(
+                confirmedScan,
+                activeReview.queueItemId,
+                {
+                    size: scanSize,
+                    notes: scanMemo.trim() || undefined,
+                    remainingPercent: scanRemainingPercent,
+                    placementMode: 'scan_review_confirmed',
+                }
+            ));
+            scanPlacementQueueRef.current = placementJob.catch(() => undefined);
+            await placementJob;
+            completeActiveScanReview();
+        } catch (error) {
+            console.error('Reviewed cabinet scan placement failed:', error);
+            const message = error instanceof Error ? error.message : t('inventory_scan_error_default');
+            updateScanQueueItem(activeReview.queueItemId, {
+                status: 'error',
+                label: t('scan_failed'),
+            });
+            setToastMessage(message);
+            setIsScanning(false);
+        }
+    }, [
+        autoPlaceScannedReagent,
+        completeActiveScanReview,
+        scanBrand,
+        scanCapacity,
+        scanCas,
+        scanContainerType,
+        scanExpiry,
+        scanMemo,
+        scanName,
+        scanProductNumber,
+        scanRemainingPercent,
+        scanResult,
+        scanSize,
+        t,
+        updateScanQueueItem,
+    ]);
 
     // Generic containers for the placement tray (labels match ReagentEditPanel: cabinet_container_*)
     const genericContainers: GenericContainerItem[] = [
@@ -974,7 +1149,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                 />
 
                 {/* Edit Mode Overlay */}
-                {!isDesktop && <ReagentEditPanel />}
+                {!isDesktop && <ReagentEditPanel onStartWasteBatch={onStartWasteBatch} />}
                 {mode === 'EDIT' && (
                     <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20">
                         {isEditPanelVisible ? (
@@ -1232,7 +1407,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
 
                 <aside className="hidden min-h-0 border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
                     {selectedReagentId ? (
-                        <ReagentEditPanel variant="desktop-aside" />
+                        <ReagentEditPanel variant="desktop-aside" onStartWasteBatch={onStartWasteBatch} />
                     ) : (
                         <div className="flex h-full flex-col">
                             <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
@@ -1518,9 +1693,19 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
             {/* Scan Result Dialog */}
             {scanDialogOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={handleScanCancel} />
-                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden p-6 gap-3 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <div
+                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                        onClick={() => {
+                            if (!isScanning) handleScanCancel();
+                        }}
+                    />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="scan-review-dialog-title"
+                        className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden p-6 gap-3 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto"
+                    >
+                        <h3 id="scan-review-dialog-title" className="text-xl font-bold text-slate-800 flex items-center gap-2">
                             <ScanLine className="w-5 h-5 text-emerald-600" />
                             {isScanning ? t('scan_analyzing') : t('scan_result_title')}
                         </h3>
@@ -1545,6 +1730,18 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                             </div>
                         ) : (
                             <>
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+                                    <p className="font-semibold">
+                                        {t('scan_review_required', '스캔 결과를 확인해 주세요')}
+                                    </p>
+                                    <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
+                                        {t(
+                                            'scan_review_required_description',
+                                            '인식 신뢰도가 낮거나 형식을 확인할 항목이 있어 자동 배치하지 않았습니다. 아래 값을 확인한 뒤 배치해 주세요.'
+                                        )}
+                                    </p>
+                                </div>
+
                                 {/* Name */}
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
@@ -1634,6 +1831,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                 {/* Container Type */}
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-semibold text-gray-600">{t('reagent_container_type_label')}</label>
+                                    {!scanContainerType && (
+                                        <p className="text-xs font-medium text-amber-700">
+                                            {t('scan_container_review_required', '사진에서 용기 종류를 확정하지 못했습니다. 실제 용기를 선택해 주세요.')}
+                                        </p>
+                                    )}
                                     <div className="grid grid-cols-4 gap-2">
                                         {containerTypeOptions.map(opt => (
                                             <button
@@ -1768,7 +1970,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack }) => 
                                     </button>
                                     <button
                                         onClick={handleScanAutoPlace}
-                                        disabled={!scanName.trim()}
+                                        disabled={!scanName.trim() || !scanContainerType || isScanning}
                                         className="flex-1 py-2.5 rounded-xl text-white font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                                     >
                                         <CheckCircle2 className="w-4 h-4" />

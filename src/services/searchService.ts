@@ -2,6 +2,7 @@ import type { Chemical } from '../types';
 import { fetchChemicalInfo } from './pubchemApi';
 import { resolveKoreanChemical, resolveCasChemical, fetchKoshaPH } from './koshaApi';
 import { resolveWikiCas } from './wikiApi';
+import { hasCasNumberFormat, normalizeCasNumber } from '../utils/casNumber';
 
 /**
  * Unified search function that delegates to the appropriate API based on input language.
@@ -23,17 +24,19 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
 
     const trimmedQuery = query.trim();
 
-    // CAS Number pattern detection (e.g., 68990-09-0)
-    const casPattern = /^\d{2,7}-\d{2}-\d$/;
-    const isCasNumber = casPattern.test(trimmedQuery);
+    const normalizedCasNumber = normalizeCasNumber(trimmedQuery);
+    if (hasCasNumberFormat(trimmedQuery) && !normalizedCasNumber) {
+        console.warn(`[Search] Rejected CAS with invalid checksum: ${trimmedQuery}`);
+        return null;
+    }
 
-    if (isCasNumber) {
-        console.log(`[Search] CAS Number detected: ${trimmedQuery}`);
+    if (normalizedCasNumber) {
+        console.log(`[Search] CAS Number detected: ${normalizedCasNumber}`);
 
         // Try PubChem (name endpoint handles many CAS as synonyms) and KOSHA CAS search in parallel
         const [pubchemResult, koshaResolved] = await Promise.all([
-            fetchChemicalInfo(trimmedQuery),
-            resolveCasChemical(trimmedQuery)
+            fetchChemicalInfo(normalizedCasNumber),
+            resolveCasChemical(normalizedCasNumber)
         ]);
 
         if (pubchemResult) {
@@ -43,7 +46,7 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                 try {
                     const koshaPh = await fetchKoshaPH(koshaResolved.chemId);
                     if (koshaPh !== undefined && finalProps.ph === undefined) {
-                        finalProps = { ...finalProps, ph: koshaPh };
+                        finalProps = { ...finalProps, ph: koshaPh, phSource: 'kosha_reference' };
                     }
                 } catch (e) {
                     console.warn('[Search] Failed to fetch pH from KOSHA:', e);
@@ -64,25 +67,26 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
 
         // PubChem name search failed for this CAS - use KOSHA data if available
         if (koshaResolved?.chemId) {
-            console.log(`[Search] PubChem failed for CAS ${trimmedQuery}, using KOSHA data (chemId: ${koshaResolved.chemId})`);
+            console.log(`[Search] PubChem failed for CAS ${normalizedCasNumber}, using KOSHA data (chemId: ${koshaResolved.chemId})`);
             const koshaPh = await fetchKoshaPH(koshaResolved.chemId).catch(() => undefined);
 
             return {
                 id: String(koshaResolved.chemId),
-                name: koshaResolved.nameKo || trimmedQuery,
-                casNumber: trimmedQuery,
+                name: koshaResolved.nameKo || normalizedCasNumber,
+                casNumber: normalizedCasNumber,
                 molecularFormula: '',
                 molecularWeight: 0,
                 properties: {
                     isOrganic: false,
                     isHalogenated: false,
-                    ph: koshaPh
+                    ph: koshaPh,
+                    phSource: koshaPh !== undefined ? 'kosha_reference' : undefined,
                 },
                 koshaId: koshaResolved.chemId
             };
         }
 
-        console.warn(`[Search] CAS ${trimmedQuery} not found in PubChem or KOSHA`);
+        console.warn(`[Search] CAS ${normalizedCasNumber} not found in PubChem or KOSHA`);
         return null;
     }
 
@@ -110,7 +114,7 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
         if (!casToSearch) {
             const resolved = await resolveKoreanChemical(trimmedQuery);
             if (resolved && resolved.casNo) {
-                casToSearch = resolved.casNo;
+                casToSearch = normalizeCasNumber(resolved.casNo);
                 koshaId = resolved.chemId;
                 finalNameKo = resolved.nameKo;
                 console.log(`[Search] Resolved '${trimmedQuery}' to CAS ${casToSearch}. Fetching from PubChem...`);
@@ -120,8 +124,9 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
         // 2. Fallback to Wikipedia API if KOSHA didn't have it
         if (!casToSearch) {
             const wikiCas = await resolveWikiCas(trimmedQuery);
-            if (wikiCas) {
-                casToSearch = wikiCas;
+            const validatedWikiCas = normalizeCasNumber(wikiCas);
+            if (validatedWikiCas) {
+                casToSearch = validatedWikiCas;
                 finalNameKo = trimmedQuery;
                 console.log(`[Search] Wikipedia resolved '${trimmedQuery}' to CAS ${casToSearch}`);
                 // Try resolving KOSHA ID with this new CAS
@@ -144,7 +149,8 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                 const baseProps = pubchemResult.properties || { isOrganic: false, isHalogenated: false };
                 const mergedProps = {
                     ...baseProps,
-                    ph: koshaPh !== undefined ? koshaPh : baseProps.ph
+                    ph: koshaPh !== undefined ? koshaPh : baseProps.ph,
+                    phSource: koshaPh !== undefined ? 'kosha_reference' : baseProps.phSource,
                 };
 
                 return {
@@ -182,7 +188,7 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                         const supplementalPh = await fetchKoshaPH(koshaResolved.chemId);
                         if (supplementalPh !== undefined && finalProps.ph === undefined) {
                             console.log(`[Search] Supplementary pH found via KOSHA: ${supplementalPh}`);
-                            finalProps = { ...finalProps, ph: supplementalPh };
+                            finalProps = { ...finalProps, ph: supplementalPh, phSource: 'kosha_reference' };
                         }
                     }
                 } catch (e) {
@@ -201,12 +207,13 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
         console.log(`[Search] Primary failed. Fallback: Resolving '${query}' via KOSHA...`);
         const resolved = await resolveKoreanChemical(query);
 
-        if (resolved && resolved.casNo) {
-            console.log(`[Search] Fallback Resolved '${query}' to CAS ${resolved.casNo}. Fetching from PubChem...`);
+        const resolvedCasNumber = normalizeCasNumber(resolved?.casNo);
+        if (resolved && resolvedCasNumber) {
+            console.log(`[Search] Fallback Resolved '${query}' to CAS ${resolvedCasNumber}. Fetching from PubChem...`);
 
             // Parallel Fetch for fallback too
             const [fallbackResult, koshaPh] = await Promise.all([
-                fetchChemicalInfo(resolved.casNo),
+                fetchChemicalInfo(resolvedCasNumber),
                 resolved.chemId ? fetchKoshaPH(resolved.chemId) : Promise.resolve(undefined)
             ]);
 
@@ -214,7 +221,8 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                 const baseProps = fallbackResult.properties || { isOrganic: false, isHalogenated: false };
                 const mergedProps = {
                     ...baseProps,
-                    ph: koshaPh !== undefined ? koshaPh : baseProps.ph
+                    ph: koshaPh !== undefined ? koshaPh : baseProps.ph,
+                    phSource: koshaPh !== undefined ? 'kosha_reference' : baseProps.phSource,
                 };
 
                 return {

@@ -1,10 +1,16 @@
 ﻿/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { fetchWasteLogs, deleteWasteLog } from '../services/wasteLogService';
-import type { DisposalCategory, WasteLog } from '../types';
+import {
+    fetchWasteLogItemsV2,
+    fetchWasteLogs,
+    isLegacyWasteLog,
+    voidWasteLogV2,
+    type WasteLogItemRecord,
+    type WasteLogRecord,
+} from '../services/wasteLogService';
+import type { DisposalCategory, WasteStreamCode } from '../types';
 import { useTranslation } from 'react-i18next';
-import { Trash2, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download } from 'lucide-react';
-import { CustomDialog } from './CustomDialog';
+import { PencilLine, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download, CheckCircle2 } from 'lucide-react';
 import { useLabStore } from '../store/useLabStore';
 import type { WasteLogSortBy } from '../services/wasteLogService';
 import { auditService, type AuditLog } from '../services/auditService';
@@ -21,6 +27,7 @@ import {
     getAuditDetailSections,
 } from '../utils/auditLogFormatting';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
+import { useAuth } from '../hooks/useAuth';
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
@@ -33,13 +40,14 @@ interface GroupedLogSection {
     mode: LogGroupMode;
     title: string;
     subtitle: string;
-    logs: WasteLog[];
+    logs: WasteLogRecord[];
     totalVolumeMl: number;
     latestCreatedAt: number;
 }
 
 const PAGE_SIZE = 20;
-const DELETE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const AUTHOR_CORRECTION_WINDOW_MS = 15 * 60 * 1000;
+const ADMIN_CORRECTION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ARCHIVE_CUTOFF_DAYS = 90;
 const DISPOSAL_CATEGORY_VALUES = new Set<string>([
     'ACID',
@@ -54,6 +62,310 @@ const DISPOSAL_CATEGORY_VALUES = new Set<string>([
     'SPECIAL_HAZARD',
     'UNKNOWN',
 ]);
+
+const WASTE_STREAM_LABELS: Record<WasteStreamCode, { ko: string; en: string }> = {
+    ACID_AQUEOUS: { ko: '산성 수계 폐액', en: 'Acidic aqueous waste' },
+    ALKALI_AQUEOUS: { ko: '알칼리성 수계 폐액', en: 'Alkaline aqueous waste' },
+    ORGANIC_HALOGENATED: { ko: '할로겐 유기 폐액', en: 'Halogenated organic waste' },
+    ORGANIC_NON_HALOGENATED: { ko: '비할로겐 유기 폐액', en: 'Non-halogenated organic waste' },
+    HEAVY_METAL: { ko: '중금속 함유 폐기물', en: 'Heavy-metal waste' },
+    CYANIDE_SULFIDE: { ko: '시안·황화물 계열', en: 'Cyanide or sulfide waste' },
+    REACTIVE_OXIDIZER: { ko: '반응성·산화성 폐기물', en: 'Reactive or oxidizing waste' },
+    SOLID_CONTAMINATED: { ko: '오염 고체·슬러리', en: 'Contaminated solid or slurry' },
+    AQUEOUS_OTHER: { ko: '기타 수계 폐액', en: 'Other aqueous waste' },
+    SPECIAL_REVIEW: { ko: '분리 보관·특별 검토', en: 'Isolate and review' },
+};
+
+function formatWasteStream(code: WasteLogRecord['stream_code'], language: string): string | null {
+    if (!code) return null;
+    const labels = WASTE_STREAM_LABELS[code];
+    return labels ? (language.startsWith('ko') ? labels.ko : labels.en) : code;
+}
+
+function formatDecisionStatus(status: WasteLogRecord['decision_status'], language: string): string {
+    const korean = language.startsWith('ko');
+    if (status === 'ready') return korean ? '폐액통 안내 가능' : 'Container guidance ready';
+    if (status === 'needs_input') return korean ? '정보 확인 필요' : 'More information needed';
+    if (status === 'blocked') return korean ? '분리 처리' : 'Isolate and handle separately';
+    return korean ? '분류 확인 불가' : 'Classification unavailable';
+}
+
+function formatHandlingAction(action: WasteLogRecord['handling_action'], language: string): string {
+    const korean = language.startsWith('ko');
+    if (action === 'container_deposit') return korean ? '폐액통 입고' : 'Container deposit';
+    if (action === 'isolated') return korean ? '분리 보관' : 'Isolated';
+    if (action === 'handover') return korean ? '담당자·위탁처 인계' : 'Handed over';
+    return '-';
+}
+
+function getWasteChemicalName(value: unknown): string | null {
+    if (!value || typeof value !== 'object') return null;
+    const component = value as Record<string, unknown>;
+    const nestedChemical = component.chemical && typeof component.chemical === 'object'
+        ? component.chemical as Record<string, unknown>
+        : null;
+    const candidate = nestedChemical?.name || component.chemicalName || component.chemical_name || component.name;
+    return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
+}
+
+function getWasteChemicalConcentration(value: unknown): string | null {
+    if (!value || typeof value !== 'object') return null;
+    const component = value as Record<string, unknown>;
+    const concentration = component.concentration && typeof component.concentration === 'object'
+        ? component.concentration as Record<string, unknown>
+        : null;
+    if (concentration?.value !== undefined && concentration.unit) {
+        return `${String(concentration.value)} ${String(concentration.unit)}`;
+    }
+
+    const legacyVolume = typeof component.volume === 'string' ? component.volume : '';
+    const legacyMolarity = typeof component.molarity === 'string' ? component.molarity : '';
+    if (!legacyVolume && !legacyMolarity) return null;
+    return [legacyVolume, legacyMolarity].filter(Boolean).join(' • ');
+}
+
+const HAZARD_FLAG_LABELS: Record<string, { ko: string; en: string }> = {
+    FLAMMABLE: { ko: '인화성', en: 'Flammable' },
+    OXIDIZER: { ko: '산화성', en: 'Oxidizer' },
+    EXPLOSIVE: { ko: '폭발성', en: 'Explosive' },
+    SELF_REACTIVE: { ko: '자기반응성', en: 'Self-reactive' },
+    WATER_REACTIVE: { ko: '수반응성', en: 'Water-reactive' },
+    PYROPHORIC: { ko: '자연발화성', en: 'Pyrophoric' },
+    CORROSIVE: { ko: '부식성', en: 'Corrosive' },
+    ACUTE_TOXIC: { ko: '급성독성', en: 'Acute toxicity' },
+    CMR: { ko: '발암성·생식독성', en: 'CMR hazard' },
+    ENVIRONMENTAL_HAZARD: { ko: '환경유해성', en: 'Environmental hazard' },
+    CYANIDE: { ko: '시안', en: 'Cyanide' },
+    SULFIDE: { ko: '황화물', en: 'Sulfide' },
+    HEAVY_METAL: { ko: '중금속', en: 'Heavy metal' },
+    REACTIVE: { ko: '반응성', en: 'Reactive' },
+    UNKNOWN_COMPONENT: { ko: '미상 성분', en: 'Unknown component' },
+};
+
+function formatHazardFlag(flag: string, language: string): string {
+    const label = HAZARD_FLAG_LABELS[flag];
+    return label ? (language.startsWith('ko') ? label.ko : label.en) : flag;
+}
+
+function formatGhsDataStatus(status: WasteLogItemRecord['ghsDataStatus'], language: string): string {
+    const korean = language.startsWith('ko');
+    if (status === 'verified') return korean ? '확인됨' : 'Verified';
+    if (status === 'lookup_failed') return korean ? '조회 실패' : 'Lookup failed';
+    if (status === 'not_checked') return korean ? '확인하지 않음' : 'Not checked';
+    return korean ? '상태 미기록' : 'Not recorded';
+}
+
+function getAnalysisSnapshotRows(
+    snapshot: Record<string, unknown>,
+    language: string,
+): Array<{ label: string; value: string }> {
+    const korean = language.startsWith('ko');
+    const rows: Array<{ label: string; value: string }> = [];
+    const addPrimitive = (labelKo: string, labelEn: string, value: unknown) => {
+        if (typeof value === 'string' && value.trim()) {
+            rows.push({ label: korean ? labelKo : labelEn, value: value.trim() });
+        } else if (typeof value === 'number' && Number.isFinite(value)) {
+            rows.push({ label: korean ? labelKo : labelEn, value: String(value) });
+        } else if (typeof value === 'boolean') {
+            rows.push({ label: korean ? labelKo : labelEn, value: value ? (korean ? '예' : 'Yes') : (korean ? '아니요' : 'No') });
+        }
+    };
+
+    addPrimitive('분류 코드', 'Category code', snapshot.category);
+    addPrimitive('판정 근거', 'Decision reason', snapshot.reason);
+    addPrimitive('AI 추정', 'AI estimated', snapshot.isAiEstimated);
+
+    const ghs = snapshot.ghs && typeof snapshot.ghs === 'object' && !Array.isArray(snapshot.ghs)
+        ? snapshot.ghs as Record<string, unknown>
+        : null;
+    if (ghs) {
+        addPrimitive('GHS 신호어', 'GHS signal word', ghs.signal);
+        const statements = Array.isArray(ghs.hazardStatements)
+            ? ghs.hazardStatements.filter((statement): statement is string => typeof statement === 'string' && Boolean(statement.trim()))
+            : [];
+        if (statements.length > 0) {
+            rows.push({
+                label: korean ? 'GHS 위험 문구' : 'GHS hazard statements',
+                value: statements.join(' · '),
+            });
+        }
+    }
+
+    const physical = snapshot.physicalProperties
+        && typeof snapshot.physicalProperties === 'object'
+        && !Array.isArray(snapshot.physicalProperties)
+        ? snapshot.physicalProperties as Record<string, unknown>
+        : null;
+    if (physical) {
+        addPrimitive('인화점', 'Flash point', physical.flashPoint);
+        addPrimitive('끓는점', 'Boiling point', physical.boilingPoint);
+        addPrimitive('용해도', 'Solubility', physical.solubility);
+        addPrimitive('안정성', 'Stability', physical.stability);
+    }
+
+    return rows;
+}
+
+interface WasteLogItemsPanelProps {
+    items: WasteLogItemRecord[] | undefined;
+    isLoading: boolean;
+    error: string | null;
+    onRetry: () => void;
+    onViewAudit: (id: string) => void;
+}
+
+export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
+    items,
+    isLoading,
+    error,
+    onRetry,
+    onViewAudit,
+}) => {
+    const { i18n } = useTranslation();
+    const korean = i18n.language.startsWith('ko');
+
+    if (isLoading && items === undefined) {
+        return (
+            <div role="status" className="flex min-h-20 items-center justify-center gap-2 rounded-lg bg-slate-50 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                {korean ? '성분 상세 기록을 불러오는 중입니다.' : 'Loading component details.'}
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+                <p>{error}</p>
+                <button
+                    type="button"
+                    onClick={onRetry}
+                    className="mt-2 min-h-11 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-slate-900 dark:text-amber-200"
+                >
+                    {korean ? '다시 불러오기' : 'Try again'}
+                </button>
+            </div>
+        );
+    }
+
+    if (items && items.length === 0) {
+        return (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+                {korean
+                    ? 'V2 성분 상세 행이 없습니다. 배치 요약은 보존되어 있지만 성분별 근거는 확인할 수 없습니다.'
+                    : 'No V2 component rows were found. The batch summary remains available, but per-component evidence cannot be verified.'}
+            </div>
+        );
+    }
+
+    if (!items) return null;
+
+    return (
+        <div className="space-y-3">
+            {items.map((item) => {
+                const snapshotRows = getAnalysisSnapshotRows(item.analysisSnapshot, i18n.language);
+                const originId = item.inventoryItemId || item.cabinetItemId;
+                return (
+                    <article key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800/80">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                                <div className="font-semibold text-slate-800 dark:text-slate-100">
+                                    <span className="mr-1 text-xs font-normal text-slate-400">#{item.lineNumber}</span>
+                                    {item.chemicalName || (korean ? '이름 미기록' : 'Name not recorded')}
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                    {item.casNumber && <span>CAS {item.casNumber}</span>}
+                                    {item.formula && <span>{item.formula}</span>}
+                                    {item.molecularWeight !== null && <span>MW {item.molecularWeight}</span>}
+                                    {item.pubchemCid !== null && <span>PubChem CID {item.pubchemCid}</span>}
+                                    {item.koshaChemId && <span>KOSHA {item.koshaChemId}</span>}
+                                </div>
+                            </div>
+                            {item.concentrationValue !== null && item.concentrationUnit && (
+                                <span className="rounded-md bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
+                                    {item.concentrationValue} {item.concentrationUnit}
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                            {item.hazardFlags.length > 0 ? item.hazardFlags.map((flag) => (
+                                <span key={flag} className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+                                    {formatHazardFlag(flag, i18n.language)}
+                                </span>
+                            )) : (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                    {korean ? '기록된 위험 플래그 없음' : 'No recorded hazard flags'}
+                                </span>
+                            )}
+                        </div>
+
+                        <dl className="mt-3 grid gap-2 border-t border-slate-200 pt-3 text-xs dark:border-slate-700 sm:grid-cols-2">
+                            <div>
+                                <dt className="text-slate-500 dark:text-slate-400">{korean ? '식별 신뢰도' : 'Identity confidence'}</dt>
+                                <dd className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">
+                                    {item.identityConfidence === null ? '-' : `${Math.round(item.identityConfidence * 100)}%`}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-slate-500 dark:text-slate-400">GHS</dt>
+                                <dd className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">{formatGhsDataStatus(item.ghsDataStatus, i18n.language)}</dd>
+                            </div>
+                            <div className="sm:col-span-2">
+                                <dt className="text-slate-500 dark:text-slate-400">{korean ? '유입 경로' : 'Source'}</dt>
+                                <dd className="mt-0.5 break-all font-medium text-slate-700 dark:text-slate-200">
+                                    {item.sourceType}{item.sourceRef ? ` · ${item.sourceRef}` : ''}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        {item.dataSources.length > 0 && (
+                            <div className="mt-3 rounded-md bg-white p-2.5 text-xs dark:bg-slate-900/70">
+                                <div className="font-semibold text-slate-700 dark:text-slate-200">{korean ? '데이터 출처' : 'Data sources'}</div>
+                                <ul className="mt-1.5 space-y-1 text-slate-500 dark:text-slate-400">
+                                    {item.dataSources.map((source, index) => (
+                                        <li key={`${source.sourceType}-${source.capturedAt || index}`} className="break-all">
+                                            {source.sourceType}
+                                            {source.sourceRef ? ` · ${source.sourceRef}` : ''}
+                                            {source.capturedAt ? ` · ${new Date(source.capturedAt).toLocaleString(korean ? 'ko-KR' : 'en-US')}` : ''}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {snapshotRows.length > 0 && (
+                            <details className="mt-3 rounded-md bg-white p-2.5 text-xs dark:bg-slate-900/70">
+                                <summary className="min-h-11 cursor-pointer py-2 font-semibold text-slate-700 dark:text-slate-200">
+                                    {korean ? '저장된 분석 근거 보기' : 'View stored analysis evidence'}
+                                </summary>
+                                <dl className="space-y-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+                                    {snapshotRows.map((row) => (
+                                        <div key={`${row.label}-${row.value}`}>
+                                            <dt className="text-slate-500 dark:text-slate-400">{row.label}</dt>
+                                            <dd className="mt-0.5 break-words text-slate-700 dark:text-slate-200">{row.value}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            </details>
+                        )}
+
+                        {originId && (
+                            <button
+                                type="button"
+                                onClick={() => onViewAudit(originId)}
+                                className="mt-3 flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                            >
+                                <History className="h-3.5 w-3.5" aria-hidden="true" />
+                                {korean ? '연결된 재고 이력 보기' : 'View linked inventory history'}
+                            </button>
+                        )}
+                    </article>
+                );
+            })}
+        </div>
+    );
+};
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
     '&': '&amp;',
@@ -72,22 +384,37 @@ function safeSpreadsheetCell(value: unknown): string {
     return /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
 }
 
-export const WasteLogView: React.FC = () => {
+interface WasteLogViewProps {
+    initialWasteLogId?: string | null;
+    openCorrection?: boolean;
+}
+
+export const WasteLogView: React.FC<WasteLogViewProps> = ({
+    initialWasteLogId,
+    openCorrection = false,
+}) => {
     const { t, i18n } = useTranslation();
+    const { user } = useAuth();
     const isDesktop = useIsDesktop();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.logs);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const currentLabId = useLabStore(state => state.currentLabId);
     const myLabs = useLabStore(state => state.myLabs);
     const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
-    const canDeleteLogs = !currentLabId || currentRole === 'admin';
-    const [logs, setLogs] = useState<WasteLog[]>([]);
+    const canManageLabLogs = !currentLabId || currentRole === 'admin';
+    const [logs, setLogs] = useState<WasteLogRecord[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [page, setPage] = useState(0);
-    const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [voidId, setVoidId] = useState<string | null>(null);
+    const [voidReason, setVoidReason] = useState('');
+    const [isVoiding, setIsVoiding] = useState(false);
+    const [voidError, setVoidError] = useState<string | null>(null);
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
+    const voidDialogRef = useRef<HTMLDivElement>(null);
+    const initialRecordHandledRef = useRef(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchInput, setSearchInput] = useState('');
     const [activeTab, setActiveTab] = useState<LogViewTab>('recent');
@@ -106,6 +433,12 @@ export const WasteLogView: React.FC = () => {
     const [customExportEndDate, setCustomExportEndDate] = useState('');
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
     const [selectedDesktopLogId, setSelectedDesktopLogId] = useState<string | null>(null);
+    const [v2ItemsByLogId, setV2ItemsByLogId] = useState<Record<string, WasteLogItemRecord[]>>({});
+    const [v2ItemsLoading, setV2ItemsLoading] = useState<Record<string, boolean>>({});
+    const [v2ItemsError, setV2ItemsError] = useState<Record<string, string | null>>({});
+    const v2ItemsCacheRef = useRef<Record<string, WasteLogItemRecord[]>>({});
+    const v2ItemsRequestsRef = useRef<Set<string>>(new Set());
+    const v2ItemsGenerationRef = useRef(0);
     const exportOptionsContainerRef = useRef<HTMLDivElement>(null);
     const customExportSectionRef = useRef<HTMLDivElement>(null);
 
@@ -137,6 +470,48 @@ export const WasteLogView: React.FC = () => {
     }, [viewingAuditLogForId]);
 
     useEffect(() => {
+        v2ItemsGenerationRef.current += 1;
+        v2ItemsCacheRef.current = {};
+        v2ItemsRequestsRef.current.clear();
+        setV2ItemsByLogId({});
+        setV2ItemsLoading({});
+        setV2ItemsError({});
+    }, [currentLabId]);
+
+    const loadV2Items = useCallback(async (wasteLogId: string, force = false) => {
+        if (!force && Object.prototype.hasOwnProperty.call(v2ItemsCacheRef.current, wasteLogId)) return;
+        if (v2ItemsRequestsRef.current.has(wasteLogId)) return;
+
+        if (force) {
+            delete v2ItemsCacheRef.current[wasteLogId];
+        }
+        const generation = v2ItemsGenerationRef.current;
+        v2ItemsRequestsRef.current.add(wasteLogId);
+        setV2ItemsLoading((current) => ({ ...current, [wasteLogId]: true }));
+        setV2ItemsError((current) => ({ ...current, [wasteLogId]: null }));
+
+        try {
+            const items = await fetchWasteLogItemsV2(wasteLogId);
+            if (generation !== v2ItemsGenerationRef.current) return;
+            v2ItemsCacheRef.current[wasteLogId] = items;
+            setV2ItemsByLogId((current) => ({ ...current, [wasteLogId]: items }));
+        } catch {
+            if (generation !== v2ItemsGenerationRef.current) return;
+            setV2ItemsError((current) => ({
+                ...current,
+                [wasteLogId]: i18n.language.startsWith('ko')
+                    ? '성분 상세 기록을 불러오지 못했습니다. 배치 요약은 그대로 유지됩니다.'
+                    : 'Could not load component details. The batch summary is still available.',
+            }));
+        } finally {
+            v2ItemsRequestsRef.current.delete(wasteLogId);
+            if (generation === v2ItemsGenerationRef.current) {
+                setV2ItemsLoading((current) => ({ ...current, [wasteLogId]: false }));
+            }
+        }
+    }, [i18n.language]);
+
+    useEffect(() => {
         if (!isExportDialogOpen || exportScope !== 'custom') {
             return;
         }
@@ -155,6 +530,38 @@ export const WasteLogView: React.FC = () => {
             });
         });
     }, [exportScope, isExportDialogOpen]);
+
+    useEffect(() => {
+        if (!voidId || isVoiding) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setVoidId(null);
+                setVoidReason('');
+                setVoidError(null);
+                return;
+            }
+
+            if (event.key === 'Tab') {
+                const focusable = Array.from(voidDialogRef.current?.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+                ) || []);
+                if (focusable.length === 0) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isVoiding, voidId]);
 
     const { createdAfter, createdBefore } = useMemo(
         () => getLogDateFilters(activeTab, dateRange),
@@ -238,12 +645,14 @@ export const WasteLogView: React.FC = () => {
             const q = searchQuery.toLowerCase();
             const matchText =
                 log.disposal_category?.toLowerCase().includes(q) ||
+                log.stream_code?.toLowerCase().includes(q) ||
+                formatWasteStream(log.stream_code, i18n.language)?.toLowerCase().includes(q) ||
                 log.handler_name?.toLowerCase().includes(q) ||
-                log.memo?.toLowerCase().includes(q);
+                log.memo?.toLowerCase().includes(q) ||
+                log.void_reason?.toLowerCase().includes(q);
             const matchChemical = log.chemicals?.some(
                 c =>
-                    c.chemical?.name?.toLowerCase().includes(q) ||
-                    (c as any).name?.toLowerCase().includes(q) ||
+                    getWasteChemicalName(c)?.toLowerCase().includes(q) ||
                     (c as any).deleted_location?.toLowerCase().includes(q)
             );
             return matchText || matchChemical;
@@ -272,6 +681,18 @@ export const WasteLogView: React.FC = () => {
         }
     }, [filteredLogs, selectedDesktopLogId]);
 
+    useEffect(() => {
+        const expandedLog = expandedId
+            ? filteredLogs.find((log) => log.id === expandedId)
+            : null;
+        if (expandedLog?.schema_version === 2) {
+            void loadV2Items(expandedLog.id);
+        }
+        if (isDesktop && selectedDesktopLog?.schema_version === 2) {
+            void loadV2Items(selectedDesktopLog.id);
+        }
+    }, [expandedId, filteredLogs, isDesktop, loadV2Items, selectedDesktopLog]);
+
     const sortOptions = useMemo(() => ([
         { value: 'created_at-desc', label: t('log_sort_date_desc') },
         { value: 'created_at-asc', label: t('log_sort_date_asc') },
@@ -281,49 +702,85 @@ export const WasteLogView: React.FC = () => {
         { value: 'handler_name-desc', label: t('log_sort_handler_desc') },
     ]), [t]);
 
-    const isDeleteAllowedForLog = useCallback((log: WasteLog) => {
-        if (!canDeleteLogs) {
-            return false;
-        }
+    const canVoidLog = useCallback((log: WasteLogRecord) => {
+        if (log.voided_at) return false;
 
-        return Date.now() - new Date(log.created_at).getTime() <= DELETE_WINDOW_MS;
-    }, [canDeleteLogs]);
+        const createdAt = new Date(log.created_at).getTime();
+        if (!Number.isFinite(createdAt)) return false;
 
-    const getDeleteBlockedMessage = useCallback((log: WasteLog) => {
-        if (!canDeleteLogs) {
-            return t('log_delete_admin_only');
-        }
+        const age = Date.now() - createdAt;
+        const isAuthor = Boolean(user?.id && log.user_id === user.id);
+        if (isAuthor && age <= AUTHOR_CORRECTION_WINDOW_MS) return true;
+        return Boolean(currentLabId && canManageLabLogs && age <= ADMIN_CORRECTION_WINDOW_MS);
+    }, [canManageLabLogs, currentLabId, user?.id]);
 
-        if (!isDeleteAllowedForLog(log)) {
-            return t('log_delete_time_limited');
-        }
+    const openVoidDialog = useCallback((log: WasteLogRecord) => {
+        if (!canVoidLog(log)) return;
+        setVoidId(log.id);
+        setVoidReason('');
+        setVoidError(null);
+        setStatusMessage(null);
+    }, [canVoidLog]);
 
-        return null;
-    }, [canDeleteLogs, isDeleteAllowedForLog, t]);
+    useEffect(() => {
+        if (initialRecordHandledRef.current || !initialWasteLogId || logs.length === 0) return;
+        const target = logs.find((log) => log.id === initialWasteLogId);
+        if (!target) return;
 
-    const handleDelete = async () => {
-        if (!deleteId) return;
-        const targetLog = logs.find(log => log.id === deleteId);
+        initialRecordHandledRef.current = true;
+        setSelectedDesktopLogId(target.id);
+        setExpandedId(target.id);
+        if (openCorrection) openVoidDialog(target);
+    }, [initialWasteLogId, logs, openCorrection, openVoidDialog]);
 
-        if (!targetLog) {
-            setDeleteId(null);
+    const closeVoidDialog = useCallback(() => {
+        if (isVoiding) return;
+        setVoidId(null);
+        setVoidReason('');
+        setVoidError(null);
+    }, [isVoiding]);
+
+    const handleVoid = async () => {
+        if (!voidId || isVoiding) return;
+        const targetLog = logs.find((log) => log.id === voidId);
+        if (!targetLog || !canVoidLog(targetLog)) {
+            setVoidError(i18n.language.startsWith('ko')
+                ? '이 기록은 정정할 수 있는 시간이 지났거나 권한이 없습니다.'
+                : 'The correction window has expired or you do not have permission.');
             return;
         }
 
-        const blockedMessage = getDeleteBlockedMessage(targetLog);
-        if (blockedMessage) {
-            setError(blockedMessage);
-            setDeleteId(null);
+        const normalizedReason = voidReason.replace(/\s+/g, ' ').trim();
+        if (normalizedReason.length < 3) {
+            setVoidError(i18n.language.startsWith('ko')
+                ? '정정 사유를 3자 이상 입력해 주세요.'
+                : 'Enter a correction reason of at least 3 characters.');
             return;
         }
+
+        setIsVoiding(true);
+        setVoidError(null);
         try {
-            await deleteWasteLog(deleteId);
-            setLogs(prev => prev.filter(l => l.id !== deleteId));
-            setTotalCount(prev => prev - 1);
-        } catch {
-            setError(t('dispose_error'));
+            const receipt = await voidWasteLogV2(voidId, normalizedReason);
+            setLogs((current) => current.map((log) => log.id === voidId
+                ? {
+                    ...log,
+                    voided_at: receipt.voidedAt || new Date().toISOString(),
+                    voided_by: receipt.voidedBy,
+                    void_reason: receipt.reason,
+                }
+                : log));
+            setStatusMessage(i18n.language.startsWith('ko')
+                ? '기록이 삭제되지 않고 정정 상태로 보존되었습니다.'
+                : 'The original record was preserved and marked as corrected.');
+            setVoidId(null);
+            setVoidReason('');
+        } catch (voidFailure) {
+            setVoidError(voidFailure instanceof Error
+                ? voidFailure.message
+                : (i18n.language.startsWith('ko') ? '기록을 정정하지 못했습니다.' : 'Could not correct the record.'));
         } finally {
-            setDeleteId(null);
+            setIsVoiding(false);
         }
     };
 
@@ -338,8 +795,19 @@ export const WasteLogView: React.FC = () => {
         });
     }, [i18n.language]);
 
-    // Compute total volume from individual cart items
-    const computeTotalVolume = (log: WasteLog): string | null => {
+    // V2 uses one batch amount; legacy records fall back to their historical volume fields.
+    const computeTotalVolume = useCallback((log: WasteLogRecord): string | null => {
+        if (log.schema_version === 2) {
+            if (log.amount_is_unknown) {
+                return i18n.language.startsWith('ko') ? '양 모름' : 'Amount unknown';
+            }
+            if (log.total_amount_value !== null && log.total_amount_value !== undefined && log.total_amount_unit) {
+                const approximate = log.amount_is_approximate
+                    ? (i18n.language.startsWith('ko') ? '약 ' : 'Approx. ')
+                    : '';
+                return `${approximate}${log.total_amount_value.toLocaleString()} ${log.total_amount_unit}`;
+            }
+        }
         if (log.total_volume_ml) return `${log.total_volume_ml} mL`;
         // Try summing individual volumes
         const total = log.chemicals.reduce((sum, c) => {
@@ -350,14 +818,13 @@ export const WasteLogView: React.FC = () => {
             return sum;
         }, 0);
         return total > 0 ? `${total} mL` : null;
+    }, [i18n.language]);
+
+    const getPrimaryChemicalName = (log: WasteLogRecord): string | null => {
+        return getWasteChemicalName(log.chemicals?.[0]);
     };
 
-    const getPrimaryChemicalName = (log: WasteLog): string | null => {
-        const first = log.chemicals?.[0] as any;
-        return first?.chemical?.name || first?.name || null;
-    };
-
-    const getDeletedLocation = useCallback((log: WasteLog): string | null => {
+    const getDeletedLocation = useCallback((log: WasteLogRecord): string | null => {
         const first = log.chemicals?.[0] as any;
         let locName: string | null = null;
         if (first?.deleted_location) {
@@ -371,7 +838,7 @@ export const WasteLogView: React.FC = () => {
         return locName ? translateLocationName(locName, t) : null;
     }, [t]);
 
-    const getDeleteReason = (log: WasteLog): string | null => {
+    const getDeleteReason = (log: WasteLogRecord): string | null => {
         const memo = (log.memo || '').trim();
         if (!memo) return null;
 
@@ -386,20 +853,25 @@ export const WasteLogView: React.FC = () => {
         return t(getCategoryDetails(category as DisposalCategory).label);
     }, [t]);
 
-    const renderLogCard = useCallback((log: WasteLog) => {
+    const renderLogCard = useCallback((log: WasteLogRecord) => {
         const isExpanded = expandedId === log.id;
         const totalVol = computeTotalVolume(log);
         const primaryChemicalName = getPrimaryChemicalName(log);
         const deletedLocation = getDeletedLocation(log);
         const deleteReason = getDeleteReason(log);
         const locationBadgeClass = getLocationBadgeClass(deletedLocation);
-        const displayTitle = log.disposal_category.startsWith('기타')
+        const legacyRecord = isLegacyWasteLog(log);
+        const streamLabel = formatWasteStream(log.stream_code, i18n.language);
+        const displayTitle = streamLabel || (log.disposal_category.startsWith('기타')
             ? (primaryChemicalName || log.disposal_category)
-            : formatDisposalCategory(log.disposal_category);
-        const canDeleteThisLog = isDeleteAllowedForLog(log);
+            : formatDisposalCategory(log.disposal_category));
+        const canVoidThisLog = canVoidLog(log);
+        const v2Items = log.schema_version === 2 ? v2ItemsByLogId[log.id] : undefined;
+        const componentCount = v2Items?.length ?? log.chemicals.length;
         const firstChemical = log.chemicals?.[0] as any;
-        const firstChemicalName = firstChemical?.chemical?.name || firstChemical?.name || null;
+        const firstChemicalName = getWasteChemicalName(firstChemical);
         const shouldCompactSingleDeleteLog = Boolean(
+            legacyRecord &&
             deleteReason &&
             log.chemicals.length === 1 &&
             firstChemicalName &&
@@ -409,7 +881,11 @@ export const WasteLogView: React.FC = () => {
         return (
             <div
                 key={log.id}
-                className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden transition-all"
+                className={`bg-white dark:bg-slate-800 border rounded-xl shadow-sm overflow-hidden transition-all ${
+                    log.voided_at
+                        ? 'border-slate-300 opacity-80 dark:border-slate-600'
+                        : 'border-gray-100 dark:border-slate-700'
+                }`}
             >
                 <button
                     onClick={() => {
@@ -428,6 +904,16 @@ export const WasteLogView: React.FC = () => {
                                 <span className="min-w-0 break-words text-sm font-semibold leading-5 text-slate-800 dark:text-slate-200">
                                     {displayTitle}
                                 </span>
+                                {legacyRecord && (
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600">
+                                        {i18n.language.startsWith('ko') ? '기존 기록 · 분류 확인 불가' : 'Legacy record · classification unavailable'}
+                                    </span>
+                                )}
+                                {log.voided_at && (
+                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/60">
+                                        {i18n.language.startsWith('ko') ? '기록 정정됨' : 'Corrected record'}
+                                    </span>
+                                )}
                                 {deletedLocation && (
                                     <span className={`text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap ${locationBadgeClass}`}>
                                         {deletedLocation}
@@ -435,8 +921,9 @@ export const WasteLogView: React.FC = () => {
                                 )}
                             </div>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                <span className="whitespace-nowrap">{t('log_chemicals_count', { count: log.chemicals.length })}</span>
+                                <span className="whitespace-nowrap">{t('log_chemicals_count', { count: componentCount })}</span>
                                 {totalVol && <span className="whitespace-nowrap">• {totalVol}</span>}
+                                {log.stream_code && <span className="break-all font-mono text-[10px]">• {log.stream_code}</span>}
                                 {log.handler_name && <span className="min-w-0 break-words">• {log.handler_name}</span>}
                                 <span className="whitespace-nowrap text-slate-400 dark:text-slate-500 sm:ml-auto">
                                     {formatDate(log.created_at)}
@@ -453,7 +940,17 @@ export const WasteLogView: React.FC = () => {
 
                 {isExpanded && (
                     <div className="px-4 pb-4 border-t border-gray-100 dark:border-slate-700">
-                        {!shouldCompactSingleDeleteLog && (
+                        {log.schema_version === 2 ? (
+                            <div className="mt-3">
+                                <WasteLogItemsPanel
+                                    items={v2Items}
+                                    isLoading={Boolean(v2ItemsLoading[log.id])}
+                                    error={v2ItemsError[log.id] || null}
+                                    onRetry={() => void loadV2Items(log.id, true)}
+                                    onViewAudit={setViewingAuditLogForId}
+                                />
+                            </div>
+                        ) : !shouldCompactSingleDeleteLog && (
                             <div className="space-y-2 mt-3">
                                 {log.chemicals.map((chem, idx) => (
                                     <div
@@ -462,15 +959,15 @@ export const WasteLogView: React.FC = () => {
                                     >
                                         <div>
                                             <div className="font-medium text-slate-700 dark:text-slate-300">
-                                                {chem.chemical?.name || (chem as any).name || 'Unknown'}
+                                                {getWasteChemicalName(chem) || 'Unknown'}
                                             </div>
                                             <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                                                 {chem.label && t(chem.label as any)}
                                             </div>
                                         </div>
-                                        {(chem.volume || chem.molarity) && (
+                                        {getWasteChemicalConcentration(chem) && (
                                             <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                                                {chem.volume}{chem.volume && chem.molarity && ' • '}{chem.molarity}
+                                                {getWasteChemicalConcentration(chem)}
                                             </div>
                                         )}
                                         {(chem as any).id && (
@@ -502,6 +999,36 @@ export const WasteLogView: React.FC = () => {
                             </div>
                         )}
 
+                        {log.schema_version === 2 && (
+                            <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/50 sm:grid-cols-2">
+                                <div>
+                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '처리 행동' : 'Handling action'}</div>
+                                    <div className="mt-0.5 font-semibold text-slate-800 dark:text-slate-100">{formatHandlingAction(log.handling_action, i18n.language)}</div>
+                                </div>
+                                <div>
+                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '판정 상태' : 'Decision status'}</div>
+                                    <div className="mt-0.5 font-semibold text-slate-800 dark:text-slate-100">{formatDecisionStatus(log.decision_status, i18n.language)}</div>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '폐기 분류' : 'Waste classification'}</div>
+                                    <div className="mt-0.5 break-all font-semibold text-slate-800 dark:text-slate-100">
+                                        {streamLabel || '-'}{log.stream_code ? ` · ${log.stream_code}` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {log.voided_at && (
+                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
+                                <div className="flex items-center gap-1.5 font-semibold">
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    {i18n.language.startsWith('ko') ? '원본을 보존하고 정정 처리한 기록입니다.' : 'The original record is preserved and marked as corrected.'}
+                                </div>
+                                {log.void_reason && <p className="mt-1.5 break-words">{log.void_reason}</p>}
+                                <p className="mt-1 text-xs opacity-75">{formatDate(log.voided_at)}</p>
+                            </div>
+                        )}
+
                         {!deleteReason && shouldCompactSingleDeleteLog && firstChemical?.id && (
                             <div className="mt-3 flex justify-end">
                                 <button
@@ -513,20 +1040,35 @@ export const WasteLogView: React.FC = () => {
                             </div>
                         )}
 
-                        {canDeleteThisLog && (
+                        {canVoidThisLog && (
                             <button
-                                onClick={() => setDeleteId(log.id)}
-                                className="mt-3 w-full py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                                onClick={() => openVoidDialog(log)}
+                                className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/20"
                             >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                {t('log_delete') || '삭제'}
+                                <PencilLine className="w-4 h-4" />
+                                {i18n.language.startsWith('ko') ? '기록 정정' : 'Correct record'}
                             </button>
                         )}
                     </div>
                 )}
             </div>
         );
-    }, [expandedId, formatDate, formatDisposalCategory, getDeletedLocation, isDeleteAllowedForLog, isDesktop, t]);
+    }, [
+        canVoidLog,
+        computeTotalVolume,
+        expandedId,
+        formatDate,
+        formatDisposalCategory,
+        getDeletedLocation,
+        i18n.language,
+        isDesktop,
+        loadV2Items,
+        openVoidDialog,
+        t,
+        v2ItemsByLogId,
+        v2ItemsError,
+        v2ItemsLoading,
+    ]);
     const openExportDialog = (format: ExportFormat) => {
         setIsExportMenuOpen(false);
         setExportFormat(format);
@@ -600,7 +1142,7 @@ export const WasteLogView: React.FC = () => {
             const data = allLogs.map((log) => ({
                 'Disposed At': formatDate(log.created_at),
                 'Category': log.disposal_category,
-                'Chemicals': log.chemicals.map(c => c.chemical?.name || (c as any).name || 'Unknown').join(', '),
+                'Chemicals': log.chemicals.map(c => getWasteChemicalName(c) || 'Unknown').join(', '),
                 'Total Volume': computeTotalVolume(log) || '',
                 'Deleted Location': getDeletedLocation(log) || '',
                 'Handler': log.handler_name || '',
@@ -650,7 +1192,7 @@ export const WasteLogView: React.FC = () => {
                     <tbody>
             `;
             allLogs.forEach(log => {
-                const chemicals = escapeHtml(log.chemicals.map(c => c.chemical?.name || (c as any).name || 'Unknown').join(', '));
+                const chemicals = escapeHtml(log.chemicals.map(c => getWasteChemicalName(c) || 'Unknown').join(', '));
                 html += `
                     <tr>
                         <td style="border: 1px solid #e5e7eb; padding: 6px;">${escapeHtml(formatDate(log.created_at))}</td>
@@ -875,9 +1417,16 @@ export const WasteLogView: React.FC = () => {
 
             {/* Error */}
             {error && (
-                <div className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm border border-red-100 dark:border-red-900/30">
+                <div role="alert" className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm border border-red-100 dark:border-red-900/30">
                     <AlertCircle className="w-4 h-4" />
                     {error}
+                </div>
+            )}
+
+            {statusMessage && (
+                <div aria-live="polite" className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {statusMessage}
                 </div>
             )}
 
@@ -998,18 +1547,46 @@ export const WasteLogView: React.FC = () => {
                     {selectedDesktopLog ? (
                         <div className="space-y-5 py-5">
                             <div>
-                                <div className="flex items-center gap-2">
-                                    <span className={`h-3 w-3 rounded-full ${getCategoryColor(selectedDesktopLog.disposal_category)}`} />
-                                    <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100">{formatDisposalCategory(selectedDesktopLog.disposal_category)}</h4>
-                                </div>
-                                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{formatDate(selectedDesktopLog.created_at)}</p>
-                            </div>
+                                 <div className="flex items-center gap-2">
+                                     <span className={`h-3 w-3 rounded-full ${getCategoryColor(selectedDesktopLog.disposal_category)}`} />
+                                     <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                                         {formatWasteStream(selectedDesktopLog.stream_code, i18n.language) || formatDisposalCategory(selectedDesktopLog.disposal_category)}
+                                     </h4>
+                                 </div>
+                                 <div className="mt-2 flex flex-wrap gap-1.5">
+                                     {isLegacyWasteLog(selectedDesktopLog) && (
+                                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                                             {i18n.language.startsWith('ko') ? '기존 기록 · 분류 확인 불가' : 'Legacy record · classification unavailable'}
+                                         </span>
+                                     )}
+                                     {selectedDesktopLog.voided_at && (
+                                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                                             {i18n.language.startsWith('ko') ? '기록 정정됨' : 'Corrected record'}
+                                         </span>
+                                     )}
+                                 </div>
+                                 <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{formatDate(selectedDesktopLog.created_at)}</p>
+                             </div>
 
                             <div className="space-y-3 rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-800">
                                 {[
                                     [t('log_handler_label', '작업자'), selectedDesktopLog.handler_name || t('common_unknown')],
-                                    [t('input_volume'), computeTotalVolume(selectedDesktopLog) || '-'],
-                                    [t('log_chemicals_count', { count: selectedDesktopLog.chemicals.length }), selectedDesktopLog.chemicals.length],
+                                     [i18n.language.startsWith('ko') ? '폐액 전체량' : 'Total waste amount', computeTotalVolume(selectedDesktopLog) || '-'],
+                                     ...(selectedDesktopLog.schema_version === 2 ? [
+                                         [i18n.language.startsWith('ko') ? '폐기 분류' : 'Waste classification', selectedDesktopLog.stream_code || '-'],
+                                         [i18n.language.startsWith('ko') ? '판정 상태' : 'Decision status', formatDecisionStatus(selectedDesktopLog.decision_status, i18n.language)],
+                                         [i18n.language.startsWith('ko') ? '처리 행동' : 'Handling action', formatHandlingAction(selectedDesktopLog.handling_action, i18n.language)],
+                                     ] : []),
+                                     [
+                                         t('log_chemicals_count', {
+                                             count: selectedDesktopLog.schema_version === 2
+                                                 ? (v2ItemsByLogId[selectedDesktopLog.id]?.length ?? selectedDesktopLog.chemicals.length)
+                                                 : selectedDesktopLog.chemicals.length,
+                                         }),
+                                         selectedDesktopLog.schema_version === 2
+                                             ? (v2ItemsByLogId[selectedDesktopLog.id]?.length ?? selectedDesktopLog.chemicals.length)
+                                             : selectedDesktopLog.chemicals.length,
+                                     ],
                                     [t('log_disposal_reason'), getDeleteReason(selectedDesktopLog) || '-'],
                                 ].map(([label, value]) => (
                                     <div key={String(label)} className="flex items-start justify-between gap-4">
@@ -1020,16 +1597,30 @@ export const WasteLogView: React.FC = () => {
                             </div>
 
                             <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-                                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('log_chemicals_count', { count: selectedDesktopLog.chemicals.length })}</h4>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                                    {t('log_chemicals_count', {
+                                        count: selectedDesktopLog.schema_version === 2
+                                            ? (v2ItemsByLogId[selectedDesktopLog.id]?.length ?? selectedDesktopLog.chemicals.length)
+                                            : selectedDesktopLog.chemicals.length,
+                                    })}
+                                </h4>
                                 <div className="mt-3 space-y-2">
-                                    {selectedDesktopLog.chemicals.map((chemical, index) => (
+                                    {selectedDesktopLog.schema_version === 2 ? (
+                                        <WasteLogItemsPanel
+                                            items={v2ItemsByLogId[selectedDesktopLog.id]}
+                                            isLoading={Boolean(v2ItemsLoading[selectedDesktopLog.id])}
+                                            error={v2ItemsError[selectedDesktopLog.id] || null}
+                                            onRetry={() => void loadV2Items(selectedDesktopLog.id, true)}
+                                            onViewAudit={setViewingAuditLogForId}
+                                        />
+                                    ) : selectedDesktopLog.chemicals.map((chemical, index) => (
                                         <div key={index} className="rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
                                             <div className="font-semibold text-slate-800 dark:text-slate-100">
-                                                {chemical.chemical?.name || (chemical as any).name || 'Unknown'}
+                                                {getWasteChemicalName(chemical) || 'Unknown'}
                                             </div>
-                                            {(chemical.volume || chemical.molarity) && (
+                                            {getWasteChemicalConcentration(chemical) && (
                                                 <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                                    {chemical.volume}{chemical.volume && chemical.molarity && ' / '}{chemical.molarity}
+                                                    {getWasteChemicalConcentration(chemical)}
                                                 </div>
                                             )}
                                         </div>
@@ -1056,15 +1647,98 @@ export const WasteLogView: React.FC = () => {
                 </aside>
             </div>
 
-            <CustomDialog
-                isOpen={canDeleteLogs && !!deleteId}
-                onClose={() => setDeleteId(null)}
-                title={t('log_delete') || '삭제'}
-                description={t('log_delete_confirm')}
-                type="confirm"
-                isDestructive={true}
-                onConfirm={handleDelete}
-            />
+            {voidId && (
+                <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
+                    <button
+                        type="button"
+                        aria-label={i18n.language.startsWith('ko') ? '정정 창 닫기' : 'Close correction dialog'}
+                        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+                        onClick={closeVoidDialog}
+                    />
+                    <div
+                        ref={voidDialogRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="void-waste-log-title"
+                        aria-describedby="void-waste-log-description"
+                        className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
+                    >
+                        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5 dark:border-slate-800">
+                            <div>
+                                <h3 id="void-waste-log-title" className="font-bold text-slate-900 dark:text-white">
+                                    {i18n.language.startsWith('ko') ? '폐기 기록 정정' : 'Correct waste record'}
+                                </h3>
+                                <p id="void-waste-log-description" className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400">
+                                    {i18n.language.startsWith('ko')
+                                        ? '원본 기록은 삭제되지 않고 정정 상태와 사유가 함께 보존됩니다.'
+                                        : 'The original record will not be deleted. Its corrected status and reason are preserved.'}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeVoidDialog}
+                                disabled={isVoiding}
+                                aria-label={i18n.language.startsWith('ko') ? '닫기' : 'Close'}
+                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-5">
+                            <label htmlFor="void-waste-log-reason" className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                {i18n.language.startsWith('ko') ? '정정 사유' : 'Correction reason'}
+                            </label>
+                            <textarea
+                                id="void-waste-log-reason"
+                                autoFocus
+                                rows={4}
+                                maxLength={500}
+                                value={voidReason}
+                                onChange={(event) => {
+                                    setVoidReason(event.target.value);
+                                    if (voidError) setVoidError(null);
+                                }}
+                                placeholder={i18n.language.startsWith('ko')
+                                    ? '예: 폐액통 입고 전 잘못 기록하여 실제 처리하지 않음'
+                                    : 'Example: Recorded by mistake before the waste was deposited'}
+                                className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            />
+                            <div className="mt-1 flex items-start justify-between gap-3 text-xs">
+                                <span className="text-slate-500 dark:text-slate-400">
+                                    {i18n.language.startsWith('ko') ? '3자 이상 입력해 주세요.' : 'Enter at least 3 characters.'}
+                                </span>
+                                <span className="shrink-0 text-slate-400">{voidReason.length}/500</span>
+                            </div>
+                            {voidError && (
+                                <div role="alert" className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+                                    {voidError}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-800/50">
+                            <button
+                                type="button"
+                                onClick={closeVoidDialog}
+                                disabled={isVoiding}
+                                className="min-h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            >
+                                {t('btn_cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleVoid}
+                                disabled={isVoiding || voidReason.trim().length < 3}
+                                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {isVoiding && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {i18n.language.startsWith('ko') ? '정정 처리' : 'Mark corrected'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isExportDialogOpen && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -1410,7 +2084,7 @@ function toEndOfDayIso(dateString: string): string {
 }
 
 function groupWasteLogsByAge(
-    logs: WasteLog[],
+    logs: WasteLogRecord[],
     sortOrder: 'asc' | 'desc',
     t: (key: string, options?: Record<string, unknown>) => string,
     lang: string
@@ -1471,7 +2145,7 @@ function groupWasteLogsByAge(
     });
 }
 
-function sumLogVolume(log: WasteLog): number {
+function sumLogVolume(log: WasteLogRecord): number {
     if (typeof log.total_volume_ml === 'number' && !Number.isNaN(log.total_volume_ml)) {
         return log.total_volume_ml;
     }

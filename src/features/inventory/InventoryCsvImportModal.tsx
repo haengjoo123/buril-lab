@@ -732,7 +732,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         ? useFridgeStore.getState().shelves.find((shelf) => shelf.level === row.targetShelfLevel)
                         : null;
                     if (typeof row.targetShelfLevel === 'number' && !targetShelf) {
-                        await supabase.from('inventory').delete().eq('id', created.id);
+                        await inventoryService.deleteItem({ ...created, _source: 'inventory' });
                         throw new Error(t(
                             'inventory_csv_error_shelf_changed',
                             { defaultValue: '지정한 선반을 현재 시약장에서 찾을 수 없습니다. 템플릿을 다시 내려받아 확인해 주세요.' },
@@ -759,14 +759,14 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         sectionIndex: row.targetSectionIndex,
                     } : undefined);
                     if (!placed) {
-                        await supabase.from('inventory').delete().eq('id', created.id);
+                        await inventoryService.deleteItem({ ...created, _source: 'inventory' });
                         throw new Error(t('inventory_csv_error_no_cabinet_space'));
                     }
                     try {
                         await persistLoadedCabinetStateStrict(input.cabinet_id);
                     } catch (persistError) {
                         await rollbackPlacedItem(input.cabinet_id, placed.itemId);
-                        await supabase.from('inventory').delete().eq('id', created.id);
+                        await inventoryService.deleteItem({ ...created, _source: 'inventory' });
                         throw new Error(t('inventory_csv_error_cabinet_sync_failed_with_reason', { reason: toReasonText(persistError, t) }));
                     }
                     cabinetService.logActivity(input.cabinet_id, 'add', input.name, t('inventory_csv_log_reason'), input.memo || undefined)

@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import { json } from '../gemini/_utils'
+import { normalizeCasNumber } from '../../../src/utils/casNumber'
 
 interface Env {
   KOSHA_API_KEY?: string
@@ -79,7 +80,6 @@ type SourceLookup =
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const KOSHA_BASE_URL = 'https://msds.kosha.or.kr/openapi/service/msdschem'
 const PUBCHEM_BASE_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug'
-const CAS_PATTERN = /^\d{2,7}-\d{2}-\d$/
 const MAX_ITEMS = 25
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -134,25 +134,6 @@ function shouldSkipName(rawName: string): boolean {
   ]
 
   return skipPatterns.some((pattern) => pattern.test(rawName))
-}
-
-function normalizeCasNumber(value?: string | null): string | null {
-  const normalized = (value || '').replace(/\s+/g, '').trim()
-  if (!CAS_PATTERN.test(normalized)) return null
-  if (!passesCasChecksum(normalized)) return null
-  return normalized
-}
-
-function passesCasChecksum(casNumber: string): boolean {
-  const [left, middle, right] = casNumber.split('-')
-  if (!left || !middle || !right) return false
-
-  const digits = `${left}${middle}`.split('').reverse()
-  const checksum = Number.parseInt(right, 10)
-  if (!Number.isFinite(checksum)) return false
-
-  const total = digits.reduce((sum, digit, index) => sum + Number.parseInt(digit, 10) * (index + 1), 0)
-  return total % 10 === checksum
 }
 
 function unique<T>(values: T[]): T[] {

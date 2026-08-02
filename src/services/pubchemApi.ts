@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Chemical, MsdsSection } from '../types';
 import { COMMON_CHEMICALS } from '../data/commonChemicals';
+import { hasCasNumberFormat, normalizeCasNumber } from '../utils/casNumber';
 
 /**
  * Fetch autocomplete suggestions for a chemical name from PubChem
@@ -105,9 +106,17 @@ const fetchSynonyms = async (cid: string | number): Promise<string[]> => {
 export const fetchChemicalInfo = async (query: string): Promise<Chemical | null> => {
     if (!query) return null;
 
+    const trimmedQuery = query.trim();
+    const queriedCasNumber = normalizeCasNumber(trimmedQuery);
+    if (hasCasNumberFormat(trimmedQuery) && !queriedCasNumber) {
+        console.warn(`[PubChem] Rejected CAS with invalid checksum: ${trimmedQuery}`);
+        return null;
+    }
+
     // 1. Check Local Dataset first (O(1) lookup)
-    const normalizedQuery = query.trim().toUpperCase();
-    if (COMMON_CHEMICALS[normalizedQuery]) {
+    const normalizedQuery = trimmedQuery.toUpperCase();
+    // CAS searches must be confirmed by an external registry response.
+    if (!queriedCasNumber && COMMON_CHEMICALS[normalizedQuery]) {
         console.log(`[Cache Hit] Found ${query} in local dataset.`);
         return COMMON_CHEMICALS[normalizedQuery];
     }
@@ -143,11 +152,15 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
         const ghsData = fullRecord ? parseGHSFromRecord(fullRecord) : undefined;
         const physicalProps = fullRecord ? parsePhysicalFromRecord(fullRecord) : undefined;
 
-        // Find CAS Number from synonyms (Pattern: d-dd-d where d is digit, but usually 2-7 digits first)
-        // Strict CAS pattern: \d{2,7}-\d{2}-\d
-        const casPattern = /^\d{2,7}-\d{2}-\d$/;
-        // Find the first synonym that matches the CAS pattern
-        const foundCas = synonyms.find((s: string) => casPattern.test(s));
+        const validCasNumbers = synonyms
+            .map((synonym: string) => normalizeCasNumber(synonym))
+            .filter((casNumber: string | null): casNumber is string => Boolean(casNumber));
+        const foundCas = validCasNumbers[0];
+
+        if (queriedCasNumber && !validCasNumbers.includes(queriedCasNumber)) {
+            console.warn(`[PubChem] CAS ${queriedCasNumber} was not confirmed by the returned compound record.`);
+            return null;
+        }
 
         // Name Priority: Title (Common Name) > Uppercase Query (if matched) > IUPACName > Query
         const displayName = compoundProps.Title || compoundProps.IUPACName || query;
@@ -155,10 +168,7 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
         return {
             id: String(cid || Date.now()),
             name: displayName,
-            // Use found CAS or fallback to query if it looks like a CAS, otherwise just empty or query?
-            // User complained query "AgHO" became CAS.
-            // If no CAS found, maybe we shouldn't show the query as CAS unless it looks like one.
-            casNumber: foundCas || (casPattern.test(query) ? query : displayName),
+            casNumber: queriedCasNumber || foundCas || '',
             molecularFormula: compoundProps.MolecularFormula,
             molecularWeight: parseFloat(compoundProps.MolecularWeight),
             properties: {

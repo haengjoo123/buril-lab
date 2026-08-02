@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import { getInternalApiUrl } from './apiUrl';
+import { normalizeCasNumber } from '../utils/casNumber';
 
 
 const getKoshaBaseUrl = () => getInternalApiUrl('/api/kosha');
@@ -23,6 +24,34 @@ const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@_"
 });
+
+/**
+ * Parse only the pH value from a KOSHA Section 9 detail string. Conditions
+ * such as temperature, concentration and molarity are removed first so their
+ * numbers can never be mistaken for the pH of the reference material.
+ */
+export const parseKoshaPhDetail = (detail?: string | null): number | undefined => {
+    const normalized = String(detail ?? '').normalize('NFKC').trim();
+    if (!normalized) return undefined;
+
+    const explicitPh = normalized.match(/\bpH\s*(?:[:=]|is|는|은)?\s*(-?\d+(?:\.\d+)?)/i);
+    if (explicitPh) {
+        const value = Number(explicitPh[1]);
+        return Number.isFinite(value) && value >= 0 && value <= 14 ? value : undefined;
+    }
+
+    const withoutConditions = normalized
+        .replace(/-?\d+(?:\.\d+)?\s*(?:°\s*[CF]|℃|℉)/gi, ' ')
+        .replace(/-?\d+(?:\.\d+)?\s*%/g, ' ')
+        .replace(/-?\d+(?:\.\d+)?\s*(?:mM|M|mol\s*\/?\s*L|mg\s*\/?\s*mL)\b/gi, ' ')
+        .replace(/\([^)]*(?:°\s*[CF]|℃|℉|%|mM|mol\s*\/?\s*L)[^)]*\)/gi, ' ');
+    const candidates = withoutConditions.match(/-?\d+(?:\.\d+)?/g) ?? [];
+    const values = candidates
+        .map(Number)
+        .filter((value) => Number.isFinite(value) && value >= 0 && value <= 14);
+
+    return values.length === 1 ? values[0] : undefined;
+};
 
 /**
  * Fetches Physicochemical properties (specifically pH) from KOSHA API
@@ -63,15 +92,12 @@ export const fetchKoshaPH = async (chemId: number | string): Promise<number | un
             console.log(`[KOSHA] Found pH Item:`, phItem);
 
             if (phItem.itemDetail) {
-                // Parse pH from string like "3.5 (at 20C)" or "7"
-                // Simple regex to grab the first float number
-                const match = String(phItem.itemDetail).match(/(-?[\d.]+)/);
-                if (match) {
-                    const val = parseFloat(match[1]);
-                    console.log(`[KOSHA] Successfully parsed pH: ${val} from "${phItem.itemDetail}"`);
-                    return val;
+                const parsedPh = parseKoshaPhDetail(String(phItem.itemDetail));
+                if (parsedPh !== undefined) {
+                    console.log(`[KOSHA] Successfully parsed pH: ${parsedPh} from "${phItem.itemDetail}"`);
+                    return parsedPh;
                 } else {
-                    console.warn(`[KOSHA] Failed to regex match pH from details: "${phItem.itemDetail}"`);
+                    console.warn(`[KOSHA] Could not isolate a valid pH from details: "${phItem.itemDetail}"`);
                 }
             } else {
                 console.warn('[KOSHA] pH item found but has no details.');
@@ -143,11 +169,16 @@ export const resolveKoreanChemical = async (keyword: string): Promise<{ casNo: s
         }
 
         const { chemId, chemNameKor, casNo } = bestMatch;
+        const normalizedCasNumber = normalizeCasNumber(String(casNo || ''));
+        if (!normalizedCasNumber) {
+            console.warn(`[KOSHA] Ignored invalid CAS returned for '${keyword}': ${casNo}`);
+            return null;
+        }
 
         console.log(`[KOSHA] Resolved: ${chemNameKor} -> CAS: ${casNo}`);
 
         return {
-            casNo: String(casNo).trim(),
+            casNo: normalizedCasNumber,
             nameKo: chemNameKor || '', // Ensure valid string
             nameEn: '', // KOSHA chemlist does not return English Name. We rely on PubChem for that.
             chemId: Number(chemId)
@@ -216,12 +247,18 @@ export const fetchKoshaSuggestions = async (keyword: string, limit: number = 5):
  */
 export const resolveCasChemical = async (casNo: string): Promise<{ chemId: number; nameKo?: string } | null> => {
     try {
-        console.log(`[KOSHA] Resolving CAS: ${casNo}`);
+        const normalizedCasNumber = normalizeCasNumber(casNo);
+        if (!normalizedCasNumber) {
+            console.warn(`[KOSHA] Rejected invalid CAS: ${casNo}`);
+            return null;
+        }
+
+        console.log(`[KOSHA] Resolving CAS: ${normalizedCasNumber}`);
 
         // Search for Chemical by CAS
         const searchRes = await axios.get(`${getKoshaBaseUrl()}/chemlist`, {
             params: {
-                searchWrd: casNo,
+                searchWrd: normalizedCasNumber,
                 searchCnd: 1, // 1 = CAS No (Confirmed by doc)
             }
         });
@@ -234,12 +271,17 @@ export const resolveCasChemical = async (casNo: string): Promise<{ chemId: numbe
             return null;
         }
 
-        const firstMatch: KoshaSearchItem = Array.isArray(items) ? items[0] : items;
-        const { chemId, chemNameKor } = firstMatch;
+        const list: KoshaSearchItem[] = Array.isArray(items) ? items : [items];
+        const exactMatch = list.find((item) => normalizeCasNumber(String(item.casNo || '')) === normalizedCasNumber);
+        if (!exactMatch) {
+            console.warn(`[KOSHA] Response did not confirm CAS ${normalizedCasNumber}.`);
+            return null;
+        }
+        const { chemId, chemNameKor } = exactMatch;
 
         if (!chemId) return null;
 
-        console.log(`[KOSHA] CAS Resolved: ${casNo} -> chemId: ${chemId}, name: ${chemNameKor}`);
+        console.log(`[KOSHA] CAS Resolved: ${normalizedCasNumber} -> chemId: ${chemId}, name: ${chemNameKor}`);
         return { chemId: Number(chemId), nameKo: chemNameKor || undefined };
 
     } catch (error) {

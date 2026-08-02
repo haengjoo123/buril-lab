@@ -1,10 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useFridgeStore } from '../../store/fridgeStore';
+import { useLabStore } from '../../store/useLabStore';
+import { useAuth } from '../../hooks/useAuth';
 import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2, History, Copy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
-import { inventoryService } from '../../services/inventoryService';
+import {
+    createInventoryOperationRequestId,
+    inventoryService,
+    type InventoryItem,
+    type InventoryUsageCompletionKind,
+} from '../../services/inventoryService';
 import { auditService, type AuditLog } from '../../services/auditService';
 import type { ReagentTemplateType } from '../../types/fridge';
 import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
@@ -18,14 +25,19 @@ import { ResultCard } from '../../components/ResultCard';
 import type { AnalysisResult } from '../../types';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
-import { supabase } from '../../services/supabaseClient';
+import {
+    executeReagentDisposalAction,
+    type ReagentDisposalReason,
+    type WasteBatchDisposalReason,
+} from './reagentDisposalFlow';
 
-type DisposalReason = 'used' | 'expired' | 'broken' | 'other';
-
-const REASONS: { key: DisposalReason; i18n: string; icon: string }[] = [
+const REASONS: { key: ReagentDisposalReason; i18n: string; icon: string }[] = [
     { key: 'used', i18n: 'cabinet_dispose_reason_used', icon: '✅' },
+    { key: 'empty_container', i18n: 'cabinet_dispose_reason_empty_container', icon: '📦' },
+    { key: 'contaminated_container', i18n: 'cabinet_dispose_reason_contaminated_container', icon: '⚠️' },
     { key: 'expired', i18n: 'cabinet_dispose_reason_expired', icon: '⏰' },
     { key: 'broken', i18n: 'cabinet_dispose_reason_broken', icon: '💔' },
+    { key: 'leak', i18n: 'cabinet_dispose_reason_leak', icon: '💧' },
     { key: 'other', i18n: 'cabinet_dispose_reason_other', icon: '📝' },
 ];
 
@@ -40,10 +52,22 @@ const STORAGE_WARNING_PREVIEW_LIMIT = 3;
 
 interface ReagentEditPanelProps {
     variant?: 'floating' | 'desktop-aside';
+    onStartWasteBatch?: (
+        item: InventoryItem,
+        options?: { reason?: WasteBatchDisposalReason },
+    ) => Promise<void>;
 }
 
-export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'floating' }) => {
+export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
+    variant = 'floating',
+    onStartWasteBatch,
+}) => {
     const { t, i18n } = useTranslation();
+    const { user } = useAuth();
+    const currentLabId = useLabStore((state) => state.currentLabId);
+    const disposalReasons = onStartWasteBatch
+        ? REASONS
+        : REASONS.filter(({ key }) => key === 'used' || key === 'empty_container');
     const selectedReagentId = useFridgeStore(s => s.selectedReagentId);
     const shelves = useFridgeStore(s => s.shelves);
     const cabinetId = useFridgeStore(s => s.cabinetId);
@@ -65,8 +89,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
     // Disposal flow state
     const [showDisposalView, setShowDisposalView] = useState(false);
-    const [selectedReason, setSelectedReason] = useState<DisposalReason | null>(null);
+    const [selectedReason, setSelectedReason] = useState<ReagentDisposalReason | null>(null);
     const [isDisposing, setIsDisposing] = useState(false);
+    const [disposalError, setDisposalError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [copyToastMessage, setCopyToastMessage] = useState<string | null>(null);
@@ -82,6 +107,14 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
     // Prevent immediate interaction to avoid ghost clicks on mobile
     const [showModalContent, setShowModalContent] = useState(false);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const analysisDialogRef = useRef<HTMLDivElement>(null);
+    const analysisDialogCloseRef = useRef<HTMLButtonElement>(null);
+    const usageCompletionRequestRef = useRef<{
+        cabinetItemId: string;
+        completionKind: InventoryUsageCompletionKind;
+        requestId: string;
+    } | null>(null);
     // Find the selected item from all shelves
     const selectedItem = React.useMemo(() => {
         if (!selectedReagentId) return null;
@@ -137,6 +170,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
     useEffect(() => {
         setShowDisposalView(false);
         setSelectedReason(null);
+        setDisposalError(null);
 
         if (selectedReagentId) {
             setIsLoadingLogs(true);
@@ -156,6 +190,96 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
         return () => window.clearTimeout(timer);
     }, [copyToastMessage]);
+
+    useEffect(() => {
+        if (!selectedReagentId || !showModalContent || analysisResult) return;
+
+        const panel = panelRef.current;
+        if (panel && !panel.contains(document.activeElement)) {
+            panel.focus();
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                if (showDisposalView) {
+                    setShowDisposalView(false);
+                    setSelectedReason(null);
+                    setDisposalError(null);
+                } else {
+                    setSelectedReagentId(null);
+                }
+                return;
+            }
+
+            if (event.key !== 'Tab' || !panel) return;
+            const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ));
+            if (focusable.length === 0) {
+                event.preventDefault();
+                panel.focus();
+                return;
+            }
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [analysisResult, selectedReagentId, setSelectedReagentId, showDisposalView, showModalContent]);
+
+    useEffect(() => {
+        if (!analysisResult) return;
+
+        const dialog = analysisDialogRef.current;
+        const previouslyFocused = document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        analysisDialogCloseRef.current?.focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                setAnalysisResult(null);
+                return;
+            }
+            if (event.key !== 'Tab' || !dialog) return;
+
+            const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ));
+            if (focusable.length === 0) {
+                event.preventDefault();
+                dialog.focus();
+                return;
+            }
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            if (previouslyFocused?.isConnected) previouslyFocused.focus();
+        };
+    }, [analysisResult]);
 
     if (!selectedReagentId || !selectedItem || !showModalContent) return null;
 
@@ -258,32 +382,84 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
     const expiryStatus = getExpiryStatus(expiryDate);
 
     const handleDeleteClick = () => {
+        setDisposalError(null);
         setShowDisposalView(true);
     };
 
     const confirmDisposal = async () => {
         if (!selectedReason || !cabinetId) return;
         setIsDisposing(true);
+        setDisposalError(null);
         try {
-            // 1. 기존 폐기 로그 (하위 호환성)
-            await cabinetService.logDisposal(cabinetId, selectedItem.name, selectedReason);
-            // 2. 통합 활동 로그 기록
-            await cabinetService.logActivity(cabinetId, 'remove', selectedItem.name, selectedReason);
-            // 3. 연결된 재고 항목 삭제
-            await inventoryService.deleteLinkedInventoryByCabinetItemId({
-                cabinetId,
-                cabinetItemId: selectedReagentId,
-                linkedInventoryItemId: selectedItem.linkedInventoryItemId,
-                itemName: selectedItem.name,
-                reasonKey: selectedReason,
+            const actionResult = await executeReagentDisposalAction({
+                reason: selectedReason,
+                completeUsage: async (completionKind) => {
+                    const pendingRequest = usageCompletionRequestRef.current;
+                    const requestId = pendingRequest?.cabinetItemId === selectedReagentId &&
+                        pendingRequest.completionKind === completionKind
+                        ? pendingRequest.requestId
+                        : createInventoryOperationRequestId();
+                    usageCompletionRequestRef.current = {
+                        cabinetItemId: selectedReagentId,
+                        completionKind,
+                        requestId,
+                    };
+
+                    return inventoryService.recordUsageCompletion({
+                        cabinetItemId: selectedReagentId,
+                        requestId,
+                        completionKind,
+                    });
+                },
+                startWasteBatch: async (reason) => {
+                    if (!onStartWasteBatch) {
+                        throw new Error(t('cabinet_start_waste_batch_failed'));
+                    }
+
+                    const inventoryItem: InventoryItem = {
+                        id: selectedReagentId,
+                        lab_id: currentLabId,
+                        user_id: currentLabId ? null : user?.id ?? null,
+                        name: selectedItem.name,
+                        brand: selectedItem.brand ?? null,
+                        product_number: selectedItem.productNumber ?? null,
+                        cas_number: selectedItem.casNo ?? null,
+                        quantity: 1,
+                        capacity: selectedItem.capacity ?? null,
+                        storage_type: 'cabinet',
+                        cabinet_id: cabinetId,
+                        storage_location_id: null,
+                        product_id: null,
+                        expiry_date: selectedItem.expiryDate ?? null,
+                        memo: selectedItem.notes ?? null,
+                        remaining_percent: selectedItem.remaining_percent ?? null,
+                        created_at: '',
+                        updated_at: '',
+                        linked_inventory_item_id: selectedItem.linkedInventoryItemId ?? null,
+                        shelf_id: selectedItem.shelfId,
+                        shelf_level: selectedItem.shelfLevel,
+                        _source: 'cabinet_item',
+                    };
+
+                    await onStartWasteBatch(inventoryItem, { reason });
+                },
             });
-            // 4. Remove from store
-            removeReagent(selectedReagentId);
-            // 5. Save cabinet state
-            await saveCabinet();
+
+            if (actionResult.kind === 'inventory_usage_completed') {
+                if (actionResult.receipt.cabinetItemRemoved) {
+                    // The RPC already removed the database rows. Only mirror that
+                    // committed result in local cabinet state; do not save again.
+                    removeReagent(selectedReagentId);
+                }
+                usageCompletionRequestRef.current = null;
+            }
+
+            setShowDisposalView(false);
+            setSelectedReason(null);
             setSelectedReagentId(null);
         } catch (err) {
             console.error('Disposal failed:', err);
+            setDisposalError(err instanceof Error ? err.message : t('cabinet_start_waste_batch_failed'));
         } finally {
             setIsDisposing(false);
         }
@@ -344,13 +520,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
             });
 
             if (!placed) {
-                const { error } = await supabase
-                    .from('inventory')
-                    .delete()
-                    .eq('id', createdInventory.id);
-                if (error) {
-                    console.error('Failed to rollback copied inventory row after no-space result:', error);
-                }
+                await inventoryService.deleteItem({ ...createdInventory, _source: 'inventory' });
                 setSelectedReagentId(sourcePlacementId);
                 setCopyToastMessage(t('reagent_no_space'));
                 return;
@@ -378,12 +548,30 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
             }
 
             if (createdInventoryId) {
-                const { error } = await supabase
-                    .from('inventory')
-                    .delete()
-                    .eq('id', createdInventoryId);
-                if (error) {
-                    console.error('Failed to rollback copied inventory row:', error);
+                try {
+                    await inventoryService.deleteItem({
+                        id: createdInventoryId,
+                        lab_id: null,
+                        user_id: null,
+                        name: sourceItem.name,
+                        brand: sourceItem.brand ?? null,
+                        product_number: sourceItem.productNumber ?? null,
+                        cas_number: sourceItem.casNo ?? null,
+                        quantity: 1,
+                        capacity: sourceItem.capacity ?? null,
+                        storage_type: 'cabinet',
+                        cabinet_id: cabinetId,
+                        storage_location_id: null,
+                        product_id: null,
+                        expiry_date: sourceItem.expiryDate ?? null,
+                        memo: sourceItem.notes ?? null,
+                        remaining_percent: sourceItem.remaining_percent ?? null,
+                        created_at: '',
+                        updated_at: '',
+                        _source: 'inventory',
+                    });
+                } catch (rollbackError) {
+                    console.error('Failed to rollback copied inventory row:', rollbackError);
                 }
             }
 
@@ -465,25 +653,34 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
 
     return (
         <>
-            <div className={panelClassName}>
+            <div
+                ref={panelRef}
+                className={panelClassName}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="reagent-edit-panel-title"
+                tabIndex={-1}
+            >
                 {/* Header */}
                 <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/95">
                     <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
                         {showDisposalView ? (
                             <>
                                 <Trash2 size={18} className="text-red-500" />
-                                <span>{t('cabinet_dispose_reason_title')}</span>
+                                <span id="reagent-edit-panel-title">{t('cabinet_dispose_reason_title')}</span>
                             </>
                         ) : (
                             <>
                                 <Beaker size={18} className="text-blue-500" />
-                                <span>{t('cabinet_edit_title')}</span>
+                                <span id="reagent-edit-panel-title">{t('cabinet_edit_title')}</span>
                             </>
                         )}
                     </div>
                     <button
                         onClick={handleClose}
-                        className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        type="button"
+                        aria-label={t('btn_close')}
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                     >
                         <X size={18} />
                     </button>
@@ -496,33 +693,57 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
                             <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">
                                 <span className="font-medium text-slate-700 dark:text-slate-200">{selectedItem.name}</span> — {t('cabinet_dispose_reason_desc')}
                             </p>
-                            {REASONS.map(reason => (
+                            {disposalReasons.map(reason => (
                                 <button
                                     key={reason.key}
-                                    onClick={() => setSelectedReason(reason.key)}
-                                    className={`w-full px-3 py-2.5 text-sm rounded-lg border transition-all flex items-center gap-2.5 ${selectedReason === reason.key
-                                        ? 'border-red-400 bg-red-50 text-red-700 ring-1 ring-red-300 dark:border-red-500/70 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-500/40'
+                                    onClick={() => {
+                                        setSelectedReason(reason.key);
+                                        setDisposalError(null);
+                                    }}
+                                    className={`flex min-h-11 w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-all ${selectedReason === reason.key
+                                        ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300 dark:border-blue-500/70 dark:bg-blue-950/40 dark:text-blue-200 dark:ring-blue-500/40'
                                         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700'
                                         }`}
                                 >
                                     <span className="text-base">{reason.icon}</span>
                                     <span className="font-medium">{t(reason.i18n)}</span>
                                     {selectedReason === reason.key && (
-                                        <CheckCircle2 size={16} className="ml-auto text-red-500" />
+                                        <CheckCircle2 size={16} className="ml-auto text-blue-500" />
                                     )}
                                 </button>
                             ))}
+                            {selectedReason && (
+                                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    {t(selectedReason === 'used' || selectedReason === 'empty_container'
+                                        ? 'cabinet_usage_complete_notice'
+                                        : selectedReason === 'contaminated_container'
+                                            ? 'cabinet_contaminated_container_notice'
+                                            : 'cabinet_waste_batch_notice')}
+                                </p>
+                            )}
                         </div>
 
                         {/* Disposal Confirm Button */}
                         <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+                            {disposalError && (
+                                <p role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-200">
+                                    {disposalError}
+                                </p>
+                            )}
                             <button
                                 onClick={confirmDisposal}
                                 disabled={!selectedReason || isDisposing}
-                                className="w-full px-3.5 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                type="button"
+                                className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                <Trash2 size={16} />
-                                {isDisposing ? t('cabinet_processing') : t('cabinet_delete')}
+                                {selectedReason === 'used' || selectedReason === 'empty_container'
+                                    ? <CheckCircle2 size={16} />
+                                    : <FlaskConical size={16} />}
+                                {isDisposing
+                                    ? t('cabinet_processing')
+                                    : t(selectedReason === 'used' || selectedReason === 'empty_container'
+                                        ? 'cabinet_action_usage_complete'
+                                        : 'cabinet_action_continue_waste_batch')}
                             </button>
                         </div>
                     </>
@@ -1010,15 +1231,28 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({ variant = 'f
             {/* Disposal Guide Modal overlay */}
             {analysisResult && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+                    <div
+                        ref={analysisDialogRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="reagent-disposal-guide-title"
+                        tabIndex={-1}
+                        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+                    >
                         <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
-                            <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                            <h3
+                                id="reagent-disposal-guide-title"
+                                className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2"
+                            >
                                 <BookOpen className="w-5 h-5 text-blue-500" />
                                 {t('btn_check_disposal_guide', '폐기가이드 확인')}
                             </h3>
                             <button
+                                ref={analysisDialogCloseRef}
                                 onClick={() => setAnalysisResult(null)}
-                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition"
+                                type="button"
+                                aria-label={t('btn_close')}
+                                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-slate-700 dark:hover:text-gray-300"
                             >
                                 <X size={20} />
                             </button>

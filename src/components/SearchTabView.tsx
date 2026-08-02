@@ -10,6 +10,7 @@ import type { CabinetSearchResult } from '../services/cabinetService';
 import type { MediaProduct, SortOption } from '../services/mediaProductService';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { fetchWasteLogs } from '../services/wasteLogService';
+import type { ScannerSelectionMeta } from './Scanner';
 
 type WasteLogChemicalEntry = Partial<CartItem> & {
   chemical?: Partial<CartItem['chemical']> | null;
@@ -38,6 +39,7 @@ interface SearchTabViewProps {
   isAiAnalyzing: boolean;
   error: string | null;
   result: AnalysisResult | null;
+  scanSelectionMeta?: ScannerSelectionMeta;
   mediaProducts: MediaProduct[];
   mediaBrands: string[];
   mediaCount: number;
@@ -80,6 +82,7 @@ export function SearchTabView({
   isAiAnalyzing,
   error,
   result,
+  scanSelectionMeta,
   mediaProducts,
   mediaBrands,
   mediaCount,
@@ -552,6 +555,7 @@ export function SearchTabView({
               )}
               <ResultCard
                 result={result}
+                scanSelectionMeta={scanSelectionMeta}
                 onReset={onReset}
                 onAddConfirmed={onResultAddConfirmed}
                 onRequireAuth={onRequireAuth}

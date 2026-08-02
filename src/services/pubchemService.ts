@@ -11,6 +11,7 @@
  */
 
 import { supabase } from './supabaseClient';
+import { normalizeCasNumber } from '../utils/casNumber';
 
 // ═══════════════════════════════════════
 // Types
@@ -239,18 +240,6 @@ const PUG_VIEW_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view';
 // ═══════════════════════════════════════
 
 /**
- * Normalize CAS number: remove spaces, validate format
- */
-function normalizeCAS(cas: string): string | null {
-    const cleaned = cas.replace(/\s+/g, '').trim();
-    // CAS format: digits-digits-digit (e.g. 7647-01-0)
-    if (/^\d{1,7}-\d{2}-\d$/.test(cleaned)) {
-        return cleaned;
-    }
-    return null;
-}
-
-/**
  * Extract H-code from a hazard statement string.
  * e.g. "H302: Harmful if swallowed [Warning Acute toxicity, oral]" → "H302"
  */
@@ -439,7 +428,7 @@ function findGHSInformation(sections: any[]): any[] {
  */
 export async function lookupGHSByCAS(casNumber: string, options?: LookupGHSOptions): Promise<PubChemGHSResult> {
     // Normalize
-    const cas = normalizeCAS(casNumber);
+    const cas = normalizeCasNumber(casNumber);
     if (!cas) {
         return {
             cid: 0,

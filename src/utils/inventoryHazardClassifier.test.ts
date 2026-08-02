@@ -56,6 +56,7 @@ describe('classifyInventoryHazard', () => {
 
         expect(result.level).toBe('high');
         expect(result.groups).toContain('TOXIC_AZIDE');
+        expect(result.filterCategories).toEqual(expect.arrayContaining(['special_high', 'toxic']));
         expect(result.groupLabelKeys).toContain('storage_group_azide');
     });
 
@@ -71,6 +72,32 @@ describe('classifyInventoryHazard', () => {
         expect(result.level).toBe('high');
         expect(result.groups).toContain('ACUTE_TOXIC');
         expect(result.groupLabelKeys).toContain('storage_group_acute_toxic');
+    });
+
+    it('keeps ordinary flammables visible without labeling every solvent special-high', () => {
+        const result = classifyInventoryHazard(
+            createInventoryItem({ name: 'Acetone', cas_number: '67-64-1' }),
+            { hCodes: ['H225'] },
+        );
+
+        expect(result.level).toBe('none');
+        expect(result.filterCategories).toContain('flammable');
+        expect(result.filterCategories).not.toContain('special_high');
+        expect(result.groupLabelKeys).toContain('storage_group_flammable');
+    });
+
+    it('separates corrosive and other managed risks into their own filters', () => {
+        const corrosive = classifyInventoryHazard(
+            createInventoryItem({ name: 'Hydrochloric acid', cas_number: '7647-01-0' }),
+            { hCodes: ['H314'] },
+        );
+        const environmental = classifyInventoryHazard(
+            createInventoryItem({ name: 'Environmental sample' }),
+            { hCodes: ['H410'] },
+        );
+
+        expect(corrosive.filterCategories).toContain('corrosive');
+        expect(environmental.filterCategories).toContain('other_managed');
     });
 });
 

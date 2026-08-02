@@ -1,6 +1,7 @@
 import { useEffect, useCallback, lazy, Suspense, useRef, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { MainLayout } from './components/MainLayout';
 import { SearchTabView } from './components/SearchTabView';
 import { BottomTabNav } from './components/BottomTabNav';
@@ -9,13 +10,20 @@ import { openVoiceAgentSheet } from './components/openVoiceAgentSheet';
 import { GatewayLanding } from './components/GatewayLanding';
 
 const Scanner = lazy(() => import('./components/Scanner'));
+import type { ScannerSelectionMeta } from './components/Scanner';
 
 import { CartView } from './components/CartView';
+import { WasteV2DisabledCartView } from './components/WasteV2DisabledCartView';
+import { isWasteV2Enabled } from './config/featureFlags';
 import { AuthView } from './components/AuthView';
 import { ResetPasswordView } from './components/ResetPasswordView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import type { CabinetSearchResult } from './services/cabinetService';
+import type { InventoryItem } from './services/inventoryService';
+import { searchChemical } from './services/searchService';
+import { analyzeChemical } from './utils/chemicalAnalyzer';
+import { normalizeCasNumber } from './utils/casNumber';
 import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
 import { useAppUiState, type AppTab } from './hooks/useAppUiState';
@@ -37,6 +45,10 @@ import {
 import { focusCabinetItem } from './services/cabinetFocusService';
 import { analyticsService } from './services/analyticsService';
 import type { VoiceQueryResponse, VoiceUiAction } from './utils/voiceAgent';
+import {
+  requiresSolidSlurryWasteBatch,
+  type WasteBatchDisposalReason,
+} from './features/fridge/reagentDisposalFlow';
 
 const WasteLogView = lazy(() =>
   import('./components/WasteLogView').then((module) => ({ default: module.WasteLogView }))
@@ -90,9 +102,14 @@ function App() {
   const activeCabinetId = searchParams.get('id') || locationState?.cabinetId || null;
 
   const cart = useWasteStore((state) => state.cart);
+  const setWasteScope = useWasteStore((state) => state.setScope);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
   const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
+  const [scanSelection, setScanSelection] = useState<{
+    searchTerm: string;
+    meta: ScannerSelectionMeta;
+  } | null>(null);
   const [isOnboardingRemoteChecked, setIsOnboardingRemoteChecked] = useState(false);
   const currentLabId = useLabStore((state) => state.currentLabId);
   const myLabs = useLabStore((state) => state.myLabs);
@@ -142,6 +159,13 @@ function App() {
     addSearchHistory,
   });
 
+  useEffect(() => {
+    if (!scanSelection || !lastSearchQuery) return;
+    if (scanSelection.searchTerm.trim().toLowerCase() !== lastSearchQuery.trim().toLowerCase()) {
+      setScanSelection(null);
+    }
+  }, [lastSearchQuery, scanSelection]);
+
   const isAuthenticated = !!session;
   const navigateToLogin = useCallback((returnTo: string = `${location.pathname}${location.search}`) => {
     navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
@@ -164,6 +188,104 @@ function App() {
     navigate,
     isAuthenticated,
   });
+
+  const handleStartInventoryWasteBatch = useCallback(async (
+    item: InventoryItem,
+    options?: { reason?: WasteBatchDisposalReason },
+  ) => {
+    const wasteState = useWasteStore.getState();
+    const requiresSolidMatrix = requiresSolidSlurryWasteBatch(options?.reason);
+    const incidentContext = options?.reason === 'broken' || options?.reason === 'leak'
+      ? options.reason
+      : null;
+    const initialScopeKey = wasteState.scopeKey;
+    const initialWasEmpty = wasteState.batch.components.length === 0;
+    if (
+      (item.lab_id ?? null) !== (wasteState.batch.labId ?? null) ||
+      (item.lab_id === null && item.user_id !== (wasteState.batch.userId ?? null))
+    ) {
+      throw new Error(t('cabinet_waste_scope_changed'));
+    }
+    if (incidentContext && !initialWasEmpty) {
+      throw new Error(t('cabinet_incident_waste_batch_conflict'));
+    }
+    if (requiresSolidMatrix && !initialWasEmpty && wasteState.batch.matrix !== 'solid_slurry') {
+      throw new Error(t('cabinet_solid_waste_batch_conflict'));
+    }
+
+    const verifiedInventoryCas = normalizeCasNumber(item.cas_number);
+    const queryForLookup = verifiedInventoryCas || item.name;
+    let chemical = null;
+    try {
+      chemical = await searchChemical(queryForLookup);
+    } catch (lookupError) {
+      console.warn('[Waste V2] Inventory chemical lookup failed; preserving an unverified component.', lookupError);
+    }
+
+    const analysis = analyzeChemical(chemical ?? {
+      id: `inventory:${item.id}`,
+      name: item.name,
+      casNumber: verifiedInventoryCas ?? '',
+      molecularFormula: '',
+      properties: {
+        isOrganic: false,
+        isHalogenated: false,
+      },
+    });
+    const identityWasVerifiedByCas = Boolean(
+      verifiedInventoryCas &&
+      chemical &&
+      normalizeCasNumber(chemical.casNumber) === verifiedInventoryCas,
+    );
+    const isCabinetItem = item._source === 'cabinet_item';
+    const latestWasteState = useWasteStore.getState();
+    if (
+      latestWasteState.scopeKey !== initialScopeKey ||
+      (item.lab_id ?? null) !== (latestWasteState.batch.labId ?? null) ||
+      (item.lab_id === null && item.user_id !== (latestWasteState.batch.userId ?? null))
+    ) {
+      throw new Error(t('cabinet_waste_scope_changed'));
+    }
+    const wasEmpty = latestWasteState.batch.components.length === 0;
+    if (incidentContext && !wasEmpty) {
+      throw new Error(t('cabinet_incident_waste_batch_conflict'));
+    }
+    if (requiresSolidMatrix && !wasEmpty && latestWasteState.batch.matrix !== 'solid_slurry') {
+      throw new Error(t('cabinet_solid_waste_batch_conflict'));
+    }
+
+    latestWasteState.addToCart(analysis, {
+      sourceType: isCabinetItem ? 'cabinet' : 'inventory',
+      sourceRef: item.id,
+      inventoryId: isCabinetItem ? undefined : item.id,
+      cabinetId: isCabinetItem ? item.id : undefined,
+      // Name-only lookups can resolve to similarly named materials. Only an
+      // exact, checksum-valid CAS match is automatically confirmed.
+      identityConfidence: identityWasVerifiedByCas ? 'verified' : 'review_required',
+      ghsDataStatus: chemical?.ghs ? 'verified' : chemical ? 'not_checked' : 'lookup_failed',
+      inventoryDisposalQuantity: isCabinetItem || item.quantity <= 1 ? 1 : undefined,
+      inventorySnapshot: {
+        brand: item.brand,
+        productNumber: item.product_number,
+        location: item.cabinet_name || item.storage_location_name || null,
+        nominalCapacity: item.capacity,
+        quantity: item.quantity,
+        remainingPercent: item.remaining_percent,
+      },
+    });
+    if (wasEmpty && requiresSolidMatrix) {
+      useWasteStore.getState().setMatrix('solid_slurry');
+    }
+    if (wasEmpty && options?.reason === 'leak') {
+      // A spill can involve liquid, absorbent, packaging, or an unknown matrix.
+      // Do not infer an ordinary solvent stream from the inventory product alone.
+      useWasteStore.getState().setMatrix('unknown');
+    }
+    if (incidentContext) {
+      useWasteStore.getState().setIncidentContext(incidentContext);
+    }
+    setIsCartOpen(true);
+  }, [setIsCartOpen, t]);
   const wasOnboardingOpenRef = useRef(false);
   const onboardingBaselineRef = useRef({
     result,
@@ -190,6 +312,45 @@ function App() {
   const nativeGatewayRedirect = isNativeApp && isGatewayRoute ? labAppRoute() : null;
   const rootSearchRedirect = isGatewayRoute && searchParams.has('q') ? labAppRoute() : null;
   const labAppRedirectTarget = legacyLabAppRedirect ?? nativeGatewayRedirect ?? rootSearchRedirect;
+
+  useEffect(() => {
+    setWasteScope(activeOnboardingUserId, currentLabId);
+  }, [activeOnboardingUserId, currentLabId, setWasteScope]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
+
+    let disposed = false;
+    let removeListener: (() => Promise<void>) | undefined;
+    void CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (isScanning) {
+        setIsScanning(false);
+        return;
+      }
+      if (isCartOpen) {
+        setIsCartOpen(false);
+        return;
+      }
+      if (canGoBack) {
+        navigate(-1);
+        return;
+      }
+      if (window.confirm(t('native_exit_confirm' as never))) {
+        void CapacitorApp.exitApp();
+      }
+    }).then((handle) => {
+      if (disposed) {
+        void handle.remove();
+        return;
+      }
+      removeListener = handle.remove;
+    });
+
+    return () => {
+      disposed = true;
+      void removeListener?.();
+    };
+  }, [isCartOpen, isScanning, navigate, setIsCartOpen, setIsScanning, t]);
 
   useEffect(() => {
     if (session) {
@@ -503,8 +664,9 @@ function App() {
     });
   }, [navigate, navigateToLogin, session]);
 
-  const handleScan = (scannedText: string) => {
+  const handleScan = (scannedText: string, selectionMeta: ScannerSelectionMeta) => {
     setIsScanning(false);
+    setScanSelection({ searchTerm: scannedText, meta: selectionMeta });
     navigateWithFreshFilters(scannedText);
   };
 
@@ -618,7 +780,10 @@ function App() {
           cartCount={cart.length}
           hasSearchResult={Boolean(result)}
           isNativeApp={isNativeApp}
-          onRunSampleSearch={() => navigateWithFreshFilters('Acetone')}
+          onRunSampleSearch={() => {
+            setScanSelection(null);
+            navigateWithFreshFilters('Acetone');
+          }}
           onOpenScanner={() => setIsScanning(true)}
           onNavigateTab={handleOnboardingNavigateTab}
         />
@@ -638,13 +803,24 @@ function App() {
       )}
 
       {isCartOpen && isAuthenticated && (
-        <CartView
-          onClose={() => setIsCartOpen(false)}
-          onDisposed={() => {
-            incrementLogRefreshKey();
-            navigate(labAppRoute('/logs'));
-          }}
-        />
+        isWasteV2Enabled ? (
+          <CartView
+            onClose={() => setIsCartOpen(false)}
+            onDisposed={incrementLogRefreshKey}
+            onOpenLogs={(wasteLogId, openCorrection = false) => navigate(wasteLogId
+              ? `${labAppRoute('/logs')}?record=${encodeURIComponent(wasteLogId)}${openCorrection ? '&correct=1' : ''}`
+              : labAppRoute('/logs'))}
+            onAddComponent={() => {
+              setIsCartOpen(false);
+              handleTabClick('search');
+            }}
+          />
+        ) : (
+          <WasteV2DisabledCartView
+            onClose={() => setIsCartOpen(false)}
+            onOpenLogs={() => navigate(labAppRoute('/logs'))}
+          />
+        )
       )}
 
       <MainLayout
@@ -675,17 +851,26 @@ function App() {
             <div className="h-full">
               {activeCabinetId ? (
                 <FridgeView
+                  key={`${activeCabinetId}:${logRefreshKey}`}
                   cabinetId={activeCabinetId}
                   onBack={() => navigate(labAppRoute('/cabinet'))}
+                  onStartWasteBatch={isWasteV2Enabled ? handleStartInventoryWasteBatch : undefined}
                 />
               ) : (
                 <CabinetListView onSelectCabinet={(id) => navigate(labAppRoute(`/cabinet?id=${id}`))} />
               )}
             </div>
           ) : activeTab === 'logs' ? (
-            <WasteLogView key={logRefreshKey} />
+            <WasteLogView
+              key={logRefreshKey}
+              initialWasteLogId={searchParams.get('record')}
+              openCorrection={searchParams.get('correct') === '1'}
+            />
           ) : activeTab === 'inventory' ? (
-            <InventoryListView />
+            <InventoryListView
+              key={logRefreshKey}
+              onStartWasteBatch={isWasteV2Enabled ? handleStartInventoryWasteBatch : undefined}
+            />
           ) : activeTab === 'admin' && isAdmin ? (
             <GlobalAuditLogsView />
           ) : (
@@ -715,6 +900,10 @@ function App() {
               isAiAnalyzing={isAiAnalyzing}
               error={error}
               result={result}
+              scanSelectionMeta={scanSelection &&
+                scanSelection.searchTerm.trim().toLowerCase() === lastSearchQuery.trim().toLowerCase()
+                ? scanSelection.meta
+                : undefined}
               mediaProducts={mediaProducts}
               mediaBrands={mediaBrands}
               mediaCount={mediaCount}
@@ -723,15 +912,29 @@ function App() {
               selectedBrand={selectedBrand}
               sortBy={sortBy}
               recentSearches={recentSearches}
-              onQueryChange={setQuery}
-              onSearchSubmit={handleSearch}
-              onReset={handleReset}
+              onQueryChange={(value) => {
+                if (scanSelection && value.trim().toLowerCase() !== scanSelection.searchTerm.trim().toLowerCase()) {
+                  setScanSelection(null);
+                }
+                setQuery(value);
+              }}
+              onSearchSubmit={(event) => {
+                setScanSelection(null);
+                handleSearch(event);
+              }}
+              onReset={() => {
+                setScanSelection(null);
+                handleReset();
+              }}
               onResultAddConfirmed={() => {
                 if (isWelcomeOpen) {
                   completeOnboardingMission('disposal', 'search');
                 }
               }}
-              onSuggestionClick={navigateWithFreshFilters}
+              onSuggestionClick={(term) => {
+                setScanSelection(null);
+                navigateWithFreshFilters(term);
+              }}
               onOpenScanner={() => setIsScanning(true)}
               onClearSearchHistory={clearSearchHistory}
               onRemoveSearchHistory={removeSearchHistory}
@@ -777,6 +980,7 @@ function App() {
         currentContext={{
           screen: activeTab === 'cabinet' ? 'cabinet' : 'search',
           cabinetId: activeCabinetId || undefined,
+          labId: currentLabId || undefined,
           language: i18n.language.startsWith('ko') ? 'ko' : 'en',
         }}
         onUiAction={handleVoiceUiAction}

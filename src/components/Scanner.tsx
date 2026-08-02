@@ -1,25 +1,63 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import { X, Loader2, Image as ImageIcon, RotateCcw, Check, Search, Sparkles } from 'lucide-react';
-import { performGeminiImageAnalysis } from '../services/geminiVisionService';
+import {
+    X,
+    Loader2,
+    Image as ImageIcon,
+    RotateCcw,
+    Check,
+    Search,
+    Sparkles,
+    AlertTriangle,
+} from 'lucide-react';
+import {
+    getAutoVerifiedReagentScanIdentity,
+    getReagentScanIdentityCandidates,
+    scanReagentLabel,
+    type ReagentScanFieldSnapshot,
+    type ReagentScanIdentityField,
+    type ReagentScanResult,
+    type ReagentScanValidation,
+} from '../services/geminiReagentScanService';
 import { useTranslation } from 'react-i18next';
 
+export interface ScannerSelectionMeta {
+    scanSnapshot: ReagentScanResult;
+    selectedField: ReagentScanIdentityField;
+    userConfirmed: boolean;
+    autoVerifiedIdentity: boolean;
+}
+
 interface ScannerProps {
-    onScan: (text: string) => void;
+    onScan: (searchTerm: string, selectionMeta: ScannerSelectionMeta) => void;
     onClose: () => void;
 }
 
 type ScannerState = 'camera' | 'preview' | 'processing' | 'result';
 
+const FOCUSABLE_SELECTOR = [
+    'button:not([disabled])',
+    '[href]',
+    'input:not([disabled]):not([tabindex="-1"])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
 export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const resultPanelRef = useRef<HTMLDivElement>(null);
     const webcamRef = useRef<Webcam>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { t } = useTranslation();
 
     const [state, setState] = useState<ScannerState>('camera');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState<string | null>(null);
+    const [scanResult, setScanResult] = useState<ReagentScanResult | null>(null);
+    const [selectedField, setSelectedField] = useState<ReagentScanIdentityField | null>(null);
+    const [userConfirmedSelection, setUserConfirmedSelection] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [cameraPermissionDenied, setCameraPermissionDenied] = useState(false);
     const [showFlash, setShowFlash] = useState(false);
 
     // Stop all camera tracks helper
@@ -37,11 +75,74 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         return () => stopCamera();
     }, [stopCamera]);
 
+    const closeScanner = useCallback(() => {
+        stopCamera();
+        onClose();
+    }, [onClose, stopCamera]);
+
+    useEffect(() => {
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+
+        const previouslyFocused = document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        const initialFocus = dialog.querySelector<HTMLElement>('[data-dialog-initial-focus]');
+        (initialFocus ?? dialog).focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeScanner();
+                return;
+            }
+
+            if (event.key !== 'Tab') return;
+            const focusable = Array.from(
+                dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+            ).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+
+            if (focusable.length === 0) {
+                event.preventDefault();
+                dialog.focus();
+                return;
+            }
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            const activeElement = document.activeElement;
+            if (!dialog.contains(activeElement)) {
+                event.preventDefault();
+                (event.shiftKey ? last : first).focus();
+            } else if (event.shiftKey && activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            previouslyFocused?.focus();
+        };
+    }, [closeScanner]);
+
+    useEffect(() => {
+        if (state !== 'result' || !scanResult) return;
+        resultPanelRef.current?.focus();
+    }, [scanResult, state]);
+
     const resetToCamera = useCallback(() => {
         setState('camera');
         setCapturedImage(null);
-        setSearchTerm(null);
+        setScanResult(null);
+        setSelectedField(null);
+        setUserConfirmedSelection(false);
         setError(null);
+        setCameraPermissionDenied(false);
     }, []);
 
     const processImage = useCallback(async (imageSrc: string) => {
@@ -49,13 +150,18 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         setError(null);
 
         try {
-            const result = await performGeminiImageAnalysis(imageSrc);
+            const result = await scanReagentLabel(imageSrc);
+            const identityCandidates = getReagentScanIdentityCandidates(result);
 
-            if (result.success && result.searchTerm) {
-                setSearchTerm(result.searchTerm);
+            if (result.success && identityCandidates.length > 0) {
+                const autoVerifiedField = getAutoVerifiedReagentScanIdentity(result);
+                setScanResult(result);
+                setSelectedField(autoVerifiedField);
+                setUserConfirmedSelection(false);
                 setState('result');
             } else {
-                setError(result.error || t('scanner_error_cam'));
+                setScanResult(result.success ? result : null);
+                setError(result.error || t('scanner_error_cas'));
                 setState('result');
             }
         } catch (err) {
@@ -162,15 +268,84 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         }
     };
 
-    const useSearchTerm = () => {
-        if (searchTerm) {
-            stopCamera();
-            onScan(searchTerm);
-        }
+    const identityCandidates = scanResult
+        ? getReagentScanIdentityCandidates(scanResult)
+        : [];
+    const autoVerifiedField = scanResult
+        ? getAutoVerifiedReagentScanIdentity(scanResult)
+        : null;
+    const selectedCandidate = identityCandidates.find(({ field }) => field === selectedField);
+    const canUseSelection = Boolean(
+        scanResult
+        && selectedCandidate
+        && (autoVerifiedField === selectedField || userConfirmedSelection),
+    );
+
+    const selectIdentity = (field: ReagentScanIdentityField) => {
+        setSelectedField(field);
+        setUserConfirmedSelection(true);
     };
 
+    const useSearchTerm = () => {
+        if (!scanResult || !selectedCandidate || !canUseSelection || !selectedField) return;
+
+        stopCamera();
+        onScan(selectedCandidate.value, {
+            scanSnapshot: scanResult,
+            selectedField,
+            userConfirmed: userConfirmedSelection,
+            autoVerifiedIdentity: autoVerifiedField === selectedField,
+        });
+    };
+
+    const resultFields: Array<{
+        key: Exclude<keyof NonNullable<ReagentScanResult['fieldSnapshots']>, 'containerType'>;
+        label: string;
+        snapshot?: ReagentScanFieldSnapshot<string>;
+    }> = scanResult ? [
+        { key: 'name', label: t('scanner_field_name'), snapshot: scanResult.fieldSnapshots?.name },
+        { key: 'casNumber', label: t('scanner_field_cas'), snapshot: scanResult.fieldSnapshots?.casNumber },
+        { key: 'capacity', label: t('scanner_field_capacity'), snapshot: scanResult.fieldSnapshots?.capacity },
+        { key: 'expiryDate', label: t('scanner_field_expiry'), snapshot: scanResult.fieldSnapshots?.expiryDate },
+        { key: 'brand', label: t('scanner_field_brand'), snapshot: scanResult.fieldSnapshots?.brand },
+        { key: 'productNumber', label: t('scanner_field_product_number'), snapshot: scanResult.fieldSnapshots?.productNumber },
+    ] : [];
+
+    const validationLabel = (validation: ReagentScanValidation | undefined, confidence = 0) => {
+        if (validation === 'valid' && confidence >= 0.8) return t('scanner_validation_verified');
+        if (validation === 'valid' || validation === 'review_required') return t('scanner_validation_review');
+        if (validation === 'invalid') return t('scanner_validation_invalid');
+        return t('scanner_validation_missing');
+    };
+
+    const validationClasses = (validation: ReagentScanValidation | undefined, confidence = 0) => {
+        if (validation === 'valid' && confidence >= 0.8) {
+            return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200';
+        }
+        if (validation === 'valid' || validation === 'review_required') {
+            return 'border-amber-400/30 bg-amber-400/10 text-amber-100';
+        }
+        if (validation === 'invalid') {
+            return 'border-red-400/30 bg-red-400/10 text-red-100';
+        }
+        return 'border-slate-500/30 bg-slate-700/50 text-slate-300';
+    };
+
+    const confidencePercent = (confidence: number) => (
+        Number.isFinite(confidence)
+            ? Math.round(Math.min(Math.max(confidence, 0), 1) * 100)
+            : 0
+    );
+
     return (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-center items-center">
+        <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="scanner-dialog-title"
+            tabIndex={-1}
+            className="fixed inset-0 z-50 bg-black flex flex-col justify-center items-center"
+        >
             {/* Flash Effect */}
             {showFlash && (
                 <div className="absolute inset-0 bg-white z-50 animate-pulse" />
@@ -178,15 +353,17 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
             {/* Close Button */}
             <button
-                onClick={() => { stopCamera(); onClose(); }}
+                type="button"
+                onClick={closeScanner}
                 aria-label={t('btn_close')}
-                className="absolute top-5 right-5 text-white/80 hover:text-white p-2 z-30"
+                data-dialog-initial-focus
+                className="absolute right-5 top-[calc(1.25rem+env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center text-white/80 hover:text-white z-30"
             >
                 <X className="w-8 h-8" />
             </button>
 
             {/* State-based Header */}
-            <div className="absolute top-16 text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-20">
+            <div id="scanner-dialog-title" className="absolute top-[calc(4rem+env(safe-area-inset-top))] text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-20">
                 {state === 'camera' && t('scanner_guide')}
                 {state === 'preview' && t('scanner_preview')}
                 {state === 'processing' && t('scanner_processing')}
@@ -210,13 +387,20 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                             }}
                             className="w-full h-full object-cover"
                             onUserMedia={(stream) => {
+                                setCameraPermissionDenied(false);
+                                setError(null);
                                 const track = stream.getVideoTracks()[0];
                                 const settings = track.getSettings();
                                 console.log(`[Scanner] Camera initialized: ${settings.width}x${settings.height}`);
                             }}
                             onUserMediaError={(err) => {
                                 console.error('[Scanner] Camera error:', err);
-                                setError(t('scanner_error_cam'));
+                                const errorName = typeof err === 'object' && err && 'name' in err
+                                    ? String((err as { name?: string }).name)
+                                    : '';
+                                const denied = ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName);
+                                setCameraPermissionDenied(denied);
+                                setError(denied ? t('scanner_permission_denied') : t('scanner_error_cam'));
                             }}
                         />
                         {/* Viewfinder Overlay */}
@@ -246,45 +430,138 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                     </div>
                 )}
 
-                {/* Result Overlay */}
-                {state === 'result' && searchTerm && (
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 pt-20 flex flex-col gap-4">
-                        <div className="bg-slate-900/80 backdrop-blur-md border border-purple-500/30 rounded-xl p-4 shadow-xl">
-                            <div className="flex items-center gap-2 text-purple-300 text-xs mb-2 uppercase tracking-wide font-semibold">
-                                <Sparkles className="w-3 h-3" />
-                                <span>{t('scanner_detected_query')}</span>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                <div className="bg-slate-800 p-2 rounded-lg text-slate-400 border border-slate-700">
-                                    <Search className="w-5 h-5" />
+                {/* Structured Result Overlay */}
+                {state === 'result' && scanResult && identityCandidates.length > 0 && (
+                    <div
+                        ref={resultPanelRef}
+                        tabIndex={-1}
+                        aria-live="polite"
+                        className="absolute inset-0 overflow-y-auto bg-slate-950/95 px-4 pb-5 pt-14 text-white backdrop-blur-sm"
+                    >
+                        <div className="mx-auto flex w-full max-w-sm flex-col gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
+                                    <Sparkles aria-hidden="true" className="h-4 w-4" />
+                                    <span>{t('scanner_structured_result')}</span>
                                 </div>
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="flex-1 text-lg font-bold text-white bg-transparent outline-none border-b border-white/20 focus:border-purple-400 focus:ring-0 pb-1"
-                                    placeholder={t('scanner_edit_query_placeholder')}
-                                />
+                                <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                                    {t('scanner_structured_result_help')}
+                                </p>
                             </div>
-                        </div>
 
-                        <button
-                            onClick={useSearchTerm}
-                            className="w-full flex justify-center items-center gap-2 py-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors font-bold shadow-lg shadow-purple-900/50"
-                        >
-                            <Check className="w-5 h-5" />
-                            <span>{t('scanner_search_with_query')}</span>
-                        </button>
+                            <fieldset className="rounded-xl border border-purple-400/30 bg-purple-400/10 p-3">
+                                <legend className="px-1 text-sm font-semibold text-white">
+                                    {identityCandidates.length > 1 || !autoVerifiedField
+                                        ? t('scanner_choose_identity')
+                                        : t('scanner_selected_identity')}
+                                </legend>
+                                <div className="mt-1 space-y-2">
+                                    {identityCandidates.map((candidate) => {
+                                        const checked = selectedField === candidate.field;
+                                        const needsConfirmation = identityCandidates.length > 1
+                                            || autoVerifiedField !== candidate.field;
+                                        return (
+                                            <label
+                                                key={candidate.field}
+                                                className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${checked
+                                                    ? 'border-purple-300 bg-purple-500/20'
+                                                    : 'border-slate-600 bg-slate-900/70 hover:border-slate-400'}`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="scanner-identity"
+                                                    value={candidate.field}
+                                                    checked={checked}
+                                                    onChange={() => selectIdentity(candidate.field)}
+                                                    className="h-5 w-5 shrink-0 accent-purple-500"
+                                                />
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block text-xs text-slate-400">
+                                                        {candidate.field === 'name'
+                                                            ? t('scanner_field_name')
+                                                            : t('scanner_field_cas')}
+                                                    </span>
+                                                    <span className="block break-words text-sm font-semibold text-white">
+                                                        {candidate.value}
+                                                    </span>
+                                                </span>
+                                                <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-medium ${needsConfirmation
+                                                    ? 'border-amber-400/30 bg-amber-400/10 text-amber-100'
+                                                    : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'}`}
+                                                >
+                                                    {needsConfirmation
+                                                        ? t('scanner_selection_required')
+                                                        : t('scanner_identity_auto_verified')}
+                                                </span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {(identityCandidates.length > 1 || !autoVerifiedField) && !userConfirmedSelection && (
+                                    <p className="mt-2 flex items-start gap-2 text-xs leading-relaxed text-amber-100">
+                                        <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <span>{t('scanner_identity_confirmation_help')}</span>
+                                    </p>
+                                )}
+                            </fieldset>
+
+                            <section aria-labelledby="scanner-field-results-title">
+                                <h2 id="scanner-field-results-title" className="mb-2 text-sm font-semibold text-white">
+                                    {t('scanner_detected_fields')}
+                                </h2>
+                                <dl className="space-y-2">
+                                    {resultFields.map(({ key, label, snapshot }) => (
+                                        <div
+                                            key={key}
+                                            className="rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <dt className="text-xs font-medium text-slate-400">{label}</dt>
+                                                <dd className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${validationClasses(snapshot?.validation, snapshot?.confidence)}`}>
+                                                    {validationLabel(snapshot?.validation, snapshot?.confidence)}
+                                                </dd>
+                                            </div>
+                                            <dd className="mt-1 break-words text-sm font-medium text-white">
+                                                {snapshot?.value || t('scanner_value_not_detected')}
+                                            </dd>
+                                            {snapshot && snapshot.validation !== 'missing' && (
+                                                <dd className="mt-1 text-[11px] text-slate-400">
+                                                    {t('scanner_confidence', {
+                                                        value: confidencePercent(snapshot.confidence),
+                                                    })}
+                                                </dd>
+                                            )}
+                                        </div>
+                                    ))}
+                                </dl>
+                            </section>
+
+                            <button
+                                type="button"
+                                onClick={useSearchTerm}
+                                disabled={!canUseSelection}
+                                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-3 font-bold text-white shadow-lg shadow-purple-900/50 transition-colors hover:bg-purple-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none"
+                            >
+                                {canUseSelection ? (
+                                    <Check aria-hidden="true" className="h-5 w-5" />
+                                ) : (
+                                    <Search aria-hidden="true" className="h-5 w-5" />
+                                )}
+                                <span>{canUseSelection
+                                    ? t('scanner_search_selected_identity')
+                                    : t('scanner_select_identity_first')}</span>
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
 
             {/* Footer Controls */}
-            <div className="absolute bottom-10 flex flex-col items-center gap-4 w-full px-5">
+            <div className="absolute bottom-[calc(2.5rem+env(safe-area-inset-bottom))] flex flex-col items-center gap-4 w-full px-5">
                 {error && state === 'camera' && (
-                    <div className="bg-red-500/90 text-white px-4 py-2 rounded-lg text-sm mb-2 animate-bounce">
-                        {error}
+                    <div role="alert" className="max-w-sm rounded-xl bg-red-500/95 px-4 py-3 text-center text-sm text-white shadow-lg">
+                        <p className="font-semibold">{error}</p>
+                        {cameraPermissionDenied && <p className="mt-1 text-xs text-red-50">{t('scanner_permission_help')}</p>}
                     </div>
                 )}
 
@@ -297,11 +574,12 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                                 ref={fileInputRef}
                                 onChange={handleFileChange}
                                 accept="image/*"
+                                tabIndex={-1}
                                 className="hidden"
                             />
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className="p-3 bg-white/20 hover:bg-white/30 rounded-full backdrop-blur-sm transition-colors text-white"
+                                className="flex h-12 w-12 items-center justify-center bg-white/20 hover:bg-white/30 rounded-full backdrop-blur-sm transition-colors text-white"
                                 title={t('scanner_upload_photo')}
                                 aria-label={t('scanner_upload_photo')}
                             >
@@ -310,7 +588,9 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
                             <button
                                 onClick={capture}
-                                className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform"
+                                disabled={cameraPermissionDenied}
+                                aria-label={t('scanner_capture')}
+                                className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 <div className="w-16 h-16 bg-white border-4 border-slate-300 rounded-full"></div>
                             </button>
@@ -326,7 +606,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                     <div className="flex items-center justify-center gap-6">
                         <button
                             onClick={resetToCamera}
-                            className="flex items-center gap-2 px-5 py-3 bg-slate-600 hover:bg-slate-500 text-white rounded-full transition-colors font-medium shadow-lg"
+                            className="min-h-11 flex items-center gap-2 px-5 py-3 bg-slate-600 hover:bg-slate-500 text-white rounded-full transition-colors font-medium shadow-lg"
                         >
                             <RotateCcw className="w-5 h-5" />
                             <span>{t('scanner_retake')}</span>
@@ -334,7 +614,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                         {!error && (
                             <button
                                 onClick={confirmAndProcess}
-                                className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-full transition-colors font-bold shadow-lg shadow-green-900/40"
+                                className="min-h-11 flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-full transition-colors font-bold shadow-lg shadow-green-900/40"
                             >
                                 <Sparkles className="w-5 h-5" />
                                 <span>{t('scanner_ai_detect')}</span>
@@ -345,7 +625,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
                 {/* Status Notice for error without preview logic handling it correctly */}
                 {state === 'result' && error && (
-                    <div className="absolute top-[-40px] bg-red-500/90 text-white px-4 py-2 rounded-lg text-sm animate-bounce w-max mx-auto left-0 right-0 text-center">
+                    <div role="alert" className="absolute top-[-40px] bg-red-500/90 text-white px-4 py-2 rounded-lg text-sm animate-bounce w-max mx-auto left-0 right-0 text-center">
                         {error}
                     </div>
                 )}
@@ -356,10 +636,11 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
             {/* Top Left Retry Button for Result Mode */}
             {state === 'result' && !error && (
                 <button
+                    type="button"
                     onClick={resetToCamera}
-                    className="absolute top-5 left-5 text-white/80 hover:text-white p-2 z-30 bg-black/40 rounded-full backdrop-blur-md flex items-center gap-2"
+                    className="absolute left-5 top-[calc(1.25rem+env(safe-area-inset-top))] z-30 flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full bg-black/60 px-3 py-2 text-white/80 backdrop-blur-md hover:text-white"
                 >
-                    <RotateCcw className="w-4 h-4" />
+                    <RotateCcw aria-hidden="true" className="w-4 h-4" />
                     <span className="text-xs font-medium px-1">{t('scanner_retake')}</span>
                 </button>
             )}

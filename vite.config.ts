@@ -7,6 +7,17 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
+const disabledAutomaticClientEnvPrefix = 'BURIL_AUTO_ENV_DISABLED_'
+
+const explicitClientEnvNames = [
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY',
+  'VITE_AUTH_REDIRECT_URL',
+  'VITE_INTERNAL_API_BASE_URL',
+  'VITE_PUBLIC_APP_URL',
+  'VITE_ENABLE_WASTE_V2',
+] as const
+
 type AdminIdentity = {
   id: string
   email: string
@@ -325,7 +336,41 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
+  // `envPrefix` cannot be empty. Reserve a prefix that must never be used and
+  // fail closed if it appears, leaving `define` below as the only client-env
+  // allowlist. This also protects builds that still have legacy VITE_* secret
+  // names in a developer's ignored local environment.
+  const automaticClientEnvNames = new Set([
+    ...Object.keys(process.env),
+    ...Object.keys(env),
+  ])
+  const unexpectedAutomaticClientEnvNames = [...automaticClientEnvNames]
+    .filter((name) => name.startsWith(disabledAutomaticClientEnvPrefix))
+    .sort()
+
+  if (unexpectedAutomaticClientEnvNames.length > 0) {
+    throw new Error(
+      `Automatic client environment exposure is disabled; remove: ${unexpectedAutomaticClientEnvNames.join(', ')}`,
+    )
+  }
+
+  const explicitClientEnv = Object.fromEntries(
+    explicitClientEnvNames.map((name) => [name, env[name] || '']),
+  ) as Record<(typeof explicitClientEnvNames)[number], string>
+
   return {
+  // Vite exposes every variable matching envPrefix through import.meta.env.
+  // Automatic exposure is intentionally disabled; only the explicit public
+  // browser configuration below is injected.
+  envPrefix: disabledAutomaticClientEnvPrefix,
+  define: {
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(explicitClientEnv.VITE_SUPABASE_URL),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(explicitClientEnv.VITE_SUPABASE_ANON_KEY),
+    'import.meta.env.VITE_AUTH_REDIRECT_URL': JSON.stringify(explicitClientEnv.VITE_AUTH_REDIRECT_URL),
+    'import.meta.env.VITE_INTERNAL_API_BASE_URL': JSON.stringify(explicitClientEnv.VITE_INTERNAL_API_BASE_URL),
+    'import.meta.env.VITE_PUBLIC_APP_URL': JSON.stringify(explicitClientEnv.VITE_PUBLIC_APP_URL),
+    'import.meta.env.VITE_ENABLE_WASTE_V2': JSON.stringify(explicitClientEnv.VITE_ENABLE_WASTE_V2),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

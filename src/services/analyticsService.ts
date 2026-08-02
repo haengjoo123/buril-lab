@@ -11,6 +11,7 @@ import {
     type OnboardingRemoteProgress,
 } from '../store/useOnboardingStore';
 import { supabase } from './supabaseClient';
+import { normalizeCasNumber } from '../utils/casNumber';
 
 export type CommerceIntentEventType =
     | 'inventory_registered'
@@ -97,11 +98,6 @@ interface OnboardingEventRow {
 
 function normalizeText(value?: string | null): string | null {
     const normalized = value?.trim().toLowerCase().replace(/\s+/g, ' ');
-    return normalized ? normalized : null;
-}
-
-function normalizeCasNumber(value?: string | null): string | null {
-    const normalized = value?.replace(/[^0-9-]/g, '')?.trim();
     return normalized ? normalized : null;
 }
 

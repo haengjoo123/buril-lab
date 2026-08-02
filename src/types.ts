@@ -52,7 +52,9 @@ export interface Chemical {
     properties?: {
         isHalogenated: boolean;
         isOrganic: boolean;
-        ph?: number; // Optional, for acid/alkali determination
+        /** External reference value used only for material-level classification. */
+        ph?: number;
+        phSource?: 'kosha_reference' | 'pubchem_reference';
     };
     physicalProperties?: {
         solubility?: string; // e.g. "miscible", "insoluble"
@@ -119,6 +121,176 @@ export interface CartItem extends AnalysisResult {
     volume?: string; // Input by user (e.g. "500 mL")
     molarity?: string; // Input by user (e.g. "0.1 M")
     solutionContext?: SolutionContext;
+}
+
+/** Units accepted by the V2 waste-batch workflow. */
+export type AmountUnit = 'mL' | 'L' | 'mg' | 'g';
+
+/** The physical matrix of the complete waste batch, not an individual reagent. */
+export type WasteMatrix =
+    | 'aqueous'
+    | 'organic_non_halogenated'
+    | 'organic_halogenated'
+    | 'mixed_biphasic'
+    | 'solid_slurry'
+    | 'unknown';
+
+export type DecisionStatus = 'ready' | 'needs_input' | 'blocked';
+
+export type HandlingAction =
+    | 'container_deposit'
+    | 'isolated'
+    | 'handover';
+
+/** Stable, locale-independent waste stream identifiers. */
+export type WasteStreamCode =
+    | 'ACID_AQUEOUS'
+    | 'ALKALI_AQUEOUS'
+    | 'ORGANIC_HALOGENATED'
+    | 'ORGANIC_NON_HALOGENATED'
+    | 'HEAVY_METAL'
+    | 'CYANIDE_SULFIDE'
+    | 'REACTIVE_OXIDIZER'
+    | 'SOLID_CONTAMINATED'
+    | 'AQUEOUS_OTHER'
+    | 'SPECIAL_REVIEW';
+
+export type WasteHazardFlag =
+    | 'FLAMMABLE'
+    | 'OXIDIZER'
+    | 'EXPLOSIVE'
+    | 'SELF_REACTIVE'
+    | 'WATER_REACTIVE'
+    | 'PYROPHORIC'
+    | 'CORROSIVE'
+    | 'ACUTE_TOXIC'
+    | 'CMR'
+    | 'ENVIRONMENTAL_HAZARD'
+    | 'CYANIDE'
+    | 'SULFIDE'
+    | 'HEAVY_METAL'
+    | 'REACTIVE'
+    | 'UNKNOWN_COMPONENT';
+
+export type WasteComponentSource = 'search' | 'scan' | 'inventory' | 'cabinet' | 'manual';
+export type WasteDataStatus = 'verified' | 'lookup_failed' | 'not_checked';
+export type WasteIdentityConfidence = 'verified' | 'review_required' | 'unknown';
+export type AdditionalComponentsStatus = 'none' | 'present' | 'unknown';
+export type WasteIncidentContext = 'none' | 'broken' | 'leak';
+export type WasteMatrixSource = 'automatic' | 'user' | 'unresolved';
+export type ConcentrationUnit = 'M' | 'mM' | '%' | 'mg/mL';
+
+/**
+ * Batch amount keeps both the user's entry and the normalized comparison value.
+ * Volume is normalized to mL and mass to mg; mass and volume are never converted
+ * into one another without an explicit density-aware workflow.
+ */
+export interface WasteAmount {
+    value: number | null;
+    unit: AmountUnit | null;
+    normalizedValue: number | null;
+    normalizedUnit: 'mL' | 'mg' | null;
+    isApproximate: boolean;
+    isUnknown: boolean;
+}
+
+export interface WasteConcentration {
+    value: number;
+    unit: ConcentrationUnit;
+}
+
+/** V2 cart line. Extending CartItem keeps legacy readers interoperable. */
+export interface WasteComponent extends CartItem {
+    cartLineId: string;
+    sourceType: WasteComponentSource;
+    sourceRef?: string;
+    inventoryId?: string;
+    cabinetId?: string;
+    identityConfidence: WasteIdentityConfidence;
+    /** True when a person, rather than an automatic lookup, explicitly confirmed the identity. */
+    identityConfirmedByUser?: boolean;
+    ghsDataStatus: WasteDataStatus;
+    /** User explicitly reviewed the product label or SDS when an automatic GHS lookup was unavailable. */
+    hazardDataConfirmedByUser?: boolean;
+    capturedAt: string;
+    hazardFlags: WasteHazardFlag[];
+    /** Structured, field-level label scan evidence used to explain identity confirmation. */
+    scanSnapshot?: Record<string, unknown>;
+    concentration?: WasteConcentration;
+    /** Number of inventory containers represented by this line that are physically discarded. */
+    inventoryDisposalQuantity?: number;
+    inventorySnapshot?: {
+        brand?: string | null;
+        productNumber?: string | null;
+        location?: string | null;
+        nominalCapacity?: string | null;
+        quantity?: number | null;
+        remainingPercent?: number | null;
+    };
+}
+
+export interface WasteBatchDraft {
+    id: string;
+    /** Human-readable label generated when the draft is parked. */
+    displayName?: string;
+    /** ISO timestamp recorded when the draft is parked. */
+    parkedAt?: string;
+    scopeKey: string;
+    userId?: string;
+    labId?: string;
+    components: WasteComponent[];
+    matrix: WasteMatrix;
+    matrixSource: WasteMatrixSource;
+    totalAmount: WasteAmount;
+    measuredPh?: number;
+    measuredPhStatus: 'measured' | 'unknown' | 'not_required';
+    additionalComponentsStatus?: AdditionalComponentsStatus;
+    /** Physical incident context that must never be downgraded to an ordinary container deposit. */
+    incidentContext: WasteIncidentContext;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type WasteDecisionReasonCode =
+    | 'dangerous_compatibility'
+    | 'incident_response'
+    | 'special_hazard'
+    | 'reactive_waste'
+    | 'explosive_or_self_reactive'
+    | 'water_reactive_aqueous'
+    | 'pyrophoric'
+    | 'policy_blocked_hazard'
+    | 'policy_disallowed_hazard'
+    | 'unknown_component';
+
+export interface WasteDecisionReason {
+    code: WasteDecisionReasonCode;
+    messageKey: string;
+    ruleId?: string;
+    chemicals?: string[];
+}
+
+export type WasteMissingField =
+    | 'components'
+    | 'matrix'
+    | 'total_amount'
+    | 'measured_ph'
+    | 'identity'
+    | 'hazard_data'
+    | 'additional_components'
+    | 'inventory_quantity'
+    | 'policy_stream'
+    | 'policy_destination';
+
+export interface WasteDecision {
+    decisionStatus: DecisionStatus;
+    streamCode: WasteStreamCode;
+    hazardFlags: WasteHazardFlag[];
+    allowedActions: HandlingAction[];
+    blockingReasons: WasteDecisionReason[];
+    missingFields: WasteMissingField[];
+    policyVersion: string;
+    ruleVersion: string;
 }
 
 export interface MsdsSection {

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { normalizeCasNumber } from '../utils/casNumber';
 
 /**
  * Wikipedia/Wikidata를 활용해 한글 물질명(관용명, 이명)으로부터 CAS 번호를 자동으로 조회합니다.
@@ -31,7 +32,7 @@ export const resolveWikiCas = async (keyword: string): Promise<string | null> =>
         if (!claims || claims.length === 0) return null;
         
         const casNo = claims[0]?.mainsnak?.datavalue?.value;
-        const result = typeof casNo === 'string' ? casNo : null;
+        const result = typeof casNo === 'string' ? normalizeCasNumber(casNo) : null;
         
         if (result) {
             console.log(`[Wiki] CAS resolved: ${keyword} -> ${result}`);

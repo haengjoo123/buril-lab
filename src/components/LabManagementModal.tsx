@@ -304,17 +304,17 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-[380px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div role="dialog" aria-modal="true" aria-labelledby="lab-management-title" className="w-full max-w-[380px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
 
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center shrink-0">
-                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">
+                    <h3 id="lab-management-title" className="font-bold text-lg text-slate-800 dark:text-white">
                         {view === 'menu' && t('lab_mgmt_title')}
                         {view === 'create' && t('lab_mgmt_create_title')}
                         {view === 'search' && t('lab_mgmt_search_title')}
                         {view === 'members' && t('lab_mgmt_members_title')}
                         {view === 'settings' && t('lab_mgmt_settings_title')}
                     </h3>
-                    <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+                    <button onClick={onClose} aria-label={t('btn_close')} className="flex h-11 w-11 items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors">
                         <X className="w-5 h-5 text-gray-500" />
                     </button>
                 </div>
@@ -827,6 +827,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             </div>
                         </form>
                     )}
+
                 </div>
             </div>
         </div>

@@ -12,8 +12,11 @@ dist
 .wrangler/
 .venv
 .env
-.env.e2e
-.env.android
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 /android/keystore.properties
 dist-ssr
 *.local

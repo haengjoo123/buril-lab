@@ -1,9 +1,7 @@
+import { extractValidCasNumber } from './casNumber';
+
 export const extractCasNumber = (text: string): string | null => {
-    // CAS RegEx: 2-7 digits, hyphen, 2 digits, hyphen, 1 digit
-    // e.g., 67-64-1
-    const casRegex = /\b\d{2,7}-\d{2}-\d\b/g;
-    const matches = text.match(casRegex);
-    return matches ? matches[0] : null;
+    return extractValidCasNumber(text);
 };
 
 export const sanitizeSearchTerm = (text: string): string => {

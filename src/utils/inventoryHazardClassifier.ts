@@ -32,10 +32,17 @@ const HIGH_RISK_GROUPS: StorageGroup[] = [
 ];
 
 export type HazardLevel = 'high' | 'none';
+export type InventoryHazardFilterCategory =
+    | 'special_high'
+    | 'flammable'
+    | 'corrosive'
+    | 'toxic'
+    | 'other_managed';
 
 export interface HazardClassification {
     level: HazardLevel;
     groups: StorageGroup[];
+    filterCategories: InventoryHazardFilterCategory[];
     /** Translation keys for group labels */
     groupLabelKeys: string[];
 }
@@ -73,6 +80,25 @@ export function classifyInventoryHazard(
 
     const groups = classifyStorageGroups(pseudoPlacement);
     const hazardousGroups = groups.filter(g => HIGH_RISK_GROUPS.includes(g));
+    const hCodes = new Set(options.hCodes || []);
+    const filterCategories = new Set<InventoryHazardFilterCategory>();
+
+    if (hazardousGroups.length > 0) filterCategories.add('special_high');
+    if (groups.includes('FLAMMABLE')) filterCategories.add('flammable');
+    if (groups.some((group) => (
+        group === 'INORGANIC_ACID' || group === 'ORGANIC_ACID' || group === 'BASE'
+    )) || hCodes.has('H290') || hCodes.has('H314')) {
+        filterCategories.add('corrosive');
+    }
+    if (groups.some((group) => (
+        group === 'ACUTE_TOXIC' || group === 'TOXIC_CYANIDE' ||
+        group === 'TOXIC_SULFIDE' || group === 'TOXIC_AZIDE'
+    )) || [...hCodes].some((code) => /^(?:H30[01]|H31[01]|H33[01]|H34[01]|H35[01]|H36[012])$/.test(code))) {
+        filterCategories.add('toxic');
+    }
+    if (groups.includes('COMPRESSED_GAS') || [...hCodes].some((code) => /^H4\d{2}$/.test(code))) {
+        filterCategories.add('other_managed');
+    }
 
     const LABEL_KEYS: Partial<Record<StorageGroup, string>> = {
         FLAMMABLE: 'storage_group_flammable',
@@ -93,8 +119,9 @@ export function classifyInventoryHazard(
 
     return {
         level: hazardousGroups.length > 0 ? 'high' : 'none',
-        groups: hazardousGroups,
-        groupLabelKeys: hazardousGroups.map(g => LABEL_KEYS[g] || '').filter(Boolean),
+        groups: groups.filter((group) => group !== 'GENERAL' && group !== 'ORGANIC_SOLVENT'),
+        filterCategories: [...filterCategories],
+        groupLabelKeys: groups.map(g => LABEL_KEYS[g] || '').filter(Boolean),
     };
 }
 

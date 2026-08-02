@@ -17,28 +17,47 @@ export async function generateGeminiText(
     allowFallback?: boolean
     maxRetries?: number
     initialRetryDelay?: number
+    timeoutMs?: number
   } = {}
 ): Promise<GeminiResult> {
   const { 
     allowFallback = true, 
     maxRetries = 2, 
-    initialRetryDelay = 1000 
+    initialRetryDelay = 1000,
+    timeoutMs = 20_000,
   } = options
+
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error('Gemini request timeout must be a positive finite number.')
+  }
 
   let currentRetry = 0
   let currentModel = allowFallback ? GEMINI_PRIMARY_MODEL : GEMINI_FALLBACK_MODEL
 
   while (currentRetry <= maxRetries) {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    let response: Response
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
         },
-        body: JSON.stringify(payload),
-      },
-    )
+      )
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Gemini request timed out after ${timeoutMs}ms.`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
     if (response.ok) {
       const data = await response.json() as {

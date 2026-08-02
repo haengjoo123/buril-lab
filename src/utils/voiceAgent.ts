@@ -14,6 +14,7 @@ export type VoiceMatchSource = 'cabinet_item' | 'inventory'
 export interface VoiceQueryContext {
   screen?: 'search' | 'cabinet'
   cabinetId?: string
+  labId?: string
   language?: VoiceLanguage
 }
 

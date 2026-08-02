@@ -2,9 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
 import { useTranslation } from 'react-i18next';
-import { Building2, ShieldAlert, Loader2, Users } from 'lucide-react';
+import { Building2, Container, ShieldAlert, Loader2, Users } from 'lucide-react';
 import { EmptyState } from '../../components/EmptyState';
 import { AppSelect } from '../../components/AppSelect';
+import { WastePolicySettingsPanel } from '../../components/WastePolicySettingsPanel';
+import { isWasteV2Enabled } from '../../config/featureFlags';
 import { MemberManagementPanel } from './MemberManagementPanel';
 import { LabSafetyCenterPanel } from './LabSafetyCenterPanel';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
@@ -23,12 +25,13 @@ type ActionFilter = 'all' | 'create' | 'update' | 'delete';
 type PeriodFilter = 'all' | 'today' | '7d';
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-type AdminTab = 'members' | 'center' | 'audit';
+type AdminTab = 'members' | 'center' | 'audit' | 'waste_settings';
 
 export const GlobalAuditLogsView: React.FC = () => {
     const { t, i18n } = useTranslation();
     const isDesktop = useIsDesktop();
     const currentLabId = useLabStore(state => state.currentLabId);
+    const showWasteSettingsTab = isWasteV2Enabled && Boolean(currentLabId);
     const [activeTab, setActiveTab] = useState<AdminTab>('members');
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -45,6 +48,12 @@ export const GlobalAuditLogsView: React.FC = () => {
             setActiveTab('audit');
         }
     }, [isDesktop]);
+
+    useEffect(() => {
+        if (activeTab === 'waste_settings' && !showWasteSettingsTab) {
+            setActiveTab(isDesktop ? 'audit' : 'members');
+        }
+    }, [activeTab, isDesktop, showWasteSettingsTab]);
 
     useEffect(() => {
         if (!currentLabId || activeTab !== 'audit') return;
@@ -185,40 +194,69 @@ export const GlobalAuditLogsView: React.FC = () => {
     return (
         <div className="flex flex-col">
             {/* Tab header */}
-            <div className="flex border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-10">
+            <div
+                role="tablist"
+                aria-label={t('tab_audit')}
+                className="sticky top-0 z-10 flex w-full border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+            >
                 <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'members'}
                     onClick={() => setActiveTab('members')}
-                    className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 border-b-2 px-1.5 py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm lg:min-w-28 lg:flex-none lg:px-4 ${
                         activeTab === 'members'
                             ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                             : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                     }`}
                 >
-                    <Users className="w-4 h-4" />
-                    {t('admin_tab_members')}
+                    <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="truncate whitespace-nowrap">{t('admin_tab_members')}</span>
                 </button>
                 <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'audit'}
                     onClick={() => setActiveTab('audit')}
-                    className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 border-b-2 px-1.5 py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm lg:min-w-28 lg:flex-none lg:px-4 ${
                         activeTab === 'audit'
                             ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                             : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                     }`}
                 >
-                    <ShieldAlert className="w-4 h-4" />
-                    {t('admin_tab_audit')}
+                    <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="truncate whitespace-nowrap">{t('admin_tab_audit')}</span>
                 </button>
                 <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'center'}
                     onClick={() => setActiveTab('center')}
-                    className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 border-b-2 px-1.5 py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm lg:min-w-28 lg:flex-none lg:px-4 ${
                         activeTab === 'center'
                             ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                             : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                     }`}
                 >
-                    <Building2 className="w-4 h-4" />
-                    센터 연결
+                    <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="truncate whitespace-nowrap">{t('admin_tab_center')}</span>
                 </button>
+                {showWasteSettingsTab && (
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === 'waste_settings'}
+                        onClick={() => setActiveTab('waste_settings')}
+                        className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 border-b-2 px-1.5 py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm lg:min-w-28 lg:flex-none lg:px-4 ${
+                            activeTab === 'waste_settings'
+                                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                        }`}
+                    >
+                        <Container className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="truncate whitespace-nowrap">{t('admin_tab_waste_settings')}</span>
+                    </button>
+                )}
             </div>
 
             {/* Tab content */}
@@ -226,6 +264,19 @@ export const GlobalAuditLogsView: React.FC = () => {
                 <MemberManagementPanel />
             ) : activeTab === 'center' ? (
                 <LabSafetyCenterPanel />
+            ) : activeTab === 'waste_settings' && currentLabId ? (
+                <section className="space-y-4 p-4 pb-28 sm:p-5" aria-labelledby="waste-settings-heading">
+                    <div>
+                        <h2 id="waste-settings-heading" className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
+                            <Container className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                            {t('waste_policy_settings_title')}
+                        </h2>
+                        <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                            {t('waste_policy_settings_desc')}
+                        </p>
+                    </div>
+                    <WastePolicySettingsPanel labId={currentLabId} />
+                </section>
             ) : (
                 <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
                     <div className="flex items-center justify-between">

@@ -5,8 +5,8 @@
 
 import { supabase } from './supabaseClient';
 import { useLabStore } from '../store/useLabStore';
-import { estimateTotalVolumeMl } from '../utils/capacityParser';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
+import type { ReagentTemplateType } from '../types/fridge';
 
 // ── Types ──────────────────────────────────────────────
 type DisposalReasonKey = 'used' | 'expired' | 'broken' | 'other';
@@ -46,6 +46,8 @@ export interface InventoryItem {
     storage_location_name?: string | null;
     storage_location_icon?: string | null;
     linked_inventory_item_id?: string | null;
+    placement_template?: ReagentTemplateType | null;
+    placement_width?: number | null;
     _source?: InventorySource;
 }
 
@@ -105,6 +107,8 @@ interface CabinetItemRowWithCabinet {
     created_at: string;
     cabinet_id: string;
     shelf_id: string | null;
+    template: ReagentTemplateType | null;
+    width: number | null;
     cabinets: { name: string | null; lab_id: string | null } | { name: string | null; lab_id: string | null }[] | null;
 }
 
@@ -113,15 +117,69 @@ interface ShelfLevelRow {
     level: number;
 }
 
-interface AtomicDeleteRpcParams {
-    p_item_id: string;
-    p_item_source: InventorySource;
-    p_item_name: string;
-    p_lab_id: string | null;
-    p_cabinet_id: string | null;
-    p_cabinet_name: string | null;
-    p_storage_location_name: string | null;
-    p_disposal_reason: string;
+export interface InventoryRemovalTarget {
+    item_id: string;
+    item_source: InventorySource;
+}
+
+export interface InventoryRemovalResult {
+    removedCount: number;
+    items: InventoryRemovalTarget[];
+}
+
+export interface InventoryMovePlacement {
+    shelf_id: string;
+    template: ReagentTemplateType;
+    width: number;
+    position: number;
+    depth_position: number;
+}
+
+export interface InventoryMoveTarget {
+    item_id: string;
+    item_source: InventorySource;
+    placement?: InventoryMovePlacement;
+}
+
+export type InventoryMoveDestination =
+    | { storage_type: 'cabinet'; cabinet_id: string }
+    | { storage_type: 'other'; storage_location_id: string };
+
+export interface InventoryMoveLocationSnapshot {
+    storageType: 'cabinet' | 'other';
+    cabinetId: string | null;
+    storageLocationId: string | null;
+}
+
+export interface InventoryMoveReceiptItem {
+    itemId: string;
+    itemSource: InventorySource;
+    inventoryItemId: string | null;
+    cabinetItemId: string | null;
+    source: InventoryMoveLocationSnapshot;
+    destination: InventoryMoveLocationSnapshot;
+}
+
+export interface InventoryMoveReceipt {
+    requestId: string;
+    movedCount: number;
+    movedItems: InventoryMoveReceiptItem[];
+    destination: InventoryMoveDestination;
+    idempotent: boolean;
+}
+
+export type InventoryUsageCompletionKind = 'used' | 'empty_container';
+
+export interface InventoryUsageCompletionReceipt {
+    requestId: string;
+    cabinetItemId: string;
+    inventoryItemId: string | null;
+    completionKind: InventoryUsageCompletionKind;
+    previousQuantity: number;
+    remainingQuantity: number;
+    cabinetItemRemoved: boolean;
+    inventoryItemRemoved: boolean;
+    idempotent: boolean;
 }
 
 interface LinkedCabinetCasSyncInput {
@@ -298,59 +356,290 @@ export const storageLocationService = {
 
 // ── Inventory Service ──────────────────────────────────
 
-export const inventoryService = {
-    /**
-     * 삭제 로그를 waste_logs에 기록합니다.
-     * handler_name 컬럼이 없는 환경에서도 로그 유실을 막기 위해 fallback insert를 시도합니다.
-     */
-    async logDeleteToWasteLogs(input: {
-        userId: string | null;
-        labId: string | null;
-        chemical: {
-            id: string;
-            name: string;
-            cas_number?: string;
-            brand?: string;
-            quantity?: number;
-            capacity?: string;
-            storage_type?: 'cabinet' | 'other';
-        };
-        location: string;
-        memo: string;
-    }): Promise<void> {
-        const handlerName = await getCurrentUserDisplayName(input.labId);
-        const chemicalWithLocation = {
-            ...input.chemical,
-            deleted_location: input.location,
-        };
-        const row = {
-            user_id: input.userId,
-            lab_id: input.labId,
-            chemicals: [chemicalWithLocation],
-            disposal_category: input.chemical.name,
-            total_volume_ml: estimateTotalVolumeMl(input.chemical.capacity, input.chemical.quantity),
-            handler_name: handlerName || null,
-            memo: input.memo,
-        };
+const MAX_ATOMIC_REMOVAL_ITEMS = 100;
+const RECORD_REMOVAL_REASON = 'Incorrect inventory record';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-        const { error } = await supabase.from('waste_logs').insert(row);
-        if (!error) return;
+const CABINET_RECORD_REMOVAL_REASONS: Record<DisposalReasonKey, string> = {
+    used: 'Inventory record removed after full use',
+    expired: 'Expired inventory record removed',
+    broken: 'Broken inventory record removed',
+    other: 'Cabinet inventory record removed',
+};
 
-        // 하위 스키마 호환: handler_name 미지원 시 재시도
-        const fallbackRow = {
-            user_id: row.user_id,
-            lab_id: row.lab_id,
-            chemicals: row.chemicals,
-            disposal_category: row.disposal_category,
-            total_volume_ml: row.total_volume_ml,
-            memo: row.memo,
-        };
-        const { error: fallbackError } = await supabase.from('waste_logs').insert(fallbackRow);
-        if (fallbackError) {
-            throw fallbackError;
-        }
+const isInventoryRecordNotFoundError = (error: unknown): boolean => {
+    if (!error || typeof error !== 'object' || Array.isArray(error)) return false;
+    return (error as { code?: unknown }).code === 'P0002';
+};
+
+export const createInventoryOperationRequestId = (): string => {
+    if (typeof globalThis.crypto?.randomUUID === 'function') {
+        return globalThis.crypto.randomUUID();
+    }
+
+    throw new Error('This environment cannot create an idempotency key.');
+};
+
+const parseUsageCompletionReceipt = (
+    value: unknown,
+    expected: {
+        requestId: string;
+        cabinetItemId: string;
+        completionKind: InventoryUsageCompletionKind;
     },
+): InventoryUsageCompletionReceipt => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('사용 완료 처리 결과를 확인할 수 없습니다. 재고 목록을 새로고침한 뒤 다시 확인해 주세요.');
+    }
 
+    const payload = value as Record<string, unknown>;
+    const read = (snakeCase: string, camelCase: string): unknown =>
+        payload[snakeCase] ?? payload[camelCase];
+    const requestId = read('request_id', 'requestId');
+    const cabinetItemId = read('cabinet_item_id', 'cabinetItemId');
+    const inventoryItemId = read('inventory_item_id', 'inventoryItemId');
+    const completionKind = read('completion_kind', 'completionKind');
+    const previousQuantity = read('previous_quantity', 'previousQuantity');
+    const remainingQuantity = read('remaining_quantity', 'remainingQuantity');
+    const cabinetItemRemoved = read('cabinet_item_removed', 'cabinetItemRemoved');
+    const inventoryItemRemoved = read('inventory_item_removed', 'inventoryItemRemoved');
+    const idempotent = payload.idempotent;
+
+    const quantitiesAreValid = Number.isInteger(previousQuantity) &&
+        Number.isInteger(remainingQuantity) &&
+        (previousQuantity as number) >= 1 &&
+        (remainingQuantity as number) === (previousQuantity as number) - 1;
+    const removalFlagsAreValid = typeof cabinetItemRemoved === 'boolean' &&
+        typeof inventoryItemRemoved === 'boolean' &&
+        cabinetItemRemoved === ((remainingQuantity as number) === 0) &&
+        inventoryItemRemoved === ((remainingQuantity as number) === 0) &&
+        cabinetItemRemoved === inventoryItemRemoved;
+
+    if (requestId !== expected.requestId ||
+        cabinetItemId !== expected.cabinetItemId ||
+        completionKind !== expected.completionKind ||
+        typeof inventoryItemId !== 'string' ||
+        !UUID_PATTERN.test(inventoryItemId) ||
+        typeof idempotent !== 'boolean' ||
+        !quantitiesAreValid ||
+        !removalFlagsAreValid) {
+        throw new Error('사용 완료 처리가 요청과 일치하지 않습니다. 재고 목록을 새로고침한 뒤 다시 확인해 주세요.');
+    }
+
+    return {
+        requestId,
+        cabinetItemId,
+        inventoryItemId,
+        completionKind,
+        previousQuantity,
+        remainingQuantity,
+        cabinetItemRemoved,
+        inventoryItemRemoved,
+        idempotent,
+    } as InventoryUsageCompletionReceipt;
+};
+
+const normalizeMoveLocationSnapshot = (
+    value: unknown,
+): InventoryMoveLocationSnapshot | null => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const record = value as Record<string, unknown>;
+    const storageType = record.storage_type ?? record.storageType;
+    const cabinetId = record.cabinet_id ?? record.cabinetId ?? null;
+    const storageLocationId = record.storage_location_id ?? record.storageLocationId ?? null;
+    if ((storageType !== 'cabinet' && storageType !== 'other') ||
+        (cabinetId !== null && (typeof cabinetId !== 'string' || !UUID_PATTERN.test(cabinetId))) ||
+        (storageLocationId !== null &&
+            (typeof storageLocationId !== 'string' || !UUID_PATTERN.test(storageLocationId)))) {
+        return null;
+    }
+    if (storageType === 'cabinet' && (!cabinetId || storageLocationId !== null)) return null;
+    if (storageType === 'other' && cabinetId !== null) return null;
+
+    return { storageType, cabinetId, storageLocationId };
+};
+
+const destinationMatches = (
+    snapshot: InventoryMoveLocationSnapshot,
+    expected: InventoryMoveDestination,
+): boolean => expected.storage_type === 'cabinet'
+    ? snapshot.storageType === 'cabinet' &&
+        snapshot.cabinetId === expected.cabinet_id &&
+        snapshot.storageLocationId === null
+    : snapshot.storageType === 'other' &&
+        snapshot.cabinetId === null &&
+        snapshot.storageLocationId === expected.storage_location_id;
+
+const parseInventoryMoveReceipt = (
+    value: unknown,
+    expected: {
+        requestId: string;
+        targets: InventoryMoveTarget[];
+        destination: InventoryMoveDestination;
+    },
+): InventoryMoveReceipt => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('The inventory-move RPC returned an invalid atomic receipt.');
+    }
+    const payload = value as Record<string, unknown>;
+    const requestId = payload.request_id ?? payload.requestId;
+    const movedCount = payload.moved_count ?? payload.movedCount;
+    const rawItems = payload.moved_items ?? payload.movedItems;
+    const destination = normalizeMoveLocationSnapshot(payload.destination);
+    const idempotent = payload.idempotent;
+    const movedItems = Array.isArray(rawItems)
+        ? rawItems.flatMap((candidate): InventoryMoveReceiptItem[] => {
+            if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return [];
+            const item = candidate as Record<string, unknown>;
+            const itemId = item.item_id ?? item.itemId;
+            const itemSource = item.item_source ?? item.itemSource;
+            const inventoryItemId = item.inventory_item_id ?? item.inventoryItemId ?? null;
+            const cabinetItemId = item.cabinet_item_id ?? item.cabinetItemId ?? null;
+            const source = normalizeMoveLocationSnapshot(item.source);
+            const itemDestination = normalizeMoveLocationSnapshot(item.destination);
+            if (typeof itemId !== 'string' || !UUID_PATTERN.test(itemId) ||
+                (itemSource !== 'inventory' && itemSource !== 'cabinet_item') ||
+                (inventoryItemId !== null &&
+                    (typeof inventoryItemId !== 'string' || !UUID_PATTERN.test(inventoryItemId))) ||
+                (cabinetItemId !== null &&
+                    (typeof cabinetItemId !== 'string' || !UUID_PATTERN.test(cabinetItemId))) ||
+                !source ||
+                !itemDestination ||
+                !destinationMatches(itemDestination, expected.destination)) {
+                return [];
+            }
+            if ((itemSource === 'inventory' && inventoryItemId !== itemId) ||
+                (itemSource === 'cabinet_item' && cabinetItemId !== itemId)) {
+                return [];
+            }
+            return [{
+                itemId,
+                itemSource,
+                inventoryItemId,
+                cabinetItemId,
+                source,
+                destination: itemDestination,
+            }];
+        })
+        : [];
+    const expectedKeys = new Set(expected.targets.map((target) => (
+        `${target.item_source}:${target.item_id}`
+    )));
+    const returnedKeys = new Set(movedItems.map((item) => (
+        `${item.itemSource}:${item.itemId}`
+    )));
+    const exactTargets = expectedKeys.size === returnedKeys.size &&
+        [...expectedKeys].every((key) => returnedKeys.has(key));
+
+    if (requestId !== expected.requestId ||
+        movedCount !== expected.targets.length ||
+        movedItems.length !== expected.targets.length ||
+        !destination ||
+        !destinationMatches(destination, expected.destination) ||
+        typeof idempotent !== 'boolean' ||
+        !exactTargets) {
+        throw new Error('The inventory-move RPC returned an invalid atomic receipt.');
+    }
+
+    return {
+        requestId,
+        movedCount,
+        movedItems,
+        destination: expected.destination,
+        idempotent,
+    } as InventoryMoveReceipt;
+};
+
+const parseRemovalResult = (
+    value: unknown,
+    expectedTargets: InventoryRemovalTarget[],
+): InventoryRemovalResult => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('재고 데이터 삭제 결과를 확인할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.');
+    }
+
+    const payload = value as {
+        removed_count?: unknown;
+        removed_items?: unknown;
+        items?: unknown;
+    };
+    const rawItems = Array.isArray(payload.removed_items)
+        ? payload.removed_items
+        : Array.isArray(payload.items)
+            ? payload.items
+            : [];
+    const items = rawItems.filter((item): item is InventoryRemovalTarget => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+        const candidate = item as Partial<InventoryRemovalTarget>;
+        return typeof candidate.item_id === 'string' &&
+            (candidate.item_source === 'inventory' || candidate.item_source === 'cabinet_item');
+    });
+    const removedCount = typeof payload.removed_count === 'number'
+        ? payload.removed_count
+        : Number.NaN;
+
+    const expectedKeys = new Set(
+        expectedTargets.map((item) => `${item.item_source}:${item.item_id}`)
+    );
+    const returnedKeys = new Set(
+        items.map((item) => `${item.item_source}:${item.item_id}`)
+    );
+    const resultMatchesRequest = expectedKeys.size === returnedKeys.size &&
+        [...expectedKeys].every((key) => returnedKeys.has(key));
+
+    if (removedCount !== expectedTargets.length ||
+        items.length !== expectedTargets.length ||
+        !resultMatchesRequest) {
+        throw new Error('재고 데이터 삭제가 완료되지 않았습니다. 어떤 항목도 부분 삭제로 처리하지 않습니다.');
+    }
+
+    return { removedCount, items };
+};
+
+const removeInventoryRecords = async (
+    targets: InventoryRemovalTarget[],
+    labId: string | null,
+    actorName: string | null,
+    reason: string = RECORD_REMOVAL_REASON,
+): Promise<InventoryRemovalResult> => {
+    if (targets.length < 1 || targets.length > MAX_ATOMIC_REMOVAL_ITEMS) {
+        throw new Error('재고 데이터는 한 번에 1개 이상 100개 이하로 삭제할 수 있습니다.');
+    }
+
+    const seen = new Set<string>();
+    for (const target of targets) {
+        const key = `${target.item_source}:${target.item_id}`;
+        if (!target.item_id || seen.has(key)) {
+            throw new Error('중복되거나 올바르지 않은 재고 삭제 항목이 포함되어 있습니다.');
+        }
+        seen.add(key);
+    }
+
+    const { data, error } = await supabase.rpc('remove_inventory_record_v2', {
+        p_items: targets,
+        p_lab_id: labId,
+        p_actor_name: actorName,
+        p_reason: reason,
+    });
+
+    if (error) {
+        const errorText = String(error.message || '');
+        const missingRpc = error.code === '42883' ||
+            error.code === 'PGRST202' ||
+            errorText.includes('remove_inventory_record_v2');
+        if (missingRpc) {
+            throw new Error('재고 데이터 삭제 기능이 서버에 배포되지 않았습니다. 관리자에게 문의해 주세요.');
+        }
+        if (!isInventoryRecordNotFoundError(error)) {
+            console.error('[Inventory] V2 record removal error:', error);
+        }
+        throw error;
+    }
+
+    return parseRemovalResult(data, targets);
+};
+
+export const inventoryService = {
     /** Get all inventory items for the current lab (includes cabinet_items) */
     async getItems(): Promise<InventoryItem[]> {
         const { currentLabId } = useLabStore.getState();
@@ -416,7 +705,7 @@ export const inventoryService = {
             .from('cabinet_items')
             .select(`
                 id, inventory_item_id, name, brand, product_number, cas_no, capacity, expiry_date, notes, created_at,
-                cabinet_id, shelf_id, remaining_percent,
+                cabinet_id, shelf_id, template, width, remaining_percent,
                 cabinets!inner ( name, lab_id )
             `);
 
@@ -446,6 +735,10 @@ export const inventoryService = {
             const linkedCabinetRow = linkedCabinetRowByInventoryId.get(item.id);
             if (!linkedCabinetRow) continue;
             item.shelf_id = linkedCabinetRow.shelf_id || null;
+            item.placement_template = linkedCabinetRow.template || null;
+            item.placement_width = Number.isFinite(Number(linkedCabinetRow.width))
+                ? Number(linkedCabinetRow.width)
+                : null;
         }
 
         const inventoryItemIdSet = new Set(inventoryItems.map((item) => item.id));
@@ -515,6 +808,8 @@ export const inventoryService = {
                 storage_location_name: undefined,
                 storage_location_icon: undefined,
                 linked_inventory_item_id: ci.inventory_item_id ?? null,
+                placement_template: ci.template || null,
+                placement_width: Number.isFinite(Number(ci.width)) ? Number(ci.width) : null,
                 _source: 'cabinet_item',
             }));
 
@@ -616,33 +911,6 @@ export const inventoryService = {
         const { data, error } = await supabase.rpc('create_inventory_item_atomic', payload);
 
         if (error) {
-            // fallback to direct insert if RPC not yet deployed
-            if (error.code === '42883' || error.code === 'PGRST202') {
-                console.warn('[Inventory] RPC not found, falling back to direct insert');
-                const row = {
-                    lab_id: currentLabId || null,
-                    user_id: userData.user?.id || null,
-                    name: input.name,
-                    brand: input.brand || null,
-                    product_number: input.product_number || null,
-                    cas_number: input.cas_number || null,
-                    quantity: input.quantity ?? 1,
-                    capacity: input.capacity || null,
-                    storage_type: input.storage_type,
-                    cabinet_id: input.storage_type === 'cabinet' ? (input.cabinet_id || null) : null,
-                    storage_location_id: input.storage_type === 'other' ? (input.storage_location_id || null) : null,
-                    product_id: input.product_id || null,
-                    expiry_date: input.expiry_date || null,
-                    memo: input.memo || null,
-                    remaining_percent: input.remaining_percent ?? null,
-                };
-                const { data: directData, error: directError } = await supabase.from('inventory').insert(row).select().single();
-                if (directError) {
-                    console.error('[Inventory] create error:', directError);
-                    return null;
-                }
-                return directData as InventoryItem;
-            }
             console.error('[Inventory] atomic create error:', error);
             return null;
         }
@@ -699,14 +967,6 @@ export const inventoryService = {
 
         const { error } = await supabase.rpc('update_inventory_item_atomic', payload);
         if (error) {
-            // fallback if missing
-            if (error.code === '42883' || error.code === 'PGRST202') {
-                console.warn('[Inventory] Atomic update RPC not found. Falling back to direct update.');
-                const table = source === 'cabinet_item' ? 'cabinet_items' : 'inventory';
-                const { error: directError } = await supabase.from(table).update(payloadRecord).eq('id', id);
-                if (directError) throw directError;
-                return;
-            }
             console.error('[Inventory] atomic update error:', error);
             throw error;
         }
@@ -879,42 +1139,138 @@ export const inventoryService = {
         }
     },
 
-    /** Delete an inventory item through an atomic DB RPC transaction */
+    /**
+     * Remove one incorrectly registered database record. This is not a physical
+     * waste-disposal action and therefore never creates a waste_logs row.
+     */
     async deleteItem(item: InventoryItem): Promise<void> {
+        await inventoryService.deleteItems([item]);
+    },
+
+    /** Remove 1..100 records in one all-or-nothing database transaction. */
+    async deleteItems(items: InventoryItem[]): Promise<InventoryRemovalResult> {
         const { currentLabId } = useLabStore.getState();
         const actorName = await getCurrentUserDisplayName(currentLabId);
+        const targets = items.map((item): InventoryRemovalTarget => ({
+            item_id: item.id,
+            item_source: item._source || 'inventory',
+        }));
 
-        const source: InventorySource = item._source || 'inventory';
-        const payload: AtomicDeleteRpcParams & { p_actor_name: string | null } = {
-            p_item_id: item.id,
-            p_item_source: source,
-            p_item_name: item.name,
-            p_lab_id: item.lab_id || null,
-            p_cabinet_id: item.cabinet_id || null,
-            p_cabinet_name: item.cabinet_name || null,
-            p_storage_location_name: item.storage_location_name || null,
-            p_disposal_reason: '재고 목록에서 삭제',
-            p_actor_name: actorName || null,
-        };
+        return removeInventoryRecords(
+            targets,
+            currentLabId || null,
+            actorName || null,
+        );
+    },
 
-        const { error } = await supabase.rpc('delete_inventory_item_atomic', payload);
+    /** Move 1..100 inventory/cabinet records in one all-or-nothing transaction. */
+    async moveRecords(input: {
+        targets: InventoryMoveTarget[];
+        destination: InventoryMoveDestination;
+        requestId: string;
+    }): Promise<InventoryMoveReceipt> {
+        if (input.targets.length < 1 || input.targets.length > 100) {
+            throw new Error('Inventory moves must contain between 1 and 100 targets.');
+        }
+        if (!UUID_PATTERN.test(input.requestId)) {
+            throw new Error('requestId must be a valid UUID.');
+        }
+        const destinationId = input.destination.storage_type === 'cabinet'
+            ? input.destination.cabinet_id
+            : input.destination.storage_location_id;
+        if (!UUID_PATTERN.test(destinationId)) {
+            throw new Error('The inventory move destination must be a valid UUID.');
+        }
+
+        const seen = new Set<string>();
+        for (const target of input.targets) {
+            const key = `${target.item_source}:${target.item_id}`;
+            if (!UUID_PATTERN.test(target.item_id) || seen.has(key)) {
+                throw new Error('Inventory move targets must have unique valid UUIDs.');
+            }
+            seen.add(key);
+
+            if (input.destination.storage_type === 'other') {
+                if (target.item_source !== 'inventory' || target.placement !== undefined) {
+                    throw new Error('Only inventory records without placement data can move to other storage.');
+                }
+                continue;
+            }
+
+            const placement = target.placement;
+            if (!placement ||
+                !UUID_PATTERN.test(placement.shelf_id) ||
+                !['A', 'B', 'C', 'D'].includes(placement.template) ||
+                !Number.isFinite(placement.width) ||
+                !Number.isFinite(placement.position) ||
+                !Number.isFinite(placement.depth_position) ||
+                placement.width <= 0 ||
+                placement.width > 100 ||
+                placement.position < 0 ||
+                placement.position + placement.width > 100 ||
+                placement.depth_position < 0 ||
+                placement.depth_position > 100) {
+                throw new Error('Every cabinet move target requires valid placement geometry.');
+            }
+        }
+
+        const { data, error } = await supabase.rpc('move_inventory_records_v2', {
+            p_targets: input.targets,
+            p_destination: input.destination,
+            p_request_id: input.requestId,
+        });
         if (error) {
-            const missingRpc =
-                error.code === '42883' ||
+            const errorText = String(error.message || '');
+            const missingRpc = error.code === '42883' ||
                 error.code === 'PGRST202' ||
-                String(error.message || '').includes('delete_inventory_item_atomic');
+                errorText.includes('move_inventory_records_v2');
             if (missingRpc) {
-                throw new Error('삭제 RPC가 배포되지 않았습니다. `database/delete_inventory_item_atomic.sql`을 먼저 적용해주세요.');
+                throw new Error('재고 일괄 이동 기능이 서버에 배포되지 않았습니다. 관리자에게 문의해 주세요.');
             }
-            const outdatedRpc =
-                error.code === '0A000' &&
-                String(error.message || '').includes('FOR UPDATE cannot be applied to the nullable side of an outer join');
-            if (outdatedRpc) {
-                throw new Error('삭제 RPC가 구버전입니다. `database/delete_inventory_item_atomic.sql` 최신 버전을 다시 적용해주세요.');
-            }
-            console.error('[Inventory] atomic delete error:', error);
             throw error;
         }
+
+        return parseInventoryMoveReceipt(data, input);
+    },
+
+    /**
+     * Record one fully used unit (or one empty container) without creating a
+     * physical waste log. The server derives actor, lab and linked inventory
+     * scope, then decrements or removes the linked rows atomically.
+     */
+    async recordUsageCompletion(input: {
+        cabinetItemId: string;
+        requestId: string;
+        completionKind: InventoryUsageCompletionKind;
+    }): Promise<InventoryUsageCompletionReceipt> {
+        if (!UUID_PATTERN.test(input.cabinetItemId)) {
+            throw new Error('cabinetItemId must be a valid UUID.');
+        }
+        if (!UUID_PATTERN.test(input.requestId)) {
+            throw new Error('requestId must be a valid UUID.');
+        }
+        if (input.completionKind !== 'used' && input.completionKind !== 'empty_container') {
+            throw new Error('completionKind must be used or empty_container.');
+        }
+
+        const { data, error } = await supabase.rpc('record_inventory_usage_completion_v2', {
+            p_cabinet_item_id: input.cabinetItemId,
+            p_request_id: input.requestId,
+            p_completion_kind: input.completionKind,
+        });
+
+        if (error) {
+            const errorText = String(error.message || '');
+            const missingRpc = error.code === '42883' ||
+                error.code === 'PGRST202' ||
+                errorText.includes('record_inventory_usage_completion_v2');
+            if (missingRpc) {
+                throw new Error('사용 완료 처리 기능이 서버에 배포되지 않았습니다. 관리자에게 문의해 주세요.');
+            }
+            throw error;
+        }
+
+        return parseUsageCompletionReceipt(data, input);
     },
 
     /**
@@ -928,204 +1284,128 @@ export const inventoryService = {
         itemName: string;
         reasonKey?: DisposalReasonKey;
     }): Promise<void> {
-        const reasonKey = input.reasonKey;
-        const itemName = input.itemName;
-        const reasonLabelMap: Record<DisposalReasonKey, string> = {
-            used: '사용완료',
-            expired: '유효기간 만료',
-            broken: '파손',
-            other: '기타',
-        };
-        const disposalReason = reasonKey ? reasonLabelMap[reasonKey] : '단순 삭제';
+        if (!input.cabinetId) return;
 
-        const { data: cabinetInfo } = await supabase
-            .from('cabinets')
-            .select('name, lab_id')
-            .eq('id', input.cabinetId)
-            .maybeSingle();
-
-        if (input.linkedInventoryItemId) {
-            const { data: linkedInventory, error: fetchError } = await supabase
-                .from('inventory')
-                .select('id, lab_id, name, cas_number, brand, quantity, capacity, storage_type')
-                .eq('id', input.linkedInventoryItemId)
-                .maybeSingle();
-            if (fetchError) throw fetchError;
-
-            const { error } = await supabase
-                .from('inventory')
-                .delete()
-                .eq('id', input.linkedInventoryItemId);
-            if (error) throw error;
-
-            if (linkedInventory) {
-                try {
-                    const { data: userData } = await supabase.auth.getUser();
-                    await this.logDeleteToWasteLogs({
-                        userId: userData.user?.id || null,
-                        labId: linkedInventory.lab_id || cabinetInfo?.lab_id || null,
-                        chemical: {
-                            id: linkedInventory.id,
-                            name: linkedInventory.name,
-                            cas_number: linkedInventory.cas_number || undefined,
-                            brand: linkedInventory.brand || undefined,
-                            quantity: linkedInventory.quantity,
-                            capacity: linkedInventory.capacity || undefined,
-                            storage_type: linkedInventory.storage_type,
-                        },
-                        location: cabinetInfo?.name || 'Cabinet',
-                        memo: disposalReason,
-                    });
-                } catch (err) {
-                    console.error('[Inventory] exact linked waste_log error (non-fatal):', err);
-                }
+        const { currentLabId } = useLabStore.getState();
+        const actorName = await getCurrentUserDisplayName(currentLabId);
+        const reason = CABINET_RECORD_REMOVAL_REASONS[input.reasonKey || 'other'];
+        const removeExactRecord = async (target: InventoryRemovalTarget): Promise<boolean> => {
+            try {
+                await removeInventoryRecords(
+                    [target],
+                    currentLabId || null,
+                    actorName || null,
+                    reason,
+                );
+                return true;
+            } catch (error) {
+                // The cabinet save path may already have removed the placement.
+                // Only an explicit server-side not-found result is safe to ignore.
+                if (isInventoryRecordNotFoundError(error)) return false;
+                throw error;
             }
+        };
+
+        // ReagentEditPanel calls this before removing/saving the cabinet item, so
+        // the placement ID is the most precise target. The RPC also removes its
+        // linked inventory row in the same transaction.
+        if (input.cabinetItemId) {
+            const removed = await removeExactRecord({
+                item_id: input.cabinetItemId,
+                item_source: 'cabinet_item',
+            });
+            if (removed) return;
+        }
+
+        // Older callers may already have removed the cabinet placement. In that
+        // case, remove the exact linked inventory ID through the same guarded RPC.
+        if (input.linkedInventoryItemId) {
+            await removeExactRecord({
+                item_id: input.linkedInventoryItemId,
+                item_source: 'inventory',
+            });
             return;
         }
 
-        const linkedInventoryIds = await getLinkedInventoryIdsForCabinet(input.cabinetId);
+        // Legacy placements may not carry a link ID. Never choose an arbitrary
+        // same-name row: resolve only a unique record in the requested cabinet.
+        const { data: cabinetMatches, error: cabinetMatchError } = await supabase
+            .from('cabinet_items')
+            .select('id')
+            .eq('cabinet_id', input.cabinetId)
+            .eq('name', input.itemName)
+            .limit(2);
+        if (cabinetMatchError) throw cabinetMatchError;
 
-        const { data: matchedInventoryRows } = await supabase
+        const cabinetRows = (cabinetMatches || []) as Array<{ id: string }>;
+        if (cabinetRows.length > 1) {
+            throw new Error('같은 이름의 시약이 여러 개라 삭제 대상을 안전하게 식별할 수 없습니다.');
+        }
+        if (cabinetRows.length === 1) {
+            await removeExactRecord({
+                item_id: cabinetRows[0].id,
+                item_source: 'cabinet_item',
+            });
+            return;
+        }
+
+        const { data: inventoryMatches, error: inventoryMatchError } = await supabase
             .from('inventory')
-            .select('id, lab_id, name, cas_number, brand, quantity, capacity, storage_type')
+            .select('id')
             .eq('cabinet_id', input.cabinetId)
             .eq('storage_type', 'cabinet')
-            .eq('name', itemName)
-            .order('created_at', { ascending: true });
+            .eq('name', input.itemName)
+            .limit(2);
+        if (inventoryMatchError) throw inventoryMatchError;
 
-        const matchedInventory = (matchedInventoryRows || []).find((row: {
-            id: string;
-            lab_id: string | null;
-            name: string;
-            cas_number: string | null;
-            brand: string | null;
-            quantity: number;
-            capacity: string | null;
-            storage_type: 'cabinet' | 'other';
-        }) => !linkedInventoryIds.has(row.id));
-
-        if (matchedInventory) {
-            const { error } = await supabase
-                .from('inventory')
-                .delete()
-                .eq('id', matchedInventory.id);
-            if (error) throw error;
-
-            try {
-                const { data: userData } = await supabase.auth.getUser();
-                await this.logDeleteToWasteLogs({
-                    userId: userData.user?.id || null,
-                    labId: matchedInventory.lab_id || cabinetInfo?.lab_id || null,
-                    chemical: {
-                        id: matchedInventory.id,
-                        name: matchedInventory.name,
-                        cas_number: matchedInventory.cas_number || undefined,
-                        brand: matchedInventory.brand || undefined,
-                        quantity: matchedInventory.quantity,
-                        capacity: matchedInventory.capacity || undefined,
-                        storage_type: matchedInventory.storage_type,
-                    },
-                    location: cabinetInfo?.name || '시약장',
-                    memo: disposalReason,
-                });
-            } catch (err) {
-                console.error('[Inventory] linked waste_log error (non-fatal):', err);
-            }
-            return;
+        const inventoryRows = (inventoryMatches || []) as Array<{ id: string }>;
+        if (inventoryRows.length > 1) {
+            throw new Error('같은 이름의 재고가 여러 개라 삭제 대상을 안전하게 식별할 수 없습니다.');
         }
-
-        // 연결된 inventory 행이 없어도, 시약장 삭제 정보는 최소한 이름 기준으로 남깁니다.
-        try {
-            const { currentLabId } = useLabStore.getState();
-            const { data: userData } = await supabase.auth.getUser();
-            await this.logDeleteToWasteLogs({
-                userId: userData.user?.id || null,
-                labId: currentLabId || cabinetInfo?.lab_id || null,
-                chemical: {
-                    id: `cabinet:${input.cabinetId}:${itemName}`,
-                    name: itemName,
-                    storage_type: 'cabinet',
-                },
-                location: cabinetInfo?.name || '시약장',
-                memo: disposalReason,
+        if (inventoryRows.length === 1) {
+            await removeExactRecord({
+                item_id: inventoryRows[0].id,
+                item_source: 'inventory',
             });
-        } catch (err) {
-            console.error('[Inventory] fallback linked waste_log error (non-fatal):', err);
         }
     },
     /**
      * Called from cabinet view when "Clear All" is performed.
      * Deletes all linked inventory rows for the entire cabinet at once.
      */
-    async clearCabinetInventory(cabinetId: string, items: { name: string; brand?: string; casNo?: string; quantity?: number; capacity?: string }[]): Promise<void> {
+    async clearCabinetInventory(cabinetId: string, _items: { name: string; brand?: string; casNo?: string; quantity?: number; capacity?: string }[]): Promise<void> {
         if (!cabinetId) return;
+        void _items; // Kept for caller compatibility; database deletion is ID/scope based.
 
-        // 1. Delete all matching inventory rows for this cabinet
-        const { error: deleteError } = await supabase
+        // FridgeView currently saves the empty cabinet before this cleanup, so
+        // cabinet_items may already be gone. Resolve the remaining linked inventory
+        // IDs first, then remove all of them in one server transaction.
+        const { data, error } = await supabase
             .from('inventory')
-            .delete()
+            .select('id')
             .eq('cabinet_id', cabinetId)
-            .eq('storage_type', 'cabinet');
+            .eq('storage_type', 'cabinet')
+            .limit(MAX_ATOMIC_REMOVAL_ITEMS + 1);
+        if (error) throw error;
 
-        if (deleteError) {
-            console.error('[Inventory] clearCabinetInventory delete error:', deleteError);
-            throw deleteError;
+        const targets = ((data || []) as Array<{ id: string }>).map(
+            (row): InventoryRemovalTarget => ({
+                item_id: row.id,
+                item_source: 'inventory',
+            })
+        );
+        if (targets.length === 0) return;
+        if (targets.length > MAX_ATOMIC_REMOVAL_ITEMS) {
+            throw new Error('시약장 연결 재고가 100개를 초과해 전체 삭제할 수 없습니다. 어떤 항목도 삭제되지 않았습니다.');
         }
 
-        // 2. Add a bulk entry to waste_logs
-        if (items.length > 0) {
-            try {
-                const { currentLabId } = useLabStore.getState();
-                const { data: userData } = await supabase.auth.getUser();
-                const userId = userData.user?.id || null;
-                const { data: cabinetInfo } = await supabase
-                    .from('cabinets')
-                    .select('name')
-                    .eq('id', cabinetId)
-                    .maybeSingle();
-
-                const chemicals = items.map(item => ({
-                    id: `cabinet:${cabinetId}:${item.name}`,
-                    name: item.name,
-                    brand: item.brand,
-                    cas_number: item.casNo,
-                    quantity: item.quantity || 1,
-                    capacity: item.capacity,
-                    storage_type: 'cabinet',
-                    deleted_location: cabinetInfo?.name || '시약장',
-                }));
-
-                const handlerName = await getCurrentUserDisplayName(currentLabId);
-                const totalVolumeMl = chemicals.reduce((sum, chemical) => {
-                    const estimated = estimateTotalVolumeMl(chemical.capacity, chemical.quantity);
-                    return sum + (estimated ?? 0);
-                }, 0);
-                const row = {
-                    user_id: userId,
-                    lab_id: currentLabId,
-                    chemicals: chemicals,
-                    total_volume_ml: totalVolumeMl > 0 ? totalVolumeMl : null,
-                    disposal_category: '시약장 전체 비우기',
-                    handler_name: handlerName || null,
-                    memo: `${cabinetInfo?.name || '시약장'} 전체 비우기 기능으로 폐기됨 (${items.length}건)`,
-                };
-
-                const { error: logError } = await supabase.from('waste_logs').insert(row);
-                if (logError) {
-                    // Fallback to simpler row if handler_name is not supported
-                    const fallbackRow = {
-                        user_id: row.user_id,
-                        lab_id: row.lab_id,
-                        chemicals: row.chemicals,
-                        disposal_category: row.disposal_category,
-                        total_volume_ml: row.total_volume_ml,
-                        memo: row.memo,
-                    };
-                    await supabase.from('waste_logs').insert(fallbackRow);
-                }
-            } catch (err) {
-                console.error('[Inventory] clearCabinetInventory waste_log error (non-fatal):', err);
-            }
-        }
+        const { currentLabId } = useLabStore.getState();
+        const actorName = await getCurrentUserDisplayName(currentLabId);
+        await removeInventoryRecords(
+            targets,
+            currentLabId || null,
+            actorName || null,
+            'Clear cabinet inventory records',
+        );
     },
 };

@@ -1,4 +1,5 @@
 import { normalizeVoiceLookupText, type VoiceMatchSource } from './voiceAgent'
+import { normalizeCasNumber } from './casNumber'
 
 export type ReagentAliasSourceType = VoiceMatchSource
 
@@ -53,7 +54,7 @@ export function buildSeedAliasTerms(input: AliasSeedInput): string[] {
   const name = input.name?.trim()
   const brand = input.brand?.trim()
   const productNumber = input.productNumber?.trim()
-  const casNumber = input.casNumber?.trim()
+  const casNumber = normalizeCasNumber(input.casNumber) || undefined
 
   const aliasCandidates = [
     name,

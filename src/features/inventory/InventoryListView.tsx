@@ -14,11 +14,21 @@ import {
     ShieldAlert,
     Camera,
     PackagePlus,
-    CheckCircle2,
-    X,
-    Trash2
+	CheckCircle2,
+	X,
+	Trash2,
+	FlaskConical
 } from 'lucide-react';
-import { inventoryService, storageLocationService, type CreateInventoryInput, type InventoryItem, type StorageLocation } from '../../services/inventoryService';
+import {
+    createInventoryOperationRequestId,
+    inventoryService,
+    storageLocationService,
+    type CreateInventoryInput,
+    type InventoryItem,
+    type InventoryMoveDestination,
+    type InventoryMoveTarget,
+    type StorageLocation,
+} from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { InventoryFormModal } from './InventoryFormModal';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
@@ -28,7 +38,6 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { AppSelect } from '../../components/AppSelect';
 
@@ -36,16 +45,19 @@ import { useLabStore } from '../../store/useLabStore';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
-import type { ReagentTemplateType } from '../../types/fridge';
-import { normalizeTemplateFromDb } from '../../utils/normalizeTemplateFromDb';
-import { classifyInventoryHazard } from '../../utils/inventoryHazardClassifier';
+import {
+    classifyInventoryHazard,
+    type InventoryHazardFilterCategory,
+} from '../../utils/inventoryHazardClassifier';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import { lookupGHSByCAS, type PubChemGHSResult } from '../../services/pubchemService';
 import { getPictogramCode, getPictogramUrl } from '../../data/ghsCodes';
+import { planBulkInventoryCabinetMove } from '../../utils/bulkInventoryMovePlanner';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
+type InventoryHazardFilter = 'all' | InventoryHazardFilterCategory;
 type InventoryGroup = {
     id: string;
     items: InventoryItem[];
@@ -70,6 +82,10 @@ type InventoryGhsPictogram = {
     url: string;
     code?: string;
 };
+
+export interface InventoryListViewProps {
+    onStartWasteBatch?: (item: InventoryItem) => Promise<void>;
+}
 
 const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
 const normalizeGroupCas = (value?: string | null) => (value || '').replace(/[^0-9a-z-]/gi, '').trim().toLowerCase();
@@ -202,20 +218,7 @@ function buildInventoryGroups(sourceItems: InventoryItem[], sortBy: InventorySor
         .sort((left, right) => compareInventoryItems(left.primaryItem, right.primaryItem, sortBy));
 }
 
-async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promise<void> {
-    const state = useFridgeStore.getState();
-    if (!state.cabinetId || state.cabinetId !== expectedCabinetId) {
-        throw new Error('cabinet_state_mismatch');
-    }
-    await cabinetService.saveCabinetState(expectedCabinetId, state.shelves);
-    await cabinetService.updateCabinet(expectedCabinetId, {
-        width: state.cabinetWidth,
-        height: state.cabinetHeight,
-        depth: state.cabinetDepth,
-    });
-}
-
-export const InventoryListView: React.FC = () => {
+export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWasteBatch }) => {
     const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.inventory);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
@@ -227,7 +230,7 @@ export const InventoryListView: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<InventorySortOption>('expiry_asc');
-    const [hazardFilter, setHazardFilter] = useState(false);
+    const [hazardFilter, setHazardFilter] = useState<InventoryHazardFilter>('all');
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -244,6 +247,8 @@ export const InventoryListView: React.FC = () => {
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [wasteBatchPendingKeys, setWasteBatchPendingKeys] = useState<string[]>([]);
+    const [wasteBatchErrors, setWasteBatchErrors] = useState<Record<string, string>>({});
     const [isSelectMode, setIsSelectMode] = useState(false);
     const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
     const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
@@ -259,12 +264,14 @@ export const InventoryListView: React.FC = () => {
     const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
     const [selectedDesktopItemId, setSelectedDesktopItemId] = useState<string | null>(null);
     const [inventoryGhsByCas, setInventoryGhsByCas] = useState<Record<string, InventoryGhsState>>({});
+    const wasteBatchPendingRef = useRef<Set<string>>(new Set());
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressTriggeredRef = useRef(false);
     const bulkMoveInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const inventoryGhsByCasRef = useRef<Record<string, InventoryGhsState>>({});
     const inventoryGhsInFlightRef = useRef<Set<string>>(new Set());
     const bulkErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const bulkMoveRequestRef = useRef<{ signature: string; requestId: string } | null>(null);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -298,6 +305,7 @@ export const InventoryListView: React.FC = () => {
         setExpandedGroupIds([]);
         setBulkMoveTargetType('other');
         setBulkMoveCabinetId('');
+        bulkMoveRequestRef.current = null;
     }, [currentLabId]);
 
     useEffect(() => {
@@ -395,21 +403,39 @@ export const InventoryListView: React.FC = () => {
             );
         }
 
-        if (hazardFilter) {
-            result = result.filter(item => classifyInventoryItemHazard(item).level === 'high');
+        if (hazardFilter !== 'all') {
+            result = result.filter(item => (
+                classifyInventoryItemHazard(item).filterCategories.includes(hazardFilter)
+            ));
         }
 
         return result;
     }, [items, searchQuery, hazardFilter, classifyInventoryItemHazard]);
 
-    // Hazard summary for showing count
-    const hazardSummary = useMemo(() => {
-        let count = 0;
+    const hazardFilterCounts = useMemo(() => {
+        const counts: Record<InventoryHazardFilterCategory, number> = {
+            special_high: 0,
+            flammable: 0,
+            corrosive: 0,
+            toxic: 0,
+            other_managed: 0,
+        };
         for (const item of items) {
-            if (classifyInventoryItemHazard(item).level === 'high') count++;
+            for (const category of classifyInventoryItemHazard(item).filterCategories) {
+                counts[category] += 1;
+            }
         }
-        return count;
+        return counts;
     }, [items, classifyInventoryItemHazard]);
+    const hazardSummary = hazardFilterCounts.special_high;
+    const hazardFilterOptions = useMemo(() => ([
+        { value: 'all', label: t('inventory_hazard_filter_all') },
+        { value: 'special_high', label: `${t('inventory_hazard_special_high')} (${hazardFilterCounts.special_high})` },
+        { value: 'flammable', label: `${t('inventory_hazard_flammable')} (${hazardFilterCounts.flammable})` },
+        { value: 'corrosive', label: `${t('inventory_hazard_corrosive')} (${hazardFilterCounts.corrosive})` },
+        { value: 'toxic', label: `${t('inventory_hazard_toxic')} (${hazardFilterCounts.toxic})` },
+        { value: 'other_managed', label: `${t('inventory_hazard_other_managed')} (${hazardFilterCounts.other_managed})` },
+    ]), [hazardFilterCounts, t]);
 
     // 만료/위치 우선으로 빠르게 확인할 수 있게 화면 전용 정렬 목록을 만든다.
     const visibleItems = useMemo(() => {
@@ -420,6 +446,15 @@ export const InventoryListView: React.FC = () => {
         () => visibleItems.find((item) => item.id === selectedDesktopItemId) || visibleItems[0] || null,
         [selectedDesktopItemId, visibleItems]
     );
+    const selectedDesktopWasteBatchKey = selectedDesktopItem
+        ? `${selectedDesktopItem._source || 'inventory'}:${selectedDesktopItem.id}`
+        : null;
+    const isStartingDesktopWasteBatch = selectedDesktopWasteBatchKey
+        ? wasteBatchPendingKeys.includes(selectedDesktopWasteBatchKey)
+        : false;
+    const selectedDesktopWasteBatchError = selectedDesktopWasteBatchKey
+        ? wasteBatchErrors[selectedDesktopWasteBatchKey]
+        : undefined;
 
     const sortOptions = useMemo(() => ([
         { value: 'expiry_asc', label: t('inventory_sort_expiry_asc') },
@@ -475,7 +510,7 @@ export const InventoryListView: React.FC = () => {
             tone: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-300',
         },
         {
-            label: t('inventory_hazard_filter'),
+            label: t('inventory_hazard_special_high'),
             value: hazardSummary,
             Icon: ShieldAlert,
             tone: 'text-red-600 bg-red-50 dark:bg-red-950/30 dark:text-red-300',
@@ -680,6 +715,36 @@ export const InventoryListView: React.FC = () => {
 
     const handleDeleteClick = (item: InventoryItem) => {
         setItemToDelete(item);
+    };
+
+    const getWasteBatchActionKey = (item: InventoryItem) =>
+        `${item._source || 'inventory'}:${item.id}`;
+
+    const handleStartWasteBatch = async (item: InventoryItem) => {
+        if (!onStartWasteBatch) return;
+        const actionKey = getWasteBatchActionKey(item);
+        if (wasteBatchPendingRef.current.has(actionKey)) return;
+
+        wasteBatchPendingRef.current.add(actionKey);
+        setWasteBatchPendingKeys((current) => [...current, actionKey]);
+        setWasteBatchErrors((current) => {
+            const next = { ...current };
+            delete next[actionKey];
+            return next;
+        });
+
+        try {
+            await onStartWasteBatch(item);
+        } catch (error) {
+            console.error('Failed to start inventory waste batch:', error);
+            setWasteBatchErrors((current) => ({
+                ...current,
+                [actionKey]: t('inventory_start_waste_batch_failed'),
+            }));
+        } finally {
+            wasteBatchPendingRef.current.delete(actionKey);
+            setWasteBatchPendingKeys((current) => current.filter((key) => key !== actionKey));
+        }
     };
 
     /* const handleOpenCasReview = async () => {
@@ -976,32 +1041,17 @@ export const InventoryListView: React.FC = () => {
         setBulkDeleteError(null);
         try {
             const selectedItems = items.filter(item => selectedItemIds.includes(item.id));
-            const deleteResults = await Promise.allSettled(
-                selectedItems.map(item => inventoryService.deleteItem(item))
-            );
+            await inventoryService.deleteItems(selectedItems);
 
-            const successIds: string[] = [];
-            let failedCount = 0;
-            deleteResults.forEach((result, index) => {
-                if (result.status === 'fulfilled') {
-                    successIds.push(selectedItems[index].id);
-                } else {
-                    failedCount += 1;
-                    console.error('Failed to bulk delete inventory item:', result.reason);
-                }
-            });
-
-            if (successIds.length > 0) {
-                setItems(prev => prev.filter(item => !successIds.includes(item.id)));
-            }
-
-            if (failedCount > 0) {
-                setSelectedItemIds(prev => prev.filter(id => !successIds.includes(id)));
-                setBulkDeleteError(t('inventory_bulk_delete_partial_failed', { count: failedCount }));
-            } else {
-                setSelectedItemIds([]);
-                setIsSelectMode(false);
-            }
+            const deletedIds = new Set(selectedItems.map(item => item.id));
+            setItems(prev => prev.filter(item => !deletedIds.has(item.id)));
+            setSelectedItemIds([]);
+            setIsSelectMode(false);
+        } catch (error) {
+            // The V2 RPC is one transaction: a failure means no selected row was
+            // removed, so the current list and selection remain intact.
+            console.error('Failed to atomically delete inventory records:', error);
+            setBulkDeleteError(t('inventory_bulk_delete_failed'));
         } finally {
             setIsBulkDeleting(false);
             setIsBulkDeleteConfirmOpen(false);
@@ -1023,319 +1073,149 @@ export const InventoryListView: React.FC = () => {
         setBulkMoveError(null);
         setBulkMoveInfo(null);
         try {
-            const selectedItems = items.filter(item => selectedItemIds.includes(item.id));
-            const eligibleItems = selectedItems.filter((item) => {
-                if (bulkMoveTargetType === 'other') return item._source === 'inventory';
-                return item._source === 'inventory' || item._source === 'cabinet_item';
-            });
-            const ineligibleCount = selectedItems.length - eligibleItems.length;
+            const selectedItems = items.filter((item) => selectedItemIds.includes(item.id));
+            if (selectedItems.length !== selectedItemIds.length) {
+                throw new Error('selected_inventory_items_changed');
+            }
 
-            if (eligibleItems.length === 0) {
-                setBulkMoveError(
-                    bulkMoveTargetType === 'other'
-                        ? t('inventory_bulk_move_no_eligible_other')
-                        : t('inventory_bulk_move_no_eligible_cabinet')
-                );
+            const eligibleItems = selectedItems.filter((item) => (
+                bulkMoveTargetType === 'other'
+                    ? item._source === 'inventory'
+                    : item._source === 'inventory' || item._source === 'cabinet_item'
+            ));
+            if (eligibleItems.length !== selectedItems.length) {
+                setBulkMoveError(t('inventory_bulk_move_ineligible_part', {
+                    count: selectedItems.length - eligibleItems.length,
+                }));
                 return;
             }
 
-            const successIds: string[] = [];
-            let failedCount = 0;
-            let unchangedCount = 0;
-            let noSpaceCount = 0;
-            let placementFailedCount = 0;
-            let cabinetSyncFailedCount = 0;
-            let sourceRemoveFailedCount = 0;
-            let rollbackFailedCount = 0;
-            const sourceRemoveFailedNames: string[] = [];
+            const unchangedItems = eligibleItems.filter((item) => (
+                bulkMoveTargetType === 'other'
+                    ? item.storage_type === 'other' && item.storage_location_id === bulkMoveLocationId
+                    : item.storage_type === 'cabinet' && item.cabinet_id === bulkMoveCabinetId
+            ));
+            if (unchangedItems.length > 0) {
+                if (unchangedItems.length === eligibleItems.length) {
+                    setBulkMoveInfo(t('inventory_bulk_move_all_already_target'));
+                } else {
+                    setBulkMoveError(t('inventory_bulk_move_unchanged_part', {
+                        count: unchangedItems.length,
+                    }));
+                }
+                return;
+            }
 
+            let destination: InventoryMoveDestination;
+            let targets: InventoryMoveTarget[];
             if (bulkMoveTargetType === 'other') {
-                const targetLocation = locations.find(loc => loc.id === bulkMoveLocationId);
+                const targetLocation = locations.find((location) => (
+                    location.id === bulkMoveLocationId
+                ));
                 if (!targetLocation) {
                     setBulkMoveError(t('inventory_bulk_move_invalid_location'));
                     return;
                 }
-
-                const moveCandidates = eligibleItems.filter(
-                    item => !(item.storage_type === 'other' && item.storage_location_id === bulkMoveLocationId)
-                );
-                unchangedCount = eligibleItems.length - moveCandidates.length;
-
-                if (moveCandidates.length === 0) {
-                    setBulkMoveInfo(t('inventory_bulk_move_all_already_target'));
-                    return;
-                }
-
-                for (const item of moveCandidates) {
-                    let isInventoryMoved = false;
-                    try {
-                        await inventoryService.updateItem(item.id, {
-                            storage_type: 'other',
-                            storage_location_id: bulkMoveLocationId,
-                        }, 'inventory');
-                        isInventoryMoved = true;
-
-                        if (item.storage_type === 'cabinet' && item.cabinet_id) {
-                            const syncSuccess = await removeFromCabinetByInventoryItem(item);
-                            if (!syncSuccess) {
-                                throw new Error('cabinet_sync_failed');
-                            }
-                        }
-
-                        successIds.push(item.id);
-                    } catch (error) {
-                        failedCount += 1;
-                        if (isInventoryMoved && item.storage_type === 'cabinet' && item.cabinet_id) {
-                            try {
-                                await inventoryService.updateItem(item.id, {
-                                    storage_type: 'cabinet',
-                                    cabinet_id: item.cabinet_id,
-                                }, 'inventory');
-                            } catch (rollbackError) {
-                                rollbackFailedCount += 1;
-                                console.error('Rollback after cabinet sync failure failed:', rollbackError);
-                            }
-                        }
-                        if (error instanceof Error && error.message === 'cabinet_sync_failed') {
-                            cabinetSyncFailedCount += 1;
-                        } else {
-                            console.error('Failed to bulk move inventory item to other storage:', error);
-                        }
-                    }
-                }
-
-                if (successIds.length > 0) {
-                    setItems(prev => prev.map(item => {
-                        if (!successIds.includes(item.id)) return item;
-                        return {
-                            ...item,
-                            storage_type: 'other',
-                            storage_location_id: targetLocation.id,
-                            storage_location_name: targetLocation.name,
-                            storage_location_icon: targetLocation.icon,
-                            cabinet_id: null,
-                            cabinet_name: null,
-                            shelf_id: null,
-                            shelf_level: null,
-                        };
-                    }));
-                }
+                destination = {
+                    storage_type: 'other',
+                    storage_location_id: targetLocation.id,
+                };
+                targets = eligibleItems.map((item) => ({
+                    item_id: item.id,
+                    item_source: 'inventory',
+                }));
             } else {
-                const targetCabinet = cabinets.find(cab => cab.id === bulkMoveCabinetId);
+                const targetCabinet = cabinets.find((cabinet) => (
+                    cabinet.id === bulkMoveCabinetId
+                ));
                 if (!targetCabinet) {
                     setBulkMoveError(t('inventory_bulk_move_invalid_cabinet'));
                     return;
                 }
 
-                const moveCandidates = eligibleItems.filter(
-                    item => !(item.storage_type === 'cabinet' && item.cabinet_id === bulkMoveCabinetId)
-                );
-                unchangedCount = eligibleItems.length - moveCandidates.length;
+                const store = useFridgeStore.getState();
+                await store.loadCabinet(targetCabinet.id);
+                const targetState = useFridgeStore.getState();
+                if (targetState.cabinetId !== targetCabinet.id) {
+                    throw new Error('cabinet_state_mismatch');
+                }
 
-                if (moveCandidates.length === 0) {
-                    setBulkMoveInfo(t('inventory_bulk_move_all_already_target'));
+                const plan = planBulkInventoryCabinetMove({
+                    shelves: targetState.shelves,
+                    cabinetWidth: targetState.cabinetWidth,
+                    cabinetDepth: targetState.cabinetDepth,
+                    candidates: eligibleItems.map((item) => {
+                        const fallbackTemplate = guessTemplateFromCapacity(item.capacity || '');
+                        const template = item.placement_template || fallbackTemplate;
+                        const savedWidth = item.placement_width;
+                        const width = typeof savedWidth === 'number' &&
+                            Number.isFinite(savedWidth) &&
+                            savedWidth > 0
+                            ? savedWidth
+                            : getWidthForTemplate(template);
+                        return {
+                            itemId: item.id,
+                            itemSource: item._source === 'cabinet_item'
+                                ? 'cabinet_item'
+                                : 'inventory',
+                            name: item.name,
+                            template,
+                            width,
+                        };
+                    }),
+                });
+                if (!plan || plan.length !== eligibleItems.length) {
+                    setBulkMoveError(t('inventory_bulk_move_no_space_part', {
+                        count: eligibleItems.length,
+                    }));
                     return;
                 }
 
-                const successShelfLevelById = new Map<string, number>();
-                const cabinetItemNewIdByOldId = new Map<string, string>();
-                const linkedInventoryIdByItemId = new Map<string, string | null>();
-
-                for (const item of moveCandidates) {
-                    const sourceGeometry = await getSourcePlacementGeometry(item);
-                    const template = sourceGeometry?.template ?? guessTemplateFromCapacity(item.capacity || '');
-                    const width = sourceGeometry?.width ?? getWidthForTemplate(template);
-                    let placedItemId: string | null = null;
-                    let isInventoryUpdated = false;
-                    try {
-                        const store = useFridgeStore.getState();
-                        await store.loadCabinet(targetCabinet.id);
-
-                        const targetLinkId = item._source === 'inventory'
-                            ? item.id
-                            : (item.linked_inventory_item_id || null);
-                        const needsDeferredLink = Boolean(
-                            targetLinkId
-                            && item.storage_type === 'cabinet'
-                            && item.cabinet_id
-                            && item.cabinet_id !== targetCabinet.id
-                        );
-
-                        const placementResult = store.autoPlaceReagent({
-                            id: '',
-                            reagentId: item.id,
-                            linkedInventoryItemId: needsDeferredLink ? undefined : (targetLinkId || undefined),
-                            name: item.name,
-                            width,
-                            template,
-                            isAcidic: false,
-                            isBasic: false,
-                            hCodes: getInventoryGhsHCodes(item),
-                            notes: item.memo || undefined,
-                            casNo: item.cas_number || undefined,
-                            expiryDate: item.expiry_date || undefined,
-                            capacity: item.capacity || undefined,
-                            productNumber: item.product_number || undefined,
-                            brand: item.brand || undefined,
-                        });
-
-                        if (!placementResult) {
-                            noSpaceCount += 1;
-                            continue;
-                        }
-
-                        placedItemId = placementResult.itemId;
-                        await persistLoadedCabinetStateStrict(targetCabinet.id);
-                        cabinetService.logActivity(targetCabinet.id, 'add', item.name, undefined, item.memo || undefined)
-                            .catch((error) => console.error('Failed to log cabinet activity for bulk move:', error));
-
-                        if (item._source === 'inventory') {
-                            await inventoryService.updateItem(item.id, {
-                                storage_type: 'cabinet',
-                                cabinet_id: targetCabinet.id,
-                            }, 'inventory');
-                            isInventoryUpdated = true;
-
-                            if (item.storage_type === 'cabinet' && item.cabinet_id && item.cabinet_id !== targetCabinet.id) {
-                                const removed = await removeFromCabinetByInventoryItem(item);
-                                if (!removed) {
-                                    throw new Error('cabinet_sync_failed');
-                                }
-                            }
-                        } else {
-                            if (!item.cabinet_id) {
-                                throw new Error('source_remove_failed');
-                            }
-                            const removed = await removeCabinetItemById(item.cabinet_id, item, item.memo || undefined);
-                            if (!removed) {
-                                throw new Error('source_remove_failed');
-                            }
-                            cabinetItemNewIdByOldId.set(item.id, placementResult.itemId);
-                        }
-
-                        if (needsDeferredLink && targetLinkId) {
-                            try {
-                                await inventoryService.setCabinetItemInventoryLink(placementResult.itemId, targetLinkId);
-                                useFridgeStore.getState().updateReagent(placementResult.itemId, {
-                                    linkedInventoryItemId: targetLinkId,
-                                    reagentId: targetLinkId,
-                                });
-                            } catch (linkError) {
-                                console.error('Failed to finalize cabinet inventory link after bulk move:', linkError);
-                            }
-                        }
-
-                        successIds.push(item.id);
-                        successShelfLevelById.set(item.id, placementResult.shelfLevel - 1);
-                        linkedInventoryIdByItemId.set(item.id, targetLinkId);
-                    } catch (error) {
-                        try {
-                            if (placedItemId) {
-                                const rollbackStore = useFridgeStore.getState();
-                                await rollbackStore.loadCabinet(targetCabinet.id);
-                                const rollbackTarget = rollbackStore.shelves
-                                    .flatMap(shelf => shelf.items)
-                                    .find(placed => placed.id === placedItemId);
-                                if (rollbackTarget) {
-                                    rollbackStore.removeReagent(rollbackTarget.id);
-                                    await persistLoadedCabinetStateStrict(targetCabinet.id);
-                                }
-                            }
-                        } catch (rollbackError) {
-                            rollbackFailedCount += 1;
-                            console.error('Rollback after cabinet bulk move failed:', rollbackError);
-                        }
-
-                        if (isInventoryUpdated && item._source === 'inventory') {
-                            try {
-                                await inventoryService.updateItem(item.id, {
-                                    storage_type: item.storage_type,
-                                    cabinet_id: item.storage_type === 'cabinet' ? (item.cabinet_id || undefined) : undefined,
-                                    storage_location_id: item.storage_type === 'other' ? (item.storage_location_id || undefined) : undefined,
-                                }, 'inventory');
-                            } catch (rollbackError) {
-                                rollbackFailedCount += 1;
-                                console.error('Rollback inventory update after cabinet move failed:', rollbackError);
-                            }
-                        }
-
-                        if (error instanceof Error && error.message === 'cabinet_sync_failed') {
-                            cabinetSyncFailedCount += 1;
-                        } else if (error instanceof Error && error.message === 'source_remove_failed') {
-                            sourceRemoveFailedCount += 1;
-                            sourceRemoveFailedNames.push(item.name);
-                        } else {
-                            placementFailedCount += 1;
-                            console.error('Failed to bulk move item to cabinet:', error);
-                        }
-                        failedCount += 1;
-                    }
-                }
-
-                if (successIds.length > 0) {
-                    setItems(prev => prev.map(item => {
-                        if (!successIds.includes(item.id)) return item;
-                        const nextId = item._source === 'cabinet_item'
-                            ? (cabinetItemNewIdByOldId.get(item.id) || item.id)
-                            : item.id;
-                        return {
-                            ...item,
-                            id: nextId,
-                            linked_inventory_item_id: linkedInventoryIdByItemId.get(item.id) ?? item.linked_inventory_item_id ?? null,
-                            storage_type: 'cabinet',
-                            cabinet_id: targetCabinet.id,
-                            cabinet_name: targetCabinet.name,
-                            shelf_id: item.shelf_id || null,
-                            shelf_level: successShelfLevelById.get(item.id) ?? null,
-                            storage_location_id: null,
-                            storage_location_name: null,
-                            storage_location_icon: null,
-                        };
-                    }));
-                }
+                destination = {
+                    storage_type: 'cabinet',
+                    cabinet_id: targetCabinet.id,
+                };
+                targets = plan.map((planned) => ({
+                    item_id: planned.itemId,
+                    item_source: planned.itemSource,
+                    placement: planned.placement,
+                }));
             }
 
-            const movedCount = successIds.length;
-            if (movedCount > 0) {
-                setBulkMoveInfo(t('inventory_bulk_move_success', { count: movedCount }));
+            const signature = JSON.stringify({ targets, destination });
+            const pendingRequest = bulkMoveRequestRef.current;
+            const requestId = pendingRequest?.signature === signature
+                ? pendingRequest.requestId
+                : createInventoryOperationRequestId();
+            bulkMoveRequestRef.current = { signature, requestId };
+
+            const receipt = await inventoryService.moveRecords({
+                targets,
+                destination,
+                requestId,
+            });
+
+            await loadData();
+            if (destination.storage_type === 'cabinet') {
+                await useFridgeStore.getState().loadCabinet(destination.cabinet_id);
             }
 
-            if (
-                failedCount > 0 ||
-                ineligibleCount > 0 ||
-                unchangedCount > 0 ||
-                noSpaceCount > 0 ||
-                placementFailedCount > 0 ||
-                cabinetSyncFailedCount > 0 ||
-                sourceRemoveFailedCount > 0 ||
-                rollbackFailedCount > 0
-            ) {
-                const details: string[] = [];
-                if (failedCount > 0) details.push(t('inventory_bulk_move_failed_part', { count: failedCount }));
-                if (ineligibleCount > 0) details.push(t('inventory_bulk_move_ineligible_part', { count: ineligibleCount }));
-                if (unchangedCount > 0) details.push(t('inventory_bulk_move_unchanged_part', { count: unchangedCount }));
-                if (noSpaceCount > 0) details.push(t('inventory_bulk_move_no_space_part', { count: noSpaceCount }));
-                if (placementFailedCount > 0) details.push(t('inventory_bulk_move_place_failed_part', { count: placementFailedCount }));
-                if (cabinetSyncFailedCount > 0) details.push(t('inventory_bulk_move_cabinet_sync_failed_part', { count: cabinetSyncFailedCount }));
-                if (sourceRemoveFailedCount > 0) details.push(t('inventory_bulk_move_source_remove_failed_part', { count: sourceRemoveFailedCount }));
-                if (sourceRemoveFailedNames.length > 0) {
-                    details.push(t('inventory_bulk_move_source_remove_failed_detail', {
-                        items: sourceRemoveFailedNames.slice(0, 3).join(', '),
-                    }));
-                }
-                if (rollbackFailedCount > 0) details.push(t('inventory_bulk_move_rollback_failed_part', { count: rollbackFailedCount }));
-                setBulkMoveError(details.join(' '));
-                setSelectedItemIds(prev => prev.filter(id => !successIds.includes(id)));
-            } else {
-                setSelectedItemIds([]);
-                setIsSelectMode(false);
-            }
+            bulkMoveRequestRef.current = null;
+            setBulkMoveInfo(t('inventory_bulk_move_success', {
+                count: receipt.movedCount,
+            }));
+            setSelectedItemIds([]);
+            setIsSelectMode(false);
+        } catch (error) {
+            // The server RPC is one transaction. Keep both the current list and
+            // selection untouched so the same idempotency key can be retried.
+            console.error('Failed to atomically move inventory records:', error);
+            setBulkMoveError(t('inventory_bulk_move_atomic_failed'));
         } finally {
             setIsBulkMoving(false);
             setIsBulkMoveConfirmOpen(false);
         }
     };
-
     const renderStorageBadge = (item: InventoryItem) => {
         if (item.storage_type === 'cabinet') {
             const shelfLabel = typeof item.shelf_level === 'number'
@@ -1495,11 +1375,11 @@ export const InventoryListView: React.FC = () => {
             return <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label={t('msds_loading')} />;
         }
 
-        if (hazard.level === 'none') {
+        if (hazard.filterCategories.length === 0) {
             return <span className="text-xs text-slate-400">-</span>;
         }
 
-        return <ShieldAlert className="h-4 w-4 text-red-500" />;
+        return <ShieldAlert className={`h-4 w-4 ${hazard.filterCategories.includes('special_high') ? 'text-red-500' : 'text-orange-500'}`} />;
     };
 
     const getStorageSummaryText = (item: InventoryItem) => {
@@ -1531,6 +1411,9 @@ export const InventoryListView: React.FC = () => {
         const nested = options?.nested ?? false;
         const expiryStatus = getExpiryStatus(item.expiry_date);
         const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
+        const wasteBatchActionKey = getWasteBatchActionKey(item);
+        const isStartingWasteBatch = wasteBatchPendingKeys.includes(wasteBatchActionKey);
+        const wasteBatchError = wasteBatchErrors[wasteBatchActionKey];
 
         return (
             <div
@@ -1590,11 +1473,15 @@ export const InventoryListView: React.FC = () => {
                         </div>
                         {(() => {
                             const hazard = classifyInventoryItemHazard(item);
-                            if (hazard.level === 'none') return null;
+                            if (hazard.filterCategories.length === 0) return null;
+                            const isSpecialHigh = hazard.filterCategories.includes('special_high');
                             return (
                                 <div className="mt-2 mb-1 flex flex-wrap gap-1">
                                     {hazard.groupLabelKeys.map(key => (
-                                        <span key={key} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
+                                        <span key={key} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${isSpecialHigh
+                                            ? 'bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+                                            : 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800'
+                                        }`}>
                                             <ShieldAlert className="w-2.5 h-2.5" />
                                             {t(key)}
                                         </span>
@@ -1623,19 +1510,46 @@ export const InventoryListView: React.FC = () => {
                     {renderStorageBadge(item)}
 
                     {!isSelectMode && (
-                        <button
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                handleDeleteClick(item);
-                            }}
-                            disabled={isDeleting || isBulkDeleting}
-                            className="text-xs text-red-500 hover:text-red-700 disabled:text-red-300 disabled:cursor-not-allowed font-medium px-2 py-1"
-                        >
-                            {t('inventory_btn_delete')}
-                        </button>
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {onStartWasteBatch && (
+                                <button
+                                    type="button"
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleStartWasteBatch(item);
+                                    }}
+                                    disabled={isStartingWasteBatch || isDeleting || isBulkDeleting}
+                                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                                >
+                                    {isStartingWasteBatch
+                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        : <FlaskConical className="h-3.5 w-3.5" />}
+                                    {isStartingWasteBatch
+                                        ? t('inventory_start_waste_batch_running')
+                                        : t('inventory_start_waste_batch')}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleDeleteClick(item);
+                                }}
+                                disabled={isDeleting || isBulkDeleting || isStartingWasteBatch}
+                                className="min-h-11 rounded-lg px-2.5 py-2 text-xs font-bold text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-950/30"
+                            >
+                                {t('inventory_btn_delete')}
+                            </button>
+                        </div>
                     )}
                 </div>
+                {wasteBatchError && (
+                    <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                        {wasteBatchError}
+                    </p>
+                )}
             </div>
         );
     };
@@ -1772,172 +1686,6 @@ export const InventoryListView: React.FC = () => {
         );
     };
 
-    const removeFromCabinetByInventoryItem = async (item: InventoryItem): Promise<boolean> => {
-        if (!item.cabinet_id) return false;
-
-        const store = useFridgeStore.getState();
-        await store.loadCabinet(item.cabinet_id);
-
-        const placement = store.shelves
-            .flatMap(shelf => shelf.items)
-            .find(placed =>
-                placed.linkedInventoryItemId === item.id ||
-                placed.reagentId === item.id ||
-                (
-                    normalizeText(placed.name) === normalizeText(item.name) &&
-                    normalizeText(placed.brand) === normalizeText(item.brand) &&
-                    normalizeText(placed.productNumber) === normalizeText(item.product_number) &&
-                    normalizeText(placed.capacity) === normalizeText(item.capacity) &&
-                    normalizeText(placed.casNo) === normalizeText(item.cas_number) &&
-                    !placed.linkedInventoryItemId
-                )
-            );
-
-        if (!placement) return false;
-
-        const deleted = await deleteCabinetItemRow(item.cabinet_id, placement.id);
-        if (!deleted) return false;
-        cabinetService.logActivity(item.cabinet_id, 'remove', item.name, t('inventory_bulk_move_reason'), item.memo || undefined)
-            .catch((error) => console.error('Failed to log cabinet remove activity for bulk move:', error));
-
-        return true;
-    };
-
-    const removeCabinetItemById = async (
-        cabinetId: string,
-        sourceItem: InventoryItem,
-        memo?: string
-    ): Promise<boolean> => {
-        if (sourceItem.id) {
-            const deletedById = await deleteCabinetItemRow(cabinetId, sourceItem.id);
-            if (deletedById) {
-                cabinetService.logActivity(cabinetId, 'remove', sourceItem.name, t('inventory_bulk_move_reason'), memo)
-                    .catch((error) => console.error('Failed to log cabinet remove activity for cabinet-item move:', error));
-                return true;
-            }
-        }
-
-        const store = useFridgeStore.getState();
-        await store.loadCabinet(cabinetId);
-
-        const shelfItems = store.shelves.flatMap(shelf => shelf.items);
-        const placementById = shelfItems.find(placed => placed.id === sourceItem.id);
-        const placementByLinkedInventoryId = sourceItem.linked_inventory_item_id
-            ? shelfItems.find(placed => placed.linkedInventoryItemId === sourceItem.linked_inventory_item_id)
-            : null;
-        const placementByFingerprint = shelfItems.find(placed =>
-            normalizeText(placed.name) === normalizeText(sourceItem.name) &&
-            normalizeText(placed.brand) === normalizeText(sourceItem.brand) &&
-            normalizeText(placed.productNumber) === normalizeText(sourceItem.product_number) &&
-            normalizeText(placed.capacity) === normalizeText(sourceItem.capacity) &&
-            normalizeText(placed.casNo) === normalizeText(sourceItem.cas_number) &&
-            !placed.linkedInventoryItemId
-        );
-        const placement = placementById || placementByLinkedInventoryId || placementByFingerprint;
-
-        if (!placement) return false;
-
-        const deleted = await deleteCabinetItemRow(cabinetId, placement.id);
-        if (!deleted) return false;
-        cabinetService.logActivity(cabinetId, 'remove', sourceItem.name, t('inventory_bulk_move_reason'), memo)
-            .catch((error) => console.error('Failed to log cabinet remove activity for cabinet-item move:', error));
-
-        return true;
-    };
-
-    const deleteCabinetItemRow = async (cabinetId: string, cabinetItemId: string): Promise<boolean> => {
-        const { data, error } = await supabase
-            .from('cabinet_items')
-            .delete()
-            .eq('cabinet_id', cabinetId)
-            .eq('id', cabinetItemId)
-            .select('id');
-        if (error) {
-            console.error('Failed to delete cabinet item row directly:', error);
-            return false;
-        }
-        return (data || []).length > 0;
-    };
-
-    const getSourcePlacementGeometry = async (
-        item: InventoryItem
-    ): Promise<{ template: ReagentTemplateType; width: number } | null> => {
-        if (item.storage_type !== 'cabinet' || !item.cabinet_id) return null;
-
-        // 1) DB 원본 우선 조회: id가 정확히 매칭되면 템플릿/너비를 가장 신뢰할 수 있다.
-        const exactQuery = supabase
-            .from('cabinet_items')
-            .select('id, template, width')
-            .eq('cabinet_id', item.cabinet_id);
-        const { data: exactRow, error: exactRowError } = await (item._source === 'inventory'
-            ? exactQuery.eq('inventory_item_id', item.id)
-            : exactQuery.eq('id', item.id))
-            .maybeSingle();
-        if (exactRowError) {
-            console.error('Failed to fetch source cabinet geometry by exact link:', exactRowError);
-        } else if (exactRow?.template && Number.isFinite(Number(exactRow.width)) && Number(exactRow.width) > 0) {
-            return {
-                template: normalizeTemplateFromDb(exactRow.template),
-                width: Number(exactRow.width),
-            };
-        }
-
-        // 2) id 매칭이 안 될 때, fingerprint로 DB에서 한 번 더 시도
-        const { data: fingerprintRows, error: fingerprintError } = await supabase
-            .from('cabinet_items')
-            .select('id, inventory_item_id, template, width, name, brand, product_number, capacity, cas_no')
-            .eq('cabinet_id', item.cabinet_id)
-            .is('inventory_item_id', null)
-            .eq('name', item.name);
-        if (fingerprintError) {
-            console.error('Failed to fetch source cabinet geometry by fingerprint:', fingerprintError);
-        } else {
-            const fingerprintRow = (fingerprintRows || []).find((row: {
-                brand?: string | null;
-                product_number?: string | null;
-                capacity?: string | null;
-                cas_no?: string | null;
-                template?: ReagentTemplateType | null;
-                width?: number | string | null;
-            }) =>
-                normalizeText(row.brand) === normalizeText(item.brand) &&
-                normalizeText(row.product_number) === normalizeText(item.product_number) &&
-                normalizeText(row.capacity) === normalizeText(item.capacity) &&
-                normalizeText(row.cas_no) === normalizeText(item.cas_number)
-            );
-            if (fingerprintRow?.template && Number.isFinite(Number(fingerprintRow.width)) && Number(fingerprintRow.width) > 0) {
-                return {
-                    template: normalizeTemplateFromDb(fingerprintRow.template),
-                    width: Number(fingerprintRow.width),
-                };
-            }
-        }
-
-        // 3) 마지막 fallback: 현재 로드된 store에서 탐색
-        const store = useFridgeStore.getState();
-        await store.loadCabinet(item.cabinet_id);
-        const placement = store.shelves
-            .flatMap(shelf => shelf.items)
-            .find(placed =>
-                (item._source === 'cabinet_item' && placed.id === item.id) ||
-                (item._source === 'inventory' && placed.linkedInventoryItemId === item.id) ||
-                (item._source === 'inventory' && placed.reagentId === item.id) ||
-                (
-                    normalizeText(placed.name) === normalizeText(item.name) &&
-                    normalizeText(placed.brand) === normalizeText(item.brand) &&
-                    normalizeText(placed.productNumber) === normalizeText(item.product_number) &&
-                    normalizeText(placed.capacity) === normalizeText(item.capacity) &&
-                    normalizeText(placed.casNo) === normalizeText(item.cas_number) &&
-                    !placed.linkedInventoryItemId
-                )
-            );
-        if (!placement) return null;
-        const template = normalizeTemplateFromDb(placement.template);
-        const width = Number(placement.width);
-        if (!template || !Number.isFinite(width) || width <= 0) return null;
-        return { template, width };
-    };
-
     return (
         <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)]">
             {/* Header */}
@@ -2031,25 +1779,16 @@ export const InventoryListView: React.FC = () => {
                 </div>
                 <div className="mt-3 flex items-center justify-end gap-2 lg:hidden">
                     <div className="flex items-center gap-2 min-w-0">
-                        {/* Hazard Filter */}
-                        {hazardSummary > 0 && (
-                            <button
-                                onClick={() => setHazardFilter(!hazardFilter)}
-                                className={`flex items-center gap-1.5 px-2.5 rounded-xl text-xs font-semibold border transition-all h-[42px] shrink-0 shadow-sm ${hazardFilter
-                                        ? 'border-red-400 dark:border-red-600 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 ring-1 ring-red-300 dark:ring-red-700'
-                                        : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:border-red-300 dark:hover:border-red-600 hover:text-red-600 dark:hover:text-red-400'
-                                    }`}
-                            >
-                                <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
-                                <span>{t('inventory_hazard_filter')}</span>
-                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${hazardFilter
-                                        ? 'bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200'
-                                        : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300'
-                                    }`}>
-                                    {hazardSummary}
-                                </span>
-                            </button>
-                        )}
+                        <AppSelect
+                            value={hazardFilter}
+                            onChange={(value) => setHazardFilter(value as InventoryHazardFilter)}
+                            options={hazardFilterOptions}
+                            align="right"
+                            ariaLabel={t('inventory_hazard_filter')}
+                            className="min-w-0 shrink"
+                            buttonClassName="min-w-0 max-w-[154px] bg-white dark:bg-slate-700 !h-[40px] !rounded-xl !shadow-sm !text-xs !py-0"
+                            menuClassName="w-max min-w-[220px]"
+                        />
                         <AppSelect
                             value={sortBy}
                             onChange={(value) => setSortBy(value as InventorySortOption)}
@@ -2215,22 +1954,16 @@ export const InventoryListView: React.FC = () => {
                                             className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-900 shadow-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                                         />
                                     </div>
-                                    {hazardSummary > 0 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setHazardFilter(!hazardFilter)}
-                                            className={`flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition-colors ${hazardFilter
-                                                ? 'border-red-300 bg-red-50 text-red-700 ring-2 ring-red-500/10 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300'
-                                                : 'border-slate-200 bg-white text-slate-600 hover:border-red-200 hover:text-red-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
-                                                }`}
-                                        >
-                                            <ShieldAlert className="h-3.5 w-3.5 text-red-500" />
-                                            <span>{t('inventory_hazard_filter')}</span>
-                                            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                                {hazardSummary}
-                                            </span>
-                                        </button>
-                                    )}
+                                    <AppSelect
+                                        value={hazardFilter}
+                                        onChange={(value) => setHazardFilter(value as InventoryHazardFilter)}
+                                        options={hazardFilterOptions}
+                                        align="right"
+                                        ariaLabel={t('inventory_hazard_filter')}
+                                        className="min-w-[190px]"
+                                        buttonClassName="min-w-[190px] bg-white dark:bg-slate-950 !h-10 !rounded-lg !shadow-sm !text-xs !py-0"
+                                        menuClassName="w-max min-w-[230px]"
+                                    />
                                     <AppSelect
                                         value={sortBy}
                                         onChange={(value) => setSortBy(value as InventorySortOption)}
@@ -2386,7 +2119,7 @@ export const InventoryListView: React.FC = () => {
                                             <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_quantity')}</th>
                                             <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_error_expiry_label')}</th>
                                             <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_capacity')}</th>
-                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_hazard_filter')}</th>
+                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_hazard_management')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -2520,7 +2253,7 @@ export const InventoryListView: React.FC = () => {
                         </div>
 
                         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('inventory_hazard_filter')}</h4>
+                            <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('inventory_hazard_management')}</h4>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {(() => {
                                     const hazard = classifyInventoryItemHazard(selectedDesktopItem);
@@ -2531,12 +2264,15 @@ export const InventoryListView: React.FC = () => {
                                         return renderGhsPictograms(selectedDesktopItem, hazard, { variant: 'detail' });
                                     }
 
-                                    return hazard.level === 'none' ? (
+                                    return hazard.filterCategories.length === 0 ? (
                                         <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
                                             {t('status_allowed')}
                                         </span>
                                     ) : hazard.groupLabelKeys.map((key) => (
-                                        <span key={key} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+                                        <span key={key} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold ${hazard.filterCategories.includes('special_high')
+                                            ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300'
+                                            : 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300'
+                                        }`}>
                                             <ShieldAlert className="h-3.5 w-3.5" />
                                             {t(key)}
                                         </span>
@@ -2545,7 +2281,7 @@ export const InventoryListView: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <button
                                 type="button"
                                 onClick={() => handleEdit(selectedDesktopItem)}
@@ -2553,15 +2289,35 @@ export const InventoryListView: React.FC = () => {
                             >
                                 {t('cabinet_card_edit')}
                             </button>
+                            {onStartWasteBatch && (
+                                <button
+                                    type="button"
+                                    onClick={() => void handleStartWasteBatch(selectedDesktopItem)}
+                                    disabled={isStartingDesktopWasteBatch || isDeleting || isBulkDeleting}
+                                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                                >
+                                    {isStartingDesktopWasteBatch
+                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                        : <FlaskConical className="h-4 w-4" />}
+                                    {isStartingDesktopWasteBatch
+                                        ? t('inventory_start_waste_batch_running')
+                                        : t('inventory_start_waste_batch')}
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={() => handleDeleteClick(selectedDesktopItem)}
-                                disabled={isDeleting || isBulkDeleting}
-                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-bold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                                disabled={isDeleting || isBulkDeleting || isStartingDesktopWasteBatch}
+                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-bold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300 sm:col-span-2"
                             >
                                 {t('inventory_btn_delete')}
                             </button>
                         </div>
+                        {selectedDesktopWasteBatchError && (
+                            <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+                                {selectedDesktopWasteBatchError}
+                            </p>
+                        )}
                     </div>
                 ) : (
                     <div className="flex min-h-[20rem] items-center justify-center text-center text-sm text-slate-400">
@@ -2731,7 +2487,7 @@ export const InventoryListView: React.FC = () => {
                 type="confirm"
                 isDestructive={true}
                 onConfirm={confirmDelete}
-                confirmText={t('btn_confirm')}
+                confirmText={t('inventory_delete_confirm')}
                 cancelText={t('btn_cancel')}
                 isConfirmLoading={isDeleting}
                 preventCloseWhileLoading={true}

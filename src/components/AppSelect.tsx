@@ -18,6 +18,7 @@ interface AppSelectProps {
     className?: string;
     buttonClassName?: string;
     menuClassName?: string;
+    ariaLabel?: string;
 }
 
 const joinClasses = (...classes: Array<string | false | null | undefined>) =>
@@ -34,9 +35,11 @@ export const AppSelect: React.FC<AppSelectProps> = ({
     className,
     buttonClassName,
     menuClassName,
+    ariaLabel,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const menuId = React.useId();
 
     const selectedOption = useMemo(
         () => options.find((option) => option.value === value),
@@ -79,6 +82,10 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                     setIsOpen((prev) => !prev);
                 }}
                 disabled={disabled}
+                aria-label={ariaLabel}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+                aria-controls={isOpen ? menuId : undefined}
                 className={joinClasses(
                     'w-full border bg-white text-left shadow-sm transition-all dark:bg-slate-800',
                     'border-slate-200 hover:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-slate-600 dark:hover:border-emerald-500/70',
@@ -99,6 +106,9 @@ export const AppSelect: React.FC<AppSelectProps> = ({
 
             {isOpen && !disabled && (
                 <div
+                    id={menuId}
+                    role="listbox"
+                    aria-label={ariaLabel}
                     className={joinClasses(
                         'absolute top-full mt-2 min-w-full overflow-hidden border bg-white shadow-xl dark:bg-slate-800',
                         'border-slate-200 dark:border-slate-600',
@@ -116,6 +126,8 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                                     key={option.value}
                                     type="button"
                                     disabled={option.disabled}
+                                    role="option"
+                                    aria-selected={isSelected}
                                     onClick={() => {
                                         if (option.disabled) return;
                                         onChange(option.value);

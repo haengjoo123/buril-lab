@@ -48,6 +48,8 @@ import type {
   SafetyCenterWasteLog,
 } from './types';
 import { getSafetyCenterSectionFromPath } from './safetyCenterNavigation';
+import { WastePolicyDistributionPanel } from './WastePolicyDistributionPanel';
+import { isWasteV2Enabled } from '../../config/featureFlags';
 
 type DatasetKey = 'risks' | 'waste' | 'audit';
 
@@ -607,7 +609,12 @@ export function SafetyCenterWorkspace() {
             onExport={(format, datasets, options) => void exportDatasets(format, datasets, options)}
           />
         ) : activeSection === 'settings' ? (
-          <SettingsPage center={activeCenter} members={members} exportLogs={exportLogs} />
+          <SettingsPage
+            center={activeCenter}
+            members={members}
+            exportLogs={exportLogs}
+            canManage={canManageCenter}
+          />
         ) : (
           <DashboardPage
             summary={dashboardSummary}
@@ -1671,13 +1678,19 @@ function SettingsPage({
   center,
   members,
   exportLogs,
+  canManage,
 }: {
   center: SafetyCenter;
   members: SafetyCenterMember[];
   exportLogs: SafetyCenterExportLog[];
+  canManage: boolean;
 }) {
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="space-y-5">
+      {isWasteV2Enabled && (
+        <WastePolicyDistributionPanel centerId={center.id} canManage={canManage} />
+      )}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-medium text-slate-950 dark:text-white">센터 설정</h2>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -1716,6 +1729,7 @@ function SettingsPage({
           </p>
         </section>
       </aside>
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { analyzeChemical } from '../utils/chemicalAnalyzer';
 import { classifyChemicalWithAI } from '../services/geminiClassificationService';
 import type { AnalysisResult } from '../types';
 import { getLabAppScopedPath, labAppRoute } from '../utils/appRoutes';
+import { hasCasNumberFormat, normalizeCasNumber } from '../utils/casNumber';
 
 interface UseSearchFlowParams {
   pathname: string;
@@ -86,6 +87,19 @@ export function useSearchFlow({
 
   const performSearch = useCallback(async (searchQuery: string, brand: string = 'all', sort: SortOption = 'relevance') => {
     if (!searchQuery.trim()) return;
+
+    if (hasCasNumberFormat(searchQuery) && !normalizeCasNumber(searchQuery)) {
+      setIsLoading(false);
+      setIsAiAnalyzing(false);
+      setResult(null);
+      setMediaProducts([]);
+      setMediaBrands([]);
+      setMediaCount(0);
+      setCabinetResults([]);
+      setLastSearchQuery(searchQuery);
+      setError(t('search_invalid_cas_checksum', 'CAS 번호의 검증 숫자가 올바르지 않습니다. 번호를 확인해 주세요.'));
+      return;
+    }
 
     setIsLoading(true);
     setIsAiAnalyzing(false);

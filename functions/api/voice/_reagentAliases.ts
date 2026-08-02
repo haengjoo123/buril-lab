@@ -4,6 +4,7 @@ import {
   dedupeAliasTerms,
   normalizeAliasText,
 } from '../../../src/utils/reagentAliases'
+import { normalizeCasNumber } from '../../../src/utils/casNumber'
 import {
   type VoiceLanguage,
   type VoiceMatch,
@@ -37,7 +38,6 @@ const KOSHA_BASE_URL = 'https://msds.kosha.or.kr/openapi/service/msdschem'
 const KOSHA_CAS_SEARCH_CONDITION = 1
 const MAX_MATCH_CANDIDATES = 120
 const MAX_GENERATED_ALIASES = 10
-const CAS_PATTERN = /^\d{2,7}-\d{2}-\d$/
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -145,13 +145,14 @@ function extractXmlItems(xmlText: string): KoshaSearchItem[] {
 }
 
 async function fetchKoshaKoreanNameByCas(env: ReagentAliasEnv, casNumber?: string | null): Promise<string | null> {
-  if (!env.KOSHA_API_KEY?.trim() || !casNumber || !CAS_PATTERN.test(casNumber.trim())) {
+  const normalizedCasNumber = normalizeCasNumber(casNumber)
+  if (!env.KOSHA_API_KEY?.trim() || !normalizedCasNumber) {
     return null
   }
 
   const params = new URLSearchParams({
     serviceKey: env.KOSHA_API_KEY,
-    searchWrd: casNumber.trim(),
+    searchWrd: normalizedCasNumber,
     searchCnd: String(KOSHA_CAS_SEARCH_CONDITION),
     pageNo: '1',
     numOfRows: '3',
@@ -169,7 +170,10 @@ async function fetchKoshaKoreanNameByCas(env: ReagentAliasEnv, casNumber?: strin
   }
 
   const items = extractXmlItems(await response.text())
-  const name = items[0]?.chemNameKor?.trim()
+  const exactMatch = items.find(
+    (item) => normalizeCasNumber(String(item.casNo || '')) === normalizedCasNumber,
+  )
+  const name = exactMatch?.chemNameKor?.trim()
   return name || null
 }
 
@@ -217,10 +221,12 @@ async function fetchPubChemAliases(query: string): Promise<PubChemResolution | n
       synonyms = synonymsData.InformationList?.Information?.[0]?.Synonym || []
     }
 
-    const casNumber = synonyms.find((synonym) => CAS_PATTERN.test(synonym.trim()))
+    const casNumber = synonyms
+      .map((synonym) => normalizeCasNumber(synonym))
+      .find((value): value is string => Boolean(value))
     return {
       canonicalName: property.Title?.trim() || property.IUPACName?.trim() || lookup,
-      casNumber: casNumber?.trim(),
+      casNumber,
       synonyms,
     }
   } catch (error) {

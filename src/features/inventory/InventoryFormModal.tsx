@@ -436,7 +436,7 @@ export const InventoryFormModal: React.FC<Props> = ({
 
         const removed = await removeSourceCabinetRow(sourceItem);
         if (!removed) {
-            await supabase.from('inventory').delete().eq('id', created.id);
+            await inventoryService.deleteItem({ ...created, _source: 'inventory' });
             throw new Error('원본 시약장 제거에 실패해 이동을 취소했습니다.');
         }
     }
