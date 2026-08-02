@@ -36,7 +36,11 @@ function ReloadPrompt() {
     if (!offlineReady && !needRefresh) return null;
 
     return (
-        <div className="fixed bottom-6 left-4 right-4 z-[9999] flex justify-center pointer-events-none">
+        <div
+            className="fixed bottom-6 left-4 right-4 z-[9999] flex justify-center pointer-events-none"
+            role="status"
+            aria-live="polite"
+        >
             <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl shadow-black/40 overflow-hidden animate-slide-up">
                 {/* Accent bar */}
                 <div className={`h-1 w-full ${needRefresh ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gradient-to-r from-teal-400 to-cyan-500'}`} />
@@ -56,14 +60,16 @@ function ReloadPrompt() {
                         {needRefresh && (
                             <div className="mt-3 flex gap-2">
                                 <button
+                                    type="button"
                                     onClick={() => updateServiceWorker(true)}
-                                    className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 transition-colors"
+                                    className="min-h-11 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 transition-colors"
                                 >
                                     {t('pwa_reload')}
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={close}
-                                    className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
+                                    className="min-h-11 px-3.5 py-1.5 text-xs font-medium rounded-lg text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
                                 >
                                     {t('pwa_close')}
                                 </button>
@@ -74,10 +80,12 @@ function ReloadPrompt() {
                     {/* Close button (for offline ready) */}
                     {offlineReady && !needRefresh && (
                         <button
+                            type="button"
                             onClick={close}
-                            className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors"
+                            aria-label={t('pwa_close')}
+                            className="flex-shrink-0 min-h-11 min-w-11 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors"
                         >
-                            <X size={14} />
+                            <X size={14} aria-hidden="true" />
                         </button>
                     )}
                 </div>

@@ -1,4 +1,4 @@
-import { Camera, CheckCircle2, Eye, FlaskConical, Package, Search, X } from 'lucide-react';
+import { Camera, CheckCircle2, Eye, X } from 'lucide-react';
 import type { OnboardingMissionKey } from '../../store/useOnboardingStore';
 
 interface MissionCopy {
@@ -35,61 +35,26 @@ export function MobileOnboardingSheet({
     onSkip,
 }: MobileOnboardingSheetProps) {
     const progressPercent = Math.round((completedCount / totalCount) * 100);
-    const shouldShowIntro = mission === 'search' && completedCount === 0 && !hasSearchResult;
     const isKorean = document.documentElement.lang === 'ko';
     const SecondaryIcon = mission === 'search' ? Camera : Eye;
+    const shouldDockAtTop = mission === 'disposal' && hasSearchResult;
 
     return (
         <div className="pointer-events-none fixed inset-0 z-[45] lg:hidden">
-            {shouldShowIntro && (
-                <div className="absolute inset-x-0 top-[4.75rem] px-5">
-                    <div className="rounded-[1.75rem] border border-blue-100 bg-white/95 p-5 shadow-2xl shadow-slate-950/10 backdrop-blur dark:border-blue-900/50 dark:bg-slate-900/95">
-                        <div className="flex items-center justify-between gap-3">
-                            <div>
-                                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
-                                    3 min lab setup
-                                </p>
-                                <h2 className="mt-2 text-2xl font-black leading-tight text-slate-950 dark:text-white">
-                                    {isKorean ? '찾고, 판단하고, 기록까지 이어가요.' : 'Search, decide, and keep a record.'}
-                                </h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={onSkip}
-                                className="pointer-events-auto rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                                aria-label={isKorean ? '온보딩 건너뛰기' : 'Skip onboarding'}
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-                        <div className="mt-5 grid grid-cols-3 gap-2">
-                            {[
-                                { icon: Search, label: isKorean ? '검색' : 'Search' },
-                                { icon: FlaskConical, label: isKorean ? '판단' : 'Disposal' },
-                                { icon: Package, label: isKorean ? '재고' : 'Inventory' },
-                            ].map((item) => {
-                                const Icon = item.icon;
-                                return (
-                                    <div key={item.label} className="rounded-2xl bg-slate-50 p-3 text-center dark:bg-slate-800">
-                                        <Icon className="mx-auto h-5 w-5 text-blue-600 dark:text-blue-300" />
-                                        <p className="mt-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">{item.label}</p>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <div className="absolute bottom-[calc(4rem+env(safe-area-inset-bottom))] left-1/2 w-full max-w-[430px] -translate-x-1/2 px-3 pb-3">
-                <div className="pointer-events-auto max-h-[calc(100dvh-9rem)] overflow-y-auto rounded-[1.65rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900">
+            <div
+                className={`absolute left-1/2 w-full max-w-[430px] -translate-x-1/2 px-3 ${shouldDockAtTop
+                    ? 'top-[calc(4rem+env(safe-area-inset-top))] pt-2'
+                    : 'bottom-[calc(4rem+env(safe-area-inset-bottom))] pb-2'
+                    }`}
+            >
+                <div className="pointer-events-auto max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-[1.4rem] border border-slate-200 bg-white shadow-xl shadow-slate-950/15 dark:border-slate-700 dark:bg-slate-900">
                     <div className="h-1 bg-slate-100 dark:bg-slate-800">
                         <div
                             className="h-full rounded-r-full bg-blue-600 transition-all duration-300 dark:bg-blue-400"
                             style={{ width: `${Math.max(8, progressPercent)}%` }}
                         />
                     </div>
-                    <div className="p-4">
+                    <div className="p-3.5 sm:p-4">
                         {isAllComplete ? (
                             <div className="text-center">
                                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -113,12 +78,13 @@ export function MobileOnboardingSheet({
                             </div>
                         ) : (
                             <>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-600 dark:text-blue-300 sm:text-[11px] sm:tracking-[0.16em]">
                                             {copy.eyebrow}
+                                            <span className="text-slate-400 dark:text-slate-500"> · 3 min setup</span>
                                         </p>
-                                        <h3 className="mt-1 text-lg font-black leading-tight text-slate-950 dark:text-white">{copy.title}</h3>
+                                        <h3 className="mt-1 text-base font-black leading-tight text-slate-950 dark:text-white sm:text-lg">{copy.title}</h3>
                                     </div>
                                     <button
                                         type="button"
@@ -129,13 +95,13 @@ export function MobileOnboardingSheet({
                                         <X className="h-5 w-5" />
                                     </button>
                                 </div>
-                                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.description}</p>
-                                <div className="mt-4 flex gap-2">
+                                <p className="mt-1.5 line-clamp-2 text-[13px] leading-5 text-slate-600 dark:text-slate-300 sm:mt-2 sm:text-sm sm:leading-6">{copy.description}</p>
+                                <div className="mt-3 flex gap-2 sm:mt-4">
                                     {copy.secondaryAction && onSecondaryAction && (
                                         <button
                                             type="button"
                                             onClick={onSecondaryAction}
-                                            className="inline-flex h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                            className="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:h-11 sm:text-sm"
                                         >
                                             <SecondaryIcon className="h-4 w-4" />
                                             {copy.secondaryAction}
@@ -144,7 +110,7 @@ export function MobileOnboardingSheet({
                                     <button
                                         type="button"
                                         onClick={onPrimaryAction}
-                                        className="h-11 flex-[1.35] whitespace-nowrap rounded-xl bg-blue-600 px-4 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700"
+                                        className="h-10 min-w-0 flex-[1.35] whitespace-nowrap rounded-xl bg-blue-600 px-3 text-[13px] font-black text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 sm:h-11 sm:px-4 sm:text-sm"
                                     >
                                         {copy.primaryAction}
                                     </button>

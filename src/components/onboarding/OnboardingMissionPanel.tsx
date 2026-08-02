@@ -78,11 +78,11 @@ function getCopy(isKorean: boolean): Record<OnboardingMissionKey, MissionCopy> {
             },
             disposal: {
                 eyebrow: 'Mission 2 / 4',
-                title: 'MSDS와 위험정보를 보고 리스트에 담기',
-                description: '결과 카드에서 MSDS, GHS, 폐기 분류를 확인한 뒤 리스트에 담아 기록 흐름으로 이어가세요.',
-                primaryAction: '담기 버튼 찾기',
+                title: 'MSDS와 위험정보를 보고 폐액 배치에 추가하기',
+                description: '결과 카드에서 MSDS, GHS, 검색 물질 기준 분류를 확인한 뒤 현재 폐액 배치에 성분을 추가하세요.',
+                primaryAction: '성분 추가 버튼 찾기',
                 secondaryAction: 'MSDS 보기',
-                doneLabel: '폐기 리스트 담기',
+                doneLabel: '폐액 배치에 추가',
                 imageAlt: 'MSDS와 폐기 가이드 예시',
             },
             cabinet: {
@@ -116,11 +116,11 @@ function getCopy(isKorean: boolean): Record<OnboardingMissionKey, MissionCopy> {
         },
         disposal: {
             eyebrow: 'Mission 2 / 4',
-            title: 'Review safety details and add it to the list',
-            description: 'Check MSDS, GHS, and the disposal category, then add the item to continue toward record keeping.',
-            primaryAction: 'Find add button',
+            title: 'Review safety details and add a waste-batch component',
+            description: 'Check the MSDS, GHS, and substance-level classification, then add the chemical to the current waste batch.',
+            primaryAction: 'Find component button',
             secondaryAction: 'Open MSDS',
-            doneLabel: 'Added to disposal list',
+            doneLabel: 'Added to waste batch',
             imageAlt: 'MSDS and disposal guide example',
         },
         cabinet: {
@@ -223,6 +223,34 @@ export function OnboardingMissionPanel({
             },
         });
     }, [activeTab, cartCount, currentMission, platform]);
+
+    useEffect(() => {
+        if (currentMission !== 'disposal' || !hasSearchResult || window.matchMedia('(min-width: 1024px)').matches) {
+            return;
+        }
+
+        let scrollFrame = 0;
+        const measureFrame = window.requestAnimationFrame(() => {
+            scrollFrame = window.requestAnimationFrame(() => {
+                const target = document.querySelector<HTMLElement>('[data-onboarding-target="add-to-list-button"]');
+                if (!target) return;
+
+                const rect = target.getBoundingClientRect();
+                const isVisibleBelowCoachCard = rect.top >= 240 && rect.bottom <= window.innerHeight - 72;
+                if (isVisibleBelowCoachCard) return;
+
+                target.scrollIntoView({
+                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                    block: 'center',
+                });
+            });
+        });
+
+        return () => {
+            window.cancelAnimationFrame(measureFrame);
+            window.cancelAnimationFrame(scrollFrame);
+        };
+    }, [currentMission, hasSearchResult]);
 
     const handlePrimaryAction = () => {
         if (isAllComplete) {

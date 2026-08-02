@@ -89,7 +89,7 @@ export function OnboardingSpotlight({ selector, title, description }: Onboarding
     return (
         <div className="pointer-events-none fixed inset-0 z-[40]">
             <div
-                className="absolute rounded-2xl border-2 border-blue-500 shadow-[0_0_0_9999px_rgba(15,23,42,0.18),0_18px_42px_rgba(37,99,235,0.2)] ring-4 ring-blue-400/20 transition-all duration-300 dark:border-blue-300 dark:ring-blue-300/20"
+                className="absolute rounded-2xl border-2 border-blue-500 shadow-[0_0_0_9999px_rgba(15,23,42,0.10),0_18px_42px_rgba(37,99,235,0.2)] ring-4 ring-blue-400/20 transition-all duration-300 dark:border-blue-300 dark:ring-blue-300/20 sm:shadow-[0_0_0_9999px_rgba(15,23,42,0.18),0_18px_42px_rgba(37,99,235,0.2)]"
                 style={spotlightStyle}
             />
             <div
