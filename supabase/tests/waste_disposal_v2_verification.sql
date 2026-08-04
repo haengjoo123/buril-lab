@@ -204,6 +204,21 @@ begin
         raise exception 'waste recorder lacks audit, delegated-policy, ambiguity, or TOCTOU protection';
     end if;
 
+    if position('component hazardflags contains an unsupported value' in v_definition) = 0
+       or position(
+           '''hydrofluoric_acid'', ''fluoride''' in
+           substring(
+               v_definition
+               from greatest(
+                   position('component hazardflags contains an unsupported value' in v_definition) - 900,
+                   1
+               )
+               for 900
+           )
+       ) = 0 then
+        raise exception 'waste recorder component hazard whitelist lacks HF/fluoride flags';
+    end if;
+
     select count(*)
     into v_count
     from public.waste_stream_catalog;
@@ -255,6 +270,33 @@ declare
     v_result jsonb;
     v_definition text;
     v_status text;
+    v_case record;
+    v_acid_alkali_components jsonb := '[
+        {
+            "chemicalName": "Hydrochloric acid",
+            "ghsDataStatus": "verified",
+            "casNumber": "7647-01-0",
+            "formula": "HCl",
+            "identityConfidence": 1,
+            "hazardFlags": ["CORROSIVE"],
+            "analysisSnapshot": {
+                "category": "ACID",
+                "ghs": {"hazardStatements": ["H314"]}
+            }
+        },
+        {
+            "chemicalName": "Sodium hydroxide",
+            "ghsDataStatus": "verified",
+            "casNumber": "1310-73-2",
+            "formula": "NaOH",
+            "identityConfidence": 1,
+            "hazardFlags": ["CORROSIVE"],
+            "analysisSnapshot": {
+                "category": "ALKALI",
+                "ghs": {"hazardStatements": ["H314"]}
+            }
+        }
+    ]'::jsonb;
     v_confirmation jsonb := '{
         "measuredPhStatus": "not_required",
         "additionalComponentsStatus": "none",
@@ -373,6 +415,106 @@ begin
        or not (v_result->'hazardFlags' @> '["FLAMMABLE"]'::jsonb) then
         raise exception 'Server analysis must allow configured-policy Acetone while retaining FLAMMABLE';
     end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Hydrofluoric acid',
+            'ghsDataStatus', 'verified',
+            'casNumber', '7664-39-3',
+            'formula', 'HF',
+            'identityConfidence', 1,
+            'hazardFlags', jsonb_build_array('HYDROFLUORIC_ACID', 'CORROSIVE', 'ACUTE_TOXIC'),
+            'analysisSnapshot', jsonb_build_object(
+                'category', 'ACID',
+                'ghs', jsonb_build_object(
+                    'hazardStatements',
+                    jsonb_build_array('H300', 'H310', 'H330', 'H314')
+                )
+            )
+        )),
+        'aqueous',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or not (v_result->'hazardFlags' @> '["HYDROFLUORIC_ACID"]'::jsonb)
+       or not (v_result->'missingFields' @> '["fluoride_container"]'::jsonb) then
+        raise exception 'HF must require a compatible-container confirmation in SPECIAL_REVIEW';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Hydrofluoric acid',
+            'ghsDataStatus', 'verified',
+            'casNumber', '7664-39-3',
+            'formula', 'HF',
+            'identityConfidence', 1,
+            'hazardFlags', jsonb_build_array('HYDROFLUORIC_ACID', 'CORROSIVE'),
+            'analysisSnapshot', jsonb_build_object('category', 'ACID')
+        )),
+        'aqueous',
+        jsonb_set(v_confirmation, '{fluorideContainerStatus}', '"incompatible"'::jsonb)
+    );
+    if v_result->>'decisionStatus' <> 'blocked'
+       or not (
+           v_result->'blockingCodes' @> '["hf_fluoride_incompatible_container"]'::jsonb
+       ) then
+        raise exception 'HF in an incompatible container must be blocked';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Hydrofluoric acid',
+            'ghsDataStatus', 'verified',
+            'casNumber', '7664-39-3',
+            'formula', 'HF',
+            'identityConfidence', 1,
+            'hazardFlags', jsonb_build_array('HYDROFLUORIC_ACID', 'CORROSIVE'),
+            'analysisSnapshot', jsonb_build_object('category', 'ACID')
+        )),
+        'aqueous',
+        jsonb_set(v_confirmation, '{fluorideContainerStatus}', '"compatible"'::jsonb)
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or v_result->'missingFields' @> '["fluoride_container"]'::jsonb then
+        raise exception 'Confirmed compatible HF containers must clear only the container gate';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Ammonium fluoride',
+            'ghsDataStatus', 'verified',
+            'casNumber', '12125-01-8',
+            'formula', 'NH4F',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object('category', 'NEUTRAL')
+        )),
+        'aqueous',
+        v_confirmation
+    );
+    if not (v_result->'hazardFlags' @> '["FLUORIDE"]'::jsonb)
+       or not (v_result->'missingFields' @> '["fluoride_container"]'::jsonb) then
+        raise exception 'Explicit fluoride compounds must trigger the compatible-container gate';
+    end if;
+
+    begin
+        perform private.analyze_waste_batch_v2(
+            jsonb_build_array(jsonb_build_object(
+                'chemicalName', 'Hydrofluoric acid',
+                'ghsDataStatus', 'verified',
+                'casNumber', '7664-39-3',
+                'formula', 'HF',
+                'identityConfidence', 1,
+                'analysisSnapshot', jsonb_build_object('category', 'ACID')
+            )),
+            'aqueous',
+            jsonb_set(v_confirmation, '{fluorideContainerStatus}', '"plastic"'::jsonb)
+        );
+        raise exception 'Server analysis accepted an unsupported fluoride container status';
+    exception
+        when sqlstate '22023' then null;
+    end;
 
     -- The client serializes this optional unanswered question as JSON null for
     -- an ordinary single-component batch. JSON null must behave like omission,
@@ -575,12 +717,197 @@ begin
             )
         ),
         'aqueous',
-        v_confirmation
+        v_confirmation || jsonb_build_object(
+            'measuredPhStatus', 'measured',
+            'measuredBatchPh', 7
+        )
     );
     if v_result->>'decisionStatus' <> 'blocked'
        or v_result->>'streamCode' <> 'CYANIDE_SULFIDE'
        or not (v_result->'blockingCodes' @> '["acid_cyanide"]'::jsonb) then
         raise exception 'Server analysis must block forged-ready acid plus cyanide';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        v_acid_alkali_components,
+        'aqueous',
+        v_confirmation || jsonb_build_object('mixingState', 'unknown')
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or not (v_result->'missingFields' @> '["mixing_state"]'::jsonb)
+       or v_result->>'routingBasis' <> 'unresolved' then
+        raise exception 'Separate acid/base inputs must require an explicit mixing state';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        v_acid_alkali_components,
+        'aqueous',
+        v_confirmation || jsonb_build_object('mixingState', 'separate')
+    );
+    if v_result->>'decisionStatus' <> 'blocked'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or not (v_result->'blockingCodes' @> '["acid_alkali_separate"]'::jsonb) then
+        raise exception 'Separate acid/base waste must not be combined or deposited';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        v_acid_alkali_components,
+        'aqueous',
+        v_confirmation || jsonb_build_object(
+            'mixingState', 'already_mixed',
+            'measuredPhStatus', 'unknown'
+        )
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or not (v_result->'missingFields' @> '["measured_ph"]'::jsonb) then
+        raise exception 'Already-mixed acid/base waste must require a measured final pH';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        v_acid_alkali_components,
+        'mixed_biphasic',
+        v_confirmation || jsonb_build_object('mixingState', 'unknown')
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or not (v_result->'missingFields' @> '["mixing_state"]'::jsonb)
+       or v_result->>'routingBasis' <> 'unresolved' then
+        raise exception 'Every matrix must require acid/base mixing state before routing';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        v_acid_alkali_components,
+        'mixed_biphasic',
+        v_confirmation || jsonb_build_object('mixingState', 'separate')
+    );
+    if v_result->>'decisionStatus' <> 'blocked'
+       or not (v_result->'blockingCodes' @> '["acid_alkali_separate"]'::jsonb) then
+        raise exception 'Separate acid/base material must remain blocked in every matrix';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        v_acid_alkali_components,
+        'mixed_biphasic',
+        v_confirmation || jsonb_build_object(
+            'mixingState', 'already_mixed',
+            'measuredPhStatus', 'measured',
+            'measuredBatchPh', 7
+        )
+    );
+    if v_result->>'decisionStatus' <> 'blocked'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or not (
+           v_result->'blockingCodes' @> '["acid_alkali_non_aqueous_mixed"]'::jsonb
+       )
+       or v_result->'missingFields' @> '["measured_ph"]'::jsonb
+       or v_result->>'legalWastePhClass' <> 'unknown'
+       or v_result->>'corrosivityPhScreen' <> 'unknown'
+       or v_result->>'routingBasis' <> 'special_rule' then
+        raise exception 'Already-mixed non-aqueous acid/base waste must be escalated: %',
+            v_result;
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        v_acid_alkali_components,
+        'aqueous',
+        v_confirmation || jsonb_build_object(
+            'alreadyMixed', true,
+            'measuredPhStatus', 'measured',
+            'measuredPh', 7
+        )
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'AQUEOUS_OTHER'
+       or v_result->>'routingBasis' <> 'measured_batch_ph' then
+        raise exception 'Legacy alreadyMixed/measuredPh records must remain readable';
+    end if;
+
+    for v_case in
+        select *
+        from (values
+            (2.00::numeric, 'ACID_AQUEOUS', 'waste_acid', 'review_required'),
+            (2.01::numeric, 'AQUEOUS_OTHER', 'none', 'not_indicated'),
+            (7.00::numeric, 'AQUEOUS_OTHER', 'none', 'not_indicated'),
+            (11.00::numeric, 'AQUEOUS_OTHER', 'none', 'not_indicated'),
+            (11.50::numeric, 'AQUEOUS_OTHER', 'none', 'review_required'),
+            (12.49::numeric, 'AQUEOUS_OTHER', 'none', 'review_required'),
+            (12.50::numeric, 'ALKALI_AQUEOUS', 'waste_alkali', 'review_required')
+        ) as cases(measured_ph, expected_stream, expected_legal_class, expected_screen)
+    loop
+        v_result := private.analyze_waste_batch_v2(
+            v_acid_alkali_components,
+            'aqueous',
+            v_confirmation || jsonb_build_object(
+                'mixingState', 'already_mixed',
+                'measuredPhStatus', 'measured',
+                'measuredBatchPh', v_case.measured_ph
+            )
+        );
+        if v_result->>'decisionStatus' <> 'ready'
+           or v_result->>'streamCode' <> v_case.expected_stream
+           or v_result->>'legalWastePhClass' <> v_case.expected_legal_class
+           or v_result->>'corrosivityPhScreen' <> v_case.expected_screen
+           or v_result->>'routingBasis' <> 'measured_batch_ph' then
+            raise exception 'Measured pH boundary mismatch for pH %: %',
+                v_case.measured_ph,
+                v_result;
+        end if;
+    end loop;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Reference-only acidic sample',
+            'ghsDataStatus', 'verified',
+            'identityConfidence', 1,
+            'hazardFlags', jsonb_build_array(),
+            'analysisSnapshot', jsonb_build_object(
+                'category', 'NEUTRAL',
+                'referencePh', 3,
+                'ghs', jsonb_build_object('hazardStatements', jsonb_build_array())
+            )
+        )),
+        'aqueous',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'AQUEOUS_OTHER'
+       or v_result->>'routingBasis' <> 'matrix' then
+        raise exception 'Reference pH alone must not select an acid waste stream';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(
+            jsonb_build_object(
+                'chemicalName', 'Reference-only acidic sample',
+                'ghsDataStatus', 'verified',
+                'identityConfidence', 1,
+                'hazardFlags', jsonb_build_array(),
+                'analysisSnapshot', jsonb_build_object(
+                    'category', 'NEUTRAL',
+                    'referencePh', 3,
+                    'ghs', jsonb_build_object('hazardStatements', jsonb_build_array())
+                )
+            ),
+            jsonb_build_object(
+                'chemicalName', 'Reference-only alkaline sample',
+                'ghsDataStatus', 'verified',
+                'identityConfidence', 1,
+                'hazardFlags', jsonb_build_array(),
+                'analysisSnapshot', jsonb_build_object(
+                    'category', 'NEUTRAL',
+                    'referencePh', 11,
+                    'ghs', jsonb_build_object('hazardStatements', jsonb_build_array())
+                )
+            )
+        ),
+        'aqueous',
+        v_confirmation || jsonb_build_object('mixingState', 'unknown')
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or not (v_result->'missingFields' @> '["mixing_state"]'::jsonb) then
+        raise exception 'Reference pH may only trigger the conservative pre-mix gate';
     end if;
 
     v_result := private.analyze_waste_batch_v2(

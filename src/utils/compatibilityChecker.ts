@@ -36,7 +36,7 @@ interface ChemEntry {
     hCodes: string[];
     isOrganic: boolean;
     isAqueous: boolean;
-    ph?: number;
+    referencePh?: number;
     isCyanide: boolean;
     isSulfide: boolean;
     isReactiveMetal: boolean;
@@ -106,11 +106,11 @@ const isReactiveElementalMetal = (name: string, formula: string): boolean => {
 
 const isAcidic = (entry: ChemEntry): boolean =>
     entry.category === 'ACID' ||
-    (entry.ph !== undefined && entry.ph < 4) ||
-    (hasGroup(entry.hCodes, 'CORROSIVE') && entry.ph !== undefined && entry.ph < 7);
+    (entry.referencePh !== undefined && entry.referencePh < 4) ||
+    (hasGroup(entry.hCodes, 'CORROSIVE') && entry.referencePh !== undefined && entry.referencePh < 7);
 
 const isBasic = (entry: ChemEntry): boolean =>
-    entry.category === 'ALKALI' || (entry.ph !== undefined && entry.ph > 10);
+    entry.category === 'ALKALI' || (entry.referencePh !== undefined && entry.referencePh > 10);
 
 const warning = (
     severity: Severity,
@@ -159,7 +159,7 @@ const rules: Rule[] = [
         : null,
     (a, b) => {
         const corrosiveAcid = hasGroup(a.hCodes, 'CORROSIVE') &&
-            (a.category === 'ACID' || (a.ph !== undefined ? a.ph < 7 : false));
+            (a.category === 'ACID' || (a.referencePh !== undefined ? a.referencePh < 7 : false));
         return corrosiveAcid && b.isOrganic
             ? warning('WARNING', 'acid_organic', 'compat_acid_organic', a, b)
             : null;
@@ -184,7 +184,7 @@ const toEntry = (item: CartItem, matrix?: WasteMatrix): ChemEntry => {
         // Solubility describes what a pure substance can dissolve in, not the
         // actual matrix currently inside the waste container.
         isAqueous: aqueousMatrix || aqueousContext || isWaterIdentity,
-        ph: item.chemical.properties?.ph,
+        referencePh: item.chemical.properties?.referencePh ?? item.chemical.properties?.ph,
         isCyanide: item.category === 'CYANIDE' ||
             CYANIDE_NAME_PATTERN.test(name) ||
             CYANIDE_FORMULA_PATTERN.test(normalizedFormula),

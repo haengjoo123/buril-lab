@@ -54,6 +54,10 @@ import { useIsDesktop } from '../../hooks/useIsDesktop';
 import { lookupGHSByCAS, type PubChemGHSResult } from '../../services/pubchemService';
 import { getPictogramCode, getPictogramUrl } from '../../data/ghsCodes';
 import { planBulkInventoryCabinetMove } from '../../utils/bulkInventoryMovePlanner';
+import {
+    findInventoryIdentityConflictItemIds,
+    partitionInventoryItemsByIdentity,
+} from '../../utils/inventoryGrouping';
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
@@ -87,8 +91,6 @@ export interface InventoryListViewProps {
     onStartWasteBatch?: (item: InventoryItem) => Promise<void>;
 }
 
-const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
-const normalizeGroupCas = (value?: string | null) => (value || '').replace(/[^0-9a-z-]/gi, '').trim().toLowerCase();
 const normalizeGhsCas = (value?: string | null) => (value || '').replace(/\s+/g, '').trim();
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
@@ -145,62 +147,7 @@ function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: Inven
 function buildInventoryGroups(sourceItems: InventoryItem[], sortBy: InventorySortOption): InventoryGroup[] {
     if (sourceItems.length === 0) return [];
 
-    const items = [...sourceItems];
-    const parents = items.map((_, index) => index);
-    const findParent = (index: number): number => {
-        let cursor = index;
-        while (parents[cursor] !== cursor) {
-            parents[cursor] = parents[parents[cursor]];
-            cursor = parents[cursor];
-        }
-        return cursor;
-    };
-    const union = (left: number, right: number) => {
-        const leftRoot = findParent(left);
-        const rightRoot = findParent(right);
-        if (leftRoot !== rightRoot) {
-            parents[rightRoot] = leftRoot;
-        }
-    };
-
-    const firstIndexByName = new Map<string, number>();
-    const firstIndexByCas = new Map<string, number>();
-
-    items.forEach((item, index) => {
-        const nameKey = normalizeText(item.name);
-        const casKey = normalizeGroupCas(item.cas_number);
-
-        if (nameKey) {
-            const existingIndex = firstIndexByName.get(nameKey);
-            if (existingIndex !== undefined) {
-                union(existingIndex, index);
-            } else {
-                firstIndexByName.set(nameKey, index);
-            }
-        }
-
-        if (casKey) {
-            const existingIndex = firstIndexByCas.get(casKey);
-            if (existingIndex !== undefined) {
-                union(existingIndex, index);
-            } else {
-                firstIndexByCas.set(casKey, index);
-            }
-        }
-    });
-
-    const groupedItems = new Map<number, InventoryItem[]>();
-    items.forEach((item, index) => {
-        const root = findParent(index);
-        const existingGroup = groupedItems.get(root);
-        if (existingGroup) {
-            existingGroup.push(item);
-            return;
-        }
-        groupedItems.set(root, [item]);
-    });
-
-    return Array.from(groupedItems.values())
+    return partitionInventoryItemsByIdentity(sourceItems)
         .map((groupItems) => {
             const sortedItems = [...groupItems].sort((left, right) => compareInventoryItems(left, right, sortBy));
             const uniqueNames = Array.from(new Set(sortedItems.map((item) => item.name.trim()).filter(Boolean)));
@@ -245,6 +192,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     const scanPendingTasksRef = useRef<{ id: string; imageSrc: string }[]>([]);
     const scanActiveCountRef = useRef(0);
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
+    const [itemActionMenuItem, setItemActionMenuItem] = useState<InventoryItem | null>(null);
     const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [wasteBatchPendingKeys, setWasteBatchPendingKeys] = useState<string[]>([]);
@@ -442,6 +390,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         return [...filteredItems].sort((a, b) => compareInventoryItems(a, b, sortBy));
     }, [filteredItems, sortBy]);
     const visibleGroups = useMemo(() => buildInventoryGroups(visibleItems, sortBy), [visibleItems, sortBy]);
+    const identityReviewItemIds = useMemo(() => findInventoryIdentityConflictItemIds(items), [items]);
     const selectedDesktopItem = useMemo(
         () => visibleItems.find((item) => item.id === selectedDesktopItemId) || visibleItems[0] || null,
         [selectedDesktopItemId, visibleItems]
@@ -455,6 +404,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     const selectedDesktopWasteBatchError = selectedDesktopWasteBatchKey
         ? wasteBatchErrors[selectedDesktopWasteBatchKey]
         : undefined;
+    const itemActionMenuWasteBatchKey = itemActionMenuItem
+        ? `${itemActionMenuItem._source || 'inventory'}:${itemActionMenuItem.id}`
+        : null;
+    const isStartingActionMenuWasteBatch = itemActionMenuWasteBatchKey
+        ? wasteBatchPendingKeys.includes(itemActionMenuWasteBatchKey)
+        : false;
 
     const sortOptions = useMemo(() => ([
         { value: 'expiry_asc', label: t('inventory_sort_expiry_asc') },
@@ -715,6 +670,20 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
 
     const handleDeleteClick = (item: InventoryItem) => {
         setItemToDelete(item);
+    };
+
+    const handleActionMenuWasteBatch = () => {
+        if (!itemActionMenuItem) return;
+        const item = itemActionMenuItem;
+        setItemActionMenuItem(null);
+        void handleStartWasteBatch(item);
+    };
+
+    const handleActionMenuDelete = () => {
+        if (!itemActionMenuItem) return;
+        const item = itemActionMenuItem;
+        setItemActionMenuItem(null);
+        handleDeleteClick(item);
     };
 
     const getWasteBatchActionKey = (item: InventoryItem) =>
@@ -1409,6 +1378,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
 
     const renderInventoryCard = (item: InventoryItem, options?: { nested?: boolean }) => {
         const nested = options?.nested ?? false;
+        const needsIdentityReview = identityReviewItemIds.has(item.id);
         const expiryStatus = getExpiryStatus(item.expiry_date);
         const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
         const wasteBatchActionKey = getWasteBatchActionKey(item);
@@ -1442,8 +1412,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                     handleEdit(item);
                 }}
                 className={`${nested
-                    ? 'rounded-2xl border bg-slate-50/80 dark:bg-slate-900/30 p-4 shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
-                    : 'bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
+                    ? 'rounded-2xl border bg-slate-50/80 px-4 pb-2 pt-4 shadow-sm cursor-pointer hover:border-emerald-300 dark:bg-slate-900/30 dark:hover:border-emerald-600'
+                    : 'bg-white dark:bg-slate-800 px-4 pb-2 pt-4 rounded-xl border shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
                     } flex flex-col gap-3 transition-colors ${selectedDesktopItemId === item.id ? 'lg:border-emerald-400 lg:ring-2 lg:ring-emerald-500/30' : cardBorderClass || 'border-slate-200 dark:border-slate-700'}`}
             >
                 <div className="flex justify-between items-start gap-2">
@@ -1462,21 +1432,35 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                 {t('inventory_select_item')}
                             </label>
                         )}
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
-                                {item.name}
-                            </h3>
-                            <div className="flex items-center gap-1.5">
+                             <div className="flex items-center gap-2 flex-wrap">
+                                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
+                                     {item.name}
+                                 </h3>
+                                 {needsIdentityReview && (
+                                     <span
+                                         className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                         title={t('inventory_identity_review_help')}
+                                     >
+                                         <AlertTriangle className="h-3 w-3" />
+                                         {t('inventory_identity_review')}
+                                     </span>
+                                 )}
+                                 <div className="flex items-center gap-1.5">
                                 {renderExpiryBadge(item)}
                                 {renderRemainingBadge(item)}
                             </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
+                            {item.brand && <span>{item.brand}</span>}
+                            {item.product_number && <span>{t('inventory_meta_pn')}: {item.product_number}</span>}
                         </div>
                         {(() => {
                             const hazard = classifyInventoryItemHazard(item);
                             if (hazard.filterCategories.length === 0) return null;
                             const isSpecialHigh = hazard.filterCategories.includes('special_high');
                             return (
-                                <div className="mt-2 mb-1 flex flex-wrap gap-1">
+                                <div className="mt-2 flex flex-wrap gap-1">
                                     {hazard.groupLabelKeys.map(key => (
                                         <span key={key} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${isSpecialHigh
                                             ? 'bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
@@ -1489,60 +1473,42 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                 </div>
                             );
                         })()}
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                            {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
-                            {item.brand && <span>{item.brand}</span>}
-                            {item.product_number && <span>{t('inventory_meta_pn')}: {item.product_number}</span>}
-                        </div>
                     </div>
-                    <div className="flex flex-col items-end shrink-0">
+                    <div className="flex self-stretch shrink-0 flex-col items-end">
                         <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
-                            {t('inventory_group_total_quantity', { count: item.quantity })}
+                            {item.quantity >= 2
+                                ? t('inventory_group_total_quantity', { count: item.quantity })
+                                : t('inventory_quantity_count', { count: item.quantity })}
                         </span>
                         {item.capacity && (
-                            <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                            <span className="mt-auto pb-0.5 text-xs text-slate-400 dark:text-slate-500">
                                 {item.capacity}
                             </span>
                         )}
                     </div>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
-                    {renderStorageBadge(item)}
+                <div className="flex min-h-11 items-center justify-between gap-3 border-t border-slate-100 pt-2 dark:border-slate-700">
+                    <div className="flex h-11 min-w-0 flex-1 items-center">
+                        {renderStorageBadge(item)}
+                    </div>
 
                     {!isSelectMode && (
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
-                            {onStartWasteBatch && (
-                                <button
-                                    type="button"
-                                    onPointerDown={(event) => event.stopPropagation()}
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        void handleStartWasteBatch(item);
-                                    }}
-                                    disabled={isStartingWasteBatch || isDeleting || isBulkDeleting}
-                                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
-                                >
-                                    {isStartingWasteBatch
-                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        : <FlaskConical className="h-3.5 w-3.5" />}
-                                    {isStartingWasteBatch
-                                        ? t('inventory_start_waste_batch_running')
-                                        : t('inventory_start_waste_batch')}
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleDeleteClick(item);
-                                }}
-                                disabled={isDeleting || isBulkDeleting || isStartingWasteBatch}
-                                className="min-h-11 rounded-lg px-2.5 py-2 text-xs font-bold text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-950/30"
-                            >
-                                {t('inventory_btn_delete')}
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                setItemActionMenuItem(item);
+                            }}
+                            disabled={isDeleting || isBulkDeleting || isStartingWasteBatch}
+                            aria-label={t('inventory_remove_menu_open')}
+                            title={t('inventory_remove_menu_open')}
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-red-300"
+                        >
+                            {isStartingWasteBatch
+                                ? <Loader2 className="h-5 w-5 animate-spin" />
+                                : <Trash2 className="h-5 w-5" />}
+                        </button>
                     )}
                 </div>
                 {wasteBatchError && (
@@ -1563,6 +1529,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         const uniqueStorageLabels = Array.from(new Set(group.items.map(getStorageSummaryText)));
         const hasSingleStorage = uniqueStorageLabels.length === 1;
         const aliasCount = Math.max(0, group.uniqueNames.length - 1);
+        const identityReviewCount = group.items.filter((item) => identityReviewItemIds.has(item.id)).length;
         const uniqueCapacities = Array.from(new Set(group.items.map((item) => (item.capacity || '').trim()).filter(Boolean)));
         const expiryAlertCount = group.items.filter((item) => {
             const status = getExpiryStatus(item.expiry_date);
@@ -1617,12 +1584,21 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
                                     {group.primaryItem.name}
                                 </h3>
-                                {expiryAlertCount > 0 && (
-                                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                        <AlertTriangle className="h-3 w-3" />
-                                        {t('inventory_group_expiry_issue_count', { count: expiryAlertCount })}
-                                    </span>
-                                )}
+                                 {expiryAlertCount > 0 && (
+                                     <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                         <AlertTriangle className="h-3 w-3" />
+                                         {t('inventory_group_expiry_issue_count', { count: expiryAlertCount })}
+                                     </span>
+                                 )}
+                                 {identityReviewCount > 0 && (
+                                     <span
+                                         className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                         title={t('inventory_identity_review_help')}
+                                     >
+                                         <AlertTriangle className="h-3 w-3" />
+                                         {t('inventory_group_identity_review_count', { count: identityReviewCount })}
+                                     </span>
+                                 )}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 {group.uniqueCasNumbers.length === 1 && <span>{t('inventory_meta_cas')}: {group.uniqueCasNumbers[0]}</span>}
@@ -1636,7 +1612,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                         </div>
                         <div className="flex flex-col items-end shrink-0">
                             <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
-                                {t('inventory_group_total_quantity', { count: group.totalQuantity })}
+                                {group.totalQuantity >= 2
+                                    ? t('inventory_group_total_quantity', { count: group.totalQuantity })
+                                    : t('inventory_quantity_count', { count: group.totalQuantity })}
                             </span>
                             {uniqueCapacities.length === 1 && (
                                 <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
@@ -2478,6 +2456,92 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                 onClose={() => setIsCsvImportOpen(false)}
                 onImported={loadData}
             />
+
+            {itemActionMenuItem && (
+                <div
+                    className="fixed inset-0 z-[140] flex items-end justify-center lg:hidden"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="inventory-remove-menu-title"
+                >
+                    <button
+                        type="button"
+                        aria-label={t('btn_close')}
+                        onClick={() => setItemActionMenuItem(null)}
+                        className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+                    />
+                    <div className="relative z-10 w-full max-w-lg animate-in slide-in-from-bottom-4 rounded-t-3xl bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl dark:bg-slate-900">
+                        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
+                        <div className="flex items-start gap-3 px-1 pb-4">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
+                                <Trash2 className="h-5 w-5" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <h2 id="inventory-remove-menu-title" className="truncate text-base font-bold text-slate-900 dark:text-slate-100">
+                                    {t('inventory_remove_menu_title', { name: itemActionMenuItem.name })}
+                                </h2>
+                                <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400">
+                                    {t('inventory_remove_menu_desc')}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                autoFocus
+                                onClick={() => setItemActionMenuItem(null)}
+                                aria-label={t('btn_close')}
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-2">
+                            {onStartWasteBatch && (
+                                <button
+                                    type="button"
+                                    onClick={handleActionMenuWasteBatch}
+                                    disabled={isStartingActionMenuWasteBatch || isDeleting || isBulkDeleting}
+                                    className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50/70 p-3 text-left transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
+                                >
+                                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
+                                        {isStartingActionMenuWasteBatch
+                                            ? <Loader2 className="h-5 w-5 animate-spin" />
+                                            : <FlaskConical className="h-5 w-5" />}
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block text-sm font-bold text-blue-900 dark:text-blue-200">
+                                            {isStartingActionMenuWasteBatch
+                                                ? t('inventory_start_waste_batch_running')
+                                                : t('inventory_start_waste_batch')}
+                                        </span>
+                                        <span className="mt-0.5 block text-xs leading-4 text-blue-700/80 dark:text-blue-300/80">
+                                            {t('inventory_remove_menu_dispose_desc')}
+                                        </span>
+                                    </span>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={handleActionMenuDelete}
+                                disabled={isDeleting || isBulkDeleting || isStartingActionMenuWasteBatch}
+                                className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-red-200 bg-red-50/70 p-3 text-left transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:bg-red-950/30 dark:hover:bg-red-950/50"
+                            >
+                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm shadow-red-600/20">
+                                    <Trash2 className="h-5 w-5" />
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-bold text-red-900 dark:text-red-200">
+                                        {t('inventory_btn_delete')}
+                                    </span>
+                                    <span className="mt-0.5 block text-xs leading-4 text-red-700/80 dark:text-red-300/80">
+                                        {t('inventory_remove_menu_delete_desc')}
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <CustomDialog
                 isOpen={!!itemToDelete}

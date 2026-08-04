@@ -28,6 +28,7 @@ import {
 } from '../utils/auditLogFormatting';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
 import { useAuth } from '../hooks/useAuth';
+import { formatGhsStatementList } from '../data/ghsCodes';
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
@@ -138,6 +139,8 @@ const HAZARD_FLAG_LABELS: Record<string, { ko: string; en: string }> = {
     CYANIDE: { ko: '시안', en: 'Cyanide' },
     SULFIDE: { ko: '황화물', en: 'Sulfide' },
     HEAVY_METAL: { ko: '중금속', en: 'Heavy metal' },
+    HYDROFLUORIC_ACID: { ko: '불산(HF)', en: 'Hydrofluoric acid (HF)' },
+    FLUORIDE: { ko: '불화물', en: 'Fluoride' },
     REACTIVE: { ko: '반응성', en: 'Reactive' },
     UNKNOWN_COMPONENT: { ko: '미상 성분', en: 'Unknown component' },
 };
@@ -155,12 +158,40 @@ function formatGhsDataStatus(status: WasteLogItemRecord['ghsDataStatus'], langua
     return korean ? '상태 미기록' : 'Not recorded';
 }
 
+function formatGhsSignal(signal: string, language: string): string {
+    if (!language.startsWith('ko')) return signal;
+    const normalized = signal.trim().toLowerCase();
+    if (normalized === 'danger') return '위험';
+    if (normalized === 'warning') return '경고';
+    return signal;
+}
+
+type AnalysisSnapshotRow = {
+    label: string;
+    value: string | string[];
+};
+
+function formatStoredPhysicalValue(value: unknown, language: string): unknown {
+    if (!language.startsWith('ko') || typeof value !== 'string') return value;
+
+    const trimmed = value.trim();
+    const normalized = trimmed.toLowerCase();
+    if (normalized.startsWith('miscible')) {
+        return `혼화성${trimmed.slice('Miscible'.length)}`;
+    }
+    if (normalized === 'stable under recommended storage conditions.') {
+        return '권장 보관 조건에서 안정함';
+    }
+    return value;
+}
+
 function getAnalysisSnapshotRows(
     snapshot: Record<string, unknown>,
     language: string,
-): Array<{ label: string; value: string }> {
+    translate: (key: string) => string,
+): AnalysisSnapshotRow[] {
     const korean = language.startsWith('ko');
-    const rows: Array<{ label: string; value: string }> = [];
+    const rows: AnalysisSnapshotRow[] = [];
     const addPrimitive = (labelKo: string, labelEn: string, value: unknown) => {
         if (typeof value === 'string' && value.trim()) {
             rows.push({ label: korean ? labelKo : labelEn, value: value.trim() });
@@ -171,22 +202,40 @@ function getAnalysisSnapshotRows(
         }
     };
 
-    addPrimitive('분류 코드', 'Category code', snapshot.category);
-    addPrimitive('판정 근거', 'Decision reason', snapshot.reason);
+    if (typeof snapshot.category === 'string' && snapshot.category.trim()) {
+        const category = snapshot.category.trim();
+        const categoryLabel = DISPOSAL_CATEGORY_VALUES.has(category)
+            ? translate(getCategoryDetails(category as DisposalCategory).label)
+            : category;
+        rows.push({ label: korean ? '분류' : 'Category', value: categoryLabel });
+    }
+    if (typeof snapshot.reason === 'string' && snapshot.reason.trim()) {
+        const reason = snapshot.reason.trim();
+        const translatedReason = translate(reason);
+        rows.push({
+            label: korean ? '판정 근거' : 'Decision reason',
+            value: translatedReason === reason ? reason : translatedReason,
+        });
+    }
     addPrimitive('AI 추정', 'AI estimated', snapshot.isAiEstimated);
 
     const ghs = snapshot.ghs && typeof snapshot.ghs === 'object' && !Array.isArray(snapshot.ghs)
         ? snapshot.ghs as Record<string, unknown>
         : null;
     if (ghs) {
-        addPrimitive('GHS 신호어', 'GHS signal word', ghs.signal);
+        if (typeof ghs.signal === 'string' && ghs.signal.trim()) {
+            rows.push({
+                label: korean ? 'GHS 신호어' : 'GHS signal word',
+                value: formatGhsSignal(ghs.signal.trim(), language),
+            });
+        }
         const statements = Array.isArray(ghs.hazardStatements)
             ? ghs.hazardStatements.filter((statement): statement is string => typeof statement === 'string' && Boolean(statement.trim()))
             : [];
         if (statements.length > 0) {
             rows.push({
                 label: korean ? 'GHS 위험 문구' : 'GHS hazard statements',
-                value: statements.join(' · '),
+                value: formatGhsStatementList(statements, korean ? 'ko' : 'en'),
             });
         }
     }
@@ -199,8 +248,8 @@ function getAnalysisSnapshotRows(
     if (physical) {
         addPrimitive('인화점', 'Flash point', physical.flashPoint);
         addPrimitive('끓는점', 'Boiling point', physical.boilingPoint);
-        addPrimitive('용해도', 'Solubility', physical.solubility);
-        addPrimitive('안정성', 'Stability', physical.stability);
+        addPrimitive('용해도', 'Solubility', formatStoredPhysicalValue(physical.solubility, language));
+        addPrimitive('안정성', 'Stability', formatStoredPhysicalValue(physical.stability, language));
     }
 
     return rows;
@@ -221,7 +270,7 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
     onRetry,
     onViewAudit,
 }) => {
-    const { i18n } = useTranslation();
+    const { t, i18n } = useTranslation();
     const korean = i18n.language.startsWith('ko');
 
     if (isLoading && items === undefined) {
@@ -263,7 +312,11 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
     return (
         <div className="space-y-3">
             {items.map((item) => {
-                const snapshotRows = getAnalysisSnapshotRows(item.analysisSnapshot, i18n.language);
+                const snapshotRows = getAnalysisSnapshotRows(
+                    item.analysisSnapshot,
+                    i18n.language,
+                    (key) => t(key as never),
+                );
                 const originId = item.inventoryItemId || item.cabinetItemId;
                 return (
                     <article key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800/80">
@@ -341,9 +394,24 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
                                 </summary>
                                 <dl className="space-y-2 border-t border-slate-100 pt-2 dark:border-slate-800">
                                     {snapshotRows.map((row) => (
-                                        <div key={`${row.label}-${row.value}`}>
+                                        <div key={`${row.label}-${Array.isArray(row.value) ? row.value.join('|') : row.value}`}>
                                             <dt className="text-slate-500 dark:text-slate-400">{row.label}</dt>
-                                            <dd className="mt-0.5 break-words text-slate-700 dark:text-slate-200">{row.value}</dd>
+                                            {Array.isArray(row.value) ? (
+                                                <dd className="mt-1">
+                                                    <ul className="space-y-1.5">
+                                                        {row.value.map((value) => (
+                                                            <li
+                                                                key={value}
+                                                                className="rounded-md bg-slate-50 px-2 py-1.5 leading-5 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                                            >
+                                                                {value}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </dd>
+                                            ) : (
+                                                <dd className="mt-0.5 break-words text-slate-700 dark:text-slate-200">{row.value}</dd>
+                                            )}
                                         </div>
                                     ))}
                                 </dl>
@@ -923,7 +991,6 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 <span className="whitespace-nowrap">{t('log_chemicals_count', { count: componentCount })}</span>
                                 {totalVol && <span className="whitespace-nowrap">• {totalVol}</span>}
-                                {log.stream_code && <span className="break-all font-mono text-[10px]">• {log.stream_code}</span>}
                                 {log.handler_name && <span className="min-w-0 break-words">• {log.handler_name}</span>}
                                 <span className="whitespace-nowrap text-slate-400 dark:text-slate-500 sm:ml-auto">
                                     {formatDate(log.created_at)}
@@ -1012,7 +1079,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                 <div className="sm:col-span-2">
                                     <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '폐기 분류' : 'Waste classification'}</div>
                                     <div className="mt-0.5 break-all font-semibold text-slate-800 dark:text-slate-100">
-                                        {streamLabel || '-'}{log.stream_code ? ` · ${log.stream_code}` : ''}
+                                        {streamLabel || '-'}
                                     </div>
                                 </div>
                             </div>

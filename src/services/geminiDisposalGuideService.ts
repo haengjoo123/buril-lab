@@ -78,7 +78,8 @@ export interface DisposalGuideBatchContext {
         approximate?: boolean
         unknown?: boolean
     }
-    measuredPh?: number | null
+    measuredBatchPh?: number | null
+    mixingState?: 'unknown' | 'separate' | 'already_mixed'
     hazardFlags?: string[]
     compatibilityWarnings?: Array<string | {
         severity?: string

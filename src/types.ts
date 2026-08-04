@@ -52,7 +52,9 @@ export interface Chemical {
     properties?: {
         isHalogenated: boolean;
         isOrganic: boolean;
-        /** External reference value used only for material-level classification. */
+        /** External SDS/reference value. Never use this as a measured waste-batch pH. */
+        referencePh?: number;
+        /** @deprecated Read-only fallback for records created before referencePh was introduced. */
         ph?: number;
         phSource?: 'kosha_reference' | 'pubchem_reference';
     };
@@ -169,6 +171,8 @@ export type WasteHazardFlag =
     | 'CYANIDE'
     | 'SULFIDE'
     | 'HEAVY_METAL'
+    | 'HYDROFLUORIC_ACID'
+    | 'FLUORIDE'
     | 'REACTIVE'
     | 'UNKNOWN_COMPONENT';
 
@@ -176,9 +180,19 @@ export type WasteComponentSource = 'search' | 'scan' | 'inventory' | 'cabinet' |
 export type WasteDataStatus = 'verified' | 'lookup_failed' | 'not_checked';
 export type WasteIdentityConfidence = 'verified' | 'review_required' | 'unknown';
 export type AdditionalComponentsStatus = 'none' | 'present' | 'unknown';
+export type FluorideContainerStatus = 'compatible' | 'incompatible' | 'unknown';
+export type WasteMixingState = 'unknown' | 'separate' | 'already_mixed';
 export type WasteIncidentContext = 'none' | 'broken' | 'leak';
 export type WasteMatrixSource = 'automatic' | 'user' | 'unresolved';
 export type ConcentrationUnit = 'M' | 'mM' | '%' | 'mg/mL';
+export type WasteLegalPhClass = 'waste_acid' | 'waste_alkali' | 'none' | 'unknown';
+export type WasteCorrosivityPhScreen = 'review_required' | 'not_indicated' | 'unknown';
+export type WasteRoutingBasis =
+    | 'special_rule'
+    | 'identity'
+    | 'measured_batch_ph'
+    | 'matrix'
+    | 'unresolved';
 
 /**
  * Batch amount keeps both the user's entry and the normalized comparison value.
@@ -242,9 +256,15 @@ export interface WasteBatchDraft {
     matrix: WasteMatrix;
     matrixSource: WasteMatrixSource;
     totalAmount: WasteAmount;
+    /** Actual measured pH of the complete physical waste batch. */
+    measuredBatchPh?: number;
+    /** @deprecated Persisted-draft compatibility; normalized into measuredBatchPh when loaded. */
     measuredPh?: number;
     measuredPhStatus: 'measured' | 'unknown' | 'not_required';
+    mixingState: WasteMixingState;
     additionalComponentsStatus?: AdditionalComponentsStatus;
+    /** Confirmation that HF/fluoride waste uses an institution-approved compatible container. */
+    fluorideContainerStatus?: FluorideContainerStatus;
     /** Physical incident context that must never be downgraded to an ordinary container deposit. */
     incidentContext: WasteIncidentContext;
     createdAt: string;
@@ -261,6 +281,9 @@ export type WasteDecisionReasonCode =
     | 'pyrophoric'
     | 'policy_blocked_hazard'
     | 'policy_disallowed_hazard'
+    | 'hf_fluoride_incompatible_container'
+    | 'acid_alkali_separate'
+    | 'acid_alkali_non_aqueous_mixed'
     | 'unknown_component';
 
 export interface WasteDecisionReason {
@@ -274,10 +297,12 @@ export type WasteMissingField =
     | 'components'
     | 'matrix'
     | 'total_amount'
+    | 'mixing_state'
     | 'measured_ph'
     | 'identity'
     | 'hazard_data'
     | 'additional_components'
+    | 'fluoride_container'
     | 'inventory_quantity'
     | 'policy_stream'
     | 'policy_destination';
@@ -289,6 +314,9 @@ export interface WasteDecision {
     allowedActions: HandlingAction[];
     blockingReasons: WasteDecisionReason[];
     missingFields: WasteMissingField[];
+    legalWastePhClass: WasteLegalPhClass;
+    corrosivityPhScreen: WasteCorrosivityPhScreen;
+    routingBasis: WasteRoutingBasis;
     policyVersion: string;
     ruleVersion: string;
 }

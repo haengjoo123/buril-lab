@@ -26,6 +26,7 @@ function analysis(
         signal?: string;
         isOrganic?: boolean;
         isHalogenated?: boolean;
+        referencePh?: number;
     } = {},
 ): AnalysisResult {
     return {
@@ -37,6 +38,7 @@ function analysis(
             properties: {
                 isOrganic: options.isOrganic ?? false,
                 isHalogenated: options.isHalogenated ?? false,
+                referencePh: options.referencePh,
             },
             ghs: {
                 signal: options.signal ?? 'Warning',
@@ -169,10 +171,13 @@ describe('analyzeWasteBatch', () => {
     });
 
     it('blocks acid + sodium cyanide and permits only isolation or handover', () => {
-        const decision = analyzeWasteBatch(batch([
+        const draft = batch([
             analysis('Hydrochloric acid', 'HCl', 'ACID'),
             analysis('Sodium cyanide', 'NaCN', 'CYANIDE'),
-        ], 'aqueous'));
+        ], 'aqueous');
+        draft.measuredBatchPh = 7;
+        draft.measuredPhStatus = 'measured';
+        const decision = analyzeWasteBatch(draft);
 
         expect(decision.decisionStatus).toBe('blocked');
         expect(decision.streamCode).toBe('CYANIDE_SULFIDE');
@@ -184,6 +189,111 @@ describe('analyzeWasteBatch', () => {
             }),
         ]));
         expect(decision.blockingReasons.some(({ ruleId }) => ruleId === 'acid_metal')).toBe(false);
+    });
+
+    it('requires an explicit mixing state before handling acidic and alkaline aqueous components', () => {
+        const draft = batch([
+            analysis('Hydrochloric acid', 'HCl', 'ACID'),
+            analysis('Sodium hydroxide', 'NaOH', 'ALKALI'),
+        ], 'aqueous');
+
+        const unknownState = analyzeWasteBatch(draft);
+        expect(unknownState.decisionStatus).toBe('needs_input');
+        expect(unknownState.streamCode).toBe('SPECIAL_REVIEW');
+        expect(unknownState.missingFields).toContain('mixing_state');
+
+        draft.mixingState = 'separate';
+        const separate = analyzeWasteBatch(draft);
+        expect(separate.decisionStatus).toBe('blocked');
+        expect(separate.allowedActions).toEqual(['isolated', 'handover']);
+        expect(separate.blockingReasons).toContainEqual(expect.objectContaining({
+            code: 'acid_alkali_separate',
+        }));
+
+        draft.mixingState = 'already_mixed';
+        const alreadyMixed = analyzeWasteBatch(draft);
+        expect(alreadyMixed.decisionStatus).toBe('needs_input');
+        expect(alreadyMixed.missingFields).toContain('measured_ph');
+    });
+
+    it('requires the mixing state for acid/alkali in every matrix and escalates an already-mixed non-aqueous batch', () => {
+        const draft = batch([
+            analysis('Hydrochloric acid', 'HCl', 'ACID'),
+            analysis('Sodium hydroxide', 'NaOH', 'ALKALI'),
+        ], 'mixed_biphasic');
+
+        const unknownState = analyzeWasteBatch(draft);
+        expect(unknownState.decisionStatus).toBe('needs_input');
+        expect(unknownState.streamCode).toBe('SPECIAL_REVIEW');
+        expect(unknownState.missingFields).toContain('mixing_state');
+
+        draft.mixingState = 'separate';
+        expect(analyzeWasteBatch(draft).blockingReasons).toContainEqual(
+            expect.objectContaining({ code: 'acid_alkali_separate' }),
+        );
+
+        draft.mixingState = 'already_mixed';
+        draft.measuredBatchPh = 7;
+        draft.measuredPhStatus = 'measured';
+        const alreadyMixed = analyzeWasteBatch(draft);
+        expect(alreadyMixed.decisionStatus).toBe('blocked');
+        expect(alreadyMixed.streamCode).toBe('SPECIAL_REVIEW');
+        expect(alreadyMixed.blockingReasons).toContainEqual(expect.objectContaining({
+            code: 'acid_alkali_non_aqueous_mixed',
+        }));
+        expect(alreadyMixed.missingFields).not.toContain('measured_ph');
+        expect(alreadyMixed.legalWastePhClass).toBe('unknown');
+        expect(alreadyMixed.corrosivityPhScreen).toBe('unknown');
+        expect(alreadyMixed.routingBasis).toBe('special_rule');
+    });
+
+    it.each([
+        [2, 'ACID_AQUEOUS', 'waste_acid', 'review_required'],
+        [2.01, 'AQUEOUS_OTHER', 'none', 'not_indicated'],
+        [7, 'AQUEOUS_OTHER', 'none', 'not_indicated'],
+        [11, 'AQUEOUS_OTHER', 'none', 'not_indicated'],
+        [11.5, 'AQUEOUS_OTHER', 'none', 'review_required'],
+        [12.49, 'AQUEOUS_OTHER', 'none', 'review_required'],
+        [12.5, 'ALKALI_AQUEOUS', 'waste_alkali', 'review_required'],
+    ] as const)(
+        'routes an already-mixed acid/alkali batch at measured pH %s',
+        (measuredBatchPh, streamCode, legalWastePhClass, corrosivityPhScreen) => {
+            const draft = batch([
+                analysis('Hydrochloric acid', 'HCl', 'ACID'),
+                analysis('Sodium hydroxide', 'NaOH', 'ALKALI'),
+            ], 'aqueous');
+            draft.mixingState = 'already_mixed';
+            draft.measuredBatchPh = measuredBatchPh;
+            draft.measuredPhStatus = 'measured';
+
+            const decision = analyzeWasteBatch(draft);
+
+            expect(decision.decisionStatus).toBe('ready');
+            expect(decision.streamCode).toBe(streamCode);
+            expect(decision.legalWastePhClass).toBe(legalWastePhClass);
+            expect(decision.corrosivityPhScreen).toBe(corrosivityPhScreen);
+            expect(decision.routingBasis).toBe('measured_batch_ph');
+        },
+    );
+
+    it('uses reference pH only as a conservative mixing warning, never as a single-component route', () => {
+        const referenceAcid = analysis('Reference-only acidic material', 'X', 'NEUTRAL', {
+            referencePh: 3,
+        });
+        const referenceAlkali = analysis('Reference-only alkaline material', 'Y', 'NEUTRAL', {
+            referencePh: 11,
+        });
+
+        const singleDecision = analyzeWasteBatch(batch([referenceAcid], 'aqueous'));
+        expect(singleDecision.streamCode).toBe('AQUEOUS_OTHER');
+        expect(singleDecision.routingBasis).toBe('matrix');
+
+        const mixedDraft = batch([referenceAcid, referenceAlkali], 'aqueous');
+        expect(analyzeWasteBatch(mixedDraft).missingFields).toContain('mixing_state');
+        mixedDraft.mixingState = 'already_mixed';
+        mixedDraft.measuredBatchPh = 7;
+        mixedDraft.measuredPhStatus = 'measured';
+        expect(analyzeWasteBatch(mixedDraft).streamCode).toBe('AQUEOUS_OTHER');
     });
 
     it('always blocks broken-container and leak-response batches from ordinary deposit', () => {
@@ -217,6 +327,51 @@ describe('analyzeWasteBatch', () => {
         expect(decision.streamCode).toBe('ORGANIC_NON_HALOGENATED');
         expect(decision.hazardFlags).toContain('FLAMMABLE');
         expect(decision.allowedActions).toEqual(['container_deposit']);
+    });
+
+    it('routes HF to special review and requires an approved compatible container', () => {
+        const hydrofluoricAcid = analysis('Hydrofluoric acid', 'HF', 'ACID', {
+            hCodes: ['H300', 'H310', 'H330', 'H314'],
+            signal: 'Danger',
+        });
+        hydrofluoricAcid.chemical.casNumber = '7664-39-3';
+        const draft = batch([hydrofluoricAcid], 'aqueous');
+
+        const unanswered = analyzeWasteBatch(draft);
+        expect(unanswered).toMatchObject({
+            decisionStatus: 'needs_input',
+            streamCode: 'SPECIAL_REVIEW',
+        });
+        expect(unanswered.hazardFlags).toContain('HYDROFLUORIC_ACID');
+        expect(unanswered.missingFields).toContain('fluoride_container');
+
+        draft.fluorideContainerStatus = 'compatible';
+        const compatible = analyzeWasteBatch(draft);
+        expect(compatible.decisionStatus).toBe('ready');
+        expect(compatible.allowedActions).toEqual(['container_deposit']);
+
+        draft.fluorideContainerStatus = 'incompatible';
+        const incompatible = analyzeWasteBatch(draft);
+        expect(incompatible.decisionStatus).toBe('blocked');
+        expect(incompatible.allowedActions).toEqual(['isolated', 'handover']);
+        expect(incompatible.blockingReasons).toContainEqual(expect.objectContaining({
+            code: 'hf_fluoride_incompatible_container',
+        }));
+    });
+
+    it('flags explicit fluoride compounds without treating every fluoro-organic name as free fluoride', () => {
+        const ammoniumFluoride = analysis('Ammonium fluoride', 'NH4F', 'NEUTRAL');
+        ammoniumFluoride.chemical.casNumber = '12125-01-8';
+        const fluorideDecision = analyzeWasteBatch(batch([ammoniumFluoride], 'aqueous'));
+        expect(fluorideDecision.hazardFlags).toContain('FLUORIDE');
+        expect(fluorideDecision.missingFields).toContain('fluoride_container');
+
+        const tfa = analysis('Trifluoroacetic acid', 'C2HF3O2', 'ACID');
+        tfa.chemical.casNumber = '76-05-1';
+        const tfaDecision = analyzeWasteBatch(batch([tfa], 'aqueous'));
+        expect(tfaDecision.hazardFlags).not.toContain('FLUORIDE');
+        expect(tfaDecision.hazardFlags).not.toContain('HYDROFLUORIC_ACID');
+        expect(tfaDecision.missingFields).not.toContain('fluoride_container');
     });
 
     it('allows deposit from the active policy category without local container metadata', () => {

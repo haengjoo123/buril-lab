@@ -41,6 +41,8 @@ export const WASTE_POLICY_HAZARDS: ReadonlyArray<{
   { flag: 'CYANIDE', label: '시안' },
   { flag: 'SULFIDE', label: '황화물' },
   { flag: 'HEAVY_METAL', label: '중금속' },
+  { flag: 'HYDROFLUORIC_ACID', label: '불산(HF)' },
+  { flag: 'FLUORIDE', label: '불화물' },
   { flag: 'REACTIVE', label: '반응성' },
   { flag: 'UNKNOWN_COMPONENT', label: '미상 성분' },
 ];

@@ -102,15 +102,19 @@ function App() {
   const activeCabinetId = searchParams.get('id') || locationState?.cabinetId || null;
 
   const cart = useWasteStore((state) => state.cart);
+  const parkedBatchCount = useWasteStore((state) => state.parkedBatches.length);
+  const wasteDraftCount = parkedBatchCount + (cart.length > 0 ? 1 : 0);
   const setWasteScope = useWasteStore((state) => state.setScope);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
   const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
+  const [isAddingWasteComponent, setIsAddingWasteComponent] = useState(false);
+  const [wasteComponentSearchRequestKey, setWasteComponentSearchRequestKey] = useState(0);
   const [scanSelection, setScanSelection] = useState<{
     searchTerm: string;
     meta: ScannerSelectionMeta;
   } | null>(null);
-  const [isOnboardingRemoteChecked, setIsOnboardingRemoteChecked] = useState(false);
+  const [onboardingCheckedUserId, setOnboardingCheckedUserId] = useState<string | null>(null);
   const currentLabId = useLabStore((state) => state.currentLabId);
   const myLabs = useLabStore((state) => state.myLabs);
   const currentRole = myLabs.find((membership) => membership.lab_id === currentLabId)?.role;
@@ -125,6 +129,10 @@ function App() {
   const openWelcome = useOnboardingStore((state) => state.openWelcome);
   const markMissionCompleted = useOnboardingStore((state) => state.markMissionCompleted);
   const activeOnboardingUserId = session?.user?.id ?? user?.id ?? null;
+  const hasAuthSession = Boolean(session);
+  const isOnboardingRemoteChecked = hasAuthSession
+    && Boolean(activeOnboardingUserId)
+    && onboardingCheckedUserId === activeOnboardingUserId;
 
   const {
     query,
@@ -421,13 +429,12 @@ function App() {
   }, [activeOnboardingUserId, setActiveOnboardingUser]);
 
   useEffect(() => {
-    if (!session || !activeOnboardingUserId) {
-      setIsOnboardingRemoteChecked(true);
+    if (!hasAuthSession || !activeOnboardingUserId) {
+      setOnboardingCheckedUserId(null);
       return;
     }
 
     let isCancelled = false;
-    setIsOnboardingRemoteChecked(false);
 
     void analyticsService.getOnboardingProgress().then((progress) => {
       if (isCancelled) return;
@@ -436,13 +443,13 @@ function App() {
         applyRemoteOnboardingProgress(activeOnboardingUserId, progress);
       }
 
-      setIsOnboardingRemoteChecked(true);
+      setOnboardingCheckedUserId(activeOnboardingUserId);
     });
 
     return () => {
       isCancelled = true;
     };
-  }, [activeOnboardingUserId, applyRemoteOnboardingProgress, session]);
+  }, [activeOnboardingUserId, applyRemoteOnboardingProgress, hasAuthSession]);
 
   useEffect(() => {
     document.documentElement.lang = i18n.language.startsWith('ko') ? 'ko' : 'en';
@@ -774,7 +781,7 @@ function App() {
     <>
       <SafetyDisclaimer />
 
-      {isWelcomeOpen && !isScanning && (
+      {isWelcomeOpen && isOnboardingRemoteChecked && !isScanning && (
         <OnboardingMissionPanel
           activeTab={activeTab}
           cartCount={cart.length}
@@ -811,6 +818,8 @@ function App() {
               ? `${labAppRoute('/logs')}?record=${encodeURIComponent(wasteLogId)}${openCorrection ? '&correct=1' : ''}`
               : labAppRoute('/logs'))}
             onAddComponent={() => {
+              setIsAddingWasteComponent(true);
+              setWasteComponentSearchRequestKey((requestKey) => requestKey + 1);
               setIsCartOpen(false);
               handleTabClick('search');
             }}
@@ -831,7 +840,7 @@ function App() {
         activeTab={activeTab}
         isAdmin={isAdmin}
         onTabClick={handleTabClick}
-        cartCount={cart.length}
+        cartCount={wasteDraftCount}
         onCartClick={() => {
           if (!isAuthenticated) {
             navigateToLogin(labAppRoute());
@@ -927,6 +936,10 @@ function App() {
                 handleReset();
               }}
               onResultAddConfirmed={() => {
+                if (isAddingWasteComponent) {
+                  setIsAddingWasteComponent(false);
+                  setIsCartOpen(true);
+                }
                 if (isWelcomeOpen) {
                   completeOnboardingMission('disposal', 'search');
                 }
@@ -948,6 +961,12 @@ function App() {
               isSuggestionsLoading={isSuggestionsLoading}
               onClearSuggestions={clearSuggestions}
               onSearchFocusChange={setIsSearchInputFocused}
+              wasteComponentSearchMode={isAddingWasteComponent}
+              searchFocusRequestKey={wasteComponentSearchRequestKey}
+              onReturnToWasteBatch={() => {
+                setIsAddingWasteComponent(false);
+                setIsCartOpen(true);
+              }}
               onRequireAuth={!isAuthenticated ? () => navigateToLogin() : undefined}
               onOpenVoiceAgent={() => openVoiceAgentSheet({
                 screen: 'search',
@@ -957,7 +976,7 @@ function App() {
           )}
         </Suspense>
 
-        {cart.length > 0 && !isCartOpen && !shouldHideMobileSearchChrome && (
+        {wasteDraftCount > 0 && !isCartOpen && !shouldHideMobileSearchChrome && (
           <button
             onClick={() => {
               if (!isAuthenticated) {
@@ -968,10 +987,10 @@ function App() {
               setIsCartOpen(true);
             }}
             className={`absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition-transform animate-in fade-in slide-in-from-bottom-4 active:scale-90 dark:bg-slate-100 dark:text-slate-900 lg:hidden`}
-            aria-label={`${t('cart_title')} ${cart.length}`}
+            aria-label={`${t('cart_title')} ${wasteDraftCount}`}
           >
             <ShoppingBag className="w-6 h-6" />
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold border-2 border-white dark:border-slate-900 text-white">{cart.length}</span>
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold border-2 border-white dark:border-slate-900 text-white">{wasteDraftCount}</span>
           </button>
         )}
       </MainLayout>

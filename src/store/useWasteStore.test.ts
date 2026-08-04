@@ -563,6 +563,37 @@ describe('useWasteStore V2 batch isolation', () => {
         });
     });
 
+    it('stores measured batch pH only for an explicitly already-mixed aqueous batch', () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        useWasteStore.getState().setMatrix('aqueous');
+        useWasteStore.getState().setMixingState('already_mixed');
+        useWasteStore.getState().setMeasuredPh(11.5, false);
+
+        expect(useWasteStore.getState().batch).toMatchObject({
+            mixingState: 'already_mixed',
+            measuredBatchPh: 11.5,
+            measuredPhStatus: 'measured',
+        });
+        expect(useWasteStore.getState().batch.measuredPh).toBeUndefined();
+
+        useWasteStore.getState().setMixingState('separate');
+        expect(useWasteStore.getState().batch).toMatchObject({
+            mixingState: 'separate',
+            measuredPhStatus: 'not_required',
+        });
+        expect(useWasteStore.getState().batch.measuredBatchPh).toBeUndefined();
+
+        useWasteStore.getState().setMatrix('mixed_biphasic');
+        useWasteStore.getState().setMixingState('already_mixed');
+        useWasteStore.getState().setMeasuredPh(7, false);
+        expect(useWasteStore.getState().batch).toMatchObject({
+            matrix: 'mixed_biphasic',
+            mixingState: 'already_mixed',
+            measuredPhStatus: 'not_required',
+        });
+        expect(useWasteStore.getState().batch.measuredBatchPh).toBeUndefined();
+    });
+
     it('migrates an explicitly owner-tagged legacy cart exactly once', () => {
         const legacyAcetone = {
             ...cartItem('acetone', 'Acetone'),

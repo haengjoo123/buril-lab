@@ -37,4 +37,24 @@ describe('searchChemical CAS validation', () => {
     expect(mocks.resolveKoreanChemical).not.toHaveBeenCalled()
     expect(mocks.resolveWikiCas).not.toHaveBeenCalled()
   })
+
+  it('stores a KOSHA pH as an external reference value instead of a batch pH', async () => {
+    mocks.fetchChemicalInfo.mockResolvedValue({
+      id: '962',
+      name: 'Water',
+      casNumber: '7732-18-5',
+      molecularFormula: 'H2O',
+      properties: { isOrganic: false, isHalogenated: false },
+    })
+    mocks.resolveCasChemical.mockResolvedValue({ chemId: 123, nameKo: '물' })
+    mocks.fetchKoshaPH.mockResolvedValue(6.5)
+
+    const result = await searchChemical('7732-18-5')
+
+    expect(result?.properties).toMatchObject({
+      referencePh: 6.5,
+      phSource: 'kosha_reference',
+    })
+    expect(result?.properties).not.toHaveProperty('ph')
+  })
 })

@@ -18,7 +18,7 @@ import type {
     WasteStreamCode,
 } from '../types';
 import { useLabStore } from '../store/useLabStore';
-import { validateWasteAmount } from '../utils/wasteBatch';
+import { getMeasuredBatchPh, validateWasteAmount } from '../utils/wasteBatch';
 
 export type WasteLogDecisionStatus = WasteDecision['decisionStatus'] | 'legacy_unverified';
 
@@ -88,6 +88,7 @@ export interface RecordWasteHandlingV2Params {
     memo?: string;
     confirmationSnapshot?: {
         alreadyMixed?: boolean;
+        mixingState?: WasteBatchDraft['mixingState'];
     };
     /** Reuse this UUID when retrying the same user action. */
     requestId?: string;
@@ -159,6 +160,9 @@ export interface WasteHandlingRpcBatchPayload {
         allowedActions: HandlingAction[];
         blockingReasons: WasteDecision['blockingReasons'];
         missingFields: WasteDecision['missingFields'];
+        legalWastePhClass: WasteDecision['legalWastePhClass'];
+        corrosivityPhScreen: WasteDecision['corrosivityPhScreen'];
+        routingBasis: WasteDecision['routingBasis'];
         policyVersion: string;
         ruleVersion: string;
     };
@@ -181,6 +185,8 @@ const WASTE_HAZARD_FLAGS = new Set<WasteHazardFlag>([
     'CYANIDE',
     'SULFIDE',
     'HEAVY_METAL',
+    'HYDROFLUORIC_ACID',
+    'FLUORIDE',
     'REACTIVE',
     'UNKNOWN_COMPONENT',
 ]);
@@ -390,10 +396,11 @@ export function buildWasteHandlingRpcPayload(
         throw new Error(`Invalid waste amount: ${amountValidation.error}.`);
     }
 
-    if (
-        batch.measuredPhStatus === 'measured'
-        && (batch.measuredPh === undefined || !Number.isFinite(batch.measuredPh) || batch.measuredPh < 0 || batch.measuredPh > 14)
-    ) {
+    const measuredBatchPh = getMeasuredBatchPh(batch);
+    if (batch.measuredPhStatus === 'measured' && (
+        measuredBatchPh === undefined || !Number.isFinite(measuredBatchPh) ||
+        measuredBatchPh < 0 || measuredBatchPh > 14
+    )) {
         throw new Error('Measured pH must be between 0 and 14.');
     }
 
@@ -433,6 +440,8 @@ export function buildWasteHandlingRpcPayload(
                 hazardDataConfirmedByUser: Boolean(component.hazardDataConfirmedByUser),
                 scanSnapshot: component.scanSnapshot ?? null,
                 physicalProperties: component.chemical.physicalProperties ?? null,
+                referencePh: component.chemical.properties?.referencePh ?? component.chemical.properties?.ph ?? null,
+                referencePhSource: component.chemical.properties?.phSource ?? null,
                 inventorySnapshot: component.inventorySnapshot ?? null,
                 inventoryDisposalQuantity: component.inventoryDisposalQuantity ?? null,
             },
@@ -452,6 +461,9 @@ export function buildWasteHandlingRpcPayload(
             allowedActions: [...decision.allowedActions],
             blockingReasons: decision.blockingReasons,
             missingFields: [...decision.missingFields],
+            legalWastePhClass: decision.legalWastePhClass,
+            corrosivityPhScreen: decision.corrosivityPhScreen,
+            routingBasis: decision.routingBasis,
             policyVersion: decision.policyVersion,
             ruleVersion: decision.ruleVersion,
         },
@@ -460,10 +472,18 @@ export function buildWasteHandlingRpcPayload(
             scopeKey: batch.scopeKey,
             matrixSource: batch.matrixSource,
             incidentContext: batch.incidentContext,
-            measuredPh: batch.measuredPhStatus === 'measured' ? batch.measuredPh ?? null : null,
+            measuredBatchPh: batch.measuredPhStatus === 'measured' ? measuredBatchPh ?? null : null,
+            measuredPh: batch.measuredPhStatus === 'measured' ? measuredBatchPh ?? null : null,
             measuredPhStatus: batch.measuredPhStatus,
+            mixingState: batch.mixingState,
+            ...(batch.mixingState === 'unknown'
+                ? {}
+                : { alreadyMixed: batch.mixingState === 'already_mixed' }),
             ...(batch.additionalComponentsStatus
                 ? { additionalComponentsStatus: batch.additionalComponentsStatus }
+                : {}),
+            ...(batch.fluorideContainerStatus
+                ? { fluorideContainerStatus: batch.fluorideContainerStatus }
                 : {}),
             ...(params.confirmationSnapshot || {}),
         },

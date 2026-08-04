@@ -99,6 +99,9 @@ export function createWastePolicyGuardFingerprint(
     decision: {
       decisionStatus: decision.decisionStatus,
       streamCode: decision.streamCode,
+      legalWastePhClass: decision.legalWastePhClass,
+      corrosivityPhScreen: decision.corrosivityPhScreen,
+      routingBasis: decision.routingBasis,
       policyVersion: decision.policyVersion,
       allowedActions: sortedStrings(decision.allowedActions),
       blockingReasons: normalizeReasons(decision.blockingReasons),

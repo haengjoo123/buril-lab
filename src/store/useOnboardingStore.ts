@@ -118,6 +118,16 @@ function createInitialSnapshot(): PersistedOnboardingSnapshot {
     };
 }
 
+function createCompletedSnapshot(snapshot: PersistedOnboardingSnapshot): PersistedOnboardingSnapshot {
+    return {
+        ...snapshot,
+        hasCompletedWelcome: true,
+        hasSkippedOnboarding: false,
+        seenGuides: ALL_GUIDES_SEEN,
+        hasCompletedMissionOnboarding: true,
+    };
+}
+
 function createInitialState(): Pick<
     OnboardingState,
     | keyof PersistedOnboardingSnapshot
@@ -138,7 +148,7 @@ function normalizeSnapshot(snapshot?: Partial<PersistedOnboardingSnapshot>): Per
         return createInitialSnapshot();
     }
 
-    return {
+    const normalized = {
         ...createInitialSnapshot(),
         ...snapshot,
         seenGuides: snapshot.seenGuides || {},
@@ -146,6 +156,10 @@ function normalizeSnapshot(snapshot?: Partial<PersistedOnboardingSnapshot>): Per
         dismissedHints: snapshot.dismissedHints || {},
         currentMission: snapshot.currentMission || getNextIncompleteMission(snapshot.completedMissions || {}),
     };
+
+    return isMissionFlowComplete(normalized.completedMissions)
+        ? createCompletedSnapshot(normalized)
+        : normalized;
 }
 
 function toSnapshot(state: OnboardingState): PersistedOnboardingSnapshot {
@@ -170,8 +184,14 @@ export const useOnboardingStore = create<OnboardingState>()(
         (set, get) => ({
             ...createInitialState(),
             syncVersion: () => {
-                if (get().version === ONBOARDING_VERSION) return;
-                set(createInitialState());
+                const state = get();
+                if (state.version !== ONBOARDING_VERSION) {
+                    set(createInitialState());
+                    return;
+                }
+                if (isMissionFlowComplete(state.completedMissions) && !state.hasCompletedMissionOnboarding) {
+                    get().finishOnboarding();
+                }
             },
             setActiveUser: (userId) =>
                 set((state) => {
@@ -241,12 +261,18 @@ export const useOnboardingStore = create<OnboardingState>()(
                 })),
             completeWelcome: () => get().finishOnboarding(),
             finishOnboarding: () =>
-                set({
-                    hasCompletedWelcome: true,
-                    hasCompletedMissionOnboarding: true,
-                    hasSkippedOnboarding: false,
-                    seenGuides: ALL_GUIDES_SEEN,
-                    isWelcomeOpen: false,
+                set((state) => {
+                    const nextSnapshot = createCompletedSnapshot(toSnapshot(state));
+                    const users = { ...state.users };
+                    if (state.activeUserId) {
+                        users[state.activeUserId] = nextSnapshot;
+                    }
+                    return {
+                        ...nextSnapshot,
+                        activeUserId: state.activeUserId,
+                        users,
+                        isWelcomeOpen: false,
+                    };
                 }),
             skipOnboarding: () =>
                 set({
@@ -294,6 +320,24 @@ export const useOnboardingStore = create<OnboardingState>()(
                         ...state.completedMissions,
                         [key]: true,
                     };
+
+                    if (isMissionFlowComplete(completedMissions)) {
+                        const nextSnapshot = createCompletedSnapshot({
+                            ...toSnapshot(state),
+                            completedMissions,
+                            currentMission: getNextIncompleteMission(completedMissions),
+                        });
+                        const users = { ...state.users };
+                        if (state.activeUserId) {
+                            users[state.activeUserId] = nextSnapshot;
+                        }
+                        return {
+                            ...nextSnapshot,
+                            activeUserId: state.activeUserId,
+                            users,
+                            isWelcomeOpen: false,
+                        };
+                    }
 
                     return {
                         completedMissions,

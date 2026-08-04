@@ -19,6 +19,21 @@ const KOREAN_MANUAL_SYNONYMS: Record<string, string> = {
     '아세톤': '67-64-1', // Acetone (often just "아세톤" in KOSHA, but ensuring safety)
 };
 
+const mergeReferencePh = (
+    properties: NonNullable<Chemical['properties']>,
+    referencePh?: number,
+    source?: NonNullable<Chemical['properties']>['phSource'],
+): NonNullable<Chemical['properties']> => {
+    const { ph: legacyReferencePh, ...rest } = properties;
+    const resolvedReferencePh = referencePh ?? properties.referencePh ?? legacyReferencePh;
+
+    return {
+        ...rest,
+        ...(resolvedReferencePh !== undefined ? { referencePh: resolvedReferencePh } : {}),
+        ...((source ?? properties.phSource) ? { phSource: source ?? properties.phSource } : {}),
+    };
+};
+
 export const searchChemical = async (query: string): Promise<Chemical | null> => {
     if (!query.trim()) return null;
 
@@ -40,13 +55,15 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
         ]);
 
         if (pubchemResult) {
-            let finalProps = pubchemResult.properties || { isOrganic: false, isHalogenated: false };
+            let finalProps = mergeReferencePh(
+                pubchemResult.properties || { isOrganic: false, isHalogenated: false },
+            );
 
             if (koshaResolved?.chemId) {
                 try {
                     const koshaPh = await fetchKoshaPH(koshaResolved.chemId);
-                    if (koshaPh !== undefined && finalProps.ph === undefined) {
-                        finalProps = { ...finalProps, ph: koshaPh, phSource: 'kosha_reference' };
+                    if (koshaPh !== undefined && finalProps.referencePh === undefined && finalProps.ph === undefined) {
+                        finalProps = mergeReferencePh(finalProps, koshaPh, 'kosha_reference');
                     }
                 } catch (e) {
                     console.warn('[Search] Failed to fetch pH from KOSHA:', e);
@@ -76,12 +93,10 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                 casNumber: normalizedCasNumber,
                 molecularFormula: '',
                 molecularWeight: 0,
-                properties: {
+                properties: mergeReferencePh({
                     isOrganic: false,
                     isHalogenated: false,
-                    ph: koshaPh,
-                    phSource: koshaPh !== undefined ? 'kosha_reference' : undefined,
-                },
+                }, koshaPh, koshaPh !== undefined ? 'kosha_reference' : undefined),
                 koshaId: koshaResolved.chemId
             };
         }
@@ -147,11 +162,11 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
 
             if (pubchemResult) {
                 const baseProps = pubchemResult.properties || { isOrganic: false, isHalogenated: false };
-                const mergedProps = {
-                    ...baseProps,
-                    ph: koshaPh !== undefined ? koshaPh : baseProps.ph,
-                    phSource: koshaPh !== undefined ? 'kosha_reference' : baseProps.phSource,
-                };
+                const mergedProps = mergeReferencePh(
+                    baseProps,
+                    koshaPh,
+                    koshaPh !== undefined ? 'kosha_reference' : baseProps.phSource,
+                );
 
                 return {
                     ...pubchemResult,
@@ -170,7 +185,9 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
         const pubchemResult = await fetchChemicalInfo(query);
 
         if (pubchemResult) {
-            let finalProps = pubchemResult.properties || { isOrganic: false, isHalogenated: false };
+            let finalProps = mergeReferencePh(
+                pubchemResult.properties || { isOrganic: false, isHalogenated: false },
+            );
             let koshaId: number | undefined;
 
             // If pH is missing, try supplemental fetch from KOSHA using CAS
@@ -186,9 +203,9 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                     if (koshaResolved?.chemId) {
                         koshaId = koshaResolved.chemId;
                         const supplementalPh = await fetchKoshaPH(koshaResolved.chemId);
-                        if (supplementalPh !== undefined && finalProps.ph === undefined) {
+                        if (supplementalPh !== undefined && finalProps.referencePh === undefined && finalProps.ph === undefined) {
                             console.log(`[Search] Supplementary pH found via KOSHA: ${supplementalPh}`);
-                            finalProps = { ...finalProps, ph: supplementalPh, phSource: 'kosha_reference' };
+                            finalProps = mergeReferencePh(finalProps, supplementalPh, 'kosha_reference');
                         }
                     }
                 } catch (e) {
@@ -219,11 +236,11 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
 
             if (fallbackResult) {
                 const baseProps = fallbackResult.properties || { isOrganic: false, isHalogenated: false };
-                const mergedProps = {
-                    ...baseProps,
-                    ph: koshaPh !== undefined ? koshaPh : baseProps.ph,
-                    phSource: koshaPh !== undefined ? 'kosha_reference' : baseProps.phSource,
-                };
+                const mergedProps = mergeReferencePh(
+                    baseProps,
+                    koshaPh,
+                    koshaPh !== undefined ? 'kosha_reference' : baseProps.phSource,
+                );
 
                 return {
                     ...fallbackResult,

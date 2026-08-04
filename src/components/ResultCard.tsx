@@ -9,7 +9,6 @@ import { MsdsModal } from './MsdsModal';
 import { isValidCasNumber } from '../utils/casNumber';
 import { scanIdentityMatchesChemical } from '../utils/scanIdentity';
 import type { ScannerSelectionMeta } from './Scanner';
-import { WasteCategorySymbol } from './WasteCategorySymbol';
 
 interface ResultCardProps {
     result: AnalysisResult;
@@ -86,6 +85,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     };
 
     const reasonKey = compactReasonKeyByCategory[category] || reason;
+    const referencePh = chemical.properties?.referencePh ?? chemical.properties?.ph;
     const hazardStatements = chemical.ghs?.hazardStatements;
     const ghsStatements = React.useMemo(() => {
         if (!hazardStatements) return [];
@@ -127,10 +127,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             {/* Body: Disposal Guide */}
             <div className="p-5 flex flex-col items-center text-center">
 
-                {/* Material classification cue; actual container visuals come from institution policy. */}
-                <WasteCategorySymbol category={category} />
-
-                <div className="mb-2 mt-3 flex flex-wrap items-center justify-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
                     <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         {t('result_basis_badge' as any)}
                     </span>
@@ -161,6 +158,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 <p className="mb-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                     {t('result_solution_notice_short' as any)}
                 </p>
+
+                {referencePh !== undefined && (
+                    <p className="mb-4 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {t('result_reference_ph' as any, { ph: referencePh })}
+                    </p>
+                )}
 
                 {/* AI Badge if inferred by Gemini */}
                 {result.isAiEstimated && (

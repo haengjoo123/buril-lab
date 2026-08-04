@@ -72,6 +72,9 @@ interface SearchTabViewProps {
   showRecentWasteLogs?: boolean;
   onOpenLogs?: () => void;
   onSearchFocusChange?: (isFocused: boolean) => void;
+  wasteComponentSearchMode?: boolean;
+  searchFocusRequestKey?: number;
+  onReturnToWasteBatch?: () => void;
 }
 
 export function SearchTabView({
@@ -115,6 +118,9 @@ export function SearchTabView({
   showRecentWasteLogs = false,
   onOpenLogs,
   onSearchFocusChange,
+  wasteComponentSearchMode = false,
+  searchFocusRequestKey = 0,
+  onReturnToWasteBatch,
 }: SearchTabViewProps) {
   const { t } = useTranslation();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -188,6 +194,17 @@ export function SearchTabView({
     onSuggestionClick(term);
     onClearSuggestions?.();
   }, [onClearSuggestions, onSuggestionClick, setSearchFocus]);
+
+  useEffect(() => {
+    if (searchFocusRequestKey <= 0) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [searchFocusRequestKey]);
 
   useEffect(() => {
     if (!isSearchFocused || !shouldShowAutocomplete) return;
@@ -341,11 +358,35 @@ export function SearchTabView({
         </p>
       </section>
 
+      {wasteComponentSearchMode && (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p className="font-bold">{t('waste_component_search_title')}</p>
+            <p className="mt-1 text-sm text-blue-800 dark:text-blue-200">
+              {t('waste_component_search_desc')}
+            </p>
+          </div>
+          {onReturnToWasteBatch && (
+            <button
+              type="button"
+              onClick={onReturnToWasteBatch}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-slate-900 dark:text-blue-200 dark:hover:bg-blue-950"
+            >
+              <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+              {t('waste_return_to_batch')}
+            </button>
+          )}
+        </div>
+      )}
+
       <form
         ref={searchFormRef}
         onSubmit={handleFormSubmit}
         data-onboarding-target="search-box"
-        className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 lg:static' : ''}`}
+        className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 lg:relative lg:top-auto' : ''}`}
       >
         <div
           className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:group-focus-within:translate-y-0 lg:group-focus-within:shadow-none dark:lg:bg-transparent ${error

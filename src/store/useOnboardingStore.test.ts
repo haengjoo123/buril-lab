@@ -46,6 +46,41 @@ describe('useOnboardingStore', () => {
         expect(state.hasCompletedMissionOnboarding).toBe(false);
     });
 
+    it('finishes and closes onboarding as soon as the final mission is completed', () => {
+        useOnboardingStore.getState().setActiveUser('user-a');
+        useOnboardingStore.getState().openWelcome();
+        useOnboardingStore.getState().markMissionCompleted('search');
+        useOnboardingStore.getState().markMissionCompleted('disposal');
+        useOnboardingStore.getState().markMissionCompleted('cabinet');
+        useOnboardingStore.getState().markMissionCompleted('inventory');
+
+        const state = useOnboardingStore.getState();
+        expect(state.hasCompletedWelcome).toBe(true);
+        expect(state.hasCompletedMissionOnboarding).toBe(true);
+        expect(state.isWelcomeOpen).toBe(false);
+        expect(state.users['user-a']?.hasCompletedMissionOnboarding).toBe(true);
+    });
+
+    it('repairs a legacy all-missions-complete state that is still open', () => {
+        useOnboardingStore.setState({
+            completedMissions: {
+                search: true,
+                disposal: true,
+                cabinet: true,
+                inventory: true,
+            },
+            hasCompletedWelcome: false,
+            hasCompletedMissionOnboarding: false,
+            isWelcomeOpen: true,
+        });
+
+        useOnboardingStore.getState().syncVersion();
+
+        const state = useOnboardingStore.getState();
+        expect(state.hasCompletedMissionOnboarding).toBe(true);
+        expect(state.isWelcomeOpen).toBe(false);
+    });
+
     it('finishes onboarding and suppresses legacy guide cards', () => {
         useOnboardingStore.getState().finishOnboarding();
 

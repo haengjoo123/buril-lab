@@ -8,14 +8,16 @@ import type {
     WasteDecision,
     WasteDecisionReason,
     WasteHazardFlag,
+    WasteLegalPhClass,
     WasteMatrix,
     WasteMissingField,
+    WasteRoutingBasis,
     WasteStreamCode,
 } from '../types';
 import { checkCompatibility } from './compatibilityChecker';
 import { isValidCasNumber } from './casNumber';
 
-export const WASTE_RULE_VERSION = '2.0.0';
+export const WASTE_RULE_VERSION = '2.3.0';
 export const DEFAULT_WASTE_POLICY_VERSION = 'KR-2026.3';
 
 export interface NormalizedWasteAmount {
@@ -73,6 +75,124 @@ const NON_HALOGENATED_SOLVENT_CAS = new Set([
     '141-78-6', // ethyl acetate
 ]);
 
+const HYDROFLUORIC_ACID_CAS = '7664-39-3';
+const ACID_IDENTITY_CAS = new Set([
+    '7647-01-0', // hydrochloric acid
+    '7664-93-9', // sulfuric acid
+    '7697-37-2', // nitric acid
+    '7664-38-2', // phosphoric acid
+    '7601-90-3', // perchloric acid
+    '64-19-7', // acetic acid
+    '64-18-6', // formic acid
+    HYDROFLUORIC_ACID_CAS,
+]);
+const ALKALI_IDENTITY_CAS = new Set([
+    '1310-73-2', // sodium hydroxide
+    '1310-58-3', // potassium hydroxide
+    '1310-65-2', // lithium hydroxide
+    '1305-62-0', // calcium hydroxide
+    '1336-21-6', // ammonium hydroxide solution
+    '7664-41-7', // ammonia
+]);
+const ACID_IDENTITY_FORMULAS = new Set([
+    'HCL', 'HBR', 'HI', 'HF', 'H2SO4', 'HNO3', 'H3PO4', 'HCLO4', 'CH3COOH', 'HCOOH',
+]);
+const ALKALI_IDENTITY_FORMULAS = new Set([
+    'NAOH', 'KOH', 'LIOH', 'CA(OH)2', 'BA(OH)2', 'NH3', 'NH4OH',
+]);
+const FLUORIDE_COMPOUND_CAS = new Set([
+    '7681-49-4', // sodium fluoride
+    '7789-23-3', // potassium fluoride
+    '12125-01-8', // ammonium fluoride
+    '1341-49-7', // ammonium bifluoride
+    '7789-24-4', // lithium fluoride
+    '7789-75-5', // calcium fluoride
+    '7783-40-6', // magnesium fluoride
+    '7784-18-1', // aluminium fluoride
+    '1333-83-1', // sodium bifluoride
+    '7789-29-9', // potassium bifluoride
+]);
+const FLUORIDE_COMPOUND_FORMULAS = new Set([
+    'NAF', 'KF', 'NH4F', 'NH4HF2', 'LIF', 'CAF2', 'MGF2', 'ALF3',
+    'NAHF2', 'KHF2', 'CSF', 'RBF', 'BAF2', 'ZNF2',
+]);
+
+const normalizedFormula = (formula: string | undefined): string =>
+    (formula ?? '')
+        .replace(/\s+/g, '')
+        .replace(/\((?:aq|s|l|g)\)$/i, '')
+        .toUpperCase();
+
+const getReferencePh = (analysis: AnalysisResult): number | undefined =>
+    analysis.chemical.properties?.referencePh ?? analysis.chemical.properties?.ph;
+
+const hasAcidRoutingIdentity = (analysis: AnalysisResult): boolean => {
+    const { name, casNumber, molecularFormula } = analysis.chemical;
+    return analysis.category === 'ACID' ||
+        ACID_IDENTITY_CAS.has(casNumber?.trim() ?? '') ||
+        ACID_IDENTITY_FORMULAS.has(normalizedFormula(molecularFormula)) ||
+        /\b(?:hydrochloric|sulfuric|sulphuric|nitric|phosphoric|perchloric|hydrofluoric|acetic|formic)\s+acid\b|염산|황산|질산|인산|과염소산|불산|아세트산|개미산/i.test(name);
+};
+
+const hasAlkaliRoutingIdentity = (analysis: AnalysisResult): boolean => {
+    const { name, casNumber, molecularFormula } = analysis.chemical;
+    return analysis.category === 'ALKALI' ||
+        ALKALI_IDENTITY_CAS.has(casNumber?.trim() ?? '') ||
+        ALKALI_IDENTITY_FORMULAS.has(normalizedFormula(molecularFormula)) ||
+        /\b(?:sodium|potassium|lithium|calcium|barium|ammonium)\s+hydroxide\b|\bammonia\b|수산화\s*(?:나트륨|칼륨|리튬|칼슘|바륨|암모늄)|암모니아/i.test(name);
+};
+
+const hasAcidMixingRole = (analysis: AnalysisResult): boolean => {
+    const referencePh = getReferencePh(analysis);
+    return hasAcidRoutingIdentity(analysis) || referencePh !== undefined && referencePh < 4;
+};
+
+const hasAlkaliMixingRole = (analysis: AnalysisResult): boolean => {
+    const referencePh = getReferencePh(analysis);
+    return hasAlkaliRoutingIdentity(analysis) || referencePh !== undefined && referencePh > 10;
+};
+
+export const getWasteAcidBasePresence = (
+    components: readonly AnalysisResult[],
+): { hasAcid: boolean; hasAlkali: boolean } => ({
+    hasAcid: components.some(hasAcidMixingRole),
+    hasAlkali: components.some(hasAlkaliMixingRole),
+});
+
+export const getMeasuredBatchPh = (batch: WasteBatchDraft): number | undefined =>
+    batch.measuredBatchPh ?? batch.measuredPh;
+
+const hasValidMeasuredBatchPh = (batch: WasteBatchDraft): boolean => {
+    const measuredBatchPh = getMeasuredBatchPh(batch);
+    return batch.measuredPhStatus === 'measured' &&
+        measuredBatchPh !== undefined &&
+        Number.isFinite(measuredBatchPh) &&
+        measuredBatchPh >= 0 &&
+        measuredBatchPh <= 14;
+};
+
+const getLegalWastePhClass = (batch: WasteBatchDraft): WasteLegalPhClass => {
+    if (batch.matrix !== 'aqueous' || !hasValidMeasuredBatchPh(batch)) return 'unknown';
+    const measuredBatchPh = getMeasuredBatchPh(batch)!;
+    if (measuredBatchPh <= 2) return 'waste_acid';
+    if (measuredBatchPh >= 12.5) return 'waste_alkali';
+    return 'none';
+};
+
+const isHydrofluoricAcid = (analysis: AnalysisResult): boolean => {
+    const { name, casNumber, molecularFormula } = analysis.chemical;
+    return casNumber?.trim() === HYDROFLUORIC_ACID_CAS ||
+        normalizedFormula(molecularFormula) === 'HF' ||
+        /\b(?:hydrofluoric\s+acid|hydrogen\s+fluoride|fluorhydric\s+acid)\b|불산|불화\s*수소|플루오린화\s*수소/i.test(name);
+};
+
+const isFluorideCompound = (analysis: AnalysisResult): boolean => {
+    const { name, casNumber, molecularFormula } = analysis.chemical;
+    return FLUORIDE_COMPOUND_CAS.has(casNumber?.trim() ?? '') ||
+        FLUORIDE_COMPOUND_FORMULAS.has(normalizedFormula(molecularFormula)) ||
+        /\b(?:bi)?fluoride\b|\bhydrogen\s+difluoride\b|불화물|불화암모늄|불화나트륨|불화칼륨/i.test(name);
+};
+
 /** Infer a batch matrix only from evidence that is strong enough to show as editable. */
 export function inferWasteMatrixFromComponent(component: WasteComponent): WasteMatrix | null {
     const capacity = component.inventorySnapshot?.nominalCapacity?.trim() ?? '';
@@ -129,7 +249,13 @@ export function inferWasteMatrixFromComponents(
 
 const HAZARD_CODES: Record<Exclude<
     WasteHazardFlag,
-    'CYANIDE' | 'SULFIDE' | 'HEAVY_METAL' | 'REACTIVE' | 'UNKNOWN_COMPONENT'
+    | 'CYANIDE'
+    | 'SULFIDE'
+    | 'HEAVY_METAL'
+    | 'HYDROFLUORIC_ACID'
+    | 'FLUORIDE'
+    | 'REACTIVE'
+    | 'UNKNOWN_COMPONENT'
 >, readonly string[]> = {
     FLAMMABLE: ['H220', 'H221', 'H222', 'H223', 'H224', 'H225', 'H226', 'H227', 'H228'],
     OXIDIZER: ['H270', 'H271', 'H272'],
@@ -186,6 +312,8 @@ export function deriveWasteHazardFlags(analysis: AnalysisResult): WasteHazardFla
 
     if (isCyanide(analysis)) flags.add('CYANIDE');
     if (isSulfide(analysis)) flags.add('SULFIDE');
+    if (isHydrofluoricAcid(analysis)) flags.add('HYDROFLUORIC_ACID');
+    else if (isFluorideCompound(analysis)) flags.add('FLUORIDE');
     if (analysis.category === 'HEAVY_METAL') flags.add('HEAVY_METAL');
     if (analysis.category === 'REACTIVE') flags.add('REACTIVE');
     if (analysis.category === 'SPECIAL_HAZARD') flags.add('REACTIVE');
@@ -259,6 +387,7 @@ export function createEmptyWasteBatch(
             isUnknown: false,
         },
         measuredPhStatus: 'not_required',
+        mixingState: 'unknown',
         incidentContext: 'none',
         createdAt: now,
         updatedAt: now,
@@ -323,52 +452,90 @@ export function validateWasteAmount(
     return { valid: true };
 }
 
-const selectStream = (
+interface WasteRoutingSelection {
+    streamCode: WasteStreamCode;
+    routingBasis: WasteRoutingBasis;
+}
+
+const selectRouting = (
     batch: WasteBatchDraft,
     hazards: Set<WasteHazardFlag>,
-): WasteStreamCode => {
+    hasAcidMixingRole: boolean,
+    hasAlkaliMixingRole: boolean,
+    hasAcidIdentity: boolean,
+    hasAlkaliIdentity: boolean,
+): WasteRoutingSelection => {
     if (batch.incidentContext === 'broken' || batch.incidentContext === 'leak') {
-        return 'SPECIAL_REVIEW';
+        return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'special_rule' };
+    }
+    if (hazards.has('HYDROFLUORIC_ACID') || hazards.has('FLUORIDE')) {
+        return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'special_rule' };
     }
     const categories = new Set(batch.components.map((component) => component.category));
 
-    if (categories.has('SPECIAL_HAZARD')) return 'SPECIAL_REVIEW';
+    if (categories.has('SPECIAL_HAZARD')) {
+        return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'special_rule' };
+    }
     if (categories.has('REACTIVE') || hazards.has('REACTIVE') ||
         hazards.has('OXIDIZER') || hazards.has('EXPLOSIVE') ||
         hazards.has('SELF_REACTIVE') || hazards.has('PYROPHORIC')) {
-        return 'REACTIVE_OXIDIZER';
+        return { streamCode: 'REACTIVE_OXIDIZER', routingBasis: 'special_rule' };
     }
     if (hazards.has('CYANIDE') || hazards.has('SULFIDE') || categories.has('CYANIDE')) {
-        return 'CYANIDE_SULFIDE';
+        return { streamCode: 'CYANIDE_SULFIDE', routingBasis: 'special_rule' };
     }
-    if (hazards.has('HEAVY_METAL') || categories.has('HEAVY_METAL')) return 'HEAVY_METAL';
+    if (hazards.has('HEAVY_METAL') || categories.has('HEAVY_METAL')) {
+        return { streamCode: 'HEAVY_METAL', routingBasis: 'special_rule' };
+    }
+    if (hasAcidMixingRole && hasAlkaliMixingRole && batch.matrix !== 'aqueous') {
+        return {
+            streamCode: 'SPECIAL_REVIEW',
+            routingBasis: batch.mixingState === 'already_mixed' && batch.matrix !== 'unknown'
+                ? 'special_rule'
+                : 'unresolved',
+        };
+    }
     if (batch.matrix === 'organic_halogenated' || categories.has('ORGANIC_HALOGEN')) {
-        return 'ORGANIC_HALOGENATED';
+        return { streamCode: 'ORGANIC_HALOGENATED', routingBasis: 'matrix' };
     }
-    if (batch.matrix === 'organic_non_halogenated') return 'ORGANIC_NON_HALOGENATED';
-    if (batch.matrix === 'solid_slurry') return 'SOLID_CONTAMINATED';
+    if (batch.matrix === 'organic_non_halogenated') {
+        return { streamCode: 'ORGANIC_NON_HALOGENATED', routingBasis: 'matrix' };
+    }
+    if (batch.matrix === 'solid_slurry') {
+        return { streamCode: 'SOLID_CONTAMINATED', routingBasis: 'matrix' };
+    }
 
     if (batch.matrix === 'aqueous') {
-        const hasAcid = categories.has('ACID');
-        const hasAlkali = categories.has('ALKALI');
-
-        if (hasAcid && hasAlkali && batch.measuredPhStatus === 'measured' &&
-            batch.measuredPh !== undefined) {
-            if (batch.measuredPh < 7) return 'ACID_AQUEOUS';
-            if (batch.measuredPh > 7) return 'ALKALI_AQUEOUS';
-            return 'AQUEOUS_OTHER';
+        if (hasAcidMixingRole && hasAlkaliMixingRole) {
+            if (batch.mixingState !== 'already_mixed' || !hasValidMeasuredBatchPh(batch)) {
+                return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
+            }
+            const measuredBatchPh = getMeasuredBatchPh(batch)!;
+            if (measuredBatchPh <= 2) {
+                return { streamCode: 'ACID_AQUEOUS', routingBasis: 'measured_batch_ph' };
+            }
+            if (measuredBatchPh >= 12.5) {
+                return { streamCode: 'ALKALI_AQUEOUS', routingBasis: 'measured_batch_ph' };
+            }
+            return { streamCode: 'AQUEOUS_OTHER', routingBasis: 'measured_batch_ph' };
         }
-        if (hasAcid) return 'ACID_AQUEOUS';
-        if (hasAlkali) return 'ALKALI_AQUEOUS';
-        return 'AQUEOUS_OTHER';
+        if (hasAcidIdentity) {
+            return { streamCode: 'ACID_AQUEOUS', routingBasis: 'identity' };
+        }
+        if (hasAlkaliIdentity) {
+            return { streamCode: 'ALKALI_AQUEOUS', routingBasis: 'identity' };
+        }
+        return { streamCode: 'AQUEOUS_OTHER', routingBasis: 'matrix' };
     }
 
     if (batch.matrix === 'mixed_biphasic') {
-        if (categories.has('ORGANIC_NON_HALOGEN')) return 'ORGANIC_NON_HALOGENATED';
-        return 'SPECIAL_REVIEW';
+        if (categories.has('ORGANIC_NON_HALOGEN')) {
+            return { streamCode: 'ORGANIC_NON_HALOGENATED', routingBasis: 'matrix' };
+        }
+        return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
     }
 
-    return 'SPECIAL_REVIEW';
+    return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
 };
 
 const pushReason = (
@@ -406,6 +573,10 @@ export function analyzeWasteBatch(
     const blockingReasons: WasteDecisionReason[] = [];
     const missingFields: WasteMissingField[] = [];
     const compatibilityWarnings = checkCompatibility(batch.components as CartItem[], { matrix: batch.matrix });
+    const { hasAcid, hasAlkali } = getWasteAcidBasePresence(batch.components);
+    const hasAcidIdentity = batch.components.some(hasAcidRoutingIdentity);
+    const hasAlkaliIdentity = batch.components.some(hasAlkaliRoutingIdentity);
+    const hasAcidAlkaliPair = hasAcid && hasAlkali;
 
     if (batch.incidentContext === 'broken' || batch.incidentContext === 'leak') {
         pushReason(blockingReasons, {
@@ -423,6 +594,26 @@ export function analyzeWasteBatch(
             ruleId: compatibility.ruleId,
             chemicals: [compatibility.chemicalA, compatibility.chemicalB],
         });
+    }
+
+    if (hasAcidAlkaliPair) {
+        if (batch.mixingState === 'separate') {
+            pushReason(blockingReasons, {
+                code: 'acid_alkali_separate',
+                messageKey: 'waste_block_acid_alkali_separate',
+                ruleId: 'acid_base',
+            });
+        } else if (batch.mixingState !== 'already_mixed') {
+            pushMissing(missingFields, 'mixing_state');
+        } else if (batch.matrix === 'aqueous' && !hasValidMeasuredBatchPh(batch)) {
+            pushMissing(missingFields, 'measured_ph');
+        } else if (batch.matrix !== 'aqueous' && batch.matrix !== 'unknown') {
+            pushReason(blockingReasons, {
+                code: 'acid_alkali_non_aqueous_mixed',
+                messageKey: 'waste_block_acid_alkali_non_aqueous_mixed',
+                ruleId: 'acid_base',
+            });
+        }
     }
 
     if (batch.components.some(({ category }) => category === 'SPECIAL_HAZARD')) {
@@ -455,6 +646,19 @@ export function analyzeWasteBatch(
             code: 'water_reactive_aqueous',
             messageKey: 'waste_block_water_reactive_aqueous',
         });
+    }
+
+    const requiresFluorideCompatibleContainer =
+        hazards.has('HYDROFLUORIC_ACID') || hazards.has('FLUORIDE');
+    if (requiresFluorideCompatibleContainer) {
+        if (batch.fluorideContainerStatus === 'incompatible') {
+            pushReason(blockingReasons, {
+                code: 'hf_fluoride_incompatible_container',
+                messageKey: 'waste_block_hf_fluoride_container',
+            });
+        } else if (batch.fluorideContainerStatus !== 'compatible') {
+            pushMissing(missingFields, 'fluoride_container');
+        }
     }
 
     const policyBlockedHazards = options.policy?.blockedHazardFlags?.filter((flag) => hazards.has(flag)) ?? [];
@@ -502,10 +706,6 @@ export function analyzeWasteBatch(
     }
 
     const categories = new Set(batch.components.map(({ category }) => category));
-    if (batch.matrix === 'aqueous' && categories.has('ACID') && categories.has('ALKALI') &&
-        batch.measuredPhStatus !== 'measured') {
-        pushMissing(missingFields, 'measured_ph');
-    }
     if (batch.additionalComponentsStatus === 'present' || (
         batch.matrix === 'mixed_biphasic' &&
         !categories.has('ORGANIC_HALOGEN') &&
@@ -523,10 +723,24 @@ export function analyzeWasteBatch(
         : missingFields.length > 0
             ? 'needs_input'
             : 'ready';
+    const routing = selectRouting(
+        batch,
+        hazards,
+        hasAcid,
+        hasAlkali,
+        hasAcidIdentity,
+        hasAlkaliIdentity,
+    );
+    const measuredBatchPh = getMeasuredBatchPh(batch);
+    const corrosivityPhScreen = batch.matrix !== 'aqueous' || !hasValidMeasuredBatchPh(batch)
+        ? 'unknown' as const
+        : measuredBatchPh! <= 2 || measuredBatchPh! >= 11.5
+            ? 'review_required' as const
+            : 'not_indicated' as const;
 
     return {
         decisionStatus,
-        streamCode: selectStream(batch, hazards),
+        streamCode: routing.streamCode,
         hazardFlags: [...hazards],
         allowedActions: decisionStatus === 'blocked'
             ? ['isolated', 'handover']
@@ -535,6 +749,9 @@ export function analyzeWasteBatch(
                 : [],
         blockingReasons,
         missingFields,
+        legalWastePhClass: getLegalWastePhClass(batch),
+        corrosivityPhScreen,
+        routingBasis: routing.routingBasis,
         policyVersion: options.policyVersion ?? DEFAULT_WASTE_POLICY_VERSION,
         ruleVersion: options.ruleVersion ?? WASTE_RULE_VERSION,
     };

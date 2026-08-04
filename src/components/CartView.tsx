@@ -18,7 +18,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { MAX_PARKED_WASTE_BATCHES, useWasteStore } from '../store/useWasteStore';
 import { useLabStore } from '../store/useLabStore';
-import { getAllowedAmountUnits } from '../utils/wasteBatch';
+import { getAllowedAmountUnits, getWasteAcidBasePresence } from '../utils/wasteBatch';
 import {
     getWastePolicyEscalationDetails,
     hasWastePolicyContextChanged,
@@ -29,6 +29,7 @@ import { parseCapacityMeasurement } from '../utils/capacityParser';
 import { getAIDisposalGuide, type DisposalGuideResult } from '../services/geminiDisposalGuideService';
 import { getActiveWastePolicyV2, type ActiveWastePolicy } from '../services/wastePolicyService';
 import { recordWasteHandlingV2, type WasteHandlingReceipt } from '../services/wasteLogService';
+import { translateGHS } from '../data/ghsCodes';
 import type {
     AmountUnit,
     ConcentrationUnit,
@@ -71,15 +72,20 @@ const MANUAL_HAZARD_OPTIONS: WasteHazardFlag[] = [
     'CYANIDE',
     'SULFIDE',
     'HEAVY_METAL',
+    'HYDROFLUORIC_ACID',
+    'FLUORIDE',
     'REACTIVE',
 ];
 
-const MISSING_FIELD_KEYS: Partial<Record<WasteMissingField, string>> = {
+const MISSING_FIELD_KEYS: Record<WasteMissingField, string> = {
+    components: 'waste_missing_components',
     matrix: 'waste_missing_matrix',
     total_amount: 'waste_missing_total_amount',
+    mixing_state: 'waste_missing_mixing_state',
     identity: 'waste_missing_identity',
     hazard_data: 'waste_missing_hazard_data',
     additional_components: 'waste_missing_additional_components',
+    fluoride_container: 'waste_missing_fluoride_container',
     measured_ph: 'waste_missing_measured_ph',
     inventory_quantity: 'waste_missing_inventory_quantity',
     policy_stream: 'waste_missing_policy_stream',
@@ -126,6 +132,45 @@ const isInvalidConcentrationText = (rawValue: string | undefined): boolean => {
     return !Number.isFinite(value) || value <= 0;
 };
 
+const normalizePolicyPhrase = (value: string): string =>
+    value.toLocaleLowerCase().replace(/[\s·•:：,./()_-]/g, '');
+
+const STANDARD_LABEL_REQUIREMENTS = new Set([
+    '성분명',
+    '주요성분명',
+    '성분과양',
+    '주요위험',
+    '폐액전체량',
+    '대략적인양또는양모름',
+    'componentname',
+    'componentnames',
+    'componentsandamount',
+    'mainhazard',
+    'mainhazards',
+    'majorhazard',
+    'majorhazards',
+    'totalwasteamount',
+    'approximateamountorunknown',
+]);
+
+const isStandardLabelRequirement = (value: string): boolean =>
+    STANDARD_LABEL_REQUIREMENTS.has(normalizePolicyPhrase(value));
+
+const repeatsNoNeutralizeDrainWarning = (value: string): boolean => {
+    const normalized = normalizePolicyPhrase(value);
+    const mentionsNeutralizing = normalized.includes('중화') || normalized.includes('neutraliz');
+    const mentionsDrainDisposal = ['배수구', '하수', '배출', '버리', 'drain', 'sewer']
+        .some((keyword) => normalized.includes(keyword));
+    return mentionsNeutralizing && mentionsDrainDisposal;
+};
+
+const splitHazardLabel = (value: string): { code: string | null; description: string } => {
+    const match = /^(H\d{3})\s*:\s*(.+)$/i.exec(value.trim());
+    return match
+        ? { code: match[1].toUpperCase(), description: match[2] }
+        : { code: null, description: value };
+};
+
 const focusableSelector = [
     'button:not([disabled])',
     '[href]',
@@ -150,7 +195,9 @@ export const CartView: React.FC<CartViewProps> = ({
         setMatrix,
         setTotalAmount,
         setMeasuredPh,
+        setMixingState,
         setAdditionalComponentsStatus,
+        setFluorideContainerStatus,
         parkedBatches,
         parkCurrentBatch,
         restoreParkedBatch,
@@ -171,7 +218,6 @@ export const CartView: React.FC<CartViewProps> = ({
     const [concentrationInputs, setConcentrationInputs] = useState<Record<string, string>>({});
     const [concentrationUnits, setConcentrationUnits] = useState<Record<string, ConcentrationUnit>>({});
     const [memo, setMemo] = useState('');
-    const [alreadyMixed, setAlreadyMixed] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [policyGuardMessage, setPolicyGuardMessage] = useState<string | null>(null);
@@ -189,7 +235,9 @@ export const CartView: React.FC<CartViewProps> = ({
         || batch.totalAmount.value !== null
         || batch.totalAmount.isUnknown
         || batch.measuredPhStatus !== 'not_required'
+        || batch.mixingState !== 'unknown'
         || batch.additionalComponentsStatus !== undefined
+        || batch.fluorideContainerStatus !== undefined
         || batch.incidentContext !== 'none';
 
     const parkBatchAndStartNew = () => {
@@ -285,15 +333,52 @@ export const CartView: React.FC<CartViewProps> = ({
             ? { value: Number((normalizedTotal / 1_000).toFixed(3)), unit: 'g' as const }
             : { value: Number(normalizedTotal.toFixed(3)), unit: 'mg' as const };
     }, [batch.components, batch.matrix]);
-    const needsMeasuredPh = batch.matrix === 'aqueous' &&
-        batch.components.some(({ category }) => category === 'ACID') &&
-        batch.components.some(({ category }) => category === 'ALKALI');
+    const acidBasePresence = getWasteAcidBasePresence(batch.components);
+    const requiresMixingState = acidBasePresence.hasAcid && acidBasePresence.hasAlkali;
+    const needsMeasuredPh = requiresMixingState && batch.matrix === 'aqueous' &&
+        batch.mixingState === 'already_mixed';
     const shouldAskAdditionalComponents = batch.matrix === 'mixed_biphasic' ||
         batch.matrix === 'unknown' || batch.components.length > 1;
+    const requiresFluorideCompatibleContainer =
+        decision.hazardFlags.includes('HYDROFLUORIC_ACID') ||
+        decision.hazardFlags.includes('FLUORIDE');
     const isKorean = i18n.language.toLowerCase().startsWith('ko');
     const streamName = matchedStream
         ? (isKorean ? matchedStream.displayNameKo : matchedStream.displayNameEn)
         : (isKorean ? STREAM_NAMES_KO[decision.streamCode] : STREAM_NAMES_EN[decision.streamCode]);
+    const labelComponentNames = Array.from(new Set(
+        batch.components
+            .map((component) => component.chemical.name.trim())
+            .filter(Boolean),
+    )).join(', ');
+    const wasteHazardLabels = Array.from(new Set(decision.hazardFlags))
+        .map((flag) => t(`waste_hazard_${flag}` as never));
+    const rawGhsHazardStatements = batch.components
+        .flatMap((component) => component.chemical.ghs?.hazardStatements ?? []);
+    const ghsHazardCodes = extractHCodes(rawGhsHazardStatements);
+    const ghsHazardLabels = (ghsHazardCodes.length > 0
+        ? ghsHazardCodes
+        : Array.from(new Set(rawGhsHazardStatements))
+    ).map((statement) => translateGHS(statement, isKorean ? 'ko' : 'en'));
+    const labelHazardItems = (wasteHazardLabels.length > 0 ? wasteHazardLabels : ghsHazardLabels)
+        .map(splitHazardLabel);
+    const hasUnconfirmedHazardData = batch.components.some((component) =>
+        component.ghsDataStatus !== 'verified' && !component.hazardDataConfirmedByUser
+    );
+    const labelAmount = batch.totalAmount.isUnknown
+        ? t('waste_amount_unknown')
+        : batch.totalAmount.value !== null && batch.totalAmount.unit
+            ? batch.totalAmount.isApproximate
+                ? t('waste_label_amount_approximate_value', {
+                    value: batch.totalAmount.value,
+                    unit: batch.totalAmount.unit,
+                })
+                : `${batch.totalAmount.value} ${batch.totalAmount.unit}`
+            : t('waste_label_value_not_entered');
+    const additionalLabelRequirements = (matchedStream?.labelRequirements ?? [])
+        .filter((requirement) => !isStandardLabelRequirement(requirement));
+    const hasEquivalentNoNeutralizeDrainWarning = (matchedStream?.prohibitions ?? [])
+        .some(repeatsNoNeutralizeDrainWarning);
     const receiptStreamName = receipt
         ? receipt.streamSnapshot.containerLabel
             || (isKorean ? receipt.streamSnapshot.displayNameKo : receipt.streamSnapshot.displayNameEn)
@@ -307,8 +392,7 @@ export const CartView: React.FC<CartViewProps> = ({
         batch,
         decision,
         memo: memo.trim(),
-        alreadyMixed,
-    }), [alreadyMixed, batch, decision, memo]);
+    }), [batch, decision, memo]);
     const aiContextFingerprint = useMemo(() => JSON.stringify({
         language: i18n.language,
         batch,
@@ -322,7 +406,6 @@ export const CartView: React.FC<CartViewProps> = ({
         setConcentrationInputs({});
         setConcentrationUnits({});
         setMemo('');
-        setAlreadyMixed(true);
         requestIdRef.current = null;
         requestFingerprintRef.current = null;
     }, [batch.id]);
@@ -468,7 +551,8 @@ export const CartView: React.FC<CartViewProps> = ({
                             approximate: batch.totalAmount.isApproximate,
                             unknown: batch.totalAmount.isUnknown,
                         },
-                        measuredPh: batch.measuredPh,
+                        measuredBatchPh: batch.measuredBatchPh,
+                        mixingState: batch.mixingState,
                         hazardFlags: decision.hazardFlags,
                         compatibilityWarnings: compatibilityWarnings.map((warning) => ({
                             severity: warning.severity,
@@ -582,7 +666,12 @@ export const CartView: React.FC<CartViewProps> = ({
                 handlingAction,
                 memo,
                 requestId,
-                confirmationSnapshot: { alreadyMixed },
+                confirmationSnapshot: {
+                    mixingState: batchSnapshot.mixingState,
+                    ...(batchSnapshot.mixingState === 'unknown'
+                        ? {}
+                        : { alreadyMixed: batchSnapshot.mixingState === 'already_mixed' }),
+                },
             });
             setReceipt(result);
             rememberCurrentMatrix();
@@ -658,10 +747,6 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </span>
                                 )}
                             </dd>
-                        </div>
-                        <div className="mt-2 flex justify-between gap-4">
-                            <dt className="text-slate-500">ID</dt>
-                            <dd className="max-w-[65%] truncate font-mono text-xs text-slate-700 dark:text-slate-300">{receipt.id}</dd>
                         </div>
                     </dl>
                     <div aria-live="polite" className="sr-only">{t('waste_record_success')}</div>
@@ -1127,6 +1212,38 @@ export const CartView: React.FC<CartViewProps> = ({
                                 </section>
                             )}
 
+                            {requiresFluorideCompatibleContainer && (
+                                <section
+                                    aria-labelledby="fluoride-container-title"
+                                    className="rounded-2xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900 dark:bg-red-950/30"
+                                >
+                                    <h3 id="fluoride-container-title" className="text-sm font-bold leading-5 text-red-950 dark:text-red-100">
+                                        {t('waste_fluoride_container_question')}
+                                    </h3>
+                                    <p className="mt-1 text-xs leading-5 text-red-800 dark:text-red-200">
+                                        {t('waste_fluoride_container_help')}
+                                    </p>
+                                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                                        {(['compatible', 'incompatible', 'unknown'] as const).map((value) => (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                aria-pressed={batch.fluorideContainerStatus === value}
+                                                onClick={() => setFluorideContainerStatus(value)}
+                                                className={`min-h-11 rounded-xl border px-3 py-2 text-xs font-semibold ${batch.fluorideContainerStatus === value
+                                                    ? value === 'compatible'
+                                                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-200'
+                                                        : 'border-red-600 bg-white text-red-800 ring-1 ring-red-600 dark:bg-red-950/60 dark:text-red-100'
+                                                    : 'border-red-200 bg-white text-slate-700 dark:border-red-900 dark:bg-slate-950 dark:text-slate-200'
+                                                }`}
+                                            >
+                                                {t(`waste_fluoride_container_${value}` as never)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
+
                             <section aria-labelledby="waste-amount-title">
                                     <div className="mb-2 flex items-center justify-between gap-3">
                                         <h3 id="waste-amount-title" className="font-bold text-slate-900 dark:text-white">
@@ -1210,22 +1327,53 @@ export const CartView: React.FC<CartViewProps> = ({
                                     )}
                             </section>
 
+                            {requiresMixingState && (
+                                <section aria-labelledby="waste-mixing-state-title">
+                                    <h3 id="waste-mixing-state-title" className="mb-2 font-bold text-slate-900 dark:text-white">
+                                        {t('waste_mixing_state')}
+                                    </h3>
+                                    <p className="mb-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                                        {t('waste_mixing_state_help')}
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(['separate', 'already_mixed'] as const).map((value) => (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                aria-pressed={batch.mixingState === value}
+                                                onClick={() => setMixingState(value)}
+                                                className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${batch.mixingState === value
+                                                    ? value === 'separate'
+                                                        ? 'border-red-600 bg-red-50 text-red-800 ring-1 ring-red-600 dark:bg-red-950/50 dark:text-red-100'
+                                                        : 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/50 dark:text-blue-100'
+                                                    : 'border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                                                }`}
+                                            >
+                                                {t(value === 'separate' ? 'waste_not_mixed_yet' : 'waste_already_mixed')}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
+
                             {needsMeasuredPh && (
                                 <section aria-labelledby="waste-ph-title">
                                     <h3 id="waste-ph-title" className="mb-2 font-bold text-slate-900 dark:text-white">
                                         {t('waste_ph_title')}
                                     </h3>
+                                    <p className="mb-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                                        {t('waste_ph_measured_only_help')}
+                                    </p>
                                     <div className="grid grid-cols-[1fr_auto] gap-3">
                                         <input
                                             type="number"
                                             min="0"
                                             max="14"
                                             step="0.1"
-                                            disabled={batch.measuredPhStatus === 'unknown'}
-                                            value={batch.measuredPh ?? ''}
+                                            value={batch.measuredBatchPh ?? ''}
                                             placeholder={t('waste_ph_placeholder')}
                                             onChange={(event) => setMeasuredPh(event.target.value ? Number(event.target.value) : null)}
-                                            className="h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3 disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:disabled:bg-slate-800"
+                                            className="h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-900"
                                         />
                                         <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                                             <input
@@ -1248,6 +1396,22 @@ export const CartView: React.FC<CartViewProps> = ({
                             <h3 className="font-bold">{statusConfig.title}</h3>
                         </div>
 
+                        {batch.measuredPhStatus === 'measured' && batch.measuredBatchPh !== undefined && (
+                            <div className="mt-3 rounded-xl bg-white/65 p-3 text-sm dark:bg-slate-950/30">
+                                <p className="mb-2 font-bold">{t('waste_ph_assessment_title')}</p>
+                                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                                    <dt className="font-medium opacity-70">{t('waste_measured_batch_ph')}</dt>
+                                    <dd>{batch.measuredBatchPh}</dd>
+                                    <dt className="font-medium opacity-70">{t('waste_legal_ph_class')}</dt>
+                                    <dd>{t(`waste_legal_${decision.legalWastePhClass}` as never)}</dd>
+                                    <dt className="font-medium opacity-70">{t('waste_corrosivity_ph_screen')}</dt>
+                                    <dd>{t(`waste_corrosivity_${decision.corrosivityPhScreen}` as never)}</dd>
+                                    <dt className="font-medium opacity-70">{t('waste_routing_basis')}</dt>
+                                    <dd>{t(`waste_routing_${decision.routingBasis}` as never)}</dd>
+                                </dl>
+                            </div>
+                        )}
+
                         {decision.decisionStatus === 'ready' && (
                             <div className="mt-4 space-y-3 text-sm">
                                 <div>
@@ -1263,10 +1427,46 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </div>
                                 )}
                                 <div className="rounded-xl bg-white/60 p-3 dark:bg-slate-900/30">
-                                    {(matchedStream?.labelRequirements.length
-                                        ? matchedStream.labelRequirements
-                                        : [t('waste_label_contents')]
-                                    ).map((item) => <p key={item}>• {item}</p>)}
+                                    <dl className="grid gap-2 sm:grid-cols-[auto_1fr] sm:gap-x-4">
+                                        <dt className="font-semibold text-slate-600 dark:text-slate-300">{t('waste_label_component_names')}</dt>
+                                        <dd className="break-words">{labelComponentNames || t('waste_label_value_not_entered')}</dd>
+                                        <dt className="font-semibold text-slate-600 dark:text-slate-300">{t('waste_label_total_amount')}</dt>
+                                        <dd>{labelAmount}</dd>
+                                    </dl>
+                                    {additionalLabelRequirements.length > 0 && (
+                                        <div className="mt-3 border-t border-current/10 pt-3">
+                                            <p className="font-semibold">{t('waste_label_additional_requirements')}</p>
+                                            <ul className="mt-1 space-y-1">
+                                                {additionalLabelRequirements.map((item) => <li key={item}>• {item}</li>)}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="rounded-xl border border-orange-200 bg-orange-50/80 p-3 text-slate-900 dark:border-orange-900/70 dark:bg-orange-950/25 dark:text-slate-100">
+                                    <p className="font-bold">{t('waste_hazard_reference_title')}</p>
+                                    {labelHazardItems.length > 0 ? (
+                                        <ul className="mt-2 space-y-1">
+                                            {labelHazardItems.map(({ code, description }) => (
+                                                <li
+                                                    key={`${code ?? 'hazard'}-${description}`}
+                                                    className="flex items-start gap-2 rounded-lg bg-white/75 px-2.5 py-1.5 dark:bg-slate-950/30"
+                                                >
+                                                    {code ? (
+                                                        <span className="mt-0.5 inline-flex min-w-12 shrink-0 justify-center rounded-md bg-orange-100 px-2 py-0.5 font-mono text-xs font-bold text-orange-800 dark:bg-orange-950/70 dark:text-orange-200">
+                                                            {code}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" aria-hidden="true" />
+                                                    )}
+                                                    <span className="leading-5">{description}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="mt-2 text-sm font-medium">{t(hasUnconfirmedHazardData
+                                            ? 'waste_label_hazards_need_review'
+                                            : 'waste_label_no_known_hazards')}</p>
+                                    )}
                                 </div>
                                 {matchedStream?.prohibitions.length ? (
                                     <div className="rounded-xl border border-red-200 bg-red-50/80 p-3 text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">
@@ -1297,10 +1497,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                 {decision.missingFields.map((field) => (
                                     <li key={field} className="flex items-start gap-2">
                                         <span aria-hidden="true">•</span>
-                                        <span>{MISSING_FIELD_KEYS[field]
-                                            ? t(MISSING_FIELD_KEYS[field] as never)
-                                            : field
-                                        }</span>
+                                        <span>{t(MISSING_FIELD_KEYS[field] as never)}</span>
                                     </li>
                                 ))}
                             </ul>
@@ -1317,18 +1514,11 @@ export const CartView: React.FC<CartViewProps> = ({
                                         </li>
                                     ))}
                                 </ul>
-                                <fieldset className="rounded-xl border border-red-200 bg-white/70 p-3 dark:border-red-800 dark:bg-slate-950/30">
-                                    <legend className="px-1 font-semibold">{t('waste_mixing_state', { defaultValue: '현재 혼합 상태' })}</legend>
-                                    <label className="mr-4 inline-flex min-h-11 items-center gap-2">
-                                        <input type="radio" checked={!alreadyMixed} onChange={() => setAlreadyMixed(false)} />
-                                        {t('waste_not_mixed_yet', { defaultValue: '아직 섞기 전' })}
-                                    </label>
-                                    <label className="inline-flex min-h-11 items-center gap-2">
-                                        <input type="radio" checked={alreadyMixed} onChange={() => setAlreadyMixed(true)} />
-                                        {t('waste_already_mixed', { defaultValue: '이미 섞음' })}
-                                    </label>
-                                </fieldset>
-                                <p className="font-medium">{alreadyMixed ? t('waste_blocked_already_mixed') : t('waste_blocked_before_mix')}</p>
+                                {requiresMixingState && batch.mixingState !== 'unknown' && (
+                                    <p className="font-medium">{batch.mixingState === 'already_mixed'
+                                        ? t('waste_blocked_already_mixed')
+                                        : t('waste_blocked_before_mix')}</p>
+                                )}
                                 {!hasAmountConfirmation && (
                                     <p className="rounded-lg bg-white/70 p-2 font-semibold dark:bg-slate-950/30">
                                         {t('waste_missing_total_amount')}
@@ -1357,7 +1547,7 @@ export const CartView: React.FC<CartViewProps> = ({
                             </div>
                         )}
 
-                        {batch.components.length > 0 && (
+                        {batch.components.length > 0 && !hasEquivalentNoNeutralizeDrainWarning && (
                             <div className="mt-3 border-t border-current/15 pt-3 text-xs opacity-75">
                                 <p>{t('waste_prohibition_no_neutralize')}</p>
                             </div>
@@ -1497,9 +1687,13 @@ export const CartView: React.FC<CartViewProps> = ({
                                     ? t(decision.blockingReasons[0].messageKey as never)
                                     : t('waste_decision_blocked')}
                             </p>
-                            <p className="mt-0.5 font-medium">
-                                {alreadyMixed ? t('waste_blocked_already_mixed') : t('waste_blocked_before_mix')}
-                            </p>
+                            {requiresMixingState && batch.mixingState !== 'unknown' && (
+                                <p className="mt-0.5 font-medium">
+                                    {batch.mixingState === 'already_mixed'
+                                        ? t('waste_blocked_already_mixed')
+                                        : t('waste_blocked_before_mix')}
+                                </p>
+                            )}
                             {!hasAmountConfirmation && (
                                 <p className="mt-0.5 font-semibold">{t('waste_missing_total_amount')}</p>
                             )}

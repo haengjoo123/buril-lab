@@ -96,8 +96,20 @@ export function CabinetCard({
 
             <div className="flex min-w-0 flex-1 flex-col gap-3 lg:p-4">
                 <div className="flex min-w-0 items-start gap-3">
-                    <div className="min-w-0 flex-1 overflow-hidden">
-                        <h3 className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold text-slate-900 transition-colors group-hover:text-blue-600 dark:text-slate-100 dark:group-hover:text-blue-400">
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onManage) {
+                                onManage(e);
+                                return;
+                            }
+                            onClick();
+                        }}
+                        className="group/title min-w-0 flex-1 overflow-hidden rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800"
+                        aria-label={`${cabinet.name} ${t('cabinet_manage')}`}
+                    >
+                        <h3 className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold text-slate-900 transition-colors group-hover/title:text-blue-600 dark:text-slate-100 dark:group-hover/title:text-blue-400">
                             <span className="min-w-0 truncate">{cabinet.name}</span>
                             {cabinet.location && (
                                 <span className="flex shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600 dark:bg-slate-700 dark:text-slate-300">
@@ -112,7 +124,7 @@ export function CabinetCard({
                         >
                             {t('cabinet_card_size', { width: cabinet.width, height: cabinet.height, date: formattedDate })}
                         </p>
-                    </div>
+                    </button>
 
                     {hasOverflowActions && (
                         <div ref={actionMenuRef} className="relative shrink-0">

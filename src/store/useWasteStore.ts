@@ -106,18 +106,45 @@ const isWasteBatchDraft = (value: unknown): value is WasteBatchDraft => {
  * ordinary (non-incident) path without dropping newer fields such as scan
  * snapshots that this store does not otherwise need to understand.
  */
-const normalizeWasteBatchDraft = (draft: WasteBatchDraft): WasteBatchDraft => ({
-    ...draft,
-    incidentContext: draft.incidentContext === 'broken' || draft.incidentContext === 'leak'
-        ? draft.incidentContext
-        : 'none',
-    displayName: typeof draft.displayName === 'string' && draft.displayName.trim()
-        ? draft.displayName.trim()
-        : undefined,
-    parkedAt: typeof draft.parkedAt === 'string' && draft.parkedAt.trim()
-        ? draft.parkedAt
-        : undefined,
-});
+const normalizeWasteBatchDraft = (draft: WasteBatchDraft): WasteBatchDraft => {
+    const legacyMeasuredPh = draft.measuredBatchPh ?? draft.measuredPh;
+    const mixingState = draft.mixingState === 'separate' || draft.mixingState === 'already_mixed'
+        ? draft.mixingState
+        : 'unknown';
+    const acceptsMeasuredBatchPh = draft.matrix === 'aqueous' && mixingState === 'already_mixed';
+    const measuredBatchPh = acceptsMeasuredBatchPh && legacyMeasuredPh !== undefined &&
+        Number.isFinite(legacyMeasuredPh) && legacyMeasuredPh >= 0 && legacyMeasuredPh <= 14
+        ? legacyMeasuredPh
+        : undefined;
+    const measuredPhStatus = !acceptsMeasuredBatchPh
+        ? 'not_required'
+        : draft.measuredPhStatus === 'measured'
+            ? measuredBatchPh === undefined ? 'unknown' : 'measured'
+            : 'unknown';
+
+    return {
+        ...draft,
+        measuredBatchPh,
+        measuredPh: undefined,
+        measuredPhStatus,
+        mixingState,
+        incidentContext: draft.incidentContext === 'broken' || draft.incidentContext === 'leak'
+            ? draft.incidentContext
+            : 'none',
+        displayName: typeof draft.displayName === 'string' && draft.displayName.trim()
+            ? draft.displayName.trim()
+            : undefined,
+        parkedAt: typeof draft.parkedAt === 'string' && draft.parkedAt.trim()
+            ? draft.parkedAt
+            : undefined,
+        fluorideContainerStatus:
+            draft.fluorideContainerStatus === 'compatible' ||
+            draft.fluorideContainerStatus === 'incompatible' ||
+            draft.fluorideContainerStatus === 'unknown'
+                ? draft.fluorideContainerStatus
+                : undefined,
+    };
+};
 
 const isBatchOwnedByScope = (
     batch: WasteBatchDraft,
@@ -298,7 +325,9 @@ const hasBatchContent = (batch: WasteBatchDraft): boolean =>
     batch.totalAmount.value !== null ||
     batch.totalAmount.isUnknown ||
     batch.measuredPhStatus !== 'not_required' ||
+    batch.mixingState !== 'unknown' ||
     batch.additionalComponentsStatus !== undefined ||
+    batch.fluorideContainerStatus !== undefined ||
     batch.incidentContext !== 'none';
 
 const MATRIX_DISPLAY_NAMES: Record<WasteMatrix, string> = {
@@ -410,8 +439,12 @@ export interface WasteState {
         isUnknown?: boolean;
     }) => void;
     setMeasuredPh: (value: number | null, isUnknown?: boolean) => void;
+    setMixingState: (value: WasteBatchDraft['mixingState']) => void;
     setAdditionalComponentsStatus: (
         value: WasteBatchDraft['additionalComponentsStatus'],
+    ) => void;
+    setFluorideContainerStatus: (
+        value: WasteBatchDraft['fluorideContainerStatus'],
     ) => void;
     setIncidentContext: (value: WasteBatchDraft['incidentContext']) => void;
     rememberCurrentMatrix: () => void;
@@ -546,10 +579,12 @@ export const useWasteStore = create<WasteState>((set, get) => ({
             totalAmount: crossesDimension
                 ? { ...EMPTY_WASTE_AMOUNT }
                 : state.batch.totalAmount,
-            measuredPh: matrix === 'aqueous' ? state.batch.measuredPh : undefined,
-            measuredPhStatus: matrix === 'aqueous'
+            measuredBatchPh: matrix === 'aqueous' ? state.batch.measuredBatchPh : undefined,
+            measuredPh: undefined,
+            measuredPhStatus: matrix === 'aqueous' && state.batch.mixingState === 'already_mixed'
                 ? (state.batch.measuredPhStatus === 'measured' ? 'measured' : 'unknown')
                 : 'not_required',
+            mixingState: matrix === 'aqueous' ? state.batch.mixingState : 'unknown',
         });
         saveWasteScope(batch, state.parkedBatches);
         return { batch, cart: batch.components, ...emptyAIState };
@@ -585,13 +620,40 @@ export const useWasteStore = create<WasteState>((set, get) => ({
         }),
 
     setMeasuredPh: (value, isUnknown = false) => set((state) => {
+        if (state.batch.matrix !== 'aqueous' || state.batch.mixingState !== 'already_mixed') {
+            const batch = touchBatch({
+                ...state.batch,
+                measuredBatchPh: undefined,
+                measuredPh: undefined,
+                measuredPhStatus: 'not_required',
+            });
+            saveWasteScope(batch, state.parkedBatches);
+            return { batch, cart: batch.components, ...emptyAIState };
+        }
         const validValue = value !== null && Number.isFinite(value) && value >= 0 && value <= 14
             ? value
             : undefined;
         const batch = touchBatch({
             ...state.batch,
-            measuredPh: isUnknown ? undefined : validValue,
+            measuredBatchPh: isUnknown ? undefined : validValue,
+            measuredPh: undefined,
             measuredPhStatus: isUnknown || validValue === undefined ? 'unknown' : 'measured',
+        });
+        saveWasteScope(batch, state.parkedBatches);
+        return { batch, cart: batch.components, ...emptyAIState };
+    }),
+
+    setMixingState: (mixingState) => set((state) => {
+        const requiresMeasuredBatchPh = state.batch.matrix === 'aqueous' &&
+            mixingState === 'already_mixed';
+        const batch = touchBatch({
+            ...state.batch,
+            mixingState,
+            measuredBatchPh: requiresMeasuredBatchPh ? state.batch.measuredBatchPh : undefined,
+            measuredPh: undefined,
+            measuredPhStatus: requiresMeasuredBatchPh
+                ? (state.batch.measuredPhStatus === 'measured' ? 'measured' : 'unknown')
+                : 'not_required',
         });
         saveWasteScope(batch, state.parkedBatches);
         return { batch, cart: batch.components, ...emptyAIState };
@@ -599,6 +661,12 @@ export const useWasteStore = create<WasteState>((set, get) => ({
 
     setAdditionalComponentsStatus: (additionalComponentsStatus) => set((state) => {
         const batch = touchBatch({ ...state.batch, additionalComponentsStatus });
+        saveWasteScope(batch, state.parkedBatches);
+        return { batch, cart: batch.components, ...emptyAIState };
+    }),
+
+    setFluorideContainerStatus: (fluorideContainerStatus) => set((state) => {
+        const batch = touchBatch({ ...state.batch, fluorideContainerStatus });
         saveWasteScope(batch, state.parkedBatches);
         return { batch, cart: batch.components, ...emptyAIState };
     }),

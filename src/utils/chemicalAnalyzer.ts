@@ -445,7 +445,6 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
 
     let category: DisposalCategory = 'UNKNOWN';
     let reason = '';
-    let reasonParams: Record<string, string | number> | undefined;
 
     const isReactive = hasReactiveHCode ||
         matchesAny(name, REACTIVE_NAME_PATTERNS) ||
@@ -477,36 +476,18 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
             reason = 'reason_organic_non_halogen';
         }
     } else {
-        if (chemical.properties?.ph !== undefined) {
-            if (chemical.properties.ph < 7) {
-                category = 'ACID';
-                reason = 'reason_acid_ph';
-                reasonParams = { ph: chemical.properties.ph };
-            } else if (chemical.properties.ph > 7) {
-                category = 'ALKALI';
-                reason = 'reason_alkali_ph';
-                reasonParams = { ph: chemical.properties.ph };
-            } else {
-                category = 'NEUTRAL';
-                reason = 'reason_neutral_ph';
-                reasonParams = { ph: chemical.properties.ph };
-            }
-        }
-
-        if (category === 'UNKNOWN') {
-            if (isAcidPhosphateSalt(name, formula, elements)) {
-                category = 'ACID';
-                reason = 'reason_acid_phosphate_salt';
-            } else if (isAlkaliPhosphateSalt(name, formula, elements)) {
-                category = 'ALKALI';
-                reason = 'reason_alkali_phosphate_salt';
-            } else if (matchesAny(name, ACID_NAME_PATTERNS)) {
-                category = 'ACID';
-                reason = 'reason_acid_keyword';
-            } else if (matchesAny(name, ALKALI_NAME_PATTERNS)) {
-                category = 'ALKALI';
-                reason = 'reason_alkali_keyword';
-            }
+        if (isAcidPhosphateSalt(name, formula, elements)) {
+            category = 'ACID';
+            reason = 'reason_acid_phosphate_salt';
+        } else if (isAlkaliPhosphateSalt(name, formula, elements)) {
+            category = 'ALKALI';
+            reason = 'reason_alkali_phosphate_salt';
+        } else if (matchesAny(name, ACID_NAME_PATTERNS)) {
+            category = 'ACID';
+            reason = 'reason_acid_keyword';
+        } else if (matchesAny(name, ALKALI_NAME_PATTERNS)) {
+            category = 'ALKALI';
+            reason = 'reason_alkali_keyword';
         }
     }
 
@@ -516,5 +497,5 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         reason = 'reason_solid_waste';
     }
 
-    return buildResult(chemical, category, reason || 'reason_unknown', reasonParams);
+    return buildResult(chemical, category, reason || 'reason_unknown');
 };

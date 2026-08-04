@@ -107,6 +107,50 @@ export const translateGHS = (text: string, lang: 'ko' | 'en'): string => {
     return text;
 };
 
+/**
+ * Builds a compact, stable list for displaying stored GHS evidence.
+ * PubChem/KOSHA snapshots can contain the same H-code several times with
+ * concentration annotations, so Korean views are normalized by unique code.
+ */
+export const formatGhsStatementList = (
+    statements: string[],
+    lang: 'ko' | 'en',
+): string[] => {
+    const normalized = statements
+        .map((statement) => statement.trim())
+        .filter(Boolean);
+
+    if (lang === 'en') return [...new Set(normalized)];
+
+    const codes: string[] = [];
+    const uncodedStatements: string[] = [];
+    const seenCodes = new Set<string>();
+    const seenUncoded = new Set<string>();
+
+    normalized.forEach((statement) => {
+        const matches = statement.match(/H\d{3}/g) ?? [];
+        if (matches.length > 0) {
+            matches.forEach((code) => {
+                if (!seenCodes.has(code)) {
+                    seenCodes.add(code);
+                    codes.push(code);
+                }
+            });
+            return;
+        }
+
+        if (!seenUncoded.has(statement)) {
+            seenUncoded.add(statement);
+            uncodedStatements.push(translateGHS(statement, 'ko'));
+        }
+    });
+
+    return [
+        ...codes.map((code) => GHS_KO[code] ? `${code}: ${GHS_KO[code]}` : code),
+        ...uncodedStatements,
+    ];
+};
+
 export const GHS_PICTOGRAMS: Record<string, string> = {
     "GHS01": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS01.svg", // Exploding Bomb
     "GHS02": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS02.svg", // Flame

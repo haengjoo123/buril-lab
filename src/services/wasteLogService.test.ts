@@ -74,6 +74,7 @@ function createBatch(): WasteBatchDraft {
             isUnknown: false,
         },
         measuredPhStatus: 'not_required',
+        mixingState: 'unknown',
         additionalComponentsStatus: 'none',
         incidentContext: 'none',
         createdAt: '2026-08-02T00:00:00.000Z',
@@ -89,6 +90,9 @@ function createDecision(): WasteDecision {
         allowedActions: ['container_deposit'],
         blockingReasons: [],
         missingFields: [],
+        legalWastePhClass: 'unknown',
+        corrosivityPhScreen: 'unknown',
+        routingBasis: 'matrix',
         policyVersion: 'kr-default-2026.1',
         ruleVersion: '2.0.0',
     };
@@ -102,12 +106,14 @@ describe('wasteLogService V2 mutations', () => {
     });
 
     it('builds the database camelCase payload without legacy direct-insert fields', () => {
+        const batch = createBatch();
+        batch.mixingState = 'already_mixed';
         const payload = buildWasteHandlingRpcPayload({
-            batch: createBatch(),
+            batch,
             decision: createDecision(),
             handlingAction: 'container_deposit',
             memo: '  fume hood batch  ',
-            confirmationSnapshot: { alreadyMixed: true },
+            confirmationSnapshot: { mixingState: 'already_mixed', alreadyMixed: true },
         });
 
         expect(payload).toMatchObject({
@@ -122,12 +128,16 @@ describe('wasteLogService V2 mutations', () => {
                 unknown: false,
             },
             decisionSnapshot: {
+                legalWastePhClass: 'unknown',
+                corrosivityPhScreen: 'unknown',
+                routingBasis: 'matrix',
                 policyVersion: 'kr-default-2026.1',
                 ruleVersion: '2.0.0',
             },
             confirmationSnapshot: {
                 batchId: 'batch-1',
                 incidentContext: 'none',
+                mixingState: 'already_mixed',
                 alreadyMixed: true,
             },
             memo: 'fume hood batch',
@@ -157,6 +167,29 @@ describe('wasteLogService V2 mutations', () => {
         });
 
         expect(payload.confirmationSnapshot).not.toHaveProperty('additionalComponentsStatus');
+    });
+
+    it('serializes the HF/fluoride compatible-container confirmation into the audited snapshot', () => {
+        const batch = createBatch();
+        batch.fluorideContainerStatus = 'compatible';
+        batch.components[0].hazardFlags = ['HYDROFLUORIC_ACID'];
+        const decision: WasteDecision = {
+            ...createDecision(),
+            streamCode: 'SPECIAL_REVIEW',
+            hazardFlags: ['HYDROFLUORIC_ACID'],
+        };
+
+        const payload = buildWasteHandlingRpcPayload({
+            batch,
+            decision,
+            handlingAction: 'container_deposit',
+        });
+
+        expect(payload.confirmationSnapshot).toHaveProperty(
+            'fluorideContainerStatus',
+            'compatible',
+        );
+        expect(payload.decisionSnapshot.hazardFlags).toEqual(['HYDROFLUORIC_ACID']);
     });
 
     it('uses record_waste_handling_v2 and preserves a retry request id', async () => {

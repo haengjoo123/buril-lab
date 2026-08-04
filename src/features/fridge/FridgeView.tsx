@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X, Undo2, Redo2 } from 'lucide-react';
+import { Box, Camera, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X, Undo2, Redo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from './components/CameraCaptureModal';
@@ -184,7 +184,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         setCabinetDepth,
         setCabinetAspectRatio,
         setFocusedShelfId,
-        sortShelves,
         loadCabinet,
         saveCabinet,
         cabinetName,
@@ -446,11 +445,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const handleOpenStorageCompatBanner = () => {
         if (storageCompatWarningCount === 0) return;
         setStorageCompatBannerReopenToken((current) => current + 1);
-    };
-
-    const handleNameSort = () => {
-        sortShelves('name');
-        void autoSave();
     };
 
     const handleBuildCompatibilityPreview = async () => {
@@ -1207,15 +1201,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                     </div>
 
                                     <div className="flex items-center justify-center gap-2 pt-2 border-t border-gray-100 w-full flex-wrap">
-                                        <span className="text-[10px] sm:text-xs text-gray-500 font-medium">{t('cabinet_sort_label')}</span>
-                                        <button
-                                            onClick={handleNameSort}
-                                            disabled={shelves.length === 0}
-                                            className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1"
-                                        >
-                                            <span className="text-[10px]">AZ</span>
-                                            {t('cabinet_sort_name')}
-                                        </button>
                                         <button
                                             onClick={() => void handleBuildCompatibilityPreview()}
                                             disabled={shelves.every(s => s.items.length === 0) || isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}
@@ -1305,7 +1290,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
                 {/* Place Mode Reagent Tray - 편집 패널처럼 열고 닫기 */}
                 {mode === 'PLACE' && (
-                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20">
+                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20 lg:bottom-0">
                         {isReagentTrayVisible ? (
                             <div className="relative bg-white/90 backdrop-blur pointer-events-auto p-4 rounded-xl shadow-lg border flex flex-col gap-2 max-w-full w-full mx-4 z-20">
                                 <button
@@ -1318,14 +1303,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                 <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 px-1 pr-6 w-full">
                                     <h3 className="text-sm font-semibold text-gray-700 whitespace-nowrap shrink-0">{t('cabinet_reagent_tray_title')}</h3>
                                     <div className="flex flex-1 flex-wrap items-center gap-1.5 sm:gap-2 w-full">
-                                        <button
-                                            onClick={handleNameSort}
-                                            disabled={shelves.length === 0}
-                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
-                                        >
-                                            <span>AZ</span>
-                                            {t('cabinet_sort_name')}
-                                        </button>
                                         <button
                                             onClick={() => void handleBuildCompatibilityPreview()}
                                             disabled={shelves.every(s => s.items.length === 0) || isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}
@@ -1366,7 +1343,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <ScanLine className="w-8 h-8 text-emerald-600" />
                                         </div>
                                         <div className="w-full text-center">
-                                            <span className="text-xs font-bold text-emerald-700 leading-tight">
+                                            <span className="inline-flex items-center justify-center gap-1 text-xs font-bold leading-tight text-emerald-700">
+                                                <Camera className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden="true" />
                                                 {t('scan_reagent')}
                                             </span>
                                         </div>
