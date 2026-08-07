@@ -1,6 +1,7 @@
 import type { PhAcidBaseFamily, PhCatalog, PhCatalogRecord } from './catalogTypes';
 import { PH_CATALOG_SOURCE_MANIFEST } from './sourceManifest';
 import { PH_STRUCTURE_IDENTITIES } from './identityData';
+import { formulaCompositionKey } from '../../utils/chemicalFormula';
 
 const USGS = 'USGS-PHREEQC-3.8.8';
 const NIST = 'NIST-JPCRD-BUFFERS-2002';
@@ -241,12 +242,9 @@ export const findPhCatalogRecordByCas = (casNumber: string | undefined): PhCatal
     return matches?.length === 1 ? matches[0] : undefined;
 };
 
-const normalizedFormula = (formula: string | undefined): string =>
-    formula?.replace(/\s+/g, '').replace(/\((?:aq|s|l|g)\)$/i, '').toUpperCase() ?? '';
-
 /** Formula matches are suggestions only and must never approve an identity for calculation. */
 export const suggestPhCatalogRecordsByFormula = (formula: string | undefined): PhCatalogRecord[] => {
-    const normalized = normalizedFormula(formula);
+    const normalized = formulaCompositionKey(formula);
     if (!normalized) return [];
-    return PH_CATALOG_RECORDS.filter((entry) => normalizedFormula(entry.formula) === normalized);
+    return PH_CATALOG_RECORDS.filter((entry) => formulaCompositionKey(entry.formula) === normalized);
 };

@@ -11,6 +11,7 @@ import { checkCompatibility } from '../../utils/compatibilityChecker';
 import { validatePhCatalog } from './catalogValidation';
 import { PH_PREDICTION_MODEL_VERSION } from './modelMetadata';
 import { DEFAULT_PH_CATALOG_APPROVAL, evaluatePhCatalogApproval } from './catalogApproval';
+import { formulaCompositionKey } from '../../utils/chemicalFormula';
 
 export const PH_PREDICTION_ISSUES = Object.freeze({
     MIXING_NOT_COMPLETE: 'mixing_not_complete',
@@ -228,8 +229,8 @@ const findRecord = (component: WasteComponent, catalog: PhCatalog): PhCatalogRec
         const componentCas = component.chemical.casNumber?.trim();
         if (componentCas && selected.casNumber?.trim() !== componentCas) return undefined;
 
-        const componentFormula = component.chemical.molecularFormula?.replace(/\s+/g, '').toUpperCase();
-        const selectedFormula = selected.formula.replace(/\s+/g, '').toUpperCase();
+        const componentFormula = formulaCompositionKey(component.chemical.molecularFormula);
+        const selectedFormula = formulaCompositionKey(selected.formula);
         if (!componentCas && componentFormula && componentFormula !== selectedFormula) return undefined;
         return selected;
     }

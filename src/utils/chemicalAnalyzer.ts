@@ -9,8 +9,11 @@ import type {
 } from '../types';
 import pListCas from '../data/p_list_cas.json';
 import uListCas from '../data/u_list_cas.json';
+import { parseFormula, type ElementCounts } from './chemicalFormula';
 
-type ElementCounts = Record<string, number>;
+export { parseFormula } from './chemicalFormula';
+
+const hydrateSeparators = /[.\u00b7\u2022]/g;
 
 const HALOGENS = ['F', 'Cl', 'Br', 'I'] as const;
 const HEAVY_METALS = [
@@ -178,81 +181,6 @@ const SOLID_NAME_PATTERNS = [
     /\blump\b/i,
     /\bcrystal\b/i,
 ];
-
-const hydrateSeparators = /[.\u00b7\u2022]/g;
-
-// Helper: Parse molecular formula into element counts
-// e.g., "C6H12O6" -> { C: 6, H: 12, O: 6 }
-export const parseFormula = (formula: string): ElementCounts => {
-    const totals: ElementCounts = {};
-    const normalized = formula.replace(/\s+/g, '').replace(hydrateSeparators, '.');
-
-    const addElements = (target: ElementCounts, source: ElementCounts, multiplier = 1) => {
-        for (const [element, count] of Object.entries(source)) {
-            target[element] = (target[element] || 0) + count * multiplier;
-        }
-    };
-
-    const readNumber = (segment: string, start: number): { value: number; next: number } => {
-        let end = start;
-        while (/\d/.test(segment[end] || '')) end++;
-        return {
-            value: end > start ? parseInt(segment.slice(start, end), 10) : 1,
-            next: end,
-        };
-    };
-
-    const parseSegment = (segment: string): ElementCounts => {
-        const stack: ElementCounts[] = [{}];
-        let index = 0;
-
-        while (index < segment.length) {
-            const char = segment[index];
-
-            if (char === '(' || char === '[') {
-                stack.push({});
-                index++;
-                continue;
-            }
-
-            if (char === ')' || char === ']') {
-                if (stack.length === 1) {
-                    index++;
-                    continue;
-                }
-                const group = stack.pop() || {};
-                const multiplier = readNumber(segment, index + 1);
-                addElements(stack[stack.length - 1], group, multiplier.value);
-                index = multiplier.next;
-                continue;
-            }
-
-            if (/[A-Z]/.test(char)) {
-                let end = index + 1;
-                if (/[a-z]/.test(segment[end] || '')) end++;
-                const element = segment.slice(index, end);
-                const count = readNumber(segment, end);
-                stack[stack.length - 1][element] = (stack[stack.length - 1][element] || 0) + count.value;
-                index = count.next;
-                continue;
-            }
-
-            index++;
-        }
-
-        return stack[0];
-    };
-
-    for (const rawPart of normalized.split('.')) {
-        if (!rawPart) continue;
-        const coefficient = rawPart.match(/^(\d+)(?=[A-Z([])/);
-        const multiplier = coefficient ? parseInt(coefficient[1], 10) : 1;
-        const part = coefficient ? rawPart.slice(coefficient[1].length) : rawPart;
-        addElements(totals, parseSegment(part), multiplier);
-    }
-
-    return totals;
-};
 
 export const extractHCodes = (statements: string[] = []): string[] => {
     const codes = new Set<string>();

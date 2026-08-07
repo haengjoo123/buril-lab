@@ -32,6 +32,7 @@ interface ComponentOptions {
     volumeUnit?: 'uL' | 'mL' | 'L';
     hazardFlags?: WasteComponent['hazardFlags'];
     identityVerified?: boolean;
+    molecularFormula?: string;
 }
 
 const component = ({
@@ -46,6 +47,7 @@ const component = ({
     volumeUnit = 'mL',
     hazardFlags = [],
     identityVerified = true,
+    molecularFormula = '',
 }: ComponentOptions): WasteComponent => ({
     cartLineId: id ?? `${catalogId}-${volume}-${concentration}`,
     sourceType: 'manual',
@@ -78,7 +80,7 @@ const component = ({
         id: catalogId,
         name: catalogId,
         casNumber: cas,
-        molecularFormula: '',
+        molecularFormula,
     },
     category: 'NEUTRAL',
     binColor: '',
@@ -777,6 +779,40 @@ describe('safety and completeness gates', () => {
         formulaMatched.chemical.casNumber = '';
         formulaMatched.chemical.molecularFormula = 'HCl(aq)';
         expect(predictAqueousPh(batch([formulaMatched])).issueCodes)
+            .toContain(PH_PREDICTION_ISSUES.CATALOG_MATCH_REQUIRED);
+    });
+
+    it('accepts an explicitly selected form when its formula notation has the same composition', () => {
+        const prediction = predictAqueousPh(batch([
+            component({
+                catalogId: 'acetic-acid',
+                cas: '64-19-7',
+                concentration: 0.01,
+                id: 'acid',
+            }),
+            component({
+                catalogId: 'sodium-acetate',
+                cas: '',
+                molecularFormula: 'C2H3NaO2',
+                concentration: 0.01,
+                id: 'salt',
+            }),
+        ]));
+
+        expect(prediction.status).toBe('available');
+        expect(prediction.issueCodes).not.toContain(PH_PREDICTION_ISSUES.CATALOG_MATCH_REQUIRED);
+        expect(prediction.value).toBeCloseTo(4.73, 1);
+        expect(prediction.displayValue).toBe(4.7);
+    });
+
+    it('still rejects a selected form when the formula composition differs', () => {
+        const mismatchedFormula = component({
+            catalogId: 'sodium-acetate',
+            cas: '',
+            molecularFormula: 'C2H4O2',
+        });
+
+        expect(predictAqueousPh(batch([mismatchedFormula])).issueCodes)
             .toContain(PH_PREDICTION_ISSUES.CATALOG_MATCH_REQUIRED);
     });
 });

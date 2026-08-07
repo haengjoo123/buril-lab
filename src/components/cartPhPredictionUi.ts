@@ -5,25 +5,7 @@ import type {
   WasteComponent,
   WasteMatrix,
 } from '../types'
-import { parseFormula } from '../utils/chemicalAnalyzer'
-
-const formulaCompositionKey = (value: string | undefined): string => {
-  const normalized = value?.replace(/\s+/g, '').replace(/\((?:aq|s|l|g)\)$/i, '') ?? ''
-  if (!normalized) return ''
-
-  let entries: Array<[string, number]>
-  try {
-    entries = Object.entries(parseFormula(normalized))
-      .filter((entry): entry is [string, number] => Number.isFinite(entry[1]) && entry[1] > 0)
-      .sort(([left], [right]) => left.localeCompare(right))
-  } catch {
-    return normalized.toUpperCase()
-  }
-
-  return entries.length > 0
-    ? entries.map(([element, count]) => `${element}:${count}`).join('|')
-    : normalized.toUpperCase()
-}
+import { formulaCompositionKey } from '../utils/chemicalFormula'
 
 /**
  * Only exact, approved forms may be selected. An unidentified component must

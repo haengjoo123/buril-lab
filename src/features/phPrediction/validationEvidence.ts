@@ -124,10 +124,10 @@ const NIST_PHYSIOLOGICAL_PHOSPHATE_CASE: PhGoldenCaseEvidence = Object.freeze({
  * fingerprint and requires a new fixed evidence release.
  */
 export const PH_CATALOG_VALIDATION_EVIDENCE: PhCatalogValidationEvidence = Object.freeze({
-    evidenceVersion: 'buril-ph-evidence-2026.08.2',
+    evidenceVersion: 'buril-ph-evidence-2026.08.3',
     catalogVersion: 'buril-ph-2026.08.2',
     modelVersion: 'buril-aqueous-charge-balance-davies-1.0.0',
-    predictorSourceSha256: 'e9bfa0fd50d06db3070b6777b35e342498409f13d9b8a91b846bbc730d9b15d8',
+    predictorSourceSha256: '3de6cfb6c13b03640bcf3fdecaa1291a3d6f9e764723c7ec28feb1ab84fa55fa',
     catalogFingerprintSha256: '57c27be647411f1b5a3a7c694af3ae6c94b2ca48a06a78c00ce22d7fd5791b43',
     upstreamReleaseCommit: 'cafc3530d40c7b098ebb9c32f56383ccba6a3856',
     goldenInputSha256: 'da8946eb6a0fccc7c35ad88a3bf5f3d7506cb10504ce25b5b675de1ada2a984f',
