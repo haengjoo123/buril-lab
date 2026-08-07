@@ -173,10 +173,13 @@ function linkStatusTone(status: SafetyCenterLabCandidate['link_status']): string
 }
 
 function riskFlagTone(flag: SafetyCenterRiskFlag): string {
+  if (flag === 'hazard_special_high') return 'bg-red-50 text-red-700 border-red-100';
+  if (flag.startsWith('hazard_')) return 'bg-orange-50 text-orange-700 border-orange-100';
   if (flag === 'hazard') return 'bg-red-50 text-red-700 border-red-100';
   if (flag === 'expired') return 'bg-rose-50 text-rose-700 border-rose-100';
   if (flag === 'expiring') return 'bg-amber-50 text-amber-700 border-amber-100';
   if (flag === 'missing_cas') return 'bg-violet-50 text-violet-700 border-violet-100';
+  if (flag === 'ghs_data_review') return 'bg-violet-50 text-violet-700 border-violet-100';
   return 'bg-slate-50 text-slate-700 border-slate-200';
 }
 
@@ -848,6 +851,14 @@ function DashboardPage({
         <MetricCard label="최근 폐기" value={summary.recentWasteCount} Icon={Archive} tone="bg-emerald-50 text-emerald-600" />
       </div>
 
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard label="관리 위험 품목" value={summary.hazardCount} Icon={ShieldCheck} tone="bg-orange-50 text-orange-600" />
+        <MetricCard label="인화성" value={summary.flammableCount} Icon={AlertTriangle} tone="bg-orange-50 text-orange-600" />
+        <MetricCard label="부식성" value={summary.corrosiveCount} Icon={AlertTriangle} tone="bg-amber-50 text-amber-600" />
+        <MetricCard label="독성" value={summary.toxicCount} Icon={AlertTriangle} tone="bg-red-50 text-red-600" />
+        <MetricCard label="기타 관리 위험" value={summary.otherManagedCount} Icon={ShieldCheck} tone="bg-slate-50 text-slate-600" />
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
@@ -862,12 +873,14 @@ function DashboardPage({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[900px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs font-medium text-slate-500 dark:bg-slate-950/50 dark:text-slate-400">
                   <tr>
                     <th className="px-4 py-3">연구실</th>
                     <th className="px-4 py-3">위험 점수</th>
+                    <th className="px-4 py-3">부담량</th>
                     <th className="px-4 py-3">고위험</th>
+                    <th className="px-4 py-3">관리 위험</th>
                     <th className="px-4 py-3">만료</th>
                     <th className="px-4 py-3">CAS 누락</th>
                     <th className="px-4 py-3 text-right">작업</th>
@@ -882,10 +895,21 @@ function DashboardPage({
                           <div className="h-2 w-28 overflow-hidden rounded-full bg-slate-100">
                             <div className="h-full rounded-full bg-red-500" style={{ width: `${Math.min(100, lab.riskScore)}%` }} />
                           </div>
-                          <span className="font-medium">{lab.riskScore}</span>
+                          <span className="font-medium">{lab.evaluationStatus === 'no_items' ? '-' : lab.riskScore}</span>
                         </div>
                       </td>
+                      <td className="px-4 py-3">
+                        {lab.evaluationStatus === 'no_items' ? (
+                          <div className="text-xs text-slate-400">데이터 없음</div>
+                        ) : (
+                          <>
+                            <div className="text-xs text-slate-500">부담량 {lab.riskBurden}</div>
+                            <div className="text-[11px] text-slate-400">평균 {lab.averageRiskScore} · 상위5 {lab.topFiveAverage}</div>
+                          </>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{lab.highRiskCount}</td>
+                      <td className="px-4 py-3">{lab.hazardCount}</td>
                       <td className="px-4 py-3">{lab.expiredCount + lab.expiringCount}</td>
                       <td className="px-4 py-3">{lab.missingCasCount}</td>
                       <td className="px-4 py-3 text-right">
@@ -897,7 +921,7 @@ function DashboardPage({
                             labName: lab.labName,
                             title: `${lab.labName} 위험 재고 확인 요청`,
                             description: `고위험 ${lab.highRiskCount}건, 만료/임박 ${lab.expiredCount + lab.expiringCount}건을 확인해 주세요.`,
-                            priority: lab.riskScore > 60 ? 'high' : 'normal',
+                            priority: lab.riskScore >= 60 || lab.highRiskCount > 0 ? 'high' : 'normal',
                             dueDate: '',
                           })}
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
@@ -930,7 +954,7 @@ function DashboardPage({
                     <span className="text-xs font-medium text-red-600">{assessment.score}</span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {assessment.flags.map((flag) => (
+                    {assessment.flags.filter((flag) => flag !== 'hazard').map((flag) => (
                       <span key={flag} className={`rounded border px-2 py-0.5 text-[11px] font-medium ${riskFlagTone(flag)}`}>
                         {getRiskFlagLabel(flag)}
                       </span>
@@ -1182,7 +1206,12 @@ function RisksPage({
             </select>
             <select value={riskFlag} onChange={(event) => setRiskFlag(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal dark:border-slate-700 dark:bg-slate-950">
               <option value="all">모든 위험</option>
-              <option value="hazard">고위험</option>
+              <option value="hazard">관리 위험 전체</option>
+              <option value="hazard_special_high">특수 고위험</option>
+              <option value="hazard_flammable">인화성</option>
+              <option value="hazard_corrosive">부식성</option>
+              <option value="hazard_toxic">독성</option>
+              <option value="hazard_other_managed">기타 관리 위험</option>
               <option value="expired">만료/긴급</option>
               <option value="expiring">만료 임박</option>
               <option value="missing_cas">CAS 누락</option>
@@ -1255,7 +1284,7 @@ function RisksPage({
                               labName: item.lab_name,
                               title: `${item.inventory_name} 확인 요청`,
                               description: `${assessment.flags.map(getRiskFlagLabel).join(', ') || '위험 신호'} 항목입니다. 보관 상태와 처리 계획을 확인해 주세요.`,
-                              priority: assessment.score >= 40 ? 'high' : 'normal',
+                              priority: assessment.riskBand === 'critical' || assessment.riskBand === 'high' ? 'high' : 'normal',
                               dueDate: '',
                               targetType: item.source_type,
                               targetId: item.item_id,
@@ -1310,11 +1339,16 @@ function RiskDetailPanel({
         <span className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">점수 {assessment.score}</span>
       </div>
       <div className="mt-4 flex flex-wrap gap-1.5">
-        {assessment.flags.map((flag) => (
+        {assessment.flags.filter((flag) => flag !== 'hazard').map((flag) => (
           <span key={flag} className={`rounded border px-2 py-0.5 text-xs font-medium ${riskFlagTone(flag)}`}>
             {getRiskFlagLabel(flag)}
           </span>
         ))}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px]">
+        <div className="rounded-lg bg-red-50 p-2 text-red-700"><div>위험성</div><strong>{assessment.hazardScore}</strong></div>
+        <div className="rounded-lg bg-amber-50 p-2 text-amber-700"><div>운영상태</div><strong>{assessment.operationalScore}</strong></div>
+        <div className="rounded-lg bg-violet-50 p-2 text-violet-700"><div>데이터 보완</div><strong>{assessment.dataQualityScore}</strong></div>
       </div>
       <div className="mt-5 space-y-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
         <div className="flex justify-between gap-4"><span className="text-slate-500">CAS</span><span className="font-normal">{item.cas_number || '-'}</span></div>
@@ -1323,6 +1357,7 @@ function RiskDetailPanel({
         <div className="flex justify-between gap-4"><span className="text-slate-500">위치</span><span className="text-right font-normal">{item.cabinet_name ?? item.storage_location_name ?? '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">유효기간</span><span className="font-normal">{item.expiry_date || '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">잔량</span><span className="font-normal">{item.remaining_percent ?? 100}%</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">GHS 상태</span><span className="font-normal">{item.ghs_data_status ?? '미조회'}</span></div>
       </div>
       <div className="mt-5 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
         센터는 이 항목을 직접 수정하지 않습니다. 연구실에 확인 요청을 보내고 연구실이 보관 상태, CAS 보완, 폐기 계획을 회신합니다.
@@ -1335,7 +1370,7 @@ function RiskDetailPanel({
           labName: item.lab_name,
           title: `${item.inventory_name} 위험 항목 확인`,
           description: `${assessment.flags.map(getRiskFlagLabel).join(', ')} 신호가 있습니다. 보관/폐기 계획을 회신해 주세요.`,
-          priority: assessment.score >= 40 ? 'high' : 'normal',
+          priority: assessment.riskBand === 'critical' || assessment.riskBand === 'high' ? 'high' : 'normal',
           dueDate: '',
           targetType: item.source_type,
           targetId: item.item_id,

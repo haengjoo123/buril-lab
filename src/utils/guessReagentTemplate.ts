@@ -1,4 +1,5 @@
 import type { ReagentTemplateType } from '../types/fridge';
+import { parseCapacityMeasurement } from './capacityParser';
 
 /**
  * 용량/메모 문자열로 시약장 3D 템플릿 추론 (A–D).
@@ -9,8 +10,8 @@ export function guessTemplateFromCapacity(capacity: string): ReagentTemplateType
     if (!trimmed) return 'A';
 
     const lower = trimmed.toLowerCase();
-    const numMatch = lower.match(/(\d+)/);
-    const num = numMatch ? Number.parseInt(numMatch[1], 10) : 0;
+    const parsedCapacity = parseCapacityMeasurement(trimmed);
+    const num = parsedCapacity.numericValue ?? 0;
 
     if (/갈색|앰버|\bamber\b|\bbrown\b/i.test(trimmed)) return 'A';
     if (/플라스틱|\bplastic\b/i.test(trimmed)) return 'B';

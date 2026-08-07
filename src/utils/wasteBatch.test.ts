@@ -10,12 +10,15 @@ import {
     analyzeWasteBatch,
     createEmptyWasteBatch,
     createWasteComponentFromAnalysis,
+    deriveWasteHazardFlags,
+    deriveWasteAmountFromComponentVolumes,
     getAllowedAmountUnits,
     inferWasteMatrixFromComponent,
     inferWasteMatrixFromComponents,
     normalizeWasteAmount,
     validateWasteAmount,
 } from './wasteBatch';
+import { analyzeChemical } from './chemicalAnalyzer';
 
 function analysis(
     name: string,
@@ -83,7 +86,27 @@ function batch(
 }
 
 describe('analyzeWasteBatch', () => {
-    it('auto-infers only strong matrix evidence and leaves ambiguous acids unresolved', () => {
+    it('routes an explicitly unknown final matrix to review and handover instead of leaving the question incomplete', () => {
+        const draft = batch([analysis('Known solution', 'H2O', 'NEUTRAL')], 'unknown');
+        draft.additionalComponentsStatus = 'none';
+        const decision = analyzeWasteBatch(draft);
+        expect(decision).toMatchObject({
+            decisionStatus: 'blocked',
+            streamCode: 'SPECIAL_REVIEW',
+            allowedActions: ['isolated', 'handover'],
+        });
+        expect(decision.missingFields).not.toContain('matrix');
+        expect(decision.blockingReasons).toContainEqual(expect.objectContaining({
+            code: 'unknown_matrix_review',
+        }));
+
+        draft.matrixSource = 'unresolved';
+        const unanswered = analyzeWasteBatch(draft);
+        expect(unanswered.decisionStatus).toBe('needs_input');
+        expect(unanswered.missingFields).toContain('matrix');
+    });
+
+    it('auto-infers only exact or verified solvent evidence and leaves generic organics unresolved', () => {
         const acetone = createWasteComponentFromAnalysis(
             analysis('Acetone', 'C3H6O', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
         );
@@ -100,6 +123,21 @@ describe('analyzeWasteBatch', () => {
             analysis('Hydrochloric acid', 'HCl', 'ACID'),
         );
         expect(inferWasteMatrixFromComponent(acid)).toBeNull();
+
+        const genericOrganic = createWasteComponentFromAnalysis(
+            analysis('Generic organic solute', 'C6H12O6', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
+            { inventorySnapshot: { nominalCapacity: '500 mL' } },
+        );
+        genericOrganic.chemical.casNumber = '50-99-7';
+        expect(inferWasteMatrixFromComponent(genericOrganic)).toBeNull();
+
+        genericOrganic.solutionContext = {
+            physicalForm: 'organic_solvent',
+            solventClass: 'organic_non_halogen',
+            isSolventVerified: true,
+            solventCasNumber: '67-64-1',
+        };
+        expect(inferWasteMatrixFromComponent(genericOrganic)).toBe('organic_non_halogenated');
     });
 
     it('recomputes automatic matrix evidence without keeping an unsafe stale solvent default', () => {
@@ -120,7 +158,7 @@ describe('analyzeWasteBatch', () => {
         );
 
         expect(inferWasteMatrixFromComponents([acetone, dcm])).toBe('organic_halogenated');
-        expect(inferWasteMatrixFromComponents([water, acetone])).toBe('mixed_biphasic');
+        expect(inferWasteMatrixFromComponents([water, acetone])).toBe('organic_non_halogenated');
         expect(inferWasteMatrixFromComponents([solid, acetone])).toBeNull();
     });
 
@@ -461,6 +499,234 @@ describe('analyzeWasteBatch', () => {
         expect(decision.hazardFlags).toContain('CMR');
     });
 
+    it('routes a mixed phase only when exact allowlisted solvent CAS evidence exists', () => {
+        const water = analysis('Water', 'H2O', 'NEUTRAL');
+        const acetone = analysis('Acetone', 'C3H6O', 'ORGANIC_NON_HALOGEN', {
+            hCodes: ['H225'],
+            isOrganic: true,
+        });
+        acetone.chemical.casNumber = '67-64-1';
+        const acetoneBatch = batch([water, acetone], 'mixed_biphasic');
+        acetoneBatch.additionalComponentsStatus = 'none';
+
+        const nonHalogenated = analyzeWasteBatch(acetoneBatch);
+        expect(nonHalogenated).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ORGANIC_NON_HALOGENATED',
+            routingBasis: 'matrix',
+        });
+        expect(nonHalogenated.missingFields).not.toContain('additional_components');
+
+        acetoneBatch.components[1].identityConfidence = 'review_required';
+        expect(analyzeWasteBatch(acetoneBatch)).toMatchObject({
+            decisionStatus: 'needs_input',
+            streamCode: 'SPECIAL_REVIEW',
+            routingBasis: 'unresolved',
+        });
+        acetoneBatch.components[1].identityConfidence = 'verified';
+
+        const dcm = analysis('Dichloromethane', 'CH2Cl2', 'ORGANIC_HALOGEN', {
+            hCodes: ['H351'],
+            isOrganic: true,
+            isHalogenated: true,
+        });
+        dcm.chemical.casNumber = '75-09-2';
+        const dcmBatch = batch([water, dcm], 'mixed_biphasic');
+        dcmBatch.additionalComponentsStatus = 'none';
+
+        const halogenated = analyzeWasteBatch(dcmBatch);
+        expect(halogenated).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ORGANIC_HALOGENATED',
+            routingBasis: 'matrix',
+        });
+        expect(halogenated.missingFields).not.toContain('additional_components');
+    });
+
+    it('keeps the full verified solvent dictionary aligned with matrix inference', () => {
+        const heptane = createWasteComponentFromAnalysis(
+            analysis('Heptane', 'C7H16', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
+        );
+        heptane.chemical.casNumber = '142-82-5';
+        expect(inferWasteMatrixFromComponent(heptane)).toBe('organic_non_halogenated');
+
+        const chlorobenzene = createWasteComponentFromAnalysis(
+            analysis('Chlorobenzene', 'C6H5Cl', 'ORGANIC_HALOGEN', {
+                isOrganic: true,
+                isHalogenated: true,
+            }),
+        );
+        chlorobenzene.chemical.casNumber = '108-90-7';
+        expect(inferWasteMatrixFromComponent(chlorobenzene)).toBe('organic_halogenated');
+    });
+
+    it('preserves the conservative halogen category override outside mixed-phase routing', () => {
+        const halogenatedOrganic = analysis(
+            'Unlisted halogenated organic',
+            'C6H5Cl',
+            'ORGANIC_HALOGEN',
+            { isOrganic: true, isHalogenated: true },
+        );
+        halogenatedOrganic.chemical.casNumber = '118-74-1';
+
+        expect(analyzeWasteBatch(batch([halogenatedOrganic], 'aqueous'))).toMatchObject({
+            streamCode: 'ORGANIC_HALOGENATED',
+            routingBasis: 'matrix',
+        });
+    });
+
+    it('accepts only an explicitly verified, allowlisted solution context as solvent evidence', () => {
+        const genericSolvent = analysis(
+            'Locally verified solvent',
+            'C4H10O',
+            'ORGANIC_NON_HALOGEN',
+            { isOrganic: true },
+        );
+        genericSolvent.chemical.casNumber = '56-81-5';
+        const draft = batch([analysis('Water', 'H2O', 'NEUTRAL'), genericSolvent], 'mixed_biphasic');
+        draft.components[1].solutionContext = {
+            physicalForm: 'organic_solvent',
+            solventClass: 'organic_non_halogen',
+            isSolventVerified: true,
+            solventCasNumber: '67-64-1',
+        };
+        draft.additionalComponentsStatus = 'none';
+
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ORGANIC_NON_HALOGENATED',
+            routingBasis: 'matrix',
+        });
+
+        draft.components[1].solutionContext = {
+            physicalForm: 'organic_solvent',
+            solventClass: 'organic_non_halogen',
+            isSolventVerified: true,
+            solventCasNumber: '56-81-5',
+        };
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'needs_input',
+            streamCode: 'SPECIAL_REVIEW',
+            routingBasis: 'unresolved',
+        });
+
+        draft.components[1].solutionContext = {
+            physicalForm: 'aqueous',
+            solventClass: 'organic_non_halogen',
+            isSolventVerified: true,
+            solventCasNumber: '67-64-1',
+        };
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'needs_input',
+            streamCode: 'SPECIAL_REVIEW',
+            routingBasis: 'unresolved',
+        });
+    });
+
+    it('lets verified halogenated carrier evidence override a non-halogenated solute CAS', () => {
+        const acetone = analysis('Acetone in DCM', 'C3H6O', 'ORGANIC_NON_HALOGEN', {
+            isOrganic: true,
+        });
+        acetone.chemical.casNumber = '67-64-1';
+        const draft = batch([analysis('Water', 'H2O', 'NEUTRAL'), acetone], 'mixed_biphasic');
+        draft.components[1].solutionContext = {
+            physicalForm: 'organic_solvent',
+            solventClass: 'organic_halogen',
+            isSolventVerified: true,
+            solventResolution: 'local_dictionary',
+            solventCasNumber: '75-09-2',
+        };
+        draft.additionalComponentsStatus = 'none';
+
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ORGANIC_HALOGENATED',
+            routingBasis: 'matrix',
+        });
+    });
+
+    it('upgrades a verified non-halogenated mixed phase when halogenated organic content is present', () => {
+        const acetone = analysis('Acetone', 'C3H6O', 'ORGANIC_NON_HALOGEN', {
+            isOrganic: true,
+        });
+        acetone.chemical.casNumber = '67-64-1';
+        const halogenatedSolute = analysis(
+            'Hexachlorobenzene',
+            'C6Cl6',
+            'NEUTRAL',
+            { isOrganic: true, isHalogenated: true },
+        );
+        halogenatedSolute.chemical.casNumber = '118-74-1';
+        const draft = batch([
+            analysis('Water', 'H2O', 'NEUTRAL'),
+            acetone,
+            halogenatedSolute,
+        ], 'mixed_biphasic');
+        draft.additionalComponentsStatus = 'none';
+
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ORGANIC_HALOGENATED',
+            routingBasis: 'matrix',
+        });
+    });
+
+    it('does not treat acetic acid, sodium acetate, or generic organic categories as a solvent phase', () => {
+        const aceticAcid = analysis('Acetic acid', 'CH3COOH', 'ACID');
+        aceticAcid.chemical.casNumber = '64-19-7';
+        const sodiumAcetate = analysis(
+            'Sodium acetate',
+            'CH3COONa',
+            'ORGANIC_NON_HALOGEN',
+            { isOrganic: true },
+        );
+        sodiumAcetate.chemical.casNumber = '127-09-3';
+        const acetateBuffer = batch([aceticAcid, sodiumAcetate], 'mixed_biphasic');
+        acetateBuffer.additionalComponentsStatus = 'none';
+
+        const bufferDecision = analyzeWasteBatch(acetateBuffer);
+        expect(bufferDecision).toMatchObject({
+            decisionStatus: 'needs_input',
+            streamCode: 'SPECIAL_REVIEW',
+            routingBasis: 'unresolved',
+        });
+        expect(bufferDecision.missingFields).toContain('additional_components');
+
+        for (const genericCategory of ['ORGANIC_NON_HALOGEN', 'ORGANIC_HALOGEN'] as const) {
+            const generic = analysis(
+                `Generic ${genericCategory}`,
+                genericCategory === 'ORGANIC_HALOGEN' ? 'C6H5Cl' : 'C6H12O6',
+                genericCategory,
+                { isOrganic: true, isHalogenated: genericCategory === 'ORGANIC_HALOGEN' },
+            );
+            generic.chemical.casNumber = genericCategory === 'ORGANIC_HALOGEN' ? '118-74-1' : '50-99-7';
+            const draft = batch([analysis('Water', 'H2O', 'NEUTRAL'), generic], 'mixed_biphasic');
+            draft.additionalComponentsStatus = 'none';
+
+            const decision = analyzeWasteBatch(draft);
+            expect(decision).toMatchObject({
+                decisionStatus: 'needs_input',
+                streamCode: 'SPECIAL_REVIEW',
+                routingBasis: 'unresolved',
+            });
+            expect(decision.missingFields).toContain('additional_components');
+        }
+    });
+
+    it('fails closed instead of crashing on a malformed external molecular formula', () => {
+        const malformed = analysis('Malformed external record', 'C)Cl', 'NEUTRAL');
+        malformed.chemical.casNumber = '50-99-7';
+        const draft = batch([malformed], 'mixed_biphasic');
+        draft.additionalComponentsStatus = 'none';
+
+        expect(() => analyzeWasteBatch(draft)).not.toThrow();
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'needs_input',
+            streamCode: 'SPECIAL_REVIEW',
+            routingBasis: 'unresolved',
+        });
+    });
+
     it('does not let an organic matrix downgrade heavy-metal waste', () => {
         const decision = analyzeWasteBatch(batch([
             analysis('Copper sulfate', 'CuSO4', 'HEAVY_METAL'),
@@ -468,6 +734,27 @@ describe('analyzeWasteBatch', () => {
 
         expect(decision.streamCode).toBe('HEAVY_METAL');
         expect(decision.hazardFlags).toContain('HEAVY_METAL');
+    });
+
+    it('derives multi-hazard flags independently from the legacy category', () => {
+        const analyzed = analyzeChemical({
+            id: 'silver-nitrate',
+            name: 'Silver nitrate',
+            casNumber: '7761-88-8',
+            molecularFormula: 'AgNO3',
+            ghs: { signal: 'Danger', hazardStatements: ['H272'] },
+        });
+
+        expect(analyzed.category).toBe('REACTIVE');
+        expect(deriveWasteHazardFlags({ ...analyzed, category: 'NEUTRAL' })).toEqual(
+            expect.arrayContaining(['HEAVY_METAL', 'OXIDIZER', 'REACTIVE']),
+        );
+
+        const legacyResult = { ...analyzed };
+        delete legacyResult.hazardProfile;
+        expect(deriveWasteHazardFlags(legacyResult)).toEqual(
+            expect.arrayContaining(['HEAVY_METAL', 'OXIDIZER', 'REACTIVE']),
+        );
     });
 
     it('blocks oxidizer + flammable instead of merely recommending an organic bin', () => {
@@ -497,7 +784,7 @@ describe('analyzeWasteBatch', () => {
         ]));
     });
 
-    it('keeps an unknown extra component as missing when it changes mixed-phase classification', () => {
+    it('keeps a mixed-phase composition contradiction missing even after an explicit none answer', () => {
         const draft = batch([
             analysis('Known aqueous component', 'H2O', 'NEUTRAL'),
         ], 'mixed_biphasic');
@@ -509,7 +796,10 @@ describe('analyzeWasteBatch', () => {
         expect(decision.missingFields).toContain('additional_components');
 
         draft.additionalComponentsStatus = 'none';
-        expect(analyzeWasteBatch(draft).missingFields).not.toContain('additional_components');
+        const contradicted = analyzeWasteBatch(draft);
+        expect(contradicted.decisionStatus).toBe('needs_input');
+        expect(contradicted.streamCode).toBe('SPECIAL_REVIEW');
+        expect(contradicted.missingFields).toContain('additional_components');
     });
 
     it('keeps an explicitly present but not-yet-added component pending for every matrix', () => {
@@ -558,6 +848,28 @@ describe('waste amount validation', () => {
             normalizedValue: 2_500,
             normalizedUnit: 'mg',
         });
+    });
+
+    it('derives an approximate total only when every component solution volume is valid', () => {
+        const first = createWasteComponentFromAnalysis(analysis('Water', 'H2O', 'NEUTRAL'));
+        const second = createWasteComponentFromAnalysis(analysis('Buffer', 'C2H4O2', 'ACID'));
+        first.solutionVolume = { value: 100, unit: 'mL', normalizedMl: 100 };
+        second.solutionVolume = { value: 0.1, unit: 'L', normalizedMl: 100 };
+
+        expect(deriveWasteAmountFromComponentVolumes([first, second])).toEqual({
+            value: 200,
+            unit: 'mL',
+            normalizedValue: 200,
+            normalizedUnit: 'mL',
+            isApproximate: true,
+            isUnknown: false,
+            source: 'component_sum',
+        });
+
+        second.solutionVolume = undefined;
+        expect(deriveWasteAmountFromComponentVolumes([first, second])).toBeNull();
+        second.solutionVolume = { value: 100, unit: 'mL', normalizedMl: 99 };
+        expect(deriveWasteAmountFromComponentVolumes([first, second])).toBeNull();
     });
 
     it('uses mL/L for liquid matrices and mg/g for solid or slurry', () => {

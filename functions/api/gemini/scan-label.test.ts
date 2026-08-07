@@ -58,6 +58,34 @@ describe('reagent label scan validation', () => {
     ]))
   })
 
+  it('validates grouped and multiplicative capacities without accepting negatives', () => {
+    const valid = buildReagentLabelScanResponse({
+      fields: createConfidentFields({
+        capacity: { value: '2 x 500 mL', confidence: 0.99 },
+        expiryDate: { value: '2026/08/07', confidence: 0.99 },
+      }),
+    })
+    const grouped = buildReagentLabelScanResponse({
+      fields: createConfidentFields({
+        capacity: { value: '1,000 mL', confidence: 0.99 },
+      }),
+    })
+    const negative = buildReagentLabelScanResponse({
+      fields: createConfidentFields({
+        capacity: { value: '-500 mL', confidence: 0.99 },
+      }),
+    })
+
+    expect(valid.fieldSnapshots.capacity.validation).toBe('valid')
+    expect(valid.fieldSnapshots.expiryDate).toMatchObject({
+      value: '2026-08-07',
+      validation: 'valid',
+    })
+    expect(grouped.fieldSnapshots.capacity.validation).toBe('valid')
+    expect(negative.fieldSnapshots.capacity.validation).toBe('invalid')
+    expect(negative.capacity).toBeUndefined()
+  })
+
   it('does not default an unknown or legacy container code to A', () => {
     const unknown = buildReagentLabelScanResponse({
       fields: createConfidentFields({

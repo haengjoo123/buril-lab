@@ -11,8 +11,8 @@
  */
 
 import type { InventoryItem } from '../services/inventoryService';
-import { classifyStorageGroups, type StorageGroup } from './storageCompatibilityChecker';
-import type { ReagentPlacement } from '../types/fridge';
+import { classifyStoragePlacement, type StorageGroup } from './storageCompatibilityChecker';
+import type { ReagentGhsStatus, ReagentPlacement, StorageClassificationConfidence } from '../types/fridge';
 
 /**
  * High-risk storage groups that indicate significant hazard.
@@ -42,6 +42,8 @@ export type InventoryHazardFilterCategory =
 export interface HazardClassification {
     level: HazardLevel;
     groups: StorageGroup[];
+    confidence: StorageClassificationConfidence;
+    needsReview: boolean;
     filterCategories: InventoryHazardFilterCategory[];
     /** Translation keys for group labels */
     groupLabelKeys: string[];
@@ -49,6 +51,9 @@ export interface HazardClassification {
 
 export interface InventoryHazardClassificationOptions {
     hCodes?: string[];
+    ghsStatus?: ReagentGhsStatus;
+    /** Risk dashboards may surface name candidates as review signals. */
+    allowNameCandidates?: boolean;
 }
 
 /**
@@ -59,7 +64,9 @@ export function classifyInventoryHazard(
     item: InventoryItem,
     options: InventoryHazardClassificationOptions = {},
 ): HazardClassification {
-    // Create a minimal adapter compatible with classifyStorageGroups
+    // Create a minimal adapter compatible with the authoritative storage
+    // classifier. Name matches remain review candidates and do not become
+    // high-risk inventory categories by themselves.
     const pseudoPlacement: ReagentPlacement = {
         id: item.id,
         reagentId: item.id,
@@ -71,6 +78,7 @@ export function classifyInventoryHazard(
         isAcidic: false,
         isBasic: false,
         hCodes: options.hCodes || [],
+        ghsStatus: options.ghsStatus,
         notes: item.memo || '',
         casNo: item.cas_number || '',
         capacity: item.capacity || '',
@@ -78,7 +86,10 @@ export function classifyInventoryHazard(
         productNumber: item.product_number || '',
     };
 
-    const groups = classifyStorageGroups(pseudoPlacement);
+    const classification = classifyStoragePlacement(pseudoPlacement);
+    const groups = options.allowNameCandidates
+        ? [...new Set([...classification.groups, ...classification.candidateGroups])]
+        : classification.groups;
     const hazardousGroups = groups.filter(g => HIGH_RISK_GROUPS.includes(g));
     const hCodes = new Set(options.hCodes || []);
     const filterCategories = new Set<InventoryHazardFilterCategory>();
@@ -120,6 +131,8 @@ export function classifyInventoryHazard(
     return {
         level: hazardousGroups.length > 0 ? 'high' : 'none',
         groups: groups.filter((group) => group !== 'GENERAL' && group !== 'ORGANIC_SOLVENT'),
+        confidence: classification.confidence,
+        needsReview: classification.needsReview,
         filterCategories: [...filterCategories],
         groupLabelKeys: groups.map(g => LABEL_KEYS[g] || '').filter(Boolean),
     };

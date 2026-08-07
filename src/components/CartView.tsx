@@ -18,7 +18,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import { MAX_PARKED_WASTE_BATCHES, useWasteStore } from '../store/useWasteStore';
 import { useLabStore } from '../store/useLabStore';
-import { getAllowedAmountUnits, getWasteAcidBasePresence } from '../utils/wasteBatch';
+import {
+    deriveWasteAmountFromComponentVolumes,
+    getAllowedAmountUnits,
+    getWasteAcidBasePresence,
+} from '../utils/wasteBatch';
 import {
     getWastePolicyEscalationDetails,
     hasWastePolicyContextChanged,
@@ -30,13 +34,42 @@ import { getAIDisposalGuide, type DisposalGuideResult } from '../services/gemini
 import { getActiveWastePolicyV2, type ActiveWastePolicy } from '../services/wastePolicyService';
 import { recordWasteHandlingV2, type WasteHandlingReceipt } from '../services/wasteLogService';
 import { translateGHS } from '../data/ghsCodes';
+import { isPhPredictionEnabled } from '../config/featureFlags';
+import { hashPredictionInput, predictAqueousPh } from '../features/phPrediction';
+import {
+    createUserSolutionContext,
+    getNextWizardStep,
+    getPreviousWizardStep,
+    getSolutionQuestionComponents,
+    getWizardEntryStep,
+    isSolutionContextAnswered,
+    resolveWasteBatchWizard,
+    WASTE_BATCH_WIZARD_STEPS,
+    type WasteBatchWizardStep,
+} from '../utils/wasteBatchWizard';
+import {
+    REPRESENTATIVE_SOLVENT_PRESETS,
+    resolveCustomOrganicSolvent,
+    resolveLocalOrganicSolvent,
+    type CustomSolventResolution,
+} from '../utils/solventClassifier';
+import {
+    canDisplayPhPredictionNumber,
+    createPhPredictionAuditSnapshot,
+    getApprovedPhCatalogOptions,
+    shouldAskPhPredictionCompleteness,
+    shouldShowPhPredictionMatrixNotice,
+} from './cartPhPredictionUi';
 import type {
     AmountUnit,
     ConcentrationUnit,
     HandlingAction,
+    PhPredictionResult,
+    WasteConcentrationBasis,
     WasteMatrix,
     WasteHazardFlag,
     WasteMissingField,
+    WasteSolutionVolumeUnit,
     WasteStreamCode,
 } from '../types';
 
@@ -51,12 +84,13 @@ const MATRIX_OPTIONS: WasteMatrix[] = [
     'aqueous',
     'organic_non_halogenated',
     'organic_halogenated',
-    'mixed_biphasic',
     'solid_slurry',
     'unknown',
 ];
 
 const CONCENTRATION_UNITS: ConcentrationUnit[] = ['M', 'mM', '%', 'mg/mL'];
+const SOLUTION_VOLUME_UNITS: WasteSolutionVolumeUnit[] = ['uL', 'mL', 'L'];
+const CONCENTRATION_BASES: WasteConcentrationBasis[] = ['w_w', 'w_v', 'v_v'];
 
 const MANUAL_HAZARD_OPTIONS: WasteHazardFlag[] = [
     'FLAMMABLE',
@@ -132,6 +166,12 @@ const isInvalidConcentrationText = (rawValue: string | undefined): boolean => {
     return !Number.isFinite(value) || value <= 0;
 };
 
+const normalizeSolutionVolumeMl = (value: number, unit: WasteSolutionVolumeUnit): number => {
+    if (unit === 'L') return value * 1_000;
+    if (unit === 'uL') return value / 1_000;
+    return value;
+};
+
 const normalizePolicyPhrase = (value: string): string =>
     value.toLocaleLowerCase().replace(/[\s·•:：,./()_-]/g, '');
 
@@ -156,14 +196,6 @@ const STANDARD_LABEL_REQUIREMENTS = new Set([
 const isStandardLabelRequirement = (value: string): boolean =>
     STANDARD_LABEL_REQUIREMENTS.has(normalizePolicyPhrase(value));
 
-const repeatsNoNeutralizeDrainWarning = (value: string): boolean => {
-    const normalized = normalizePolicyPhrase(value);
-    const mentionsNeutralizing = normalized.includes('중화') || normalized.includes('neutraliz');
-    const mentionsDrainDisposal = ['배수구', '하수', '배출', '버리', 'drain', 'sewer']
-        .some((keyword) => normalized.includes(keyword));
-    return mentionsNeutralizing && mentionsDrainDisposal;
-};
-
 const splitHazardLabel = (value: string): { code: string | null; description: string } => {
     const match = /^(H\d{3})\s*:\s*(.+)$/i.exec(value.trim());
     return match
@@ -180,6 +212,20 @@ const focusableSelector = [
     '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+const WIZARD_STEP_NUMBER: Record<WasteBatchWizardStep, number> = {
+    components: 1,
+    amounts: 2,
+    solution: 3,
+    batch: 4,
+    result: 5,
+};
+
+interface SolventClassConflict {
+    cartLineId: string;
+    requestedClass: 'organic_non_halogen' | 'organic_halogen';
+    resolution: CustomSolventResolution;
+}
+
 export const CartView: React.FC<CartViewProps> = ({
     onClose,
     onDisposed,
@@ -188,6 +234,9 @@ export const CartView: React.FC<CartViewProps> = ({
 }) => {
     const { t, i18n } = useTranslation();
     const currentLabId = useLabStore((state) => state.currentLabId);
+    const currentLabName = useLabStore((state) =>
+        state.myLabs.find((membership) => membership.lab_id === state.currentLabId)?.lab?.name
+    );
     const {
         batch,
         removeFromCart,
@@ -195,7 +244,7 @@ export const CartView: React.FC<CartViewProps> = ({
         setMatrix,
         setTotalAmount,
         setMeasuredPh,
-        setMixingState,
+        confirmSingleContainer,
         setAdditionalComponentsStatus,
         setFluorideContainerStatus,
         parkedBatches,
@@ -214,9 +263,15 @@ export const CartView: React.FC<CartViewProps> = ({
     const requestIdRef = useRef<string | null>(null);
     const requestFingerprintRef = useRef<string | null>(null);
     const aiRequestSequenceRef = useRef(0);
+    const wizardScrollRef = useRef<HTMLElement>(null);
+    const wizardTitleRef = useRef<HTMLHeadingElement>(null);
     const [editingLineId, setEditingLineId] = useState<string | null>(null);
+    const [isMatrixEditing, setIsMatrixEditing] = useState(false);
     const [concentrationInputs, setConcentrationInputs] = useState<Record<string, string>>({});
     const [concentrationUnits, setConcentrationUnits] = useState<Record<string, ConcentrationUnit>>({});
+    const [solutionVolumeInputs, setSolutionVolumeInputs] = useState<Record<string, string>>({});
+    const [solutionVolumeUnits, setSolutionVolumeUnits] = useState<Record<string, WasteSolutionVolumeUnit>>({});
+    const [densityInputs, setDensityInputs] = useState<Record<string, string>>({});
     const [memo, setMemo] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
@@ -229,6 +284,16 @@ export const CartView: React.FC<CartViewProps> = ({
     const [aiError, setAiError] = useState(false);
     const [batchMessage, setBatchMessage] = useState<string | null>(null);
     const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+    const [activeStep, setActiveStep] = useState<WasteBatchWizardStep>(() =>
+        getWizardEntryStep(batch)
+    );
+    const [solutionQuestionIndex, setSolutionQuestionIndex] = useState(0);
+    const [amountQuestionIndex, setAmountQuestionIndex] = useState(0);
+    const [showAiDetail, setShowAiDetail] = useState(false);
+    const [solventSearchInputs, setSolventSearchInputs] = useState<Record<string, string>>({});
+    const [solventSearchLoading, setSolventSearchLoading] = useState(false);
+    const [solventSearchError, setSolventSearchError] = useState<string | null>(null);
+    const [solventClassConflict, setSolventClassConflict] = useState<SolventClassConflict | null>(null);
 
     const activeBatchHasContent = batch.components.length > 0
         || batch.matrix !== 'unknown'
@@ -279,12 +344,24 @@ export const CartView: React.FC<CartViewProps> = ({
         [batch.components, batch.matrix],
     );
     const allowedUnits = getAllowedAmountUnits(batch.matrix);
+    const componentVolumeTotal = useMemo(
+        () => batch.matrix !== 'unknown' && batch.matrix !== 'solid_slurry'
+            ? deriveWasteAmountFromComponentVolumes(batch.components)
+            : null,
+        [batch.components, batch.matrix],
+    );
+    const hasComponentVolumeTotal = componentVolumeTotal !== null;
+    const hasManualTotalOverride = hasComponentVolumeTotal && batch.totalAmount.source === 'manual';
     const amountValueInvalid = batch.totalAmount.value !== null && (
         !Number.isFinite(batch.totalAmount.value) || batch.totalAmount.value <= 0
     );
     const hasInvalidConcentration = batch.components.some((component) =>
         isInvalidConcentrationText(concentrationInputs[component.cartLineId])
     );
+    const hasInvalidSolutionVolume = batch.components.some((component) =>
+        isInvalidConcentrationText(solutionVolumeInputs[component.cartLineId])
+    );
+    const hasInvalidNumericInput = hasInvalidConcentration || hasInvalidSolutionVolume;
     const requestClose = useCallback(() => {
         if (hasInvalidConcentration && !window.confirm(t('waste_discard_invalid_concentration_confirm'))) return;
         onClose();
@@ -300,27 +377,28 @@ export const CartView: React.FC<CartViewProps> = ({
             if (!snapshot?.nominalCapacity) continue;
             const parsed = parseCapacityMeasurement(snapshot.nominalCapacity);
             if (parsed.numericValue === null || !parsed.unit) continue;
-            const availableQuantity = snapshot.quantity && snapshot.quantity > 0 ? snapshot.quantity : 1;
+            const availableQuantity = snapshot.quantity == null
+                ? 1
+                : Number.isFinite(snapshot.quantity) && snapshot.quantity > 0
+                    ? snapshot.quantity
+                    : null;
             const quantity = component.sourceType === 'inventory' && component.inventoryId
                 ? component.inventoryDisposalQuantity
                 : availableQuantity;
-            if (!quantity) continue;
-            const remainingRatio = snapshot.remainingPercent !== null && snapshot.remainingPercent !== undefined
-                ? Math.min(100, Math.max(0, snapshot.remainingPercent)) / 100
-                : 1;
-            const value = parsed.numericValue * quantity * remainingRatio;
-            const volumeMl = parsed.unit === 'L' ? value * 1_000
-                : parsed.unit === 'mL' ? value
-                    : parsed.unit === 'uL' ? value / 1_000
-                        : null;
-            const massMg = parsed.unit === 'kg' ? value * 1_000_000
-                : parsed.unit === 'g' ? value * 1_000
-                    : parsed.unit === 'mg' ? value
-                        : parsed.unit === 'ug' ? value / 1_000
-                            : null;
-            const normalized = expectedDimension === 'volume' ? volumeMl : massMg;
+            if (quantity == null || !Number.isFinite(quantity) || quantity <= 0) continue;
+            const remainingRatio = snapshot.remainingPercent == null
+                ? 1
+                : Number.isFinite(snapshot.remainingPercent)
+                    && snapshot.remainingPercent >= 0
+                    && snapshot.remainingPercent <= 100
+                    ? snapshot.remainingPercent / 100
+                    : null;
+            if (remainingRatio === null) continue;
+            const normalized = expectedDimension === 'volume' ? parsed.volumeMl : parsed.massMg;
             if (normalized === null) continue;
-            normalizedTotal += normalized;
+            const adjusted = normalized * quantity * remainingRatio;
+            if (!Number.isFinite(adjusted) || adjusted <= 0) continue;
+            normalizedTotal += adjusted;
             found = true;
         }
         if (!found || normalizedTotal <= 0) return null;
@@ -337,8 +415,36 @@ export const CartView: React.FC<CartViewProps> = ({
     const requiresMixingState = acidBasePresence.hasAcid && acidBasePresence.hasAlkali;
     const needsMeasuredPh = requiresMixingState && batch.matrix === 'aqueous' &&
         batch.mixingState === 'already_mixed';
+    const shouldShowPhPrediction = isPhPredictionEnabled && batch.matrix === 'aqueous' &&
+        batch.components.length > 0 && batch.mixingState === 'already_mixed';
+    const shouldShowPhPredictionMatrixUnavailable = shouldShowPhPredictionMatrixNotice(
+        isPhPredictionEnabled,
+        batch.matrix,
+        batch.components.length,
+    );
+    const phPrediction = useMemo<PhPredictionResult | null>(() => {
+        if (!shouldShowPhPrediction) return null;
+        try {
+            return predictAqueousPh(batch);
+        } catch {
+            return {
+                status: 'failed',
+                confidence: 'unavailable',
+                issueCodes: ['engine_error'],
+                assumptions: [],
+                modelVersion: 'unknown',
+                catalogVersion: 'unknown',
+                inputHash: hashPredictionInput(batch),
+            };
+        }
+    }, [batch, shouldShowPhPrediction]);
     const shouldAskAdditionalComponents = batch.matrix === 'mixed_biphasic' ||
-        batch.matrix === 'unknown' || batch.components.length > 1;
+        batch.matrix === 'unknown' || batch.components.length > 1 ||
+        shouldAskPhPredictionCompleteness(
+            isPhPredictionEnabled,
+            batch.matrix,
+            batch.components.length,
+        );
     const requiresFluorideCompatibleContainer =
         decision.hazardFlags.includes('HYDROFLUORIC_ACID') ||
         decision.hazardFlags.includes('FLUORIDE');
@@ -377,8 +483,6 @@ export const CartView: React.FC<CartViewProps> = ({
             : t('waste_label_value_not_entered');
     const additionalLabelRequirements = (matchedStream?.labelRequirements ?? [])
         .filter((requirement) => !isStandardLabelRequirement(requirement));
-    const hasEquivalentNoNeutralizeDrainWarning = (matchedStream?.prohibitions ?? [])
-        .some(repeatsNoNeutralizeDrainWarning);
     const receiptStreamName = receipt
         ? receipt.streamSnapshot.containerLabel
             || (isKorean ? receipt.streamSnapshot.displayNameKo : receipt.streamSnapshot.displayNameEn)
@@ -400,15 +504,49 @@ export const CartView: React.FC<CartViewProps> = ({
         compatibilityWarnings,
         matchedStream,
     }), [batch, compatibilityWarnings, decision, i18n.language, matchedStream]);
+    const wizard = useMemo(() => resolveWasteBatchWizard(batch), [batch]);
+    const solutionQuestionComponents = useMemo(
+        () => getSolutionQuestionComponents(batch.components),
+        [batch.components],
+    );
+    const safeSolutionQuestionIndex = solutionQuestionComponents.length === 0
+        ? 0
+        : Math.min(solutionQuestionIndex, solutionQuestionComponents.length - 1);
+    const activeSolutionComponent = solutionQuestionComponents[safeSolutionQuestionIndex];
+    const safeAmountQuestionIndex = batch.components.length === 0
+        ? 0
+        : Math.min(amountQuestionIndex, batch.components.length - 1);
+    const activeAmountComponent = batch.components[safeAmountQuestionIndex];
 
     useEffect(() => {
+        const currentBatch = useWasteStore.getState().batch;
         setEditingLineId(null);
+        setIsMatrixEditing(false);
         setConcentrationInputs({});
         setConcentrationUnits({});
+        setSolutionVolumeInputs({});
+        setSolutionVolumeUnits({});
+        setDensityInputs({});
         setMemo('');
         requestIdRef.current = null;
         requestFingerprintRef.current = null;
+        setActiveStep(getWizardEntryStep(currentBatch));
+        const firstUnanswered = getSolutionQuestionComponents(currentBatch.components)
+            .findIndex((component) => !isSolutionContextAnswered(component));
+        setSolutionQuestionIndex(firstUnanswered >= 0 ? firstUnanswered : 0);
+        const firstMissingAmount = currentBatch.components.findIndex((component) =>
+            component.solutionVolume === undefined || component.concentration === undefined);
+        setAmountQuestionIndex(firstMissingAmount >= 0 ? firstMissingAmount : 0);
+        setShowAiDetail(false);
+        setSolventSearchInputs({});
+        setSolventSearchError(null);
+        setSolventClassConflict(null);
     }, [batch.id]);
+
+    useEffect(() => {
+        wizardScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        window.setTimeout(() => wizardTitleRef.current?.focus(), 0);
+    }, [activeStep, safeAmountQuestionIndex, safeSolutionQuestionIndex, showAiDetail]);
 
     useEffect(() => {
         aiRequestSequenceRef.current += 1;
@@ -503,6 +641,7 @@ export const CartView: React.FC<CartViewProps> = ({
             value,
             unit,
             isApproximate: batch.totalAmount.isApproximate,
+            source: 'manual',
         });
     };
 
@@ -511,7 +650,113 @@ export const CartView: React.FC<CartViewProps> = ({
             value: batch.totalAmount.value,
             unit,
             isApproximate: batch.totalAmount.isApproximate,
+            source: 'manual',
         });
+    };
+
+    const selectSolutionClass = (
+        cartLineId: string,
+        solventClass: 'aqueous' | 'organic_non_halogen' | 'organic_halogen' | 'mixed_or_unknown',
+    ) => {
+        updateComponent(cartLineId, { solutionContext: createUserSolutionContext(solventClass) });
+        setSolventSearchError(null);
+        setSolventClassConflict(null);
+    };
+
+    const selectSolventPreset = (
+        cartLineId: string,
+        solventClass: 'organic_non_halogen' | 'organic_halogen',
+        preset: string,
+    ) => {
+        const exact = resolveLocalOrganicSolvent(preset);
+        if (!exact || exact.solventClass !== solventClass) return;
+        updateComponent(cartLineId, {
+            solutionContext: createUserSolutionContext(solventClass, {
+                name: exact.name,
+                casNumber: exact.casNumber,
+                molecularFormula: exact.molecularFormula,
+                preset,
+            }),
+        });
+        setSolventSearchError(null);
+        setSolventClassConflict(null);
+    };
+
+    const searchCustomSolvent = async (
+        componentId: string,
+        requestedClass: 'organic_non_halogen' | 'organic_halogen',
+    ) => {
+        const query = solventSearchInputs[componentId]?.trim() ?? '';
+        if (!query || solventSearchLoading) return;
+        setSolventSearchLoading(true);
+        setSolventSearchError(null);
+        try {
+            const resolution = await resolveCustomOrganicSolvent(query);
+            if (!resolution.isSolventVerified || !resolution.solventName
+                || (resolution.solventClass !== 'organic_non_halogen'
+                    && resolution.solventClass !== 'organic_halogen')) {
+                setSolventSearchError(t('waste_solution_search_unresolved'));
+                return;
+            }
+            if (resolution.solventClass !== requestedClass) {
+                setSolventClassConflict({ cartLineId: componentId, requestedClass, resolution });
+                return;
+            }
+            updateComponent(componentId, {
+                solutionContext: createUserSolutionContext(requestedClass, {
+                    name: resolution.solventName,
+                    casNumber: resolution.solventCasNumber,
+                    molecularFormula: resolution.solventMolecularFormula,
+                }),
+            });
+        } finally {
+            setSolventSearchLoading(false);
+        }
+    };
+
+    const moveWizardBack = () => {
+        if (showAiDetail) {
+            setShowAiDetail(false);
+            return;
+        }
+        if (activeStep === 'solution' && safeSolutionQuestionIndex > 0) {
+            setSolutionQuestionIndex((index) => Math.max(0, index - 1));
+            return;
+        }
+        if (activeStep === 'amounts' && safeAmountQuestionIndex > 0) {
+            setAmountQuestionIndex((index) => Math.max(0, index - 1));
+            return;
+        }
+        setActiveStep(getPreviousWizardStep(activeStep, wizard));
+    };
+
+    const moveWizardNext = () => {
+        if (activeStep === 'components') {
+            if (!wizard.componentStepComplete || hasInvalidNumericInput) return;
+        }
+        if (activeStep === 'amounts') {
+            if (!activeAmountComponent || hasInvalidNumericInput) return;
+            if (safeAmountQuestionIndex < batch.components.length - 1) {
+                setAmountQuestionIndex((index) => index + 1);
+                return;
+            }
+        }
+        if (activeStep === 'solution') {
+            if (!activeSolutionComponent || !isSolutionContextAnswered(activeSolutionComponent)) return;
+            if (safeSolutionQuestionIndex < solutionQuestionComponents.length - 1) {
+                setSolutionQuestionIndex((index) => index + 1);
+                return;
+            }
+            if (!wizard.solutionStepComplete) {
+                const firstUnanswered = solutionQuestionComponents.findIndex(
+                    (component) => !isSolutionContextAnswered(component),
+                );
+                if (firstUnanswered >= 0) setSolutionQuestionIndex(firstUnanswered);
+                return;
+            }
+        }
+        if (activeStep === 'batch' && !wizard.batchStepComplete) return;
+        setActiveStep(getNextWizardStep(activeStep, wizard));
     };
 
     const requestAIGuide = async () => {
@@ -530,6 +775,9 @@ export const CartView: React.FC<CartViewProps> = ({
                     category: component.category,
                     hazardFlags: component.hazardFlags,
                     concentration: component.concentration,
+                    solutionVolume: component.solutionVolume,
+                    solutionContext: component.solutionContext,
+                    phCatalogId: component.phCatalogId,
                     ghs: {
                         signalWord: component.chemical.ghs?.signal,
                         hCodes: extractHCodes(component.chemical.ghs?.hazardStatements),
@@ -553,6 +801,18 @@ export const CartView: React.FC<CartViewProps> = ({
                         },
                         measuredBatchPh: batch.measuredBatchPh,
                         mixingState: batch.mixingState,
+                        ...(phPrediction ? {
+                            predictedPh: {
+                                status: phPrediction.status,
+                                value: phPrediction.value,
+                                ionicStrength: phPrediction.ionicStrength,
+                                confidence: phPrediction.confidence,
+                                issueCodes: phPrediction.issueCodes,
+                                modelVersion: phPrediction.modelVersion,
+                                catalogVersion: phPrediction.catalogVersion,
+                                inputHash: phPrediction.inputHash,
+                            },
+                        } : {}),
                         hazardFlags: decision.hazardFlags,
                         compatibilityWarnings: compatibilityWarnings.map((warning) => ({
                             severity: warning.severity,
@@ -666,6 +926,12 @@ export const CartView: React.FC<CartViewProps> = ({
                 handlingAction,
                 memo,
                 requestId,
+                ...(phPrediction ? {
+                    phPredictionSnapshot: createPhPredictionAuditSnapshot(
+                        phPrediction,
+                        batchSnapshot.updatedAt,
+                    ),
+                } : {}),
                 confirmationSnapshot: {
                     mixingState: batchSnapshot.mixingState,
                     ...(batchSnapshot.mixingState === 'unknown'
@@ -703,6 +969,52 @@ export const CartView: React.FC<CartViewProps> = ({
                 classes: 'border-orange-200 bg-orange-50 text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100',
                 icon: <Info className="h-5 w-5 text-orange-600" aria-hidden="true" />,
             };
+
+    const phPredictionSummary = (phPrediction || shouldShowPhPredictionMatrixUnavailable) ? (
+        <div
+            className="rounded-xl border border-cyan-200 bg-cyan-50/85 p-2.5 text-cyan-950 dark:border-cyan-900/70 dark:bg-cyan-950/35 dark:text-cyan-100 lg:p-3"
+            aria-label={t('waste_ph_prediction_title')}
+        >
+            <div className="min-w-0">
+                    {phPrediction && canDisplayPhPredictionNumber(phPrediction) ? (
+                        <>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-lg font-black">
+                                    {t('waste_ph_prediction_value', {
+                                        value: (phPrediction.displayValue ?? phPrediction.value)?.toFixed(1),
+                                    })}
+                                </p>
+                                <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[11px] font-bold text-cyan-800 dark:bg-cyan-900/70 dark:text-cyan-100">
+                                    {t(`waste_ph_prediction_confidence_${phPrediction.confidence}` as never)}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-xs font-semibold leading-5">
+                                {t('waste_ph_prediction_safety')}
+                            </p>
+                        </>
+                    ) : phPrediction ? (
+                        <p className="text-xs font-semibold leading-5">
+                            {phPrediction.issueCodes[0]
+                                ? t(`waste_ph_prediction_issue_${phPrediction.issueCodes[0]}` as never, {
+                                    defaultValue: t('waste_ph_prediction_no_detail'),
+                                })
+                                : t(`waste_ph_prediction_status_${phPrediction.status}` as never, {
+                                    defaultValue: t('waste_ph_prediction_no_detail'),
+                                })}
+                        </p>
+                    ) : (
+                        <>
+                            <p className="text-xs font-semibold leading-5">
+                                {t('waste_ph_prediction_issue_matrix_not_aqueous')}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 opacity-75">
+                                {t('waste_ph_prediction_matrix_notice_help')}
+                            </p>
+                        </>
+                    )}
+            </div>
+        </div>
+    ) : null;
 
     if (receipt) {
         return (
@@ -794,15 +1106,17 @@ export const CartView: React.FC<CartViewProps> = ({
                 aria-modal="true"
                 aria-labelledby="waste-batch-title"
                 tabIndex={-1}
-                className="relative z-10 flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-950 lg:h-full lg:max-h-none lg:w-[min(760px,70vw)] lg:rounded-none lg:border-l lg:border-slate-200 dark:lg:border-slate-800"
+                className="relative z-10 flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-950 lg:h-full lg:max-h-none lg:w-[min(760px,70vw)] lg:rounded-none lg:border-l lg:border-slate-200 dark:lg:border-slate-800"
             >
-                <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] dark:border-slate-800 dark:bg-slate-950">
+                <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] dark:border-slate-800 dark:bg-slate-950 lg:px-4 lg:pb-3 lg:pt-3">
                     <div>
-                        <h2 id="waste-batch-title" className="text-lg font-bold text-slate-950 dark:text-white">
+                        <h2 id="waste-batch-title" className="text-base font-bold text-slate-950 dark:text-white lg:text-lg">
                             {t('cart_title')} <span className="text-blue-600">({batch.components.length})</span>
                         </h2>
                         <p className="mt-0.5 text-xs text-slate-500">
-                            {batch.scopeKey.endsWith(':personal') ? t('lab_personal_space') : t('lab_default_name')}
+                            {batch.scopeKey.endsWith(':personal')
+                                ? t('lab_personal_space')
+                                : currentLabName || t('lab_default_name')}
                         </p>
                     </div>
                     <button
@@ -815,14 +1129,68 @@ export const CartView: React.FC<CartViewProps> = ({
                     </button>
                 </header>
 
-                <main className={`min-h-0 flex-1 space-y-5 overflow-y-auto p-4 lg:p-6 ${
-                    decision.decisionStatus === 'blocked' ? 'pb-60 lg:pb-60' : 'pb-32 lg:pb-32'
-                }`}>
-                    <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-sm leading-relaxed text-blue-950 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100">
-                        {t('waste_batch_description')}
-                    </div>
+                <main
+                    ref={wizardScrollRef}
+                    className={`min-h-0 flex-1 overflow-y-auto bg-slate-100 p-2 dark:bg-slate-900 lg:p-6 ${
+                        activeStep === 'result' && decision.decisionStatus === 'blocked'
+                            ? 'pb-60 lg:pb-60'
+                            : 'pb-24 lg:pb-32'
+                    }`}
+                >
+                    <div className="mx-auto w-full max-w-2xl space-y-4 rounded-xl bg-white p-3 shadow-sm dark:bg-slate-950 lg:space-y-5 lg:rounded-2xl lg:p-6">
+                        <div className="flex items-start justify-between gap-2 lg:gap-3">
+                            <div>
+                                <p className="text-xs font-bold text-blue-600">
+                                    {t('waste_wizard_progress', {
+                                        current: WIZARD_STEP_NUMBER[activeStep],
+                                        total: WASTE_BATCH_WIZARD_STEPS.length,
+                                    })}
+                                </p>
+                                <h3
+                                    ref={wizardTitleRef}
+                                    tabIndex={-1}
+                                    className="mt-0.5 text-lg font-black text-slate-950 outline-none dark:text-white lg:mt-1 lg:text-xl"
+                                >
+                                    {showAiDetail
+                                        ? t('waste_wizard_ai_title')
+                                        : t(`waste_wizard_step_${activeStep}` as never)}
+                                </h3>
+                            </div>
+                            {!showAiDetail && (
+                                <div className="flex gap-1" aria-label={t('waste_wizard_steps')}>
+                                    {WASTE_BATCH_WIZARD_STEPS.map((step) => {
+                                        const current = step === activeStep;
+                                        const completed = wizard.completedSteps.includes(step)
+                                            || step === 'result' && wizard.batchStepComplete;
+                                        const relevant = wizard.relevantSteps.includes(step);
+                                        const prior = WIZARD_STEP_NUMBER[step] < WIZARD_STEP_NUMBER[activeStep];
+                                        return (
+                                            <button
+                                                key={step}
+                                                type="button"
+                                                aria-current={current ? 'step' : undefined}
+                                                aria-label={t(`waste_wizard_step_${step}` as never)}
+                                                disabled={!relevant || (!completed && !current && !prior)}
+                                                onClick={() => {
+                                                    if (completed || current || prior) setActiveStep(step);
+                                                }}
+                                                className={`h-2 w-7 rounded-full lg:h-2.5 lg:w-8 ${current
+                                                    ? 'bg-blue-600'
+                                                    : prior && relevant
+                                                        ? 'bg-blue-300 hover:bg-blue-400'
+                                                        : 'bg-slate-200 dark:bg-slate-700'
+                                                } disabled:cursor-not-allowed`}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
 
+                    {(activeStep === 'components' || activeStep === 'amounts') && !showAiDetail && (
+                        <>
                     <section aria-labelledby="waste-components-title">
+                        {activeStep === 'components' && (
                         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                             <h3 id="waste-components-title" className="font-bold text-slate-900 dark:text-white">
                                 {t('waste_components_title', { defaultValue: '성분' })}
@@ -846,33 +1214,45 @@ export const CartView: React.FC<CartViewProps> = ({
                                 </div>
                             )}
                         </div>
+                        )}
+                        {activeStep === 'amounts' && (
+                            <p className="mb-2 text-xs font-bold text-blue-600">
+                                {t('waste_amount_question_progress', {
+                                    current: safeAmountQuestionIndex + 1,
+                                    total: batch.components.length,
+                                })}
+                            </p>
+                        )}
+                        {activeStep === 'components' && (
                         <div aria-live="polite" className="mb-2 text-sm font-medium text-blue-700 dark:text-blue-300">
                             {batchMessage}
                         </div>
+                        )}
                         {batch.components.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">
                                 {t('cart_empty')}
                             </div>
                         ) : (
                             <div className="space-y-2">
-                                {batch.components.map((component) => (
-                                    <article key={component.cartLineId} className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                                {batch.components
+                                    .filter((component) => activeStep === 'components'
+                                        || component.cartLineId === activeAmountComponent?.cartLineId)
+                                    .map((component) => (
+                                    <article key={component.cartLineId} className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-800 dark:bg-slate-900 lg:rounded-2xl lg:p-3">
                                         <div className="flex items-start gap-3">
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <h4 className="font-semibold text-slate-900 dark:text-white">{component.chemical.name}</h4>
-                                                    {component.identityConfidence === 'verified' && (
+                                                    {component.identityConfidence === 'verified' && component.identityConfirmedByUser && (
                                                         <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                                                            {t(component.identityConfirmedByUser
-                                                                ? 'waste_component_user_verified'
-                                                                : 'waste_component_auto_verified')}
+                                                            {t('waste_component_user_verified')}
                                                         </span>
                                                     )}
                                                 </div>
                                                 <p className="mt-0.5 text-xs text-slate-500">
                                                     {component.chemical.casNumber ? `CAS ${component.chemical.casNumber}` : t(component.label as never)}
                                                 </p>
-                                                {component.inventorySnapshot && (
+                                                {activeStep === 'components' && component.inventorySnapshot && (
                                                     <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                                                         {[
                                                             component.inventorySnapshot.brand,
@@ -885,12 +1265,47 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         ].filter(Boolean).join(' · ')}
                                                     </p>
                                                 )}
-                                                {component.concentration && (
+                                                {activeStep === 'components' && (component.solutionVolume || component.concentration) && (
                                                     <p className="mt-1 text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                        {component.concentration.value} {component.concentration.unit}
+                                                        {[
+                                                            component.solutionVolume
+                                                                ? `${component.solutionVolume.value} ${component.solutionVolume.unit}`
+                                                                : null,
+                                                            component.concentration
+                                                                ? `${component.concentration.value} ${component.concentration.unit}${component.concentration.unit === '%' && component.concentration.basis
+                                                                    ? ` (${component.concentration.basis.replace('_', '/')})`
+                                                                    : ''}`
+                                                                : null,
+                                                        ].filter(Boolean).join(' · ')}
                                                     </p>
                                                 )}
-                                                {component.identityConfidence !== 'verified' && (
+                                                {activeStep === 'components' && isPhPredictionEnabled && (
+                                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                        {t('waste_component_ph_form_summary', {
+                                                            value: component.phCatalogId ?? t('waste_ph_catalog_form_unmatched'),
+                                                        })}
+                                                    </p>
+                                                )}
+                                                {activeStep === 'components' && component.concentration && (
+                                                    <p className={`mt-1 text-xs font-semibold ${isSolutionContextAnswered(component)
+                                                        ? 'text-blue-700 dark:text-blue-300'
+                                                        : 'text-orange-700 dark:text-orange-300'
+                                                    }`}>
+                                                        {isSolutionContextAnswered(component)
+                                                            ? t('waste_component_solution_summary', {
+                                                                value: component.solutionContext?.solventName
+                                                                    ?? t(`waste_solution_${component.solutionContext?.solventClass === 'aqueous'
+                                                                        ? 'water'
+                                                                        : component.solutionContext?.solventClass === 'organic_halogen'
+                                                                            ? 'halogen'
+                                                                            : component.solutionContext?.solventClass === 'organic_non_halogen'
+                                                                                ? 'non_halogen'
+                                                                                : 'unknown'}` as never),
+                                                            })
+                                                            : t('waste_component_solution_unanswered')}
+                                                    </p>
+                                                )}
+                                                {activeStep === 'components' && component.identityConfidence !== 'verified' && (
                                                     <button
                                                         type="button"
                                                         onClick={() => updateComponent(component.cartLineId, {
@@ -902,12 +1317,14 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_confirm_component_identity')}
                                                     </button>
                                                 )}
-                                                {component.ghsDataStatus !== 'verified' && !component.hazardDataConfirmedByUser && (
+                                                {activeStep === 'components' && component.ghsDataStatus !== 'verified' && !component.hazardDataConfirmedByUser && (
                                                     <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
                                                         {t('waste_component_hazard_lookup_failed')}
                                                     </p>
                                                 )}
                                             </div>
+                                            {activeStep === 'components' && (
+                                            <>
                                             <button
                                                 onClick={() => {
                                                     const isClosing = editingLineId === component.cartLineId;
@@ -921,10 +1338,26 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             ...current,
                                                             [component.cartLineId]: component.concentration?.unit ?? 'M',
                                                         }));
+                                                        setSolutionVolumeInputs((current) => ({
+                                                            ...current,
+                                                            [component.cartLineId]: component.solutionVolume?.value.toString() ?? '',
+                                                        }));
+                                                        setSolutionVolumeUnits((current) => ({
+                                                            ...current,
+                                                            [component.cartLineId]: component.solutionVolume?.unit ?? 'mL',
+                                                        }));
+                                                        setDensityInputs((current) => ({
+                                                            ...current,
+                                                            [component.cartLineId]: component.concentration?.density?.value.toString() ?? '',
+                                                        }));
                                                     }
                                                 }}
                                                 aria-label={`${component.chemical.name} ${t('waste_component_edit')}`}
-                                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                                aria-expanded={editingLineId === component.cartLineId}
+                                                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${editingLineId === component.cartLineId
+                                                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-200'
+                                                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                                                }`}
                                             >
                                                 <Edit3 className="h-4 w-4" aria-hidden="true" />
                                             </button>
@@ -935,8 +1368,10 @@ export const CartView: React.FC<CartViewProps> = ({
                                             >
                                                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                                             </button>
+                                            </>
+                                            )}
                                         </div>
-                                        {component.sourceType === 'inventory' && component.inventoryId && (
+                                        {activeStep === 'components' && component.sourceType === 'inventory' && component.inventoryId && (
                                             <label className="mt-3 block rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
                                                 <span className="flex flex-wrap items-center justify-between gap-2">
                                                     <span>{t('waste_inventory_disposal_quantity')}</span>
@@ -968,11 +1403,80 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 />
                                             </label>
                                         )}
-                                        {editingLineId === component.cartLineId && (
+                                        {(activeStep === 'amounts' || editingLineId === component.cartLineId) && (
                                             <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                                                {activeStep === 'amounts' && (
+                                                <>
+                                                <div className="grid grid-cols-[1fr_110px] gap-2">
+                                                    <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                        {t('waste_component_solution_volume')}
+                                                        <input
+                                                            type="number"
+                                                            inputMode="decimal"
+                                                            min="0.000001"
+                                                            step="any"
+                                                            value={solutionVolumeInputs[component.cartLineId] ?? component.solutionVolume?.value ?? ''}
+                                                            aria-invalid={isInvalidConcentrationText(solutionVolumeInputs[component.cartLineId])}
+                                                            aria-describedby={isInvalidConcentrationText(solutionVolumeInputs[component.cartLineId])
+                                                                ? `solution-volume-error-${component.cartLineId}`
+                                                                : undefined}
+                                                            onChange={(event) => {
+                                                                const rawValue = event.target.value;
+                                                                const value = Number(rawValue);
+                                                                const unit = solutionVolumeUnits[component.cartLineId]
+                                                                    ?? component.solutionVolume?.unit
+                                                                    ?? 'mL';
+                                                                setSolutionVolumeInputs((current) => ({
+                                                                    ...current,
+                                                                    [component.cartLineId]: rawValue,
+                                                                }));
+                                                                updateComponent(component.cartLineId, {
+                                                                    solutionVolume: rawValue && Number.isFinite(value) && value > 0
+                                                                        ? {
+                                                                            value,
+                                                                            unit,
+                                                                            normalizedMl: normalizeSolutionVolumeMl(value, unit),
+                                                                        }
+                                                                        : undefined,
+                                                                });
+                                                            }}
+                                                            className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base aria-[invalid=true]:border-red-500 dark:border-slate-700 dark:bg-slate-950"
+                                                        />
+                                                    </label>
+                                                    <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                        {t('unit', { defaultValue: '단위' })}
+                                                        <select
+                                                            value={solutionVolumeUnits[component.cartLineId] ?? component.solutionVolume?.unit ?? 'mL'}
+                                                            onChange={(event) => {
+                                                                const unit = event.target.value as WasteSolutionVolumeUnit;
+                                                                setSolutionVolumeUnits((current) => ({
+                                                                    ...current,
+                                                                    [component.cartLineId]: unit,
+                                                                }));
+                                                                if (component.solutionVolume) {
+                                                                    updateComponent(component.cartLineId, {
+                                                                        solutionVolume: {
+                                                                            ...component.solutionVolume,
+                                                                            unit,
+                                                                            normalizedMl: normalizeSolutionVolumeMl(component.solutionVolume.value, unit),
+                                                                        },
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-2 dark:border-slate-700 dark:bg-slate-950"
+                                                        >
+                                                            {SOLUTION_VOLUME_UNITS.map((unit) => <option key={unit}>{unit}</option>)}
+                                                        </select>
+                                                    </label>
+                                                </div>
+                                                {isInvalidConcentrationText(solutionVolumeInputs[component.cartLineId]) && (
+                                                    <p id={`solution-volume-error-${component.cartLineId}`} className="text-xs font-medium text-red-600 dark:text-red-300">
+                                                        {t('waste_component_volume_positive')}
+                                                    </p>
+                                                )}
                                                 <div className="grid grid-cols-[1fr_110px] gap-2">
                                                 <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                    {t('input_molarity')}
+                                                    {t('waste_component_concentration')}
                                                     <input
                                                         type="number"
                                                         min="0.000001"
@@ -992,6 +1496,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             updateComponent(component.cartLineId, {
                                                                 concentration: rawValue && Number.isFinite(value) && value > 0
                                                                     ? {
+                                                                        ...component.concentration,
                                                                         value,
                                                                         unit: concentrationUnits[component.cartLineId]
                                                                             ?? component.concentration?.unit
@@ -1015,10 +1520,15 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             }));
                                                             if (component.concentration) {
                                                                 updateComponent(component.cartLineId, {
-                                                                    concentration: {
-                                                                        ...component.concentration,
-                                                                        unit,
-                                                                    },
+                                                                    concentration: unit === '%'
+                                                                        ? {
+                                                                            ...component.concentration,
+                                                                            unit,
+                                                                        }
+                                                                        : {
+                                                                            value: component.concentration.value,
+                                                                            unit,
+                                                                        },
                                                                 });
                                                             }
                                                         }}
@@ -1033,7 +1543,116 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_concentration_positive')}
                                                     </p>
                                                 )}
-                                                {(component.ghsDataStatus !== 'verified' || component.hazardDataConfirmedByUser) && (
+                                                {(concentrationUnits[component.cartLineId] ?? component.concentration?.unit) === '%' && component.concentration && (
+                                                    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-950/40">
+                                                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                            {t('waste_concentration_percent_basis')}
+                                                            <select
+                                                                value={component.concentration.basis ?? ''}
+                                                                onChange={(event) => {
+                                                                    const basis = event.target.value as WasteConcentrationBasis;
+                                                                    const requiredDensityKind = basis === 'w_w' ? 'solution'
+                                                                        : basis === 'v_v' ? 'solute'
+                                                                            : null;
+                                                                    const retainedDensity = requiredDensityKind &&
+                                                                        component.concentration?.density?.kind === requiredDensityKind
+                                                                        ? component.concentration.density
+                                                                        : undefined;
+                                                                    updateComponent(component.cartLineId, {
+                                                                        concentration: {
+                                                                            ...component.concentration!,
+                                                                            basis,
+                                                                            density: retainedDensity,
+                                                                        },
+                                                                    });
+                                                                    if (!retainedDensity) {
+                                                                        setDensityInputs((current) => ({
+                                                                            ...current,
+                                                                            [component.cartLineId]: '',
+                                                                        }));
+                                                                    }
+                                                                }}
+                                                                className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950"
+                                                            >
+                                                                <option value="" disabled>{t('waste_concentration_percent_basis')}</option>
+                                                                {CONCENTRATION_BASES.map((basis) => (
+                                                                    <option key={basis} value={basis}>
+                                                                        {t(`waste_concentration_basis_${basis}` as never)}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </label>
+                                                        {(component.concentration.basis === 'w_w' || component.concentration.basis === 'v_v') && (
+                                                            <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                                {t(component.concentration.basis === 'w_w'
+                                                                    ? 'waste_concentration_solution_density'
+                                                                    : 'waste_concentration_solute_density')}
+                                                                <input
+                                                                    type="number"
+                                                                    inputMode="decimal"
+                                                                    min="0.000001"
+                                                                    step="any"
+                                                                    value={densityInputs[component.cartLineId] ?? component.concentration.density?.value ?? ''}
+                                                                    onChange={(event) => {
+                                                                        const rawValue = event.target.value;
+                                                                        const value = Number(rawValue);
+                                                                        setDensityInputs((current) => ({
+                                                                            ...current,
+                                                                            [component.cartLineId]: rawValue,
+                                                                        }));
+                                                                        updateComponent(component.cartLineId, {
+                                                                            concentration: {
+                                                                                ...component.concentration!,
+                                                                                density: rawValue && Number.isFinite(value) && value > 0
+                                                                                    ? {
+                                                                                        value,
+                                                                                        unit: 'g/mL',
+                                                                                        kind: component.concentration!.basis === 'w_w' ? 'solution' : 'solute',
+                                                                                        source: 'user',
+                                                                                        isEstimate: true,
+                                                                                    }
+                                                                                    : undefined,
+                                                                            },
+                                                                        });
+                                                                    }}
+                                                                    className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base dark:border-slate-700 dark:bg-slate-950"
+                                                                />
+                                                            </label>
+                                                        )}
+                                                        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                                                            {t('waste_concentration_density_help')}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                </>
+                                                )}
+                                                {activeStep === 'components' && isPhPredictionEnabled && (
+                                                    <label className="block border-t border-slate-100 pt-3 text-xs font-medium text-slate-600 dark:border-slate-800 dark:text-slate-300">
+                                                        {t('waste_ph_catalog_form')}
+                                                        <select
+                                                            value={component.phCatalogId && getApprovedPhCatalogOptions(component)
+                                                                .some((record) => record.id === component.phCatalogId)
+                                                                ? component.phCatalogId
+                                                                : ''}
+                                                            onChange={(event) => updateComponent(component.cartLineId, {
+                                                                phCatalogId: event.target.value || undefined,
+                                                            })}
+                                                            className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                                                        >
+                                                            <option value="">{t('waste_ph_catalog_form_unmatched')}</option>
+                                                            {getApprovedPhCatalogOptions(component).map((record) => (
+                                                                <option key={record.id} value={record.id}>
+                                                                    {record.exactFormLabel}{record.casNumber ? ` · CAS ${record.casNumber}` : ''}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <span className="mt-1 block leading-relaxed text-slate-500 dark:text-slate-400">
+                                                            {t('waste_ph_catalog_form_help')}
+                                                        </span>
+                                                    </label>
+                                                )}
+                                                {activeStep === 'components' &&
+                                                    (component.ghsDataStatus !== 'verified' || component.hazardDataConfirmedByUser) && (
                                                     <fieldset className="rounded-xl border border-orange-200 bg-orange-50/70 p-3 dark:border-orange-900 dark:bg-orange-950/30">
                                                         <legend className="px-1 text-xs font-bold text-orange-950 dark:text-orange-100">
                                                             {t('waste_manual_hazard_title')}
@@ -1085,7 +1704,7 @@ export const CartView: React.FC<CartViewProps> = ({
                         )}
                     </section>
 
-                    {parkedBatches.length > 0 && (
+                    {activeStep === 'components' && parkedBatches.length > 0 && (
                         <section aria-labelledby="waste-parked-title" className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
                             <h3 id="waste-parked-title" className="font-bold text-slate-900 dark:text-white">
                                 {t('waste_parked_title')} ({parkedBatches.length})
@@ -1137,49 +1756,278 @@ export const CartView: React.FC<CartViewProps> = ({
                         </section>
                     )}
 
-                    {batch.components.length > 0 && (
+                    {activeStep === 'components' && compatibilityWarnings.length > 0 && (
+                        <section aria-labelledby="component-compatibility-title" className="space-y-2">
+                            <h3 id="component-compatibility-title" className="font-bold text-slate-900 dark:text-white">
+                                {t('compat_title')}
+                            </h3>
+                            {compatibilityWarnings.map((warning, index) => (
+                                <div
+                                    key={`early-${warning.ruleId}-${index}`}
+                                    className={`rounded-xl border p-3 text-sm ${warning.severity === 'DANGER'
+                                        ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100'
+                                        : 'border-orange-200 bg-orange-50 text-orange-900 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100'
+                                    }`}
+                                >
+                                    <p className="font-semibold">{warning.chemicalA} + {warning.chemicalB}</p>
+                                    <p className="mt-1">{t(warning.messageKey as never)}</p>
+                                </div>
+                            ))}
+                        </section>
+                    )}
+                        </>
+                    )}
+
+                    {activeStep === 'solution' && !showAiDetail && activeSolutionComponent && (
+                        <section aria-labelledby="waste-solution-question-title" className="space-y-3 lg:space-y-4">
+                            <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900 lg:p-3">
+                                <p className="text-xs font-bold text-blue-600">
+                                    {t('waste_solution_question_progress', {
+                                        current: safeSolutionQuestionIndex + 1,
+                                        total: solutionQuestionComponents.length,
+                                    })}
+                                </p>
+                                <h4 id="waste-solution-question-title" className="mt-1 text-lg font-bold text-slate-950 dark:text-white">
+                                    {t('waste_solution_question', { name: activeSolutionComponent.chemical.name })}
+                                </h4>
+                                <p className="mt-1 text-sm text-slate-500">
+                                    {[activeSolutionComponent.chemical.casNumber
+                                        ? `CAS ${activeSolutionComponent.chemical.casNumber}`
+                                        : null,
+                                    activeSolutionComponent.concentration
+                                        ? `${activeSolutionComponent.concentration.value} ${activeSolutionComponent.concentration.unit}`
+                                        : null,
+                                    ].filter(Boolean).join(' · ')}
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                {([
+                                    ['aqueous', 'waste_solution_water'],
+                                    ['organic_non_halogen', 'waste_solution_non_halogen'],
+                                    ['organic_halogen', 'waste_solution_halogen'],
+                                    ['mixed_or_unknown', 'waste_solution_unknown'],
+                                ] as const).map(([solventClass, labelKey]) => {
+                                    const selected = activeSolutionComponent.solutionContext?.solventClass === solventClass;
+                                    return (
+                                        <button
+                                            key={solventClass}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            onClick={() => selectSolutionClass(activeSolutionComponent.cartLineId, solventClass)}
+                                            className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-bold lg:min-h-14 ${selected
+                                                ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-100'
+                                                : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
+                                            }`}
+                                        >
+                                            {t(labelKey)}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {(activeSolutionComponent.concentration?.unit === 'M'
+                                || activeSolutionComponent.concentration?.unit === 'mM') && (
+                                <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                                    {t('waste_solution_molarity_help')}
+                                </p>
+                            )}
+
+                            {(activeSolutionComponent.solutionContext?.solventClass === 'organic_non_halogen'
+                                || activeSolutionComponent.solutionContext?.solventClass === 'organic_halogen') && (() => {
+                                const selectedClass = activeSolutionComponent.solutionContext!.solventClass as
+                                    'organic_non_halogen' | 'organic_halogen';
+                                return (
+                                    <div className="space-y-2.5 rounded-xl border border-slate-200 p-2.5 dark:border-slate-700 lg:space-y-3 lg:rounded-2xl lg:p-3">
+                                        <div>
+                                            <h5 className="text-sm font-bold text-slate-900 dark:text-white">
+                                                {t('waste_solution_exact_solvent_optional')}
+                                            </h5>
+                                            <p className="mt-1 text-xs leading-5 text-slate-500">
+                                                {t('waste_solution_exact_solvent_help')}
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                            {REPRESENTATIVE_SOLVENT_PRESETS[selectedClass].map((preset) => {
+                                                const selected = activeSolutionComponent.solutionContext?.solventPreset === preset;
+                                                return (
+                                                    <button
+                                                        key={preset}
+                                                        type="button"
+                                                        aria-pressed={selected}
+                                                        onClick={() => selectSolventPreset(
+                                                            activeSolutionComponent.cartLineId,
+                                                            selectedClass,
+                                                            preset,
+                                                        )}
+                                                        className={`min-h-11 rounded-lg border px-2 text-xs font-semibold ${selected
+                                                            ? 'border-blue-600 bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-100'
+                                                            : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        {preset}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="search"
+                                                value={solventSearchInputs[activeSolutionComponent.cartLineId] ?? ''}
+                                                onChange={(event) => setSolventSearchInputs((current) => ({
+                                                    ...current,
+                                                    [activeSolutionComponent.cartLineId]: event.target.value,
+                                                }))}
+                                                placeholder={t('waste_solution_search_placeholder')}
+                                                className="h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => searchCustomSolvent(activeSolutionComponent.cartLineId, selectedClass)}
+                                                disabled={solventSearchLoading || !(solventSearchInputs[activeSolutionComponent.cartLineId]?.trim())}
+                                                className="min-h-11 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
+                                            >
+                                                {solventSearchLoading ? t('loading') : t('search')}
+                                            </button>
+                                        </div>
+                                        {solventSearchError && (
+                                            <p className="text-xs font-semibold text-red-700 dark:text-red-300" role="alert">
+                                                {solventSearchError}
+                                            </p>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {solventClassConflict?.cartLineId === activeSolutionComponent.cartLineId && (
+                                <div className="rounded-xl border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100" role="alert">
+                                    <p className="font-bold">{t('waste_solution_class_conflict_title')}</p>
+                                    <p className="mt-1 leading-5">
+                                        {t('waste_solution_class_conflict_help', {
+                                            solvent: solventClassConflict.resolution.solventName,
+                                            selected: t(solventClassConflict.requestedClass === 'organic_halogen'
+                                                ? 'waste_solution_halogen'
+                                                : 'waste_solution_non_halogen'),
+                                            found: t(solventClassConflict.resolution.solventClass === 'organic_halogen'
+                                                ? 'waste_solution_halogen'
+                                                : 'waste_solution_non_halogen'),
+                                        })}
+                                    </p>
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                selectSolutionClass(
+                                                    activeSolutionComponent.cartLineId,
+                                                    solventClassConflict.requestedClass,
+                                                );
+                                                setSolventClassConflict(null);
+                                            }}
+                                            className="min-h-11 rounded-lg border border-orange-400 bg-white px-2 text-xs font-bold text-orange-900 dark:bg-slate-950 dark:text-orange-100"
+                                        >
+                                            {t('waste_solution_keep_class_only')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const resolution = solventClassConflict.resolution;
+                                                if (resolution.solventName && (resolution.solventClass === 'organic_halogen'
+                                                    || resolution.solventClass === 'organic_non_halogen')) {
+                                                    updateComponent(activeSolutionComponent.cartLineId, {
+                                                        solutionContext: createUserSolutionContext(resolution.solventClass, {
+                                                            name: resolution.solventName,
+                                                            casNumber: resolution.solventCasNumber,
+                                                            molecularFormula: resolution.solventMolecularFormula,
+                                                        }),
+                                                    });
+                                                }
+                                                setSolventClassConflict(null);
+                                            }}
+                                            className="min-h-11 rounded-lg bg-orange-600 px-2 text-xs font-bold text-white"
+                                        >
+                                            {t('waste_solution_use_search_class')}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeSolutionComponent.solutionContext?.solventName && (
+                                <p className="rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-900 dark:bg-blue-950/35 dark:text-blue-100">
+                                    {t('waste_solution_selected_exact', {
+                                        solvent: activeSolutionComponent.solutionContext.solventName,
+                                        cas: activeSolutionComponent.solutionContext.solventCasNumber ?? t('waste_solution_cas_unverified'),
+                                    })}
+                                </p>
+                            )}
+                        </section>
+                    )}
+
+                    {activeStep === 'batch' && !showAiDetail && batch.components.length > 0 && (
                         <>
                             <section aria-labelledby="waste-matrix-title">
                                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                     <h3 id="waste-matrix-title" className="font-bold text-slate-900 dark:text-white">
                                         {t('waste_matrix_title')}
                                     </h3>
-                                    {batch.matrixSource === 'automatic' && (
-                                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-200">
-                                            {t('waste_matrix_auto_estimated')}
-                                        </span>
-                                    )}
                                 </div>
-                                {batch.matrix === 'unknown' && previousMatrix && (
-                                    <button
-                                        type="button"
-                                        onClick={applyPreviousMatrix}
-                                        className="mb-2 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-left text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                                    >
-                                        {t('waste_matrix_same_as_previous', {
-                                            matrix: t(`waste_matrix_${previousMatrix}` as never),
-                                        })}
-                                    </button>
-                                )}
-                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                    {MATRIX_OPTIONS.map((matrix) => {
-                                        const selected = batch.matrix === matrix;
-                                        return (
+                                {batch.matrixSource === 'automatic' && !isMatrixEditing ? (
+                                    <div className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-950 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-100 lg:min-h-14 lg:gap-3 lg:px-4 lg:py-3">
+                                        <p className="font-semibold">
+                                            {t('waste_matrix_auto', {
+                                                matrix: t(`waste_matrix_${batch.matrix}` as never),
+                                            })}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsMatrixEditing(true)}
+                                            className="min-h-11 shrink-0 rounded-lg border border-blue-300 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100 dark:border-blue-800 dark:bg-slate-950 dark:text-blue-200"
+                                        >
+                                            {t('waste_matrix_change')}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {batch.matrix === 'unknown' && previousMatrix && !wizard.matrixResolution.hasExplicitOrganic && (
                                             <button
-                                                key={matrix}
                                                 type="button"
-                                                onClick={() => setMatrix(matrix)}
-                                                aria-pressed={selected}
-                                                className={`min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors ${selected
-                                                    ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/50 dark:text-blue-200'
-                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-                                                }`}
+                                                onClick={applyPreviousMatrix}
+                                                className="mb-2 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-left text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                                             >
-                                                {t(`waste_matrix_${matrix}` as never)}
+                                                {t('waste_matrix_same_as_previous', {
+                                                    matrix: t(`waste_matrix_${previousMatrix}` as never),
+                                                })}
                                             </button>
-                                        );
-                                    })}
-                                </div>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                            {MATRIX_OPTIONS.map((matrix) => {
+                                                const selected = batch.matrix === matrix;
+                                                const inferredOrganicMatrix = wizard.matrixResolution.matrix;
+                                                const disabledByExplicitOrganic = wizard.matrixResolution.hasExplicitOrganic
+                                                    && matrix !== inferredOrganicMatrix
+                                                    && matrix !== 'unknown';
+                                                return (
+                                                    <button
+                                                        key={matrix}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (disabledByExplicitOrganic) return;
+                                                            setMatrix(matrix);
+                                                            setIsMatrixEditing(false);
+                                                        }}
+                                                        disabled={disabledByExplicitOrganic}
+                                                        aria-pressed={selected}
+                                                        className={`min-h-11 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${selected
+                                                            ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/50 dark:text-blue-200'
+                                                            : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        {t(`waste_matrix_${matrix}` as never)}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
                             </section>
 
                             {shouldAskAdditionalComponents && (
@@ -1215,7 +2063,7 @@ export const CartView: React.FC<CartViewProps> = ({
                             {requiresFluorideCompatibleContainer && (
                                 <section
                                     aria-labelledby="fluoride-container-title"
-                                    className="rounded-2xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900 dark:bg-red-950/30"
+                                    className="rounded-xl border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30 lg:rounded-2xl lg:p-4"
                                 >
                                     <h3 id="fluoride-container-title" className="text-sm font-bold leading-5 text-red-950 dark:text-red-100">
                                         {t('waste_fluoride_container_question')}
@@ -1249,26 +2097,47 @@ export const CartView: React.FC<CartViewProps> = ({
                                         <h3 id="waste-amount-title" className="font-bold text-slate-900 dark:text-white">
                                             {t('waste_total_amount')}
                                         </h3>
-                                        <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                                            <input
-                                                type="checkbox"
-                                                checked={batch.totalAmount.isUnknown}
-                                                onChange={(event) => setTotalAmount({
-                                                    value: null,
-                                                    unit: null,
-                                                    isUnknown: event.target.checked,
-                                                })}
-                                                className="h-5 w-5 rounded border-slate-300"
-                                            />
-                                            {t('waste_amount_unknown')}
-                                        </label>
+                                        {hasComponentVolumeTotal && componentVolumeTotal ? (
+                                            <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={hasManualTotalOverride}
+                                                    onChange={(event) => setTotalAmount(event.target.checked
+                                                        ? {
+                                                            value: componentVolumeTotal.value,
+                                                            unit: componentVolumeTotal.unit,
+                                                            isApproximate: false,
+                                                            source: 'manual',
+                                                        }
+                                                        : componentVolumeTotal)}
+                                                    className="h-5 w-5 rounded border-slate-300"
+                                                />
+                                                {t('waste_total_amount_override')}
+                                            </label>
+                                        ) : (
+                                            <label className="flex min-h-11 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={batch.totalAmount.isUnknown}
+                                                    onChange={(event) => setTotalAmount({
+                                                        value: null,
+                                                        unit: null,
+                                                        isUnknown: event.target.checked,
+                                                        source: 'manual',
+                                                    })}
+                                                    className="h-5 w-5 rounded border-slate-300"
+                                                />
+                                                {t('waste_amount_unknown')}
+                                            </label>
+                                        )}
                                     </div>
-                                    {inventoryAmountSuggestion && !batch.totalAmount.isUnknown && (
+                                    {inventoryAmountSuggestion && !hasComponentVolumeTotal && !batch.totalAmount.isUnknown && (
                                         <button
                                             type="button"
                                             onClick={() => setTotalAmount({
                                                 ...inventoryAmountSuggestion,
                                                 isApproximate: true,
+                                                source: 'manual',
                                             })}
                                             className="mb-2 min-h-11 w-full rounded-xl border border-blue-200 bg-blue-50 px-3 text-left text-sm font-medium text-blue-800 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
                                         >
@@ -1283,7 +2152,18 @@ export const CartView: React.FC<CartViewProps> = ({
                                             {t('waste_missing_matrix')}
                                         </p>
                                     )}
-                                    {batch.matrix !== 'unknown' && !batch.totalAmount.isUnknown && (
+                                    {hasComponentVolumeTotal && componentVolumeTotal && !hasManualTotalOverride && (
+                                        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-100" aria-live="polite">
+                                            <p className="text-lg font-bold">
+                                                {componentVolumeTotal.value} {componentVolumeTotal.unit}
+                                            </p>
+                                            <p className="mt-1 text-xs leading-5 text-blue-800 dark:text-blue-200">
+                                                {t('waste_total_amount_auto_help')}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {batch.matrix !== 'unknown' && !batch.totalAmount.isUnknown &&
+                                        (!hasComponentVolumeTotal || hasManualTotalOverride) && (
                                         <div className="grid grid-cols-[1fr_100px] gap-2">
                                             <input
                                                 type="number"
@@ -1305,19 +2185,22 @@ export const CartView: React.FC<CartViewProps> = ({
                                             >
                                                 {allowedUnits.map((unit) => <option key={unit}>{unit}</option>)}
                                             </select>
-                                            <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={batch.totalAmount.isApproximate}
-                                                    onChange={(event) => setTotalAmount({
-                                                        value: batch.totalAmount.value,
-                                                        unit: batch.totalAmount.unit ?? allowedUnits[0],
-                                                        isApproximate: event.target.checked,
-                                                    })}
-                                                    className="h-5 w-5 rounded border-slate-300"
-                                                />
-                                                {t('waste_amount_approximate')}
-                                            </label>
+                                            {!hasComponentVolumeTotal && (
+                                                <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={batch.totalAmount.isApproximate}
+                                                        onChange={(event) => setTotalAmount({
+                                                            value: batch.totalAmount.value,
+                                                            unit: batch.totalAmount.unit ?? allowedUnits[0],
+                                                            isApproximate: event.target.checked,
+                                                            source: 'manual',
+                                                        })}
+                                                        className="h-5 w-5 rounded border-slate-300"
+                                                    />
+                                                    {t('waste_amount_approximate')}
+                                                </label>
+                                            )}
                                             {amountValueInvalid && (
                                                 <p id="waste-amount-error" className="col-span-2 text-xs font-medium text-red-600 dark:text-red-300">
                                                     {t('waste_amount_invalid')}
@@ -1325,34 +2208,37 @@ export const CartView: React.FC<CartViewProps> = ({
                                             )}
                                         </div>
                                     )}
+                                    {hasManualTotalOverride && (
+                                        <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                                            {t('waste_total_amount_override_help')}
+                                        </p>
+                                    )}
+                                    {!hasComponentVolumeTotal && batch.components.length > 0 &&
+                                        batch.matrix !== 'unknown' && batch.matrix !== 'solid_slurry' && (
+                                        <p className="mt-2 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                                            {t('waste_total_amount_component_volume_missing_help')}
+                                        </p>
+                                    )}
                             </section>
 
-                            {requiresMixingState && (
-                                <section aria-labelledby="waste-mixing-state-title">
-                                    <h3 id="waste-mixing-state-title" className="mb-2 font-bold text-slate-900 dark:text-white">
-                                        {t('waste_mixing_state')}
+                            {batch.components.length > 0 && batch.mixingState === 'separate' && (
+                                <section
+                                    aria-labelledby="waste-legacy-separate-title"
+                                    className="rounded-xl border border-orange-300 bg-orange-50 p-3 text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100 lg:rounded-2xl lg:p-4"
+                                >
+                                    <h3 id="waste-legacy-separate-title" className="font-bold">
+                                        {t('waste_legacy_separate_title')}
                                     </h3>
-                                    <p className="mb-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
-                                        {t('waste_mixing_state_help')}
+                                    <p className="mt-2 text-xs leading-5">
+                                        {t('waste_legacy_separate_help')}
                                     </p>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {(['separate', 'already_mixed'] as const).map((value) => (
-                                            <button
-                                                key={value}
-                                                type="button"
-                                                aria-pressed={batch.mixingState === value}
-                                                onClick={() => setMixingState(value)}
-                                                className={`min-h-11 rounded-xl border px-3 py-2 text-sm font-semibold ${batch.mixingState === value
-                                                    ? value === 'separate'
-                                                        ? 'border-red-600 bg-red-50 text-red-800 ring-1 ring-red-600 dark:bg-red-950/50 dark:text-red-100'
-                                                        : 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/50 dark:text-blue-100'
-                                                    : 'border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-                                                }`}
-                                            >
-                                                {t(value === 'separate' ? 'waste_not_mixed_yet' : 'waste_already_mixed')}
-                                            </button>
-                                        ))}
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={confirmSingleContainer}
+                                        className="mt-3 min-h-11 rounded-xl border border-orange-500 bg-white px-4 text-sm font-semibold text-orange-900 hover:bg-orange-100 dark:bg-slate-950 dark:text-orange-100"
+                                    >
+                                        {t('waste_confirm_single_container')}
+                                    </button>
                                 </section>
                             )}
 
@@ -1390,11 +2276,17 @@ export const CartView: React.FC<CartViewProps> = ({
                         </>
                     )}
 
-                    <section className={`rounded-2xl border p-4 ${statusConfig.classes}`} aria-live="polite">
+                    {activeStep === 'result' && !showAiDetail && (
+                        <>
+                    <section className={`rounded-xl border p-3 lg:rounded-2xl lg:p-4 ${statusConfig.classes}`} aria-live="polite">
                         <div className="flex items-center gap-2">
                             {statusConfig.icon}
                             <h3 className="font-bold">{statusConfig.title}</h3>
                         </div>
+
+                        {decision.decisionStatus !== 'ready' && phPredictionSummary && (
+                            <div className="mt-3">{phPredictionSummary}</div>
+                        )}
 
                         {batch.measuredPhStatus === 'measured' && batch.measuredBatchPh !== undefined && (
                             <div className="mt-3 rounded-xl bg-white/65 p-3 text-sm dark:bg-slate-950/30">
@@ -1442,23 +2334,26 @@ export const CartView: React.FC<CartViewProps> = ({
                                         </div>
                                     )}
                                 </div>
+                                {phPredictionSummary}
                                 <div className="rounded-xl border border-orange-200 bg-orange-50/80 p-3 text-slate-900 dark:border-orange-900/70 dark:bg-orange-950/25 dark:text-slate-100">
                                     <p className="font-bold">{t('waste_hazard_reference_title')}</p>
                                     {labelHazardItems.length > 0 ? (
-                                        <ul className="mt-2 space-y-1">
+                                        <ul className="mt-2 flex flex-wrap gap-2">
                                             {labelHazardItems.map(({ code, description }) => (
                                                 <li
                                                     key={`${code ?? 'hazard'}-${description}`}
-                                                    className="flex items-start gap-2 rounded-lg bg-white/75 px-2.5 py-1.5 dark:bg-slate-950/30"
+                                                    className={code
+                                                        ? 'flex w-full items-start gap-2 rounded-lg bg-white/75 px-2.5 py-1.5 dark:bg-slate-950/30'
+                                                        : 'inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 text-sm dark:bg-slate-950/30'}
                                                 >
                                                     {code ? (
                                                         <span className="mt-0.5 inline-flex min-w-12 shrink-0 justify-center rounded-md bg-orange-100 px-2 py-0.5 font-mono text-xs font-bold text-orange-800 dark:bg-orange-950/70 dark:text-orange-200">
                                                             {code}
                                                         </span>
                                                     ) : (
-                                                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" aria-hidden="true" />
+                                                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" aria-hidden="true" />
                                                     )}
-                                                    <span className="leading-5">{description}</span>
+                                                    <span className={code ? 'leading-5' : 'leading-4'}>{description}</span>
                                                 </li>
                                             ))}
                                         </ul>
@@ -1468,14 +2363,6 @@ export const CartView: React.FC<CartViewProps> = ({
                                             : 'waste_label_no_known_hazards')}</p>
                                     )}
                                 </div>
-                                {matchedStream?.prohibitions.length ? (
-                                    <div className="rounded-xl border border-red-200 bg-red-50/80 p-3 text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">
-                                        <p className="font-bold">{t('waste_ai_prohibitions')}</p>
-                                        <ul className="mt-1 space-y-1">
-                                            {matchedStream.prohibitions.map((item) => <li key={item}>• {item}</li>)}
-                                        </ul>
-                                    </div>
-                                ) : null}
                                 {matchedStream?.handlerContact && (
                                     <p className="text-sm font-medium">{t('waste_policy_handler_contact')}: {matchedStream.handlerContact}</p>
                                 )}
@@ -1547,11 +2434,6 @@ export const CartView: React.FC<CartViewProps> = ({
                             </div>
                         )}
 
-                        {batch.components.length > 0 && !hasEquivalentNoNeutralizeDrainWarning && (
-                            <div className="mt-3 border-t border-current/15 pt-3 text-xs opacity-75">
-                                <p>{t('waste_prohibition_no_neutralize')}</p>
-                            </div>
-                        )}
                     </section>
 
                     {compatibilityWarnings.length > 0 && (
@@ -1573,22 +2455,18 @@ export const CartView: React.FC<CartViewProps> = ({
                     )}
 
                     {batch.components.length > 0 && (
-                        <section className="rounded-2xl border border-purple-200 bg-purple-50 p-4 dark:border-purple-900/60 dark:bg-purple-950/30">
-                            <div className="flex items-center gap-2 text-purple-900 dark:text-purple-100">
-                                <Sparkles className="h-5 w-5" aria-hidden="true" />
-                                <h3 className="font-bold">AI</h3>
-                            </div>
-                            {!aiResult && !aiError && (
-                                <button
-                                    onClick={requestAIGuide}
-                                    disabled={aiLoading}
-                                    className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 font-semibold text-white hover:bg-purple-700 disabled:opacity-60"
-                                >
-                                    {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
-                                    {t('waste_ai_button')}
-                                </button>
-                            )}
-                            {aiError && (
+                        <section className="rounded-xl border border-purple-200 bg-purple-50 p-3 dark:border-purple-900/60 dark:bg-purple-950/30 lg:rounded-2xl lg:p-4">
+                            <button
+                                onClick={() => {
+                                    setShowAiDetail(true);
+                                    if (!aiResult && !aiLoading) void requestAIGuide();
+                                }}
+                                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 font-semibold text-white hover:bg-purple-700"
+                            >
+                                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                                {t('waste_ai_button')}
+                            </button>
+                            {showAiDetail && aiError && (
                                 <div className="mt-3 text-sm text-purple-950 dark:text-purple-100">
                                     <p>{t('waste_ai_unavailable')}</p>
                                     <button onClick={requestAIGuide} className="mt-2 min-h-11 font-semibold underline">
@@ -1596,7 +2474,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </button>
                                 </div>
                             )}
-                            {aiResult && (
+                            {showAiDetail && aiResult && (
                                 <div className="mt-3 space-y-4 text-sm text-purple-950 dark:text-purple-100">
                                     {aiResult.availability === 'unavailable' && (
                                         <p className="rounded-xl bg-white/60 p-3 font-medium dark:bg-slate-950/30">{t('waste_ai_unavailable')}</p>
@@ -1656,9 +2534,65 @@ export const CartView: React.FC<CartViewProps> = ({
                             className="mt-2 min-h-24 w-full resize-y rounded-xl border border-slate-300 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
                         />
                     </details>
+                        </>
+                    )}
+
+                    {showAiDetail && (
+                        <section className="rounded-xl border border-purple-200 bg-purple-50 p-3 dark:border-purple-900/60 dark:bg-purple-950/30 lg:rounded-2xl lg:p-4">
+                            <div className="flex items-center gap-2 text-purple-900 dark:text-purple-100">
+                                <Sparkles className="h-5 w-5" aria-hidden="true" />
+                                <h4 className="font-bold">{t('waste_ai_button')}</h4>
+                            </div>
+                            {aiLoading && (
+                                <div className="flex min-h-32 items-center justify-center gap-2 text-sm font-semibold text-purple-900 dark:text-purple-100">
+                                    <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                                    {t('loading')}
+                                </div>
+                            )}
+                            {aiError && !aiLoading && (
+                                <div className="mt-3 text-sm text-purple-950 dark:text-purple-100">
+                                    <p>{t('waste_ai_unavailable')}</p>
+                                    <button onClick={requestAIGuide} className="mt-2 min-h-11 font-semibold underline">
+                                        {t('waste_record_retry')}
+                                    </button>
+                                </div>
+                            )}
+                            {aiResult && !aiLoading && (
+                                <div className="mt-3 space-y-4 text-sm text-purple-950 dark:text-purple-100">
+                                    {aiResult.availability === 'unavailable' && (
+                                        <p className="rounded-xl bg-white/60 p-3 font-medium dark:bg-slate-950/30">{t('waste_ai_unavailable')}</p>
+                                    )}
+                                    {(aiResult.availability !== 'unavailable'
+                                        || aiResult.summary.trim() !== t('waste_ai_unavailable').trim()) && (
+                                        <p className="font-medium leading-relaxed">{aiResult.summary}</p>
+                                    )}
+                                    {aiResult.steps.length > 0 && (
+                                        <ol className="space-y-2">
+                                            {aiResult.steps.map((step, index) => (
+                                                <li key={`${step}-${index}`} className="flex gap-2">
+                                                    <span className="font-bold">{index + 1}.</span><span>{step}</span>
+                                                </li>
+                                            ))}
+                                        </ol>
+                                    )}
+                                    {aiResult.prohibitions.length > 0 && (
+                                        <div>
+                                            <h5 className="font-bold">{t('waste_ai_prohibitions')}</h5>
+                                            <ul className="mt-1 space-y-1">
+                                                {aiResult.prohibitions.map((item) => <li key={item}>· {item}</li>)}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </section>
+                    )}
+                    </div>
                 </main>
 
-                <footer className="absolute inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:p-4">
+                <footer className="absolute inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:p-4">
+                    {activeStep === 'result' && !showAiDetail ? (
+                        <>
                     {!isOnline && (
                         <p className="mb-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/50 dark:text-orange-100" role="status">
                             {t('waste_offline_blocked')}
@@ -1675,7 +2609,7 @@ export const CartView: React.FC<CartViewProps> = ({
                             <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
                         </div>
                     )}
-                    {hasInvalidConcentration && (
+                    {hasInvalidNumericInput && (
                         <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-900 dark:bg-red-950/50 dark:text-red-100" role="alert">
                             {t('waste_invalid_concentration_block')}
                         </p>
@@ -1702,8 +2636,8 @@ export const CartView: React.FC<CartViewProps> = ({
                     {decision.decisionStatus === 'ready' ? (
                         <button
                             onClick={() => recordAction('container_deposit')}
-                            disabled={!isOnline || isSaving || policyLoading || hasInvalidConcentration}
-                            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!isOnline || isSaving || policyLoading || hasInvalidNumericInput}
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-12"
                         >
                             {isSaving && <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />}
                             {t('waste_action_container_deposit')}
@@ -1712,23 +2646,66 @@ export const CartView: React.FC<CartViewProps> = ({
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 onClick={() => recordAction('isolated')}
-                                disabled={!isOnline || isSaving || policyLoading || !hasAmountConfirmation || hasInvalidConcentration}
-                                className="min-h-12 rounded-xl border border-red-300 bg-white px-3 font-bold text-red-700 disabled:opacity-50 dark:border-red-800 dark:bg-slate-950 dark:text-red-300"
+                                disabled={!isOnline || isSaving || policyLoading || !hasAmountConfirmation || hasInvalidNumericInput}
+                                className="min-h-11 rounded-xl border border-red-300 bg-white px-3 font-bold text-red-700 disabled:opacity-50 dark:border-red-800 dark:bg-slate-950 dark:text-red-300 lg:min-h-12"
                             >
                                 {t('waste_action_isolated')}
                             </button>
                             <button
                                 onClick={() => recordAction('handover')}
-                                disabled={!isOnline || isSaving || policyLoading || !hasAmountConfirmation || hasInvalidConcentration}
-                                className="min-h-12 rounded-xl bg-red-600 px-3 font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                                disabled={!isOnline || isSaving || policyLoading || !hasAmountConfirmation || hasInvalidNumericInput}
+                                className="min-h-11 rounded-xl bg-red-600 px-3 font-bold text-white hover:bg-red-700 disabled:opacity-50 lg:min-h-12"
                             >
                                 {t('waste_action_handover')}
                             </button>
                         </div>
                     ) : (
-                        <button disabled className="min-h-12 w-full rounded-xl bg-orange-100 px-4 font-bold text-orange-800 dark:bg-orange-950/60 dark:text-orange-200">
+                        <button disabled className="min-h-11 w-full rounded-xl bg-orange-100 px-4 font-bold text-orange-800 dark:bg-orange-950/60 dark:text-orange-200 lg:min-h-12">
                             {statusConfig.title}
                         </button>
+                    )}
+                        </>
+                    ) : (
+                        <div className="mx-auto grid w-full max-w-2xl grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={moveWizardBack}
+                                disabled={!showAiDetail && activeStep === 'components'}
+                                className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 lg:min-h-12"
+                            >
+                                {t('waste_wizard_previous')}
+                            </button>
+                            {showAiDetail ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAiDetail(false)}
+                                    className="min-h-11 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 lg:min-h-12"
+                                >
+                                    {t('waste_ai_back_to_result')}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={moveWizardNext}
+                                    disabled={activeStep === 'components'
+                                        ? !wizard.componentStepComplete || hasInvalidNumericInput
+                                        : activeStep === 'amounts'
+                                            ? !activeAmountComponent || hasInvalidNumericInput
+                                        : activeStep === 'solution'
+                                            ? !activeSolutionComponent || !isSolutionContextAnswered(activeSolutionComponent)
+                                            : activeStep === 'batch'
+                                                ? !wizard.batchStepComplete
+                                                : false}
+                                    className="min-h-11 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 lg:min-h-12"
+                                >
+                                    {activeStep === 'amounts' && safeAmountQuestionIndex < batch.components.length - 1
+                                        ? t('waste_amount_next_component')
+                                        : activeStep === 'solution' && safeSolutionQuestionIndex < solutionQuestionComponents.length - 1
+                                        ? t('waste_solution_next_component')
+                                        : t('waste_wizard_next')}
+                                </button>
+                            )}
+                        </div>
                     )}
                 </footer>
             </div>

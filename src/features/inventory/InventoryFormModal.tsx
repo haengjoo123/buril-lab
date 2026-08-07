@@ -534,12 +534,7 @@ export const InventoryFormModal: React.FC<Props> = ({
         if (!state.cabinetId || state.cabinetId !== expectedCabinetId) {
             throw new Error('시약장 상태가 동기화되지 않아 저장을 중단했습니다.');
         }
-        await cabinetService.saveCabinetState(expectedCabinetId, state.shelves);
-        await cabinetService.updateCabinet(expectedCabinetId, {
-            width: state.cabinetWidth,
-            height: state.cabinetHeight,
-            depth: state.cabinetDepth,
-        });
+        await useFridgeStore.getState().saveCabinetStrict();
     }
 
     function normalizeText(value?: string | null): string {

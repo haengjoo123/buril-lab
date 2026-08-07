@@ -1,4 +1,12 @@
-import type { AnalysisHazardWarning, AnalysisResult, Chemical, DisposalCategory } from '../types';
+import type {
+    AnalysisHazardWarning,
+    AnalysisResult,
+    Chemical,
+    ChemicalHazardEvidence,
+    ChemicalHazardProfile,
+    DisposalCategory,
+    WasteHazardFlag,
+} from '../types';
 import pListCas from '../data/p_list_cas.json';
 import uListCas from '../data/u_list_cas.json';
 
@@ -40,6 +48,29 @@ const ACUTE_TOXICITY_H_CODES = new Set(['H300', 'H301', 'H310', 'H311', 'H330', 
 const CMR_H_CODES = new Set(['H340', 'H341', 'H350', 'H351', 'H360', 'H361', 'H362']);
 const ENVIRONMENTAL_H_CODES = new Set(['H400', 'H401', 'H402', 'H410', 'H411', 'H412', 'H413', 'H420']);
 const TARGET_ORGAN_H_CODES = new Set(['H370', 'H371', 'H372', 'H373']);
+
+const HAZARD_H_CODES = {
+    FLAMMABLE: ['H220', 'H221', 'H222', 'H223', 'H224', 'H225', 'H226', 'H227', 'H228'],
+    OXIDIZER: ['H270', 'H271', 'H272'],
+    EXPLOSIVE: ['H200', 'H201', 'H202', 'H203', 'H204', 'H205'],
+    SELF_REACTIVE: ['H240', 'H241', 'H242'],
+    WATER_REACTIVE: ['H260', 'H261'],
+    PYROPHORIC: ['H250'],
+    CORROSIVE: ['H290', 'H314'],
+    ACUTE_TOXIC: ['H300', 'H301', 'H310', 'H311', 'H330', 'H331'],
+    CMR: ['H340', 'H341', 'H350', 'H351', 'H360', 'H361', 'H362'],
+    ENVIRONMENTAL_HAZARD: ['H400', 'H410', 'H411', 'H412', 'H413'],
+} as const satisfies Partial<Record<WasteHazardFlag, readonly string[]>>;
+
+const HYDROFLUORIC_ACID_CAS = '7664-39-3';
+const FLUORIDE_COMPOUND_CAS = new Set([
+    '7681-49-4', '7789-23-3', '12125-01-8', '1341-49-7', '7789-24-4',
+    '7789-75-5', '7783-40-6', '7784-18-1', '1333-83-1', '7789-29-9',
+]);
+const FLUORIDE_COMPOUND_FORMULAS = new Set([
+    'NAF', 'KF', 'NH4F', 'NH4HF2', 'LIF', 'CAF2', 'MGF2', 'ALF3',
+    'NAHF2', 'KHF2', 'CSF', 'RBF', 'BAF2', 'ZNF2',
+]);
 
 const REACTIVE_NAME_PATTERNS = [
     /\bperoxide\b/i,
@@ -91,12 +122,14 @@ const CYANIDE_NAME_PATTERNS = [
     /\bferricyanide\b/i,
     /\bferrocyanide\b/i,
     /\bthiocyanate\b/i,
+    /시안화|시안|청산/i,
 ];
 
 const SULFIDE_NAME_PATTERNS = [
     /\bsulfide\b/i,
     /\bsulphide\b/i,
     /\bhydrogen\s+sulfide\b/i,
+    /황화/i,
 ];
 
 const INORGANIC_CARBON_NAME_PATTERNS = [
@@ -183,6 +216,10 @@ export const parseFormula = (formula: string): ElementCounts => {
             }
 
             if (char === ')' || char === ']') {
+                if (stack.length === 1) {
+                    index++;
+                    continue;
+                }
                 const group = stack.pop() || {};
                 const multiplier = readNumber(segment, index + 1);
                 addElements(stack[stack.length - 1], group, multiplier.value);
@@ -305,6 +342,16 @@ const isLikelySulfideFormula = (elements: ElementCounts): boolean => {
         hasAnyElement(elements, sulfideCounterions);
 };
 
+const isHydrofluoricAcidIdentity = (chemical: Chemical): boolean =>
+    chemical.casNumber?.trim() === HYDROFLUORIC_ACID_CAS ||
+    normalizedFormula(chemical.molecularFormula || '').toUpperCase() === 'HF' ||
+    /\b(?:hydrofluoric\s+acid|hydrogen\s+fluoride|fluorhydric\s+acid)\b|불산|불화\s*수소|플루오린화\s*수소/i.test(chemical.name || '');
+
+const isFluorideCompoundIdentity = (chemical: Chemical): boolean =>
+    FLUORIDE_COMPOUND_CAS.has(chemical.casNumber?.trim() ?? '') ||
+    FLUORIDE_COMPOUND_FORMULAS.has(normalizedFormula(chemical.molecularFormula || '').toUpperCase()) ||
+    /\b(?:bi)?fluoride\b|\bhydrogen\s+difluoride\b|불화물|불화암모늄|불화나트륨|불화칼륨/i.test(chemical.name || '');
+
 const isFormulaExactly = (formula: string, candidates: readonly string[]): boolean => {
     const normalized = normalizedFormula(formula).toUpperCase();
     return candidates.some(candidate => normalized === candidate.toUpperCase());
@@ -373,6 +420,106 @@ export const isLikelyOrganicByFormula = (formula: string, name = ''): boolean =>
     return Boolean(elements.C) && !isInorganicCarbonFormula(formula, name);
 };
 
+const HAZARD_PROFILE_VERSION = '1.0.0' as const;
+
+/**
+ * Detect every supported hazard independently from source evidence. Disposal
+ * category precedence is intentionally absent from this function.
+ */
+export const detectChemicalHazards = (chemical: Chemical): ChemicalHazardProfile => {
+    const name = chemical.name || '';
+    const formula = chemical.molecularFormula || '';
+    const casNumber = chemical.casNumber?.trim() ?? '';
+    const elements = parseFormula(formula);
+    const hCodes = extractHCodes(chemical.ghs?.hazardStatements);
+    const flags = new Set<WasteHazardFlag>();
+    const evidence: ChemicalHazardEvidence[] = [];
+    const evidenceKeys = new Set<string>();
+
+    const addEvidence = (
+        flag: WasteHazardFlag,
+        source: ChemicalHazardEvidence['source'],
+        value: string,
+        confidence: ChemicalHazardEvidence['confidence'],
+    ): void => {
+        flags.add(flag);
+        const key = `${flag}:${source}:${value}`;
+        if (evidenceKeys.has(key)) return;
+        evidenceKeys.add(key);
+        evidence.push({ flag, source, value, confidence });
+    };
+
+    for (const [flag, expectedCodes] of Object.entries(HAZARD_H_CODES) as Array<[
+        keyof typeof HAZARD_H_CODES,
+        readonly string[],
+    ]>) {
+        for (const code of hCodes.filter(candidate => expectedCodes.includes(candidate))) {
+            addEvidence(flag, 'h_code', code, 'confirmed');
+        }
+    }
+
+    for (const code of hCodes.filter(candidate => REACTIVE_H_CODES.has(candidate))) {
+        addEvidence('REACTIVE', 'h_code', code, 'confirmed');
+    }
+
+    if (matchesAny(name, REACTIVE_NAME_PATTERNS)) {
+        addEvidence('REACTIVE', 'name_pattern', name, 'inferred');
+    }
+    if (isFormulaExactly(formula, ['HNO3', 'HClO4', 'NaBH4', 'LiAlH4', 'NaH', 'KH', 'LiH', 'CaH2'])) {
+        addEvidence('REACTIVE', 'formula_pattern', formula, 'confirmed');
+    }
+
+    if (matchesAny(name, CYANIDE_NAME_PATTERNS)) {
+        addEvidence('CYANIDE', 'name_pattern', name, 'inferred');
+    }
+    if (isLikelyCyanideFormula(formula)) {
+        addEvidence('CYANIDE', 'formula_pattern', formula, 'confirmed');
+    }
+
+    if (matchesAny(name, SULFIDE_NAME_PATTERNS)) {
+        addEvidence('SULFIDE', 'name_pattern', name, 'inferred');
+    }
+    if (isLikelySulfideFormula(elements)) {
+        addEvidence('SULFIDE', 'formula_pattern', formula, 'confirmed');
+    }
+
+    for (const element of HEAVY_METALS.filter(candidate => Boolean(elements[candidate]))) {
+        addEvidence('HEAVY_METAL', 'formula_element', element, 'confirmed');
+    }
+
+    if (isHydrofluoricAcidIdentity(chemical)) {
+        const [source, value] = casNumber === HYDROFLUORIC_ACID_CAS
+            ? ['cas_registry', casNumber] as const
+            : normalizedFormula(formula).toUpperCase() === 'HF'
+                ? ['formula_pattern', formula] as const
+                : ['name_pattern', name] as const;
+        addEvidence(
+            'HYDROFLUORIC_ACID',
+            source,
+            value,
+            source === 'name_pattern' ? 'inferred' : 'confirmed',
+        );
+    } else if (isFluorideCompoundIdentity(chemical)) {
+        const [source, value] = FLUORIDE_COMPOUND_CAS.has(casNumber)
+            ? ['cas_registry', casNumber] as const
+            : FLUORIDE_COMPOUND_FORMULAS.has(normalizedFormula(formula).toUpperCase())
+                ? ['formula_pattern', formula] as const
+                : ['name_pattern', name] as const;
+        addEvidence(
+            'FLUORIDE',
+            source,
+            value,
+            source === 'name_pattern' ? 'inferred' : 'confirmed',
+        );
+    }
+
+    return {
+        version: HAZARD_PROFILE_VERSION,
+        flags: [...flags],
+        evidence,
+    };
+};
+
 // Helper: Determine disposal category details
 export const getCategoryDetails = (category: DisposalCategory): { binColor: string; label: string } => {
     switch (category) {
@@ -406,6 +553,7 @@ const buildResult = (
     category: DisposalCategory,
     reason: string,
     reasonParams?: Record<string, string | number>,
+    hazardProfile = detectChemicalHazards(chemical),
 ): AnalysisResult => {
     const { binColor, label } = getCategoryDetails(category);
     const hazardWarnings = buildHazardWarnings(extractHCodes(chemical.ghs?.hazardStatements), chemical);
@@ -416,26 +564,26 @@ const buildResult = (
         label,
         reason,
         reasonParams,
-        isSafe: category !== 'UNKNOWN',
+        isSafe: category !== 'UNKNOWN' && category !== 'SPECIAL_HAZARD',
         hazardWarnings: hazardWarnings.length > 0 ? hazardWarnings : undefined,
+        hazardProfile,
     };
 };
 
 export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     // 0. P-List Check (Highest Priority)
     if (chemical.casNumber && pListCas.includes(chemical.casNumber)) {
-        return buildResult(chemical, 'SPECIAL_HAZARD', 'reason_special_hazard');
+        return buildResult(chemical, 'SPECIAL_HAZARD', 'reason_us_rcra_p_list_match');
     }
 
     const elements = parseFormula(chemical.molecularFormula || '');
     const formula = chemical.molecularFormula || '';
     const name = chemical.name || '';
     const hCodes = extractHCodes(chemical.ghs?.hazardStatements);
-    const hasReactiveHCode = hCodes.some(code => REACTIVE_H_CODES.has(code));
     const hasFatalAcuteToxicityHCode = hCodes.some(code => FATAL_ACUTE_TOXICITY_H_CODES.has(code));
     const hasHalogen = hasAnyElement(elements, HALOGENS);
-    const hasHeavyMetal = hasAnyElement(elements, HEAVY_METALS);
     const isOrganic = isLikelyOrganicByFormula(formula, name);
+    const hazardProfile = detectChemicalHazards(chemical);
 
     chemical.properties = {
         ...chemical.properties,
@@ -446,13 +594,10 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     let category: DisposalCategory = 'UNKNOWN';
     let reason = '';
 
-    const isReactive = hasReactiveHCode ||
-        matchesAny(name, REACTIVE_NAME_PATTERNS) ||
-        isFormulaExactly(formula, ['HNO3', 'HClO4', 'NaBH4', 'LiAlH4', 'NaH', 'KH', 'LiH', 'CaH2']);
-    const isCyanideOrSulfide = matchesAny(name, CYANIDE_NAME_PATTERNS) ||
-        matchesAny(name, SULFIDE_NAME_PATTERNS) ||
-        isLikelyCyanideFormula(formula) ||
-        isLikelySulfideFormula(elements);
+    const isReactive = hazardProfile.flags.includes('REACTIVE');
+    const isCyanideOrSulfide = hazardProfile.flags.includes('CYANIDE') ||
+        hazardProfile.flags.includes('SULFIDE');
+    const hasHeavyMetal = hazardProfile.flags.includes('HEAVY_METAL');
     const isSolid = matchesAny(name, SOLID_NAME_PATTERNS);
 
     if (isReactive) {
@@ -463,7 +608,7 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         reason = 'reason_cyanide';
     } else if (hasFatalAcuteToxicityHCode) {
         category = 'SPECIAL_HAZARD';
-        reason = 'reason_special_hazard';
+        reason = 'reason_fatal_acute_toxicity';
     } else if (hasHeavyMetal) {
         category = 'HEAVY_METAL';
         reason = 'reason_heavy_metal';
@@ -497,5 +642,5 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         reason = 'reason_solid_waste';
     }
 
-    return buildResult(chemical, category, reason || 'reason_unknown');
+    return buildResult(chemical, category, reason || 'reason_unknown', undefined, hazardProfile);
 };

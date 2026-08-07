@@ -108,6 +108,14 @@ describe('wasteLogService V2 mutations', () => {
     it('builds the database camelCase payload without legacy direct-insert fields', () => {
         const batch = createBatch();
         batch.mixingState = 'already_mixed';
+        batch.totalAmount.source = 'component_sum';
+        batch.components[0].solutionContext = {
+            physicalForm: 'organic_solvent',
+            solventClass: 'organic_non_halogen',
+            isSolventVerified: true,
+            solventResolution: 'local_dictionary',
+            solventCasNumber: '67-64-1',
+        };
         const payload = buildWasteHandlingRpcPayload({
             batch,
             decision: createDecision(),
@@ -150,8 +158,18 @@ describe('wasteLogService V2 mutations', () => {
             hazardFlags: ['FLAMMABLE'],
             pubchemCid: null,
             koshaChemId: null,
+            analysisSnapshot: {
+                solutionContext: {
+                    physicalForm: 'organic_solvent',
+                    solventClass: 'organic_non_halogen',
+                    isSolventVerified: true,
+                    solventResolution: 'local_dictionary',
+                    solventCasNumber: '67-64-1',
+                },
+            },
         });
         expect(payload.confirmationSnapshot).toHaveProperty('additionalComponentsStatus', 'none');
+        expect(payload.totalAmount).not.toHaveProperty('source');
         expect(payload).not.toHaveProperty('handling_action');
         expect(payload).not.toHaveProperty('decision');
     });
@@ -167,6 +185,132 @@ describe('wasteLogService V2 mutations', () => {
         });
 
         expect(payload.confirmationSnapshot).not.toHaveProperty('additionalComponentsStatus');
+    });
+
+    it('preserves a user-confirmed solution context in the audit snapshot', () => {
+        const batch = createBatch();
+        batch.components[0].solutionContext = {
+            physicalForm: 'aqueous',
+            solventClass: 'aqueous',
+            solventName: 'Water',
+            isSolventVerified: true,
+            solventResolution: 'user',
+            solventCasNumber: '7732-18-5',
+            solventMolecularFormula: 'H2O',
+        };
+        const payload = buildWasteHandlingRpcPayload({
+            batch,
+            decision: createDecision(),
+            handlingAction: 'container_deposit',
+        });
+        expect(payload.components[0]?.analysisSnapshot).toMatchObject({
+            solutionContext: {
+                physicalForm: 'aqueous',
+                solventClass: 'aqueous',
+                isSolventVerified: true,
+                solventResolution: 'user',
+                solventCasNumber: '7732-18-5',
+            },
+        });
+    });
+
+    it('serializes structured pH inputs and an informational prediction into the audited component envelope', () => {
+        const batch = createBatch();
+        batch.matrix = 'aqueous';
+        batch.mixingState = 'already_mixed';
+        batch.components[0].solutionVolume = {
+            value: 0.1,
+            unit: 'L',
+            normalizedMl: 100,
+        };
+        batch.components[0].concentration = {
+            value: 5,
+            unit: '%',
+            basis: 'w_w',
+            density: {
+                value: 1.006,
+                unit: 'g/mL',
+                kind: 'solution',
+                temperatureC: 25,
+                source: 'catalog',
+            },
+        };
+        batch.components[0].phCatalogId = 'usgs:acetate:acetic-acid';
+
+        const payload = buildWasteHandlingRpcPayload({
+            batch,
+            decision: createDecision(),
+            handlingAction: 'container_deposit',
+            phPredictionSnapshot: {
+                origin: 'client_generated',
+                capturedAt: '2026-08-04T12:00:00.000Z',
+                status: 'approximate',
+                value: 2.381,
+                displayValue: 2.4,
+                ionicStrength: 0.025,
+                confidence: 'approximate',
+                issueCodes: ['volume_additivity_assumed'],
+                assumptions: ['aqueous_25c_closed_system'],
+                modelVersion: 'buril-ph-1.0.0',
+                catalogVersion: 'usgs-phreeqc-3.8.8-buril-1',
+                inputHash: 'fnv1a:1234abcd',
+            },
+        });
+
+        expect(payload.components[0].concentration).toEqual({ value: 5, unit: '%' });
+        expect(payload.components[0].analysisSnapshot).toMatchObject({
+            phPredictionInput: {
+                solutionVolume: {
+                    value: 0.1,
+                    unit: 'L',
+                    normalizedMl: 100,
+                    isEstimate: false,
+                },
+                concentrationBasis: 'w_w',
+                density: {
+                    value: 1.006,
+                    unit: 'g/mL',
+                    kind: 'solution',
+                    temperatureC: 25,
+                    source: 'catalog',
+                    isEstimate: false,
+                },
+                phCatalogId: 'usgs:acetate:acetic-acid',
+            },
+            phPredictionSnapshot: expect.objectContaining({
+                origin: 'client_generated',
+                status: 'approximate',
+                value: 2.381,
+            }),
+        });
+        expect(payload.confirmationSnapshot).not.toHaveProperty('phPredictionSnapshot');
+    });
+
+    it('keeps a failed non-authoritative pH prediction from invalidating the waste record payload', () => {
+        const batch = createBatch();
+        const payload = buildWasteHandlingRpcPayload({
+            batch,
+            decision: createDecision(),
+            handlingAction: 'container_deposit',
+            phPredictionSnapshot: {
+                origin: 'client_generated',
+                capturedAt: '2026-08-05T00:00:00.000Z',
+                status: 'failed',
+                confidence: 'unavailable',
+                issueCodes: ['engine_error'],
+                assumptions: [],
+                modelVersion: 'unknown',
+                catalogVersion: 'unknown',
+                inputHash: 'fnv1a64:1234567890abcdef',
+            },
+        });
+
+        expect(payload.components[0].analysisSnapshot).toMatchObject({
+            phPredictionSnapshot: {
+                status: 'failed',
+                inputHash: 'fnv1a64:1234567890abcdef',
+            },
+        });
     });
 
     it('serializes the HF/fluoride compatible-container confirmation into the audited snapshot', () => {
@@ -479,9 +623,17 @@ describe('wasteLogService V2 mutations', () => {
             stream_code: 'AQUEOUS_OTHER',
             total_amount_value: '250',
             total_amount_unit: 'mL',
+            confirmation_snapshot: { measuredBatchPh: 7.1 },
+            ph_prediction_snapshot: {
+                status: 'available',
+                displayValue: 7.2,
+                modelVersion: 'buril-ph-1.0.0',
+            },
         });
         expect(v2.decision_status).toBe('ready');
         expect(v2.total_amount_value).toBe(250);
+        expect(v2.confirmation_snapshot).toEqual({ measuredBatchPh: 7.1 });
+        expect(v2.ph_prediction_snapshot).toMatchObject({ status: 'available', displayValue: 7.2 });
         expect(isLegacyWasteLog(v2)).toBe(false);
     });
 
@@ -506,6 +658,18 @@ describe('wasteLogService V2 mutations', () => {
                 ghs_data_status: 'verified',
                 concentration_value: '10',
                 concentration_unit: '%',
+                solution_volume_value: '0.1',
+                solution_volume_unit: 'L',
+                solution_volume_normalized_ml: '100',
+                solution_volume_is_estimate: false,
+                concentration_basis: 'w_w',
+                density_value: '1.006',
+                density_unit: 'g/mL',
+                density_kind: 'solution',
+                density_temperature_c: '25',
+                density_source: 'catalog',
+                density_is_estimate: false,
+                ph_catalog_id: 'usgs:acetate:acetic-acid',
                 hazard_flags: ['FLAMMABLE', 'NOT_A_SCHEMA_FLAG'],
                 data_sources: [{
                     sourceType: 'inventory',
@@ -538,6 +702,15 @@ describe('wasteLogService V2 mutations', () => {
             pubchemCid: 180,
             concentrationValue: 10,
             concentrationUnit: '%',
+            solutionVolumeValue: 0.1,
+            solutionVolumeUnit: 'L',
+            solutionVolumeNormalizedMl: 100,
+            concentrationBasis: 'w_w',
+            densityValue: 1.006,
+            densityKind: 'solution',
+            densityTemperatureC: 25,
+            densitySource: 'catalog',
+            phCatalogId: 'usgs:acetate:acetic-acid',
             hazardFlags: ['FLAMMABLE'],
             dataSources: [{
                 sourceType: 'inventory',

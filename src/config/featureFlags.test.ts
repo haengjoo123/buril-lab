@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { isExplicitlyDisabled, isExplicitlyEnabled } from './featureFlags'
+import { DEFAULT_PH_CATALOG_APPROVAL } from '../features/phPrediction'
+import {
+  isExplicitlyDisabled,
+  isExplicitlyEnabled,
+  isPhPredictionDeploymentEnabled,
+  isPhPredictionEnabled,
+} from './featureFlags'
 
 describe('isExplicitlyEnabled', () => {
   it('fails closed when the flag is missing or not the literal true value', () => {
@@ -20,5 +26,23 @@ describe('isExplicitlyEnabled', () => {
     expect(isExplicitlyDisabled('')).toBe(false)
     expect(isExplicitlyDisabled('true')).toBe(false)
     expect(isExplicitlyDisabled(' FALSE ')).toBe(true)
+  })
+
+  it('enables an approved catalog by default and keeps an explicit emergency rollback', () => {
+    expect(isPhPredictionDeploymentEnabled(undefined, { runtimeReady: true })).toBe(true)
+    expect(isPhPredictionDeploymentEnabled('false', { runtimeReady: true })).toBe(false)
+    expect(isPhPredictionDeploymentEnabled(' FALSE ', { runtimeReady: true })).toBe(false)
+    expect(isPhPredictionDeploymentEnabled('true', { runtimeReady: false })).toBe(false)
+    expect(isPhPredictionDeploymentEnabled(undefined, { runtimeReady: false })).toBe(false)
+    expect(isPhPredictionDeploymentEnabled('yes', { runtimeReady: false })).toBe(false)
+    expect(isPhPredictionDeploymentEnabled('true', { runtimeReady: true })).toBe(true)
+  })
+
+  it('unlocks the current validated catalog in the default environment', () => {
+    expect(
+      DEFAULT_PH_CATALOG_APPROVAL.runtimeReady,
+      DEFAULT_PH_CATALOG_APPROVAL.issueCodes.join(', '),
+    ).toBe(true)
+    expect(isPhPredictionEnabled).toBe(true)
   })
 })

@@ -334,9 +334,20 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         return ghsState?.status === 'loaded' ? ghsState.result.hCodes : [];
     }, [getInventoryGhsState]);
 
+    const getInventoryGhsStatus = useCallback((item: InventoryItem) => {
+        const ghsState = getInventoryGhsState(item);
+        if (!ghsState) return 'not_checked' as const;
+        if (ghsState.status === 'loading') return 'pending' as const;
+        if (ghsState.status === 'error') return 'transient_error' as const;
+        return ghsState.result.status;
+    }, [getInventoryGhsState]);
+
     const classifyInventoryItemHazard = useCallback((item: InventoryItem) => (
-        classifyInventoryHazard(item, { hCodes: getInventoryGhsHCodes(item) })
-    ), [getInventoryGhsHCodes]);
+        classifyInventoryHazard(item, {
+            hCodes: getInventoryGhsHCodes(item),
+            ghsStatus: getInventoryGhsStatus(item),
+        })
+    ), [getInventoryGhsHCodes, getInventoryGhsStatus]);
 
     const filteredItems = useMemo(() => {
         const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -1247,17 +1258,17 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         }
 
         return (
-            <div className="flex flex-col gap-1 min-w-[64px] ml-auto sm:ml-0 overflow-hidden">
+            <span className="inline-flex min-w-[64px] flex-col gap-1 overflow-hidden align-middle">
                 <span className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold ${colorClass} leading-none truncate whitespace-nowrap`}>
                     {t(`inventory_remaining_stage_${stage}_label`)}
                 </span>
-                <div className="w-full h-1 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div
+                <span className="h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                    <span
                         className={`h-full ${barColor} transition-all duration-500`}
-                        style={{ width: `${val}%` }}
+                        style={{ display: 'block', width: `${val}%` }}
                     />
-                </div>
-            </div>
+                </span>
+            </span>
         );
     };
 
@@ -1432,23 +1443,23 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                 {t('inventory_select_item')}
                             </label>
                         )}
-                             <div className="flex items-center gap-2 flex-wrap">
-                                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base break-words">
-                                     {item.name}
-                                 </h3>
-                                 {needsIdentityReview && (
-                                     <span
-                                         className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                                         title={t('inventory_identity_review_help')}
-                                     >
-                                         <AlertTriangle className="h-3 w-3" />
-                                         {t('inventory_identity_review')}
-                                     </span>
-                                 )}
-                                 <div className="flex items-center gap-1.5">
+                        <div className="text-base leading-6">
+                            <h3 className="inline break-words font-semibold text-slate-800 dark:text-slate-100">
+                                {item.name}
+                            </h3>
+                            {needsIdentityReview && (
+                                <span
+                                    className="ml-2 inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 align-middle text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                                    title={t('inventory_identity_review_help')}
+                                >
+                                    <AlertTriangle className="h-3 w-3" />
+                                    {t('inventory_identity_review')}
+                                </span>
+                            )}
+                            <span className="ml-2 inline-flex items-center gap-1.5 align-middle">
                                 {renderExpiryBadge(item)}
                                 {renderRemainingBadge(item)}
-                            </div>
+                            </span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                             {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}

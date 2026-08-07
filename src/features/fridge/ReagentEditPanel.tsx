@@ -16,7 +16,7 @@ import { auditService, type AuditLog } from '../../services/auditService';
 import type { ReagentTemplateType } from '../../types/fridge';
 import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
-import { classifyStorageGroups, checkShelfCompatibility, getStorageGroupLabels } from '../../utils/storageCompatibilityChecker';
+import { classifyStoragePlacement, checkShelfCompatibility, getStorageGroupLabels } from '../../utils/storageCompatibilityChecker';
 import { AlertTriangle, FlaskConical, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { searchChemical } from '../../services/searchService';
 import { analyzeChemical } from '../../utils/chemicalAnalyzer';
@@ -321,6 +321,13 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             casNo: casNo || undefined,
             remaining_percent: remainingPercent,
             width,
+            ...(casChanged ? {
+                hCodes: [],
+                isAcidic: false,
+                isBasic: false,
+                ghsStatus: casNo ? 'pending' as const : 'not_checked' as const,
+                ghsCheckedAt: undefined,
+            } : {}),
         });
 
         // If CAS changed and now has a value, trigger PubChem enrichment
@@ -544,7 +551,11 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             if (placedItemId) {
                 useFridgeStore.getState().removeReagent(placedItemId);
                 useFridgeStore.getState().setSelectedReagentId(sourcePlacementId);
-                await useFridgeStore.getState().saveCabinet();
+                try {
+                    await useFridgeStore.getState().saveCabinet();
+                } catch (rollbackSaveError) {
+                    console.error('Failed to persist copied reagent rollback:', rollbackSaveError);
+                }
             }
 
             if (createdInventoryId) {
@@ -1064,7 +1075,8 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
 
                             {/* Storage Compatibility Section */}
                             {(() => {
-                                const storageGroups = classifyStorageGroups(selectedItem);
+                                const storageClassification = classifyStoragePlacement(selectedItem);
+                                const storageGroups = storageClassification.groups;
                                 const groupLabels = getStorageGroupLabels(storageGroups);
                                 const currentShelf = shelves.find(s => s.items.some(i => i.id === selectedReagentId));
                                 const shelfWarnings = currentShelf ? checkShelfCompatibility(currentShelf.items).filter(
@@ -1075,7 +1087,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                     : shelfWarnings.slice(0, STORAGE_WARNING_PREVIEW_LIMIT);
                                 const hiddenShelfWarningCount = Math.max(0, shelfWarnings.length - STORAGE_WARNING_PREVIEW_LIMIT);
 
-                                if (groupLabels.length === 0 && shelfWarnings.length === 0) return null;
+                                if (groupLabels.length === 0 && shelfWarnings.length === 0 && !storageClassification.needsReview) return null;
 
                                 return (
                                     <div className="flex flex-col gap-2 border-t border-slate-200 pt-2 dark:border-slate-800">
@@ -1137,6 +1149,13 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                                             : t('cabinet_storage_warnings_show_more', { count: hiddenShelfWarningCount })}
                                                     </button>
                                                 )}
+                                            </div>
+                                        )}
+
+                                        {storageClassification.needsReview && (
+                                            <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-700 dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-200">
+                                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                                                <span>{t('cabinet_storage_review_required')}</span>
                                             </div>
                                         )}
                                     </div>

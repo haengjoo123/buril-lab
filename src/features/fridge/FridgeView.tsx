@@ -22,8 +22,10 @@ import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import type { WasteBatchDisposalReason } from './reagentDisposalFlow';
+import { resolveAutoPlacementStorageData } from '../../utils/storagePlacementGate';
 
-import type { ReagentTemplateType } from '../../types/fridge';
+import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
+import { createCabinetLayoutSnapshot } from '../../utils/cabinetLayoutHistory';
 import { checkCabinetCompatibility } from '../../utils/storageCompatibilityChecker';
 
 const FridgeScene = lazy(() =>
@@ -118,8 +120,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
     const [isClearSecondConfirmOpen, setIsClearSecondConfirmOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    // 'idle' | 'saving' | 'saved'
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const savedTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Naming / Size Configuration Modal State
@@ -188,6 +189,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         saveCabinet,
         cabinetName,
         isLoadingCabinet,
+        cabinetSaveError,
         clearCabinet,
         pendingPlacement,
         setPendingPlacement,
@@ -328,6 +330,15 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     }, [toastMessage]);
 
     useEffect(() => {
+        if (!cabinetSaveError) {
+            setSaveStatus((current) => current === 'error' ? 'idle' : current);
+            return;
+        }
+        setSaveStatus('error');
+        setToastMessage(t('cabinet_save_failed_retry'));
+    }, [cabinetSaveError, t]);
+
+    useEffect(() => {
         if (compatibilityPlanPreview) {
             setIsCompatibilityPreviewVisible(true);
             return;
@@ -363,16 +374,18 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     }, []);
 
     // 자동저장 헬퍼 — 모든 상태 변경 후 호출
-    const autoSave = React.useCallback(async () => {
+    const autoSave = React.useCallback(async (): Promise<boolean> => {
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
         setSaveStatus('saving');
         try {
             await useFridgeStore.getState().saveCabinet();
             setSaveStatus('saved');
             savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
+            return true;
         } catch (err) {
             console.error('Auto-save failed:', err);
-            setSaveStatus('idle');
+            setSaveStatus('error');
+            return false;
         }
     }, []);
 
@@ -384,6 +397,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             setSaveStatus('saved');
             if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
             savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
+        } catch (err) {
+            console.error('Manual cabinet save failed:', err);
+            setSaveStatus('error');
         } finally {
             setIsSaving(false);
         }
@@ -410,19 +426,36 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         const state = useFridgeStore.getState();
         const currentCabinetId = state.cabinetId;
         const allItems = state.shelves.flatMap(s => s.items);
+        const rollbackState = {
+            shelves: createCabinetLayoutSnapshot(state.shelves),
+            layoutUndoStack: state.layoutUndoStack.map(createCabinetLayoutSnapshot),
+            layoutRedoStack: state.layoutRedoStack.map(createCabinetLayoutSnapshot),
+            selectedReagentId: state.selectedReagentId,
+            highlightedItemId: state.highlightedItemId,
+            draggedItem: state.draggedItem,
+            pendingPlacement: state.pendingPlacement,
+            focusedShelfId: state.focusedShelfId,
+            compatibilityPlanPreview: state.compatibilityPlanPreview,
+        };
 
         clearCabinet();
         setIsClearConfirmOpen(false);
         setIsClearSecondConfirmOpen(false);
 
-        // 로그 및 DB 동기화 (비동기, 실패해도 UI에 영향 없음)
+        // Persist the destructive cabinet change before clearing linked inventory.
         if (currentCabinetId) {
             try {
-                await saveCabinet(); // 먼저 DB에 빈 상태 반영
-                
+                await saveCabinet();
+            } catch (err) {
+                useFridgeStore.setState(rollbackState);
+                console.error('Failed to clear cabinet state:', err);
+                return;
+            }
+
+            try {
                 // 연결된 재고 항목 삭제 및 폐기 로그 기록 (allItems가 없어도 DB에서 cabinet_id로 삭제함)
                 await inventoryService.clearCabinetInventory(currentCabinetId, allItems);
-                
+
                 if (allItems.length > 0) {
                     const names = allItems.map(i => i.name).join(', ');
                     await cabinetService.logActivity(
@@ -432,7 +465,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     );
                 }
             } catch (err) {
-                console.error('Failed to log clear_all activity:', err);
+                console.error('Failed to clear linked cabinet inventory or log activity:', err);
             }
         }
     };
@@ -467,6 +500,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const handleApplyCompatibilityPreview = async () => {
         const applied = await applyCompatibilityPlan();
         if (!applied) {
+            setSaveStatus('error');
             setToastMessage(t('cabinet_auto_place_save_failed'));
             return;
         }
@@ -580,7 +614,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
         // 자동저장 + 활동 로그 (병렬)
         const currentCabinetId = useFridgeStore.getState().cabinetId;
-        autoSave();
+        const saved = await autoSave();
+        if (!saved) return;
         if (newlyPlacedItemId) {
             await analyticsService.trackCommerceIntentEvent({
                 eventType: 'cabinet_item_placed',
@@ -724,7 +759,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             throw new Error(t('scan_review_required', '시약 이름을 확인해 주세요.'));
         }
 
-        const result = autoPlaceReagent({
+        const itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'> = {
             id: '',
             reagentId: 'scan-' + Date.now(),
             name: finalName,
@@ -740,13 +775,35 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             brand: scan.brand || undefined,
             productNumber: scan.productNumber || undefined,
             remaining_percent: options?.remainingPercent ?? 100,
-        });
+        };
+
+        let resolvedItemData = itemData;
+        if (options?.placementMode !== 'scan_review_confirmed') {
+            const storageResolution = await resolveAutoPlacementStorageData(itemData);
+            if (!storageResolution.allowed) {
+                enqueueScanReview({
+                    ...scan,
+                    reviewRequired: true,
+                    reviewReasons: [
+                        ...(scan.reviewReasons || []),
+                        `storage_${storageResolution.reason || 'review_required'}`,
+                    ],
+                }, queueItemId);
+                return;
+            }
+            resolvedItemData = storageResolution.item;
+        }
+
+        const result = autoPlaceReagent(resolvedItemData);
 
         if (!result) {
             throw new Error(t('reagent_no_space'));
         } else {
             // 자동저장 + 스캔 등록 로그 (병렬)
-            await autoSave();
+            const saved = await autoSave();
+            if (!saved) {
+                throw new Error(t('cabinet_save_failed_retry'));
+            }
             updateScanQueueItem(queueItemId, { status: 'success', label: finalName });
             setToastMessage(t('scan_auto_place_done', { name: finalName }));
             void analyticsService.trackCommerceIntentEvent({
@@ -784,7 +841,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             }
         }
 
-    }, [autoPlaceReagent, autoSave, t, updateScanQueueItem]);
+    }, [autoPlaceReagent, autoSave, enqueueScanReview, t, updateScanQueueItem]);
 
     const processScanTask = React.useCallback(async (task: { id: string; imageSrc: string }) => {
         try {
@@ -987,6 +1044,17 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             <CheckCircle2 className="w-4 h-4" />
                             <span className="hidden sm:inline">{t('cabinet_saved')}</span>
                         </span>
+                    ) : saveStatus === 'error' ? (
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={isSaving || isLoadingCabinet}
+                            title={t('cabinet_save_retry')}
+                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40 dark:text-red-400 dark:hover:bg-red-950/40"
+                        >
+                            <ShieldAlert className="h-4 w-4" />
+                            <span className="hidden sm:inline">{t('cabinet_save_retry')}</span>
+                        </button>
                     ) : (
                         <button
                             onClick={handleSave}

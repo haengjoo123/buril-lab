@@ -4,6 +4,7 @@ export type SafetyCenterLabLinkStatus = 'requested' | 'approved' | 'rejected' | 
 export type SafetyCenterRequestPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type SafetyCenterRequestStatus = 'open' | 'in_progress' | 'submitted' | 'resolved';
 export type SafetyCenterExportFormat = 'xlsx' | 'pdf';
+export type SafetyCenterGhsDataStatus = 'success' | 'not_found' | 'no_ghs' | 'transient_error' | null;
 
 export interface SafetyCenter {
   id: string;
@@ -68,6 +69,11 @@ export interface SafetyCenterRiskItem {
   storage_location_name: string | null;
   expiry_date: string | null;
   remaining_percent: number | null;
+  /** Fresh lab-scoped GHS data returned by the Safety Center RPC when available. */
+  ghs_h_codes?: string[] | null;
+  ghs_data_status?: SafetyCenterGhsDataStatus;
+  ghs_fetched_at?: string | null;
+  ghs_expires_at?: string | null;
   created_at: string;
   updated_at: string;
 }

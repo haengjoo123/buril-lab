@@ -38,7 +38,23 @@ export interface DisposalGuideChemicalInput {
   concentration?: {
     value?: number
     unit?: string
+    basis?: 'w_w' | 'w_v' | 'v_v'
+    density?: {
+      value?: number
+      unit?: 'g/mL'
+      kind?: 'solution' | 'solute'
+      temperatureC?: number
+      source?: 'catalog' | 'user'
+      isEstimate?: boolean
+    }
   }
+  solutionVolume?: {
+    value?: number
+    unit?: 'uL' | 'mL' | 'L'
+    normalizedMl?: number
+    isEstimate?: boolean
+  }
+  phCatalogId?: string
   category?: string
   hazardFlags?: string[]
   ghs?: {
@@ -63,6 +79,18 @@ export interface DisposalGuideBatchContextInput {
     unknown?: boolean
   }
   measuredPh?: number | null
+  measuredBatchPh?: number | null
+  mixingState?: 'unknown' | 'separate' | 'already_mixed'
+  predictedPh?: {
+    status?: 'available' | 'approximate' | 'unsupported' | 'blocked' | 'failed'
+    value?: number
+    ionicStrength?: number
+    confidence?: 'good' | 'approximate' | 'unavailable'
+    issueCodes?: string[]
+    modelVersion?: string
+    catalogVersion?: string
+    inputHash?: string
+  }
   hazardFlags?: string[]
   compatibilityWarnings?: Array<string | {
     severity?: string
@@ -704,6 +732,8 @@ function normalizeRequestForCache(input: DisposalGuideRequestInput) {
     pubchemCid: Number.isFinite(chemical.pubchemCid) ? chemical.pubchemCid : null,
     koshaChemId: Number.isFinite(chemical.koshaChemId) ? chemical.koshaChemId : null,
     concentration: chemical.concentration || null,
+    solutionVolume: chemical.solutionVolume || null,
+    phCatalogId: cleanText(chemical.phCatalogId),
     category: cleanText(chemical.category),
     hazardFlags: cleanStringArray(chemical.hazardFlags, 80).sort(),
     ghs: chemical.ghs || null,
@@ -729,6 +759,8 @@ function buildPrompt(input: DisposalGuideRequestInput, deterministic: Structured
   const promptData = {
     components: input.chemicals || input.components || [],
     batch: input.batch || null,
+    informationalPrediction: input.batch?.predictedPh || null,
+    predictionSafetyRule: 'The predicted pH is informational only. Never present it as measured, alter immutableDecision with it, or suggest mixing separate chemicals.',
     immutableDecision: {
       decisionStatus: deterministic.decisionStatus,
       destination: deterministic.destination,

@@ -30,6 +30,9 @@ export interface ReagentPlacement {
     isAcidic: boolean;
     isBasic: boolean;
     hCodes: string[];
+    /** Status of the authoritative CAS/GHS lookup used for storage decisions. */
+    ghsStatus?: ReagentGhsStatus;
+    ghsCheckedAt?: string;
 
     // User notes and additional info
     notes?: string;
@@ -67,6 +70,15 @@ export interface ShelfData {
     items: ReagentPlacement[];
 }
 
+export type ReagentGhsStatus =
+    | 'not_checked'
+    | 'pending'
+    | 'success'
+    | 'no_ghs'
+    | 'not_found'
+    | 'transient_error'
+    | 'invalid_cas';
+
 export type StoragePlacementGroup =
     | 'FLAMMABLE'
     | 'OXIDIZER'
@@ -96,7 +108,10 @@ export type StorageClassificationEvidence =
     | 'insufficient_identity';
 
 export interface StorageClassification {
+    /** Groups supported by authoritative evidence and safe for compatibility rules. */
     groups: StoragePlacementGroup[];
+    /** Name-derived candidates shown for review only; never used for compatibility rules. */
+    candidateGroups: StoragePlacementGroup[];
     primaryGroup: StoragePlacementGroup;
     confidence: StorageClassificationConfidence;
     evidence: StorageClassificationEvidence[];

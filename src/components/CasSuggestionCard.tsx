@@ -34,6 +34,9 @@ function getUnavailableText(
     if (suggestion.status === 'match' && suggestion.confidence === 'low') {
         return t('cas_suggestion_unavailable_low_confidence', '근거가 충분하지 않아 자동 제안하지 않았어요.');
     }
+    if (suggestion.status === 'unavailable') {
+        return t('cas_suggestion_unavailable_upstream', '조회 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+    }
     return null;
 }
 

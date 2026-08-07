@@ -16,8 +16,9 @@ import type {
 } from '../types';
 import { checkCompatibility } from './compatibilityChecker';
 import { isValidCasNumber } from './casNumber';
+import { detectChemicalHazards, parseFormula } from './chemicalAnalyzer';
 
-export const WASTE_RULE_VERSION = '2.3.0';
+export const WASTE_RULE_VERSION = '2.4.0';
 export const DEFAULT_WASTE_POLICY_VERSION = 'KR-2026.3';
 
 export interface NormalizedWasteAmount {
@@ -61,19 +62,76 @@ const HALOGENATED_SOLVENT_CAS = new Set([
     '79-01-6', // trichloroethylene
     '127-18-4', // tetrachloroethylene
     '107-06-2', // 1,2-dichloroethane
+    '108-90-7', // chlorobenzene
 ]);
 
 const NON_HALOGENATED_SOLVENT_CAS = new Set([
+    '67-68-5', // dimethyl sulfoxide
     '67-64-1', // acetone
     '64-17-5', // ethanol
     '67-56-1', // methanol
     '75-05-8', // acetonitrile
     '108-88-3', // toluene
     '110-54-3', // hexane
+    '142-82-5', // heptane
+    '1330-20-7', // xylene
+    '71-43-2', // benzene
     '60-29-7', // diethyl ether
     '109-99-9', // tetrahydrofuran
+    '68-12-2', // dimethylformamide
+    '67-63-0', // isopropanol
     '141-78-6', // ethyl acetate
 ]);
+
+type OrganicSolventMatrix = Extract<
+    WasteMatrix,
+    'organic_halogenated' | 'organic_non_halogenated'
+>;
+
+/**
+ * A disposal category describes the solute's chemistry, not the presence of an
+ * organic solvent phase. Only an exact solvent allowlist match or an explicitly
+ * verified solution context is strong enough evidence for biphasic routing.
+ */
+const getOrganicSolventMatrixEvidence = (
+    component: WasteComponent,
+): OrganicSolventMatrix | null => {
+    if (component.identityConfidence !== 'verified') return null;
+
+    const chemicalCas = component.chemical.casNumber?.trim() ?? '';
+    const context = component.solutionContext;
+    const solventCas = context?.solventCasNumber?.trim() ?? '';
+    const hasVerifiedContext = context?.isSolventVerified === true
+        && context.physicalForm === 'organic_solvent';
+    const hasHalogenatedEvidence = HALOGENATED_SOLVENT_CAS.has(chemicalCas) || (
+        hasVerifiedContext
+        && context.solventClass === 'organic_halogen'
+        && HALOGENATED_SOLVENT_CAS.has(solventCas)
+    );
+    const hasNonHalogenatedEvidence = NON_HALOGENATED_SOLVENT_CAS.has(chemicalCas) || (
+        hasVerifiedContext
+        && context.solventClass === 'organic_non_halogen'
+        && NON_HALOGENATED_SOLVENT_CAS.has(solventCas)
+    );
+
+    // Any verified halogenated carrier wins over non-halogenated evidence. A
+    // solute identity must never downgrade a halogenated solvent phase.
+    if (hasHalogenatedEvidence) {
+        return 'organic_halogenated';
+    }
+    if (hasNonHalogenatedEvidence) {
+        return 'organic_non_halogenated';
+    }
+    return null;
+};
+
+const getOrganicSolventMatrixEvidenceSet = (
+    components: readonly WasteComponent[],
+): Set<OrganicSolventMatrix> => new Set(
+    components
+        .map(getOrganicSolventMatrixEvidence)
+        .filter((matrix): matrix is OrganicSolventMatrix => matrix !== null),
+);
 
 const HYDROFLUORIC_ACID_CAS = '7664-39-3';
 const ACID_IDENTITY_CAS = new Set([
@@ -100,28 +158,23 @@ const ACID_IDENTITY_FORMULAS = new Set([
 const ALKALI_IDENTITY_FORMULAS = new Set([
     'NAOH', 'KOH', 'LIOH', 'CA(OH)2', 'BA(OH)2', 'NH3', 'NH4OH',
 ]);
-const FLUORIDE_COMPOUND_CAS = new Set([
-    '7681-49-4', // sodium fluoride
-    '7789-23-3', // potassium fluoride
-    '12125-01-8', // ammonium fluoride
-    '1341-49-7', // ammonium bifluoride
-    '7789-24-4', // lithium fluoride
-    '7789-75-5', // calcium fluoride
-    '7783-40-6', // magnesium fluoride
-    '7784-18-1', // aluminium fluoride
-    '1333-83-1', // sodium bifluoride
-    '7789-29-9', // potassium bifluoride
-]);
-const FLUORIDE_COMPOUND_FORMULAS = new Set([
-    'NAF', 'KF', 'NH4F', 'NH4HF2', 'LIF', 'CAF2', 'MGF2', 'ALF3',
-    'NAHF2', 'KHF2', 'CSF', 'RBF', 'BAF2', 'ZNF2',
-]);
-
 const normalizedFormula = (formula: string | undefined): string =>
     (formula ?? '')
         .replace(/\s+/g, '')
         .replace(/\((?:aq|s|l|g)\)$/i, '')
         .toUpperCase();
+
+const hasOrganicHalogenContent = (component: WasteComponent): boolean => {
+    if (component.category === 'ORGANIC_HALOGEN') return true;
+    try {
+        const elements = parseFormula(component.chemical.molecularFormula ?? '');
+        return Boolean(elements.C && (elements.F || elements.Cl || elements.Br || elements.I));
+    } catch {
+        // External and migrated formula strings are not routing authority. A
+        // malformed value must remain unresolved instead of crashing analysis.
+        return false;
+    }
+};
 
 const getReferencePh = (analysis: AnalysisResult): number | undefined =>
     analysis.chemical.properties?.referencePh ?? analysis.chemical.properties?.ph;
@@ -179,26 +232,10 @@ const getLegalWastePhClass = (batch: WasteBatchDraft): WasteLegalPhClass => {
     return 'none';
 };
 
-const isHydrofluoricAcid = (analysis: AnalysisResult): boolean => {
-    const { name, casNumber, molecularFormula } = analysis.chemical;
-    return casNumber?.trim() === HYDROFLUORIC_ACID_CAS ||
-        normalizedFormula(molecularFormula) === 'HF' ||
-        /\b(?:hydrofluoric\s+acid|hydrogen\s+fluoride|fluorhydric\s+acid)\b|불산|불화\s*수소|플루오린화\s*수소/i.test(name);
-};
-
-const isFluorideCompound = (analysis: AnalysisResult): boolean => {
-    const { name, casNumber, molecularFormula } = analysis.chemical;
-    return FLUORIDE_COMPOUND_CAS.has(casNumber?.trim() ?? '') ||
-        FLUORIDE_COMPOUND_FORMULAS.has(normalizedFormula(molecularFormula)) ||
-        /\b(?:bi)?fluoride\b|\bhydrogen\s+difluoride\b|불화물|불화암모늄|불화나트륨|불화칼륨/i.test(name);
-};
-
 /** Infer a batch matrix only from evidence that is strong enough to show as editable. */
 export function inferWasteMatrixFromComponent(component: WasteComponent): WasteMatrix | null {
     const capacity = component.inventorySnapshot?.nominalCapacity?.trim() ?? '';
     const hasMassCapacity = /(?:^|\s|\d)(?:kg|mg|g)\s*$/i.test(capacity);
-    const hasVolumeCapacity = /(?:mL|µL|uL|L)\s*$/i.test(capacity);
-    const cas = component.chemical.casNumber?.trim();
     const formula = component.chemical.molecularFormula?.replace(/\s+/g, '').toUpperCase();
     const name = component.chemical.name?.trim();
 
@@ -206,18 +243,14 @@ export function inferWasteMatrixFromComponent(component: WasteComponent): WasteM
     if (formula === 'H2O' || /^(?:water|distilled water|deionized water|물|증류수|탈이온수)$/i.test(name)) {
         return 'aqueous';
     }
-    if (cas && HALOGENATED_SOLVENT_CAS.has(cas)) return 'organic_halogenated';
-    if (cas && NON_HALOGENATED_SOLVENT_CAS.has(cas)) return 'organic_non_halogenated';
-    if (hasVolumeCapacity && component.category === 'ORGANIC_HALOGEN') return 'organic_halogenated';
-    if (hasVolumeCapacity && component.category === 'ORGANIC_NON_HALOGEN') return 'organic_non_halogenated';
-    return null;
+    return getOrganicSolventMatrixEvidence(component);
 }
 
 /**
- * Re-evaluate an automatic matrix from all strong component evidence. A trace
- * of a halogenated organic solvent keeps the organic stream halogenated, while
- * conflicting physical dimensions are returned as unresolved for the user to
- * confirm instead of preserving a stale automatic default.
+ * Re-evaluate an automatic matrix from all strong component evidence. Organic
+ * solvent evidence determines the liquid stream even when water is also
+ * present; a trace of a halogenated organic solvent keeps that stream
+ * halogenated. Conflicting physical dimensions remain unresolved for the user.
  */
 export function inferWasteMatrixFromComponents(
     components: WasteComponent[],
@@ -233,41 +266,15 @@ export function inferWasteMatrixFromComponents(
 
     if (inferred.has('solid_slurry')) return null;
 
-    const hasAqueous = inferred.has('aqueous');
     const hasHalogenated = inferred.has('organic_halogenated');
     const hasNonHalogenated = inferred.has('organic_non_halogenated');
 
-    if (hasAqueous && (hasHalogenated || hasNonHalogenated)) {
-        return 'mixed_biphasic';
-    }
-    if (hasHalogenated && hasNonHalogenated) {
-        return 'organic_halogenated';
-    }
+    if (hasHalogenated) return 'organic_halogenated';
+    if (hasNonHalogenated) return 'organic_non_halogenated';
+    if (inferred.has('aqueous')) return 'aqueous';
 
     return null;
 }
-
-const HAZARD_CODES: Record<Exclude<
-    WasteHazardFlag,
-    | 'CYANIDE'
-    | 'SULFIDE'
-    | 'HEAVY_METAL'
-    | 'HYDROFLUORIC_ACID'
-    | 'FLUORIDE'
-    | 'REACTIVE'
-    | 'UNKNOWN_COMPONENT'
->, readonly string[]> = {
-    FLAMMABLE: ['H220', 'H221', 'H222', 'H223', 'H224', 'H225', 'H226', 'H227', 'H228'],
-    OXIDIZER: ['H270', 'H271', 'H272'],
-    EXPLOSIVE: ['H200', 'H201', 'H202', 'H203', 'H204', 'H205'],
-    SELF_REACTIVE: ['H240', 'H241', 'H242'],
-    WATER_REACTIVE: ['H260', 'H261'],
-    PYROPHORIC: ['H250'],
-    CORROSIVE: ['H290', 'H314'],
-    ACUTE_TOXIC: ['H300', 'H301', 'H310', 'H311', 'H330', 'H331'],
-    CMR: ['H340', 'H341', 'H350', 'H351', 'H360', 'H361', 'H362'],
-    ENVIRONMENTAL_HAZARD: ['H400', 'H410', 'H411', 'H412', 'H413'],
-};
 
 const generateId = (): string => {
     if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -277,46 +284,13 @@ const generateId = (): string => {
     return `waste-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
-const extractHCodes = (analysis: AnalysisResult): Set<string> => {
-    const statements = analysis.chemical.ghs?.hazardStatements ?? [];
-    return new Set(statements.flatMap((statement) =>
-        statement.toUpperCase().match(/H\d{3}/g) ?? []
-    ));
-};
-
-const hasAnyCode = (codes: Set<string>, expected: readonly string[]): boolean =>
-    expected.some((code) => codes.has(code));
-
-const isCyanide = (analysis: AnalysisResult): boolean => {
-    if (analysis.category === 'CYANIDE') return true;
-    const identity = `${analysis.chemical.name} ${analysis.chemical.molecularFormula}`;
-    return /\bcyanide\b|\bcyanid\b|\bNaCN\b|\bKCN\b|\bHCN\b|시안화|시안|청산/i.test(identity);
-};
-
-const isSulfide = (analysis: AnalysisResult): boolean => {
-    const identity = `${analysis.chemical.name} ${analysis.chemical.molecularFormula}`;
-    return /\bsulfide\b|\bsulphide\b|\bNa2S\b|\bK2S\b|\bH2S\b|황화/i.test(identity);
-};
-
-/** Derive stable V2 hazard flags without relying on the GHS signal word alone. */
+/** Derive V2 flags from lossless evidence, recomputing legacy results from their chemical data. */
 export function deriveWasteHazardFlags(analysis: AnalysisResult): WasteHazardFlag[] {
-    const hCodes = extractHCodes(analysis);
-    const flags = new Set<WasteHazardFlag>();
+    const profile = analysis.hazardProfile ?? detectChemicalHazards(analysis.chemical);
+    const flags = new Set<WasteHazardFlag>(profile.flags);
 
-    for (const [flag, codes] of Object.entries(HAZARD_CODES) as Array<[
-        keyof typeof HAZARD_CODES,
-        readonly string[],
-    ]>) {
-        if (hasAnyCode(hCodes, codes)) flags.add(flag);
-    }
-
-    if (isCyanide(analysis)) flags.add('CYANIDE');
-    if (isSulfide(analysis)) flags.add('SULFIDE');
-    if (isHydrofluoricAcid(analysis)) flags.add('HYDROFLUORIC_ACID');
-    else if (isFluorideCompound(analysis)) flags.add('FLUORIDE');
-    if (analysis.category === 'HEAVY_METAL') flags.add('HEAVY_METAL');
-    if (analysis.category === 'REACTIVE') flags.add('REACTIVE');
-    if (analysis.category === 'SPECIAL_HAZARD') flags.add('REACTIVE');
+    // UNKNOWN_COMPONENT is a data-quality sentinel, not a chemical hazard. It
+    // remains category-backed only for compatibility with legacy records.
     if (analysis.category === 'UNKNOWN') flags.add('UNKNOWN_COMPONENT');
 
     return [...flags];
@@ -415,9 +389,49 @@ export function normalizeWasteAmount(
     }
 }
 
+const roundDerivedAmount = (value: number): number => Number(value.toPrecision(12));
+
+/**
+ * Derive a liquid batch amount only when every component has a valid solution
+ * volume. The arithmetic sum is always approximate as a physical final volume
+ * because mixing can be non-additive.
+ */
+export function deriveWasteAmountFromComponentVolumes(
+    components: readonly WasteComponent[],
+): WasteAmount | null {
+    if (components.length === 0) return null;
+
+    let totalMl = 0;
+    for (const component of components) {
+        const volume = component.solutionVolume;
+        if (!volume || !Number.isFinite(volume.value) || volume.value <= 0) return null;
+        const expectedMl = volume.unit === 'L'
+            ? volume.value * 1_000
+            : volume.unit === 'uL' ? volume.value / 1_000 : volume.value;
+        if (!Number.isFinite(expectedMl) || expectedMl <= 0 ||
+            !Number.isFinite(volume.normalizedMl) || volume.normalizedMl <= 0) return null;
+        const tolerance = Math.max(1e-9, expectedMl * 1e-9);
+        if (Math.abs(volume.normalizedMl - expectedMl) > tolerance) return null;
+        totalMl += expectedMl;
+    }
+
+    if (!Number.isFinite(totalMl) || totalMl <= 0) return null;
+    const normalizedValue = roundDerivedAmount(totalMl);
+    const useLiters = normalizedValue >= 1_000;
+    return {
+        value: useLiters ? roundDerivedAmount(normalizedValue / 1_000) : normalizedValue,
+        unit: useLiters ? 'L' : 'mL',
+        normalizedValue,
+        normalizedUnit: 'mL',
+        isApproximate: true,
+        isUnknown: false,
+        source: 'component_sum',
+    };
+}
+
 export function getAllowedAmountUnits(matrix: WasteMatrix): readonly AmountUnit[] {
     if (matrix === 'solid_slurry') return ['mg', 'g'];
-    if (matrix === 'unknown') return [];
+    if (matrix === 'unknown') return ['mL', 'L', 'mg', 'g'];
     return ['mL', 'L'];
 }
 
@@ -472,6 +486,8 @@ const selectRouting = (
         return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'special_rule' };
     }
     const categories = new Set(batch.components.map((component) => component.category));
+    const organicSolventEvidence = getOrganicSolventMatrixEvidenceSet(batch.components);
+    const containsOrganicHalogen = batch.components.some(hasOrganicHalogenContent);
 
     if (categories.has('SPECIAL_HAZARD')) {
         return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'special_rule' };
@@ -494,6 +510,19 @@ const selectRouting = (
                 ? 'special_rule'
                 : 'unresolved',
         };
+    }
+    if (batch.matrix === 'mixed_biphasic') {
+        const hasVerifiedOrganicPhase = organicSolventEvidence.size > 0;
+        if (!hasVerifiedOrganicPhase) {
+            return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
+        }
+        if (organicSolventEvidence.has('organic_halogenated') || containsOrganicHalogen) {
+            return { streamCode: 'ORGANIC_HALOGENATED', routingBasis: 'matrix' };
+        }
+        if (organicSolventEvidence.has('organic_non_halogenated')) {
+            return { streamCode: 'ORGANIC_NON_HALOGENATED', routingBasis: 'matrix' };
+        }
+        return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
     }
     if (batch.matrix === 'organic_halogenated' || categories.has('ORGANIC_HALOGEN')) {
         return { streamCode: 'ORGANIC_HALOGENATED', routingBasis: 'matrix' };
@@ -526,13 +555,6 @@ const selectRouting = (
             return { streamCode: 'ALKALI_AQUEOUS', routingBasis: 'identity' };
         }
         return { streamCode: 'AQUEOUS_OTHER', routingBasis: 'matrix' };
-    }
-
-    if (batch.matrix === 'mixed_biphasic') {
-        if (categories.has('ORGANIC_NON_HALOGEN')) {
-            return { streamCode: 'ORGANIC_NON_HALOGENATED', routingBasis: 'matrix' };
-        }
-        return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
     }
 
     return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
@@ -683,7 +705,16 @@ export function analyzeWasteBatch(
     }
 
     if (batch.components.length === 0) pushMissing(missingFields, 'components');
-    if (batch.matrix === 'unknown') pushMissing(missingFields, 'matrix');
+    if (batch.matrix === 'unknown') {
+        if (batch.matrixSource === 'user') {
+            pushReason(blockingReasons, {
+                code: 'unknown_matrix_review',
+                messageKey: 'waste_block_unknown_matrix_review',
+            });
+        } else {
+            pushMissing(missingFields, 'matrix');
+        }
+    }
     if (!validateWasteAmount(batch.totalAmount, batch.matrix).valid) {
         pushMissing(missingFields, 'total_amount');
     }
@@ -705,12 +736,10 @@ export function analyzeWasteBatch(
         pushMissing(missingFields, 'inventory_quantity');
     }
 
-    const categories = new Set(batch.components.map(({ category }) => category));
+    const hasOrganicSolventEvidence = getOrganicSolventMatrixEvidenceSet(batch.components).size > 0;
     if (batch.additionalComponentsStatus === 'present' || (
         batch.matrix === 'mixed_biphasic' &&
-        !categories.has('ORGANIC_HALOGEN') &&
-        !categories.has('ORGANIC_NON_HALOGEN') &&
-        batch.additionalComponentsStatus !== 'none'
+        !hasOrganicSolventEvidence
     )) {
         pushMissing(missingFields, 'additional_components');
     }

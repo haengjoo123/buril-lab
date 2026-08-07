@@ -3,6 +3,8 @@
  * Shared helper for computing expiry status across the app.
  */
 
+import { calendarDateToUtcMs, parseCalendarDate } from './dateValidation';
+
 export type ExpiryLevel = 'expired' | 'critical' | 'warning' | 'ok' | null;
 
 export interface ExpiryStatus {
@@ -27,15 +29,15 @@ export interface ExpiryStatus {
  *  - ok:       daysLeft > 30
  */
 export function getExpiryStatus(expiryDate?: string | null): ExpiryStatus | null {
-    if (!expiryDate) return null;
+    const parsedExpiryDate = parseCalendarDate(expiryDate);
+    if (!parsedExpiryDate) return null;
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expiry = new Date(expiryDate);
-    expiry.setHours(0, 0, 0, 0);
+    const todayMs = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    const expiryMs = calendarDateToUtcMs(parsedExpiryDate);
 
-    const diffMs = expiry.getTime() - today.getTime();
-    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const diffMs = expiryMs - todayMs;
+    const daysLeft = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
     if (daysLeft < 0) {
         return {

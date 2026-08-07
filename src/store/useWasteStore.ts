@@ -6,18 +6,23 @@ import type {
     WasteComponent,
     WasteConcentration,
     WasteMatrix,
+    WasteSolutionVolume,
 } from '../types';
 import {
     createEmptyWasteBatch,
     createWasteComponentFromAnalysis,
+    deriveWasteAmountFromComponentVolumes,
     inferWasteMatrixFromComponents,
     normalizeWasteAmount,
 } from '../utils/wasteBatch';
+import { deriveWizardMatrixFromComponents } from '../utils/wasteBatchWizard';
 import { searchHistoryService } from '../services/searchHistoryService';
+import { findPhCatalogRecordByCas } from '../features/phPrediction/catalog';
 
 const BATCH_STORAGE_PREFIX = 'buril-waste-batch-v2:';
 const LEGACY_STORAGE_KEY = 'buril-waste-store';
-const BATCH_STORAGE_SCHEMA_VERSION = 3;
+const BATCH_STORAGE_SCHEMA_VERSION = 4;
+const PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION = 3;
 const LEGACY_BATCH_STORAGE_SCHEMA_VERSION = 2;
 export const MAX_PARKED_WASTE_BATCHES = 10;
 const PREVIOUS_MATRIX_STORAGE_PREFIX = 'buril-waste-previous-matrix-v2:';
@@ -35,6 +40,14 @@ interface LegacyWasteBatchStorageEnvelope {
     ownerUserId: string;
     scopeKey: string;
     draft: WasteBatchDraft;
+}
+
+interface PreviousWasteBatchStorageEnvelope {
+    schemaVersion: typeof PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION;
+    ownerUserId: string;
+    scopeKey: string;
+    draft: WasteBatchDraft;
+    parkedDrafts: WasteBatchDraft[];
 }
 
 interface LoadedWasteScope {
@@ -75,14 +88,13 @@ const removeStorage = (key: string): boolean => {
 const readPreviousMatrix = (scopeKey: string): WasteMatrix | null => {
     const value = readStorage(previousMatrixKeyForScope(scopeKey));
     return value === 'aqueous' || value === 'organic_non_halogenated' ||
-        value === 'organic_halogenated' || value === 'mixed_biphasic' ||
-        value === 'solid_slurry'
+        value === 'organic_halogenated' || value === 'solid_slurry'
         ? value
         : null;
 };
 
 const savePreviousMatrix = (scopeKey: string, matrix: WasteMatrix): boolean => {
-    if (!canUseLocalStorage() || matrix === 'unknown') return false;
+    if (!canUseLocalStorage() || matrix === 'unknown' || matrix === 'mixed_biphasic') return false;
     try {
         localStorage.setItem(previousMatrixKeyForScope(scopeKey), matrix);
         return true;
@@ -101,6 +113,100 @@ const isWasteBatchDraft = (value: unknown): value is WasteBatchDraft => {
         Boolean(draft.totalAmount);
 };
 
+const parseLegacyNumber = (value: string): number | null => {
+    const parsed = Number(value.replace(',', '.'));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseLegacySolutionVolume = (value: string | undefined): WasteSolutionVolume | undefined => {
+    if (!value) return undefined;
+    const match = value.match(/^\s*(\d+(?:[.,]\d+)?)\s*(uL|µL|μL|mL|L)\s*$/i);
+    if (!match) return undefined;
+    const numericValue = parseLegacyNumber(match[1]);
+    if (numericValue === null) return undefined;
+    const rawUnit = match[2].toLowerCase();
+    const unit: WasteSolutionVolume['unit'] = rawUnit === 'l'
+        ? 'L'
+        : rawUnit === 'ml' ? 'mL' : 'uL';
+    const normalizedMl = unit === 'L'
+        ? numericValue * 1_000
+        : unit === 'uL' ? numericValue / 1_000 : numericValue;
+    return { value: numericValue, unit, normalizedMl };
+};
+
+const parseLegacyConcentration = (
+    value: string | undefined,
+): WasteConcentration | undefined => {
+    if (!value) return undefined;
+    const match = value.match(/^\s*(\d+(?:[.,]\d+)?)\s*(mM|M|mg\s*\/\s*mL)\s*$/);
+    if (!match) return undefined;
+    const numericValue = parseLegacyNumber(match[1]);
+    if (numericValue === null) return undefined;
+    const compactUnit = match[2].replace(/\s+/g, '');
+    const unit: WasteConcentration['unit'] = compactUnit === 'mg/mL'
+        ? 'mg/mL'
+        : compactUnit === 'mM' ? 'mM' : 'M';
+    return { value: numericValue, unit };
+};
+
+const normalizeWasteComponent = (component: WasteComponent): WasteComponent => ({
+    ...component,
+    solutionVolume: component.solutionVolume ?? parseLegacySolutionVolume(component.volume),
+    concentration: component.concentration ?? parseLegacyConcentration(component.molarity),
+    phCatalogId: component.phCatalogId
+        ?? findPhCatalogRecordByCas(component.chemical.casNumber)?.id,
+});
+
+const isVolumeWasteMatrix = (matrix: WasteMatrix): boolean =>
+    matrix !== 'unknown' && matrix !== 'solid_slurry';
+
+const isEmptyWasteAmount = (amount: WasteBatchDraft['totalAmount']): boolean =>
+    !amount.isUnknown && amount.value === null && amount.unit === null &&
+    amount.normalizedValue === null && amount.normalizedUnit === null;
+
+const amountsMatch = (
+    left: WasteBatchDraft['totalAmount'],
+    right: WasteBatchDraft['totalAmount'],
+): boolean => left.normalizedUnit === right.normalizedUnit &&
+    left.normalizedValue !== null && right.normalizedValue !== null &&
+    Math.abs(left.normalizedValue - right.normalizedValue) <=
+        Math.max(1e-9, right.normalizedValue * 1e-9);
+
+const normalizeStoredTotalAmount = (
+    draft: WasteBatchDraft,
+    components: WasteComponent[],
+): WasteBatchDraft['totalAmount'] => {
+    const stored = draft.totalAmount;
+    const derived = isVolumeWasteMatrix(draft.matrix)
+        ? deriveWasteAmountFromComponentVolumes(components)
+        : null;
+
+    if (derived) {
+        if (stored.source === 'component_sum') return derived;
+        if (stored.source === 'manual') return stored.isApproximate ? derived : stored;
+        if (stored.isUnknown) return stored;
+        // Before automatic totals existed, this field was mandatory. Treat an
+        // equal legacy value as the old duplicate entry, not an intentional override.
+        if (isEmptyWasteAmount(stored) || amountsMatch(stored, derived)) return derived;
+        return { ...stored, source: 'manual' };
+    }
+
+    if (stored.source === 'component_sum') {
+        return {
+            value: null,
+            unit: null,
+            normalizedValue: null,
+            normalizedUnit: null,
+            isApproximate: false,
+            isUnknown: false,
+        };
+    }
+    if (!stored.source && (stored.isUnknown || !isEmptyWasteAmount(stored))) {
+        return { ...stored, source: 'manual' };
+    }
+    return stored;
+};
+
 /**
  * Early V2 drafts predate incident context. Normalize that absence to the
  * ordinary (non-incident) path without dropping newer fields such as scan
@@ -108,10 +214,25 @@ const isWasteBatchDraft = (value: unknown): value is WasteBatchDraft => {
  */
 const normalizeWasteBatchDraft = (draft: WasteBatchDraft): WasteBatchDraft => {
     const legacyMeasuredPh = draft.measuredBatchPh ?? draft.measuredPh;
-    const mixingState = draft.mixingState === 'separate' || draft.mixingState === 'already_mixed'
-        ? draft.mixingState
-        : 'unknown';
-    const acceptsMeasuredBatchPh = draft.matrix === 'aqueous' && mixingState === 'already_mixed';
+    const components = draft.components.map(normalizeWasteComponent);
+    const migratedMatrix = draft.matrix === 'mixed_biphasic'
+        ? inferWasteMatrixFromComponents(components) ?? 'unknown'
+        : draft.matrix;
+    const migratedMatrixSource = draft.matrix === 'mixed_biphasic'
+        ? migratedMatrix === 'unknown' ? 'unresolved' : 'automatic'
+        : draft.matrixSource;
+    const normalizedDraft = {
+        ...draft,
+        matrix: migratedMatrix,
+        matrixSource: migratedMatrixSource,
+    };
+    // A waste batch represents one physical container. Infer that invariant for
+    // ordinary/unknown drafts, but preserve an explicit legacy "separate" value
+    // so it can be resolved without silently treating separate chemicals as mixed.
+    const mixingState = draft.components.length === 0
+        ? 'unknown'
+        : draft.mixingState === 'separate' ? 'separate' : 'already_mixed';
+    const acceptsMeasuredBatchPh = migratedMatrix === 'aqueous' && mixingState === 'already_mixed';
     const measuredBatchPh = acceptsMeasuredBatchPh && legacyMeasuredPh !== undefined &&
         Number.isFinite(legacyMeasuredPh) && legacyMeasuredPh >= 0 && legacyMeasuredPh <= 14
         ? legacyMeasuredPh
@@ -123,7 +244,9 @@ const normalizeWasteBatchDraft = (draft: WasteBatchDraft): WasteBatchDraft => {
             : 'unknown';
 
     return {
-        ...draft,
+        ...normalizedDraft,
+        components,
+        totalAmount: normalizeStoredTotalAmount(normalizedDraft, components),
         measuredBatchPh,
         measuredPh: undefined,
         measuredPhStatus,
@@ -176,6 +299,18 @@ const isLegacyWasteBatchStorageEnvelope = (
         typeof envelope.ownerUserId === 'string' &&
         typeof envelope.scopeKey === 'string' &&
         isWasteBatchDraft(envelope.draft);
+};
+
+const isPreviousWasteBatchStorageEnvelope = (
+    value: unknown,
+): value is PreviousWasteBatchStorageEnvelope => {
+    if (!value || typeof value !== 'object') return false;
+    const envelope = value as Partial<PreviousWasteBatchStorageEnvelope>;
+    return envelope.schemaVersion === PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION &&
+        typeof envelope.ownerUserId === 'string' &&
+        typeof envelope.scopeKey === 'string' &&
+        isWasteBatchDraft(envelope.draft) &&
+        Array.isArray(envelope.parkedDrafts);
 };
 
 const saveWasteScope = (
@@ -234,6 +369,26 @@ const loadWasteScope = (
                     return { batch, parkedBatches };
                 }
 
+                // Schema 3 introduced parked drafts. Upgrade both active and
+                // parked components to the structured volume/concentration model.
+                if (
+                    isPreviousWasteBatchStorageEnvelope(parsed) &&
+                    parsed.ownerUserId === userId &&
+                    parsed.scopeKey === scopeKey &&
+                    isBatchOwnedByScope(parsed.draft, scopeKey, userId, labId)
+                ) {
+                    const batch = normalizeWasteBatchDraft(parsed.draft);
+                    const parkedBatches = parsed.parkedDrafts
+                        .filter(isWasteBatchDraft)
+                        .map(normalizeWasteBatchDraft)
+                        .filter((draft) =>
+                            draft.id !== batch.id &&
+                            isBatchOwnedByScope(draft, scopeKey, userId, labId)
+                        );
+                    saveWasteScope(batch, parkedBatches);
+                    return { batch, parkedBatches };
+                }
+
                 // Schema 2 stored only the active draft. Upgrade that exact
                 // owner/scope match without changing its contents.
                 if (
@@ -288,7 +443,7 @@ const loadWasteScope = (
                         labId: labId ?? undefined,
                     });
                     migrated.components = legacyCart.map((item) =>
-                        createWasteComponentFromAnalysis(item)
+                        normalizeWasteComponent(createWasteComponentFromAnalysis(item))
                     );
                     migrated.updatedAt = new Date().toISOString();
                     const persisted = saveWasteScope(migrated, []);
@@ -372,6 +527,23 @@ const EMPTY_WASTE_AMOUNT: WasteBatchDraft['totalAmount'] = {
     isUnknown: false,
 };
 
+const reconcileTotalAmountWithComponents = (
+    current: WasteBatchDraft['totalAmount'],
+    components: readonly WasteComponent[],
+    matrix: WasteMatrix,
+    resetManual: boolean,
+): WasteBatchDraft['totalAmount'] => {
+    if (!isVolumeWasteMatrix(matrix)) return current;
+    const derived = deriveWasteAmountFromComponentVolumes(components);
+    if (derived) {
+        if (resetManual || current.source !== 'manual' || current.isApproximate) return derived;
+        return current;
+    }
+    return resetManual || current.source === 'component_sum'
+        ? { ...EMPTY_WASTE_AMOUNT }
+        : current;
+};
+
 const amountAfterAutomaticMatrixChange = (
     batch: WasteBatchDraft,
     nextMatrix: WasteMatrix,
@@ -403,9 +575,12 @@ export type AddWasteComponentOptions = Partial<Pick<
     | 'capturedAt'
     | 'hazardFlags'
     | 'concentration'
+    | 'solutionVolume'
+    | 'phCatalogId'
     | 'inventoryDisposalQuantity'
     | 'inventorySnapshot'
     | 'scanSnapshot'
+    | 'solutionContext'
 >>;
 
 export interface WasteState {
@@ -423,12 +598,15 @@ export interface WasteState {
         patch: Partial<Pick<
             WasteComponent,
             | 'concentration'
+            | 'solutionVolume'
+            | 'phCatalogId'
             | 'identityConfidence'
             | 'identityConfirmedByUser'
             | 'inventoryDisposalQuantity'
             | 'ghsDataStatus'
             | 'hazardFlags'
             | 'hazardDataConfirmedByUser'
+            | 'solutionContext'
         >>,
     ) => void;
     setMatrix: (matrix: WasteMatrix) => void;
@@ -437,9 +615,11 @@ export interface WasteState {
         unit: AmountUnit | null;
         isApproximate?: boolean;
         isUnknown?: boolean;
+        source?: WasteBatchDraft['totalAmount']['source'];
     }) => void;
     setMeasuredPh: (value: number | null, isUnknown?: boolean) => void;
-    setMixingState: (value: WasteBatchDraft['mixingState']) => void;
+    /** Resolve only a legacy draft that explicitly claimed its components were separate. */
+    confirmSingleContainer: () => void;
     setAdditionalComponentsStatus: (
         value: WasteBatchDraft['additionalComponentsStatus'],
     ) => void;
@@ -495,7 +675,12 @@ export const useWasteStore = create<WasteState>((set, get) => ({
     },
 
     addToCart: (result, options) => set((state) => {
-        const component = createWasteComponentFromAnalysis(result, options);
+        const createdComponent = createWasteComponentFromAnalysis(result, options);
+        const component = normalizeWasteComponent({
+            ...createdComponent,
+            solutionVolume: options?.solutionVolume,
+            phCatalogId: options?.phCatalogId,
+        });
         const components = [...state.batch.components, component];
         const inferredMatrix = state.batch.matrixSource === 'user'
             ? null
@@ -506,6 +691,7 @@ export const useWasteStore = create<WasteState>((set, get) => ({
         const batch = touchBatch({
             ...state.batch,
             components,
+            mixingState: state.batch.mixingState === 'separate' ? 'separate' : 'already_mixed',
             // "Present" is a pending state created by the explicit
             // "add by searching" action. The next component added completes
             // that one question; users can choose Present again for another.
@@ -516,7 +702,12 @@ export const useWasteStore = create<WasteState>((set, get) => ({
             matrixSource: state.batch.matrixSource === 'user'
                 ? 'user'
                 : inferredMatrix ? 'automatic' : 'unresolved',
-            totalAmount: amountAfterAutomaticMatrixChange(state.batch, nextMatrix),
+            totalAmount: reconcileTotalAmountWithComponents(
+                amountAfterAutomaticMatrixChange(state.batch, nextMatrix),
+                components,
+                nextMatrix,
+                true,
+            ),
         });
         saveWasteScope(batch, state.parkedBatches);
         return { batch, cart: batch.components, ...emptyAIState };
@@ -543,13 +734,21 @@ export const useWasteStore = create<WasteState>((set, get) => ({
         const batch = touchBatch({
             ...state.batch,
             components,
+            mixingState: components.length === 0
+                ? 'unknown'
+                : state.batch.mixingState === 'separate' ? 'separate' : 'already_mixed',
             matrix: nextMatrix,
             matrixSource: state.batch.matrixSource === 'user'
                 ? 'user'
                 : inferredMatrix ? 'automatic' : 'unresolved',
             totalAmount: components.length === 0
                 ? { ...EMPTY_WASTE_AMOUNT }
-                : amountAfterAutomaticMatrixChange(state.batch, nextMatrix),
+                : reconcileTotalAmountWithComponents(
+                    amountAfterAutomaticMatrixChange(state.batch, nextMatrix),
+                    components,
+                    nextMatrix,
+                    true,
+                ),
         });
         saveWasteScope(batch, state.parkedBatches);
         return { batch, cart: components, ...emptyAIState };
@@ -559,7 +758,40 @@ export const useWasteStore = create<WasteState>((set, get) => ({
         const components = state.batch.components.map((component) =>
             component.cartLineId === cartLineId ? { ...component, ...patch } : component
         );
-        const batch = touchBatch({ ...state.batch, components });
+        const volumeChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionVolume');
+        const solutionContextChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionContext');
+        const wizardMatrix = solutionContextChanged
+            ? deriveWizardMatrixFromComponents(components)
+            : null;
+        const nextMatrix = wizardMatrix
+            ? wizardMatrix.requiresBatchConfirmation
+                ? 'unknown'
+                : wizardMatrix.matrix ?? 'unknown'
+            : state.batch.matrix;
+        const batch = touchBatch({
+            ...state.batch,
+            components,
+            matrix: nextMatrix,
+            matrixSource: wizardMatrix
+                ? wizardMatrix.requiresBatchConfirmation || !wizardMatrix.matrix
+                    ? 'unresolved'
+                    : 'automatic'
+                : state.batch.matrixSource,
+            totalAmount: volumeChanged || solutionContextChanged
+                ? reconcileTotalAmountWithComponents(
+                    solutionContextChanged
+                        ? amountAfterAutomaticMatrixChange(state.batch, nextMatrix)
+                        : state.batch.totalAmount,
+                    components,
+                    nextMatrix,
+                    true,
+                )
+                : state.batch.totalAmount,
+            measuredBatchPh: nextMatrix === 'aqueous' ? state.batch.measuredBatchPh : undefined,
+            measuredPhStatus: nextMatrix === 'aqueous'
+                ? state.batch.measuredPhStatus
+                : 'not_required',
+        });
         saveWasteScope(batch, state.parkedBatches);
         return { batch, cart: components, ...emptyAIState };
     }),
@@ -572,48 +804,64 @@ export const useWasteStore = create<WasteState>((set, get) => ({
             (oldDimension !== null && oldDimension !== newDimension) ||
             (storedAmountDimension !== null && storedAmountDimension !== newDimension)
         );
+        const baseAmount = crossesDimension
+            ? { ...EMPTY_WASTE_AMOUNT }
+            : state.batch.totalAmount;
         const batch = touchBatch({
             ...state.batch,
             matrix,
             matrixSource: 'user',
-            totalAmount: crossesDimension
-                ? { ...EMPTY_WASTE_AMOUNT }
-                : state.batch.totalAmount,
+            totalAmount: reconcileTotalAmountWithComponents(
+                baseAmount,
+                state.batch.components,
+                matrix,
+                false,
+            ),
             measuredBatchPh: matrix === 'aqueous' ? state.batch.measuredBatchPh : undefined,
             measuredPh: undefined,
             measuredPhStatus: matrix === 'aqueous' && state.batch.mixingState === 'already_mixed'
                 ? (state.batch.measuredPhStatus === 'measured' ? 'measured' : 'unknown')
                 : 'not_required',
-            mixingState: matrix === 'aqueous' ? state.batch.mixingState : 'unknown',
+            mixingState: state.batch.components.length === 0
+                ? 'unknown'
+                : state.batch.mixingState === 'separate' ? 'separate' : 'already_mixed',
         });
         saveWasteScope(batch, state.parkedBatches);
         return { batch, cart: batch.components, ...emptyAIState };
     }),
 
-    setTotalAmount: ({ value, unit, isApproximate = false, isUnknown = false }) =>
+    setTotalAmount: ({ value, unit, isApproximate = false, isUnknown = false, source = 'manual' }) =>
         set((state) => {
             const normalized = value !== null && unit !== null && !isUnknown
                 ? normalizeWasteAmount(value, unit)
                 : null;
+            const requestedAmount: WasteBatchDraft['totalAmount'] = isUnknown
+                ? {
+                    value: null,
+                    unit: null,
+                    normalizedValue: null,
+                    normalizedUnit: null,
+                    isApproximate: false,
+                    isUnknown: true,
+                    source,
+                }
+                : {
+                    value,
+                    unit,
+                    normalizedValue: normalized?.normalizedValue ?? null,
+                    normalizedUnit: normalized?.normalizedUnit ?? null,
+                    isApproximate,
+                    isUnknown: false,
+                    source,
+                };
+            const derived = isVolumeWasteMatrix(state.batch.matrix)
+                ? deriveWasteAmountFromComponentVolumes(state.batch.components)
+                : null;
             const batch = touchBatch({
                 ...state.batch,
-                totalAmount: isUnknown
-                    ? {
-                        value: null,
-                        unit: null,
-                        normalizedValue: null,
-                        normalizedUnit: null,
-                        isApproximate: false,
-                        isUnknown: true,
-                    }
-                    : {
-                        value,
-                        unit,
-                        normalizedValue: normalized?.normalizedValue ?? null,
-                        normalizedUnit: normalized?.normalizedUnit ?? null,
-                        isApproximate,
-                        isUnknown: false,
-                    },
+                totalAmount: derived && source === 'manual' && isApproximate && !isUnknown
+                    ? derived
+                    : requestedAmount,
             });
             saveWasteScope(batch, state.parkedBatches);
             return { batch, cart: batch.components, ...emptyAIState };
@@ -643,15 +891,17 @@ export const useWasteStore = create<WasteState>((set, get) => ({
         return { batch, cart: batch.components, ...emptyAIState };
     }),
 
-    setMixingState: (mixingState) => set((state) => {
-        const requiresMeasuredBatchPh = state.batch.matrix === 'aqueous' &&
-            mixingState === 'already_mixed';
+    confirmSingleContainer: () => set((state) => {
+        if (state.batch.components.length === 0 || state.batch.mixingState !== 'separate') {
+            return state;
+        }
+        const acceptsMeasuredBatchPh = state.batch.matrix === 'aqueous';
         const batch = touchBatch({
             ...state.batch,
-            mixingState,
-            measuredBatchPh: requiresMeasuredBatchPh ? state.batch.measuredBatchPh : undefined,
+            mixingState: 'already_mixed',
+            measuredBatchPh: acceptsMeasuredBatchPh ? state.batch.measuredBatchPh : undefined,
             measuredPh: undefined,
-            measuredPhStatus: requiresMeasuredBatchPh
+            measuredPhStatus: acceptsMeasuredBatchPh
                 ? (state.batch.measuredPhStatus === 'measured' ? 'measured' : 'unknown')
                 : 'not_required',
         });

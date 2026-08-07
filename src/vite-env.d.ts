@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string
   readonly VITE_SUPABASE_ANON_KEY?: string
   readonly VITE_ENABLE_WASTE_V2?: string
+  readonly VITE_ENABLE_PH_PREDICTION?: string
 }
 
 interface ImportMeta {

@@ -1,31 +1,30 @@
 /**
- * PubChem GHS Lookup Service
- * ═══════════════════════════
- * Fetches GHS hazard classification (H-codes, pictograms, signal word)
- * from PubChem's PUG REST / PUG View APIs using a CAS number.
+ * PubChem GHS lookup service.
  *
- * Flow: CAS Number → PubChem CID → GHS Classification → H-codes
- *
- * Rate limit: max 5 requests/second (PubChem policy)
- * Results are cached in-memory to avoid redundant API calls.
+ * Transient upstream failures are deliberately not cached. Successful data,
+ * confirmed misses, and a genuine absence of GHS data have separate TTLs.
  */
 
 import { supabase } from './supabaseClient';
 import { normalizeCasNumber } from '../utils/casNumber';
 
-// ═══════════════════════════════════════
-// Types
-// ═══════════════════════════════════════
+export type PubChemGHSStatus =
+    | 'success'
+    | 'not_found'
+    | 'no_ghs'
+    | 'transient_error'
+    | 'invalid_cas';
 
 export interface PubChemGHSResult {
     cid: number;
     name: string;
-    hCodes: string[];            // e.g. ["H225", "H319", "H336"]
-    pictograms: string[];        // e.g. ["Flame", "Exclamation Mark"]
-    signalWord: string | null;   // "Danger" | "Warning" | null
+    hCodes: string[];
+    pictograms: string[];
+    signalWord: string | null;
     isAcidic: boolean;
     isBasic: boolean;
     success: boolean;
+    status: PubChemGHSStatus;
     error?: string;
 }
 
@@ -41,18 +40,39 @@ interface ServerGhsCacheScope {
 interface ServerGhsCacheRow {
     result: unknown;
     result_version?: number | null;
+    cache_status?: string | null;
+    fetched_at?: string | null;
+    expires_at?: string | null;
 }
 
-// ═══════════════════════════════════════
-// In-memory Cache
-// ═══════════════════════════════════════
+type CacheableGhsStatus = Exclude<PubChemGHSStatus, 'transient_error' | 'invalid_cas'>;
 
-const cache = new Map<string, PubChemGHSResult>();
-const PERSISTED_CACHE_PREFIX = 'buril:pubchem-ghs:v1:';
-const SERVER_CACHE_RESULT_VERSION = 1;
+interface GhsCacheEntry {
+    schemaVersion: 2;
+    status: CacheableGhsStatus;
+    result: PubChemGHSResult;
+    fetchedAt: number;
+    expiresAt: number;
+}
+
+const SUCCESS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const NOT_FOUND_CACHE_TTL_MS = 5 * 60 * 1000;
+const NO_GHS_CACHE_TTL_MS = 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 8_000;
+const MAX_FETCH_ATTEMPTS = 3;
+const CACHE_SCHEMA_VERSION = 2 as const;
+const SERVER_CACHE_RESULT_VERSION = 2;
+const PERSISTED_CACHE_PREFIX = 'buril:pubchem-ghs:v2:';
+const LEGACY_PERSISTED_CACHE_PREFIX = 'buril:pubchem-ghs:v1:';
+
+const cache = new Map<string, GhsCacheEntry>();
 const serverCacheWriteKeys = new Set<string>();
 let hasLoggedServerCacheReadError = false;
 let hasLoggedServerCacheWriteError = false;
+let hasPurgedLegacyPersistentCache = false;
+
+const PUG_REST_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
+const PUG_VIEW_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view';
 
 function getPersistentCache(): Storage | null {
     if (typeof window === 'undefined') return null;
@@ -65,14 +85,28 @@ function getPersistentCache(): Storage | null {
 }
 
 function asStringArray(value: unknown): string[] {
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string')
+        : [];
+}
+
+function isPubChemGHSStatus(value: unknown): value is PubChemGHSStatus {
+    return value === 'success'
+        || value === 'not_found'
+        || value === 'no_ghs'
+        || value === 'transient_error'
+        || value === 'invalid_cas';
+}
+
+function isCacheableStatus(status: PubChemGHSStatus): status is CacheableGhsStatus {
+    return status === 'success' || status === 'not_found' || status === 'no_ghs';
 }
 
 function normalizeCachedResult(value: unknown): PubChemGHSResult | null {
     if (!value || typeof value !== 'object') return null;
 
     const candidate = value as Partial<PubChemGHSResult>;
-    if (typeof candidate.success !== 'boolean') return null;
+    if (typeof candidate.success !== 'boolean' || !isPubChemGHSStatus(candidate.status)) return null;
 
     return {
         cid: typeof candidate.cid === 'number' ? candidate.cid : 0,
@@ -83,33 +117,119 @@ function normalizeCachedResult(value: unknown): PubChemGHSResult | null {
         isAcidic: Boolean(candidate.isAcidic),
         isBasic: Boolean(candidate.isBasic),
         success: candidate.success,
+        status: candidate.status,
         error: typeof candidate.error === 'string' ? candidate.error : undefined,
     };
 }
 
-function readPersistedResult(cas: string): PubChemGHSResult | null {
+function getCacheTtlMs(status: CacheableGhsStatus): number {
+    if (status === 'not_found') return NOT_FOUND_CACHE_TTL_MS;
+    if (status === 'no_ghs') return NO_GHS_CACHE_TTL_MS;
+    return SUCCESS_CACHE_TTL_MS;
+}
+
+function createCacheEntry(result: PubChemGHSResult, now = Date.now()): GhsCacheEntry | null {
+    if (!isCacheableStatus(result.status)) return null;
+
+    return {
+        schemaVersion: CACHE_SCHEMA_VERSION,
+        status: result.status,
+        result,
+        fetchedAt: now,
+        expiresAt: now + getCacheTtlMs(result.status),
+    };
+}
+
+function isFreshCacheEntry(entry: GhsCacheEntry | null | undefined): entry is GhsCacheEntry {
+    return Boolean(
+        entry
+        && entry.schemaVersion === CACHE_SCHEMA_VERSION
+        && isCacheableStatus(entry.status)
+        && entry.result.status === entry.status
+        && entry.expiresAt > Date.now()
+    );
+}
+
+function purgeLegacyPersistentCache(): void {
+    if (hasPurgedLegacyPersistentCache) return;
+    hasPurgedLegacyPersistentCache = true;
+
+    const storage = getPersistentCache();
+    if (!storage) return;
+
+    try {
+        const legacyKeys: string[] = [];
+        for (let index = 0; index < storage.length; index += 1) {
+            const key = storage.key(index);
+            if (key?.startsWith(LEGACY_PERSISTED_CACHE_PREFIX)) legacyKeys.push(key);
+        }
+        legacyKeys.forEach((key) => storage.removeItem(key));
+    } catch {
+        // Local cache cleanup is best effort.
+    }
+}
+
+function readPersistedEntry(cas: string): GhsCacheEntry | null {
     const storage = getPersistentCache();
     if (!storage) return null;
 
+    const key = `${PERSISTED_CACHE_PREFIX}${cas}`;
+
     try {
-        const raw = storage.getItem(`${PERSISTED_CACHE_PREFIX}${cas}`);
+        const raw = storage.getItem(key);
         if (!raw) return null;
 
-        const parsed = JSON.parse(raw) as { result?: unknown };
-        return normalizeCachedResult(parsed.result);
+        const parsed = JSON.parse(raw) as {
+            schemaVersion?: number;
+            status?: unknown;
+            result?: unknown;
+            fetchedAt?: number;
+            expiresAt?: number;
+        };
+        const result = normalizeCachedResult(parsed.result);
+        const status = parsed.status;
+        const entry: GhsCacheEntry | null = result
+            && isPubChemGHSStatus(status)
+            && isCacheableStatus(status)
+            && parsed.schemaVersion === CACHE_SCHEMA_VERSION
+            && typeof parsed.fetchedAt === 'number'
+            && typeof parsed.expiresAt === 'number'
+            && result.status === status
+            ? {
+                schemaVersion: CACHE_SCHEMA_VERSION,
+                status,
+                result,
+                fetchedAt: parsed.fetchedAt,
+                expiresAt: parsed.expiresAt,
+            }
+            : null;
+
+        if (!isFreshCacheEntry(entry)) {
+            storage.removeItem(key);
+            return null;
+        }
+        return entry;
     } catch {
+        try {
+            storage.removeItem(key);
+        } catch {
+            // Ignore malformed or inaccessible local cache entries.
+        }
         return null;
     }
 }
 
-function writePersistedResult(cas: string, result: PubChemGHSResult): void {
+function writePersistedEntry(cas: string, entry: GhsCacheEntry): void {
     const storage = getPersistentCache();
     if (!storage) return;
 
     try {
         storage.setItem(`${PERSISTED_CACHE_PREFIX}${cas}`, JSON.stringify({
-            cachedAt: new Date().toISOString(),
-            result,
+            schemaVersion: entry.schemaVersion,
+            status: entry.status,
+            fetchedAt: entry.fetchedAt,
+            expiresAt: entry.expiresAt,
+            result: entry.result,
         }));
     } catch {
         // Local cache is an optimization; failures should not block the UI.
@@ -118,9 +238,7 @@ function writePersistedResult(cas: string, result: PubChemGHSResult): void {
 
 async function resolveServerCacheScope(options?: LookupGHSOptions): Promise<ServerGhsCacheScope | null> {
     const labId = options?.labId?.trim();
-    if (labId) {
-        return { scopeType: 'lab', scopeId: labId };
-    }
+    if (labId) return { scopeType: 'lab', scopeId: labId };
 
     try {
         const { data, error } = await supabase.auth.getUser();
@@ -135,16 +253,17 @@ function getServerCacheWriteKey(cas: string, scope: ServerGhsCacheScope): string
     return `${scope.scopeType}:${scope.scopeId}:${cas}`;
 }
 
-async function readServerCachedResult(cas: string, scope: ServerGhsCacheScope | null): Promise<PubChemGHSResult | null> {
+async function readServerCachedEntry(cas: string, scope: ServerGhsCacheScope | null): Promise<GhsCacheEntry | null> {
     if (!scope) return null;
 
     try {
         const { data, error } = await supabase
             .from('ghs_cas_cache')
-            .select('result, result_version')
+            .select('result, result_version, cache_status, fetched_at, expires_at')
             .eq('scope_type', scope.scopeType)
             .eq('scope_id', scope.scopeId)
             .eq('cas_number', cas)
+            .gt('expires_at', new Date().toISOString())
             .limit(1)
             .maybeSingle();
 
@@ -159,11 +278,28 @@ async function readServerCachedResult(cas: string, scope: ServerGhsCacheScope | 
         const row = data as ServerGhsCacheRow | null;
         if (!row || row.result_version !== SERVER_CACHE_RESULT_VERSION) return null;
 
+        const status = row.cache_status;
+        const fetchedAt = row.fetched_at ? Date.parse(row.fetched_at) : NaN;
+        const expiresAt = row.expires_at ? Date.parse(row.expires_at) : NaN;
         const result = normalizeCachedResult(row.result);
-        if (result) {
-            serverCacheWriteKeys.add(getServerCacheWriteKey(cas, scope));
-        }
-        return result;
+        const entry: GhsCacheEntry | null = result
+            && isPubChemGHSStatus(status)
+            && isCacheableStatus(status)
+            && result.status === status
+            && Number.isFinite(fetchedAt)
+            && Number.isFinite(expiresAt)
+            ? {
+                schemaVersion: CACHE_SCHEMA_VERSION,
+                status,
+                result,
+                fetchedAt,
+                expiresAt,
+            }
+            : null;
+
+        if (!isFreshCacheEntry(entry)) return null;
+        serverCacheWriteKeys.add(getServerCacheWriteKey(cas, scope));
+        return entry;
     } catch (error) {
         if (!hasLoggedServerCacheReadError) {
             console.warn('[PubChem] Supabase GHS cache read failed:', error);
@@ -173,9 +309,9 @@ async function readServerCachedResult(cas: string, scope: ServerGhsCacheScope | 
     }
 }
 
-async function writeServerCachedResult(
+async function writeServerCachedEntry(
     cas: string,
-    result: PubChemGHSResult,
+    entry: GhsCacheEntry,
     scope: ServerGhsCacheScope | null,
 ): Promise<void> {
     if (!scope) return;
@@ -190,8 +326,11 @@ async function writeServerCachedResult(
                 scope_type: scope.scopeType,
                 scope_id: scope.scopeId,
                 cas_number: cas,
-                result,
+                result: entry.result,
                 result_version: SERVER_CACHE_RESULT_VERSION,
+                cache_status: entry.status,
+                fetched_at: new Date(entry.fetchedAt).toISOString(),
+                expires_at: new Date(entry.expiresAt).toISOString(),
                 source: 'pubchem',
             }, {
                 onConflict: 'scope_type,scope_id,cas_number',
@@ -214,63 +353,38 @@ async function writeServerCachedResult(
     }
 }
 
-async function seedServerCachedResultIfMissing(
+async function seedServerCachedEntryIfMissing(
     cas: string,
-    result: PubChemGHSResult,
+    entry: GhsCacheEntry,
     scope: ServerGhsCacheScope | null,
 ): Promise<void> {
     if (!scope) return;
     if (serverCacheWriteKeys.has(getServerCacheWriteKey(cas, scope))) return;
 
-    const existingResult = await readServerCachedResult(cas, scope);
-    if (existingResult) return;
+    const existingEntry = await readServerCachedEntry(cas, scope);
+    if (existingEntry) return;
 
-    await writeServerCachedResult(cas, result, scope);
+    await writeServerCachedEntry(cas, entry, scope);
 }
 
-// ═══════════════════════════════════════
-// API Base URLs
-// ═══════════════════════════════════════
-
-const PUG_REST_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug';
-const PUG_VIEW_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view';
-
-// ═══════════════════════════════════════
-// Helpers
-// ═══════════════════════════════════════
-
-/**
- * Extract H-code from a hazard statement string.
- * e.g. "H302: Harmful if swallowed [Warning Acute toxicity, oral]" → "H302"
- */
 function extractHCode(statement: string): string | null {
     const match = statement.match(/^(H\d{3}[A-Za-z]?)/);
     return match ? match[1] : null;
 }
 
-/**
- * Determine if a chemical is acidic based on H-codes and name
- */
 function detectAcidic(hCodes: string[], name: string): boolean {
-    // H-codes for corrosive substances + acid keywords
     const acidHCodes = ['H290', 'H314'];
-    const acidKeywords = /acid|sulfuric|hydrochloric|nitric|phosphoric|산$/i;
+    const acidKeywords = /acid|sulfuric|hydrochloric|nitric|phosphoric|산/i;
     return (
-        hCodes.some(c => acidHCodes.includes(c)) && acidKeywords.test(name)
+        hCodes.some((code) => acidHCodes.includes(code)) && acidKeywords.test(name)
     ) || acidKeywords.test(name);
 }
 
-/**
- * Determine if a chemical is basic based on name
- */
 function detectBasic(name: string): boolean {
     const baseKeywords = /hydroxide|수산화|ammonia|암모니아|amine|아민/i;
     return baseKeywords.test(name);
 }
 
-/**
- * Map pictogram URL to friendly name
- */
 function pictogramName(url: string): string {
     const map: Record<string, string> = {
         GHS01: 'Exploding Bomb',
@@ -285,117 +399,6 @@ function pictogramName(url: string): string {
     };
     const match = url.match(/(GHS\d{2})/);
     return match ? map[match[1]] || match[1] : url;
-}
-
-// ═══════════════════════════════════════
-// Main API Functions
-// ═══════════════════════════════════════
-
-/**
- * Step 1: CAS → PubChem CID
- */
-async function casToCid(cas: string): Promise<number | null> {
-    const url = `${PUG_REST_BASE}/compound/name/${encodeURIComponent(cas)}/cids/JSON`;
-
-    try {
-        const res = await fetch(url);
-        if (!res.ok) {
-            console.warn(`[PubChem] CAS→CID failed for ${cas}: HTTP ${res.status}`);
-            return null;
-        }
-        const data = await res.json();
-        const cids = data?.IdentifierList?.CID;
-        if (Array.isArray(cids) && cids.length > 0) {
-            return cids[0];
-        }
-        return null;
-    } catch (err) {
-        console.error(`[PubChem] CAS→CID error for ${cas}:`, err);
-        return null;
-    }
-}
-
-/**
- * Step 2: CID → GHS Classification
- */
-async function cidToGHS(cid: number): Promise<{
-    hCodes: string[];
-    pictograms: string[];
-    signalWord: string | null;
-    name: string;
-}> {
-    const url = `${PUG_VIEW_BASE}/data/compound/${cid}/JSON?heading=GHS+Classification`;
-
-    const result = {
-        hCodes: [] as string[],
-        pictograms: [] as string[],
-        signalWord: null as string | null,
-        name: '',
-    };
-
-    try {
-        const res = await fetch(url);
-        if (!res.ok) {
-            console.warn(`[PubChem] CID→GHS failed for ${cid}: HTTP ${res.status}`);
-            return result;
-        }
-
-        const data = await res.json();
-        result.name = data?.Record?.RecordTitle || '';
-
-        // Navigate: Record → Section[0] → Section[0] → Section[0] → Information[]
-        const safetySections = data?.Record?.Section;
-        if (!Array.isArray(safetySections)) return result;
-
-        // Find GHS Classification section recursively
-        const ghsInfo = findGHSInformation(safetySections);
-
-        for (const info of ghsInfo) {
-            if (info.Name === 'GHS Hazard Statements') {
-                // Extract H-codes from strings
-                const strings = info.Value?.StringWithMarkup;
-                if (Array.isArray(strings)) {
-                    for (const item of strings) {
-                        const code = extractHCode(item.String || '');
-                        if (code && !result.hCodes.includes(code)) {
-                            result.hCodes.push(code);
-                        }
-                    }
-                }
-            }
-
-            if (info.Name === 'Pictogram(s)') {
-                const strings = info.Value?.StringWithMarkup;
-                if (Array.isArray(strings)) {
-                    for (const item of strings) {
-                        const markups = item.Markup;
-                        if (Array.isArray(markups)) {
-                            for (const m of markups) {
-                                if (m.Type === 'Icon' && m.URL) {
-                                    const name = pictogramName(m.URL);
-                                    if (!result.pictograms.includes(name)) {
-                                        result.pictograms.push(name);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (info.Name === 'Signal') {
-                const strings = info.Value?.StringWithMarkup;
-                if (Array.isArray(strings) && strings[0]?.String) {
-                    result.signalWord = strings[0].String;
-                }
-            }
-        }
-
-        return result;
-    } catch (err) {
-        console.error(`[PubChem] CID→GHS error for ${cid}:`, err);
-        return result;
-    }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -415,104 +418,272 @@ function findGHSInformation(sections: any[]): any[] {
     return results;
 }
 
-// ═══════════════════════════════════════
-// Public API
-// ═══════════════════════════════════════
+type PubChemFetchOutcome<T> =
+    | { kind: 'ok'; data: T }
+    | { kind: 'not_found' }
+    | { kind: 'transient_error'; error: string };
 
-/**
- * Look up GHS hazard classification by CAS number.
- * Results are cached in-memory.
- *
- * @param casNumber - CAS Registry Number (e.g. "67-64-1" for acetone)
- * @returns GHS classification data including H-codes
- */
-export async function lookupGHSByCAS(casNumber: string, options?: LookupGHSOptions): Promise<PubChemGHSResult> {
-    // Normalize
-    const cas = normalizeCasNumber(casNumber);
-    if (!cas) {
-        return {
-            cid: 0,
-            name: '',
+async function waitBeforeRetry(attempt: number): Promise<void> {
+    const baseDelay = 300 * (2 ** attempt);
+    const jitter = Math.floor(Math.random() * 150);
+    await new Promise<void>((resolve) => {
+        globalThis.setTimeout(resolve, baseDelay + jitter);
+    });
+}
+
+async function fetchPubChemJson<T>(url: string): Promise<PubChemFetchOutcome<T>> {
+    let lastError = 'PubChem request failed';
+
+    for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
+        const controller = new AbortController();
+        const timeoutId = globalThis.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+        try {
+            const response = await fetch(url, { signal: controller.signal });
+
+            if (response.status === 404) return { kind: 'not_found' };
+
+            if (!response.ok) {
+                lastError = `PubChem HTTP ${response.status}`;
+                const shouldRetry = response.status === 408 || response.status === 429 || response.status >= 500;
+                if (!shouldRetry || attempt === MAX_FETCH_ATTEMPTS - 1) {
+                    return { kind: 'transient_error', error: lastError };
+                }
+                await waitBeforeRetry(attempt);
+                continue;
+            }
+
+            try {
+                return { kind: 'ok', data: await response.json() as T };
+            } catch (error) {
+                lastError = error instanceof Error ? error.message : 'Invalid PubChem JSON response';
+                if (attempt === MAX_FETCH_ATTEMPTS - 1) {
+                    return { kind: 'transient_error', error: lastError };
+                }
+                await waitBeforeRetry(attempt);
+            }
+        } catch (error) {
+            lastError = error instanceof Error ? error.message : 'PubChem network request failed';
+            if (attempt === MAX_FETCH_ATTEMPTS - 1) {
+                return { kind: 'transient_error', error: lastError };
+            }
+            await waitBeforeRetry(attempt);
+        } finally {
+            globalThis.clearTimeout(timeoutId);
+        }
+    }
+
+    return { kind: 'transient_error', error: lastError };
+}
+
+async function casToCid(cas: string): Promise<PubChemFetchOutcome<number>> {
+    const url = `${PUG_REST_BASE}/compound/name/${encodeURIComponent(cas)}/cids/JSON`;
+    const outcome = await fetchPubChemJson<{ IdentifierList?: { CID?: unknown } }>(url);
+    if (outcome.kind !== 'ok') return outcome;
+
+    const cids = outcome.data?.IdentifierList?.CID;
+    if (Array.isArray(cids) && typeof cids[0] === 'number') {
+        return { kind: 'ok', data: cids[0] };
+    }
+    return { kind: 'not_found' };
+}
+
+interface GhsPayload {
+    hCodes: string[];
+    pictograms: string[];
+    signalWord: string | null;
+    name: string;
+}
+
+type GhsFetchOutcome =
+    | { kind: 'success'; data: GhsPayload }
+    | { kind: 'no_ghs'; name?: string }
+    | { kind: 'transient_error'; error: string };
+
+async function cidToGHS(cid: number): Promise<GhsFetchOutcome> {
+    const url = `${PUG_VIEW_BASE}/data/compound/${cid}/JSON?heading=GHS+Classification`;
+    const outcome = await fetchPubChemJson<{
+        Record?: {
+            RecordTitle?: unknown;
+            Section?: unknown;
+        };
+    }>(url);
+
+    if (outcome.kind === 'transient_error') return outcome;
+    if (outcome.kind === 'not_found') return { kind: 'no_ghs' };
+
+    try {
+        const result: GhsPayload = {
             hCodes: [],
             pictograms: [],
             signalWord: null,
-            isAcidic: false,
-            isBasic: false,
-            success: false,
-            error: `Invalid CAS format: "${casNumber}"`,
+            name: typeof outcome.data.Record?.RecordTitle === 'string'
+                ? outcome.data.Record.RecordTitle
+                : '',
+        };
+        const safetySections = outcome.data.Record?.Section;
+        if (!Array.isArray(safetySections)) return { kind: 'no_ghs', name: result.name };
+
+        const ghsInfo = findGHSInformation(safetySections);
+        for (const info of ghsInfo) {
+            if (info.Name === 'GHS Hazard Statements') {
+                const strings = info.Value?.StringWithMarkup;
+                if (Array.isArray(strings)) {
+                    for (const item of strings) {
+                        const code = extractHCode(typeof item.String === 'string' ? item.String : '');
+                        if (code && !result.hCodes.includes(code)) result.hCodes.push(code);
+                    }
+                }
+            }
+
+            if (info.Name === 'Pictogram(s)') {
+                const strings = info.Value?.StringWithMarkup;
+                if (Array.isArray(strings)) {
+                    for (const item of strings) {
+                        const markups = item.Markup;
+                        if (Array.isArray(markups)) {
+                            for (const markup of markups) {
+                                if (markup.Type === 'Icon' && typeof markup.URL === 'string') {
+                                    const name = pictogramName(markup.URL);
+                                    if (!result.pictograms.includes(name)) result.pictograms.push(name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (info.Name === 'Signal') {
+                const strings = info.Value?.StringWithMarkup;
+                if (Array.isArray(strings) && typeof strings[0]?.String === 'string') {
+                    result.signalWord = strings[0].String;
+                }
+            }
+        }
+
+        if (ghsInfo.length === 0 || (
+            result.hCodes.length === 0
+            && result.pictograms.length === 0
+            && !result.signalWord
+        )) {
+            return { kind: 'no_ghs', name: result.name };
+        }
+
+        return { kind: 'success', data: result };
+    } catch (error) {
+        return {
+            kind: 'transient_error',
+            error: error instanceof Error ? error.message : 'Invalid PubChem GHS response',
         };
     }
+}
+
+function createResult(
+    status: PubChemGHSStatus,
+    fields: Partial<Pick<PubChemGHSResult, 'cid' | 'name' | 'hCodes' | 'pictograms' | 'signalWord' | 'isAcidic' | 'isBasic'>> = {},
+    error?: string,
+): PubChemGHSResult {
+    return {
+        cid: fields.cid ?? 0,
+        name: fields.name ?? '',
+        hCodes: fields.hCodes ?? [],
+        pictograms: fields.pictograms ?? [],
+        signalWord: fields.signalWord ?? null,
+        isAcidic: fields.isAcidic ?? false,
+        isBasic: fields.isBasic ?? false,
+        success: status === 'success',
+        status,
+        error,
+    };
+}
+
+function storeCacheEntry(cas: string, result: PubChemGHSResult): GhsCacheEntry | null {
+    const entry = createCacheEntry(result);
+    if (entry) cache.set(cas, entry);
+    return entry;
+}
+
+export async function lookupGHSByCAS(casNumber: string, options?: LookupGHSOptions): Promise<PubChemGHSResult> {
+    purgeLegacyPersistentCache();
+
+    const cas = normalizeCasNumber(casNumber);
+    if (!cas) return createResult('invalid_cas', {}, `Invalid CAS format: "${casNumber}"`);
 
     const serverScope = await resolveServerCacheScope(options);
 
-    // Check cache
-    if (cache.has(cas)) {
-        const cachedResult = cache.get(cas)!;
-        void seedServerCachedResultIfMissing(cas, cachedResult, serverScope);
-        return cachedResult;
+    const memoryEntry = cache.get(cas);
+    if (isFreshCacheEntry(memoryEntry)) {
+        void seedServerCachedEntryIfMissing(cas, memoryEntry, serverScope);
+        return memoryEntry.result;
+    }
+    if (memoryEntry) cache.delete(cas);
+
+    const persistedEntry = readPersistedEntry(cas);
+    if (persistedEntry) {
+        cache.set(cas, persistedEntry);
+        void seedServerCachedEntryIfMissing(cas, persistedEntry, serverScope);
+        return persistedEntry.result;
     }
 
-    const persistedResult = readPersistedResult(cas);
-    if (persistedResult) {
-        cache.set(cas, persistedResult);
-        void seedServerCachedResultIfMissing(cas, persistedResult, serverScope);
-        return persistedResult;
+    const serverEntry = await readServerCachedEntry(cas, serverScope);
+    if (serverEntry) {
+        cache.set(cas, serverEntry);
+        writePersistedEntry(cas, serverEntry);
+        return serverEntry.result;
     }
 
-    const serverResult = await readServerCachedResult(cas, serverScope);
-    if (serverResult) {
-        cache.set(cas, serverResult);
-        writePersistedResult(cas, serverResult);
-        return serverResult;
+    const cidOutcome = await casToCid(cas);
+    if (cidOutcome.kind === 'not_found') {
+        const result = createResult('not_found', {}, `CAS "${cas}" not found in PubChem`);
+        const entry = storeCacheEntry(cas, result);
+        if (entry) {
+            writePersistedEntry(cas, entry);
+            await writeServerCachedEntry(cas, entry, serverScope);
+        }
+        return result;
+    }
+    if (cidOutcome.kind === 'transient_error') {
+        return createResult('transient_error', {}, `PubChem lookup temporarily unavailable: ${cidOutcome.error}`);
     }
 
-    // Step 1: CAS → CID
-    const cid = await casToCid(cas);
-    if (!cid) {
-        const failResult: PubChemGHSResult = {
-            cid: 0,
-            name: '',
-            hCodes: [],
-            pictograms: [],
-            signalWord: null,
-            isAcidic: false,
-            isBasic: false,
-            success: false,
-            error: `CAS "${cas}" not found in PubChem`,
-        };
-        cache.set(cas, failResult);
-        writePersistedResult(cas, failResult);
-        await writeServerCachedResult(cas, failResult, serverScope);
-        return failResult;
+    const ghsOutcome = await cidToGHS(cidOutcome.data);
+    if (ghsOutcome.kind === 'transient_error') {
+        return createResult(
+            'transient_error',
+            { cid: cidOutcome.data },
+            `PubChem GHS lookup temporarily unavailable: ${ghsOutcome.error}`,
+        );
+    }
+    if (ghsOutcome.kind === 'no_ghs') {
+        const result = createResult('no_ghs', { cid: cidOutcome.data, name: ghsOutcome.name });
+        const entry = storeCacheEntry(cas, result);
+        if (entry) {
+            writePersistedEntry(cas, entry);
+            await writeServerCachedEntry(cas, entry, serverScope);
+        }
+        return result;
     }
 
-    // Step 2: CID → GHS
-    const ghs = await cidToGHS(cid);
+    const result = createResult('success', {
+        cid: cidOutcome.data,
+        name: ghsOutcome.data.name,
+        hCodes: ghsOutcome.data.hCodes,
+        pictograms: ghsOutcome.data.pictograms,
+        signalWord: ghsOutcome.data.signalWord,
+        isAcidic: detectAcidic(ghsOutcome.data.hCodes, ghsOutcome.data.name),
+        isBasic: detectBasic(ghsOutcome.data.name),
+    });
+    const entry = storeCacheEntry(cas, result);
+    if (entry) {
+        writePersistedEntry(cas, entry);
+        await writeServerCachedEntry(cas, entry, serverScope);
+    }
 
-    const result: PubChemGHSResult = {
-        cid,
-        name: ghs.name,
-        hCodes: ghs.hCodes,
-        pictograms: ghs.pictograms,
-        signalWord: ghs.signalWord,
-        isAcidic: detectAcidic(ghs.hCodes, ghs.name),
-        isBasic: detectBasic(ghs.name),
-        success: true,
-    };
-
-    // Cache the result
-    cache.set(cas, result);
-    writePersistedResult(cas, result);
-    await writeServerCachedResult(cas, result, serverScope);
-
-    console.log(`[PubChem] ${cas} → CID:${cid} | H-codes: [${result.hCodes.join(', ')}] | ${result.name}`);
-
+    console.log(`[PubChem] ${cas} -> CID:${cidOutcome.data} | H-codes: [${result.hCodes.join(', ')}] | ${result.name}`);
     return result;
 }
 
-/**
- * Clear the in-memory cache (for testing or memory management)
- */
 export function clearPubChemCache(): void {
     cache.clear();
+    serverCacheWriteKeys.clear();
 }

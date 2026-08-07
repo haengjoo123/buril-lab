@@ -18,6 +18,8 @@ import type { ReagentTemplateType } from '../../types/fridge';
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
 import { getShelfSectionCount, normalizeShelfDividers } from '../../utils/shelfSections';
+import { parseCapacityMeasurement } from '../../utils/capacityParser';
+import { normalizeExpiryDate } from '../../utils/dateValidation';
 import {
     INVENTORY_IMPORT_HEADER_KEYS,
     INVENTORY_IMPORT_TEMPLATE_HEADERS_KO,
@@ -129,25 +131,7 @@ const parseOptionalPositiveInteger = (raw: string): number | null => {
 // CSV support has been removed in favor of Excel (.xlsx)
 
 const toIsoDate = (raw: string): string | null => {
-    const value = raw.trim();
-    if (!value) return null;
-    
-    // If it's already YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        const date = new Date(value);
-        if (!Number.isNaN(date.getTime())) return value;
-    }
-
-    // Try parsing as generic date
-    const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    }
-    
-    return null;
+    return normalizeExpiryDate(raw);
 };
 
 export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
@@ -333,6 +317,13 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const memo = (source.memo || '').trim();
 
         if (!name) reasons.push(t('inventory_csv_reason_name_required'));
+
+        if (capacity && parseCapacityMeasurement(capacity).numericValue === null) {
+            reasons.push(t(
+                'inventory_csv_reason_capacity_invalid',
+                { defaultValue: 'capacity must be a positive measurement such as 500 mL, 1 L, or 2 x 500 mL.' },
+            ));
+        }
 
         const quantity = quantityRaw ? Number.parseInt(quantityRaw, 10) : 1;
         if (!Number.isInteger(quantity) || quantity < 1) {
@@ -1083,12 +1074,7 @@ async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promi
     if (!state.cabinetId || state.cabinetId !== expectedCabinetId) {
         throw new Error('cabinet state mismatch');
     }
-    await cabinetService.saveCabinetState(expectedCabinetId, state.shelves);
-    await cabinetService.updateCabinet(expectedCabinetId, {
-        width: state.cabinetWidth,
-        height: state.cabinetHeight,
-        depth: state.cabinetDepth,
-    });
+    await useFridgeStore.getState().saveCabinetStrict();
 }
 
 async function rollbackPlacedItem(cabinetId: string, placedItemId: string): Promise<void> {

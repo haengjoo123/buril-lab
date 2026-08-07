@@ -54,7 +54,23 @@ export interface DisposalGuideChemicalInput {
     concentration?: {
         value: number
         unit: string
+        basis?: 'w_w' | 'w_v' | 'v_v'
+        density?: {
+            value: number
+            unit: 'g/mL'
+            kind: 'solution' | 'solute'
+            temperatureC?: number
+            source?: 'catalog' | 'user'
+            isEstimate?: boolean
+        }
     }
+    solutionVolume?: {
+        value: number
+        unit: 'uL' | 'mL' | 'L'
+        normalizedMl: number
+        isEstimate?: boolean
+    }
+    phCatalogId?: string
     category?: string
     hazardFlags?: string[]
     ghs?: {
@@ -80,6 +96,17 @@ export interface DisposalGuideBatchContext {
     }
     measuredBatchPh?: number | null
     mixingState?: 'unknown' | 'separate' | 'already_mixed'
+    /** Informational only; the server's deterministic decision remains authoritative. */
+    predictedPh?: {
+        status: 'available' | 'approximate' | 'unsupported' | 'blocked' | 'failed'
+        value?: number
+        ionicStrength?: number
+        confidence: 'good' | 'approximate' | 'unavailable'
+        issueCodes: string[]
+        modelVersion: string
+        catalogVersion: string
+        inputHash: string
+    }
     hazardFlags?: string[]
     compatibilityWarnings?: Array<string | {
         severity?: string

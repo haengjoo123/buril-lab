@@ -1,6 +1,6 @@
 import { postJson } from './internalApi';
 
-export type CasResolveStatus = 'match' | 'no_match' | 'ambiguous' | 'conflict' | 'skipped';
+export type CasResolveStatus = 'match' | 'no_match' | 'ambiguous' | 'conflict' | 'skipped' | 'unavailable';
 export type CasSuggestionConfidence = 'high' | 'medium' | 'low';
 export type CasEvidenceCode =
     | 'kosha_exact_name_match'
@@ -16,7 +16,8 @@ export type CasReasonCode =
     | 'no_exact_match'
     | 'multiple_candidates'
     | 'source_conflict'
-    | 'low_confidence';
+    | 'low_confidence'
+    | 'upstream_unavailable';
 
 export interface CasResolveCandidateOption {
     casNumber: string;

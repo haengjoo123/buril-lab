@@ -73,7 +73,7 @@ describe('buildCabinetAutoLayoutPlan', () => {
             createShelf('shelf-1', 0, [
                 createItem({ id: 'flammable', name: 'Ethanol', hCodes: ['H225'], shelfId: 'shelf-1' }),
                 createItem({ id: 'oxidizer', name: 'Potassium permanganate', hCodes: ['H272'], shelfId: 'shelf-1', position: 18 }),
-                createItem({ id: 'acid', name: 'Hydrochloric Acid', shelfId: 'shelf-1', position: 32 }),
+                createItem({ id: 'acid', name: 'Hydrochloric Acid', hCodes: ['H314'], shelfId: 'shelf-1', position: 32 }),
             ]),
             createShelf('shelf-2', 1, []),
             createShelf('shelf-3', 2, []),
@@ -94,7 +94,7 @@ describe('buildCabinetAutoLayoutPlan', () => {
 
     it('does not place a container when its height exceeds the shelf clearance', () => {
         const shelves = [
-            createShelf('shelf-1', 0, [createItem({ id: 'tall-acid', name: 'Nitric Acid', width: 16 })]),
+            createShelf('shelf-1', 0, [createItem({ id: 'tall-acid', name: 'Nitric Acid', hCodes: ['H314'], width: 16 })]),
             createShelf('shelf-2', 1, []),
             createShelf('shelf-3', 2, []),
             createShelf('shelf-4', 3, []),
@@ -138,6 +138,7 @@ describe('buildCabinetAutoLayoutPlan', () => {
                 messageKey: 'cabinet_auto_place_review_general',
             }),
         ]);
+        expect(preview.canApply).toBe(false);
     });
 
     it('moves hard-to-identify reagents into the classification review list and leaves them unplaced', () => {
@@ -175,9 +176,9 @@ describe('buildCabinetAutoLayoutPlan', () => {
     it('blocks apply when space runs out and reports the unplaced item accurately', () => {
         const shelves = [
             createShelf('shelf-1', 0, [
-                createItem({ id: 'acid-1', name: 'Acetic Acid A', width: 29 }),
-                createItem({ id: 'acid-2', name: 'Acetic Acid B', width: 29, position: 32 }),
-                createItem({ id: 'acid-3', name: 'Acetic Acid C', width: 29, position: 60 }),
+                createItem({ id: 'acid-1', name: 'Acetic Acid A', hCodes: ['H314'], width: 29 }),
+                createItem({ id: 'acid-2', name: 'Acetic Acid B', hCodes: ['H314'], width: 29, position: 32 }),
+                createItem({ id: 'acid-3', name: 'Acetic Acid C', hCodes: ['H314'], width: 29, position: 60 }),
             ]),
         ];
 

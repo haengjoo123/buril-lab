@@ -10,11 +10,14 @@ import { supabase } from './supabaseClient';
 import type {
     CartItem,
     HandlingAction,
+    PhPredictionSnapshot,
     WasteBatchDraft,
+    WasteConcentrationBasis,
     WasteDecision,
     WasteHazardFlag,
     WasteLog,
     WasteMatrix,
+    WasteSolutionVolumeUnit,
     WasteStreamCode,
 } from '../types';
 import { useLabStore } from '../store/useLabStore';
@@ -43,6 +46,8 @@ export interface WasteLogRecord extends WasteLog {
     decision_snapshot?: Record<string, unknown>;
     stream_snapshot?: Record<string, unknown>;
     confirmation_snapshot?: Record<string, unknown>;
+    /** Informational client calculation; never a routing basis. */
+    ph_prediction_snapshot?: Record<string, unknown>;
     request_id?: string | null;
     voided_at?: string | null;
     voided_by?: string | null;
@@ -75,6 +80,18 @@ export interface WasteLogItemRecord {
     ghsDataStatus: 'verified' | 'lookup_failed' | 'not_checked' | null;
     concentrationValue: number | null;
     concentrationUnit: 'M' | 'mM' | '%' | 'mg/mL' | null;
+    solutionVolumeValue: number | null;
+    solutionVolumeUnit: WasteSolutionVolumeUnit | null;
+    solutionVolumeNormalizedMl: number | null;
+    solutionVolumeIsEstimate: boolean;
+    concentrationBasis: WasteConcentrationBasis | null;
+    densityValue: number | null;
+    densityUnit: 'g/mL' | null;
+    densityKind: 'solution' | 'solute' | null;
+    densityTemperatureC: number | null;
+    densitySource: 'catalog' | 'user' | null;
+    densityIsEstimate: boolean;
+    phCatalogId: string | null;
     hazardFlags: WasteHazardFlag[];
     dataSources: WasteLogItemDataSource[];
     analysisSnapshot: Record<string, unknown>;
@@ -90,6 +107,8 @@ export interface RecordWasteHandlingV2Params {
         alreadyMixed?: boolean;
         mixingState?: WasteBatchDraft['mixingState'];
     };
+    /** Immutable, non-authoritative snapshot captured when the record is finalized. */
+    phPredictionSnapshot?: PhPredictionSnapshot;
     /** Reuse this UUID when retrying the same user action. */
     requestId?: string;
 }
@@ -166,7 +185,7 @@ export interface WasteHandlingRpcBatchPayload {
         policyVersion: string;
         ruleVersion: string;
     };
-    confirmationSnapshot: Record<string, unknown>;
+        confirmationSnapshot: Record<string, unknown>;
     memo: string | null;
 }
 
@@ -224,6 +243,12 @@ function asNullableNumber(value: unknown): number | null {
     return null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : null;
+}
+
 export function normalizeWasteLogRow(row: unknown): WasteLogRecord {
     const log = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
 
@@ -244,6 +269,8 @@ export function normalizeWasteLogRow(row: unknown): WasteLogRecord {
         normalized_amount_value: asNullableNumber(log.normalized_amount_value),
         amount_is_approximate: Boolean(log.amount_is_approximate),
         amount_is_unknown: Boolean(log.amount_is_unknown),
+        confirmation_snapshot: asRecord(log.confirmation_snapshot) ?? {},
+        ph_prediction_snapshot: asRecord(log.ph_prediction_snapshot) ?? {},
         voided_at: typeof log.voided_at === 'string' ? log.voided_at : null,
         voided_by: typeof log.voided_by === 'string' ? log.voided_by : null,
         void_reason: typeof log.void_reason === 'string' ? log.void_reason : null,
@@ -297,6 +324,26 @@ export function normalizeWasteLogItemRow(row: unknown): WasteLogItemRecord {
         || concentrationUnitValue === 'mg/mL'
         ? concentrationUnitValue
         : null;
+    const solutionVolumeUnitValue = asNullableString(item.solution_volume_unit);
+    const solutionVolumeUnit = solutionVolumeUnitValue === 'uL'
+        || solutionVolumeUnitValue === 'mL'
+        || solutionVolumeUnitValue === 'L'
+        ? solutionVolumeUnitValue
+        : null;
+    const concentrationBasisValue = asNullableString(item.concentration_basis);
+    const concentrationBasis = concentrationBasisValue === 'w_w'
+        || concentrationBasisValue === 'w_v'
+        || concentrationBasisValue === 'v_v'
+        ? concentrationBasisValue
+        : null;
+    const densityKindValue = asNullableString(item.density_kind);
+    const densityKind = densityKindValue === 'solution' || densityKindValue === 'solute'
+        ? densityKindValue
+        : null;
+    const densitySourceValue = asNullableString(item.density_source);
+    const densitySource = densitySourceValue === 'catalog' || densitySourceValue === 'user'
+        ? densitySourceValue
+        : null;
     const hazardFlags = Array.isArray(item.hazard_flags)
         ? item.hazard_flags.filter((flag): flag is WasteHazardFlag => (
             typeof flag === 'string' && WASTE_HAZARD_FLAGS.has(flag as WasteHazardFlag)
@@ -327,6 +374,18 @@ export function normalizeWasteLogItemRow(row: unknown): WasteLogItemRecord {
         ghsDataStatus,
         concentrationValue: asNullableNumber(item.concentration_value),
         concentrationUnit,
+        solutionVolumeValue: asNullableNumber(item.solution_volume_value),
+        solutionVolumeUnit,
+        solutionVolumeNormalizedMl: asNullableNumber(item.solution_volume_normalized_ml),
+        solutionVolumeIsEstimate: Boolean(item.solution_volume_is_estimate),
+        concentrationBasis,
+        densityValue: asNullableNumber(item.density_value),
+        densityUnit: item.density_unit === 'g/mL' ? 'g/mL' : null,
+        densityKind,
+        densityTemperatureC: asNullableNumber(item.density_temperature_c),
+        densitySource,
+        densityIsEstimate: Boolean(item.density_is_estimate),
+        phCatalogId: asNullableString(item.ph_catalog_id),
         hazardFlags,
         dataSources: normalizeWasteLogItemDataSources(item.data_sources),
         analysisSnapshot,
@@ -365,6 +424,116 @@ function buildComponentDataSources(
     return sources;
 }
 
+function buildPhPredictionInput(
+    component: WasteBatchDraft['components'][number],
+): Record<string, unknown> | null {
+    const input: Record<string, unknown> = {};
+    const volume = component.solutionVolume;
+    if (volume) {
+        if (!Number.isFinite(volume.value) || volume.value <= 0
+            || !Number.isFinite(volume.normalizedMl) || volume.normalizedMl <= 0
+            || !['uL', 'mL', 'L'].includes(volume.unit)) {
+            throw new Error('Solution volume must be a positive finite value with a supported unit.');
+        }
+        const expectedMl = volume.unit === 'L'
+            ? volume.value * 1_000
+            : volume.unit === 'uL' ? volume.value / 1_000 : volume.value;
+        if (Math.abs(volume.normalizedMl - expectedMl) > Math.max(1e-9, expectedMl * 1e-9)) {
+            throw new Error('Normalized solution volume does not match its value and unit.');
+        }
+        input.solutionVolume = {
+            value: volume.value,
+            unit: volume.unit,
+            normalizedMl: volume.normalizedMl,
+            isEstimate: Boolean(volume.isEstimate),
+        };
+    }
+
+    const { concentration } = component;
+    if (concentration?.basis) input.concentrationBasis = concentration.basis;
+    if (concentration?.density) {
+        const density = concentration.density;
+        if (!Number.isFinite(density.value) || density.value <= 0
+            || density.unit !== 'g/mL'
+            || !['solution', 'solute'].includes(density.kind)
+            || (density.temperatureC !== undefined
+                && (!Number.isFinite(density.temperatureC)
+                    || density.temperatureC < -100 || density.temperatureC > 300))) {
+            throw new Error('Density metadata is invalid.');
+        }
+        input.density = {
+            value: density.value,
+            unit: density.unit,
+            kind: density.kind,
+            ...(density.temperatureC === undefined ? {} : { temperatureC: density.temperatureC }),
+            ...(density.source ? { source: density.source } : {}),
+            isEstimate: Boolean(density.isEstimate),
+        };
+    }
+
+    if (component.phCatalogId) {
+        const phCatalogId = component.phCatalogId.trim();
+        if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(phCatalogId) || phCatalogId.length > 200) {
+            throw new Error('The pH catalog identifier is invalid.');
+        }
+        input.phCatalogId = phCatalogId;
+    }
+
+    return Object.keys(input).length > 0 ? input : null;
+}
+
+function buildSolutionContextSnapshot(
+    component: WasteBatchDraft['components'][number],
+): Record<string, unknown> | null {
+    const context = component.solutionContext;
+    if (!context) return null;
+
+    const solventCasNumber = context.solventCasNumber?.trim();
+    return {
+        physicalForm: context.physicalForm,
+        solventClass: context.solventClass,
+        isSolventVerified: context.isSolventVerified === true,
+        solventResolution: context.solventResolution ?? 'unresolved',
+        ...(solventCasNumber ? { solventCasNumber } : {}),
+    };
+}
+
+function validatePhPredictionSnapshot(snapshot: PhPredictionSnapshot): PhPredictionSnapshot {
+    const hasNumericResult = snapshot.status === 'available' || snapshot.status === 'approximate';
+    if (snapshot.origin !== 'client_generated'
+        || !Number.isFinite(Date.parse(snapshot.capturedAt))
+        || !['available', 'approximate', 'unsupported', 'blocked', 'failed'].includes(snapshot.status)
+        || !['good', 'approximate', 'unavailable'].includes(snapshot.confidence)
+        || !snapshot.modelVersion.trim() || snapshot.modelVersion.length > 100
+        || !snapshot.catalogVersion.trim() || snapshot.catalogVersion.length > 100
+        || !/^[A-Za-z0-9:_-]{8,128}$/.test(snapshot.inputHash)
+        || snapshot.issueCodes.length > 32 || snapshot.issueCodes.some((value) => value.length > 100)
+        || snapshot.assumptions.length > 32 || snapshot.assumptions.some((value) => value.length > 500)) {
+        throw new Error('The pH prediction snapshot is invalid.');
+    }
+    if (hasNumericResult) {
+        if (snapshot.value === undefined || !Number.isFinite(snapshot.value)
+            || snapshot.value < 0 || snapshot.value > 14
+            || snapshot.displayValue === undefined || !Number.isFinite(snapshot.displayValue)
+            || snapshot.displayValue < 0 || snapshot.displayValue > 14
+            || snapshot.ionicStrength === undefined || !Number.isFinite(snapshot.ionicStrength)
+            || snapshot.ionicStrength < 0 || snapshot.ionicStrength > 0.1) {
+            throw new Error('Available pH predictions require bounded numeric results.');
+        }
+    } else if (snapshot.value !== undefined || snapshot.displayValue !== undefined) {
+        throw new Error('Unavailable pH predictions cannot contain a pH result.');
+    } else if (snapshot.ionicStrength !== undefined
+        && (!Number.isFinite(snapshot.ionicStrength)
+            || snapshot.ionicStrength < 0 || snapshot.ionicStrength > 100)) {
+        throw new Error('Unavailable pH prediction ionic strength is invalid.');
+    }
+    return {
+        ...snapshot,
+        issueCodes: [...snapshot.issueCodes],
+        assumptions: [...snapshot.assumptions],
+    };
+}
+
 function validateHandlingAction(decision: WasteDecision, handlingAction: HandlingAction): void {
     if (!decision.allowedActions.includes(handlingAction)) {
         throw new Error('The selected handling action is not allowed by the waste decision.');
@@ -380,7 +549,7 @@ function validateHandlingAction(decision: WasteDecision, handlingAction: Handlin
 }
 
 export function buildWasteHandlingRpcPayload(
-    params: Pick<RecordWasteHandlingV2Params, 'batch' | 'decision' | 'handlingAction' | 'memo' | 'confirmationSnapshot'>,
+    params: Pick<RecordWasteHandlingV2Params, 'batch' | 'decision' | 'handlingAction' | 'memo' | 'confirmationSnapshot' | 'phPredictionSnapshot'>,
 ): WasteHandlingRpcBatchPayload {
     const { batch, decision, handlingAction } = params;
 
@@ -407,7 +576,10 @@ export function buildWasteHandlingRpcPayload(
     validateHandlingAction(decision, handlingAction);
 
     return {
-        components: batch.components.map((component) => ({
+        components: batch.components.map((component, index) => {
+            const phPredictionInput = buildPhPredictionInput(component);
+            const solutionContextSnapshot = buildSolutionContextSnapshot(component);
+            return {
             cartLineId: component.cartLineId,
             sourceType: component.sourceType,
             sourceRef: component.sourceRef ?? null,
@@ -444,8 +616,14 @@ export function buildWasteHandlingRpcPayload(
                 referencePhSource: component.chemical.properties?.phSource ?? null,
                 inventorySnapshot: component.inventorySnapshot ?? null,
                 inventoryDisposalQuantity: component.inventoryDisposalQuantity ?? null,
+                ...(solutionContextSnapshot ? { solutionContext: solutionContextSnapshot } : {}),
+                ...(phPredictionInput ? { phPredictionInput } : {}),
+                ...(index === 0 && params.phPredictionSnapshot
+                    ? { phPredictionSnapshot: validatePhPredictionSnapshot(params.phPredictionSnapshot) }
+                    : {}),
             },
-        })),
+        };
+        }),
         handlingAction,
         decisionStatus: decision.decisionStatus,
         streamCode: decision.streamCode,
@@ -857,6 +1035,18 @@ export async function fetchWasteLogItemsV2(wasteLogId: string): Promise<WasteLog
             'ghs_data_status',
             'concentration_value',
             'concentration_unit',
+            'solution_volume_value',
+            'solution_volume_unit',
+            'solution_volume_normalized_ml',
+            'solution_volume_is_estimate',
+            'concentration_basis',
+            'density_value',
+            'density_unit',
+            'density_kind',
+            'density_temperature_c',
+            'density_source',
+            'density_is_estimate',
+            'ph_catalog_id',
             'hazard_flags',
             'data_sources',
             'analysis_snapshot',

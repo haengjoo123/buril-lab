@@ -29,6 +29,7 @@ export type SolventResolutionSource =
     | 'preset'
     | 'local_dictionary'
     | 'external_lookup'
+    | 'user'
     | 'unresolved';
 
 export interface SolutionContext {
@@ -89,6 +90,33 @@ export interface AnalysisHazardWarning {
     evidenceLabel?: string;
 }
 
+export type ChemicalHazardEvidenceSource =
+    | 'h_code'
+    | 'formula_element'
+    | 'formula_pattern'
+    | 'name_pattern'
+    | 'cas_registry';
+
+export type ChemicalHazardEvidenceConfidence = 'confirmed' | 'inferred';
+
+/** Evidence for one independently detected hazard; never inferred from disposal category precedence. */
+export interface ChemicalHazardEvidence {
+    flag: WasteHazardFlag;
+    source: ChemicalHazardEvidenceSource;
+    value: string;
+    confidence: ChemicalHazardEvidenceConfidence;
+}
+
+/**
+ * Lossless chemical hazard output. `category` remains a legacy single-value
+ * projection and must not be used as the source of these flags.
+ */
+export interface ChemicalHazardProfile {
+    version: '1.0.0';
+    flags: WasteHazardFlag[];
+    evidence: ChemicalHazardEvidence[];
+}
+
 export interface AnalysisResult {
     chemical: Chemical;
     category: DisposalCategory;
@@ -99,6 +127,8 @@ export interface AnalysisResult {
     isSafe: boolean; // False if requires manual verification
     isAiEstimated?: boolean; // True if the category was inferred by the Gemini API fallback
     hazardWarnings?: AnalysisHazardWarning[];
+    /** Missing only on legacy/persisted results; consumers must re-derive it from `chemical`. */
+    hazardProfile?: ChemicalHazardProfile;
 }
 
 export type MixtureAnalysisBasis = 'pure' | 'solution' | 'unknown_matrix';
@@ -185,6 +215,8 @@ export type WasteMixingState = 'unknown' | 'separate' | 'already_mixed';
 export type WasteIncidentContext = 'none' | 'broken' | 'leak';
 export type WasteMatrixSource = 'automatic' | 'user' | 'unresolved';
 export type ConcentrationUnit = 'M' | 'mM' | '%' | 'mg/mL';
+export type WasteSolutionVolumeUnit = 'uL' | 'mL' | 'L';
+export type WasteConcentrationBasis = 'w_w' | 'w_v' | 'v_v';
 export type WasteLegalPhClass = 'waste_acid' | 'waste_alkali' | 'none' | 'unknown';
 export type WasteCorrosivityPhScreen = 'review_required' | 'not_indicated' | 'unknown';
 export type WasteRoutingBasis =
@@ -206,11 +238,33 @@ export interface WasteAmount {
     normalizedUnit: 'mL' | 'mg' | null;
     isApproximate: boolean;
     isUnknown: boolean;
+    /** Client-side provenance; final RPCs continue to store the normalized amount and approximation flag. */
+    source?: 'manual' | 'component_sum';
 }
 
 export interface WasteConcentration {
     value: number;
     unit: ConcentrationUnit;
+    /** Required for percentage concentrations so the value can be converted without guessing. */
+    basis?: WasteConcentrationBasis;
+    density?: WasteDensityMetadata;
+}
+
+export interface WasteDensityMetadata {
+    value: number;
+    unit: 'g/mL';
+    /** w/w uses solution density; v/v uses the pure solute density. */
+    kind: 'solution' | 'solute';
+    source?: 'catalog' | 'user';
+    temperatureC?: number;
+    isEstimate?: boolean;
+}
+
+export interface WasteSolutionVolume {
+    value: number;
+    unit: WasteSolutionVolumeUnit;
+    normalizedMl: number;
+    isEstimate?: boolean;
 }
 
 /** V2 cart line. Extending CartItem keeps legacy readers interoperable. */
@@ -231,6 +285,9 @@ export interface WasteComponent extends CartItem {
     /** Structured, field-level label scan evidence used to explain identity confirmation. */
     scanSnapshot?: Record<string, unknown>;
     concentration?: WasteConcentration;
+    solutionVolume?: WasteSolutionVolume;
+    /** Stable identifier for the exact chemical form in the approved pH catalog. */
+    phCatalogId?: string;
     /** Number of inventory containers represented by this line that are physically discarded. */
     inventoryDisposalQuantity?: number;
     inventorySnapshot?: {
@@ -284,6 +341,7 @@ export type WasteDecisionReasonCode =
     | 'hf_fluoride_incompatible_container'
     | 'acid_alkali_separate'
     | 'acid_alkali_non_aqueous_mixed'
+    | 'unknown_matrix_review'
     | 'unknown_component';
 
 export interface WasteDecisionReason {
@@ -319,6 +377,35 @@ export interface WasteDecision {
     routingBasis: WasteRoutingBasis;
     policyVersion: string;
     ruleVersion: string;
+}
+
+export type PhPredictionStatus =
+    | 'available'
+    | 'approximate'
+    | 'unsupported'
+    | 'blocked'
+    | 'failed';
+
+export type PhPredictionConfidence = 'good' | 'approximate' | 'unavailable';
+
+/** Informational prediction only; it is deliberately not a WasteRoutingBasis. */
+export interface PhPredictionResult {
+    status: PhPredictionStatus;
+    value?: number;
+    displayValue?: number;
+    ionicStrength?: number;
+    confidence: PhPredictionConfidence;
+    issueCodes: string[];
+    assumptions: string[];
+    modelVersion: string;
+    catalogVersion: string;
+    inputHash: string;
+}
+
+/** Immutable audit copy written only when a handling record is finalized. */
+export interface PhPredictionSnapshot extends PhPredictionResult {
+    origin: 'client_generated';
+    capturedAt: string;
 }
 
 export interface MsdsSection {

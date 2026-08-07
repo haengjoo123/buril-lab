@@ -91,6 +91,47 @@ describe('useWasteStore V2 batch isolation', () => {
         vi.unstubAllGlobals();
     });
 
+    it('recomputes the automatic matrix and total when all concentrated components are confirmed as aqueous', () => {
+        const acetate = cartItem('acetate', 'Sodium Acetate', 'NEUTRAL');
+        acetate.chemical.casNumber = '127-09-3';
+        acetate.chemical.molecularFormula = 'C2H3NaO2';
+        const aceticAcid = cartItem('acid', 'Acetic Acid', 'ACID');
+        aceticAcid.chemical.casNumber = '64-19-7';
+        aceticAcid.chemical.molecularFormula = 'C2H4O2';
+        useWasteStore.getState().addToCart(acetate);
+        useWasteStore.getState().addToCart(aceticAcid);
+
+        for (const component of useWasteStore.getState().batch.components) {
+            useWasteStore.getState().updateComponent(component.cartLineId, {
+                concentration: { value: component.chemical.name === 'Sodium Acetate' ? 0.05 : 0.01, unit: 'M' },
+                solutionVolume: { value: 100, unit: 'mL', normalizedMl: 100 },
+            });
+            useWasteStore.getState().updateComponent(component.cartLineId, {
+                solutionContext: {
+                    physicalForm: 'aqueous',
+                    solventClass: 'aqueous',
+                    solventName: 'Water',
+                    isSolventVerified: true,
+                    solventResolution: 'user',
+                    solventCasNumber: '7732-18-5',
+                    solventMolecularFormula: 'H2O',
+                },
+            });
+        }
+
+        expect(useWasteStore.getState().batch).toMatchObject({
+            matrix: 'aqueous',
+            matrixSource: 'automatic',
+            totalAmount: {
+                value: 200,
+                unit: 'mL',
+                normalizedValue: 200,
+                normalizedUnit: 'mL',
+                source: 'component_sum',
+            },
+        });
+    });
+
     it('keeps drafts isolated by user and lab and hides them after logout', () => {
         const store = useWasteStore.getState();
 
@@ -136,7 +177,7 @@ describe('useWasteStore V2 batch isolation', () => {
             draft?: { components?: Array<{ chemical?: { name?: string } }> };
             parkedDrafts?: unknown[];
         };
-        expect(stored.schemaVersion).toBe(3);
+        expect(stored.schemaVersion).toBe(4);
         expect(stored.ownerUserId).toBe('user-a');
         expect(stored.scopeKey).toBe('user-a:lab-a');
         expect(stored.draft?.components?.[0]?.chemical?.name).toBe('Acetone');
@@ -167,15 +208,82 @@ describe('useWasteStore V2 batch isolation', () => {
 
         expect(useWasteStore.getState().batch.id).toBe('raw-v2-batch');
         expect(useWasteStore.getState().cart[0].chemical.name).toBe('Acetone');
+        expect(useWasteStore.getState().batch.mixingState).toBe('already_mixed');
         const upgraded = JSON.parse(storage.getItem(storageKey) ?? '{}') as {
             schemaVersion?: number;
             ownerUserId?: string;
             draft?: { id?: string };
         };
         expect(upgraded).toMatchObject({
-            schemaVersion: 3,
+            schemaVersion: 4,
             ownerUserId: 'user-a',
             draft: { id: 'raw-v2-batch' },
+        });
+    });
+
+    it('preserves an explicit legacy separate state until the user confirms one container', () => {
+        const legacyDraft = createEmptyWasteBatch({
+            id: 'legacy-separate-batch',
+            scopeKey: 'user-a:lab-a',
+            userId: 'user-a',
+            labId: 'lab-a',
+            now: '2026-08-02T00:00:00.000Z',
+        });
+        legacyDraft.components = [
+            createWasteComponentFromAnalysis(cartItem('water', 'Water')),
+        ];
+        legacyDraft.matrix = 'aqueous';
+        legacyDraft.matrixSource = 'user';
+        legacyDraft.mixingState = 'separate';
+        storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 4,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft: legacyDraft,
+            parkedDrafts: [],
+        }));
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        expect(useWasteStore.getState().batch.mixingState).toBe('separate');
+
+        useWasteStore.getState().confirmSingleContainer();
+        expect(useWasteStore.getState().batch).toMatchObject({
+            mixingState: 'already_mixed',
+            measuredPhStatus: 'unknown',
+        });
+    });
+
+    it('migrates a legacy two-phase selection to the solvent stream found in its components', () => {
+        const legacyDraft = createEmptyWasteBatch({
+            id: 'legacy-two-phase-batch',
+            scopeKey: 'user-a:lab-a',
+            userId: 'user-a',
+            labId: 'lab-a',
+            now: '2026-08-02T00:00:00.000Z',
+        });
+        const water = cartItem('water', 'Water', 'NEUTRAL');
+        water.chemical.casNumber = '7732-18-5';
+        water.chemical.molecularFormula = 'H2O';
+        water.chemical.properties = { isOrganic: false, isHalogenated: false };
+        legacyDraft.components = [
+            createWasteComponentFromAnalysis(water),
+            createWasteComponentFromAnalysis(cartItem('acetone', 'Acetone')),
+        ];
+        legacyDraft.matrix = 'mixed_biphasic';
+        legacyDraft.matrixSource = 'user';
+        storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 4,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft: legacyDraft,
+            parkedDrafts: [],
+        }));
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+
+        expect(useWasteStore.getState().batch).toMatchObject({
+            matrix: 'organic_non_halogenated',
+            matrixSource: 'automatic',
         });
     });
 
@@ -212,7 +320,7 @@ describe('useWasteStore V2 batch isolation', () => {
             parkedDrafts?: unknown[];
         };
         expect(upgraded).toMatchObject({
-            schemaVersion: 3,
+            schemaVersion: 4,
             draft: { incidentContext: 'none' },
             parkedDrafts: [],
         });
@@ -262,6 +370,168 @@ describe('useWasteStore V2 batch isolation', () => {
 
         expect(useWasteStore.getState().batch.id).toBe('active-a');
         expect(useWasteStore.getState().parkedBatches).toEqual([]);
+    });
+
+    it('upgrades schema 3 active and parked components to structured pH inputs', () => {
+        const activeDraft = createEmptyWasteBatch({
+            id: 'active-v3',
+            scopeKey: 'user-a:lab-a',
+            userId: 'user-a',
+            labId: 'lab-a',
+        });
+        activeDraft.components = [
+            createWasteComponentFromAnalysis({
+                ...cartItem('acid', 'Acid'),
+                volume: '250 µL',
+                molarity: '0.10 M',
+            } as CartItem),
+        ];
+        const parkedDraft = createEmptyWasteBatch({
+            id: 'parked-v3',
+            scopeKey: 'user-a:lab-a',
+            userId: 'user-a',
+            labId: 'lab-a',
+        });
+        parkedDraft.components = [
+            createWasteComponentFromAnalysis({
+                ...cartItem('base', 'Base'),
+                volume: '1,5 L',
+                molarity: '25 mg / mL',
+            } as CartItem),
+        ];
+        const storageKey = `${V2_PREFIX}user-a:lab-a`;
+        storage.setItem(storageKey, JSON.stringify({
+            schemaVersion: 3,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft: activeDraft,
+            parkedDrafts: [parkedDraft],
+        }));
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            volume: '250 µL',
+            molarity: '0.10 M',
+            solutionVolume: { value: 250, unit: 'uL', normalizedMl: 0.25 },
+            concentration: { value: 0.1, unit: 'M' },
+        });
+        expect(useWasteStore.getState().parkedBatches[0].components[0]).toMatchObject({
+            volume: '1,5 L',
+            molarity: '25 mg / mL',
+            solutionVolume: { value: 1.5, unit: 'L', normalizedMl: 1_500 },
+            concentration: { value: 25, unit: 'mg/mL' },
+        });
+        const upgraded = JSON.parse(storage.getItem(storageKey) ?? '{}') as {
+            schemaVersion?: number;
+            draft?: typeof activeDraft;
+            parkedDrafts?: typeof parkedDraft[];
+        };
+        expect(upgraded.schemaVersion).toBe(4);
+        expect(upgraded.draft?.components[0].solutionVolume?.normalizedMl).toBe(0.25);
+        expect(upgraded.parkedDrafts?.[0].components[0].concentration).toEqual({
+            value: 25,
+            unit: 'mg/mL',
+        });
+    });
+
+    it('preserves unparseable legacy strings without inventing structured values', () => {
+        const draft = createEmptyWasteBatch({
+            id: 'ambiguous-v3',
+            scopeKey: 'user-a:lab-a',
+            userId: 'user-a',
+            labId: 'lab-a',
+        });
+        draft.components = [
+            createWasteComponentFromAnalysis({
+                ...cartItem('unknown-stock', 'Unknown stock'),
+                volume: 'about half a bottle',
+                molarity: '37%',
+            } as CartItem),
+        ];
+        storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 3,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft,
+            parkedDrafts: [],
+        }));
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            volume: 'about half a bottle',
+            molarity: '37%',
+        });
+        expect(useWasteStore.getState().batch.components[0].solutionVolume).toBeUndefined();
+        expect(useWasteStore.getState().batch.components[0].concentration).toBeUndefined();
+    });
+
+    it('adds and updates structured solution inputs and exact catalog identity', () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        useWasteStore.getState().addToCart(cartItem('acetic-acid', 'Acetic acid'), {
+            phCatalogId: 'cas:64-19-7:acetic-acid',
+            solutionVolume: {
+                value: 100,
+                unit: 'mL',
+                normalizedMl: 100,
+            },
+            concentration: {
+                value: 5,
+                unit: '%',
+                basis: 'w_w',
+                density: {
+                    value: 1.006,
+                    unit: 'g/mL',
+                    kind: 'solution',
+                    source: 'catalog',
+                    temperatureC: 25,
+                },
+            },
+        });
+
+        const component = useWasteStore.getState().cart[0];
+        expect(component).toMatchObject({
+            phCatalogId: 'cas:64-19-7:acetic-acid',
+            solutionVolume: { value: 100, unit: 'mL', normalizedMl: 100 },
+            concentration: {
+                value: 5,
+                unit: '%',
+                basis: 'w_w',
+                density: { value: 1.006, kind: 'solution', source: 'catalog' },
+            },
+        });
+
+        useWasteStore.getState().updateComponent(component.cartLineId, {
+            solutionVolume: {
+                value: 0.2,
+                unit: 'L',
+                normalizedMl: 200,
+                isEstimate: true,
+            },
+            phCatalogId: 'cas:64-19-7:acetic-acid-aqueous',
+        });
+
+        expect(useWasteStore.getState().cart[0]).toMatchObject({
+            phCatalogId: 'cas:64-19-7:acetic-acid-aqueous',
+            solutionVolume: {
+                value: 0.2,
+                unit: 'L',
+                normalizedMl: 200,
+                isEstimate: true,
+            },
+        });
+    });
+
+    it('persists a unique approved catalog id from an exact CAS match', () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        const aceticAcid = cartItem('acetic-acid', 'Acetic acid', 'ACID');
+        aceticAcid.chemical.casNumber = '64-19-7';
+        aceticAcid.chemical.molecularFormula = 'C2H4O2';
+
+        useWasteStore.getState().addToCart(aceticAcid);
+
+        expect(useWasteStore.getState().cart[0].phCatalogId).toBe('acetic-acid');
     });
 
     it('allows duplicate chemicals with different cartLineIds and removes one line only', () => {
@@ -484,6 +754,7 @@ describe('useWasteStore V2 batch isolation', () => {
             normalizedUnit: 'mL',
             isApproximate: true,
             isUnknown: false,
+            source: 'manual',
         });
 
         useWasteStore.getState().setMatrix('organic_non_halogenated');
@@ -507,6 +778,7 @@ describe('useWasteStore V2 batch isolation', () => {
             normalizedUnit: 'mg',
             isApproximate: false,
             isUnknown: false,
+            source: 'manual',
         });
 
         useWasteStore.getState().setMatrix('aqueous');
@@ -560,13 +832,79 @@ describe('useWasteStore V2 batch isolation', () => {
             normalizedUnit: null,
             isApproximate: false,
             isUnknown: true,
+            source: 'manual',
         });
     });
 
-    it('stores measured batch pH only for an explicitly already-mixed aqueous batch', () => {
+    it('automatically sums complete component volumes and resets stale manual overrides', () => {
         useWasteStore.getState().setScope('user-a', 'lab-a');
         useWasteStore.getState().setMatrix('aqueous');
-        useWasteStore.getState().setMixingState('already_mixed');
+        useWasteStore.getState().addToCart(cartItem('first', 'First solution'), {
+            solutionVolume: { value: 100, unit: 'mL', normalizedMl: 100 },
+        });
+        useWasteStore.getState().addToCart(cartItem('second', 'Second solution'), {
+            solutionVolume: { value: 0.05, unit: 'L', normalizedMl: 50 },
+        });
+
+        expect(useWasteStore.getState().batch.totalAmount).toEqual({
+            value: 150,
+            unit: 'mL',
+            normalizedValue: 150,
+            normalizedUnit: 'mL',
+            isApproximate: true,
+            isUnknown: false,
+            source: 'component_sum',
+        });
+
+        useWasteStore.getState().setTotalAmount({
+            value: 140,
+            unit: 'mL',
+            source: 'manual',
+        });
+        expect(useWasteStore.getState().batch.totalAmount.source).toBe('manual');
+
+        useWasteStore.getState().setTotalAmount({
+            value: 145,
+            unit: 'mL',
+            isApproximate: true,
+            source: 'manual',
+        });
+        expect(useWasteStore.getState().batch.totalAmount).toMatchObject({
+            value: 150,
+            isApproximate: true,
+            source: 'component_sum',
+        });
+
+        useWasteStore.getState().setTotalAmount({
+            value: 140,
+            unit: 'mL',
+            source: 'manual',
+        });
+
+        const firstLineId = useWasteStore.getState().batch.components[0].cartLineId;
+        useWasteStore.getState().updateComponent(firstLineId, {
+            solutionVolume: { value: 120, unit: 'mL', normalizedMl: 120 },
+        });
+        expect(useWasteStore.getState().batch.totalAmount).toMatchObject({
+            value: 170,
+            normalizedValue: 170,
+            isApproximate: true,
+            source: 'component_sum',
+        });
+
+        useWasteStore.getState().addToCart(cartItem('third', 'Unknown-volume solution'));
+        expect(useWasteStore.getState().batch.totalAmount).toMatchObject({
+            value: null,
+            isUnknown: false,
+        });
+    });
+
+    it('derives one-container mixing state and stores measured pH only for aqueous batches', () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        useWasteStore.getState().setMatrix('aqueous');
+        expect(useWasteStore.getState().batch.mixingState).toBe('unknown');
+
+        useWasteStore.getState().addToCart(cartItem('water', 'Water'));
         useWasteStore.getState().setMeasuredPh(11.5, false);
 
         expect(useWasteStore.getState().batch).toMatchObject({
@@ -576,15 +914,7 @@ describe('useWasteStore V2 batch isolation', () => {
         });
         expect(useWasteStore.getState().batch.measuredPh).toBeUndefined();
 
-        useWasteStore.getState().setMixingState('separate');
-        expect(useWasteStore.getState().batch).toMatchObject({
-            mixingState: 'separate',
-            measuredPhStatus: 'not_required',
-        });
-        expect(useWasteStore.getState().batch.measuredBatchPh).toBeUndefined();
-
         useWasteStore.getState().setMatrix('mixed_biphasic');
-        useWasteStore.getState().setMixingState('already_mixed');
         useWasteStore.getState().setMeasuredPh(7, false);
         expect(useWasteStore.getState().batch).toMatchObject({
             matrix: 'mixed_biphasic',
@@ -592,6 +922,9 @@ describe('useWasteStore V2 batch isolation', () => {
             measuredPhStatus: 'not_required',
         });
         expect(useWasteStore.getState().batch.measuredBatchPh).toBeUndefined();
+
+        useWasteStore.getState().removeFromCart('water');
+        expect(useWasteStore.getState().batch.mixingState).toBe('unknown');
     });
 
     it('migrates an explicitly owner-tagged legacy cart exactly once', () => {
@@ -610,6 +943,9 @@ describe('useWasteStore V2 batch isolation', () => {
         expect(migrated).toHaveLength(2);
         expect(new Set(migrated.map(({ cartLineId }) => cartLineId)).size).toBe(2);
         expect(migrated.every(({ volume }) => volume === '500 mL')).toBe(true);
+        expect(migrated.every(({ solutionVolume }) =>
+            solutionVolume?.value === 500 && solutionVolume.normalizedMl === 500
+        )).toBe(true);
         expect(storage.getItem(LEGACY_KEY)).toBeNull();
         expect(storage.getItem(`${V2_PREFIX}user-a:lab-a`)).not.toBeNull();
 

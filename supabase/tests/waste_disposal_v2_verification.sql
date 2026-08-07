@@ -6,7 +6,103 @@ do $$
 declare
     v_definition text;
     v_count integer;
+    v_expected_cas text;
 begin
+    if (
+        select count(*)
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'waste_log_items'
+          and column_name in (
+              'solution_volume_value', 'solution_volume_unit', 'solution_volume_normalized_ml',
+              'solution_volume_is_estimate', 'concentration_basis', 'density_value',
+              'density_unit', 'density_kind', 'density_temperature_c', 'density_source',
+              'density_is_estimate', 'ph_catalog_id'
+          )
+    ) <> 12 then
+        raise exception 'waste_log_items is missing structured pH input audit columns';
+    end if;
+
+    if not exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'waste_logs'
+          and column_name = 'ph_prediction_snapshot'
+    ) then
+        raise exception 'waste_logs is missing the pH prediction audit snapshot';
+    end if;
+
+    if not exists (
+        select 1
+        from pg_trigger
+        where tgrelid = 'public.waste_log_items'::regclass
+          and tgname = 'capture_ph_prediction_audit_v1'
+          and not tgisinternal
+    ) then
+        raise exception 'pH prediction audit trigger is missing';
+    end if;
+
+    select lower(pg_get_functiondef(
+        'private.capture_ph_prediction_audit_v1()'::regprocedure
+    )) into v_definition;
+    if position('phpredictionsnapshot is allowed only on the first component' in v_definition) = 0
+       or position('update public.waste_logs' in v_definition) = 0
+       or position('available pH predictions require bounded numeric results' in v_definition) = 0 then
+        raise exception 'pH prediction audit validation is incomplete';
+    end if;
+
+    if has_function_privilege(
+        'anon', 'private.capture_ph_prediction_audit_v1()', 'EXECUTE'
+    ) or has_function_privilege(
+        'authenticated', 'private.capture_ph_prediction_audit_v1()', 'EXECUTE'
+    ) then
+        raise exception 'pH prediction audit trigger must not be directly executable by clients';
+    end if;
+
+    select lower(pg_get_functiondef(
+        'private.analyze_waste_batch_v2(jsonb,text,jsonb)'::regprocedure
+    )) into v_definition;
+    if position('ph_prediction' in v_definition) > 0
+       or position('predictedph' in v_definition) > 0 then
+        raise exception 'Server waste routing must not consume client pH predictions';
+    end if;
+
+    if position('v_has_verified_halogenated_solvent' in v_definition) = 0
+       or position('v_has_verified_non_halogenated_solvent' in v_definition) = 0
+       or position('coalesce(v_has_verified_halogenated_solvent, false)' in v_definition) = 0
+       or position('coalesce(v_has_verified_non_halogenated_solvent, false)' in v_definition) = 0
+       or position('or coalesce(v_has_organic_halogen, false)' in v_definition) = 0
+       or position('solutioncontext' in v_definition) = 0
+       or position('physicalform' in v_definition) = 0 then
+        raise exception 'Mixed-biphasic routing must use the reviewed exact-CAS solvent allowlists';
+    end if;
+    if position('unknown_matrix_review' in v_definition) = 0
+       or position('''matrixsource''' in v_definition) = 0 then
+        raise exception 'User-confirmed unknown matrices must route to review without becoming ordinary deposits';
+    end if;
+
+    foreach v_expected_cas in array array[
+        '75-09-2', '67-66-3', '56-23-5', '79-01-6', '127-18-4',
+        '107-06-2', '108-90-7',
+        '67-68-5', '67-64-1', '64-17-5', '67-56-1', '75-05-8',
+        '108-88-3', '110-54-3', '142-82-5', '1330-20-7', '71-43-2',
+        '60-29-7', '109-99-9', '68-12-2', '67-63-0', '141-78-6'
+    ]::text[]
+    loop
+        if position(v_expected_cas in v_definition) = 0 then
+            raise exception 'Mixed-biphasic solvent allowlist is missing CAS %', v_expected_cas;
+        end if;
+    end loop;
+
+    if has_function_privilege(
+        'anon', 'private.analyze_waste_batch_v2(jsonb,text,jsonb)', 'EXECUTE'
+    ) or has_function_privilege(
+        'authenticated', 'private.analyze_waste_batch_v2(jsonb,text,jsonb)', 'EXECUTE'
+    ) then
+        raise exception 'The private waste analyzer must not be directly executable by clients';
+    end if;
+
     select lower(pg_get_functiondef(
         'public.delete_inventory_item_atomic(uuid,text,text,uuid,uuid,text,text,text,text)'::regprocedure
     )) into v_definition;
@@ -569,6 +665,44 @@ begin
         end if;
     end loop;
 
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Unidentified solution',
+            'ghsDataStatus', 'verified',
+            'casNumber', '',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object('category', 'NEUTRAL')
+        )),
+        'unknown',
+        jsonb_set(v_confirmation, '{matrixSource}', '"user"'::jsonb)
+    );
+    if v_result->>'decisionStatus' <> 'blocked'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or not (v_result->'blockingCodes' @> '["unknown_matrix_review"]'::jsonb)
+       or not (
+           v_result->'allowedActions' @> '["isolated","handover"]'::jsonb
+           and jsonb_array_length(v_result->'allowedActions') = 2
+       )
+       or v_result->'missingFields' @> '["matrix"]'::jsonb then
+        raise exception 'A user-confirmed unknown matrix must be blocked for SPECIAL_REVIEW handover';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Unidentified solution',
+            'ghsDataStatus', 'verified',
+            'casNumber', '',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object('category', 'NEUTRAL')
+        )),
+        'unknown',
+        v_confirmation - 'matrixSource'
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or not (v_result->'missingFields' @> '["matrix"]'::jsonb) then
+        raise exception 'An unanswered unknown matrix must remain a missing field';
+    end if;
+
     -- `present` declares that the component list is incomplete, regardless of
     -- whether the current matrix alone would otherwise resolve a destination.
     v_result := private.analyze_waste_batch_v2(
@@ -601,9 +735,11 @@ begin
         'mixed_biphasic',
         v_confirmation
     );
-    if v_result->>'decisionStatus' <> 'ready'
-       or v_result->'missingFields' @> '["additional_components"]'::jsonb then
-        raise exception 'Explicit no-additional-components confirmation must remain usable for a mixed batch';
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or v_result->>'routingBasis' <> 'unresolved'
+       or not (v_result->'missingFields' @> '["additional_components"]'::jsonb) then
+        raise exception 'A mixed batch without a verified solvent CAS must remain unresolved even after a none confirmation';
     end if;
 
     foreach v_status in array array['present', 'unknown']::text[]
@@ -646,6 +782,269 @@ begin
        or not (v_result->'missingFields' @> '["additional_components"]'::jsonb) then
         raise exception 'Mixed batch with missing additional component status must need input';
     end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Generic organic without CAS',
+            'ghsDataStatus', 'verified',
+            'formula', 'C6H12O6',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object(
+                'category', 'ORGANIC_NON_HALOGEN'
+            )
+        )),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or v_result->>'routingBasis' <> 'unresolved'
+       or not (v_result->'missingFields' @> '["additional_components"]'::jsonb) then
+        raise exception 'A missing component CAS must fail closed for mixed-biphasic solvent routing';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Hexachlorobenzene',
+            'ghsDataStatus', 'verified',
+            'casNumber', '118-74-1',
+            'formula', 'C6Cl6',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object(
+                'category', 'ORGANIC_HALOGEN'
+            )
+        )),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or v_result->>'routingBasis' <> 'unresolved'
+       or not (v_result->'missingFields' @> '["additional_components"]'::jsonb) then
+        raise exception 'Generic halogenated-organic content alone must not establish a mixed organic phase';
+    end if;
+
+    -- A broad category is not sufficient evidence of an organic solvent. This
+    -- deliberately forged category must not turn sodium acetate into a solvent.
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Sodium acetate',
+            'ghsDataStatus', 'verified',
+            'casNumber', '127-09-3',
+            'formula', 'C2H3NaO2',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object(
+                'category', 'ORGANIC_NON_HALOGEN'
+            )
+        )),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or v_result->>'routingBasis' <> 'unresolved'
+       or not (v_result->'missingFields' @> '["additional_components"]'::jsonb) then
+        raise exception 'Sodium acetate must not select an organic stream from a forged category';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(
+            jsonb_build_object(
+                'chemicalName', 'Acetic acid',
+                'ghsDataStatus', 'verified',
+                'casNumber', '64-19-7',
+                'formula', 'C2H4O2',
+                'identityConfidence', 1,
+                'analysisSnapshot', jsonb_build_object('category', 'ACID')
+            ),
+            jsonb_build_object(
+                'chemicalName', 'Sodium acetate',
+                'ghsDataStatus', 'verified',
+                'casNumber', '127-09-3',
+                'formula', 'C2H3NaO2',
+                'identityConfidence', 1,
+                'analysisSnapshot', jsonb_build_object(
+                    'category', 'ORGANIC_NON_HALOGEN'
+                )
+            )
+        ),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'needs_input'
+       or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+       or v_result->>'routingBasis' <> 'unresolved'
+       or not (v_result->'missingFields' @> '["additional_components"]'::jsonb) then
+        raise exception 'Acetic acid plus Sodium acetate must not be treated as an organic solvent phase';
+    end if;
+
+    -- A verified exact CAS is sufficient even when the broad AI/category label
+    -- is neutral, proving that the allowlist is the mixed-routing authority.
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Acetone',
+            'ghsDataStatus', 'verified',
+            'casNumber', '67-64-1',
+            'formula', 'C3H6O',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object('category', 'NEUTRAL')
+        )),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'ORGANIC_NON_HALOGENATED'
+       or v_result->>'routingBasis' <> 'matrix'
+       or v_result->'missingFields' @> '["additional_components"]'::jsonb then
+        raise exception 'Verified Acetone CAS must select the non-halogenated organic stream';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(
+            jsonb_build_object(
+                'chemicalName', 'Acetone',
+                'ghsDataStatus', 'verified',
+                'casNumber', '67-64-1',
+                'formula', 'C3H6O',
+                'identityConfidence', 1,
+                'analysisSnapshot', jsonb_build_object('category', 'NEUTRAL')
+            ),
+            jsonb_build_object(
+                'chemicalName', 'Hexachlorobenzene',
+                'ghsDataStatus', 'verified',
+                'casNumber', '118-74-1',
+                'formula', 'C6Cl6',
+                'identityConfidence', 1,
+                'analysisSnapshot', jsonb_build_object(
+                    -- Keep the category neutral to verify parity with the
+                    -- server's formula-derived organic-halogen guard.
+                    'category', 'NEUTRAL'
+                )
+            )
+        ),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'ORGANIC_HALOGENATED'
+       or v_result->>'routingBasis' <> 'matrix'
+       or v_result->'missingFields' @> '["additional_components"]'::jsonb then
+        raise exception 'Halogenated organic content must promote a verified non-halogenated mixed phase';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Dichloromethane',
+            'ghsDataStatus', 'verified',
+            'casNumber', '75-09-2',
+            'formula', 'CH2Cl2',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object('category', 'NEUTRAL')
+        )),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'ORGANIC_HALOGENATED'
+       or v_result->>'routingBasis' <> 'matrix'
+       or v_result->'missingFields' @> '["additional_components"]'::jsonb then
+        raise exception 'Verified Dichloromethane CAS must select the halogenated organic stream';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Acetone with conflicting context',
+            'ghsDataStatus', 'verified',
+            'casNumber', '67-64-1',
+            'formula', 'C3H6O',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object(
+                'category', 'NEUTRAL',
+                'solutionContext', jsonb_build_object(
+                    'physicalForm', 'organic_solvent',
+                    'solventClass', 'organic_halogen',
+                    'isSolventVerified', true,
+                    'solventResolution', 'local_dictionary',
+                    'solventCasNumber', '75-09-2'
+                )
+            )
+        )),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'ORGANIC_HALOGENATED'
+       or v_result->>'routingBasis' <> 'matrix' then
+        raise exception 'Verified halogenated carrier evidence must take priority over non-halogenated evidence';
+    end if;
+
+    v_result := private.analyze_waste_batch_v2(
+        jsonb_build_array(jsonb_build_object(
+            'chemicalName', 'Solute in verified Acetone',
+            'ghsDataStatus', 'verified',
+            'casNumber', '56-81-5',
+            'formula', 'C3H8O3',
+            'identityConfidence', 1,
+            'analysisSnapshot', jsonb_build_object(
+                'category', 'NEUTRAL',
+                'solutionContext', jsonb_build_object(
+                    'physicalForm', 'organic_solvent',
+                    'solventClass', 'organic_non_halogen',
+                    'isSolventVerified', true,
+                    'solventResolution', 'local_dictionary',
+                    'solventCasNumber', '67-64-1'
+                )
+            )
+        )),
+        'mixed_biphasic',
+        v_confirmation
+    );
+    if v_result->>'decisionStatus' <> 'ready'
+       or v_result->>'streamCode' <> 'ORGANIC_NON_HALOGENATED'
+       or v_result->>'routingBasis' <> 'matrix'
+       or v_result->'missingFields' @> '["additional_components"]'::jsonb then
+        raise exception 'A verified solution context with matching Acetone CAS and class must select its organic stream';
+    end if;
+
+    for v_case in
+        select *
+        from (values
+            ('unverified context', false, 'organic_solvent', 'organic_non_halogen', '67-64-1'),
+            ('class/CAS mismatch', true, 'organic_solvent', 'organic_non_halogen', '75-09-2'),
+            ('missing context CAS', true, 'organic_solvent', 'organic_non_halogen', null::text),
+            ('missing physical form', true, null::text, 'organic_non_halogen', '67-64-1'),
+            ('non-organic physical form', true, 'aqueous', 'organic_non_halogen', '67-64-1')
+        ) as cases(label, is_verified, physical_form, solvent_class, solvent_cas)
+    loop
+        v_result := private.analyze_waste_batch_v2(
+            jsonb_build_array(jsonb_build_object(
+                'chemicalName', v_case.label,
+                'ghsDataStatus', 'verified',
+                'casNumber', '56-81-5',
+                'formula', 'C3H8O3',
+                'identityConfidence', 1,
+                'analysisSnapshot', jsonb_build_object(
+                    'category', 'ORGANIC_NON_HALOGEN',
+                    'solutionContext', jsonb_build_object(
+                        'physicalForm', v_case.physical_form,
+                        'solventClass', v_case.solvent_class,
+                        'isSolventVerified', v_case.is_verified,
+                        'solventResolution', 'external_lookup',
+                        'solventCasNumber', v_case.solvent_cas
+                    )
+                )
+            )),
+            'mixed_biphasic',
+            v_confirmation
+        );
+        if v_result->>'decisionStatus' <> 'needs_input'
+           or v_result->>'streamCode' <> 'SPECIAL_REVIEW'
+           or v_result->>'routingBasis' <> 'unresolved'
+           or not (v_result->'missingFields' @> '["additional_components"]'::jsonb) then
+            raise exception 'Invalid solvent evidence (%) must not select an organic stream',
+                v_case.label;
+        end if;
+    end loop;
 
     v_result := private.analyze_waste_batch_v2(
         jsonb_build_array(jsonb_build_object(

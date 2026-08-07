@@ -1,0 +1,286 @@
+TITLE Buril Lab pH predictor dilute aqueous golden cases
+
+SOLUTION 1 HCl 0.0005 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Cl 0.0005
+
+SOLUTION 2 Acetate buffer 0.005/0.005 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Acetate 0.01
+    Na 0.005
+
+SOLUTION 3 Equimolar phosphate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    P 0.001
+    Na 0.0015
+
+SOLUTION 4 Sulfuric acid 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    S(6) 0.001
+
+SOLUTION 5 Sulfate after two equivalents NaOH
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    S(6) 0.0005
+    Na 0.001
+
+SOLUTION 6 Glycine 0.1 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Glycine 0.1
+
+SOLUTION 7 NaOH 0.0005 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Na 0.0005
+
+SOLUTION 8 Equimolar HCl and NaOH
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Cl 0.0005
+    Na 0.0005
+
+SOLUTION 9 HCl excess after neutralization
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Cl 0.0015
+    Na 0.0005
+
+SOLUTION 10 NaOH excess after neutralization
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Cl 0.0005
+    Na 0.0015
+
+SOLUTION 11 Acid-rich acetate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Acetate 0.01
+    Na 0.001
+
+SOLUTION 12 Base-rich acetate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Acetate 0.01
+    Na 0.009
+
+SOLUTION 13 Equimolar formate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Formate 0.01
+    Na 0.005
+
+SOLUTION 14 Equimolar propionate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Propionate 0.01
+    Na 0.005
+
+SOLUTION 15 Equimolar benzoate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Benzoate 0.002
+    Na 0.001
+
+SOLUTION 16 Phosphoric acid and sodium dihydrogen phosphate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    P 0.01
+    Na 0.005
+
+SOLUTION 17 Hydrogen phosphate and phosphate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    P 0.0005
+    Na 0.00125
+
+SOLUTION 18 Bisulfate and sulfate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    S(6) 0.001
+    Na 0.0015
+
+SOLUTION 19 Equimolar fluoride buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    F 0.01
+    Na 0.005
+
+SOLUTION 20 Boric acid 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    B 0.001
+
+SOLUTION 21 Half-neutralized boric acid
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    B 0.001
+    Na 0.0005
+
+SOLUTION 22 Glycine hydrochloride and glycine buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Glycine 0.01
+    Cl 0.005
+
+SOLUTION 23 Glycine and sodium glycinate buffer
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Glycine 0.01
+    Na 0.005
+
+SOLUTION 24 HNO3 0.0005 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    N(5) 0.0005
+
+SOLUTION 25 Phosphoric acid 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    P 0.001
+
+SOLUTION 26 Sodium fluoride 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    F 0.001
+    Na 0.001
+
+SOLUTION 27 Formic acid 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Formate 0.001
+
+SOLUTION 28 Propionic acid 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Propionate 0.001
+
+SOLUTION 29 Benzoic acid 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Benzoate 0.001
+
+SOLUTION 30 Acetic acid 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Acetate 0.001
+
+SOLUTION 31 Sodium acetate 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Acetate 0.001
+    Na 0.001
+
+SOLUTION 32 Sodium propionate 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Propionate 0.001
+    Na 0.001
+
+SOLUTION 33 Sodium benzoate 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Benzoate 0.001
+    Na 0.001
+
+SOLUTION 34 Sodium formate 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Formate 0.001
+    Na 0.001
+
+SOLUTION 35 Sodium bisulfate 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    S(6) 0.001
+    Na 0.001
+
+SOLUTION 36 Sodium sulfate 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    S(6) 0.001
+    Na 0.002
+
+SOLUTION 37 Trisodium phosphate 0.0005 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    P 0.0005
+    Na 0.0015
+
+SOLUTION 38 Glycine hydrochloride 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Glycine 0.001
+    Cl 0.001
+
+SOLUTION 39 Sodium glycinate 0.001 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Glycine 0.001
+    Na 0.001
+
+SOLUTION 40 KOH 0.0005 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    K 0.0005
+
+SOLUTION 41 Sodium chloride 0.05 mol/kgw
+    temp 25
+    units mol/kgw
+    pH 7 charge
+    Na 0.05
+    Cl 0.05
+
+SELECTED_OUTPUT 1
+    -file ph-golden.sel
+    -reset false
+    -solution true
+    -pH true
+    -ionic_strength true
+    -high_precision true
+
+END

@@ -51,13 +51,14 @@ function createPlacement(overrides: Partial<ReagentPlacement> = {}): ReagentPlac
 }
 
 describe('classifyInventoryHazard', () => {
-    it('classifies Sodium azide as a high-risk azide reagent by name', () => {
+    it('does not classify Sodium azide as high-risk from its name alone', () => {
         const result = classifyInventoryHazard(createInventoryItem());
 
-        expect(result.level).toBe('high');
-        expect(result.groups).toContain('TOXIC_AZIDE');
-        expect(result.filterCategories).toEqual(expect.arrayContaining(['special_high', 'toxic']));
-        expect(result.groupLabelKeys).toContain('storage_group_azide');
+        expect(result.level).toBe('none');
+        expect(result.groups).not.toContain('TOXIC_AZIDE');
+        expect(result.needsReview).toBe(true);
+        expect(result.filterCategories).not.toContain('special_high');
+        expect(result.groupLabelKeys).not.toContain('storage_group_azide');
     });
 
     it('classifies fatal acute toxicity H-codes as high-risk', () => {
@@ -106,16 +107,10 @@ describe('storageCompatibilityChecker azide handling', () => {
         const sodiumAzide = createPlacement({ id: 'azide', name: 'Sodium azide', casNo: '26628-22-8' });
         const aceticAcid = createPlacement({ id: 'acid', name: 'Acetic acid', position: 20 });
 
-        expect(classifyStorageGroups(sodiumAzide)).toContain('TOXIC_AZIDE');
+        expect(classifyStorageGroups(sodiumAzide)).not.toContain('TOXIC_AZIDE');
 
         const warnings = checkShelfCompatibility([sodiumAzide, aceticAcid]);
 
-        expect(warnings).toEqual([
-            expect.objectContaining({
-                severity: 'DANGER',
-                ruleId: 'store_orgacid_azide',
-                messageKey: 'storage_acid_azide',
-            }),
-        ]);
+        expect(warnings).toEqual([]);
     });
 });

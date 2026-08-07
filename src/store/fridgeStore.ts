@@ -18,6 +18,7 @@ import {
 } from '../utils/reagentPlacementMetrics';
 import { getShelfSectionByIndex } from '../utils/shelfSections';
 import {
+    createCabinetLayoutSnapshot,
     createCabinetLayoutHistoryChange,
     redoCabinetLayoutHistory,
     undoCabinetLayoutHistory,
@@ -40,6 +41,7 @@ interface FridgeStore extends FridgeState {
     cabinetId: string | null;
     cabinetName: string;
     isLoadingCabinet: boolean;
+    cabinetSaveError: string | null;
     loadCabinet: (cabinetId: string) => Promise<void>;
     saveCabinet: () => Promise<void>;
     saveCabinetStrict: () => Promise<void>;
@@ -70,6 +72,48 @@ const DEFAULT_CABINET_HEIGHT = 9;
 const DEFAULT_CABINET_DEPTH = 2;
 const GHS_QUEUED_ITEM_IDS_BY_CABINET = new Map<string, Set<string>>();
 const GHS_IN_FLIGHT_ITEM_IDS = new Set<string>();
+const CABINET_SAVE_QUEUES = new Map<string, Promise<void>>();
+
+interface CabinetSaveSnapshot {
+    cabinetId: string;
+    shelves: ShelfData[];
+    width: number;
+    height: number;
+    depth: number;
+}
+
+const getCabinetSaveErrorMessage = (error: unknown): string => {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    if (typeof error === 'object' && error && 'message' in error) {
+        const message = String(error.message).trim();
+        if (message) return message;
+    }
+    return 'Failed to save cabinet';
+};
+
+const enqueueCabinetSave = (snapshot: CabinetSaveSnapshot): Promise<void> => {
+    const previousSave = CABINET_SAVE_QUEUES.get(snapshot.cabinetId) ?? Promise.resolve();
+    const queuedSave = previousSave
+        .catch(() => undefined)
+        .then(() => cabinetService.saveCabinetState(
+            snapshot.cabinetId,
+            snapshot.shelves,
+            {
+                width: snapshot.width,
+                height: snapshot.height,
+                depth: snapshot.depth,
+            }
+        ));
+
+    CABINET_SAVE_QUEUES.set(snapshot.cabinetId, queuedSave);
+    void queuedSave.finally(() => {
+        if (CABINET_SAVE_QUEUES.get(snapshot.cabinetId) === queuedSave) {
+            CABINET_SAVE_QUEUES.delete(snapshot.cabinetId);
+        }
+    }).catch(() => undefined);
+
+    return queuedSave;
+};
 
 function resetCompatibilityPlanPreview(): { compatibilityPlanPreview: CompatibilityPlanPreview | null } {
     return { compatibilityPlanPreview: null };
@@ -135,6 +179,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     cabinetId: null,
     cabinetName: '',
     isLoadingCabinet: false,
+    cabinetSaveError: null,
     autoPlaceResult: null as AutoPlaceResult | null,
     compatibilityPlanPreview: null,
     isBuildingCompatibilityPlan: false,
@@ -150,6 +195,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             shelves: isSameCabinet ? previousState.shelves : [],
             isBuildingCompatibilityPlan: false,
             isApplyingCompatibilityPlan: false,
+            cabinetSaveError: null,
             layoutUndoStack: [],
             layoutRedoStack: [],
             ...resetCompatibilityPlanPreview(),
@@ -174,7 +220,13 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             GHS_QUEUED_ITEM_IDS_BY_CABINET.set(cabinetId, queuedIds);
             const itemsNeedingEnrichment = loadedShelves
                 .flatMap(s => s.items)
-                .filter(item => item.casNo && (!item.hCodes || item.hCodes.length === 0) && !queuedIds.has(item.id));
+                .filter(item => item.casNo
+                    && (!item.hCodes || item.hCodes.length === 0)
+                    && item.ghsStatus !== 'success'
+                    && item.ghsStatus !== 'no_ghs'
+                    && item.ghsStatus !== 'not_found'
+                    && item.ghsStatus !== 'invalid_cas'
+                    && !queuedIds.has(item.id));
 
             if (itemsNeedingEnrichment.length > 0) {
                 itemsNeedingEnrichment.forEach((item) => queuedIds.add(item.id));
@@ -197,21 +249,35 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
     saveCabinetStrict: async () => {
         const state = get();
-        if (!state.cabinetId) return;
-        await cabinetService.saveCabinetState(state.cabinetId, state.shelves);
-        await cabinetService.updateCabinet(state.cabinetId, {
+        if (!state.cabinetId) {
+            const error = new Error('Cannot save a cabinet before it has loaded');
+            set({ cabinetSaveError: error.message });
+            throw error;
+        }
+
+        const snapshot: CabinetSaveSnapshot = {
+            cabinetId: state.cabinetId,
+            shelves: createCabinetLayoutSnapshot(state.shelves),
             width: state.cabinetWidth,
             height: state.cabinetHeight,
-            depth: state.cabinetDepth
-        });
+            depth: state.cabinetDepth,
+        };
+
+        try {
+            await enqueueCabinetSave(snapshot);
+            if (get().cabinetId === snapshot.cabinetId) {
+                set({ cabinetSaveError: null });
+            }
+        } catch (error) {
+            if (get().cabinetId === snapshot.cabinetId) {
+                set({ cabinetSaveError: getCabinetSaveErrorMessage(error) });
+            }
+            throw error;
+        }
     },
 
     saveCabinet: async () => {
-        try {
-            await get().saveCabinetStrict();
-        } catch (err) {
-            console.error('Failed to save cabinet', err);
-        }
+        await get().saveCabinetStrict();
     },
 
     setMode: (mode) => set(state => ({
@@ -376,6 +442,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             shelfId,
             id: uuidv4(),
             depthPosition: itemData.depthPosition ?? 50,
+            ghsStatus: itemData.ghsStatus ?? (itemData.hCodes.length > 0 ? 'success' : 'not_checked'),
         };
 
         set(state => ({
@@ -490,7 +557,12 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         try {
             const itemsNeedingEnrichment = get().shelves
                 .flatMap((shelf) => shelf.items)
-                .filter((item) => item.casNo && (!item.hCodes || item.hCodes.length === 0));
+                .filter((item) => item.casNo
+                    && (!item.hCodes || item.hCodes.length === 0)
+                    && item.ghsStatus !== 'success'
+                    && item.ghsStatus !== 'no_ghs'
+                    && item.ghsStatus !== 'not_found'
+                    && item.ghsStatus !== 'invalid_cas');
 
             for (const item of itemsNeedingEnrichment) {
                 await get().enrichReagentGHS(item.id);
@@ -519,16 +591,30 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     },
 
     applyCompatibilityPlan: async () => {
-        const preview = get().compatibilityPlanPreview;
-        if (!preview?.canApply) return false;
+        const stateBeforeSave = get();
+        const preview = stateBeforeSave.compatibilityPlanPreview;
+        if (!preview?.canApply || !stateBeforeSave.cabinetId) return false;
 
-        set(state => ({
-            isApplyingCompatibilityPlan: true,
-            ...(createLayoutStorePatch(state, preview.plannedShelves) ?? resetCompatibilityPlanPreview()),
-        }));
+        const plannedShelves = createCabinetLayoutSnapshot(preview.plannedShelves);
+        const snapshot: CabinetSaveSnapshot = {
+            cabinetId: stateBeforeSave.cabinetId,
+            shelves: plannedShelves,
+            width: stateBeforeSave.cabinetWidth,
+            height: stateBeforeSave.cabinetHeight,
+            depth: stateBeforeSave.cabinetDepth,
+        };
+
+        set({ isApplyingCompatibilityPlan: true });
 
         try {
-            await get().saveCabinet();
+            await enqueueCabinetSave(snapshot);
+
+            if (get().cabinetId === snapshot.cabinetId) {
+                set(currentState => ({
+                    ...(createLayoutStorePatch(currentState, plannedShelves) ?? resetCompatibilityPlanPreview()),
+                    cabinetSaveError: null,
+                }));
+            }
             return true;
         } catch (err) {
             console.error('Failed to apply compatibility plan', err);
@@ -577,6 +663,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                             id: uuidv4(),
                             position: pos,
                             depthPosition: depthPos,
+                            ghsStatus: itemData.ghsStatus ?? (itemData.hCodes.length > 0 ? 'success' : 'not_checked'),
                         };
 
                         const result: AutoPlaceResult = {
@@ -650,6 +737,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             id: uuidv4(),
             position: slot.position,
             depthPosition: slot.depthPosition,
+            ghsStatus: itemData.ghsStatus ?? (itemData.hCodes.length > 0 ? 'success' : 'not_checked'),
         };
 
         const result: AutoPlaceResult = {
@@ -700,12 +788,22 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         if (!targetItem?.casNo) return;
         GHS_IN_FLIGHT_ITEM_IDS.add(reagentId);
 
+        set(st => ({
+            shelves: st.shelves.map(s => ({
+                ...s,
+                items: s.items.map(item => item.id === reagentId
+                    ? { ...item, ghsStatus: 'pending' as const }
+                    : item),
+            })),
+            ...resetCompatibilityPlanPreview(),
+        }));
+
         try {
             const { currentLabId } = useLabStore.getState();
             const result = await lookupGHSByCAS(targetItem.casNo, { labId: currentLabId });
-            if (!result.success || result.hCodes.length === 0) return;
 
-            // Update the reagent with GHS data
+            // Persist every lookup outcome. An empty H-code list is not enough
+            // to tell "verified no data" from "lookup never happened".
             set(st => ({
                 shelves: st.shelves.map(s => ({
                     ...s,
@@ -713,9 +811,11 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                         item.id === reagentId
                             ? {
                                 ...item,
-                                hCodes: result.hCodes,
-                                isAcidic: result.isAcidic || item.isAcidic,
-                                isBasic: result.isBasic || item.isBasic,
+                                hCodes: result.success ? result.hCodes : [],
+                                isAcidic: result.success ? result.isAcidic : false,
+                                isBasic: result.success ? result.isBasic : false,
+                                ghsStatus: result.status,
+                                ghsCheckedAt: new Date().toISOString(),
                             }
                             : item
                     ),
@@ -723,10 +823,41 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 ...resetCompatibilityPlanPreview(),
             }));
 
+            if (get().cabinetId) {
+                try {
+                    await get().saveCabinet();
+                } catch (saveError) {
+                    console.warn('[GHS Enrich] Failed to persist GHS result for', targetItem.casNo, saveError);
+                }
+            }
+
             console.log(
                 `[GHS Enrich] ${targetItem.name} (CAS: ${targetItem.casNo}) → H-codes: [${result.hCodes.join(', ')}]`
             );
         } catch (err) {
+            set(st => ({
+                shelves: st.shelves.map(s => ({
+                    ...s,
+                    items: s.items.map(item => item.id === reagentId
+                        ? {
+                            ...item,
+                            hCodes: [],
+                            isAcidic: false,
+                            isBasic: false,
+                            ghsStatus: 'transient_error' as const,
+                            ghsCheckedAt: new Date().toISOString(),
+                        }
+                        : item),
+                })),
+                ...resetCompatibilityPlanPreview(),
+            }));
+            if (get().cabinetId) {
+                try {
+                    await get().saveCabinet();
+                } catch (saveError) {
+                    console.warn('[GHS Enrich] Failed to persist lookup failure for', targetItem.casNo, saveError);
+                }
+            }
             console.warn('[GHS Enrich] Failed for', targetItem.casNo, err);
         } finally {
             GHS_IN_FLIGHT_ITEM_IDS.delete(reagentId);

@@ -195,7 +195,9 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         if (isPlacedItemDrag && draggedItem) {
             moveReagent(draggedItem.id, shelf.id, nextGhostPos, nextGhostDepthPos);
             // 시약 이동 후 자동 저장 트리거
-            void useFridgeStore.getState().saveCabinet();
+            void useFridgeStore.getState().saveCabinet().catch((error) => {
+                console.error('Failed to save dragged cabinet item:', error);
+            });
             setDraggedItem(null);
             setGhostPos(null);
             document.body.style.cursor = 'default';

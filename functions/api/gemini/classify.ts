@@ -30,12 +30,58 @@ interface ClassificationCachePayload {
   category?: ValidCategory | null
 }
 
+interface ClassificationResponsePayload {
+  category: ValidCategory
+  confidence: number
+  reason: string
+}
+
 function isValidCategory(value: unknown): value is ValidCategory {
   return typeof value === 'string' && (VALID_CATEGORIES as readonly string[]).includes(value)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Parse only the structured response contract. In particular, never search
+ * the whole model response for a category name: explanations can mention
+ * multiple categories or negate the category that should be selected.
+ */
+export function parseClassificationResponse(text: string): ClassificationResponsePayload | null {
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(text.trim()) as unknown
+  } catch {
+    return null
+  }
+
+  if (!isRecord(parsed)) return null
+
+  const { category, confidence, reason } = parsed
+  if (
+    !isValidCategory(category)
+    || typeof confidence !== 'number'
+    || !Number.isFinite(confidence)
+    || confidence < 0
+    || confidence > 1
+    || typeof reason !== 'string'
+    || !reason.trim()
+  ) {
+    return null
+  }
+
+  return {
+    category,
+    confidence,
+    reason: reason.trim(),
+  }
+}
+
 function generateCacheKey(chemical: ChemicalInput): string {
-  return stableCacheKey('classify:v1', {
+  return stableCacheKey('classify:v2', {
     name: chemical.name || '',
     casNumber: chemical.casNumber || '',
     molecularFormula: chemical.molecularFormula || '',
@@ -84,23 +130,54 @@ Strict Rules for Assignment:
 9. NEUTRAL if it's a completely pure, harmless inorganic aqueous solution WITHOUT any organics, heavy metals, or toxins.
 10. UNKNOWN if none of the above perfectly apply.
 
-Return ONLY the category name as a plain string. No other text.`
+Return ONLY a JSON object matching this exact shape. Do not wrap it in Markdown or add any other text:
+{
+  "category": "ORGANIC_NON_HALOGEN",
+  "confidence": 0.92,
+  "reason": "비할로겐 유기용매로 확인됨"
+}
+
+The category value must be exactly one of the allowed category names. The reason may explain your decision and may mention alternatives, but it must not replace the exact category field.`
 
   try {
     const result = await generateGeminiText(context.env.GEMINI_API_KEY, {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            category: {
+              type: 'STRING',
+              enum: VALID_CATEGORIES,
+            },
+            confidence: {
+              type: 'NUMBER',
+              minimum: 0,
+              maximum: 1,
+            },
+            reason: {
+              type: 'STRING',
+            },
+          },
+          required: ['category', 'confidence', 'reason'],
+          propertyOrdering: ['category', 'confidence', 'reason'],
+        },
+      },
     })
 
-    const rawText = result.text
-
-    const normalizedText = rawText.toUpperCase()
-    const category = VALID_CATEGORIES.find((value) => normalizedText.includes(value)) || 'UNKNOWN'
+    const parsed = parseClassificationResponse(result.text)
+    const category = parsed?.category || 'UNKNOWN'
 
     if (category !== 'UNKNOWN') {
       await writeAICache(context.env, 'classify', cacheKey, { category })
     }
 
-    return json({ category, responseSource: 'ai' })
+    return json({
+      category,
+      ...(parsed ? { confidence: parsed.confidence, reason: parsed.reason } : {}),
+      responseSource: 'ai',
+    })
   } catch (error) {
     return json(
       {

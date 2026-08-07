@@ -99,6 +99,70 @@ function formatHandlingAction(action: WasteLogRecord['handling_action'], languag
     return '-';
 }
 
+function asFiniteNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+}
+
+const PhPredictionAuditPanel: React.FC<{ log: WasteLogRecord }> = ({ log }) => {
+    const { i18n } = useTranslation();
+    const korean = i18n.language.startsWith('ko');
+    const prediction = log.ph_prediction_snapshot;
+    const status = typeof prediction?.status === 'string' ? prediction.status : null;
+    const predictedValue = asFiniteNumber(prediction?.displayValue ?? prediction?.value);
+    const measuredValue = asFiniteNumber(
+        log.confirmation_snapshot?.measuredBatchPh
+        ?? log.confirmation_snapshot?.measuredPh
+        ?? log.confirmation_snapshot?.measured_ph,
+    );
+
+    if (!status && measuredValue === null) return null;
+
+    const issueCodes = Array.isArray(prediction?.issueCodes)
+        ? prediction.issueCodes.filter((value): value is string => typeof value === 'string')
+        : [];
+
+    return (
+        <section className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs dark:border-sky-900/60 dark:bg-sky-950/20">
+            <div className="font-semibold text-sky-900 dark:text-sky-100">
+                {korean ? 'pH 기록 근거' : 'pH audit context'}
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div>
+                    <div className="text-sky-700/80 dark:text-sky-300/80">{korean ? '직접 측정 pH' : 'Measured pH'}</div>
+                    <div className="mt-0.5 font-bold text-slate-900 dark:text-white">
+                        {measuredValue === null ? (korean ? '미기록' : 'Not recorded') : measuredValue}
+                    </div>
+                </div>
+                {status && (
+                    <div>
+                        <div className="text-sky-700/80 dark:text-sky-300/80">{korean ? '계산 예측(측정값 아님)' : 'Prediction (not measured)'}</div>
+                        <div className="mt-0.5 font-bold text-slate-900 dark:text-white">
+                            {predictedValue === null
+                                ? (korean ? `계산 불가 · ${status}` : `Unavailable · ${status}`)
+                                : `≈ ${predictedValue.toFixed(1)}`}
+                        </div>
+                    </div>
+                )}
+            </div>
+            {issueCodes.length > 0 && (
+                <div className="mt-2 break-words text-sky-800 dark:text-sky-200">
+                    {korean ? '사유' : 'Reasons'}: {issueCodes.join(', ')}
+                </div>
+            )}
+            {status && (
+                <div className="mt-1 break-all text-[11px] text-sky-700/75 dark:text-sky-300/75">
+                    {String(prediction?.modelVersion || '-')} · {String(prediction?.catalogVersion || '-')}
+                </div>
+            )}
+        </section>
+    );
+};
+
 function getWasteChemicalName(value: unknown): string | null {
     if (!value || typeof value !== 'object') return null;
     const component = value as Record<string, unknown>;
@@ -334,11 +398,20 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
                                     {item.koshaChemId && <span>KOSHA {item.koshaChemId}</span>}
                                 </div>
                             </div>
-                            {item.concentrationValue !== null && item.concentrationUnit && (
-                                <span className="rounded-md bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
-                                    {item.concentrationValue} {item.concentrationUnit}
-                                </span>
-                            )}
+                            <div className="flex flex-wrap justify-end gap-1.5">
+                                {item.solutionVolumeValue !== null && item.solutionVolumeUnit && (
+                                    <span className="rounded-md bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
+                                        {item.solutionVolumeValue} {item.solutionVolumeUnit}
+                                        {item.solutionVolumeIsEstimate ? ' ≈' : ''}
+                                    </span>
+                                )}
+                                {item.concentrationValue !== null && item.concentrationUnit && (
+                                    <span className="rounded-md bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
+                                        {item.concentrationValue} {item.concentrationUnit}
+                                        {item.concentrationBasis ? ` (${item.concentrationBasis.replace('_', '/')})` : ''}
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -370,6 +443,23 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
                                     {item.sourceType}{item.sourceRef ? ` · ${item.sourceRef}` : ''}
                                 </dd>
                             </div>
+                            {item.phCatalogId && (
+                                <div className="sm:col-span-2">
+                                    <dt className="text-slate-500 dark:text-slate-400">{korean ? 'pH 카탈로그 항목' : 'pH catalog entry'}</dt>
+                                    <dd className="mt-0.5 break-all font-mono font-medium text-slate-700 dark:text-slate-200">{item.phCatalogId}</dd>
+                                </div>
+                            )}
+                            {item.densityValue !== null && item.densityUnit && (
+                                <div className="sm:col-span-2">
+                                    <dt className="text-slate-500 dark:text-slate-400">{korean ? '농도 환산 밀도' : 'Conversion density'}</dt>
+                                    <dd className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">
+                                        {item.densityValue} {item.densityUnit} · {item.densityKind || '-'}
+                                        {item.densityTemperatureC === null ? '' : ` · ${item.densityTemperatureC} °C`}
+                                        {item.densitySource ? ` · ${item.densitySource}` : ''}
+                                        {item.densityIsEstimate ? (korean ? ' · 추정' : ' · estimated') : ''}
+                                    </dd>
+                                </div>
+                            )}
                         </dl>
 
                         {item.dataSources.length > 0 && (
@@ -1050,6 +1140,12 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                             </div>
                         )}
 
+                        {log.schema_version === 2 && (
+                            <div className="mt-3">
+                                <PhPredictionAuditPanel log={log} />
+                            </div>
+                        )}
+
                         {deleteReason && (
                             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 dark:bg-slate-700/30 rounded-lg text-sm text-slate-700 dark:text-slate-300">
                                 <div className="min-w-0">
@@ -1662,6 +1758,10 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                     </div>
                                 ))}
                             </div>
+
+                            {selectedDesktopLog.schema_version === 2 && (
+                                <PhPredictionAuditPanel log={selectedDesktopLog} />
+                            )}
 
                             <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
                                 <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">

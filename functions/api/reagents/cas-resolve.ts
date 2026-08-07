@@ -6,7 +6,7 @@ interface Env {
   KOSHA_API_KEY?: string
 }
 
-type CasResolveStatus = 'match' | 'no_match' | 'ambiguous' | 'conflict' | 'skipped'
+type CasResolveStatus = 'match' | 'no_match' | 'ambiguous' | 'conflict' | 'skipped' | 'unavailable'
 type CasSuggestionConfidence = 'high' | 'medium' | 'low'
 type CasEvidenceCode =
   | 'kosha_exact_name_match'
@@ -23,6 +23,7 @@ type CasReasonCode =
   | 'multiple_candidates'
   | 'source_conflict'
   | 'low_confidence'
+  | 'upstream_unavailable'
 
 interface CasResolveItemInput {
   id: string
@@ -76,8 +77,10 @@ type SourceLookup =
   | { kind: 'none' }
   | { kind: 'ambiguous'; candidates: Candidate[] }
   | { kind: 'match'; candidate: Candidate }
+  | { kind: 'error'; error: string }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000
 const KOSHA_BASE_URL = 'https://msds.kosha.or.kr/openapi/service/msdschem'
 const PUBCHEM_BASE_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug'
 const MAX_ITEMS = 25
@@ -87,6 +90,13 @@ const parser = new XMLParser({
 })
 
 const suggestionCache = new Map<string, { expiresAt: number; value: Omit<CasResolveItemResult, 'id'> }>()
+
+class UpstreamLookupError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UpstreamLookupError'
+  }
+}
 
 function normalizeName(value?: string | null): string {
   return (value || '')
@@ -173,25 +183,60 @@ function toCandidateOptions(candidates: Candidate[]): CandidateOption[] {
   return options
 }
 
-async function fetchJson<T>(url: string): Promise<T | null> {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-    },
-  })
+const FETCH_TIMEOUT_MS = 8_000
+const MAX_FETCH_ATTEMPTS = 3
 
-  if (!response.ok) return null
-  return await response.json() as T
+async function waitBeforeRetry(attempt: number): Promise<void> {
+  const baseDelay = 300 * (2 ** attempt)
+  const jitter = Math.floor(Math.random() * 150)
+  await new Promise<void>((resolve) => setTimeout(resolve, baseDelay + jitter))
+}
+
+async function requestWithRetry(url: string, headers: HeadersInit): Promise<Response | null> {
+  let lastError = 'Upstream request failed'
+
+  for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+    try {
+      const response = await fetch(url, { headers, signal: controller.signal })
+      if (response.status === 404) return null
+      if (response.ok) return response
+
+      lastError = `Upstream HTTP ${response.status}`
+      const shouldRetry = response.status === 408 || response.status === 429 || response.status >= 500
+      if (!shouldRetry || attempt === MAX_FETCH_ATTEMPTS - 1) {
+        throw new UpstreamLookupError(lastError)
+      }
+      await waitBeforeRetry(attempt)
+    } catch (error) {
+      if (error instanceof UpstreamLookupError) throw error
+      lastError = error instanceof Error ? error.message : lastError
+      if (attempt === MAX_FETCH_ATTEMPTS - 1) throw new UpstreamLookupError(lastError)
+      await waitBeforeRetry(attempt)
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
+  throw new UpstreamLookupError(lastError)
+}
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+  const response = await requestWithRetry(url, { Accept: 'application/json' })
+  if (!response) return null
+
+  try {
+    return await response.json() as T
+  } catch (error) {
+    throw new UpstreamLookupError(error instanceof Error ? error.message : 'Invalid upstream JSON response')
+  }
 }
 
 async function fetchText(url: string): Promise<string | null> {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/xml,text/xml;q=0.9,*/*;q=0.8',
-    },
-  })
-
-  if (!response.ok) return null
+  const response = await requestWithRetry(url, { Accept: 'application/xml,text/xml;q=0.9,*/*;q=0.8' })
+  if (!response) return null
   return await response.text()
 }
 
@@ -233,7 +278,15 @@ async function searchKoshaExact(query: string, apiKey?: string): Promise<SourceL
     numOfRows: '20',
   })
 
-  const xmlText = await fetchText(`${KOSHA_BASE_URL}/chemlist?${params.toString()}`)
+  let xmlText: string | null
+  try {
+    xmlText = await fetchText(`${KOSHA_BASE_URL}/chemlist?${params.toString()}`)
+  } catch (error) {
+    return {
+      kind: 'error',
+      error: error instanceof Error ? error.message : 'KOSHA lookup failed',
+    }
+  }
   if (!xmlText) return { kind: 'none' }
 
   const parsed = parser.parse(xmlText) as {
@@ -339,7 +392,15 @@ async function fetchPubChemRecordByLookup(lookup: string): Promise<{
 }
 
 async function searchPubChemExact(query: string): Promise<SourceLookup> {
-  const record = await fetchPubChemRecordByLookup(query)
+  let record: Awaited<ReturnType<typeof fetchPubChemRecordByLookup>>
+  try {
+    record = await fetchPubChemRecordByLookup(query)
+  } catch (error) {
+    return {
+      kind: 'error',
+      error: error instanceof Error ? error.message : 'PubChem lookup failed',
+    }
+  }
   if (!record) return { kind: 'none' }
 
   if (record.casNumbers.length === 0) {
@@ -386,7 +447,12 @@ async function searchPubChemExact(query: string): Promise<SourceLookup> {
 }
 
 async function enrichCandidateFromPubChemCas(candidate: Candidate): Promise<Candidate> {
-  const pubchemRecord = await fetchPubChemRecordByLookup(candidate.casNumber)
+  let pubchemRecord: Awaited<ReturnType<typeof fetchPubChemRecordByLookup>>
+  try {
+    pubchemRecord = await fetchPubChemRecordByLookup(candidate.casNumber)
+  } catch {
+    return candidate
+  }
   if (!pubchemRecord) return candidate
 
   if (!pubchemRecord.casNumbers.includes(candidate.casNumber)) {
@@ -412,7 +478,12 @@ async function enrichCandidateWithKoshaName(candidate: Candidate, apiKey?: strin
     numOfRows: '3',
   })
 
-  const xmlText = await fetchText(`${KOSHA_BASE_URL}/chemlist?${params.toString()}`)
+  let xmlText: string | null
+  try {
+    xmlText = await fetchText(`${KOSHA_BASE_URL}/chemlist?${params.toString()}`)
+  } catch {
+    return candidate
+  }
   if (!xmlText) return candidate
 
   const parsed = parser.parse(xmlText) as {
@@ -526,6 +597,17 @@ async function resolveSuggestion(input: CasResolveItemInput, env: Env): Promise<
     }
   }
 
+  if (koshaLookup.kind === 'error' || pubchemLookup.kind === 'error') {
+    return {
+      status: 'unavailable',
+      matchedInput,
+      evidence: [],
+      sources: [],
+      confidence: 'low',
+      reason: 'upstream_unavailable',
+    }
+  }
+
   return {
     status: 'no_match',
     matchedInput,
@@ -560,12 +642,29 @@ export const onRequestPost = async (context: {
         ...cached.value,
       }
     }
+    if (cached) suggestionCache.delete(key)
 
-    const resolved = await resolveSuggestion(item, context.env)
-    suggestionCache.set(key, {
-      expiresAt: now + CACHE_TTL_MS,
-      value: resolved,
-    })
+    let resolved: Omit<CasResolveItemResult, 'id'>
+    try {
+      resolved = await resolveSuggestion(item, context.env)
+    } catch {
+      resolved = {
+        status: 'unavailable',
+        matchedInput: item.inputName.trim(),
+        evidence: [],
+        sources: [],
+        confidence: 'low',
+        reason: 'upstream_unavailable',
+      }
+    }
+
+    if (resolved.status !== 'unavailable') {
+      const ttl = resolved.status === 'no_match' ? NEGATIVE_CACHE_TTL_MS : CACHE_TTL_MS
+      suggestionCache.set(key, {
+        expiresAt: now + ttl,
+        value: resolved,
+      })
+    }
 
     return {
       id: item.id,

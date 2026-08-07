@@ -2,14 +2,14 @@ import type { SolventClass, SolutionContext } from '../types';
 import { searchChemical } from '../services/searchService';
 import { parseFormula } from './chemicalAnalyzer';
 
-interface SolventDictionaryEntry {
+export interface SolventDictionaryEntry {
     name: string;
     solventClass: Extract<SolventClass, 'organic_halogen' | 'organic_non_halogen'>;
     casNumber?: string;
     molecularFormula?: string;
 }
 
-interface CustomSolventResolution {
+export interface CustomSolventResolution {
     solventClass: SolventClass;
     solventName?: string;
     isSolventVerified: boolean;
@@ -19,6 +19,25 @@ interface CustomSolventResolution {
 }
 
 const COMMON_SOLVENT_ALIASES: Record<string, SolventDictionaryEntry> = {};
+
+export const REPRESENTATIVE_SOLVENT_PRESETS = Object.freeze({
+    organic_non_halogen: [
+        'DMSO',
+        'Ethanol',
+        'Methanol',
+        'Acetone',
+        'Acetonitrile',
+        'Hexane',
+        'Ethyl acetate',
+        'THF',
+    ],
+    organic_halogen: [
+        'Dichloromethane',
+        'Chloroform',
+        'Chlorobenzene',
+        '1,2-Dichloroethane',
+    ],
+} satisfies Record<'organic_non_halogen' | 'organic_halogen', readonly string[]>);
 
 const addSolvent = (entry: SolventDictionaryEntry, aliases: string[]) => {
     aliases.forEach((alias) => {
@@ -136,6 +155,10 @@ function inferSolventClassFromFormula(formula?: string): SolventClass {
     return 'organic_unknown';
 }
 
+export function resolveLocalOrganicSolvent(input: string): SolventDictionaryEntry | undefined {
+    return COMMON_SOLVENT_ALIASES[normalizeSolventQuery(input)];
+}
+
 export async function resolveCustomOrganicSolvent(input: string): Promise<CustomSolventResolution> {
     const trimmedInput = input.trim();
 
@@ -147,7 +170,7 @@ export async function resolveCustomOrganicSolvent(input: string): Promise<Custom
         };
     }
 
-    const localMatch = COMMON_SOLVENT_ALIASES[normalizeSolventQuery(trimmedInput)];
+    const localMatch = resolveLocalOrganicSolvent(trimmedInput);
     if (localMatch) {
         return {
             solventClass: localMatch.solventClass,

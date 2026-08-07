@@ -1,5 +1,7 @@
 import { generateGeminiText, json } from './_utils'
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
+import { parseCapacityMeasurement } from '../../../src/utils/capacityParser'
+import { normalizeExpiryDate } from '../../../src/utils/dateValidation'
 
 interface Env {
   GEMINI_API_KEY?: string
@@ -45,6 +47,9 @@ const CAPACITY_PATTERN = /^(\d+(?:[.,]\d+)?)\s*(uL|µL|μL|mL|L|ug|µg|μg|mg|g|
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 
 type JsonRecord = Record<string, unknown>
+
+void CAPACITY_PATTERN
+void ISO_DATE_PATTERN
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -146,9 +151,8 @@ function validateCapacityField(
     return { value: null, confidence: raw.confidence, validation: 'missing' }
   }
 
-  const match = raw.value.match(CAPACITY_PATTERN)
-  const amount = match ? Number.parseFloat(match[1].replace(',', '.')) : Number.NaN
-  const isValid = Boolean(match) && Number.isFinite(amount) && amount > 0
+  const parsed = parseCapacityMeasurement(raw.value)
+  const isValid = parsed.numericValue !== null && parsed.unit !== null
 
   return {
     value: raw.value.slice(0, 64),
@@ -164,20 +168,11 @@ function validateExpiryField(
     return { value: null, confidence: raw.confidence, validation: 'missing' }
   }
 
-  const match = raw.value.match(ISO_DATE_PATTERN)
-  let isValid = false
-  if (match) {
-    const year = Number(match[1])
-    const month = Number(match[2])
-    const day = Number(match[3])
-    const date = new Date(Date.UTC(year, month - 1, day))
-    isValid = date.getUTCFullYear() === year
-      && date.getUTCMonth() === month - 1
-      && date.getUTCDate() === day
-  }
+  const normalized = normalizeExpiryDate(raw.value)
+  const isValid = normalized !== null
 
   return {
-    value: raw.value.slice(0, 32),
+    value: normalized || raw.value.slice(0, 32),
     confidence: raw.confidence,
     validation: isValid ? 'valid' : 'invalid',
   }

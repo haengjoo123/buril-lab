@@ -336,6 +336,9 @@ export function buildCabinetAutoLayoutPlan(
         movedItemIds,
         reviewItems,
         unplacedItems,
-        canApply: originalItems.length > 0 && afterWarningCount === 0 && unplacedItems.length === 0,
+        canApply: originalItems.length > 0
+            && afterWarningCount === 0
+            && reviewItems.length === 0
+            && unplacedItems.length === 0,
     };
 }

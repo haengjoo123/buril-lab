@@ -25,6 +25,37 @@ export interface Cabinet {
     lab_id?: string;
 }
 
+export interface CabinetDimensions {
+    width: number;
+    height: number;
+    depth: number;
+}
+
+const serializeCabinetShelves = (shelves: ShelfData[]) => shelves.map((shelf) => ({
+    id: shelf.id,
+    level: shelf.level,
+    dividers: shelf.dividers,
+    items: shelf.items.map((item) => ({
+        id: item.id,
+        template: item.template,
+        name: item.name,
+        width: item.width,
+        position: item.position,
+        depth_position: item.depthPosition ?? 50,
+        expiry_date: item.expiryDate || null,
+        capacity: item.capacity || null,
+        product_number: item.productNumber || null,
+        brand: item.brand || null,
+        notes: item.notes || null,
+        cas_no: item.casNo || null,
+        h_codes: item.hCodes || [],
+        ghs_status: item.ghsStatus || null,
+        ghs_checked_at: item.ghsCheckedAt || null,
+        inventory_item_id: item.linkedInventoryItemId || null,
+        remaining_percent: item.remaining_percent ?? null,
+    })),
+}));
+
 export const cabinetService = {
     async getCabinets(): Promise<Cabinet[]> {
         const { currentLabId } = useLabStore.getState();
@@ -181,10 +212,14 @@ export const cabinetService = {
                     brand: item.brand || undefined,
                     notes: item.notes || undefined,
                     casNo: item.cas_no || undefined,
+                    hCodes: Array.isArray(item.h_codes)
+                        ? item.h_codes.filter((code: unknown): code is string => typeof code === 'string')
+                        : [],
+                    ghsStatus: item.ghs_status || undefined,
+                    ghsCheckedAt: item.ghs_checked_at || undefined,
                     remaining_percent: item.remaining_percent ?? undefined,
                     isAcidic: false,
                     isBasic: false,
-                    hCodes: [],
                 } as ReagentPlacement));
 
             return {
@@ -204,99 +239,22 @@ export const cabinetService = {
         };
     },
 
-    async saveCabinetState(cabinetId: string, shelves: ShelfData[]): Promise<void> {
-        const newShelves = shelves.map(s => ({
-            id: s.id,
-            cabinet_id: cabinetId,
-            level: s.level,
-            dividers: s.dividers
-        }));
+    async saveCabinetState(
+        cabinetId: string,
+        shelves: ShelfData[],
+        dimensions: CabinetDimensions
+    ): Promise<void> {
+        const { error } = await supabase.rpc('save_cabinet_state_with_ghs', {
+            p_cabinet_id: cabinetId,
+            p_shelves: serializeCabinetShelves(shelves),
+            p_width: dimensions.width,
+            p_height: dimensions.height,
+            p_depth: dimensions.depth,
+        });
 
-        const { error: upsertShelvesError } = await supabase
-            .from('cabinet_shelves')
-            .upsert(newShelves);
-
-        if (upsertShelvesError) {
-            console.error('Error upserting shelves:', upsertShelvesError);
-            throw upsertShelvesError;
-        }
-
-        const newItems = shelves.flatMap(s => s.items.map(i => ({
-            id: i.id,
-            cabinet_id: cabinetId,
-            shelf_id: s.id,
-            template: i.template,
-            name: i.name,
-            width: i.width,
-            position: i.position,
-            depth_position: i.depthPosition ?? 50,
-            expiry_date: i.expiryDate || null,
-            capacity: i.capacity || null,
-            product_number: i.productNumber || null,
-            brand: i.brand || null,
-            notes: i.notes || null,
-            cas_no: i.casNo || null,
-            inventory_item_id: i.linkedInventoryItemId || null,
-            remaining_percent: i.remaining_percent ?? null
-        })));
-
-        if (newItems.length > 0) {
-            const { error: upsertItemsError } = await supabase
-                .from('cabinet_items')
-                .upsert(newItems);
-
-            if (upsertItemsError) {
-                console.error('Error upserting items:', upsertItemsError);
-                throw upsertItemsError;
-            }
-        }
-
-        // Delete stale cabinet items using explicit ID diff (safer than raw "not in" filter strings)
-        const desiredItemIds = new Set(shelves.flatMap(s => s.items).map(i => i.id));
-        const { data: existingItems, error: fetchExistingItemsError } = await supabase
-            .from('cabinet_items')
-            .select('id')
-            .eq('cabinet_id', cabinetId);
-        if (fetchExistingItemsError) {
-            console.error('Error fetching existing cabinet items:', fetchExistingItemsError);
-            throw fetchExistingItemsError;
-        }
-        const staleItemIds = (existingItems || [])
-            .map((row: { id: string }) => row.id)
-            .filter((id) => !desiredItemIds.has(id));
-        if (staleItemIds.length > 0) {
-            const { error: deleteStaleItemsError } = await supabase
-                .from('cabinet_items')
-                .delete()
-                .in('id', staleItemIds);
-            if (deleteStaleItemsError) {
-                console.error('Error deleting stale cabinet items:', deleteStaleItemsError);
-                throw deleteStaleItemsError;
-            }
-        }
-
-        const shelfIds = shelves.map(s => s.id);
-        const desiredShelfIds = new Set(shelfIds);
-        const { data: existingShelves, error: fetchExistingShelvesError } = await supabase
-            .from('cabinet_shelves')
-            .select('id')
-            .eq('cabinet_id', cabinetId);
-        if (fetchExistingShelvesError) {
-            console.error('Error fetching existing cabinet shelves:', fetchExistingShelvesError);
-            throw fetchExistingShelvesError;
-        }
-        const staleShelfIds = (existingShelves || [])
-            .map((row: { id: string }) => row.id)
-            .filter((id) => !desiredShelfIds.has(id));
-        if (staleShelfIds.length > 0) {
-            const { error: deleteStaleShelvesError } = await supabase
-                .from('cabinet_shelves')
-                .delete()
-                .in('id', staleShelfIds);
-            if (deleteStaleShelvesError) {
-                console.error('Error deleting stale cabinet shelves:', deleteStaleShelvesError);
-                throw deleteStaleShelvesError;
-            }
+        if (error) {
+            console.error('Error saving cabinet state atomically:', error);
+            throw error;
         }
     },
 
