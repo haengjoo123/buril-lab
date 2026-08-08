@@ -261,9 +261,16 @@ declare
     v_replacement_fragment text;
 begin
     select replace(
-        pg_get_functiondef('public.record_waste_handling_v2(uuid,jsonb,uuid)'::regprocedure),
-        E'\r\n',
-        E'\n'
+        replace(
+            pg_get_functiondef('public.record_waste_handling_v2(uuid,jsonb,uuid)'::regprocedure),
+            E'\r\n',
+            E'\n'
+        ),
+        -- pg_get_functiondef schema-qualifies table %ROWTYPE references, but
+        -- PL/pgSQL declarations only accept the unqualified form here. The
+        -- function itself runs with public in its pinned search_path.
+        'public.waste_logs%rowtype',
+        'waste_logs%rowtype'
     ) into v_function_definition;
 
     v_required_fragment := $fragment$
@@ -335,14 +342,14 @@ $fragment$;
             coalesce(p_batch->'totalAmount', p_batch->'total_amount'),
             v_confirmation_snapshot
         );
-        select authorization.*
+        select approval.*
         into v_predicted_ph_authorization
-        from public.waste_ph_prediction_authorizations authorization
-        where authorization.id = v_predicted_ph_authorization_id
-          and authorization.user_id = v_user_id
-          and authorization.used_at is null
-          and authorization.expires_at > now()
-          and authorization.input_fingerprint = v_prediction_input_fingerprint
+        from public.waste_ph_prediction_authorizations approval
+        where approval.id = v_predicted_ph_authorization_id
+          and approval.user_id = v_user_id
+          and approval.used_at is null
+          and approval.expires_at > now()
+          and approval.input_fingerprint = v_prediction_input_fingerprint
         for update;
         if not found then
             raise exception 'Predicted pH authorization is missing, expired, used, or does not match this batch'
