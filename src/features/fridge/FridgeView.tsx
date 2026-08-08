@@ -16,6 +16,7 @@ import { inventoryService, type InventoryItem } from '../../services/inventorySe
 import { StorageCompatBanner } from './components/StorageCompatBanner';
 import { CabinetAutoLayoutPreviewModal } from './components/CabinetAutoLayoutPreviewModal';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
+import { ReagentDateFields } from '../../components/ReagentDateFields';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
@@ -23,6 +24,7 @@ import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCas
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import type { WasteBatchDisposalReason } from './reagentDisposalFlow';
 import { resolveAutoPlacementStorageData } from '../../utils/storagePlacementGate';
+import type { ManufacturerDateType } from '../../utils/manufacturerDate';
 
 import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
 import { createCabinetLayoutSnapshot } from '../../utils/cabinetLayoutHistory';
@@ -110,7 +112,7 @@ const NumberInput = ({ value, min, max, onChange, className }: { value: number; 
 };
 
 export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onStartWasteBatch }) => {
-    const { t, i18n } = useTranslation();
+    const { t } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const isDesktop = useIsDesktop();
@@ -129,6 +131,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const [placementSize, setPlacementSize] = useState<number>(1.0); // 0.8 (S), 1.0 (M), 1.2 (L)
     const [placementCapacity, setPlacementCapacity] = useState('');
     const [placementExpiry, setPlacementExpiry] = useState('');
+    const [placementManufacturerDateType, setPlacementManufacturerDateType] = useState<ManufacturerDateType>('unlabeled');
+    const [placementReceivedDate, setPlacementReceivedDate] = useState('');
+    const [placementOpenedDate, setPlacementOpenedDate] = useState('');
     const [placementBrand, setPlacementBrand] = useState('');
     const [placementProductNumber, setPlacementProductNumber] = useState('');
     const [placementCas, setPlacementCas] = useState('');
@@ -151,6 +156,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const [scanSize, setScanSize] = useState<number>(1.0);
     const [scanCapacity, setScanCapacity] = useState('');
     const [scanExpiry, setScanExpiry] = useState('');
+    const [scanManufacturerDateType, setScanManufacturerDateType] = useState<ManufacturerDateType>('unlabeled');
+    const [scanReceivedDate, setScanReceivedDate] = useState('');
+    const [scanOpenedDate, setScanOpenedDate] = useState('');
     const [scanMemo, setScanMemo] = useState('');
     const [scanBrand, setScanBrand] = useState('');
     const [scanProductNumber, setScanProductNumber] = useState('');
@@ -590,6 +598,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             notes: memo,
             capacity: placementCapacity || undefined,
             expiryDate: placementExpiry || undefined,
+            manufacturerDateType: placementManufacturerDateType,
+            receivedDate: placementReceivedDate || undefined,
+            openedDate: placementOpenedDate || undefined,
             brand: placementBrand || undefined,
             productNumber: placementProductNumber || undefined,
             casNo: placementCas || undefined,
@@ -606,6 +617,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         setPlacementSize(1.0);
         setPlacementCapacity('');
         setPlacementExpiry('');
+        setPlacementManufacturerDateType('unlabeled');
+        setPlacementReceivedDate('');
+        setPlacementOpenedDate('');
         setPlacementBrand('');
         setPlacementProductNumber('');
         setPlacementCas('');
@@ -657,6 +671,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         setPlacementSize(1.0);
         setPlacementCapacity('');
         setPlacementExpiry('');
+        setPlacementManufacturerDateType('unlabeled');
+        setPlacementReceivedDate('');
+        setPlacementOpenedDate('');
         setPlacementBrand('');
         setPlacementProductNumber('');
         setPlacementCas('');
@@ -678,6 +695,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         setScanSize(1.0);
         setScanCapacity('');
         setScanExpiry('');
+        setScanManufacturerDateType('unlabeled');
+        setScanReceivedDate('');
+        setScanOpenedDate('');
         setScanMemo('');
         setScanBrand('');
         setScanProductNumber('');
@@ -698,6 +718,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         setScanSize(1.0);
         setScanCapacity(scan.capacity || '');
         setScanExpiry(scan.expiryDate || '');
+        setScanManufacturerDateType(scan.manufacturerDateType || 'unlabeled');
+        setScanReceivedDate('');
+        setScanOpenedDate('');
         setScanMemo('');
         setScanBrand(scan.brand || '');
         setScanProductNumber(scan.productNumber || '');
@@ -745,6 +768,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             size?: number;
             notes?: string;
             remainingPercent?: number;
+            manufacturerDateType?: ManufacturerDateType;
+            receivedDate?: string;
+            openedDate?: string;
             placementMode?: 'scan_auto_place' | 'scan_review_confirmed';
         }
     ) => {
@@ -771,6 +797,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             notes: options?.notes || undefined,
             casNo: scan.casNumber || undefined,
             expiryDate: scan.expiryDate || undefined,
+            manufacturerDateType: options?.manufacturerDateType || scan.manufacturerDateType || 'unlabeled',
+            receivedDate: options?.receivedDate,
+            openedDate: options?.openedDate,
             capacity: scan.capacity || undefined,
             brand: scan.brand || undefined,
             productNumber: scan.productNumber || undefined,
@@ -905,6 +934,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const handleScanAutoPlace = React.useCallback(async () => {
         const activeReview = activeScanReviewRef.current;
         if (!activeReview || !scanResult || !scanName.trim() || !scanContainerType) return;
+        if (scanExpiry && scanManufacturerDateType === 'unlabeled') {
+            setToastMessage(t('scan_manufacturer_date_type_required'));
+            return;
+        }
 
         const confirmedScan: ReagentScanResult = {
             ...scanResult,
@@ -913,6 +946,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             suggestedContainerType: scanContainerType,
             capacity: scanCapacity.trim() || undefined,
             expiryDate: scanExpiry || undefined,
+            manufacturerDateType: scanManufacturerDateType,
             brand: scanBrand.trim() || undefined,
             productNumber: scanProductNumber.trim() || undefined,
             reviewRequired: false,
@@ -929,6 +963,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     size: scanSize,
                     notes: scanMemo.trim() || undefined,
                     remainingPercent: scanRemainingPercent,
+                    manufacturerDateType: scanManufacturerDateType,
+                    receivedDate: scanReceivedDate || undefined,
+                    openedDate: scanOpenedDate || undefined,
                     placementMode: 'scan_review_confirmed',
                 }
             ));
@@ -953,6 +990,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         scanCas,
         scanContainerType,
         scanExpiry,
+        scanManufacturerDateType,
+        scanReceivedDate,
+        scanOpenedDate,
         scanMemo,
         scanName,
         scanProductNumber,
@@ -1622,8 +1662,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             </div>
                         </div>
 
-                        {/* 용량 + 유효기간 한 줄 */}
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* 용량 */}
+                        <div className="grid grid-cols-1 gap-3">
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
                                     🧪 {t('reagent_capacity_label')}
@@ -1636,19 +1676,25 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                     className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                 />
                             </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
-                                    📅 {t('reagent_expiry_label')}
-                                </label>
-                                <input
-                                    type="date"
-                                    value={placementExpiry}
-                                    onChange={e => setPlacementExpiry(e.target.value)}
-                                    lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
-                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            </div>
                         </div>
+
+                        <ReagentDateFields
+                            value={{
+                                manufacturer_date_type: placementManufacturerDateType,
+                                expiry_date: placementExpiry,
+                                received_date: placementReceivedDate,
+                                opened_date: placementOpenedDate,
+                            }}
+                            onChange={(next) => {
+                                setPlacementManufacturerDateType(next.manufacturer_date_type);
+                                setPlacementExpiry(next.expiry_date);
+                                setPlacementReceivedDate(next.received_date);
+                                setPlacementOpenedDate(next.opened_date);
+                            }}
+                            labelClassName="text-xs font-semibold text-gray-600"
+                            inputClassName="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            columnsClassName="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                        />
 
                         {/* Remaining Amount Input */}
                         <div className="flex flex-col gap-2 mt-1 px-1">
@@ -1924,8 +1970,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                     </div>
                                 </div>
 
-                                {/* Capacity & Expiry row */}
-                                <div className="grid grid-cols-2 gap-3">
+                                {/* Capacity */}
+                                <div className="grid grid-cols-1 gap-3">
                                     <div className="flex flex-col gap-1">
                                         <label className="text-xs font-semibold text-gray-600">{t('reagent_capacity_label')}</label>
                                         <input
@@ -1936,17 +1982,29 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                                         />
                                     </div>
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-xs font-semibold text-gray-600">{t('reagent_expiry_label')}</label>
-                                        <input
-                                            type="date"
-                                            value={scanExpiry}
-                                            onChange={e => setScanExpiry(e.target.value)}
-                                            lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
-                                            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                                        />
-                                    </div>
                                 </div>
+                                {scanExpiry && scanManufacturerDateType === 'unlabeled' && (
+                                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                        {t('scan_manufacturer_date_type_required')}
+                                    </p>
+                                )}
+                                <ReagentDateFields
+                                    value={{
+                                        manufacturer_date_type: scanManufacturerDateType,
+                                        expiry_date: scanExpiry,
+                                        received_date: scanReceivedDate,
+                                        opened_date: scanOpenedDate,
+                                    }}
+                                    onChange={(next) => {
+                                        setScanManufacturerDateType(next.manufacturer_date_type);
+                                        setScanExpiry(next.expiry_date);
+                                        setScanReceivedDate(next.received_date);
+                                        setScanOpenedDate(next.opened_date);
+                                    }}
+                                    labelClassName="text-xs font-semibold text-gray-600"
+                                    inputClassName="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    columnsClassName="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                                />
 
                                 {/* Remaining Amount Input */}
                                 <div className="flex flex-col gap-2 mt-1 px-1">

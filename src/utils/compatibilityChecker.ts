@@ -1,4 +1,5 @@
 import type { CartItem, DisposalCategory, WasteMatrix } from '../types';
+import { isCorrosiveAcidByNameAndHCodes } from './chemicalAnalyzer';
 
 export type Severity = 'DANGER' | 'WARNING';
 
@@ -106,6 +107,7 @@ const isReactiveElementalMetal = (name: string, formula: string): boolean => {
 
 const isAcidic = (entry: ChemEntry): boolean =>
     entry.category === 'ACID' ||
+    isCorrosiveAcidByNameAndHCodes(entry.name, entry.hCodes) ||
     (entry.referencePh !== undefined && entry.referencePh < 4) ||
     (hasGroup(entry.hCodes, 'CORROSIVE') && entry.referencePh !== undefined && entry.referencePh < 7);
 

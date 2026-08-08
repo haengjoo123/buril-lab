@@ -37,6 +37,7 @@ import { CustomDialog } from '../../components/CustomDialog';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
+import { getManufacturerDateLabelKey, hasManufacturerDate } from '../../utils/manufacturerDate';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { AppSelect } from '../../components/AppSelect';
@@ -93,11 +94,14 @@ export interface InventoryListViewProps {
 
 const normalizeGhsCas = (value?: string | null) => (value || '').replace(/\s+/g, '').trim();
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+const getTrackedManufacturerDate = (item: InventoryItem) => (
+    hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date : null
+);
 
 function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: InventorySortOption): number {
     if (sortBy === 'expiry_asc') {
-        const expiryA = getExpiryStatus(a.expiry_date);
-        const expiryB = getExpiryStatus(b.expiry_date);
+        const expiryA = getExpiryStatus(getTrackedManufacturerDate(a));
+        const expiryB = getExpiryStatus(getTrackedManufacturerDate(b));
         const daysLeftA = expiryA ? expiryA.daysLeft : Number.POSITIVE_INFINITY;
         const daysLeftB = expiryB ? expiryB.daysLeft : Number.POSITIVE_INFINITY;
         if (daysLeftA !== daysLeftB) return daysLeftA - daysLeftB;
@@ -450,7 +454,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         let expiredCount = 0;
         let warningCount = 0;
         for (const item of items) {
-            const status = getExpiryStatus(item.expiry_date);
+            const status = getExpiryStatus(getTrackedManufacturerDate(item));
             if (!status) continue;
             if (status.level === 'expired') expiredCount++;
             else if (status.level === 'critical' || status.level === 'warning') warningCount++;
@@ -670,6 +674,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
             storage_type: defaultStorageType,
             storage_location_id: defaultStorageType === 'other' ? (locations[0]?.id || '') : '',
             expiry_date: item.result.expiryDate || '',
+            manufacturer_date_type: item.result.manufacturerDateType || 'unlabeled',
             remaining_percent: 100,
         });
         setFormEntryMode('scan_prefill');
@@ -871,7 +876,10 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                 [t('inventory_csv_table_storage')]: item.storage_type === 'cabinet'
                     ? `${item.cabinet_name || t('inventory_loc_cabinet')}${typeof item.shelf_level === 'number' ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})` : ''}`
                     : (item.storage_location_name || t('inventory_loc_other')),
-                [t('inventory_expiry_date')]: item.expiry_date || '',
+                [t('manufacturer_date_type_label')]: t(getManufacturerDateLabelKey(item.manufacturer_date_type)),
+                [t('manufacturer_date_label')]: getTrackedManufacturerDate(item) || '',
+                [t('inventory_received_date')]: item.received_date || '',
+                [t('inventory_opened_date')]: item.opened_date || '',
                 [t('inventory_memo')]: item.memo || ''
             };
         });
@@ -1220,7 +1228,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     };
 
     const renderExpiryBadge = (item: InventoryItem) => {
-        const status = getExpiryStatus(item.expiry_date);
+        const status = getExpiryStatus(getTrackedManufacturerDate(item));
         if (!status || status.level === 'ok') return null;
 
         const badgeClasses = getExpiryBadgeClasses(status.level);
@@ -1377,7 +1385,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         let highestLevel: 'warning' | 'critical' | 'expired' | null = null;
 
         for (const item of group.items) {
-            const status = getExpiryStatus(item.expiry_date);
+            const status = getExpiryStatus(getTrackedManufacturerDate(item));
             if (!status || status.level === 'ok') continue;
             if (status.level === 'expired') return getExpiryCardBorderClass('expired');
             if (status.level === 'critical') highestLevel = 'critical';
@@ -1390,7 +1398,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     const renderInventoryCard = (item: InventoryItem, options?: { nested?: boolean }) => {
         const nested = options?.nested ?? false;
         const needsIdentityReview = identityReviewItemIds.has(item.id);
-        const expiryStatus = getExpiryStatus(item.expiry_date);
+        const expiryStatus = getExpiryStatus(getTrackedManufacturerDate(item));
         const cardBorderClass = expiryStatus ? getExpiryCardBorderClass(expiryStatus.level) : '';
         const wasteBatchActionKey = getWasteBatchActionKey(item);
         const isStartingWasteBatch = wasteBatchPendingKeys.includes(wasteBatchActionKey);
@@ -1543,7 +1551,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         const identityReviewCount = group.items.filter((item) => identityReviewItemIds.has(item.id)).length;
         const uniqueCapacities = Array.from(new Set(group.items.map((item) => (item.capacity || '').trim()).filter(Boolean)));
         const expiryAlertCount = group.items.filter((item) => {
-            const status = getExpiryStatus(item.expiry_date);
+            const status = getExpiryStatus(getTrackedManufacturerDate(item));
             return Boolean(status && status.level !== 'ok');
         }).length;
 
@@ -2158,7 +2166,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                                     </td>
                                                     <td className="min-w-0 px-3 py-3">{renderStorageBadge(item)}</td>
                                                     <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">{item.quantity}</td>
-                                                    <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600 dark:text-slate-300">{item.expiry_date || '-'}</td>
+                                                    <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600 dark:text-slate-300">
+                                                        {getTrackedManufacturerDate(item)
+                                                            ? `${t(getManufacturerDateLabelKey(item.manufacturer_date_type))}: ${getTrackedManufacturerDate(item)}`
+                                                            : '-'}
+                                                    </td>
                                                     <td
                                                         className="truncate whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300"
                                                         title={item.capacity || undefined}
@@ -2226,7 +2238,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                 [t('inventory_product_number'), selectedDesktopItem.product_number || '-'],
                                 [t('inventory_capacity'), selectedDesktopItem.capacity || '-'],
                                 [t('inventory_quantity'), selectedDesktopItem.quantity],
-                                [t('inventory_error_expiry_label'), selectedDesktopItem.expiry_date || '-'],
+                                [t(getManufacturerDateLabelKey(selectedDesktopItem.manufacturer_date_type)), getTrackedManufacturerDate(selectedDesktopItem) || '-'],
+                                [t('inventory_received_date'), selectedDesktopItem.received_date || '-'],
+                                [t('inventory_opened_date'), selectedDesktopItem.opened_date || '-'],
                                 [t('inventory_remaining_amount'), `${selectedDesktopItem.remaining_percent ?? 100}%`],
                             ].map(([label, value]) => (
                                 <div key={String(label)} className="flex items-start justify-between gap-4">

@@ -34,6 +34,12 @@ const CARBONATE_COUNTERIONS = [
     'Ni', 'Co', 'Mn', 'Ag', 'Cd', 'Pb',
 ] as const;
 const ALKALI_METALS = ['Li', 'Na', 'K', 'Rb', 'Cs'] as const;
+const INORGANIC_SALT_CATIONS = [
+    ...ALKALI_METALS,
+    'Mg', 'Ca', 'Sr', 'Ba', 'Al', 'Fe', 'Ga', 'In', 'Tl', 'Zr', 'Hf',
+    'La', 'Ce', 'Y', 'Sc',
+] as const;
+const INORGANIC_SALT_ANION_ELEMENTS = ['Cl', 'Br', 'I', 'N', 'S', 'P', 'Si'] as const;
 
 const REACTIVE_H_CODES = new Set([
     // Explosives / desensitized explosives
@@ -109,19 +115,43 @@ const REACTIVE_NAME_PATTERNS = [
     /\b(?:sodium|potassium|lithium|calcium)\s+hydride\b/i,
     /\b(?:sodium|potassium|lithium)\s+amide\b/i,
     /\blithium\s+diisopropylamide\b/i,
+    /\blithium\s+hexamethyldisilazide\b/i,
     /\bLDA\b/i,
     /\b(?:n-|sec-|tert-|t-)?butyllithium\b/i,
+    /\b(?:methyl|ethyl|propyl|isopropyl|phenyl|vinyl|allyl|benzyl)\s*-?\s*lithium\b/i,
     /\borganolithium\b/i,
     /\b(?:methyl|ethyl|phenyl|vinyl|allyl|isopropyl|tert-butyl|benzyl)magnesium\s+(?:bromide|chloride|iodide)\b/i,
     /\bDIBAL-?H\b/i,
     /\bdiisobutylalum(?:in)?ium\s+hydride\b/i,
+    /\bsodium\s+naphthalenide\b/i,
+    /\bpotassium\s+graphite\b/i,
+    /\btriethylalum(?:in)?ium\b/i,
+    /\bdiethylzinc\b/i,
+    /\b(?:oxalyl|acetyl|benzoyl)\s+chloride\b/i,
+    /\bthionyl\s+chloride\b/i,
+    /\bphosphorus\s+trichloride\b/i,
+    /\bsulfuryl\s+chloride\b/i,
+    /\btitanium\s+tetrachloride\b/i,
     /\bsodium\s+metal\b/i,
     /\bpotassium\s+metal\b/i,
+];
+
+/**
+ * A name-only match is intentionally weaker than an SDS H-code or formula
+ * match. Supplier aliases can describe a stable oxide using an obsolete
+ * "peroxide" synonym, and enzymes can include "superoxide" in their
+ * biological function. Neither wording alone establishes a reactive waste.
+ */
+const REACTIVE_NAME_FALSE_POSITIVE_CONTEXTS = [
+    /\b(?:superoxide\s+dismutase|dismutase\s*,?\s*superoxide)\b/i,
+    /\b(?:peroxide|superoxide)\b[\s\S]*\boxide\b|\boxide\b[\s\S]*\b(?:peroxide|superoxide)\b/i,
+    /(?:과산화물|수퍼옥사이드|슈퍼옥사이드)[\s\S]*(?:산화물|산화\s*[가-힣]+)|(?:산화물|산화\s*[가-힣]+)[\s\S]*(?:과산화물|수퍼옥사이드|슈퍼옥사이드)/i,
 ];
 
 const CYANIDE_NAME_PATTERNS = [
     /\bcyanide\b/i,
     /\bcyanid\b/i,
+    /\bcyanogen\b/i,
     /\bferricyanide\b/i,
     /\bferrocyanide\b/i,
     /\bthiocyanate\b/i,
@@ -141,10 +171,6 @@ const INORGANIC_CARBON_NAME_PATTERNS = [
     /\bcarbon\s+monoxide\b/i,
     /\bcarbon\s+dioxide\b/i,
     /\bcarbide\b/i,
-    /\bcyanide\b/i,
-    /\bferricyanide\b/i,
-    /\bferrocyanide\b/i,
-    /\bthiocyanate\b/i,
 ];
 
 const ALKALI_NAME_PATTERNS = [
@@ -168,9 +194,22 @@ const ACID_NAME_PATTERNS = [
     /\bboric\s+acid\b/i,
     /\bchromic\s+acid\b/i,
     /\binorganic\s+acid\b/i,
-    /\bHCl\b/i,
-    /\bHF\b/i,
 ];
+
+/**
+ * Keep ordinary organic acids out of automatic acid routing, but use a
+ * confirmed corrosivity statement plus an acid identity in incompatibility
+ * checks. Otherwise a corrosive acid that happens to be organic can be mixed
+ * with cyanide or sulfide without the acid-pair danger rule firing.
+ */
+const CORROSIVE_ACID_NAME_PATTERN = /\bacid\b|산\s*$/i;
+
+export const isCorrosiveAcidByNameAndHCodes = (
+    name: string | undefined,
+    hCodes: readonly string[],
+): boolean => (
+    hCodes.includes('H314') && CORROSIVE_ACID_NAME_PATTERN.test(name || '')
+);
 
 const SOLID_NAME_PATTERNS = [
     /\bpowder\b/i,
@@ -243,6 +282,16 @@ export const buildHazardWarnings = (hCodes: string[] = [], chemical?: Chemical):
         });
     }
 
+    if (chemical?.casNumber && pListCas.includes(chemical.casNumber)) {
+        warnings.push({
+            code: 'p_list_advisory',
+            hCodes: [],
+            labelKey: 'hazard_warning_p_list_advisory',
+            descriptionKey: 'hazard_warning_p_list_advisory_desc',
+            evidenceLabel: `CAS ${chemical.casNumber}`,
+        });
+    }
+
     return warnings;
 };
 
@@ -263,12 +312,17 @@ const isLikelyCyanideFormula = (formula: string): boolean => {
 };
 
 const isLikelySulfideFormula = (elements: ElementCounts): boolean => {
-    const sulfideCounterions = ['H', 'Li', 'Na', 'K', 'Mg', 'Ca', 'Ba', 'Fe', 'Zn', 'Cd', 'Pb', 'Hg', 'Cu'];
+    const sulfideCounterions = ['H', 'Li', 'Na', 'K', 'Mg', 'Ca', 'Ba', 'Fe', 'Zn', 'Cd', 'Pb', 'Hg', 'Cu', 'Sn'];
     return Boolean(elements.S) &&
         !elements.O &&
         !elements.C &&
         hasAnyElement(elements, sulfideCounterions);
 };
+
+const isCyanogenHalideFormula = (elements: ElementCounts): boolean => (
+    elements.C === 1 && elements.N === 1 && !elements.H &&
+    hasAnyElement(elements, HALOGENS)
+);
 
 const isHydrofluoricAcidIdentity = (chemical: Chemical): boolean =>
     chemical.casNumber?.trim() === HYDROFLUORIC_ACID_CAS ||
@@ -284,6 +338,35 @@ const isFormulaExactly = (formula: string, candidates: readonly string[]): boole
     const normalized = normalizedFormula(formula).toUpperCase();
     return candidates.some(candidate => normalized === candidate.toUpperCase());
 };
+
+const INORGANIC_ACID_FORMULAS = [
+    'HCL', 'HBR', 'HI', 'HF', 'H2SO4', 'HNO3', 'H3PO4', 'HCLO4',
+] as const;
+
+/**
+ * A supplier SDS often lists a salt as an alias such as "sulfuric acid,
+ * cesium salt".  That text does not make the salt an acid for routing.
+ * Keep genuine acid-salt identities (for example sodium bisulfate) explicit
+ * instead of treating every occurrence of an acid name as the free acid.
+ */
+const isExplicitAcidSulfateSalt = (name: string, formula: string): boolean => (
+    /\b(?:bi)?sulfate\b|\bhydrogen\s+sulfate\b/i.test(name) &&
+    isFormulaExactly(formula, ['NaHSO4', 'HNaO4S', 'KHSO4', 'HKSO4'])
+);
+
+const isInorganicAcidSalt = (elements: ElementCounts): boolean => (
+    hasAnyElement(elements, INORGANIC_SALT_CATIONS)
+);
+
+/**
+ * Quaternary ammonium/phosphonium hydroxides are genuine bases despite
+ * containing carbon.  "Inner salt" names are deliberately excluded: their
+ * hydroxide wording is nomenclature, not a free hydroxide counter-ion.
+ */
+const isExplicitOrganicHydroxideBase = (name: string): boolean => (
+    !/\binner\s+salt\b/i.test(name) &&
+    /\b(?:[a-z-]+(?:ammonium|phosphonium)|cetrimonium)\s+hydroxide\b/i.test(name)
+);
 
 const hasInorganicPhosphateCore = (elements: ElementCounts): boolean =>
     Boolean(elements.P) &&
@@ -348,6 +431,35 @@ export const isLikelyOrganicByFormula = (formula: string, name = ''): boolean =>
     return Boolean(elements.C) && !isInorganicCarbonFormula(formula, name);
 };
 
+/**
+ * This is deliberately narrower than "not organic". It recognizes an ionic
+ * inorganic salt only when the formula contains a counter-ion and a familiar
+ * non-fluoride inorganic anion. Oxides, elemental materials and incomplete
+ * formulae remain unresolved instead of being silently sent to aqueous waste.
+ */
+const isConfirmedInorganicSalt = (elements: ElementCounts): boolean => (
+    !elements.C &&
+    !elements.F &&
+    hasAnyElement(elements, INORGANIC_SALT_CATIONS) &&
+    hasAnyElement(elements, INORGANIC_SALT_ANION_ELEMENTS)
+);
+
+/**
+ * Ammonium is an ionic counterion, but it cannot be discovered from the
+ * element list alone because every ammonium salt is composed only of N/H and
+ * its anion. Require both an explicit ammonium identity and a familiar
+ * inorganic anion; hydroxide, fluoride and reactive salts have already won
+ * precedence before this fallback is reached.
+ */
+const isConfirmedAmmoniumSalt = (name: string, elements: ElementCounts): boolean => (
+    !elements.C &&
+    !elements.F &&
+    Boolean(elements.N && elements.H) &&
+    /ammonium|암모늄/i.test(name) &&
+    !/\b(?:hydrogen\s+(?:sulfate|sulphate|phosphate|carbonate)|bi(?:sulfate|sulphate|phosphate|carbonate))\b|(?:중|수소)\s*(?:황산|인산|탄산)/i.test(name) &&
+    hasAnyElement(elements, INORGANIC_SALT_ANION_ELEMENTS)
+);
+
 const HAZARD_PROFILE_VERSION = '1.0.0' as const;
 
 /**
@@ -359,6 +471,11 @@ export const detectChemicalHazards = (chemical: Chemical): ChemicalHazardProfile
     const formula = chemical.molecularFormula || '';
     const casNumber = chemical.casNumber?.trim() ?? '';
     const elements = parseFormula(formula);
+    const isOrganic = isLikelyOrganicByFormula(formula, name);
+    const hasMetalCounterion = hasAnyElement(elements, [
+        ...INORGANIC_SALT_CATIONS,
+        ...HEAVY_METALS,
+    ]);
     const hCodes = extractHCodes(chemical.ghs?.hazardStatements);
     const flags = new Set<WasteHazardFlag>();
     const evidence: ChemicalHazardEvidence[] = [];
@@ -390,24 +507,30 @@ export const detectChemicalHazards = (chemical: Chemical): ChemicalHazardProfile
         addEvidence('REACTIVE', 'h_code', code, 'confirmed');
     }
 
-    if (matchesAny(name, REACTIVE_NAME_PATTERNS)) {
+    if (matchesAny(name, REACTIVE_NAME_PATTERNS) &&
+        !matchesAny(name, REACTIVE_NAME_FALSE_POSITIVE_CONTEXTS)) {
         addEvidence('REACTIVE', 'name_pattern', name, 'inferred');
     }
     if (isFormulaExactly(formula, ['HNO3', 'HClO4', 'NaBH4', 'LiAlH4', 'NaH', 'KH', 'LiH', 'CaH2'])) {
         addEvidence('REACTIVE', 'formula_pattern', formula, 'confirmed');
     }
 
-    if (matchesAny(name, CYANIDE_NAME_PATTERNS)) {
+    // "Vinyl cyanide" and other nitrile synonyms are organic molecules, not
+    // inorganic cyanide waste.  The same distinction prevents thioethers
+    // such as dimethyl sulfide from being routed to a sulfide stream.
+    if ((!isOrganic || hasMetalCounterion || isCyanogenHalideFormula(elements)) &&
+        matchesAny(name, CYANIDE_NAME_PATTERNS)) {
         addEvidence('CYANIDE', 'name_pattern', name, 'inferred');
     }
-    if (isLikelyCyanideFormula(formula)) {
+    if ((!isOrganic || hasMetalCounterion || isCyanogenHalideFormula(elements)) &&
+        isLikelyCyanideFormula(formula)) {
         addEvidence('CYANIDE', 'formula_pattern', formula, 'confirmed');
     }
 
-    if (matchesAny(name, SULFIDE_NAME_PATTERNS)) {
+    if (!isOrganic && matchesAny(name, SULFIDE_NAME_PATTERNS)) {
         addEvidence('SULFIDE', 'name_pattern', name, 'inferred');
     }
-    if (isLikelySulfideFormula(elements)) {
+    if (!isOrganic && isLikelySulfideFormula(elements)) {
         addEvidence('SULFIDE', 'formula_pattern', formula, 'confirmed');
     }
 
@@ -499,14 +622,17 @@ const buildResult = (
 };
 
 export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
-    // 0. P-List Check (Highest Priority)
-    if (chemical.casNumber && pListCas.includes(chemical.casNumber)) {
-        return buildResult(chemical, 'SPECIAL_HAZARD', 'reason_us_rcra_p_list_match');
-    }
-
     const elements = parseFormula(chemical.molecularFormula || '');
     const formula = chemical.molecularFormula || '';
     const name = chemical.name || '';
+
+    // A reaction-product UVCB cannot be treated as a single known chemical
+    // merely because one constituent name happens to contain "acid" or
+    // "hydroxide".  Preserve it as unresolved until its composition is
+    // confirmed in the waste batch.
+    if (/\breaction\s+products?\b/i.test(name)) {
+        return buildResult(chemical, 'UNKNOWN', 'reason_complex_reaction_product');
+    }
     const hCodes = extractHCodes(chemical.ghs?.hazardStatements);
     const hasFatalAcuteToxicityHCode = hCodes.some(code => FATAL_ACUTE_TOXICITY_H_CODES.has(code));
     const hasHalogen = hasAnyElement(elements, HALOGENS);
@@ -523,15 +649,15 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     let reason = '';
 
     const isReactive = hazardProfile.flags.includes('REACTIVE');
-    const isCyanideOrSulfide = hazardProfile.flags.includes('CYANIDE') ||
-        hazardProfile.flags.includes('SULFIDE');
+    const hasCyanide = hazardProfile.flags.includes('CYANIDE');
+    const hasSulfide = hazardProfile.flags.includes('SULFIDE');
     const hasHeavyMetal = hazardProfile.flags.includes('HEAVY_METAL');
     const isSolid = matchesAny(name, SOLID_NAME_PATTERNS);
 
     if (isReactive) {
         category = 'REACTIVE';
         reason = 'reason_reactive';
-    } else if (isCyanideOrSulfide) {
+    } else if (hasCyanide) {
         category = 'CYANIDE';
         reason = 'reason_cyanide';
     } else if (hasFatalAcuteToxicityHCode) {
@@ -540,6 +666,18 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     } else if (hasHeavyMetal) {
         category = 'HEAVY_METAL';
         reason = 'reason_heavy_metal';
+    } else if (hasSulfide) {
+        category = 'CYANIDE';
+        reason = 'reason_cyanide';
+    } else if (isCorrosiveAcidByNameAndHCodes(name, hCodes)) {
+        // A confirmed corrosive acid remains an acid even when its formula is
+        // organic. The batch matrix, not this category, decides whether the
+        // final waste is aqueous or an organic solvent stream.
+        category = 'ACID';
+        reason = 'reason_corrosive_acid_identity';
+    } else if (isExplicitOrganicHydroxideBase(name)) {
+        category = 'ALKALI';
+        reason = 'reason_alkali_keyword';
     } else if (isOrganic) {
         if (hasHalogen) {
             category = 'ORGANIC_HALOGEN';
@@ -555,12 +693,23 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         } else if (isAlkaliPhosphateSalt(name, formula, elements)) {
             category = 'ALKALI';
             reason = 'reason_alkali_phosphate_salt';
-        } else if (matchesAny(name, ACID_NAME_PATTERNS)) {
+        } else if (isFormulaExactly(formula, INORGANIC_ACID_FORMULAS) ||
+            isExplicitAcidSulfateSalt(name, formula)) {
+            category = 'ACID';
+            reason = isExplicitAcidSulfateSalt(name, formula)
+                ? 'reason_acid_keyword'
+                : 'reason_acid_formula';
+        } else if (matchesAny(name, ACID_NAME_PATTERNS) && !isInorganicAcidSalt(elements)) {
             category = 'ACID';
             reason = 'reason_acid_keyword';
         } else if (matchesAny(name, ALKALI_NAME_PATTERNS)) {
             category = 'ALKALI';
             reason = 'reason_alkali_keyword';
+        } else if (isConfirmedInorganicSalt(elements) || isConfirmedAmmoniumSalt(name, elements)) {
+            // More hazardous families have already won by precedence above:
+            // reactive, cyanide/sulfide, fatal toxicity, and heavy metal.
+            category = 'NEUTRAL';
+            reason = 'reason_neutral_inorganic_salt';
         }
     }
 

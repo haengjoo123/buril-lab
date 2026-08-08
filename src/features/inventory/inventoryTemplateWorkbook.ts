@@ -448,7 +448,8 @@ export async function downloadInventoryTemplateWorkbook({
         '# 5) 선반/칸은 시약장일 때만 입력하세요. 칸은 해당 선반에서 왼쪽부터 1, 2, 3... 순서입니다.',
         `# 6) 선반/칸을 비워두면 시약장 전체에서 자동 배치됩니다. 가능한 위치는 ${CABINET_POSITIONS_SHEET_NAME} 시트를 참고하세요.`,
         '# 7) 시약병(container_type): 갈색병(A) / 플라스틱 통(B) / 유리병(C) / 사각병(D)',
-        '# 8) 유효기간 형식: YYYY-MM-DD (예: 2026-12-31), 비워도 됩니다.',
+        '# 8) 제조사 날짜 유형은 유효기한, 최소 보증기한, 미표기 중 하나입니다.',
+        '# 9) 제조사 날짜·입고일·개봉일은 YYYY-MM-DD 형식이며 비워둘 수 있습니다. 미표기에는 제조사 날짜를 넣지 마세요.',
     ];
 
     guideRows.forEach((guideText, index) => {
@@ -501,9 +502,9 @@ export async function downloadInventoryTemplateWorkbook({
     });
 
     const sampleRows = [
-        ['Acetone', 'Sigma', 'A123', '67-64-1', '1', '500mL', '기타', String(t('loc_fridge')), '', '', '', '2026-12-31', String(t('inventory_csv_template_example_memo'))],
-        ['Ethanol', 'Daejung', 'E100', '64-17-5', '2', '1L', '기타', String(t('loc_bench')), '', '', '', '', ''],
-        ['HCl', 'Junsei', 'HCL500', '7647-01-0', '1', '500mL', '시약장', cabinetNames[0] || 'A421', '1', '1', getContainerTypeLabel('A', t), '', String(t('inventory_csv_template_example_cabinet_memo'))],
+        ['유효기한', '2026-12-31', '2025-01-15', '', 'Acetone', 'Sigma', 'A123', '67-64-1', '1', '500mL', '기타', String(t('loc_fridge')), '', '', '', '2026-12-31', String(t('inventory_csv_template_example_memo'))],
+        ['최소 보증기한', '2027-06-30', '', '', 'Ethanol', 'Daejung', 'E100', '64-17-5', '2', '1L', '기타', String(t('loc_bench')), '', '', '', '', ''],
+        ['미표기', '', '', '', 'HCl', 'Junsei', 'HCL500', '7647-01-0', '1', '500mL', '시약장', cabinetNames[0] || 'A421', '1', '1', getContainerTypeLabel('A', t), '', String(t('inventory_csv_template_example_cabinet_memo'))],
     ];
 
     sampleRows.forEach((rowValues, rowIndex) => {

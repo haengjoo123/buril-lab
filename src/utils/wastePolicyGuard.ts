@@ -37,8 +37,9 @@ export function getWastePolicyEscalationDetails(
 export function resolveWasteDecisionAgainstPolicy(
   batch: WasteBatchDraft,
   policy: ActiveWastePolicy | null,
+  options: { approvedPredictedBatchPh?: number } = {},
 ): PolicyBoundWasteDecision {
-  const baseDecision = analyzeWasteBatch(batch)
+  const baseDecision = analyzeWasteBatch(batch, options)
   const policyStream = policy?.resolvedStreams.find(
     ({ streamCode }) => streamCode === baseDecision.streamCode,
   ) ?? null
@@ -58,6 +59,7 @@ export function resolveWasteDecisionAgainstPolicy(
     matchedStream,
     policyStream,
     decision: analyzeWasteBatch(batch, {
+      approvedPredictedBatchPh: options.approvedPredictedBatchPh,
       policyVersion: activePolicyVersion,
       policy: {
         streamAvailable: Boolean(matchedStream),

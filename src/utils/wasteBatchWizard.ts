@@ -39,6 +39,14 @@ export interface WasteBatchWizardState {
     matrixResolution: WizardMatrixResolution;
 }
 
+export interface WasteBatchWizardOptions {
+    /** Server-authorized, high-confidence predicted pH for this exact draft. */
+    approvedPredictedBatchPh?: number;
+}
+
+const hasApprovedPredictedBatchPh = (value: number | undefined): value is number =>
+    value !== undefined && Number.isFinite(value) && value > 2.2 && value < 12.3;
+
 export const componentHasSolutionConcentration = (component: WasteComponent): boolean =>
     component.concentration !== undefined;
 
@@ -164,6 +172,7 @@ const shouldAskAdditionalComponents = (batch: WasteBatchDraft): boolean =>
 const isBatchStepComplete = (
     batch: WasteBatchDraft,
     resolution: WizardMatrixResolution,
+    options: WasteBatchWizardOptions,
 ): boolean => {
     const matrixAnswered = resolution.requiresBatchConfirmation
         ? batch.matrixSource === 'user'
@@ -177,6 +186,7 @@ const isBatchStepComplete = (
     if (batch.mixingState === 'separate') return false;
     const { hasAcid, hasAlkali } = getWasteAcidBasePresence(batch.components);
     if (hasAcid && hasAlkali && batch.matrix === 'aqueous'
+        && !hasApprovedPredictedBatchPh(options.approvedPredictedBatchPh)
         && (batch.measuredPhStatus !== 'measured'
             || batch.measuredBatchPh === undefined
             || !Number.isFinite(batch.measuredBatchPh)
@@ -190,7 +200,10 @@ const isBatchStepComplete = (
     return true;
 };
 
-export const resolveWasteBatchWizard = (batch: WasteBatchDraft): WasteBatchWizardState => {
+export const resolveWasteBatchWizard = (
+    batch: WasteBatchDraft,
+    options: WasteBatchWizardOptions = {},
+): WasteBatchWizardState => {
     const componentStepComplete = isComponentStepComplete(batch);
     const amountsStepComplete = batch.components.length > 0
         && batch.components.every((component) => !componentNeedsAmountInput(component));
@@ -198,7 +211,7 @@ export const resolveWasteBatchWizard = (batch: WasteBatchDraft): WasteBatchWizar
     const solutionStepComplete = !solutionStepRelevant || getUnansweredSolutionComponents(batch.components).length === 0;
     const matrixResolution = deriveWizardMatrixFromComponents(batch.components);
     const batchStepComplete = componentStepComplete && solutionStepComplete
-        && isBatchStepComplete(batch, matrixResolution);
+        && isBatchStepComplete(batch, matrixResolution, options);
     const relevantSteps: WasteBatchWizardStep[] = solutionStepRelevant
         ? [...WASTE_BATCH_WIZARD_STEPS]
         : WASTE_BATCH_WIZARD_STEPS.filter((step) => step !== 'solution');
@@ -227,9 +240,12 @@ export const resolveWasteBatchWizard = (batch: WasteBatchDraft): WasteBatchWizar
     };
 };
 
-export const getWizardEntryStep = (batch: WasteBatchDraft): WasteBatchWizardStep => {
+export const getWizardEntryStep = (
+    batch: WasteBatchDraft,
+    options: WasteBatchWizardOptions = {},
+): WasteBatchWizardStep => {
     if (batch.components.some(componentNeedsAmountInput)) return 'components';
-    return resolveWasteBatchWizard(batch).firstIncompleteStep;
+    return resolveWasteBatchWizard(batch, options).firstIncompleteStep;
 };
 
 export const getNextWizardStep = (

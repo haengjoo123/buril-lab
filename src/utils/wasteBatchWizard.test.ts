@@ -131,4 +131,25 @@ describe('waste batch wizard resolver', () => {
         expect(getNextWizardStep('components', wizard)).toBe('amounts');
         expect(getNextWizardStep('amounts', wizard)).toBe('batch');
     });
+
+    it('lets a server-authorized safe predicted pH complete an already-mixed aqueous acid/alkali batch', () => {
+        const acid = component('acid');
+        acid.category = 'ACID';
+        acid.solutionContext = createUserSolutionContext('aqueous');
+        const alkali = component('alkali');
+        alkali.category = 'ALKALI';
+        alkali.solutionContext = createUserSolutionContext('aqueous');
+        const draft = batch([acid, alkali]);
+        draft.matrix = 'aqueous';
+        draft.matrixSource = 'user';
+        draft.additionalComponentsStatus = 'none';
+        draft.measuredPhStatus = 'unknown';
+
+        expect(resolveWasteBatchWizard(draft).batchStepComplete).toBe(false);
+        expect(resolveWasteBatchWizard(draft, { approvedPredictedBatchPh: 7 })).toMatchObject({
+            batchStepComplete: true,
+            firstIncompleteStep: 'result',
+        });
+        expect(resolveWasteBatchWizard(draft, { approvedPredictedBatchPh: 2.2 }).batchStepComplete).toBe(false);
+    });
 });

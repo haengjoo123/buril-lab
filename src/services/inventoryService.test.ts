@@ -47,6 +47,9 @@ function inventoryItem(
         storage_location_id: null,
         product_id: null,
         expiry_date: null,
+        manufacturer_date_type: 'unlabeled',
+        received_date: null,
+        opened_date: null,
         memo: null,
         remaining_percent: null,
         created_at: '2026-08-02T00:00:00.000Z',
@@ -413,7 +416,7 @@ describe('inventoryService V2 record removal', () => {
             { name: 'Updated acetone' },
         )).rejects.toBe(error);
 
-        expect(mocks.rpc).toHaveBeenCalledWith('update_inventory_item_atomic', {
+        expect(mocks.rpc).toHaveBeenCalledWith('update_inventory_item_with_dates_atomic', {
             p_item_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
             p_item_source: 'inventory',
             p_updates: { name: 'Updated acetone' },

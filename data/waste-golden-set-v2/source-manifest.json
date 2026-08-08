@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "2.3.0",
+  "datasetId": "waste-golden-set-v2",
+  "generatedAt": "2026-08-08T05:30:00.000Z",
+  "sourcePolicy": {
+    "order": [
+      "domestic_kosha",
+      "manufacturer_sds",
+      "public_chemical_database"
+    ],
+    "sdsContentRedistributed": false,
+    "networkRequiredForCi": false
+  },
+  "rowCount": 1000,
+  "datasetSha256": "db09644c2e6293dfa9edd36f1aec89a78913a7e8fd30a0058afecbd6c52aa853",
+  "strata": {
+    "organic_non_halogenated": 134,
+    "organic_halogenated": 102,
+    "acid_alkali": 108,
+    "inorganic_salt": 66,
+    "heavy_metal": 134,
+    "cyanide_sulfide": 78,
+    "reactive_oxidizer": 69,
+    "toxic_cmr": 68,
+    "fluorine_organofluorine": 105,
+    "solid_other": 136
+  },
+  "sources": {
+    "primarySds": "https://msds.kosha.or.kr/MSDSInfo/kcic/msdsdetail.do",
+    "regulatory": "https://msds.kosha.or.kr/MSDSInfo/kcic/msdssearchLaw.do",
+    "supportingIdentity": "https://pubchem.ncbi.nlm.nih.gov/"
+  },
+  "reviewDisclosure": "approved means two independent automated curation/review stages. A named human reviewer is required before this benchmark can be represented as a human-reviewed regulatory release.",
+  "evidenceRefresh": {
+    "accessedAt": "2026-08-08T02:03:58.312Z",
+    "requiredSections": [
+      2,
+      3,
+      9,
+      10,
+      13,
+      15
+    ],
+    "acidHoldCorrections": 20,
+    "fluorideHoldCorrections": 4,
+    "reactiveEvidenceRule": "Section 2 reactive H-code or Section 10 reactive evidence only"
+  },
+  "adjudication": {
+    "method": "offline_sds_evidence_rules",
+    "evaluatedAt": "2026-08-08T02:04:07.731Z",
+    "mismatchCount": 224
+  },
+  "readyStreamReconciliation": {
+    "method": "stored_kosha_evidence_and_standard_scenario_audit",
+    "assessedAt": "2026-08-08T00:00:00.000Z",
+    "reviewedCases": 87
+  },
+  "scenarioEvidenceReconciliation": {
+    "method": "section_9_physical_state_and_ghs_compressed_gas_audit",
+    "assessedAt": "2026-08-08T00:00:00.000Z",
+    "reviewedCases": 78,
+    "gasWastePhaseConflicts": 29,
+    "liquidSolidConflicts": 49
+  },
+  "baselineCorrection": {
+    "method": "approved_first_pass_adjudication",
+    "assessedAt": "2026-08-08T05:30:00.000Z",
+    "appCorrect": 21,
+    "insufficientEvidence": 41,
+    "directReactiveEvidence": 8,
+    "reactiveUncertainty": 12,
+    "reactiveNameFalsePositives": 3,
+    "specialReviewRecommendationMigrations": 17
+  }
+}

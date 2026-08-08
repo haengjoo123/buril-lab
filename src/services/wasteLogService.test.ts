@@ -21,6 +21,7 @@ vi.mock('../store/useLabStore', () => ({
 }));
 
 import {
+    buildWastePhPredictionAuthorizationContext,
     buildWasteHandlingRpcPayload,
     fetchWasteLogItemsV2,
     isLegacyWasteLog,
@@ -185,6 +186,54 @@ describe('wasteLogService V2 mutations', () => {
         });
 
         expect(payload.confirmationSnapshot).not.toHaveProperty('additionalComponentsStatus');
+    });
+
+    it('binds a predicted-pH authorization to the same normalized batch payload used for recording', () => {
+        const batch = createBatch();
+        batch.matrix = 'aqueous';
+        batch.mixingState = 'already_mixed';
+        batch.components[0].solutionVolume = {
+            value: 100,
+            unit: 'mL',
+            normalizedMl: 100,
+        };
+        batch.components[0].concentration = { value: 0.1, unit: 'M' };
+        batch.components[0].phCatalogId = 'usgs:acetate:acetic-acid';
+        const context = buildWastePhPredictionAuthorizationContext(batch);
+        const payload = buildWasteHandlingRpcPayload({
+            batch,
+            decision: {
+                ...createDecision(),
+                streamCode: 'AQUEOUS_OTHER',
+                routingBasis: 'predicted_batch_ph',
+            },
+            handlingAction: 'container_deposit',
+            confirmationSnapshot: {
+                predictedPhAuthorizationId: '44444444-4444-4444-8444-444444444444',
+            },
+        });
+
+        expect(context).toMatchObject({
+            matrix: 'aqueous',
+            totalAmount: { value: 500, unit: 'mL', approximate: true, unknown: false },
+            confirmationSnapshot: {
+                matrixSource: 'user',
+                mixingState: 'already_mixed',
+                additionalComponentsStatus: 'none',
+                incidentContext: 'none',
+            },
+            components: [{
+                cartLineId: 'line-1',
+                analysisSnapshot: {
+                    phPredictionInput: { phCatalogId: 'usgs:acetate:acetic-acid' },
+                },
+            }],
+        });
+        expect(payload.components).toEqual(context.components);
+        expect(payload.confirmationSnapshot).toHaveProperty(
+            'predictedPhAuthorizationId',
+            '44444444-4444-4444-8444-444444444444',
+        );
     });
 
     it('preserves a user-confirmed solution context in the audit snapshot', () => {

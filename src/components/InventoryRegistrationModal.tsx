@@ -20,8 +20,10 @@ import {
 import { useFridgeStore } from '../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../types/fridge';
 import { AppSelect } from './AppSelect';
+import { ReagentDateFields } from './ReagentDateFields';
 import { translateLocationName } from '../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../utils/guessReagentTemplate';
+import type { ManufacturerDateType } from '../utils/manufacturerDate';
 
 interface InventoryRegistrationModalProps {
     product: MediaProduct;
@@ -39,7 +41,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     onSuccess,
     onNavigateToCabinet,
 }) => {
-    const { t, i18n } = useTranslation();
+    const { t } = useTranslation();
     const productNumbers = product.product_numbers?.filter(Boolean) || [];
 
     // Form state
@@ -50,6 +52,9 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     const [quantity, setQuantity] = useState(1);
     const [capacity, setCapacity] = useState('');
     const [expiryDate, setExpiryDate] = useState('');
+    const [manufacturerDateType, setManufacturerDateType] = useState<ManufacturerDateType>('unlabeled');
+    const [receivedDate, setReceivedDate] = useState('');
+    const [openedDate, setOpenedDate] = useState('');
     const [storageType, setStorageType] = useState<'cabinet' | 'other'>('other');
     const [selectedCabinetId, setSelectedCabinetId] = useState<string>('');
     const [selectedLocationId, setSelectedLocationId] = useState<string>('');
@@ -103,6 +108,9 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         setQuantity(1);
         setCapacity('');
         setExpiryDate('');
+        setManufacturerDateType('unlabeled');
+        setReceivedDate('');
+        setOpenedDate('');
         setStorageType('other');
         setSelectedCabinetId('');
         setSelectedLocationId('');
@@ -133,6 +141,11 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
             return;
         }
 
+        if (expiryDate && manufacturerDateType === 'unlabeled') {
+            setError(t('scan_manufacturer_date_type_required'));
+            return;
+        }
+
         if (storageType === 'cabinet' && !selectedCabinetId) {
             setError(t('inventory_error_cabinet_required'));
             return;
@@ -160,6 +173,9 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                 storage_location_id: storageType === 'other' ? selectedLocationId : undefined,
                 product_id: product.id,
                 expiry_date: expiryDate || undefined,
+                manufacturer_date_type: manufacturerDateType,
+                received_date: receivedDate || undefined,
+                opened_date: openedDate || undefined,
                 memo: memo || undefined,
             });
 
@@ -246,6 +262,9 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
             productNumber: selectedProductNumber || undefined,
             brand: brand.trim() || undefined,
             expiryDate: expiryDate || undefined,
+            manufacturerDateType,
+            receivedDate: receivedDate || undefined,
+            openedDate: openedDate || undefined,
         };
 
         const placeResult = useFridgeStore.getState().autoPlaceReagent(itemData);
@@ -622,18 +641,21 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                         )}
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                            {t('inventory_expiry_date')}
-                        </label>
-                        <input
-                            type="date"
-                            value={expiryDate}
-                            onChange={(e) => setExpiryDate(e.target.value)}
-                            lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
-                            className="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                        />
-                    </div>
+                    <ReagentDateFields
+                        value={{
+                            manufacturer_date_type: manufacturerDateType,
+                            expiry_date: expiryDate,
+                            received_date: receivedDate,
+                            opened_date: openedDate,
+                        }}
+                        onChange={(next) => {
+                            setManufacturerDateType(next.manufacturer_date_type);
+                            setExpiryDate(next.expiry_date);
+                            setReceivedDate(next.received_date);
+                            setOpenedDate(next.opened_date);
+                        }}
+                        inputClassName="w-full h-[46px] px-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    />
 
                     {/* Memo */}
                     <div>

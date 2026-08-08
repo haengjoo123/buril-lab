@@ -52,6 +52,7 @@ export interface VoiceMatch {
   storageLocationName?: string
   storageLocationIcon?: string
   expiryDate?: string
+  manufacturerDateType?: 'expiry' | 'minimum_shelf_life' | 'unlabeled'
   remainingPercent?: number
   capacity?: string
   matchedBy: 'cas' | 'name_exact' | 'product_exact' | 'prefix' | 'contains'
@@ -191,35 +192,39 @@ export function buildExpiryAnswer(
   expiryDate: string | null | undefined,
   language: VoiceLanguage,
   getDaysLeft: (date?: string | null) => number | null,
+  manufacturerDateType: VoiceMatch['manufacturerDateType'] = 'unlabeled',
 ): string {
+  const dateLabel = manufacturerDateType === 'minimum_shelf_life'
+    ? (language === 'ko' ? '최소 보증기한' : 'minimum shelf life date')
+    : (language === 'ko' ? '유효기한' : 'expiry date')
   if (!expiryDate) {
     return language === 'ko'
-      ? `${itemName}의 유통기한 정보가 아직 등록되지 않았어요.`
-      : `The expiry date for ${itemName} has not been recorded yet.`
+      ? `${itemName}의 ${dateLabel} 정보가 아직 등록되지 않았어요.`
+      : `The ${dateLabel} for ${itemName} has not been recorded yet.`
   }
 
   const daysLeft = getDaysLeft(expiryDate)
   if (daysLeft == null) {
     return language === 'ko'
-      ? `${itemName}의 유통기한 정보를 해석하지 못했어요.`
-      : `I could not interpret the expiry date for ${itemName}.`
+      ? `${itemName}의 ${dateLabel} 정보를 해석하지 못했어요.`
+      : `I could not interpret the ${dateLabel} for ${itemName}.`
   }
 
   if (daysLeft < 0) {
     return language === 'ko'
-      ? `${itemName}는 ${expiryDate}에 이미 만료됐어요.`
-      : `${itemName} expired on ${expiryDate}.`
+      ? `${itemName}의 ${dateLabel}은 ${expiryDate}로 이미 지났어요.`
+      : `${itemName}'s ${dateLabel} passed on ${expiryDate}.`
   }
 
   if (daysLeft === 0) {
     return language === 'ko'
-      ? `${itemName}는 오늘 만료예요.`
-      : `${itemName} expires today.`
+      ? `${itemName}의 ${dateLabel}이 오늘이에요.`
+      : `${itemName}'s ${dateLabel} is today.`
   }
 
   return language === 'ko'
-    ? `${itemName}의 유통기한은 ${expiryDate}이고, 약 ${daysLeft}일 남아 있어요.`
-    : `${itemName} expires on ${expiryDate}, with about ${daysLeft} days remaining.`
+    ? `${itemName}의 ${dateLabel}은 ${expiryDate}이고, 약 ${daysLeft}일 남아 있어요.`
+    : `${itemName}'s ${dateLabel} is ${expiryDate}, with about ${daysLeft} days remaining.`
 }
 
 export function buildLocationSummary(match: VoiceMatch, language: VoiceLanguage): string {

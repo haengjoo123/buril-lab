@@ -16,9 +16,14 @@ import type {
 } from '../types';
 import { checkCompatibility } from './compatibilityChecker';
 import { isValidCasNumber } from './casNumber';
-import { detectChemicalHazards, parseFormula } from './chemicalAnalyzer';
+import {
+    detectChemicalHazards,
+    extractHCodes,
+    isCorrosiveAcidByNameAndHCodes,
+    parseFormula,
+} from './chemicalAnalyzer';
 
-export const WASTE_RULE_VERSION = '2.4.0';
+export const WASTE_RULE_VERSION = '2.6.0';
 export const DEFAULT_WASTE_POLICY_VERSION = 'KR-2026.3';
 
 export interface NormalizedWasteAmount {
@@ -48,6 +53,8 @@ export interface CreateWasteBatchOptions {
 export interface AnalyzeWasteBatchOptions {
     policyVersion?: string;
     ruleVersion?: string;
+    /** Server-authorized, high-confidence pH prediction for this exact batch. */
+    approvedPredictedBatchPh?: number;
     policy?: {
         streamAvailable: boolean;
         allowedHazardFlags?: WasteHazardFlag[];
@@ -158,11 +165,25 @@ const ACID_IDENTITY_FORMULAS = new Set([
 const ALKALI_IDENTITY_FORMULAS = new Set([
     'NAOH', 'KOH', 'LIOH', 'CA(OH)2', 'BA(OH)2', 'NH3', 'NH4OH',
 ]);
+const ROUTING_SALT_CATIONS = new Set([
+    'Li', 'Na', 'K', 'Rb', 'Cs', 'Mg', 'Ca', 'Sr', 'Ba', 'Al', 'Fe', 'Ga',
+    'In', 'Tl', 'Zr', 'Hf', 'La', 'Ce', 'Y', 'Sc', 'Ag', 'Cd', 'Pb', 'Hg',
+    'Cr', 'As', 'Ni', 'Cu', 'Zn', 'Be', 'Co', 'Mn', 'Sn', 'Sb', 'Mo', 'V',
+]);
 const normalizedFormula = (formula: string | undefined): string =>
     (formula ?? '')
         .replace(/\s+/g, '')
         .replace(/\((?:aq|s|l|g)\)$/i, '')
         .toUpperCase();
+
+const isLikelyMetalSaltFormula = (formula: string | undefined): boolean => {
+    try {
+        const elements = parseFormula(formula ?? '');
+        return [...ROUTING_SALT_CATIONS].some((element) => Boolean(elements[element]));
+    } catch {
+        return false;
+    }
+};
 
 const hasOrganicHalogenContent = (component: WasteComponent): boolean => {
     if (component.category === 'ORGANIC_HALOGEN') return true;
@@ -181,9 +202,25 @@ const getReferencePh = (analysis: AnalysisResult): number | undefined =>
 
 const hasAcidRoutingIdentity = (analysis: AnalysisResult): boolean => {
     const { name, casNumber, molecularFormula } = analysis.chemical;
+    const isExplicitAcid = analysis.category === 'ACID' ||
+        ACID_IDENTITY_CAS.has(casNumber?.trim() ?? '') ||
+        ACID_IDENTITY_FORMULAS.has(normalizedFormula(molecularFormula)) ||
+        isCorrosiveAcidByNameAndHCodes(
+            name,
+            extractHCodes(analysis.chemical.ghs?.hazardStatements),
+        );
+    // Names such as "sulfuric acid, cesium salt" are supplier aliases for a
+    // salt, not free-acid evidence. Keep an explicit acid category/formula or
+    // corrosivity proof authoritative, then reject the alias-only route.
+    if (isExplicitAcid) return true;
+    if (isLikelyMetalSaltFormula(molecularFormula)) return false;
     return analysis.category === 'ACID' ||
         ACID_IDENTITY_CAS.has(casNumber?.trim() ?? '') ||
         ACID_IDENTITY_FORMULAS.has(normalizedFormula(molecularFormula)) ||
+        isCorrosiveAcidByNameAndHCodes(
+            name,
+            extractHCodes(analysis.chemical.ghs?.hazardStatements),
+        ) ||
         /\b(?:hydrochloric|sulfuric|sulphuric|nitric|phosphoric|perchloric|hydrofluoric|acetic|formic)\s+acid\b|염산|황산|질산|인산|과염소산|불산|아세트산|개미산/i.test(name);
 };
 
@@ -223,6 +260,9 @@ const hasValidMeasuredBatchPh = (batch: WasteBatchDraft): boolean => {
         measuredBatchPh >= 0 &&
         measuredBatchPh <= 14;
 };
+
+const hasApprovedPredictedBatchPh = (value: number | undefined): value is number =>
+    value !== undefined && Number.isFinite(value) && value > 2.2 && value < 12.3;
 
 const getLegalWastePhClass = (batch: WasteBatchDraft): WasteLegalPhClass => {
     if (batch.matrix !== 'aqueous' || !hasValidMeasuredBatchPh(batch)) return 'unknown';
@@ -478,6 +518,7 @@ const selectRouting = (
     hasAlkaliMixingRole: boolean,
     hasAcidIdentity: boolean,
     hasAlkaliIdentity: boolean,
+    approvedPredictedBatchPh: number | undefined,
 ): WasteRoutingSelection => {
     if (batch.incidentContext === 'broken' || batch.incidentContext === 'leak') {
         return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'special_rule' };
@@ -497,11 +538,18 @@ const selectRouting = (
         hazards.has('SELF_REACTIVE') || hazards.has('PYROPHORIC')) {
         return { streamCode: 'REACTIVE_OXIDIZER', routingBasis: 'special_rule' };
     }
-    if (hazards.has('CYANIDE') || hazards.has('SULFIDE') || categories.has('CYANIDE')) {
+    // Cyanide remains the most restrictive dedicated stream.  A metal
+    // sulfide, however, must not lose its heavy-metal route just because its
+    // formula also contains sulfur; the separate flags retain both facts for
+    // compatibility checks and institutional policy.
+    if (hazards.has('CYANIDE') || (categories.has('CYANIDE') && !hazards.has('SULFIDE'))) {
         return { streamCode: 'CYANIDE_SULFIDE', routingBasis: 'special_rule' };
     }
     if (hazards.has('HEAVY_METAL') || categories.has('HEAVY_METAL')) {
         return { streamCode: 'HEAVY_METAL', routingBasis: 'special_rule' };
+    }
+    if (hazards.has('SULFIDE') || categories.has('CYANIDE')) {
+        return { streamCode: 'CYANIDE_SULFIDE', routingBasis: 'special_rule' };
     }
     if (hasAcidMixingRole && hasAlkaliMixingRole && batch.matrix !== 'aqueous') {
         return {
@@ -524,7 +572,14 @@ const selectRouting = (
         }
         return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
     }
-    if (batch.matrix === 'organic_halogenated' || categories.has('ORGANIC_HALOGEN')) {
+    // A known halogenated component keeps the conservative halogen stream,
+    // except for a confirmed aqueous acid/alkali batch. In that case the
+    // measured final-batch pH is the legal routing authority.
+    if (batch.matrix === 'organic_halogenated' || (
+        categories.has('ORGANIC_HALOGEN') && !(
+            batch.matrix === 'aqueous' && hasAcidMixingRole && hasAlkaliMixingRole
+        )
+    )) {
         return { streamCode: 'ORGANIC_HALOGENATED', routingBasis: 'matrix' };
     }
     if (batch.matrix === 'organic_non_halogenated') {
@@ -536,17 +591,23 @@ const selectRouting = (
 
     if (batch.matrix === 'aqueous') {
         if (hasAcidMixingRole && hasAlkaliMixingRole) {
-            if (batch.mixingState !== 'already_mixed' || !hasValidMeasuredBatchPh(batch)) {
+            if (batch.mixingState !== 'already_mixed') {
                 return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
             }
-            const measuredBatchPh = getMeasuredBatchPh(batch)!;
-            if (measuredBatchPh <= 2) {
-                return { streamCode: 'ACID_AQUEOUS', routingBasis: 'measured_batch_ph' };
+            if (hasValidMeasuredBatchPh(batch)) {
+                const measuredBatchPh = getMeasuredBatchPh(batch)!;
+                if (measuredBatchPh <= 2) {
+                    return { streamCode: 'ACID_AQUEOUS', routingBasis: 'measured_batch_ph' };
+                }
+                if (measuredBatchPh >= 12.5) {
+                    return { streamCode: 'ALKALI_AQUEOUS', routingBasis: 'measured_batch_ph' };
+                }
+                return { streamCode: 'AQUEOUS_OTHER', routingBasis: 'measured_batch_ph' };
             }
-            if (measuredBatchPh >= 12.5) {
-                return { streamCode: 'ALKALI_AQUEOUS', routingBasis: 'measured_batch_ph' };
+            if (hasApprovedPredictedBatchPh(approvedPredictedBatchPh)) {
+                return { streamCode: 'AQUEOUS_OTHER', routingBasis: 'predicted_batch_ph' };
             }
-            return { streamCode: 'AQUEOUS_OTHER', routingBasis: 'measured_batch_ph' };
+            return { streamCode: 'SPECIAL_REVIEW', routingBasis: 'unresolved' };
         }
         if (hasAcidIdentity) {
             return { streamCode: 'ACID_AQUEOUS', routingBasis: 'identity' };
@@ -576,6 +637,28 @@ const pushMissing = (
 ): void => {
     if (!target.includes(field)) target.push(field);
 };
+
+/**
+ * A verified solid matrix is enough to use the common contaminated-solid
+ * stream only after all hazardous precedence rules have run. This intentionally
+ * applies to UNKNOWN components only: a known cyanide, metal, fluoride,
+ * reactive, or special hazard retains its more specific route or hold.
+ */
+const isSafeVerifiedSolidFallback = (component: WasteComponent): boolean => (
+    component.category === 'UNKNOWN' &&
+    component.identityConfidence === 'verified' &&
+    (component.ghsDataStatus === 'verified' || component.hazardDataConfirmedByUser === true) &&
+    !component.hazardFlags.some((flag) => (
+        flag === 'REACTIVE' ||
+        flag === 'OXIDIZER' ||
+        flag === 'EXPLOSIVE' ||
+        flag === 'SELF_REACTIVE' ||
+        flag === 'PYROPHORIC' ||
+        flag === 'WATER_REACTIVE' ||
+        flag === 'HYDROFLUORIC_ACID' ||
+        flag === 'FLUORIDE'
+    ))
+);
 
 /**
  * Deterministic V2 decision engine. Compatibility DANGER rules always win,
@@ -618,6 +701,29 @@ export function analyzeWasteBatch(
         });
     }
 
+    // Keep this batch-level guard in addition to the pairwise compatibility
+    // checker. An organic but corrosive acid can carry an acid identity in its
+    // CAS/formula or GHS evidence without the legacy single-value category
+    // being ACID; it must still never be combined with cyanide or sulfide.
+    if (hasAcid && hazards.has('CYANIDE')) {
+        pushReason(blockingReasons, {
+            code: 'dangerous_compatibility',
+            messageKey: 'compat_acid_cyanide',
+            ruleId: 'acid_cyanide',
+        });
+    }
+    if (hasAcid && hazards.has('SULFIDE')) {
+        pushReason(blockingReasons, {
+            code: 'dangerous_compatibility',
+            messageKey: 'compat_acid_sulfide',
+            ruleId: 'acid_sulfide',
+        });
+    }
+
+    const approvedPredictedBatchPh = hasApprovedPredictedBatchPh(options.approvedPredictedBatchPh)
+        ? options.approvedPredictedBatchPh
+        : undefined;
+
     if (hasAcidAlkaliPair) {
         if (batch.mixingState === 'separate') {
             pushReason(blockingReasons, {
@@ -627,7 +733,7 @@ export function analyzeWasteBatch(
             });
         } else if (batch.mixingState !== 'already_mixed') {
             pushMissing(missingFields, 'mixing_state');
-        } else if (batch.matrix === 'aqueous' && !hasValidMeasuredBatchPh(batch)) {
+        } else if (batch.matrix === 'aqueous' && !hasValidMeasuredBatchPh(batch) && !approvedPredictedBatchPh) {
             pushMissing(missingFields, 'measured_ph');
         } else if (batch.matrix !== 'aqueous' && batch.matrix !== 'unknown') {
             pushReason(blockingReasons, {
@@ -721,11 +827,17 @@ export function analyzeWasteBatch(
     if (batch.components.some(({ identityConfidence }) => identityConfidence !== 'verified')) {
         pushMissing(missingFields, 'identity');
     }
-    if (batch.components.some(({ category, ghsDataStatus, hazardDataConfirmedByUser }) => (
-        category === 'UNKNOWN' ||
-        (ghsDataStatus !== 'verified' && !hazardDataConfirmedByUser)
+    if (batch.components.some(({ ghsDataStatus, hazardDataConfirmedByUser }) => (
+        ghsDataStatus !== 'verified' && !hazardDataConfirmedByUser
     ))) {
         pushMissing(missingFields, 'hazard_data');
+    }
+    const unknownCategoryComponents = batch.components.filter(({ category }) => category === 'UNKNOWN');
+    const canUseSolidFallback = batch.matrix === 'solid_slurry' &&
+        unknownCategoryComponents.length > 0 &&
+        unknownCategoryComponents.every(isSafeVerifiedSolidFallback);
+    if (unknownCategoryComponents.length > 0 && !canUseSolidFallback) {
+        pushMissing(missingFields, 'classification');
     }
     if (batch.components.some((component) => {
         if (component.sourceType !== 'inventory' || !component.inventoryId) return false;
@@ -759,6 +871,7 @@ export function analyzeWasteBatch(
         hasAlkali,
         hasAcidIdentity,
         hasAlkaliIdentity,
+        approvedPredictedBatchPh,
     );
     const measuredBatchPh = getMeasuredBatchPh(batch);
     const corrosivityPhScreen = batch.matrix !== 'aqueous' || !hasValidMeasuredBatchPh(batch)

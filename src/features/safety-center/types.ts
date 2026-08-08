@@ -68,6 +68,9 @@ export interface SafetyCenterRiskItem {
   cabinet_name: string | null;
   storage_location_name: string | null;
   expiry_date: string | null;
+  manufacturer_date_type: 'expiry' | 'minimum_shelf_life' | 'unlabeled';
+  received_date: string | null;
+  opened_date: string | null;
   remaining_percent: number | null;
   /** Fresh lab-scoped GHS data returned by the Safety Center RPC when available. */
   ghs_h_codes?: string[] | null;

@@ -1,5 +1,6 @@
 import type { InventoryItem } from '../../services/inventoryService';
 import { getExpiryStatus } from '../../utils/expiryStatus';
+import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import {
   classifyInventoryHazard,
   type InventoryHazardFilterCategory,
@@ -213,6 +214,9 @@ export function asInventoryItem(item: SafetyCenterRiskItem): InventoryItem {
     storage_location_id: null,
     product_id: null,
     expiry_date: item.expiry_date,
+    manufacturer_date_type: item.manufacturer_date_type,
+    received_date: item.received_date,
+    opened_date: item.opened_date,
     memo: null,
     remaining_percent: item.remaining_percent,
     created_at: item.created_at,
@@ -238,7 +242,7 @@ export function assessRiskItem(item: SafetyCenterRiskItem): RiskItemAssessment {
     allowNameCandidates: true,
   });
   const hazardCategories = hazard.filterCategories;
-  const expiry = getExpiryStatus(item.expiry_date);
+  const expiry = getExpiryStatus(hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date : null);
   const isMissingCas = !item.cas_number?.trim();
   const isLowRemaining = (item.remaining_percent ?? 100) <= 10;
   const ghsDataNeedsReview = item.ghs_data_status === 'transient_error';
@@ -431,7 +435,7 @@ export function filterRiskItems(input: {
     if (input.casState === 'present' && !item.cas_number?.trim()) return false;
 
     if (input.expiryState !== 'all') {
-      const expiry = getExpiryStatus(item.expiry_date);
+      const expiry = getExpiryStatus(hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date : null);
       if (input.expiryState === 'expired' && expiry?.level !== 'expired') return false;
       if (input.expiryState === 'warning' && expiry?.level !== 'warning' && expiry?.level !== 'critical') return false;
       if (input.expiryState === 'none' && expiry) return false;

@@ -2,6 +2,10 @@ import { generateGeminiText, json } from './_utils'
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
 import { parseCapacityMeasurement } from '../../../src/utils/capacityParser'
 import { normalizeExpiryDate } from '../../../src/utils/dateValidation'
+import {
+  isManufacturerDateType,
+  type ManufacturerDateType,
+} from '../../../src/utils/manufacturerDate'
 
 interface Env {
   GEMINI_API_KEY?: string
@@ -21,6 +25,7 @@ export interface ReagentLabelFieldSnapshots {
   casNumber: ScanFieldSnapshot<string>
   capacity: ScanFieldSnapshot<string>
   expiryDate: ScanFieldSnapshot<string>
+  manufacturerDateType: ScanFieldSnapshot<ManufacturerDateType>
   brand: ScanFieldSnapshot<string>
   productNumber: ScanFieldSnapshot<string>
   containerType: ScanFieldSnapshot<ContainerType>
@@ -32,6 +37,7 @@ export interface ReagentLabelScanResponse {
   suggestedContainerType: ContainerType | null
   capacity?: string
   expiryDate?: string
+  manufacturerDateType?: ManufacturerDateType
   brand?: string
   productNumber?: string
   fieldSnapshots: ReagentLabelFieldSnapshots
@@ -178,6 +184,32 @@ function validateExpiryField(
   }
 }
 
+function validateManufacturerDateTypeField(
+  raw: { value: string | null; confidence: number },
+): ScanFieldSnapshot<ManufacturerDateType> {
+  if (!raw.value) {
+    return { value: null, confidence: raw.confidence, validation: 'missing' }
+  }
+
+  const normalized = raw.value.trim().toLowerCase()
+  const aliases: Record<string, ManufacturerDateType> = {
+    expiry: 'expiry',
+    expiration: 'expiry',
+    exp: 'expiry',
+    use_by: 'expiry',
+    'use by': 'expiry',
+    minimum_shelf_life: 'minimum_shelf_life',
+    'minimum shelf life': 'minimum_shelf_life',
+    unlabeled: 'unlabeled',
+  }
+  const value = aliases[normalized] || (isManufacturerDateType(normalized) ? normalized : null)
+  return {
+    value,
+    confidence: raw.confidence,
+    validation: value ? 'valid' : 'review_required',
+  }
+}
+
 function validateContainerField(
   raw: { value: string | null; confidence: number },
 ): ScanFieldSnapshot<ContainerType> {
@@ -229,6 +261,16 @@ function getReviewReasons(fields: ReagentLabelFieldSnapshots): string[] {
     }
   })
 
+  if (fields.expiryDate.validation === 'valid' && fields.expiryDate.value) {
+    if (fields.manufacturerDateType.validation !== 'valid'
+      || !fields.manufacturerDateType.value
+      || fields.manufacturerDateType.value === 'unlabeled') {
+      reasons.add('manufacturerDateType_review_required')
+    } else if (fields.manufacturerDateType.confidence < AUTO_PLACE_CONFIDENCE) {
+      reasons.add('manufacturerDateType_low_confidence')
+    }
+  }
+
   return [...reasons]
 }
 
@@ -248,6 +290,7 @@ export function buildReagentLabelScanResponse(input: unknown): ReagentLabelScanR
     casNumber: validateCasField(readRawField(input, 'casNumber')),
     capacity: validateCapacityField(readRawField(input, 'capacity')),
     expiryDate: validateExpiryField(readRawField(input, 'expiryDate')),
+    manufacturerDateType: validateManufacturerDateTypeField(readRawField(input, 'manufacturerDateType')),
     brand: validateTextField(readRawField(input, 'brand'), 200),
     productNumber: validateTextField(readRawField(input, 'productNumber'), 200),
     containerType: validateContainerField(container),
@@ -266,6 +309,9 @@ export function buildReagentLabelScanResponse(input: unknown): ReagentLabelScanR
       : null,
     capacity: validValue(fields.capacity),
     expiryDate: validValue(fields.expiryDate),
+    manufacturerDateType: fields.manufacturerDateType.validation === 'valid'
+      ? fields.manufacturerDateType.value || undefined
+      : undefined,
     brand: validValue(fields.brand),
     productNumber: validValue(fields.productNumber),
     fieldSnapshots: fields,
@@ -300,6 +346,7 @@ Extract only information that is visibly supported by the image. Return one JSON
     "casNumber": { "value": "<CAS number only or null>", "confidence": 0.0 },
     "capacity": { "value": "<amount with unit, such as 500 mL or 1 kg, or null>", "confidence": 0.0 },
     "expiryDate": { "value": "<YYYY-MM-DD or null>", "confidence": 0.0 },
+    "manufacturerDateType": { "value": "<expiry, minimum_shelf_life, unlabeled, or null>", "confidence": 0.0 },
     "brand": { "value": "<manufacturer/brand or null>", "confidence": 0.0 },
     "productNumber": { "value": "<catalog/product number or null>", "confidence": 0.0 },
     "containerType": { "value": "<A, B, C, D, or null>", "confidence": 0.0 }
@@ -316,7 +363,9 @@ Rules:
 - confidence must be a number from 0 to 1 for each field
 - use null when text is hidden, ambiguous, or not visible
 - never guess a container type and never default an unknown container to A
-- do not infer capacity, expiry, brand, product number, or CAS from the chemical name
+ - manufacturerDateType must be expiry only when the label explicitly says EXP, expiry, expiration, or use by; it must be minimum_shelf_life only when the label explicitly says minimum shelf life (or equivalent)
+ - return null for manufacturerDateType when a date is visible but its label type is not visible or is ambiguous; use unlabeled only when no manufacturer date is printed on the visible label
+ - do not infer capacity, expiry, brand, product number, or CAS from the chemical name
 - preserve the reagent name in the language shown on the label
 - return only the JSON object`
 

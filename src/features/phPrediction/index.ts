@@ -7,6 +7,12 @@ export {
 } from './predictor';
 export { PH_PREDICTION_MODEL_VERSION } from './modelMetadata';
 export {
+    getPredictedPhForRouting,
+    PREDICTED_PH_ROUTING_MAX_EXCLUSIVE,
+    PREDICTED_PH_ROUTING_MIN_EXCLUSIVE,
+} from './routing';
+export type { PredictedPhRoutingCandidate } from './routing';
+export {
     DEFAULT_PH_CATALOG,
     PH_ACID_BASE_FAMILIES,
     PH_CATALOG_BY_ID,

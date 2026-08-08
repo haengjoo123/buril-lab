@@ -49,6 +49,21 @@ describe('checkCompatibility V2 safety corrections', () => {
         ]));
     });
 
+    it.each([
+        ['Methanesulfonic acid', 'CH4O3S'],
+        ['p-Toluenesulfonic acid', 'C7H8O3S'],
+        ['Trifluoroacetic acid', 'C2HF3O2'],
+    ])('blocks a corrosive organic acid (%s) with cyanide even without a reference pH', (name, formula) => {
+        const warnings = checkCompatibility([
+            item(name, formula, 'ORGANIC_NON_HALOGEN', { hCodes: ['H314'], isOrganic: true }),
+            item('Sodium cyanide', 'NaCN', 'CYANIDE'),
+        ]);
+
+        expect(warnings).toEqual(expect.arrayContaining([
+            expect.objectContaining({ severity: 'DANGER', ruleId: 'acid_cyanide' }),
+        ]));
+    });
+
     it('does not mistake sodium cyanide for elemental sodium metal', () => {
         const warnings = checkCompatibility([
             item('Hydrochloric acid', 'HCl', 'ACID'),

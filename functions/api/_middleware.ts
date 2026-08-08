@@ -96,6 +96,11 @@ const LIMIT_CONFIGS = {
     ip: { count: 5, window: "1 m" },
     pattern: /^\/api\/reagents\//,
   },
+  WASTE: {
+    user: { count: 30, window: "1 m" },
+    ip: { count: 2, window: "1 m" },
+    pattern: /^\/api\/waste\//,
+  },
 } as const
 
 const PROTECTED_API_PATTERNS = [
@@ -104,6 +109,7 @@ const PROTECTED_API_PATTERNS = [
   /^\/api\/vision\//,
   /^\/api\/voice\//,
   /^\/api\/reagents\//,
+  /^\/api\/waste\//,
 ] as const
 
 function isProtectedApiPath(path: string): boolean {
@@ -216,6 +222,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   else if (LIMIT_CONFIGS.AI.pattern.test(path)) category = 'AI'
   else if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) category = 'KOSHA'
   else if (LIMIT_CONFIGS.REAGENTS.pattern.test(path)) category = 'REAGENTS'
+  else if (LIMIT_CONFIGS.WASTE.pattern.test(path)) category = 'WASTE'
 
   // If no category matches, we still apply a global safety limit
   const limitConfig = category 

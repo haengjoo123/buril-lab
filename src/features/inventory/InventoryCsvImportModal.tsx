@@ -20,6 +20,14 @@ import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/gues
 import { getShelfSectionCount, normalizeShelfDividers } from '../../utils/shelfSections';
 import { parseCapacityMeasurement } from '../../utils/capacityParser';
 import { normalizeExpiryDate } from '../../utils/dateValidation';
+import { downloadRowsAsCsv, parseCsvText } from '../../utils/csvFiles';
+import {
+    DEFAULT_MANUFACTURER_DATE_TYPE,
+    getManufacturerDateLabelKey,
+    hasManufacturerDate,
+    isManufacturerDateType,
+    type ManufacturerDateType,
+} from '../../utils/manufacturerDate';
 import {
     INVENTORY_IMPORT_HEADER_KEYS,
     INVENTORY_IMPORT_TEMPLATE_HEADERS_KO,
@@ -99,6 +107,13 @@ const HEADER_ALIASES: Record<string, string[]> = {
 
 const normalize = (value: string) => value.trim().toLowerCase();
 
+Object.assign(HEADER_ALIASES, {
+    manufacturer_date_type: ['manufacturer_date_type', 'manufacturer date type', 'date type', '제조사 날짜 유형', '날짜 유형', '유효기한 유형'],
+    manufacturer_date: ['manufacturer_date', 'manufacturer date', '제조사 날짜', '제조사일자'],
+    received_date: ['received_date', 'received date', '입고일', '입고 날짜'],
+    opened_date: ['opened_date', 'opened date', '개봉일', '개봉 날짜'],
+});
+
 const STORAGE_TYPE_ALIAS_MAP: Record<string, 'other' | 'cabinet'> = {
     other: 'other',
     '기타': 'other',
@@ -132,6 +147,22 @@ const parseOptionalPositiveInteger = (raw: string): number | null => {
 
 const toIsoDate = (raw: string): string | null => {
     return normalizeExpiryDate(raw);
+};
+
+const parseManufacturerDateType = (raw: string): ManufacturerDateType | null => {
+    const normalized = normalizeImportToken(raw);
+    if (!normalized) return null;
+
+    if (['expiry', 'expiration', 'exp', '유효기한', '유효기간', '만료일'].some((value) => normalizeImportToken(value) === normalized)) {
+        return 'expiry';
+    }
+    if (['minimum shelf life', 'minimum_shelf_life', '최소 보증기한', '최소 보증기간'].some((value) => normalizeImportToken(value) === normalized)) {
+        return 'minimum_shelf_life';
+    }
+    if (['unlabeled', 'not printed', '미표기', '없음'].some((value) => normalizeImportToken(value) === normalized)) {
+        return 'unlabeled';
+    }
+    return isManufacturerDateType(raw) ? raw : null;
 };
 
 export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
@@ -313,7 +344,11 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         const shelfLevelRaw = (source.shelf_level || '').trim();
         const shelfSectionRaw = (source.shelf_section || '').trim();
         const containerTypeRaw = (source.container_type || '').trim();
-        const expiryDateRaw = (source.expiry_date || '').trim();
+        const manufacturerDateTypeRaw = (source.manufacturer_date_type || '').trim();
+        const manufacturerDateRaw = (source.manufacturer_date || '').trim();
+        const legacyExpiryDateRaw = (source.expiry_date || '').trim();
+        const receivedDateRaw = (source.received_date || '').trim();
+        const openedDateRaw = (source.opened_date || '').trim();
         const memo = (source.memo || '').trim();
 
         if (!name) reasons.push(t('inventory_csv_reason_name_required'));
@@ -409,9 +444,33 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             ));
         }
 
-        const expiryDate = toIsoDate(expiryDateRaw);
-        if (expiryDateRaw && !expiryDate) {
-            reasons.push(t('inventory_csv_reason_expiry_invalid'));
+        const parsedManufacturerDateType = parseManufacturerDateType(manufacturerDateTypeRaw);
+        let manufacturerDateType: ManufacturerDateType = DEFAULT_MANUFACTURER_DATE_TYPE;
+        if (manufacturerDateTypeRaw && !parsedManufacturerDateType) {
+            reasons.push(t('inventory_csv_reason_manufacturer_date_type_invalid'));
+        } else if (parsedManufacturerDateType) {
+            manufacturerDateType = parsedManufacturerDateType;
+        } else if (legacyExpiryDateRaw) {
+            // The pre-existing expiry_date column remains backwards compatible.
+            manufacturerDateType = 'expiry';
+        }
+
+        const manufacturerDateSource = manufacturerDateRaw || legacyExpiryDateRaw;
+        const manufacturerDate = toIsoDate(manufacturerDateSource);
+        if (manufacturerDateSource && !manufacturerDate) {
+            reasons.push(t('inventory_csv_reason_manufacturer_date_invalid'));
+        }
+        if (manufacturerDateType === 'unlabeled' && manufacturerDateSource) {
+            reasons.push(t('inventory_csv_reason_manufacturer_date_unlabeled'));
+        }
+
+        const receivedDate = toIsoDate(receivedDateRaw);
+        if (receivedDateRaw && !receivedDate) {
+            reasons.push(t('inventory_csv_reason_received_date_invalid'));
+        }
+        const openedDate = toIsoDate(openedDateRaw);
+        if (openedDateRaw && !openedDate) {
+            reasons.push(t('inventory_csv_reason_opened_date_invalid'));
         }
 
         const input: CreateInventoryInput | null = reasons.length === 0
@@ -425,7 +484,10 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                 storage_type: storageType || 'other',
                 storage_location_id: storageType === 'other' ? (locationId || undefined) : undefined,
                 cabinet_id: storageType === 'cabinet' ? (cabinetId || undefined) : undefined,
-                expiry_date: expiryDate || undefined,
+                manufacturer_date_type: manufacturerDateType,
+                expiry_date: manufacturerDate || undefined,
+                received_date: receivedDate || undefined,
+                opened_date: openedDate || undefined,
                 memo: memo || undefined,
             }
             : null;
@@ -502,9 +564,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         */
     };
 
-    const handleInventoryExcelDownload = async () => {
-        const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
-        const rowsForExport = items.map((item) => {
+    const buildRowsForExport = () => items.map((item) => {
             const shelfLabel = item.storage_type === 'cabinet' && typeof item.shelf_level === 'number'
                 ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})`
                 : '';
@@ -521,21 +581,36 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                 [t('inventory_capacity')]: item.capacity || '',
                 [t('inventory_storage_type')]: item.storage_type === 'cabinet' ? t('inventory_loc_cabinet') : t('inventory_loc_other'),
                 [t('inventory_storage_location')]: storageLabel,
-                [t('inventory_expiry_date')]: item.expiry_date || '',
+                [t('manufacturer_date_type_label')]: t(getManufacturerDateLabelKey(item.manufacturer_date_type)),
+                [t('manufacturer_date_label')]: hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date || '' : '',
+                [t('inventory_received_date')]: item.received_date || '',
+                [t('inventory_opened_date')]: item.opened_date || '',
                 [t('inventory_memo')]: item.memo || '',
             };
         });
 
+    const getExportDateToken = () => {
         const today = new Date();
-        const dateToken = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-        await downloadRowsAsXlsx(rowsForExport, 'Inventory', `inventory_list_${dateToken}.xlsx`);
+        return `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    };
+
+    const handleInventoryExcelDownload = async () => {
+        const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
+        const dateToken = getExportDateToken();
+        await downloadRowsAsXlsx(buildRowsForExport(), 'Inventory', `inventory_list_${dateToken}.xlsx`);
+    };
+
+    const handleInventoryCsvDownload = async () => {
+        const dateToken = getExportDateToken();
+        await downloadRowsAsCsv(buildRowsForExport(), `inventory_list_${dateToken}.csv`);
     };
 
     const parseImportFile = async (file: File) => {
         const lowerName = file.name.toLowerCase();
         const isExcel = lowerName.endsWith('.xlsx');
+        const isCsv = lowerName.endsWith('.csv') || file.type === 'text/csv';
 
-        if (!isExcel) {
+        if (!isExcel && !isCsv) {
             setGlobalError(t('inventory_csv_error_only_csv'));
             return;
         }
@@ -546,8 +621,12 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
         setLastFileName(file.name);
 
         try {
-            const { readFirstWorksheetRows } = await import('../../utils/excelFiles');
-            const jsonData = await readFirstWorksheetRows(file);
+            const jsonData = isCsv
+                ? parseCsvText(await file.text())
+                : await (async () => {
+                    const { readFirstWorksheetRows } = await import('../../utils/excelFiles');
+                    return readFirstWorksheetRows(file);
+                })();
             
             if (jsonData.length < 1) {
                 setGlobalError(t('inventory_csv_error_no_usable_rows'));
@@ -745,6 +824,9 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         productNumber: input.product_number || undefined,
                         brand: input.brand || undefined,
                         expiryDate: input.expiry_date || undefined,
+                        manufacturerDateType: input.manufacturer_date_type || DEFAULT_MANUFACTURER_DATE_TYPE,
+                        receivedDate: input.received_date || undefined,
+                        openedDate: input.opened_date || undefined,
                     }, targetShelf ? {
                         shelfId: targetShelf.id,
                         sectionIndex: row.targetSectionIndex,
@@ -877,6 +959,14 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                     </button>
 
                     <button
+                        onClick={handleInventoryCsvDownload}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-cyan-200 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300"
+                    >
+                        <Download className="w-4 h-4" />
+                        {t('inventory_csv_download')}
+                    </button>
+
+                    <button
                         onClick={handleTemplateDownload}
                         disabled={isParsing || isImporting || isTemplateDownloading}
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -894,7 +984,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         {t('inventory_csv_upload')}
                         <input
                             type="file"
-                            accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             className="hidden"
                             onChange={handleFileChange}
                             disabled={isParsing || isImporting || isTemplateDownloading}

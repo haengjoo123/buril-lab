@@ -76,11 +76,13 @@ export interface Chemical {
 }
 
 export type AnalysisHazardWarningCode =
-    | 'acute_toxic'
-    | 'carcinogen_mutagen_reprotoxic'
-    | 'environmental_hazard'
-    | 'target_organ_toxic'
-    | 'u_listed_waste';
+      | 'acute_toxic'
+      | 'carcinogen_mutagen_reprotoxic'
+      | 'environmental_hazard'
+      | 'target_organ_toxic'
+      /** US RCRA P-list match; informational only in the Korean policy. */
+      | 'p_list_advisory'
+      | 'u_listed_waste';
 
 export interface AnalysisHazardWarning {
     code: AnalysisHazardWarningCode;
@@ -223,6 +225,7 @@ export type WasteRoutingBasis =
     | 'special_rule'
     | 'identity'
     | 'measured_batch_ph'
+    | 'predicted_batch_ph'
     | 'matrix'
     | 'unresolved';
 
@@ -359,6 +362,8 @@ export type WasteMissingField =
     | 'measured_ph'
     | 'identity'
     | 'hazard_data'
+    /** Identity/GHS are known, but the disposal family could not be derived safely. */
+    | 'classification'
     | 'additional_components'
     | 'fluoride_container'
     | 'inventory_quantity'
@@ -388,7 +393,7 @@ export type PhPredictionStatus =
 
 export type PhPredictionConfidence = 'good' | 'approximate' | 'unavailable';
 
-/** Informational prediction only; it is deliberately not a WasteRoutingBasis. */
+/** A prediction never authorizes routing by itself; that requires separate server approval. */
 export interface PhPredictionResult {
     status: PhPredictionStatus;
     value?: number;

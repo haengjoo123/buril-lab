@@ -7,6 +7,7 @@ function createConfidentFields(overrides: Record<string, unknown> = {}) {
     casNumber: { value: '67-64-1', confidence: 0.99 },
     capacity: { value: '500 mL', confidence: 0.96 },
     expiryDate: { value: '2028-02-29', confidence: 0.94 },
+    manufacturerDateType: { value: 'expiry', confidence: 0.94 },
     brand: { value: 'Merck', confidence: 0.93 },
     productNumber: { value: 'A-100', confidence: 0.92 },
     containerType: { value: 'A', confidence: 0.97 },
@@ -29,6 +30,7 @@ describe('reagent label scan validation', () => {
       casNumber: { value: '67-64-1', confidence: 0.99, validation: 'valid' },
       capacity: { value: '500 mL', confidence: 0.96, validation: 'valid' },
       expiryDate: { value: '2028-02-29', confidence: 0.94, validation: 'valid' },
+      manufacturerDateType: { value: 'expiry', confidence: 0.94, validation: 'valid' },
       brand: { value: 'Merck', confidence: 0.93, validation: 'valid' },
       productNumber: { value: 'A-100', confidence: 0.92, validation: 'valid' },
       containerType: { value: 'A', confidence: 0.97, validation: 'valid' },
@@ -107,6 +109,19 @@ describe('reagent label scan validation', () => {
     expect(unknown.reviewRequired).toBe(true)
     expect(unsupportedLegacyCode.suggestedContainerType).toBeNull()
     expect(unsupportedLegacyCode.fieldSnapshots.containerType.validation).toBe('review_required')
+  })
+
+  it('requires a user review when a date is readable but its label type is ambiguous', () => {
+    const result = buildReagentLabelScanResponse({
+      fields: createConfidentFields({
+        manufacturerDateType: { value: null, confidence: 0 },
+      }),
+    })
+
+    expect(result.expiryDate).toBe('2028-02-29')
+    expect(result.manufacturerDateType).toBeUndefined()
+    expect(result.reviewRequired).toBe(true)
+    expect(result.reviewReasons).toContain('manufacturerDateType_review_required')
   })
 
   it('keeps the existing API-key-missing error response', async () => {

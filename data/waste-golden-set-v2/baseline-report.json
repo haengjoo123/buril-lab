@@ -1,0 +1,2938 @@
+{
+  "schemaVersion": "2.3.0",
+  "datasetSha256": "db09644c2e6293dfa9edd36f1aec89a78913a7e8fd30a0058afecbd6c52aa853",
+  "generatedAt": "2026-08-08T05:16:12.603Z",
+  "total": 1000,
+  "strictMatches": 909,
+  "strictMatchRate": 0.909,
+  "conservativeHolds": 70,
+  "conservativeHoldRate": 0.07,
+  "unsafeAutomaticReady": 0,
+  "readyStreamMismatches": 0,
+  "recommendedStreamMismatches": 0,
+  "byStratum": {
+    "cyanide_sulfide": {
+      "total": 78,
+      "strictMatches": 71,
+      "strictMatchRate": 0.9102564102564102,
+      "conservativeHolds": 6,
+      "conservativeHoldRate": 0.07692307692307693,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "reactive_oxidizer": {
+      "total": 69,
+      "strictMatches": 69,
+      "strictMatchRate": 1,
+      "conservativeHolds": 0,
+      "conservativeHoldRate": 0,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "organic_non_halogenated": {
+      "total": 134,
+      "strictMatches": 119,
+      "strictMatchRate": 0.8880597014925373,
+      "conservativeHolds": 13,
+      "conservativeHoldRate": 0.09701492537313433,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "toxic_cmr": {
+      "total": 68,
+      "strictMatches": 59,
+      "strictMatchRate": 0.8676470588235294,
+      "conservativeHolds": 8,
+      "conservativeHoldRate": 0.11764705882352941,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "organic_halogenated": {
+      "total": 102,
+      "strictMatches": 84,
+      "strictMatchRate": 0.8235294117647058,
+      "conservativeHolds": 16,
+      "conservativeHoldRate": 0.1568627450980392,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "heavy_metal": {
+      "total": 134,
+      "strictMatches": 115,
+      "strictMatchRate": 0.8582089552238806,
+      "conservativeHolds": 15,
+      "conservativeHoldRate": 0.11194029850746269,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "inorganic_salt": {
+      "total": 66,
+      "strictMatches": 61,
+      "strictMatchRate": 0.9242424242424242,
+      "conservativeHolds": 2,
+      "conservativeHoldRate": 0.030303030303030304,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "solid_other": {
+      "total": 136,
+      "strictMatches": 131,
+      "strictMatchRate": 0.9632352941176471,
+      "conservativeHolds": 3,
+      "conservativeHoldRate": 0.022058823529411766,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "acid_alkali": {
+      "total": 108,
+      "strictMatches": 105,
+      "strictMatchRate": 0.9722222222222222,
+      "conservativeHolds": 1,
+      "conservativeHoldRate": 0.009259259259259259,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    },
+    "fluorine_organofluorine": {
+      "total": 105,
+      "strictMatches": 95,
+      "strictMatchRate": 0.9047619047619048,
+      "conservativeHolds": 6,
+      "conservativeHoldRate": 0.05714285714285714,
+      "unsafeAutomaticReady": 0,
+      "readyStreamMismatches": 0,
+      "recommendedStreamMismatches": 0
+    }
+  },
+  "mismatches": [
+    {
+      "id": "v2-0005-74-90-8",
+      "casNumber": "74-90-8",
+      "stratum": "cyanide_sulfide",
+      "expected": {
+        "status": "ready",
+        "streamCode": "CYANIDE_SULFIDE",
+        "reason": "Single-substance standard scenario; evidence-specific CYANIDE_SULFIDE common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0016-12211-52-8",
+      "casNumber": "12211-52-8",
+      "stratum": "cyanide_sulfide",
+      "expected": {
+        "status": "ready",
+        "streamCode": "CYANIDE_SULFIDE",
+        "reason": "Single-substance standard scenario; evidence-specific CYANIDE_SULFIDE common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0026-557-21-1",
+      "casNumber": "557-21-1",
+      "stratum": "cyanide_sulfide",
+      "expected": {
+        "status": "ready",
+        "streamCode": "CYANIDE_SULFIDE",
+        "reason": "Single-substance standard scenario; evidence-specific CYANIDE_SULFIDE common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0027-107-12-0",
+      "casNumber": "107-12-0",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0037-14402-89-2",
+      "casNumber": "14402-89-2",
+      "stratum": "cyanide_sulfide",
+      "expected": {
+        "status": "ready",
+        "streamCode": "CYANIDE_SULFIDE",
+        "reason": "Single-substance standard scenario; evidence-specific CYANIDE_SULFIDE common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0053-75-15-0",
+      "casNumber": "75-15-0",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0056-7783-06-4",
+      "casNumber": "7783-06-4",
+      "stratum": "cyanide_sulfide",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a gas or compressed gas, but no absorption, capture, or liquid-waste composition is evidenced; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0088-1344-48-5",
+      "casNumber": "1344-48-5",
+      "stratum": "cyanide_sulfide",
+      "expected": {
+        "status": "ready",
+        "streamCode": "CYANIDE_SULFIDE",
+        "reason": "Single-substance standard scenario; evidence-specific CYANIDE_SULFIDE common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0103-31119-53-6",
+      "casNumber": "31119-53-6",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0106-1191-79-3",
+      "casNumber": "1191-79-3",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0124-1345-09-1",
+      "casNumber": "1345-09-1",
+      "stratum": "cyanide_sulfide",
+      "expected": {
+        "status": "ready",
+        "streamCode": "CYANIDE_SULFIDE",
+        "reason": "Single-substance standard scenario; evidence-specific CYANIDE_SULFIDE common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0130-1306-19-0",
+      "casNumber": "1306-19-0",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0131-10124-36-4",
+      "casNumber": "10124-36-4",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0133-10108-64-2",
+      "casNumber": "10108-64-2",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0169-10022-68-1",
+      "casNumber": "10022-68-1",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0185-68876-84-6",
+      "casNumber": "68876-84-6",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a gas or compressed gas, but no absorption, capture, or liquid-waste composition is evidenced; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0186-7439-97-6",
+      "casNumber": "7439-97-6",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0188-15385-58-7",
+      "casNumber": "15385-58-7",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0189-10112-91-1",
+      "casNumber": "10112-91-1",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0191-7783-32-6",
+      "casNumber": "7783-32-6",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0194-12344-40-0",
+      "casNumber": "12344-40-0",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0197-7616-83-3",
+      "casNumber": "7616-83-3",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0198-22967-92-6",
+      "casNumber": "22967-92-6",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0199-7784-03-4",
+      "casNumber": "7784-03-4",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0210-12037-01-3",
+      "casNumber": "12037-01-3",
+      "stratum": "inorganic_salt",
+      "expected": {
+        "status": "ready",
+        "streamCode": "AQUEOUS_OTHER",
+        "reason": "Single-substance standard scenario; evidence-specific AQUEOUS_OTHER common stream."
+      },
+      "actual": {
+        "status": "needs_input",
+        "streamCode": "AQUEOUS_OTHER",
+        "reasons": [],
+        "missingFields": [
+          "classification"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "insufficient_evidence",
+        "reason": "The stored single-substance scenario does not establish enough material-form or routing evidence for automatic disposal classification.",
+        "evidenceSections": [
+          3,
+          9,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0223-94-17-7",
+      "casNumber": "94-17-7",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0225-3071-32-7",
+      "casNumber": "3071-32-7",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0241-12738-76-0",
+      "casNumber": "12738-76-0",
+      "stratum": "inorganic_salt",
+      "expected": {
+        "status": "ready",
+        "streamCode": "AQUEOUS_OTHER",
+        "reason": "Single-substance standard scenario; evidence-specific AQUEOUS_OTHER common stream."
+      },
+      "actual": {
+        "status": "needs_input",
+        "streamCode": "AQUEOUS_OTHER",
+        "reasons": [],
+        "missingFields": [
+          "classification"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "insufficient_evidence",
+        "reason": "The stored single-substance scenario does not establish enough material-form or routing evidence for automatic disposal classification.",
+        "evidenceSections": [
+          3,
+          9,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0251-1705-60-8",
+      "casNumber": "1705-60-8",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0255-7782-79-8",
+      "casNumber": "7782-79-8",
+      "stratum": "acid_alkali",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0257-20762-60-1",
+      "casNumber": "20762-60-1",
+      "stratum": "inorganic_salt",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0258-79-19-6",
+      "casNumber": "79-19-6",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0260-2231-57-4",
+      "casNumber": "2231-57-4",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0264-497-18-7",
+      "casNumber": "497-18-7",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0269-6610-29-3",
+      "casNumber": "6610-29-3",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0295-57-14-7",
+      "casNumber": "57-14-7",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0298-13775-80-9",
+      "casNumber": "13775-80-9",
+      "stratum": "inorganic_salt",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0300-1073-69-4",
+      "casNumber": "1073-69-4",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0305-640-19-7",
+      "casNumber": "640-19-7",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0315-684-16-2",
+      "casNumber": "684-16-2",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a gas or compressed gas, but no absorption, capture, or liquid-waste composition is evidenced; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0318-367-11-3",
+      "casNumber": "367-11-3",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0321-16961-83-4",
+      "casNumber": "16961-83-4",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "SPECIAL_REVIEW",
+        "reason": "Inorganic fluoride/HF-family identity requires container-compatibility and institution-specific handling confirmation."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0328-3863-11-4",
+      "casNumber": "3863-11-4",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0343-453-18-9",
+      "casNumber": "453-18-9",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0345-382-21-8",
+      "casNumber": "382-21-8",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a gas or compressed gas, but no absorption, capture, or liquid-waste composition is evidenced; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0346-62-74-8",
+      "casNumber": "62-74-8",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0350-420-46-2",
+      "casNumber": "420-46-2",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a gas or compressed gas, but no absorption, capture, or liquid-waste composition is evidenced; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0377-685-88-1",
+      "casNumber": "685-88-1",
+      "stratum": "fluorine_organofluorine",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0402-96-24-2",
+      "casNumber": "96-24-2",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0406-327-98-0",
+      "casNumber": "327-98-0",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0407-78-95-5",
+      "casNumber": "78-95-5",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0411-126-99-8",
+      "casNumber": "126-99-8",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0419-1897-45-6",
+      "casNumber": "1897-45-6",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0420-4109-96-0",
+      "casNumber": "4109-96-0",
+      "stratum": "inorganic_salt",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a gas or compressed gas, but no absorption, capture, or liquid-waste composition is evidenced; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0431-5836-73-7",
+      "casNumber": "5836-73-7",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0432-12663-46-6",
+      "casNumber": "12663-46-6",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0442-109-09-1",
+      "casNumber": "109-09-1",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0453-79-11-8",
+      "casNumber": "79-11-8",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0461-87-86-5",
+      "casNumber": "87-86-5",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0479-107-14-2",
+      "casNumber": "107-14-2",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0480-107-20-0",
+      "casNumber": "107-20-0",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0482-111-44-4",
+      "casNumber": "111-44-4",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0489-1825-21-4",
+      "casNumber": "1825-21-4",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0528-12268-84-7",
+      "casNumber": "12268-84-7",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0535-20427-59-2",
+      "casNumber": "20427-59-2",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0544-75-59-2",
+      "casNumber": "75-59-2",
+      "stratum": "acid_alkali",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ALKALI_AQUEOUS",
+        "reason": "Single-substance standard scenario; evidence-specific ALKALI_AQUEOUS common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0550-14691-87-3",
+      "casNumber": "14691-87-3",
+      "stratum": "acid_alkali",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Stored name-level evidence alone does not confirm reactivity, but it is insufficient to authorize automatic deposit."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0568-21041-93-0",
+      "casNumber": "21041-93-0",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0607-77-78-1",
+      "casNumber": "77-78-1",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0611-7783-35-9",
+      "casNumber": "7783-35-9",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0613-7488-55-3",
+      "casNumber": "7488-55-3",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0614-7446-18-6",
+      "casNumber": "7446-18-6",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0618-7783-36-0",
+      "casNumber": "7783-36-0",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0627-1031-07-8",
+      "casNumber": "1031-07-8",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0651-151-21-3",
+      "casNumber": "151-21-3",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0667-65-30-5",
+      "casNumber": "65-30-5",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0668-2074-50-2",
+      "casNumber": "2074-50-2",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0670-10031-59-1",
+      "casNumber": "10031-59-1",
+      "stratum": "heavy_metal",
+      "expected": {
+        "status": "ready",
+        "streamCode": "HEAVY_METAL",
+        "reason": "Single-substance standard scenario; evidence-specific HEAVY_METAL common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0681-51-60-5",
+      "casNumber": "51-60-5",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0806-75-86-5",
+      "casNumber": "75-86-5",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0808-921-03-9",
+      "casNumber": "921-03-9",
+      "stratum": "organic_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0810-1752-30-3",
+      "casNumber": "1752-30-3",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0811-1798-60-3",
+      "casNumber": "1798-60-3",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0817-107-18-6",
+      "casNumber": "107-18-6",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0848-51774-11-9",
+      "casNumber": "51774-11-9",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0851-107-19-7",
+      "casNumber": "107-19-7",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0860-68551-07-5",
+      "casNumber": "68551-07-5",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0864-90604-31-2",
+      "casNumber": "90604-31-2",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a liquid, but no absorption, curing, or solid-residue evidence is stored; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0866-68333-80-2",
+      "casNumber": "68333-80-2",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0884-68603-15-6",
+      "casNumber": "68603-15-6",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "needs_input",
+        "reason": "SDS Section 9 product-state evidence conflicts with the prior standard waste scenario. The product is a liquid, but no absorption, curing, or solid-residue evidence is stored; confirm the actual waste phase before routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": [
+          "matrix"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0905-681-84-5",
+      "casNumber": "681-84-5",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "SPECIAL_REVIEW",
+        "reasons": [
+          "special_hazard"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "policy_decision",
+        "reason": "The current analyzer elevates this to special hazard; the common-stream baseline needs an explicit domestic-policy decision.",
+        "evidenceSections": [
+          2,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    }
+  ]
+}

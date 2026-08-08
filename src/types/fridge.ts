@@ -39,6 +39,9 @@ export interface ReagentPlacement {
     casNo?: string;
     chemId?: number;
     expiryDate?: string; // ISO date string (YYYY-MM-DD)
+    manufacturerDateType?: import('../utils/manufacturerDate').ManufacturerDateType;
+    receivedDate?: string; // ISO date string (YYYY-MM-DD)
+    openedDate?: string; // ISO date string (YYYY-MM-DD)
     capacity?: string; // e.g. "500mL", "1kg"
 
     // Product info (from inventory registration)

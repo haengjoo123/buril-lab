@@ -89,6 +89,18 @@ describe('reagent scan automatic placement gate', () => {
         expect(getReagentScanReviewReasons(unknownContainer)).toContain('containerType_review_required')
     })
 
+    it('blocks automatic placement when a manufacturer date lacks an explicit type', () => {
+        const result = createResult({
+            expiryDate: '2028-02-29',
+            fieldSnapshots: createSnapshots({
+                expiryDate: { value: '2028-02-29', confidence: 0.99, validation: 'valid' },
+            }),
+        })
+
+        expect(getReagentScanReviewReasons(result)).toContain('manufacturerDateType_review_required')
+        expect(canAutoPlaceReagentScan(result)).toBe(false)
+    })
+
     it('treats a legacy successful response without snapshots as review-only', () => {
         const legacy = createResult({ fieldSnapshots: undefined })
 

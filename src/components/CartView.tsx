@@ -35,7 +35,15 @@ import { getActiveWastePolicyV2, type ActiveWastePolicy } from '../services/wast
 import { recordWasteHandlingV2, type WasteHandlingReceipt } from '../services/wasteLogService';
 import { translateGHS } from '../data/ghsCodes';
 import { isPhPredictionEnabled } from '../config/featureFlags';
-import { hashPredictionInput, predictAqueousPh } from '../features/phPrediction';
+import {
+    getPredictedPhForRouting,
+    hashPredictionInput,
+    predictAqueousPh,
+} from '../features/phPrediction';
+import {
+    authorizePredictedPhForWasteBatch,
+    type PredictedPhAuthorization,
+} from '../services/wastePhAuthorizationService';
 import {
     createUserSolutionContext,
     getNextWizardStep,
@@ -118,6 +126,7 @@ const MISSING_FIELD_KEYS: Record<WasteMissingField, string> = {
     mixing_state: 'waste_missing_mixing_state',
     identity: 'waste_missing_identity',
     hazard_data: 'waste_missing_hazard_data',
+    classification: 'waste_missing_classification',
     additional_components: 'waste_missing_additional_components',
     fluoride_container: 'waste_missing_fluoride_container',
     measured_ph: 'waste_missing_measured_ph',
@@ -294,6 +303,10 @@ export const CartView: React.FC<CartViewProps> = ({
     const [solventSearchLoading, setSolventSearchLoading] = useState(false);
     const [solventSearchError, setSolventSearchError] = useState<string | null>(null);
     const [solventClassConflict, setSolventClassConflict] = useState<SolventClassConflict | null>(null);
+    const [predictedPhAuthorization, setPredictedPhAuthorization] = useState<{
+        inputHash: string;
+        authorization: PredictedPhAuthorization;
+    } | null>(null);
 
     const activeBatchHasContent = batch.components.length > 0
         || batch.matrix !== 'unknown'
@@ -330,15 +343,6 @@ export const CartView: React.FC<CartViewProps> = ({
         if (deleteParkedBatch(id)) setBatchMessage(t('waste_delete_parked_done'));
     };
 
-    const policyResolution = useMemo(
-        () => resolveWasteDecisionAgainstPolicy(batch, policy),
-        [batch, policy],
-    );
-    const { decision, matchedStream, policyStream } = policyResolution;
-    const escalationDetails = useMemo(
-        () => getWastePolicyEscalationDetails(policyStream),
-        [policyStream],
-    );
     const compatibilityWarnings = useMemo(
         () => checkCompatibility(batch.components, { matrix: batch.matrix }),
         [batch.components, batch.matrix],
@@ -366,7 +370,6 @@ export const CartView: React.FC<CartViewProps> = ({
         if (hasInvalidConcentration && !window.confirm(t('waste_discard_invalid_concentration_confirm'))) return;
         onClose();
     }, [hasInvalidConcentration, onClose, t]);
-    const hasAmountConfirmation = !decision.missingFields.includes('total_amount');
     const inventoryAmountSuggestion = useMemo(() => {
         if (batch.matrix === 'unknown' || batch.components.length === 0) return null;
         const expectedDimension = batch.matrix === 'solid_slurry' ? 'mass' : 'volume';
@@ -413,8 +416,6 @@ export const CartView: React.FC<CartViewProps> = ({
     }, [batch.components, batch.matrix]);
     const acidBasePresence = getWasteAcidBasePresence(batch.components);
     const requiresMixingState = acidBasePresence.hasAcid && acidBasePresence.hasAlkali;
-    const needsMeasuredPh = requiresMixingState && batch.matrix === 'aqueous' &&
-        batch.mixingState === 'already_mixed';
     const shouldShowPhPrediction = isPhPredictionEnabled && batch.matrix === 'aqueous' &&
         batch.components.length > 0 && batch.mixingState === 'already_mixed';
     const shouldShowPhPredictionMatrixUnavailable = shouldShowPhPredictionMatrixNotice(
@@ -438,6 +439,28 @@ export const CartView: React.FC<CartViewProps> = ({
             };
         }
     }, [batch, shouldShowPhPrediction]);
+    const locallyRoutablePredictedPh = getPredictedPhForRouting(phPrediction);
+    const activePredictedPhAuthorization = predictedPhAuthorization
+        && phPrediction?.inputHash === predictedPhAuthorization.inputHash
+        && Date.parse(predictedPhAuthorization.authorization.expiresAt) > Date.now()
+        && getPredictedPhForRouting(predictedPhAuthorization.authorization.prediction) !== undefined
+        ? predictedPhAuthorization.authorization
+        : null;
+    const approvedPredictedBatchPh = activePredictedPhAuthorization
+        ? getPredictedPhForRouting(activePredictedPhAuthorization.prediction)
+        : undefined;
+    const policyResolution = useMemo(
+        () => resolveWasteDecisionAgainstPolicy(batch, policy, { approvedPredictedBatchPh }),
+        [approvedPredictedBatchPh, batch, policy],
+    );
+    const { decision, matchedStream, policyStream } = policyResolution;
+    const escalationDetails = useMemo(
+        () => getWastePolicyEscalationDetails(policyStream),
+        [policyStream],
+    );
+    const hasAmountConfirmation = !decision.missingFields.includes('total_amount');
+    const needsMeasuredPh = requiresMixingState && batch.matrix === 'aqueous' &&
+        batch.mixingState === 'already_mixed' && approvedPredictedBatchPh === undefined;
     const shouldAskAdditionalComponents = batch.matrix === 'mixed_biphasic' ||
         batch.matrix === 'unknown' || batch.components.length > 1 ||
         shouldAskPhPredictionCompleteness(
@@ -504,7 +527,10 @@ export const CartView: React.FC<CartViewProps> = ({
         compatibilityWarnings,
         matchedStream,
     }), [batch, compatibilityWarnings, decision, i18n.language, matchedStream]);
-    const wizard = useMemo(() => resolveWasteBatchWizard(batch), [batch]);
+    const wizard = useMemo(
+        () => resolveWasteBatchWizard(batch, { approvedPredictedBatchPh }),
+        [approvedPredictedBatchPh, batch],
+    );
     const solutionQuestionComponents = useMemo(
         () => getSolutionQuestionComponents(batch.components),
         [batch.components],
@@ -517,6 +543,33 @@ export const CartView: React.FC<CartViewProps> = ({
         ? 0
         : Math.min(amountQuestionIndex, batch.components.length - 1);
     const activeAmountComponent = batch.components[safeAmountQuestionIndex];
+
+    useEffect(() => {
+        let active = true;
+        setPredictedPhAuthorization(null);
+        if (!requiresMixingState || !phPrediction || locallyRoutablePredictedPh === undefined) {
+            return () => {
+                active = false;
+            };
+        }
+
+        void authorizePredictedPhForWasteBatch(batch)
+            .then((authorization) => {
+                if (!active || getPredictedPhForRouting(authorization.prediction) === undefined) return;
+                setPredictedPhAuthorization({
+                    inputHash: phPrediction.inputHash,
+                    authorization,
+                });
+            })
+            .catch((error) => {
+                // Failing closed leaves the measured-pH field visible.
+                console.warn('Predicted pH could not be server-authorized:', error);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [batch, locallyRoutablePredictedPh, phPrediction, requiresMixingState]);
 
     useEffect(() => {
         const currentBatch = useWasteStore.getState().batch;
@@ -541,6 +594,7 @@ export const CartView: React.FC<CartViewProps> = ({
         setSolventSearchInputs({});
         setSolventSearchError(null);
         setSolventClassConflict(null);
+        setPredictedPhAuthorization(null);
     }, [batch.id]);
 
     useEffect(() => {
@@ -875,11 +929,27 @@ export const CartView: React.FC<CartViewProps> = ({
         if (!isOnline || isSaving || hasInvalidConcentration) return;
         const batchSnapshot = batch;
         const policySnapshot = policy;
-        const resolutionSnapshot = policyResolution;
         setIsSaving(true);
         setSaveError(null);
         setPolicyGuardMessage(null);
         try {
+            let authorizationForRecord: PredictedPhAuthorization | null = null;
+            let approvedPredictedPhForRecord: number | undefined;
+            let resolutionSnapshot = policyResolution;
+            if (resolutionSnapshot.decision.routingBasis === 'predicted_batch_ph') {
+                // Always obtain a fresh single-use authorization for the final
+                // write. This prevents a retry from reusing an authorization
+                // that a prior RPC may already have consumed.
+                authorizationForRecord = await authorizePredictedPhForWasteBatch(batchSnapshot);
+                approvedPredictedPhForRecord = getPredictedPhForRouting(authorizationForRecord.prediction);
+                if (approvedPredictedPhForRecord === undefined) {
+                    throw new Error('The server did not approve this predicted pH for routing.');
+                }
+                resolutionSnapshot = resolveWasteDecisionAgainstPolicy(batchSnapshot, policySnapshot, {
+                    approvedPredictedBatchPh: approvedPredictedPhForRecord,
+                });
+            }
+
             let latestPolicy: ActiveWastePolicy;
             try {
                 latestPolicy = await getActiveWastePolicyV2(currentLabId);
@@ -899,7 +969,9 @@ export const CartView: React.FC<CartViewProps> = ({
                 return;
             }
 
-            const latestResolution = resolveWasteDecisionAgainstPolicy(batchSnapshot, latestPolicy);
+            const latestResolution = resolveWasteDecisionAgainstPolicy(batchSnapshot, latestPolicy, {
+                approvedPredictedBatchPh: approvedPredictedPhForRecord,
+            });
             setPolicy(latestPolicy);
             if (hasWastePolicyContextChanged(
                 policySnapshot,
@@ -920,15 +992,16 @@ export const CartView: React.FC<CartViewProps> = ({
             }
             const requestId = requestIdRef.current ?? createRequestId();
             requestIdRef.current = requestId;
+            const predictionForAudit = authorizationForRecord?.prediction ?? phPrediction;
             const result = await recordWasteHandlingV2({
                 batch: batchSnapshot,
                 decision: resolutionSnapshot.decision,
                 handlingAction,
                 memo,
                 requestId,
-                ...(phPrediction ? {
+                ...(predictionForAudit ? {
                     phPredictionSnapshot: createPhPredictionAuditSnapshot(
-                        phPrediction,
+                        predictionForAudit,
                         batchSnapshot.updatedAt,
                     ),
                 } : {}),
@@ -937,6 +1010,9 @@ export const CartView: React.FC<CartViewProps> = ({
                     ...(batchSnapshot.mixingState === 'unknown'
                         ? {}
                         : { alreadyMixed: batchSnapshot.mixingState === 'already_mixed' }),
+                    ...(authorizationForRecord && resolutionSnapshot.decision.routingBasis === 'predicted_batch_ph'
+                        ? { predictedPhAuthorizationId: authorizationForRecord.authorizationId }
+                        : {}),
                 },
             });
             setReceipt(result);
@@ -991,6 +1067,11 @@ export const CartView: React.FC<CartViewProps> = ({
                             <p className="mt-2 text-xs font-semibold leading-5">
                                 {t('waste_ph_prediction_safety')}
                             </p>
+                            {activePredictedPhAuthorization && (
+                                <p className="mt-1 text-xs font-bold leading-5 text-cyan-800 dark:text-cyan-200">
+                                    {t('waste_ph_prediction_authorized')}
+                                </p>
+                            )}
                         </>
                     ) : phPrediction ? (
                         <p className="text-xs font-semibold leading-5">

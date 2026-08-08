@@ -22,6 +22,9 @@ function createRiskItem(overrides: Partial<SafetyCenterRiskItem> = {}): SafetyCe
     cabinet_name: null,
     storage_location_name: null,
     expiry_date: null,
+    manufacturer_date_type: 'unlabeled',
+    received_date: null,
+    opened_date: null,
     remaining_percent: 100,
     ghs_h_codes: ['H225'],
     ghs_data_status: 'success',
@@ -58,6 +61,20 @@ describe('Safety Center risk scoring v2', () => {
     expect(assessment.flags).not.toContain('hazard_special_high');
     expect(assessment.hazardScore).toBe(30);
     expect(assessment.score).toBe(30);
+  });
+
+  it('applies expiry risk to minimum shelf life but excludes unlabeled dates', () => {
+    const minimumShelfLife = assessRiskItem(createRiskItem({
+      expiry_date: '2000-01-01',
+      manufacturer_date_type: 'minimum_shelf_life',
+    }));
+    const unlabeled = assessRiskItem(createRiskItem({
+      expiry_date: '2000-01-01',
+      manufacturer_date_type: 'unlabeled',
+    }));
+
+    expect(minimumShelfLife.flags).toContain('expired');
+    expect(unlabeled.flags).not.toContain('expired');
   });
 
   it('scores corrosive H-codes from the GHS payload', () => {

@@ -7,6 +7,7 @@ import { supabase } from './supabaseClient';
 import { useLabStore } from '../store/useLabStore';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
 import type { ReagentTemplateType } from '../types/fridge';
+import type { ManufacturerDateType } from '../utils/manufacturerDate';
 
 // ── Types ──────────────────────────────────────────────
 type DisposalReasonKey = 'used' | 'expired' | 'broken' | 'other';
@@ -35,6 +36,9 @@ export interface InventoryItem {
     storage_location_id: string | null;
     product_id: string | null;
     expiry_date: string | null;
+    manufacturer_date_type: ManufacturerDateType;
+    received_date: string | null;
+    opened_date: string | null;
     memo: string | null;
     remaining_percent: number | null;
     created_at: string;
@@ -63,6 +67,9 @@ export interface CreateInventoryInput {
     storage_location_id?: string;
     product_id?: string;
     expiry_date?: string;
+    manufacturer_date_type?: ManufacturerDateType;
+    received_date?: string;
+    opened_date?: string;
     memo?: string;
     remaining_percent?: number;
 }
@@ -82,6 +89,9 @@ interface InventoryRow {
     storage_location_id: string | null;
     product_id: string | null;
     expiry_date: string | null;
+    manufacturer_date_type: ManufacturerDateType;
+    received_date: string | null;
+    opened_date: string | null;
     memo: string | null;
     remaining_percent: number | null;
     created_at: string;
@@ -102,6 +112,9 @@ interface CabinetItemRowWithCabinet {
     cas_no: string | null;
     capacity: string | null;
     expiry_date: string | null;
+    manufacturer_date_type: ManufacturerDateType;
+    received_date: string | null;
+    opened_date: string | null;
     notes: string | null;
     remaining_percent: number | null;
     created_at: string;
@@ -704,7 +717,7 @@ export const inventoryService = {
         let cabQuery = supabase
             .from('cabinet_items')
             .select(`
-                id, inventory_item_id, name, brand, product_number, cas_no, capacity, expiry_date, notes, created_at,
+                id, inventory_item_id, name, brand, product_number, cas_no, capacity, expiry_date, manufacturer_date_type, received_date, opened_date, notes, created_at,
                 cabinet_id, shelf_id, template, width, remaining_percent,
                 cabinets!inner ( name, lab_id )
             `);
@@ -800,6 +813,9 @@ export const inventoryService = {
                 storage_location_id: null,
                 product_id: null,
                 expiry_date: ci.expiry_date || null,
+                manufacturer_date_type: ci.manufacturer_date_type || 'unlabeled',
+                received_date: ci.received_date || null,
+                opened_date: ci.opened_date || null,
                 memo: ci.notes || null,
                 remaining_percent: ci.remaining_percent ?? null,
                 created_at: ci.created_at,
@@ -901,6 +917,9 @@ export const inventoryService = {
             p_storage_location_id: input.storage_type === 'other' ? (input.storage_location_id || null) : null,
             p_product_id: input.product_id || null,
             p_expiry_date: input.expiry_date || null,
+            p_manufacturer_date_type: input.manufacturer_date_type || 'unlabeled',
+            p_received_date: input.received_date || null,
+            p_opened_date: input.opened_date || null,
             p_memo: input.memo || null,
             p_remaining_percent: input.remaining_percent ?? null,
             p_lab_id: currentLabId || null,
@@ -908,7 +927,7 @@ export const inventoryService = {
             p_actor_name: actorName || null,
         };
 
-        const { data, error } = await supabase.rpc('create_inventory_item_atomic', payload);
+        const { data, error } = await supabase.rpc('create_inventory_item_with_dates_atomic', payload);
 
         if (error) {
             console.error('[Inventory] atomic create error:', error);
@@ -932,6 +951,9 @@ export const inventoryService = {
             if (updates.cas_number !== undefined) payloadRecord.cas_no = updates.cas_number || null;
             if (updates.capacity !== undefined) payloadRecord.capacity = updates.capacity || null;
             if (updates.expiry_date !== undefined) payloadRecord.expiry_date = updates.expiry_date || null;
+            if (updates.manufacturer_date_type !== undefined) payloadRecord.manufacturer_date_type = updates.manufacturer_date_type;
+            if (updates.received_date !== undefined) payloadRecord.received_date = updates.received_date || null;
+            if (updates.opened_date !== undefined) payloadRecord.opened_date = updates.opened_date || null;
             if (updates.memo !== undefined) payloadRecord.notes = updates.memo || null;
             if (updates.remaining_percent !== undefined) payloadRecord.remaining_percent = updates.remaining_percent ?? null;
         } else {
@@ -943,6 +965,9 @@ export const inventoryService = {
             if (updates.capacity !== undefined) payloadRecord.capacity = updates.capacity || null;
             if (updates.product_id !== undefined) payloadRecord.product_id = updates.product_id || null;
             if (updates.expiry_date !== undefined) payloadRecord.expiry_date = updates.expiry_date || null;
+            if (updates.manufacturer_date_type !== undefined) payloadRecord.manufacturer_date_type = updates.manufacturer_date_type;
+            if (updates.received_date !== undefined) payloadRecord.received_date = updates.received_date || null;
+            if (updates.opened_date !== undefined) payloadRecord.opened_date = updates.opened_date || null;
             if (updates.memo !== undefined) payloadRecord.memo = updates.memo || null;
             if (updates.remaining_percent !== undefined) payloadRecord.remaining_percent = updates.remaining_percent ?? null;
 
@@ -965,7 +990,7 @@ export const inventoryService = {
             p_actor_name: actorName || null,
         };
 
-        const { error } = await supabase.rpc('update_inventory_item_atomic', payload);
+        const { error } = await supabase.rpc('update_inventory_item_with_dates_atomic', payload);
         if (error) {
             console.error('[Inventory] atomic update error:', error);
             throw error;
@@ -990,6 +1015,9 @@ export const inventoryService = {
         if (input.updates.cas_number !== undefined) cabinetUpdates.cas_number = input.updates.cas_number;
         if (input.updates.capacity !== undefined) cabinetUpdates.capacity = input.updates.capacity;
         if (input.updates.expiry_date !== undefined) cabinetUpdates.expiry_date = input.updates.expiry_date;
+        if (input.updates.manufacturer_date_type !== undefined) cabinetUpdates.manufacturer_date_type = input.updates.manufacturer_date_type;
+        if (input.updates.received_date !== undefined) cabinetUpdates.received_date = input.updates.received_date;
+        if (input.updates.opened_date !== undefined) cabinetUpdates.opened_date = input.updates.opened_date;
         if (input.updates.memo !== undefined) cabinetUpdates.memo = input.updates.memo;
         if (input.updates.remaining_percent !== undefined) cabinetUpdates.remaining_percent = input.updates.remaining_percent;
 

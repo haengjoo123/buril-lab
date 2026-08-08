@@ -19,6 +19,7 @@ import {
     type ReagentScanResult,
     type ReagentScanValidation,
 } from '../services/geminiReagentScanService';
+import type { ManufacturerDateType } from '../utils/manufacturerDate';
 import { useTranslation } from 'react-i18next';
 
 export interface ScannerSelectionMeta {
@@ -301,12 +302,13 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
     const resultFields: Array<{
         key: Exclude<keyof NonNullable<ReagentScanResult['fieldSnapshots']>, 'containerType'>;
         label: string;
-        snapshot?: ReagentScanFieldSnapshot<string>;
+        snapshot?: ReagentScanFieldSnapshot<string | ManufacturerDateType>;
     }> = scanResult ? [
         { key: 'name', label: t('scanner_field_name'), snapshot: scanResult.fieldSnapshots?.name },
         { key: 'casNumber', label: t('scanner_field_cas'), snapshot: scanResult.fieldSnapshots?.casNumber },
         { key: 'capacity', label: t('scanner_field_capacity'), snapshot: scanResult.fieldSnapshots?.capacity },
         { key: 'expiryDate', label: t('scanner_field_expiry'), snapshot: scanResult.fieldSnapshots?.expiryDate },
+        { key: 'manufacturerDateType', label: t('manufacturer_date_type_label'), snapshot: scanResult.fieldSnapshots?.manufacturerDateType },
         { key: 'brand', label: t('scanner_field_brand'), snapshot: scanResult.fieldSnapshots?.brand },
         { key: 'productNumber', label: t('scanner_field_product_number'), snapshot: scanResult.fieldSnapshots?.productNumber },
     ] : [];

@@ -1,4 +1,5 @@
 import { postJson } from './internalApi'
+import type { ManufacturerDateType } from '../utils/manufacturerDate'
 
 export type ReagentContainerType = 'A' | 'B' | 'C' | 'D'
 
@@ -19,6 +20,7 @@ export interface ReagentScanFieldSnapshots {
     casNumber: ReagentScanFieldSnapshot<string>
     capacity: ReagentScanFieldSnapshot<string>
     expiryDate: ReagentScanFieldSnapshot<string>
+    manufacturerDateType?: ReagentScanFieldSnapshot<ManufacturerDateType>
     brand: ReagentScanFieldSnapshot<string>
     productNumber: ReagentScanFieldSnapshot<string>
     containerType: ReagentScanFieldSnapshot<ReagentContainerType>
@@ -30,6 +32,7 @@ export interface ReagentScanResult {
     suggestedContainerType: ReagentContainerType | null
     capacity?: string
     expiryDate?: string
+    manufacturerDateType?: ManufacturerDateType
     brand?: string
     productNumber?: string
     fieldSnapshots?: ReagentScanFieldSnapshots
@@ -178,6 +181,17 @@ export function getReagentScanReviewReasons(result: ReagentScanResult): string[]
             reasons.add(`${key}_low_confidence`)
         }
     })
+
+    if (snapshots.expiryDate.validation === 'valid' && hasSnapshotValue(snapshots.expiryDate)) {
+        const manufacturerDateType = snapshots.manufacturerDateType
+        if (!manufacturerDateType || manufacturerDateType.validation !== 'valid'
+            || !hasSnapshotValue(manufacturerDateType)
+            || manufacturerDateType.value === 'unlabeled') {
+            reasons.add('manufacturerDateType_review_required')
+        } else if (!hasAutoPlaceConfidence(manufacturerDateType)) {
+            reasons.add('manufacturerDateType_low_confidence')
+        }
+    }
 
     if (!result.name.trim()) reasons.add('name_missing')
     if (!result.suggestedContainerType) reasons.add('containerType_review_required')

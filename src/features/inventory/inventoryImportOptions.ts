@@ -13,6 +13,10 @@ export const INVENTORY_IMPORT_HEADER_KEYS = [
     'shelf_level',
     'shelf_section',
     'container_type',
+    'manufacturer_date_type',
+    'manufacturer_date',
+    'received_date',
+    'opened_date',
     'expiry_date',
     'memo',
 ] as const;
@@ -20,6 +24,10 @@ export const INVENTORY_IMPORT_HEADER_KEYS = [
 export type InventoryImportHeaderKey = (typeof INVENTORY_IMPORT_HEADER_KEYS)[number];
 
 export const INVENTORY_IMPORT_TEMPLATE_HEADERS_KO: string[] = [
+    '제조사 날짜 유형',
+    '제조사 날짜',
+    '입고일',
+    '개봉일',
     '시약명',
     '브랜드',
     '제품번호',

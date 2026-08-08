@@ -10,6 +10,7 @@ import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
 import { supabase } from '../../services/supabaseClient';
 import { AppSelect } from '../../components/AppSelect';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
+import { ReagentDateFields } from '../../components/ReagentDateFields';
 
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
@@ -56,6 +57,9 @@ export const InventoryFormModal: React.FC<Props> = ({
         cabinet_id: '',
         storage_location_id: '',
         expiry_date: '',
+        manufacturer_date_type: 'unlabeled',
+        received_date: '',
+        opened_date: '',
         memo: '',
         remaining_percent: 100,
     });
@@ -96,6 +100,9 @@ export const InventoryFormModal: React.FC<Props> = ({
                     cabinet_id: initialData.cabinet_id || '',
                     storage_location_id: initialData.storage_location_id || '',
                     expiry_date: initialData.expiry_date || '',
+                    manufacturer_date_type: initialData.manufacturer_date_type || 'unlabeled',
+                    received_date: initialData.received_date || '',
+                    opened_date: initialData.opened_date || '',
                     memo: initialData.memo || '',
                     remaining_percent: initialData.remaining_percent ?? 100,
                 });
@@ -115,6 +122,9 @@ export const InventoryFormModal: React.FC<Props> = ({
                         ? (initialDraft?.storage_location_id || (locations.length > 0 ? locations[0].id : ''))
                         : '',
                     expiry_date: initialDraft?.expiry_date || '',
+                    manufacturer_date_type: initialDraft?.manufacturer_date_type || 'unlabeled',
+                    received_date: initialDraft?.received_date || '',
+                    opened_date: initialDraft?.opened_date || '',
                     memo: initialDraft?.memo || '',
                     remaining_percent: initialDraft?.remaining_percent ?? 100,
                 });
@@ -183,6 +193,11 @@ export const InventoryFormModal: React.FC<Props> = ({
 
         if (formData.storage_type === 'other' && !formData.storage_location_id) {
             setError(t('msg_select_location'));
+            return;
+        }
+
+        if (formData.expiry_date && formData.manufacturer_date_type === 'unlabeled') {
+            setError(t('scan_manufacturer_date_type_required'));
             return;
         }
 
@@ -339,6 +354,9 @@ export const InventoryFormModal: React.FC<Props> = ({
                 productNumber: input.product_number || undefined,
                 brand: input.brand || undefined,
                 expiryDate: input.expiry_date || undefined,
+                manufacturerDateType: input.manufacturer_date_type,
+                receivedDate: input.received_date || undefined,
+                openedDate: input.opened_date || undefined,
                 remaining_percent: input.remaining_percent,
             });
             if (!placed) {
@@ -594,7 +612,10 @@ export const InventoryFormModal: React.FC<Props> = ({
             'cas_no': 'CAS',
             'cas_number': 'CAS',
             'capacity': t('inventory_capacity', '규격'),
-            'expiry_date': t('inventory_expiry', '유통기한'),
+            'manufacturer_date_type': t('manufacturer_date_type_label'),
+            'expiry_date': t('manufacturer_date_label'),
+            'received_date': t('inventory_received_date'),
+            'opened_date': t('inventory_opened_date'),
             'memo': t('inventory_memo', '메모'),
             'notes': t('inventory_memo', '메모'),
             'quantity': t('inventory_quantity', '수량'),
@@ -861,17 +882,16 @@ export const InventoryFormModal: React.FC<Props> = ({
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col gap-1.5 mt-2">
-                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_expiry_date')}</label>
-                                    <input
-                                        name="expiry_date"
-                                        type="date"
-                                        value={formData.expiry_date}
-                                        onChange={handleChange}
-                                        lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100 min-h-[42px]"
-                                    />
-                                </div>
+                                <ReagentDateFields
+                                    className="mt-2"
+                                    value={formData}
+                                    onChange={(next) => setFormData((prev) => ({ ...prev, ...next }))}
+                                />
+                                {formData.expiry_date && formData.manufacturer_date_type === 'unlabeled' && (
+                                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                        {t('scan_manufacturer_date_type_required')}
+                                    </p>
+                                )}
 
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_memo')}</label>
@@ -979,6 +999,9 @@ export const InventoryFormModal: React.FC<Props> = ({
             productNumber: input.product_number || undefined,
             brand: input.brand || undefined,
             expiryDate: input.expiry_date || undefined,
+            manufacturerDateType: input.manufacturer_date_type,
+            receivedDate: input.received_date || undefined,
+            openedDate: input.opened_date || undefined,
             remaining_percent: input.remaining_percent,
         } as Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>);
 

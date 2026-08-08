@@ -44,6 +44,9 @@ const FIELD_KEY: Record<string, string> = {
     quantity: 'audit_field_quantity',
     capacity: 'audit_field_capacity',
     expiry_date: 'audit_field_expiry_date',
+    manufacturer_date_type: 'manufacturer_date_type_label',
+    received_date: 'inventory_received_date',
+    opened_date: 'inventory_opened_date',
     memo: 'audit_field_memo',
     notes: 'audit_field_memo',
     brand: 'audit_field_brand',
@@ -69,7 +72,10 @@ const FIELD_ORDER = [
     'product_number',
     'cas_number',
     'cas_no',
+    'manufacturer_date_type',
     'expiry_date',
+    'received_date',
+    'opened_date',
     'storage_type',
     'cabinet_id',
     'storage_location_id',
@@ -294,8 +300,14 @@ export const formatAuditValue = (
             return formatActivityAction(value, t);
         }
 
-        if (key === 'expiry_date') {
+        if (key === 'expiry_date' || key === 'received_date' || key === 'opened_date') {
             return formatDate(value, locale);
+        }
+
+        if (key === 'manufacturer_date_type') {
+            if (value === 'expiry') return t('manufacturer_date_type_expiry');
+            if (value === 'minimum_shelf_life') return t('manufacturer_date_type_minimum_shelf_life');
+            if (value === 'unlabeled') return t('manufacturer_date_type_unlabeled');
         }
 
         if (key === 'remaining_percent' && /^-?\d+(\.\d+)?$/.test(value)) {

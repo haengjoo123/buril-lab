@@ -60,6 +60,7 @@ interface CabinetItemRow {
   cas_no: string | null
   capacity: string | null
   expiry_date: string | null
+  manufacturer_date_type: 'expiry' | 'minimum_shelf_life' | 'unlabeled'
   remaining_percent: number | null
   cabinet_id: string
   shelf_id: string | null
@@ -79,6 +80,7 @@ interface InventoryRow {
   cas_number: string | null
   capacity: string | null
   expiry_date: string | null
+  manufacturer_date_type: 'expiry' | 'minimum_shelf_life' | 'unlabeled'
   remaining_percent: number | null
   storage_type: 'cabinet' | 'other'
   cabinet_id: string | null
@@ -422,7 +424,8 @@ function mapCabinetItem(row: CabinetItemRow): VoiceMatch {
     shelfId: row.shelf_id || undefined,
     shelfLevel: getRelationRow(row.cabinet_shelves)?.level ?? undefined,
     storageType: 'cabinet',
-    expiryDate: row.expiry_date || undefined,
+    expiryDate: row.manufacturer_date_type === 'unlabeled' ? undefined : row.expiry_date || undefined,
+    manufacturerDateType: row.manufacturer_date_type || 'unlabeled',
     remainingPercent: row.remaining_percent ?? undefined,
     capacity: row.capacity || undefined,
     matchedBy: 'contains',
@@ -444,7 +447,8 @@ function mapInventoryRow(row: InventoryRow): VoiceMatch {
     storageLocationId: row.storage_location_id || undefined,
     storageLocationName: getRelationRow(row.storage_locations)?.name || undefined,
     storageLocationIcon: getRelationRow(row.storage_locations)?.icon || undefined,
-    expiryDate: row.expiry_date || undefined,
+    expiryDate: row.manufacturer_date_type === 'unlabeled' ? undefined : row.expiry_date || undefined,
+    manufacturerDateType: row.manufacturer_date_type || 'unlabeled',
     remainingPercent: row.remaining_percent ?? undefined,
     capacity: row.capacity || undefined,
     matchedBy: 'contains',
@@ -716,7 +720,7 @@ async function buildAnswerText(
   }
 
   if (intent === 'expiration') {
-    return buildExpiryAnswer(match.name, match.expiryDate, language, getDaysLeft)
+    return buildExpiryAnswer(match.name, match.expiryDate, language, getDaysLeft, match.manufacturerDateType)
   }
 
   if (intent === 'remaining') {
@@ -803,6 +807,7 @@ export const onRequestPost = async (context: {
           cas_no,
           capacity,
           expiry_date,
+          manufacturer_date_type,
           remaining_percent,
           cabinet_id,
           shelf_id,
@@ -822,6 +827,7 @@ export const onRequestPost = async (context: {
           cas_number,
           capacity,
           expiry_date,
+          manufacturer_date_type,
           remaining_percent,
           storage_type,
           cabinet_id,

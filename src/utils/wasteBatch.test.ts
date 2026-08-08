@@ -208,6 +208,44 @@ describe('analyzeWasteBatch', () => {
         expect(draft.components[0].ghsDataStatus).toBe('lookup_failed');
     });
 
+    it('separates an unknown disposal category from missing hazard data', () => {
+        const draft = batch([
+            analysis('Unclassified but SDS-verified material', '', 'UNKNOWN'),
+        ], 'aqueous');
+        draft.components[0].ghsDataStatus = 'verified';
+
+        const decision = analyzeWasteBatch(draft);
+        expect(decision.decisionStatus).toBe('needs_input');
+        expect(decision.missingFields).toContain('classification');
+        expect(decision.missingFields).not.toContain('hazard_data');
+    });
+
+    it('routes a verified, otherwise unclassified solid through the contaminated-solid stream', () => {
+        const draft = batch([
+            analysis('Verified solid polymer', '', 'UNKNOWN'),
+        ], 'solid_slurry');
+        draft.components[0].ghsDataStatus = 'verified';
+        draft.components[0].identityConfidence = 'verified';
+
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'SOLID_CONTAMINATED',
+        });
+    });
+
+    it('does not let the solid fallback override a verified reactive hazard', () => {
+        const draft = batch([
+            analysis('Reactive solid', '', 'UNKNOWN', { hCodes: ['H250'] }),
+        ], 'solid_slurry');
+        draft.components[0].ghsDataStatus = 'verified';
+        draft.components[0].hazardFlags = ['REACTIVE', 'PYROPHORIC'];
+
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'blocked',
+            streamCode: 'REACTIVE_OXIDIZER',
+        });
+    });
+
     it('blocks acid + sodium cyanide and permits only isolation or handover', () => {
         const draft = batch([
             analysis('Hydrochloric acid', 'HCl', 'ACID'),
@@ -252,6 +290,38 @@ describe('analyzeWasteBatch', () => {
         const alreadyMixed = analyzeWasteBatch(draft);
         expect(alreadyMixed.decisionStatus).toBe('needs_input');
         expect(alreadyMixed.missingFields).toContain('measured_ph');
+    });
+
+    it('permits only a server-authorized safe predicted pH to complete an aqueous acid/alkali mixture', () => {
+        const draft = batch([
+            analysis('Hydrochloric acid', 'HCl', 'ACID'),
+            analysis('Sodium hydroxide', 'NaOH', 'ALKALI'),
+        ], 'aqueous');
+        draft.mixingState = 'already_mixed';
+
+        expect(analyzeWasteBatch(draft).missingFields).toContain('measured_ph');
+
+        const predicted = analyzeWasteBatch(draft, { approvedPredictedBatchPh: 7 });
+        expect(predicted).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'AQUEOUS_OTHER',
+            legalWastePhClass: 'unknown',
+            corrosivityPhScreen: 'unknown',
+            routingBasis: 'predicted_batch_ph',
+        });
+
+        expect(analyzeWasteBatch(draft, { approvedPredictedBatchPh: 2.2 }).missingFields)
+            .toContain('measured_ph');
+        expect(analyzeWasteBatch(draft, { approvedPredictedBatchPh: 12.3 }).missingFields)
+            .toContain('measured_ph');
+
+        draft.measuredBatchPh = 2;
+        draft.measuredPhStatus = 'measured';
+        expect(analyzeWasteBatch(draft, { approvedPredictedBatchPh: 7 })).toMatchObject({
+            streamCode: 'ACID_AQUEOUS',
+            legalWastePhClass: 'waste_acid',
+            routingBasis: 'measured_batch_ph',
+        });
     });
 
     it('requires the mixing state for acid/alkali in every matrix and escalates an already-mixed non-aqueous batch', () => {
@@ -314,6 +384,34 @@ describe('analyzeWasteBatch', () => {
         },
     );
 
+    it('uses measured pH for an aqueous corrosive organic-acid/alkali batch', () => {
+        const draft = batch([
+            analyzeChemical({
+                id: 'tfa',
+                name: 'Trifluoroacetic acid',
+                casNumber: '76-05-1',
+                molecularFormula: 'C2HF3O2',
+                ghs: { signal: 'Danger', hazardStatements: ['H314'] },
+            }),
+            analyzeChemical({
+                id: 'naoh',
+                name: 'Sodium hydroxide',
+                casNumber: '1310-73-2',
+                molecularFormula: 'NaOH',
+                ghs: { signal: 'Danger', hazardStatements: ['H314'] },
+            }),
+        ], 'aqueous');
+        draft.mixingState = 'already_mixed';
+        draft.measuredBatchPh = 2;
+        draft.measuredPhStatus = 'measured';
+
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ACID_AQUEOUS',
+            routingBasis: 'measured_batch_ph',
+        });
+    });
+
     it('uses reference pH only as a conservative mixing warning, never as a single-component route', () => {
         const referenceAcid = analysis('Reference-only acidic material', 'X', 'NEUTRAL', {
             referencePh: 3,
@@ -365,6 +463,21 @@ describe('analyzeWasteBatch', () => {
         expect(decision.streamCode).toBe('ORGANIC_NON_HALOGENATED');
         expect(decision.hazardFlags).toContain('FLAMMABLE');
         expect(decision.allowedActions).toEqual(['container_deposit']);
+    });
+
+    it('routes a metal sulfide to the heavy-metal stream rather than the cyanide/sulfide stream', () => {
+        const tinDisulfide = analyzeChemical({
+            id: 'tin-disulfide',
+            name: 'Tin disulfide',
+            casNumber: '1315-01-1',
+            molecularFormula: 'SnS2',
+            ghs: { signal: 'Warning', hazardStatements: ['H335'] },
+        });
+
+        expect(analyzeWasteBatch(batch([tinDisulfide], 'aqueous'))).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'HEAVY_METAL',
+        });
     });
 
     it('routes HF to special review and requires an approved compatible container', () => {

@@ -19,6 +19,8 @@ import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus
 import { classifyStoragePlacement, checkShelfCompatibility, getStorageGroupLabels } from '../../utils/storageCompatibilityChecker';
 import { AlertTriangle, FlaskConical, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { searchChemical } from '../../services/searchService';
+import { ReagentDateFields } from '../../components/ReagentDateFields';
+import { hasManufacturerDate, type ManufacturerDateType } from '../../utils/manufacturerDate';
 import { analyzeChemical } from '../../utils/chemicalAnalyzer';
 import { classifyChemicalWithAI } from '../../services/geminiClassificationService';
 import { ResultCard } from '../../components/ResultCard';
@@ -80,6 +82,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
     const [name, setName] = useState('');
     const [notes, setNotes] = useState('');
     const [expiryDate, setExpiryDate] = useState('');
+    const [manufacturerDateType, setManufacturerDateType] = useState<ManufacturerDateType>('unlabeled');
+    const [receivedDate, setReceivedDate] = useState('');
+    const [openedDate, setOpenedDate] = useState('');
     const [capacity, setCapacity] = useState('');
     const [template, setTemplate] = useState<ReagentTemplateType>('A');
     const [width, setWidth] = useState<number>(10);
@@ -141,6 +146,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             setName(selectedItem.name);
             setNotes(selectedItem.notes || '');
             setExpiryDate(selectedItem.expiryDate || '');
+            setManufacturerDateType(selectedItem.manufacturerDateType || 'unlabeled');
+            setReceivedDate(selectedItem.receivedDate || '');
+            setOpenedDate(selectedItem.openedDate || '');
             setCapacity(selectedItem.capacity || '');
             setTemplate(selectedItem.template);
             setBrand(selectedItem.brand || '');
@@ -303,6 +311,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             name,
             memo: notes || undefined,
             expiry_date: expiryDate || undefined,
+            manufacturer_date_type: manufacturerDateType,
+            received_date: receivedDate || undefined,
+            opened_date: openedDate || undefined,
             capacity: capacity || undefined,
             brand: brand || undefined,
             product_number: productNumber || undefined,
@@ -314,6 +325,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             name,
             notes,
             expiryDate: expiryDate || undefined,
+            manufacturerDateType,
+            receivedDate: receivedDate || undefined,
+            openedDate: openedDate || undefined,
             capacity: capacity || undefined,
             template,
             brand: brand || undefined,
@@ -386,7 +400,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
         }
     };
 
-    const expiryStatus = getExpiryStatus(expiryDate);
+    const expiryStatus = getExpiryStatus(hasManufacturerDate(manufacturerDateType) ? expiryDate : null);
 
     const handleDeleteClick = () => {
         setDisposalError(null);
@@ -438,6 +452,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                         storage_location_id: null,
                         product_id: null,
                         expiry_date: selectedItem.expiryDate ?? null,
+                        manufacturer_date_type: selectedItem.manufacturerDateType || 'unlabeled',
+                        received_date: selectedItem.receivedDate ?? null,
+                        opened_date: selectedItem.openedDate ?? null,
                         memo: selectedItem.notes ?? null,
                         remaining_percent: selectedItem.remaining_percent ?? null,
                         created_at: '',
@@ -498,6 +515,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                 storage_type: 'cabinet',
                 cabinet_id: cabinetId,
                 expiry_date: sourceItem.expiryDate || undefined,
+                manufacturer_date_type: sourceItem.manufacturerDateType || 'unlabeled',
+                received_date: sourceItem.receivedDate || undefined,
+                opened_date: sourceItem.openedDate || undefined,
                 memo: sourceItem.notes || undefined,
                 remaining_percent: sourceItem.remaining_percent,
             });
@@ -523,6 +543,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                 productNumber: sourceItem.productNumber,
                 brand: sourceItem.brand,
                 expiryDate: sourceItem.expiryDate,
+                manufacturerDateType: sourceItem.manufacturerDateType,
+                receivedDate: sourceItem.receivedDate,
+                openedDate: sourceItem.openedDate,
                 remaining_percent: sourceItem.remaining_percent,
             });
 
@@ -575,6 +598,9 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                         storage_location_id: null,
                         product_id: null,
                         expiry_date: sourceItem.expiryDate ?? null,
+                        manufacturer_date_type: sourceItem.manufacturerDateType || 'unlabeled',
+                        received_date: sourceItem.receivedDate ?? null,
+                        opened_date: sourceItem.openedDate ?? null,
                         memo: sourceItem.notes ?? null,
                         remaining_percent: sourceItem.remaining_percent ?? null,
                         created_at: '',
@@ -643,7 +669,10 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             'cas_no': 'CAS',
             'cas_number': 'CAS',
             'capacity': t('inventory_capacity', '규격'),
-            'expiry_date': t('inventory_expiry', '유통기한'),
+            'manufacturer_date_type': t('manufacturer_date_type_label'),
+            'expiry_date': t('manufacturer_date_label'),
+            'received_date': t('inventory_received_date'),
+            'opened_date': t('inventory_opened_date'),
             'memo': t('inventory_memo', '메모'),
             'notes': t('inventory_memo', '메모'),
             'quantity': t('inventory_quantity', '수량'),
@@ -1029,37 +1058,28 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
 
 
 
-                            {/* Expiry Date Input */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className={iconLabelClassName}>
-                                    <CalendarClock size={12} />
-                                    {t('inventory_error_expiry_label')}
-                                </label>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="date"
-                                        value={expiryDate}
-                                        onChange={(e) => setExpiryDate(e.target.value)}
-                                        lang={i18n.language.startsWith('ko') ? 'ko' : 'en-US'}
-                                        className={`${inputClassName} flex-1`}
-                                    />
-                                    {expiryDate && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setExpiryDate('')}
-                                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                                            title={t('cabinet_delete_expiry')}
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    )}
-                                </div>
-                                {expiryStatus && (
-                                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md w-fit ${getExpiryBadgeClasses(expiryStatus.level)}`}>
-                                        {t(expiryStatus.labelKey, expiryStatus.labelParams)}
-                                    </span>
-                                )}
-                            </div>
+                            <ReagentDateFields
+                                value={{
+                                    manufacturer_date_type: manufacturerDateType,
+                                    expiry_date: expiryDate,
+                                    received_date: receivedDate,
+                                    opened_date: openedDate,
+                                }}
+                                onChange={(next) => {
+                                    setManufacturerDateType(next.manufacturer_date_type);
+                                    setExpiryDate(next.expiry_date);
+                                    setReceivedDate(next.received_date);
+                                    setOpenedDate(next.opened_date);
+                                }}
+                                labelClassName={labelClassName}
+                                inputClassName={inputClassName}
+                                columnsClassName="grid grid-cols-1 gap-3"
+                            />
+                            {expiryStatus && (
+                                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md w-fit ${getExpiryBadgeClasses(expiryStatus.level)}`}>
+                                    {t(expiryStatus.labelKey, expiryStatus.labelParams)}
+                                </span>
+                            )}
 
                             {/* Notes Input */}
                             <div className="flex flex-col gap-1.5">

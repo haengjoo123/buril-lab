@@ -13,6 +13,7 @@ import { ActivityLogModal } from './components/ActivityLogModal';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
+import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
@@ -100,7 +101,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     const [inventoryModal, setInventoryModal] = useState<{
         isOpen: boolean;
         cabinetName: string;
-        items: { name: string; shelfLevel: number; template: string; capacity?: string; expiryDate?: string }[];
+        items: { name: string; shelfLevel: number; template: string; capacity?: string; expiryDate?: string; manufacturerDateType?: 'expiry' | 'minimum_shelf_life' | 'unlabeled' }[];
         isLoading: boolean;
     }>({ isOpen: false, cabinetName: '', items: [], isLoading: false });
 
@@ -115,7 +116,8 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                     shelfLevel: shelf.level,
                     template: item.template,
                     capacity: item.capacity,
-                    expiryDate: item.expiryDate
+                    expiryDate: item.expiryDate,
+                    manufacturerDateType: item.manufacturerDateType,
                 }))
             );
             setInventoryModal(prev => ({ ...prev, items, isLoading: false }));
@@ -962,7 +964,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                                         <span className="text-xs text-slate-400 dark:text-slate-500 font-mono w-5">{idx + 1}.</span>
                                                         <span className="text-sm text-slate-700 dark:text-slate-200 font-medium">{item.name}</span>
                                                         {(() => {
-                                                            const expiry = getExpiryStatus(item.expiryDate);
+                                                            const expiry = getExpiryStatus(hasManufacturerDate(item.manufacturerDateType) ? item.expiryDate : null);
                                                             if (!expiry || expiry.level === 'ok') return null;
                                                             return (
                                                                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${getExpiryBadgeClasses(expiry.level)}`}>

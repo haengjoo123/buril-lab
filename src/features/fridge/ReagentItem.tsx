@@ -7,6 +7,7 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import * as THREE from 'three';
 import { useGLTF, Text } from '@react-three/drei';
 import { getExpiryStatus, type ExpiryLevel } from '../../utils/expiryStatus';
+import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { CONTAINER_BASE_WIDTHS } from '../../utils/reagentPlacementMetrics';
 
 interface ReagentItemProps {
@@ -384,7 +385,7 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
                     isHighlighted={isHighlighted}
                     expiryLevel={(() => {
                         if (isGhost || dimmed) return undefined;
-                        const status = getExpiryStatus(item.expiryDate);
+                        const status = getExpiryStatus(hasManufacturerDate(item.manufacturerDateType) ? item.expiryDate : null);
                         return status?.level ?? undefined;
                     })()}
                 />

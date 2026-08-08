@@ -50,8 +50,19 @@ import type {
 import { getSafetyCenterSectionFromPath } from './safetyCenterNavigation';
 import { WastePolicyDistributionPanel } from './WastePolicyDistributionPanel';
 import { isWasteV2Enabled } from '../../config/featureFlags';
+import { hasManufacturerDate } from '../../utils/manufacturerDate';
 
 type DatasetKey = 'risks' | 'waste' | 'audit';
+
+const getManufacturerDateTypeLabel = (type: SafetyCenterRiskItem['manufacturer_date_type']) => {
+  if (type === 'minimum_shelf_life') return '최소 보증기한';
+  if (type === 'expiry') return '유효기한';
+  return '미표기';
+};
+
+const getTrackedManufacturerDate = (item: SafetyCenterRiskItem) => (
+  hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date : null
+);
 
 interface ExportOptions {
   labIds?: string[];
@@ -395,7 +406,10 @@ export function SafetyCenterWorkspace() {
           CAS: item.cas_number ?? '',
           Flags: assessment.flags.map(getRiskFlagLabel).join(', '),
           Location: item.cabinet_name ?? item.storage_location_name ?? '-',
-          Expiry: item.expiry_date ?? '',
+          ManufacturerDateType: getManufacturerDateTypeLabel(item.manufacturer_date_type),
+          ManufacturerDate: getTrackedManufacturerDate(item) ?? '',
+          ReceivedDate: item.received_date ?? '',
+          OpenedDate: item.opened_date ?? '',
           Remaining: item.remaining_percent ?? '',
           Source: item.source_type,
         });
@@ -1223,7 +1237,7 @@ function RisksPage({
               <option value="present">CAS 있음</option>
             </select>
             <select value={expiryState} onChange={(event) => setExpiryState(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal dark:border-slate-700 dark:bg-slate-950">
-              <option value="all">유효기간 전체</option>
+              <option value="all">제조사 날짜 전체</option>
               <option value="expired">만료</option>
               <option value="warning">임박</option>
               <option value="none">미입력</option>
@@ -1246,7 +1260,7 @@ function RisksPage({
                   <th className="px-3 py-3">CAS</th>
                   <th className="px-3 py-3">위험 신호</th>
                   <th className="px-3 py-3">보관 위치</th>
-                  <th className="px-3 py-3">유효기간</th>
+                  <th className="px-3 py-3">제조사 날짜</th>
                   <th className="px-3 py-3 text-right">작업</th>
                 </tr>
               </thead>
@@ -1272,7 +1286,11 @@ function RisksPage({
                         </div>
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-500">{item.cabinet_name ?? item.storage_location_name ?? '-'}</td>
-                      <td className="px-3 py-3 text-xs text-slate-500">{item.expiry_date ?? '-'}</td>
+                      <td className="px-3 py-3 text-xs text-slate-500">
+                        {getTrackedManufacturerDate(item)
+                          ? `${getManufacturerDateTypeLabel(item.manufacturer_date_type)}: ${getTrackedManufacturerDate(item)}`
+                          : '-'}
+                      </td>
                       <td className="px-3 py-3 text-right">
                         <button
                           type="button"
@@ -1351,11 +1369,14 @@ function RiskDetailPanel({
         <div className="rounded-lg bg-violet-50 p-2 text-violet-700"><div>데이터 보완</div><strong>{assessment.dataQualityScore}</strong></div>
       </div>
       <div className="mt-5 space-y-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+        <div className="flex justify-between gap-4"><span className="text-slate-500">제조사 날짜 유형</span><span className="font-normal">{getManufacturerDateTypeLabel(item.manufacturer_date_type)}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">제조사 날짜</span><span className="font-normal">{getTrackedManufacturerDate(item) || '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">입고일</span><span className="font-normal">{item.received_date || '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">개봉일</span><span className="font-normal">{item.opened_date || '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">CAS</span><span className="font-normal">{item.cas_number || '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">브랜드</span><span className="font-normal">{item.brand || '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">규격</span><span className="font-normal">{item.capacity || '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">위치</span><span className="text-right font-normal">{item.cabinet_name ?? item.storage_location_name ?? '-'}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">유효기간</span><span className="font-normal">{item.expiry_date || '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">잔량</span><span className="font-normal">{item.remaining_percent ?? 100}%</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">GHS 상태</span><span className="font-normal">{item.ghs_data_status ?? '미조회'}</span></div>
       </div>

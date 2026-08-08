@@ -1,4 +1,5 @@
--- Run after applying 20260801162628_waste_disposal_v2_security_and_schema.sql
+-- Run after applying the waste-disposal V2 migrations, including
+-- 20260808100000_authorize_predicted_ph_routing.sql.
 -- to a local Supabase database. These assertions are read-only and abort on a
 -- missing security invariant.
 
@@ -63,9 +64,10 @@ begin
     select lower(pg_get_functiondef(
         'private.analyze_waste_batch_v2(jsonb,text,jsonb)'::regprocedure
     )) into v_definition;
-    if position('ph_prediction' in v_definition) > 0
-       or position('predictedph' in v_definition) > 0 then
-        raise exception 'Server waste routing must not consume client pH predictions';
+    if position('approvedpredictedph' in v_definition) = 0
+       or position('predicted_batch_ph' in v_definition) = 0
+       or position('v_has_approved_predicted_ph' in v_definition) = 0 then
+        raise exception 'Server waste routing must recognize only server-injected predicted-pH approvals';
     end if;
 
     if position('v_has_verified_halogenated_solvent' in v_definition) = 0
@@ -101,6 +103,37 @@ begin
         'authenticated', 'private.analyze_waste_batch_v2(jsonb,text,jsonb)', 'EXECUTE'
     ) then
         raise exception 'The private waste analyzer must not be directly executable by clients';
+    end if;
+
+    if not exists (
+        select 1
+        from pg_class
+        where oid = 'public.waste_ph_prediction_authorizations'::regclass
+          and relrowsecurity
+    ) then
+        raise exception 'predicted-pH authorizations must exist with RLS enabled';
+    end if;
+    if has_table_privilege('anon', 'public.waste_ph_prediction_authorizations', 'SELECT')
+       or has_table_privilege('authenticated', 'public.waste_ph_prediction_authorizations', 'INSERT') then
+        raise exception 'clients must not read or issue predicted-pH authorizations directly';
+    end if;
+    if has_function_privilege(
+        'anon', 'public.waste_ph_prediction_fingerprint(jsonb,text,jsonb,jsonb)', 'EXECUTE'
+    ) or not has_function_privilege(
+        'authenticated', 'public.waste_ph_prediction_fingerprint(jsonb,text,jsonb,jsonb)', 'EXECUTE'
+    ) then
+        raise exception 'predicted-pH fingerprint helper grants are invalid';
+    end if;
+
+    select lower(pg_get_functiondef(
+        'public.record_waste_handling_v2(uuid,jsonb,uuid)'::regprocedure
+    )) into v_definition;
+    if position('predictedphauthorizationid' in v_definition) = 0
+       or position('for update' in v_definition) = 0
+       or position('authorization.used_at is null' in v_definition) = 0
+       or position('authorization.input_fingerprint' in v_definition) = 0
+       or position('v_analysis_confirmation_snapshot' in v_definition) = 0 then
+        raise exception 'predicted-pH authorization must be single-use, batch-bound, and server-injected';
     end if;
 
     select lower(pg_get_functiondef(

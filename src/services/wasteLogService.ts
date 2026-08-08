@@ -106,6 +106,7 @@ export interface RecordWasteHandlingV2Params {
     confirmationSnapshot?: {
         alreadyMixed?: boolean;
         mixingState?: WasteBatchDraft['mixingState'];
+        predictedPhAuthorizationId?: string;
     };
     /** Immutable, non-authoritative snapshot captured when the record is finalized. */
     phPredictionSnapshot?: PhPredictionSnapshot;
@@ -187,6 +188,22 @@ export interface WasteHandlingRpcBatchPayload {
     };
         confirmationSnapshot: Record<string, unknown>;
     memo: string | null;
+}
+
+export type WasteHandlingRpcComponent = WasteHandlingRpcBatchPayload['components'][number];
+
+/**
+ * The exact, server-bindable input for a predicted-pH authorization. It uses
+ * the same normalized component payload that is later sent to the write RPC.
+ */
+export interface WastePhPredictionAuthorizationContext {
+    components: WasteHandlingRpcComponent[];
+    matrix: WasteBatchDraft['matrix'];
+    totalAmount: WasteHandlingRpcBatchPayload['totalAmount'];
+    confirmationSnapshot: Pick<
+        WasteBatchDraft,
+        'matrixSource' | 'mixingState' | 'additionalComponentsStatus' | 'incidentContext'
+    >;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -548,6 +565,79 @@ function validateHandlingAction(decision: WasteDecision, handlingAction: Handlin
     }
 }
 
+export function buildWasteHandlingComponents(
+    components: WasteBatchDraft['components'],
+    phPredictionSnapshot?: PhPredictionSnapshot,
+): WasteHandlingRpcComponent[] {
+    return components.map((component, index) => {
+        const phPredictionInput = buildPhPredictionInput(component);
+        const solutionContextSnapshot = buildSolutionContextSnapshot(component);
+        return {
+            cartLineId: component.cartLineId,
+            sourceType: component.sourceType,
+            sourceRef: component.sourceRef ?? null,
+            inventoryItemId: component.inventoryId ?? null,
+            cabinetItemId: component.cabinetId ?? null,
+            chemicalName: component.chemical.name,
+            casNumber: component.chemical.casNumber || null,
+            formula: component.chemical.molecularFormula || null,
+            molecularWeight: component.chemical.molecularWeight ?? null,
+            pubchemCid: /^\d+$/.test(component.chemical.id) ? Number(component.chemical.id) : null,
+            koshaChemId: component.chemical.koshaId ?? null,
+            identityConfidence: identityConfidenceToNumber(component.identityConfidence),
+            ghsDataStatus: component.ghsDataStatus,
+            concentration: component.concentration ? {
+                value: component.concentration.value,
+                unit: component.concentration.unit,
+            } : null,
+            hazardFlags: [...component.hazardFlags],
+            dataSources: buildComponentDataSources(component),
+            analysisSnapshot: {
+                category: component.category,
+                label: component.label,
+                reason: component.reason,
+                reasonParams: component.reasonParams ?? null,
+                isAiEstimated: Boolean(component.isAiEstimated),
+                identityConfirmedByUser: Boolean(component.identityConfirmedByUser),
+                ghs: component.chemical.ghs ?? null,
+                hazardDataConfirmedByUser: Boolean(component.hazardDataConfirmedByUser),
+                scanSnapshot: component.scanSnapshot ?? null,
+                physicalProperties: component.chemical.physicalProperties ?? null,
+                referencePh: component.chemical.properties?.referencePh ?? component.chemical.properties?.ph ?? null,
+                referencePhSource: component.chemical.properties?.phSource ?? null,
+                inventorySnapshot: component.inventorySnapshot ?? null,
+                inventoryDisposalQuantity: component.inventoryDisposalQuantity ?? null,
+                ...(solutionContextSnapshot ? { solutionContext: solutionContextSnapshot } : {}),
+                ...(phPredictionInput ? { phPredictionInput } : {}),
+                ...(index === 0 && phPredictionSnapshot
+                    ? { phPredictionSnapshot: validatePhPredictionSnapshot(phPredictionSnapshot) }
+                    : {}),
+            },
+        };
+    });
+}
+
+export function buildWastePhPredictionAuthorizationContext(
+    batch: WasteBatchDraft,
+): WastePhPredictionAuthorizationContext {
+    return {
+        components: buildWasteHandlingComponents(batch.components),
+        matrix: batch.matrix,
+        totalAmount: {
+            value: batch.totalAmount.value,
+            unit: batch.totalAmount.unit,
+            approximate: batch.totalAmount.isApproximate,
+            unknown: batch.totalAmount.isUnknown,
+        },
+        confirmationSnapshot: {
+            matrixSource: batch.matrixSource,
+            mixingState: batch.mixingState,
+            additionalComponentsStatus: batch.additionalComponentsStatus,
+            incidentContext: batch.incidentContext,
+        },
+    };
+}
+
 export function buildWasteHandlingRpcPayload(
     params: Pick<RecordWasteHandlingV2Params, 'batch' | 'decision' | 'handlingAction' | 'memo' | 'confirmationSnapshot' | 'phPredictionSnapshot'>,
 ): WasteHandlingRpcBatchPayload {
@@ -576,54 +666,7 @@ export function buildWasteHandlingRpcPayload(
     validateHandlingAction(decision, handlingAction);
 
     return {
-        components: batch.components.map((component, index) => {
-            const phPredictionInput = buildPhPredictionInput(component);
-            const solutionContextSnapshot = buildSolutionContextSnapshot(component);
-            return {
-            cartLineId: component.cartLineId,
-            sourceType: component.sourceType,
-            sourceRef: component.sourceRef ?? null,
-            inventoryItemId: component.inventoryId ?? null,
-            cabinetItemId: component.cabinetId ?? null,
-            chemicalName: component.chemical.name,
-            casNumber: component.chemical.casNumber || null,
-            formula: component.chemical.molecularFormula || null,
-            molecularWeight: component.chemical.molecularWeight ?? null,
-            pubchemCid: /^\d+$/.test(component.chemical.id)
-                ? Number(component.chemical.id)
-                : null,
-            koshaChemId: component.chemical.koshaId ?? null,
-            identityConfidence: identityConfidenceToNumber(component.identityConfidence),
-            ghsDataStatus: component.ghsDataStatus,
-            concentration: component.concentration ? {
-                value: component.concentration.value,
-                unit: component.concentration.unit,
-            } : null,
-            hazardFlags: [...component.hazardFlags],
-            dataSources: buildComponentDataSources(component),
-            analysisSnapshot: {
-                category: component.category,
-                label: component.label,
-                reason: component.reason,
-                reasonParams: component.reasonParams ?? null,
-                isAiEstimated: Boolean(component.isAiEstimated),
-                identityConfirmedByUser: Boolean(component.identityConfirmedByUser),
-                ghs: component.chemical.ghs ?? null,
-                hazardDataConfirmedByUser: Boolean(component.hazardDataConfirmedByUser),
-                scanSnapshot: component.scanSnapshot ?? null,
-                physicalProperties: component.chemical.physicalProperties ?? null,
-                referencePh: component.chemical.properties?.referencePh ?? component.chemical.properties?.ph ?? null,
-                referencePhSource: component.chemical.properties?.phSource ?? null,
-                inventorySnapshot: component.inventorySnapshot ?? null,
-                inventoryDisposalQuantity: component.inventoryDisposalQuantity ?? null,
-                ...(solutionContextSnapshot ? { solutionContext: solutionContextSnapshot } : {}),
-                ...(phPredictionInput ? { phPredictionInput } : {}),
-                ...(index === 0 && params.phPredictionSnapshot
-                    ? { phPredictionSnapshot: validatePhPredictionSnapshot(params.phPredictionSnapshot) }
-                    : {}),
-            },
-        };
-        }),
+        components: buildWasteHandlingComponents(batch.components, params.phPredictionSnapshot),
         handlingAction,
         decisionStatus: decision.decisionStatus,
         streamCode: decision.streamCode,

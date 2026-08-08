@@ -43,6 +43,9 @@ const serializeCabinetShelves = (shelves: ShelfData[]) => shelves.map((shelf) =>
         position: item.position,
         depth_position: item.depthPosition ?? 50,
         expiry_date: item.expiryDate || null,
+        manufacturer_date_type: item.manufacturerDateType || 'unlabeled',
+        received_date: item.receivedDate || null,
+        opened_date: item.openedDate || null,
         capacity: item.capacity || null,
         product_number: item.productNumber || null,
         brand: item.brand || null,
@@ -207,6 +210,9 @@ export const cabinetService = {
                     position: Number(item.position),
                     depthPosition: Number(item.depth_position),
                     expiryDate: item.expiry_date || undefined,
+                    manufacturerDateType: item.manufacturer_date_type || 'unlabeled',
+                    receivedDate: item.received_date || undefined,
+                    openedDate: item.opened_date || undefined,
                     capacity: item.capacity || undefined,
                     productNumber: item.product_number || undefined,
                     brand: item.brand || undefined,
@@ -244,7 +250,7 @@ export const cabinetService = {
         shelves: ShelfData[],
         dimensions: CabinetDimensions
     ): Promise<void> {
-        const { error } = await supabase.rpc('save_cabinet_state_with_ghs', {
+        const { error } = await supabase.rpc('save_cabinet_state_with_dates', {
             p_cabinet_id: cabinetId,
             p_shelves: serializeCabinetShelves(shelves),
             p_width: dimensions.width,
