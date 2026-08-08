@@ -10,6 +10,11 @@ import {
     validatePhCatalog,
 } from './index';
 import type { PhCatalogValidationEvidence } from './validationEvidence';
+import phreeqcGoldenInput from './fixtures/phreeqc-v3.8.8-golden.pqi?raw';
+import phreeqcGoldenOutput from './fixtures/phreeqc-v3.8.8-golden.sel?raw';
+import predictorSource from './predictor.ts?raw';
+import { PHREEQC_GOLDEN_PROVENANCE, PHREEQC_GOLDEN_RESULTS } from './fixtures/phreeqcGolden';
+import { normalizeLf, sha256Text } from './integrity';
 
 const component = (
     catalogId: string,
@@ -57,6 +62,24 @@ const batch = (components: WasteComponent[]): WasteBatchDraft => ({
 });
 
 describe('evidence-derived pH catalog approval', () => {
+    it('keeps the Pages Functions runtime golden metadata tied to the source artifacts', () => {
+        expect(sha256Text(normalizeLf(phreeqcGoldenInput))).toBe(PHREEQC_GOLDEN_PROVENANCE.inputSha256);
+        expect(sha256Text(normalizeLf(phreeqcGoldenOutput))).toBe(PHREEQC_GOLDEN_PROVENANCE.selectedOutputSha256);
+        expect(sha256Text(normalizeLf(predictorSource)))
+            .toBe(PH_CATALOG_VALIDATION_EVIDENCE.predictorSourceSha256);
+
+        const outputRows = normalizeLf(phreeqcGoldenOutput)
+            .split('\n')
+            .slice(1)
+            .map((line) => line.trim().split(/\s+/).map(Number))
+            .filter((values) => values.length >= 3 && values.every(Number.isFinite))
+            .map(([row, pH, ionicStrength]) => ({ row, pH, ionicStrength }));
+        const runtimeRows = Object.values(PHREEQC_GOLDEN_RESULTS)
+            .map((result, index) => ({ row: index + 1, ...result }));
+
+        expect(runtimeRows).toEqual(outputRows);
+    });
+
     it('activates only the exact records covered by passing fixed evidence', () => {
         expect(DEFAULT_PH_CATALOG_APPROVAL.runtimeReady).toBe(true);
         expect(DEFAULT_PH_CATALOG_APPROVAL.passingGoldenCaseIds).toHaveLength(42);
