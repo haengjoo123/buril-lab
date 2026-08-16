@@ -190,6 +190,41 @@ describe('useWasteStore V2 batch isolation', () => {
         ]);
     });
 
+    it('removes a stale organic-solvent category from a stored carbon-and-metal material', () => {
+        const legacyAnalysis = cartItem('sodium-acetate', 'Sodium Acetate');
+        legacyAnalysis.chemical.casNumber = '127-09-3';
+        legacyAnalysis.chemical.molecularFormula = 'C2H3NaO2';
+        const draft = createEmptyWasteBatch({
+            id: 'stored-acetate',
+            scopeKey: 'user-a:lab-a',
+            userId: 'user-a',
+            labId: 'lab-a',
+            now: '2026-08-02T00:00:00.000Z',
+        });
+        draft.components = [createWasteComponentFromAnalysis(legacyAnalysis)];
+
+        storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 4,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft,
+            parkedDrafts: [],
+        }));
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            category: 'UNKNOWN',
+            label: 'label_possible_ionic_material',
+            reason: 'reason_possible_ionic_material_review',
+            identityConfidence: 'review_required',
+            materialProfile: {
+                kind: 'possible_ionic_organic_material',
+                evidence: 'formula',
+            },
+        });
+    });
+
     it('upgrades an owner-matched raw V2 draft to the versioned envelope', () => {
         const rawDraft = createEmptyWasteBatch({
             id: 'raw-v2-batch',

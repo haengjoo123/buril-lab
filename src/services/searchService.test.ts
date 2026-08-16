@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '../locales/i18n'
 
 const mocks = vi.hoisted(() => ({
   fetchChemicalInfo: vi.fn(),
@@ -25,8 +26,42 @@ vi.mock('./wikiApi', () => ({
 import { searchChemical } from './searchService'
 
 describe('searchChemical CAS validation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     Object.values(mocks).forEach((mock) => mock.mockReset())
+    await i18n.changeLanguage('en')
+  })
+
+  it('uses the PubChem English name in English mode even when KOSHA has a Korean name', async () => {
+    mocks.fetchChemicalInfo.mockResolvedValue({
+      id: '123',
+      name: 'Beef extract',
+      casNumber: '68990-09-0',
+      molecularFormula: '',
+      properties: { isOrganic: false, isHalogenated: false },
+    })
+    mocks.resolveCasChemical.mockResolvedValue({ chemId: 456, nameKo: '소고기 추출물' })
+    mocks.fetchKoshaPH.mockResolvedValue(undefined)
+
+    await expect(searchChemical('68990-09-0')).resolves.toMatchObject({
+      name: 'Beef extract',
+    })
+  })
+
+  it('keeps the Korean source name alongside the English name in Korean mode', async () => {
+    await i18n.changeLanguage('ko')
+    mocks.fetchChemicalInfo.mockResolvedValue({
+      id: '123',
+      name: 'Beef extract',
+      casNumber: '68990-09-0',
+      molecularFormula: '',
+      properties: { isOrganic: false, isHalogenated: false },
+    })
+    mocks.resolveCasChemical.mockResolvedValue({ chemId: 456, nameKo: '소고기 추출물' })
+    mocks.fetchKoshaPH.mockResolvedValue(undefined)
+
+    await expect(searchChemical('68990-09-0')).resolves.toMatchObject({
+      name: '소고기 추출물 (Beef extract)',
+    })
   })
 
   it('rejects an invalid CAS checksum before any external lookup', async () => {

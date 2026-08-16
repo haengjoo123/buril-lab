@@ -5,6 +5,7 @@ import {
     type ManufacturerDateType,
     hasManufacturerDate,
 } from '../utils/manufacturerDate';
+import { AppSelect } from './AppSelect';
 
 export interface ReagentDateValues {
     manufacturer_date_type?: ManufacturerDateType;
@@ -53,15 +54,17 @@ export const ReagentDateFields: React.FC<ReagentDateFieldsProps> = ({
         <div className={`flex flex-col gap-3 ${className}`}>
             <div className="flex flex-col gap-1.5">
                 <label className={labelClassName}>{t('manufacturer_date_type_label')}</label>
-                <select
+                <AppSelect
                     value={manufacturerDateType}
-                    onChange={(event) => emit({ manufacturer_date_type: event.target.value as ManufacturerDateType })}
-                    className={inputClassName}
-                >
-                    <option value="expiry">{t('manufacturer_date_type_expiry')}</option>
-                    <option value="minimum_shelf_life">{t('manufacturer_date_type_minimum_shelf_life')}</option>
-                    <option value="unlabeled">{t('manufacturer_date_type_unlabeled')}</option>
-                </select>
+                    onChange={(nextValue) => emit({ manufacturer_date_type: nextValue as ManufacturerDateType })}
+                    options={[
+                        { value: 'expiry', label: t('manufacturer_date_type_expiry') },
+                        { value: 'minimum_shelf_life', label: t('manufacturer_date_type_minimum_shelf_life') },
+                        { value: 'unlabeled', label: t('manufacturer_date_type_unlabeled') },
+                    ]}
+                    ariaLabel={t('manufacturer_date_type_label')}
+                    buttonClassName={inputClassName}
+                />
             </div>
 
             <div className={columnsClassName}>

@@ -17,6 +17,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
     const { t, i18n } = useTranslation();
     const [loading, setLoading] = useState(true);
     const [sections, setSections] = useState<MsdsSection[]>([]);
+    const [missingSections, setMissingSections] = useState<number[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     // Prevent body scroll when modal is open
@@ -36,9 +37,11 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
         setLoading(true);
         setError(null);
         setSections([]);
+        setMissingSections([]);
 
         try {
             let data: MsdsSection[] = [];
+            let missing: number[] = [];
             const isEnglish = i18n.language === 'en';
 
             if (isEnglish) {
@@ -49,17 +52,24 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                 }
                 if (data.length === 0 && chemical.koshaId) {
                     console.log('Fallback to KOSHA...');
-                    data = await fetchKoshaMsds(chemical.koshaId);
+                    const koshaData = await fetchKoshaMsds(chemical.koshaId);
+                    data = koshaData.sections;
+                    missing = koshaData.missingSections;
                 }
             } else {
                 // Korean: KOSHA (Korean) first, PubChem fallback
                 if (chemical.koshaId) {
                     console.log('Fetching from KOSHA (KO priority)...');
-                    data = await fetchKoshaMsds(chemical.koshaId);
+                    const koshaData = await fetchKoshaMsds(chemical.koshaId);
+                    data = koshaData.sections;
+                    missing = koshaData.missingSections;
                 }
                 if (data.length === 0 && chemical.id) {
                     console.log('Fallback to PubChem...');
                     data = await fetchPubChemMsds(chemical.id);
+                    if (data.length > 0) {
+                        missing = [];
+                    }
                 }
             }
 
@@ -67,6 +77,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                 setError(t('msds_not_found'));
             } else {
                 setSections(data);
+                setMissingSections(missing);
             }
         } catch (err) {
             setError(t('msds_load_error'));
@@ -124,6 +135,11 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                         </div>
                     ) : (
                         <div className="space-y-6">
+                            {missingSections.length > 0 && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+                                    {t('msds_incomplete', { sections: missingSections.join(', ') })}
+                                </div>
+                            )}
                             {sections.map((section, idx) => (
                                 <SectionItem key={idx} section={section} />
                             ))}

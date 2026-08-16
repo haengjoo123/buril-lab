@@ -3,6 +3,7 @@ import { fetchChemicalInfo } from './pubchemApi';
 import { resolveKoreanChemical, resolveCasChemical, fetchKoshaPH } from './koshaApi';
 import { resolveWikiCas } from './wikiApi';
 import { hasCasNumberFormat, normalizeCasNumber } from '../utils/casNumber';
+import i18n from '../locales/i18n';
 
 /**
  * Unified search function that delegates to the appropriate API based on input language.
@@ -32,6 +33,18 @@ const mergeReferencePh = (
         ...(resolvedReferencePh !== undefined ? { referencePh: resolvedReferencePh } : {}),
         ...((source ?? properties.phSource) ? { phSource: source ?? properties.phSource } : {}),
     };
+};
+
+/**
+ * KOSHA supplies Korean material names while PubChem supplies English ones.
+ * Only Korean UI should prefer the KOSHA display name.
+ */
+const getLocalizedDisplayName = (englishName: string, koreanName?: string): string => {
+    if (i18n.language.toLowerCase().startsWith('ko') && koreanName) {
+        return `${koreanName} (${englishName})`;
+    }
+
+    return englishName;
 };
 
 export const searchChemical = async (query: string): Promise<Chemical | null> => {
@@ -70,9 +83,7 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
                 }
             }
 
-            const displayName = koshaResolved?.nameKo
-                ? `${koshaResolved.nameKo} (${pubchemResult.name})`
-                : pubchemResult.name;
+            const displayName = getLocalizedDisplayName(pubchemResult.name, koshaResolved?.nameKo);
 
             return {
                 ...pubchemResult,
@@ -170,7 +181,7 @@ export const searchChemical = async (query: string): Promise<Chemical | null> =>
 
                 return {
                     ...pubchemResult,
-                    name: finalNameKo ? `${finalNameKo} (${pubchemResult.name})` : pubchemResult.name, // e.g., "벤젠 (Benzene)"
+                    name: getLocalizedDisplayName(pubchemResult.name, finalNameKo),
                     properties: mergedProps,
                     koshaId: koshaId
                 };

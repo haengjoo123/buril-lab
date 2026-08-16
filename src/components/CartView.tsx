@@ -68,6 +68,7 @@ import {
     shouldAskPhPredictionCompleteness,
     shouldShowPhPredictionMatrixNotice,
 } from './cartPhPredictionUi';
+import { AppSelect } from './AppSelect';
 import type {
     AmountUnit,
     ConcentrationUnit,
@@ -1524,12 +1525,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base aria-[invalid=true]:border-red-500 dark:border-slate-700 dark:bg-slate-950"
                                                         />
                                                     </label>
-                                                    <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                        {t('unit', { defaultValue: '단위' })}
-                                                        <select
+                                                    <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                        <span>{t('unit', { defaultValue: '단위' })}</span>
+                                                        <AppSelect
                                                             value={solutionVolumeUnits[component.cartLineId] ?? component.solutionVolume?.unit ?? 'mL'}
-                                                            onChange={(event) => {
-                                                                const unit = event.target.value as WasteSolutionVolumeUnit;
+                                                            onChange={(value) => {
+                                                                const unit = value as WasteSolutionVolumeUnit;
                                                                 setSolutionVolumeUnits((current) => ({
                                                                     ...current,
                                                                     [component.cartLineId]: unit,
@@ -1544,11 +1545,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                                                     });
                                                                 }
                                                             }}
-                                                            className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-2 dark:border-slate-700 dark:bg-slate-950"
-                                                        >
-                                                            {SOLUTION_VOLUME_UNITS.map((unit) => <option key={unit}>{unit}</option>)}
-                                                        </select>
-                                                    </label>
+                                                            options={SOLUTION_VOLUME_UNITS.map((unit) => ({ value: unit, label: unit }))}
+                                                            ariaLabel={t('unit', { defaultValue: '단위' })}
+                                                            className="mt-1 w-full"
+                                                            buttonClassName="!min-h-11 !rounded-xl !border-slate-300 !bg-white !px-2 dark:!border-slate-700 dark:!bg-slate-950"
+                                                        />
+                                                    </div>
                                                 </div>
                                                 {isInvalidConcentrationText(solutionVolumeInputs[component.cartLineId]) && (
                                                     <p id={`solution-volume-error-${component.cartLineId}`} className="text-xs font-medium text-red-600 dark:text-red-300">
@@ -1589,12 +1591,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base aria-[invalid=true]:border-red-500 dark:border-slate-700 dark:bg-slate-950"
                                                     />
                                                 </label>
-                                                <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                    {t('unit', { defaultValue: '단위' })}
-                                                    <select
+                                                <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                    <span>{t('unit', { defaultValue: '단위' })}</span>
+                                                    <AppSelect
                                                         value={concentrationUnits[component.cartLineId] ?? component.concentration?.unit ?? 'M'}
-                                                        onChange={(event) => {
-                                                            const unit = event.target.value as ConcentrationUnit;
+                                                        onChange={(value) => {
+                                                            const unit = value as ConcentrationUnit;
                                                             setConcentrationUnits((current) => ({
                                                                 ...current,
                                                                 [component.cartLineId]: unit,
@@ -1613,11 +1615,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                                                 });
                                                             }
                                                         }}
-                                                        className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-2 dark:border-slate-700 dark:bg-slate-950"
-                                                    >
-                                                        {CONCENTRATION_UNITS.map((unit) => <option key={unit}>{unit}</option>)}
-                                                    </select>
-                                                </label>
+                                                        options={CONCENTRATION_UNITS.map((unit) => ({ value: unit, label: unit }))}
+                                                        ariaLabel={t('unit', { defaultValue: '단위' })}
+                                                        className="mt-1 w-full"
+                                                        buttonClassName="!min-h-11 !rounded-xl !border-slate-300 !bg-white !px-2 dark:!border-slate-700 dark:!bg-slate-950"
+                                                    />
+                                                </div>
                                                 </div>
                                                 {isInvalidConcentrationText(concentrationInputs[component.cartLineId]) && (
                                                     <p id={`concentration-error-${component.cartLineId}`} className="text-xs font-medium text-red-600 dark:text-red-300">
@@ -1626,12 +1629,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 )}
                                                 {(concentrationUnits[component.cartLineId] ?? component.concentration?.unit) === '%' && component.concentration && (
                                                     <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-950/40">
-                                                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                            {t('waste_concentration_percent_basis')}
-                                                            <select
+                                                        <div className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                            <span>{t('waste_concentration_percent_basis')}</span>
+                                                            <AppSelect
                                                                 value={component.concentration.basis ?? ''}
-                                                                onChange={(event) => {
-                                                                    const basis = event.target.value as WasteConcentrationBasis;
+                                                                onChange={(value) => {
+                                                                    const basis = value as WasteConcentrationBasis;
                                                                     const requiredDensityKind = basis === 'w_w' ? 'solution'
                                                                         : basis === 'v_v' ? 'solute'
                                                                             : null;
@@ -1653,16 +1656,16 @@ export const CartView: React.FC<CartViewProps> = ({
                                                                         }));
                                                                     }
                                                                 }}
-                                                                className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950"
-                                                            >
-                                                                <option value="" disabled>{t('waste_concentration_percent_basis')}</option>
-                                                                {CONCENTRATION_BASES.map((basis) => (
-                                                                    <option key={basis} value={basis}>
-                                                                        {t(`waste_concentration_basis_${basis}` as never)}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        </label>
+                                                                options={CONCENTRATION_BASES.map((basis) => ({
+                                                                    value: basis,
+                                                                    label: t(`waste_concentration_basis_${basis}` as never),
+                                                                }))}
+                                                                placeholder={t('waste_concentration_percent_basis')}
+                                                                ariaLabel={t('waste_concentration_percent_basis')}
+                                                                className="mt-1 w-full"
+                                                                buttonClassName="!min-h-11 !rounded-xl !border-slate-300 !bg-white !px-3 dark:!border-slate-700 dark:!bg-slate-950"
+                                                            />
+                                                        </div>
                                                         {(component.concentration.basis === 'w_w' || component.concentration.basis === 'v_v') && (
                                                             <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                                                                 {t(component.concentration.basis === 'w_w'
@@ -1708,29 +1711,32 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 </>
                                                 )}
                                                 {activeStep === 'components' && isPhPredictionEnabled && (
-                                                    <label className="block border-t border-slate-100 pt-3 text-xs font-medium text-slate-600 dark:border-slate-800 dark:text-slate-300">
-                                                        {t('waste_ph_catalog_form')}
-                                                        <select
+                                                    <div className="block border-t border-slate-100 pt-3 text-xs font-medium text-slate-600 dark:border-slate-800 dark:text-slate-300">
+                                                        <span>{t('waste_ph_catalog_form')}</span>
+                                                        <AppSelect
                                                             value={component.phCatalogId && getApprovedPhCatalogOptions(component)
                                                                 .some((record) => record.id === component.phCatalogId)
                                                                 ? component.phCatalogId
                                                                 : ''}
-                                                            onChange={(event) => updateComponent(component.cartLineId, {
-                                                                phCatalogId: event.target.value || undefined,
+                                                            onChange={(value) => updateComponent(component.cartLineId, {
+                                                                phCatalogId: value || undefined,
                                                             })}
-                                                            className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                                                        >
-                                                            <option value="">{t('waste_ph_catalog_form_unmatched')}</option>
-                                                            {getApprovedPhCatalogOptions(component).map((record) => (
-                                                                <option key={record.id} value={record.id}>
-                                                                    {record.exactFormLabel}{record.casNumber ? ` · CAS ${record.casNumber}` : ''}
-                                                                </option>
-                                                            ))}
-                                                        </select>
+                                                            options={[
+                                                                { value: '', label: t('waste_ph_catalog_form_unmatched') },
+                                                                ...getApprovedPhCatalogOptions(component).map((record) => ({
+                                                                    value: record.id,
+                                                                    label: `${record.exactFormLabel}${record.casNumber ? ` · CAS ${record.casNumber}` : ''}`,
+                                                                })),
+                                                            ]}
+                                                            ariaLabel={t('waste_ph_catalog_form')}
+                                                            className="mt-1 w-full"
+                                                            buttonClassName="!min-h-11 !rounded-xl !border-slate-200 !bg-white !px-3 !text-sm !text-slate-900 focus:!border-blue-500 focus:!ring-blue-500 dark:!border-slate-700 dark:!bg-slate-950 dark:!text-white"
+                                                            menuClassName="w-full"
+                                                        />
                                                         <span className="mt-1 block leading-relaxed text-slate-500 dark:text-slate-400">
                                                             {t('waste_ph_catalog_form_help')}
                                                         </span>
-                                                    </label>
+                                                    </div>
                                                 )}
                                                 {activeStep === 'components' &&
                                                     (component.ghsDataStatus !== 'verified' || component.hazardDataConfirmedByUser) && (
@@ -2258,14 +2264,13 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 aria-describedby={amountValueInvalid ? 'waste-amount-error' : undefined}
                                                 className="h-12 min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-base aria-[invalid=true]:border-red-500 dark:border-slate-700 dark:bg-slate-900"
                                             />
-                                            <select
+                                            <AppSelect
                                                 value={batch.totalAmount.unit ?? allowedUnits[0]}
-                                                onChange={(event) => changeUnit(event.target.value as AmountUnit)}
-                                                aria-label={t('unit', { defaultValue: '단위' })}
-                                                className="h-12 rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-900"
-                                            >
-                                                {allowedUnits.map((unit) => <option key={unit}>{unit}</option>)}
-                                            </select>
+                                                onChange={(value) => changeUnit(value as AmountUnit)}
+                                                options={allowedUnits.map((unit) => ({ value: unit, label: unit }))}
+                                                ariaLabel={t('unit', { defaultValue: '단위' })}
+                                                buttonClassName="!min-h-12 !rounded-xl !border-slate-300 !bg-white !px-3 dark:!border-slate-700 dark:!bg-slate-900"
+                                            />
                                             {!hasComponentVolumeTotal && (
                                                 <label className="col-span-2 flex min-h-11 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                                                     <input

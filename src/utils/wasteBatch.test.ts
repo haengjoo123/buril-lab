@@ -826,6 +826,37 @@ describe('analyzeWasteBatch', () => {
         }
     });
 
+    it('routes a structurally verified sodium acetate solution by its confirmed matrix', () => {
+        const sodiumAcetate = analyzeChemical({
+            id: 'sodium-acetate',
+            name: 'Sodium acetate',
+            casNumber: '127-09-3',
+            molecularFormula: 'C2H3NaO2',
+            connectivitySmiles: 'CC(=O)[O-].[Na+]',
+            ghs: { signal: 'Warning', hazardStatements: [] },
+        });
+        expect(sodiumAcetate.category).toBe('NEUTRAL');
+
+        const component = createWasteComponentFromAnalysis(sodiumAcetate);
+        expect(inferWasteMatrixFromComponent(component)).toBeNull();
+
+        const aqueous = batch([sodiumAcetate], 'aqueous');
+        aqueous.additionalComponentsStatus = 'none';
+        expect(analyzeWasteBatch(aqueous)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'AQUEOUS_OTHER',
+            routingBasis: 'matrix',
+        });
+
+        const methanolCarrier = batch([sodiumAcetate], 'organic_non_halogenated');
+        methanolCarrier.additionalComponentsStatus = 'none';
+        expect(analyzeWasteBatch(methanolCarrier)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ORGANIC_NON_HALOGENATED',
+            routingBasis: 'matrix',
+        });
+    });
+
     it('fails closed instead of crashing on a malformed external molecular formula', () => {
         const malformed = analysis('Malformed external record', 'C)Cl', 'NEUTRAL');
         malformed.chemical.casNumber = '50-99-7';

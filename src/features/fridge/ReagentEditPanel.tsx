@@ -636,7 +636,8 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             const chemicalData = await searchChemical(query);
             if (chemicalData) {
                 let analysis = analyzeChemical(chemicalData);
-                if (analysis.category === 'UNKNOWN') {
+                if (analysis.category === 'UNKNOWN' &&
+                    analysis.materialProfile?.kind !== 'possible_ionic_organic_material') {
                     const aiResult = await classifyChemicalWithAI(chemicalData);
                     if (aiResult) {
                         analysis = { ...analysis, ...aiResult };

@@ -9,6 +9,33 @@ const getKoshaBaseUrl = () => getInternalApiUrl('/api/kosha');
 
 // KOSHA API Types (Internal)
 import type { MsdsSection } from '../types';
+
+const KOSHA_MSDS_SECTION_COUNT = 16;
+
+interface KoshaMsdsSectionResponse {
+    sectionNumber: number;
+    status: number;
+    body: string;
+}
+
+interface KoshaMsdsApiResponse {
+    sections?: KoshaMsdsSectionResponse[];
+    missingSections?: number[];
+}
+
+export interface KoshaMsdsResult {
+    sections: MsdsSection[];
+    missingSections: number[];
+}
+
+interface CachedMsdsResult {
+    result: KoshaMsdsResult;
+    expiresAt: number;
+}
+
+const MSDS_CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
+const msdsResultCache = new Map<number, CachedMsdsResult>();
+const msdsPendingRequests = new Map<number, Promise<KoshaMsdsResult>>();
 // Reference: Image 4 (getChemList response) - Actual response has chemNameKor
 interface KoshaSearchItem {
     chemId: number;
@@ -292,63 +319,91 @@ export const resolveCasChemical = async (casNo: string): Promise<{ chemId: numbe
 
 // --- MSDS Full Fetching ---
 
+const msdsSectionNames = [
+    "1. 화학제품과 회사에 관한 정보",
+    "2. 유해성·위험성",
+    "3. 구성성분의 명칭 및 함유량",
+    "4. 응급조치 요령",
+    "5. 폭발·화재시 대처방법",
+    "6. 누출 사고시 대처방법",
+    "7. 취급 및 저장방법",
+    "8. 노출방지 및 개인보호구",
+    "9. 물리화학적 특성",
+    "10. 안정성 및 반응성",
+    "11. 독성에 관한 정보",
+    "12. 환경에 미치는 영향",
+    "13. 폐기시 주의사항",
+    "14. 운송에 필요한 정보",
+    "15. 법적 규제현황",
+    "16. 그 밖의 참고사항"
+];
+
 /**
- * Fetches all MSDS sections (1-16) from KOSHA API
- * This is a heavy operation, so should only be called on user request.
+ * Fetches the KOSHA document through the server-side batch endpoint. This
+ * counts as one public API request instead of 16 concurrent browser requests.
  */
-export const fetchKoshaMsds = async (chemId: number): Promise<MsdsSection[]> => {
+export const fetchKoshaMsds = async (chemId: number): Promise<KoshaMsdsResult> => {
+    const cachedResult = msdsResultCache.get(chemId);
+    if (cachedResult && cachedResult.expiresAt > Date.now()) {
+        return cachedResult.result;
+    }
+    if (cachedResult) {
+        msdsResultCache.delete(chemId);
+    }
+
+    const pendingRequest = msdsPendingRequests.get(chemId);
+    if (pendingRequest) {
+        return pendingRequest;
+    }
+
+    const request = fetchKoshaMsdsDocument(chemId);
+    msdsPendingRequests.set(chemId, request);
+
+    try {
+        const result = await request;
+        // Keep only complete results in memory so an explicit retry can recover
+        // sections that were temporarily unavailable at KOSHA.
+        if (result.missingSections.length === 0) {
+            msdsResultCache.set(chemId, {
+                result,
+                expiresAt: Date.now() + MSDS_CLIENT_CACHE_TTL_MS,
+            });
+        }
+        return result;
+    } finally {
+        msdsPendingRequests.delete(chemId);
+    }
+};
+
+const fetchKoshaMsdsDocument = async (chemId: number): Promise<KoshaMsdsResult> => {
     const paddedId = String(chemId).padStart(6, '0');
     console.log(`[KOSHA] Fetching Full MSDS for: ${paddedId}`);
 
-    // Define section names (approximately)
-    const sectionNames = [
-        "1. 화학제품과 회사에 관한 정보",
-        "2. 유해성·위험성",
-        "3. 구성성분의 명칭 및 함유량",
-        "4. 응급조치 요령",
-        "5. 폭발·화재시 대처방법",
-        "6. 누출 사고시 대처방법",
-        "7. 취급 및 저장방법",
-        "8. 노출방지 및 개인보호구",
-        "9. 물리화학적 특성",
-        "10. 안정성 및 반응성",
-        "11. 독성에 관한 정보",
-        "12. 환경에 미치는 영향",
-        "13. 폐기시 주의사항",
-        "14. 운송에 필요한 정보",
-        "15. 법적 규제현황",
-        "16. 그 밖의 참고사항"
-    ];
-
-    // Create array of promises for 16 sections
-    const promises = Array.from({ length: 16 }, (_, i) => {
-        const detailNum = String(i + 1).padStart(2, '0'); // 01, 02, ... 16
-        return axios.get(`${getKoshaBaseUrl()}/chemdetail${detailNum}`, {
-            params: {
-                chemId: paddedId,
-            }
-        }).then(res => ({ idx: i, data: res.data })).catch(e => ({ idx: i, error: e }));
+    const response = await axios.get<KoshaMsdsApiResponse>(`${getKoshaBaseUrl()}/msds`, {
+        params: { chemId: paddedId },
     });
-
-    const results = await Promise.all(promises);
-
+    const responseSections = response.data.sections || [];
+    const missingSections = new Set(response.data.missingSections || []);
     const sections: MsdsSection[] = [];
 
-    results.forEach((res: any) => {
-        if (res.error) {
-            console.warn(`[KOSHA] Failed section ${res.idx + 1}`);
+    responseSections.forEach((responseSection) => {
+        const sectionNumber = responseSection.sectionNumber;
+        if (responseSection.status < 200 || responseSection.status >= 300) {
+            console.warn(`[KOSHA] Failed section ${sectionNumber}`);
+            missingSections.add(sectionNumber);
             return;
         }
 
         try {
-            const parsed = parser.parse(res.data);
+            const parsed = parser.parse(responseSection.body);
             const items = parsed?.response?.body?.items?.item;
 
-            if (!items) return;
+            if (!items) {
+                missingSections.add(sectionNumber);
+                return;
+            }
 
             const list = Array.isArray(items) ? items : [items];
-
-            // Map items to label/value
             const content = list.map((item: any) => ({
                 label: item.msdsItemNameKor || 'Unknown',
                 value: item.itemDetail || '자료없음'
@@ -356,21 +411,26 @@ export const fetchKoshaMsds = async (chemId: number): Promise<MsdsSection[]> => 
 
             if (content.length > 0) {
                 sections.push({
-                    title: sectionNames[res.idx] || `Section ${res.idx + 1}`,
-                    content: content
+                    title: msdsSectionNames[sectionNumber - 1] || `Section ${sectionNumber}`,
+                    content
                 });
+            } else {
+                missingSections.add(sectionNumber);
             }
-
-        } catch (e) {
-            console.warn(`[KOSHA] Parse error section ${res.idx + 1}`, e);
+        } catch (error) {
+            console.warn(`[KOSHA] Parse error section ${sectionNumber}`, error);
+            missingSections.add(sectionNumber);
         }
     });
 
-    // Sort by original index to ensure order
-    // But since we pushed in loop of results which depends on promise resolution order? No Promise.all preserves order of results array.
-    // Wait, Promise.all returns results in order.
-    // But I pushed to sections inside forEach which iterates the results array. So it is ordered.
-    // Let's just make sure empty sections are handled.
+    for (let sectionNumber = 1; sectionNumber <= KOSHA_MSDS_SECTION_COUNT; sectionNumber += 1) {
+        if (!responseSections.some((section) => section.sectionNumber === sectionNumber)) {
+            missingSections.add(sectionNumber);
+        }
+    }
 
-    return sections;
-};;
+    return {
+        sections,
+        missingSections: Array.from(missingSections).sort((a, b) => a - b),
+    };
+};

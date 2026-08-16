@@ -41,6 +41,93 @@ describe('analyzeChemical confirmed inorganic salt routing', () => {
     });
 });
 
+describe('analyzeChemical ionic organic material routing', () => {
+    it.each([
+        ['Sodium acetate', 'C2H3NaO2', 'CC(=O)[O-].[Na+]'],
+        ['Potassium acetate', 'C2H3KO2', 'CC(=O)[O-].[K+]'],
+        ['Trisodium citrate', 'C6H5Na3O7', 'C(C(=O)[O-])(CC(=O)[O-])CC(=O)[O-].[Na+].[Na+].[Na+]'],
+    ])('keeps verified ionic organic salt %s out of organic-solvent categories', (
+        name,
+        molecularFormula,
+        connectivitySmiles,
+    ) => {
+        expect(analyzeChemical({
+            id: name,
+            name,
+            casNumber: '127-09-3',
+            molecularFormula,
+            connectivitySmiles,
+        })).toMatchObject({
+            category: 'NEUTRAL',
+            label: 'label_ionic_organic_salt',
+            reason: 'reason_ionic_organic_salt_matrix_required',
+            materialProfile: {
+                kind: 'ionic_organic_salt',
+                evidence: 'connectivity_smiles',
+                requiresMatrixConfirmation: true,
+            },
+        });
+    });
+
+    it('does not mistake an ester solvent or covalent organometallic for an ionic salt', () => {
+        const ethylAcetate = analyzeChemical({
+            id: 'ethyl-acetate',
+            name: 'Ethyl acetate',
+            casNumber: '141-78-6',
+            molecularFormula: 'C4H8O2',
+            connectivitySmiles: 'CCOC(=O)C',
+        });
+        const methylLithium = analyzeChemical({
+            id: 'methyllithium',
+            name: 'Methyllithium',
+            casNumber: '917-54-4',
+            molecularFormula: 'CH3Li',
+            connectivitySmiles: 'C[Li]',
+        });
+
+        expect(ethylAcetate).toMatchObject({
+            category: 'ORGANIC_NON_HALOGEN',
+            materialProfile: { kind: 'organic_compound' },
+        });
+        expect(methylLithium).toMatchObject({
+            category: 'REACTIVE',
+            materialProfile: { kind: 'organic_compound' },
+        });
+    });
+
+    it('holds a carbon-and-metal formula for review when structural ions are unavailable', () => {
+        expect(analyzeChemical({
+            id: 'sodium-acetate-without-structure',
+            name: 'Sodium acetate',
+            casNumber: '127-09-3',
+            molecularFormula: 'C2H3NaO2',
+        })).toMatchObject({
+            category: 'UNKNOWN',
+            label: 'label_possible_ionic_material',
+            reason: 'reason_possible_ionic_material_review',
+            materialProfile: {
+                kind: 'possible_ionic_organic_material',
+                evidence: 'formula',
+            },
+        });
+    });
+
+    it('keeps confirmed hazards above the ionic-salt material identity', () => {
+        expect(analyzeChemical({
+            id: 'toxic-sodium-benzoate-test',
+            name: 'Toxic sodium benzoate test',
+            casNumber: '532-32-1',
+            molecularFormula: 'C7H5NaO2',
+            connectivitySmiles: 'C1=CC=C(C=C1)C(=O)[O-].[Na+]',
+            ghs: { signal: 'Danger', hazardStatements: ['H300'] },
+        })).toMatchObject({
+            category: 'SPECIAL_HAZARD',
+            label: 'label_special_hazard',
+            materialProfile: { kind: 'ionic_organic_salt' },
+        });
+    });
+});
+
 describe('analyzeChemical independent hazard detection', () => {
     it('preserves heavy-metal and reactive/oxidizer evidence despite legacy precedence', () => {
         const result = analyzeChemical({

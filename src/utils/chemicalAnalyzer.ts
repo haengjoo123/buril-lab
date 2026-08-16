@@ -4,6 +4,7 @@ import type {
     Chemical,
     ChemicalHazardEvidence,
     ChemicalHazardProfile,
+    ChemicalMaterialProfile,
     DisposalCategory,
     WasteHazardFlag,
 } from '../types';
@@ -431,6 +432,34 @@ export const isLikelyOrganicByFormula = (formula: string, name = ''): boolean =>
     return Boolean(elements.C) && !isInorganicCarbonFormula(formula, name);
 };
 
+const smilesFragmentHasCarbon = (fragment: string): boolean =>
+    /c|C(?![a-z])/.test(fragment);
+
+const smilesFragmentHasPositiveCharge = (fragment: string): boolean =>
+    /\[[^\]]*\+\d*[^\]]*\]/.test(fragment);
+
+const smilesFragmentHasNegativeCharge = (fragment: string): boolean =>
+    /\[[^\]]*-\d*[^\]]*\]/.test(fragment);
+
+/**
+ * PubChem ConnectivitySMILES retains disconnected counter-ions. Requiring
+ * separate positive and negative fragments avoids treating covalent
+ * organometallic reagents (for example C[Li]) as ordinary salts.
+ */
+export const isIonicOrganicSaltByStructure = (connectivitySmiles = ''): boolean => {
+    const fragments = connectivitySmiles
+        .split('.')
+        .map(fragment => fragment.trim())
+        .filter(Boolean);
+    if (fragments.length < 2) return false;
+
+    const positiveFragments = fragments.filter(smilesFragmentHasPositiveCharge);
+    const negativeFragments = fragments.filter(smilesFragmentHasNegativeCharge);
+    if (positiveFragments.length === 0 || negativeFragments.length === 0) return false;
+
+    return [...positiveFragments, ...negativeFragments].some(smilesFragmentHasCarbon);
+};
+
 /**
  * This is deliberately narrower than "not organic". It recognizes an ionic
  * inorganic salt only when the formula contains a counter-ion and a familiar
@@ -459,6 +488,65 @@ const isConfirmedAmmoniumSalt = (name: string, elements: ElementCounts): boolean
     !/\b(?:hydrogen\s+(?:sulfate|sulphate|phosphate|carbonate)|bi(?:sulfate|sulphate|phosphate|carbonate))\b|(?:중|수소)\s*(?:황산|인산|탄산)/i.test(name) &&
     hasAnyElement(elements, INORGANIC_SALT_ANION_ELEMENTS)
 );
+
+const isPossibleIonicOrganicMaterial = (
+    chemical: Chemical,
+    elements: ElementCounts,
+): boolean => (
+    !chemical.connectivitySmiles &&
+    Boolean(elements.C) &&
+    !isInorganicCarbonFormula(chemical.molecularFormula || '', chemical.name || '') &&
+    hasAnyElement(elements, [...INORGANIC_SALT_CATIONS, ...HEAVY_METALS])
+);
+
+/** Material identity is descriptive evidence, never a final waste-stream decision. */
+export const detectChemicalMaterial = (chemical: Chemical): ChemicalMaterialProfile => {
+    const formula = chemical.molecularFormula || '';
+    const name = chemical.name || '';
+    const elements = parseFormula(formula);
+
+    if (isIonicOrganicSaltByStructure(chemical.connectivitySmiles)) {
+        return {
+            kind: 'ionic_organic_salt',
+            evidence: 'connectivity_smiles',
+            requiresMatrixConfirmation: true,
+        };
+    }
+    if (isInorganicCarbonFormula(formula, name) &&
+        hasAnyElement(elements, [...INORGANIC_SALT_CATIONS, ...HEAVY_METALS])) {
+        return {
+            kind: 'inorganic_salt',
+            evidence: 'formula',
+            requiresMatrixConfirmation: true,
+        };
+    }
+    if (isPossibleIonicOrganicMaterial(chemical, elements)) {
+        return {
+            kind: 'possible_ionic_organic_material',
+            evidence: 'formula',
+            requiresMatrixConfirmation: true,
+        };
+    }
+    if (isConfirmedInorganicSalt(elements) || isConfirmedAmmoniumSalt(name, elements)) {
+        return {
+            kind: 'inorganic_salt',
+            evidence: 'formula',
+            requiresMatrixConfirmation: true,
+        };
+    }
+    if (isLikelyOrganicByFormula(formula, name)) {
+        return {
+            kind: 'organic_compound',
+            evidence: 'formula',
+            requiresMatrixConfirmation: true,
+        };
+    }
+    return {
+        kind: 'unresolved',
+        evidence: 'unresolved',
+        requiresMatrixConfirmation: true,
+    };
+};
 
 const HAZARD_PROFILE_VERSION = '1.0.0' as const;
 
@@ -606,8 +694,14 @@ const buildResult = (
     reasonParams?: Record<string, string | number>,
     hazardProfile = detectChemicalHazards(chemical),
 ): AnalysisResult => {
-    const { binColor, label } = getCategoryDetails(category);
+    const { binColor, label: categoryLabel } = getCategoryDetails(category);
     const hazardWarnings = buildHazardWarnings(extractHCodes(chemical.ghs?.hazardStatements), chemical);
+    const materialProfile = detectChemicalMaterial(chemical);
+    const label = category === 'NEUTRAL' && materialProfile.kind === 'ionic_organic_salt'
+        ? 'label_ionic_organic_salt'
+        : category === 'UNKNOWN' && materialProfile.kind === 'possible_ionic_organic_material'
+            ? 'label_possible_ionic_material'
+            : categoryLabel;
     return {
         chemical,
         category,
@@ -618,6 +712,7 @@ const buildResult = (
         isSafe: category !== 'UNKNOWN' && category !== 'SPECIAL_HAZARD',
         hazardWarnings: hazardWarnings.length > 0 ? hazardWarnings : undefined,
         hazardProfile,
+        materialProfile,
     };
 };
 
@@ -638,6 +733,7 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     const hasHalogen = hasAnyElement(elements, HALOGENS);
     const isOrganic = isLikelyOrganicByFormula(formula, name);
     const hazardProfile = detectChemicalHazards(chemical);
+    const materialProfile = detectChemicalMaterial(chemical);
 
     chemical.properties = {
         ...chemical.properties,
@@ -678,6 +774,15 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     } else if (isExplicitOrganicHydroxideBase(name)) {
         category = 'ALKALI';
         reason = 'reason_alkali_keyword';
+    } else if (materialProfile.kind === 'ionic_organic_salt') {
+        // An organic ion is not evidence of an organic solvent phase. Keep the
+        // legacy category server-compatible while the material profile and the
+        // batch matrix carry the authoritative distinction.
+        category = 'NEUTRAL';
+        reason = 'reason_ionic_organic_salt_matrix_required';
+    } else if (materialProfile.kind === 'possible_ionic_organic_material') {
+        category = 'UNKNOWN';
+        reason = 'reason_possible_ionic_material_review';
     } else if (isOrganic) {
         if (hasHalogen) {
             category = 'ORGANIC_HALOGEN';
@@ -714,7 +819,8 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     }
 
     // Apply Solid fallback if category is unknown or if it specifically matches solid without being overridden by dangerous categories
-    if (category === 'UNKNOWN' && isSolid) {
+    if (category === 'UNKNOWN' && isSolid &&
+        materialProfile.kind !== 'possible_ionic_organic_material') {
         category = 'SOLID_WASTE';
         reason = 'reason_solid_waste';
     }

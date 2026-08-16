@@ -18,6 +18,7 @@ import {
 import { deriveWizardMatrixFromComponents } from '../utils/wasteBatchWizard';
 import { searchHistoryService } from '../services/searchHistoryService';
 import { findPhCatalogRecordByCas } from '../features/phPrediction/catalog';
+import { analyzeChemical, detectChemicalMaterial } from '../utils/chemicalAnalyzer';
 
 const BATCH_STORAGE_PREFIX = 'buril-waste-batch-v2:';
 const LEGACY_STORAGE_KEY = 'buril-waste-store';
@@ -149,13 +150,42 @@ const parseLegacyConcentration = (
     return { value: numericValue, unit };
 };
 
-const normalizeWasteComponent = (component: WasteComponent): WasteComponent => ({
-    ...component,
-    solutionVolume: component.solutionVolume ?? parseLegacySolutionVolume(component.volume),
-    concentration: component.concentration ?? parseLegacyConcentration(component.molarity),
-    phCatalogId: component.phCatalogId
-        ?? findPhCatalogRecordByCas(component.chemical.casNumber)?.id,
-});
+const normalizeWasteComponent = (component: WasteComponent): WasteComponent => {
+    const materialProfile = component.materialProfile ?? detectChemicalMaterial(component.chemical);
+    const normalized = {
+        ...component,
+        materialProfile,
+        solutionVolume: component.solutionVolume ?? parseLegacySolutionVolume(component.volume),
+        concentration: component.concentration ?? parseLegacyConcentration(component.molarity),
+        phCatalogId: component.phCatalogId
+            ?? findPhCatalogRecordByCas(component.chemical.casNumber)?.id,
+    };
+    const legacyOrganicSaltCategory = (
+        component.category === 'ORGANIC_NON_HALOGEN' ||
+        component.category === 'ORGANIC_HALOGEN'
+    ) && (
+        materialProfile.kind === 'ionic_organic_salt' ||
+        materialProfile.kind === 'possible_ionic_organic_material'
+    );
+    if (!legacyOrganicSaltCategory) return normalized;
+
+    const reanalysis = analyzeChemical(component.chemical);
+    return {
+        ...normalized,
+        category: reanalysis.category,
+        binColor: reanalysis.binColor,
+        label: reanalysis.label,
+        reason: reanalysis.reason,
+        reasonParams: reanalysis.reasonParams,
+        isSafe: reanalysis.isSafe,
+        hazardWarnings: reanalysis.hazardWarnings,
+        hazardProfile: reanalysis.hazardProfile,
+        materialProfile: reanalysis.materialProfile,
+        identityConfidence: reanalysis.materialProfile?.kind === 'possible_ionic_organic_material'
+            ? 'review_required'
+            : component.identityConfidence,
+    };
+};
 
 const isVolumeWasteMatrix = (matrix: WasteMatrix): boolean =>
     matrix !== 'unknown' && matrix !== 'solid_slurry';

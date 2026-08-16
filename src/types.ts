@@ -32,6 +32,20 @@ export type SolventResolutionSource =
     | 'user'
     | 'unresolved';
 
+export type ChemicalMaterialKind =
+    | 'ionic_organic_salt'
+    | 'possible_ionic_organic_material'
+    | 'organic_compound'
+    | 'inorganic_salt'
+    | 'unresolved';
+
+export interface ChemicalMaterialProfile {
+    kind: ChemicalMaterialKind;
+    evidence: 'connectivity_smiles' | 'formula' | 'unresolved';
+    /** True when a waste stream cannot be selected from identity alone. */
+    requiresMatrixConfirmation: boolean;
+}
+
 export interface SolutionContext {
     physicalForm: SolutionPhysicalForm;
     solventClass: SolventClass;
@@ -50,6 +64,8 @@ export interface Chemical {
     casNumber: string; // format: dddd-dd-d
     molecularFormula: string; // e.g., C6H6
     molecularWeight?: number;
+    /** PubChem structure with disconnected ionic fragments preserved. */
+    connectivitySmiles?: string;
     properties?: {
         isHalogenated: boolean;
         isOrganic: boolean;
@@ -131,6 +147,8 @@ export interface AnalysisResult {
     hazardWarnings?: AnalysisHazardWarning[];
     /** Missing only on legacy/persisted results; consumers must re-derive it from `chemical`. */
     hazardProfile?: ChemicalHazardProfile;
+    /** Material identity is separate from the final waste-stream category. */
+    materialProfile?: ChemicalMaterialProfile;
 }
 
 export type MixtureAnalysisBasis = 'pure' | 'solution' | 'unknown_matrix';

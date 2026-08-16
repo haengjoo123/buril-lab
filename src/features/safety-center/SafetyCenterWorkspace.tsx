@@ -51,6 +51,7 @@ import { getSafetyCenterSectionFromPath } from './safetyCenterNavigation';
 import { WastePolicyDistributionPanel } from './WastePolicyDistributionPanel';
 import { isWasteV2Enabled } from '../../config/featureFlags';
 import { hasManufacturerDate } from '../../utils/manufacturerDate';
+import { AppSelect } from '../../components/AppSelect';
 
 type DatasetKey = 'risks' | 'waste' | 'audit';
 
@@ -547,15 +548,13 @@ export function SafetyCenterWorkspace() {
           </div>
           <div className="flex items-center gap-2">
             {centers.length > 1 && (
-              <select
+              <AppSelect
                 value={activeCenter?.id ?? ''}
-                onChange={(event) => setActiveCenterId(event.target.value)}
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              >
-                {centers.map((center) => (
-                  <option key={center.id} value={center.id}>{center.center_name}</option>
-                ))}
-              </select>
+                onChange={setActiveCenterId}
+                options={centers.map((center) => ({ value: center.id, label: center.center_name }))}
+                className="min-w-[160px]"
+                buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal !text-slate-700 dark:!border-slate-700 dark:!bg-slate-900 dark:!text-slate-100"
+              />
             )}
             <button
               type="button"
@@ -1214,34 +1213,54 @@ function RisksPage({
             </div>
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-5">
-            <select value={labId} onChange={(event) => setLabId(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal dark:border-slate-700 dark:bg-slate-950">
-              <option value="all">모든 연구실</option>
-              {approvedLabs.map((lab) => <option key={lab.lab_id} value={lab.lab_id}>{lab.lab_name}</option>)}
-            </select>
-            <select value={riskFlag} onChange={(event) => setRiskFlag(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal dark:border-slate-700 dark:bg-slate-950">
-              <option value="all">모든 위험</option>
-              <option value="hazard">관리 위험 전체</option>
-              <option value="hazard_special_high">특수 고위험</option>
-              <option value="hazard_flammable">인화성</option>
-              <option value="hazard_corrosive">부식성</option>
-              <option value="hazard_toxic">독성</option>
-              <option value="hazard_other_managed">기타 관리 위험</option>
-              <option value="expired">만료/긴급</option>
-              <option value="expiring">만료 임박</option>
-              <option value="missing_cas">CAS 누락</option>
-              <option value="low_remaining">잔량 부족</option>
-            </select>
-            <select value={casState} onChange={(event) => setCasState(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal dark:border-slate-700 dark:bg-slate-950">
-              <option value="all">CAS 전체</option>
-              <option value="missing">CAS 누락</option>
-              <option value="present">CAS 있음</option>
-            </select>
-            <select value={expiryState} onChange={(event) => setExpiryState(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal dark:border-slate-700 dark:bg-slate-950">
-              <option value="all">제조사 날짜 전체</option>
-              <option value="expired">만료</option>
-              <option value="warning">임박</option>
-              <option value="none">미입력</option>
-            </select>
+            <AppSelect
+              value={labId}
+              onChange={setLabId}
+              options={[
+                { value: 'all', label: '모든 연구실' },
+                ...approvedLabs.map((lab) => ({ value: lab.lab_id, label: lab.lab_name })),
+              ]}
+              buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
+            />
+            <AppSelect
+              value={riskFlag}
+              onChange={setRiskFlag}
+              options={[
+                { value: 'all', label: '모든 위험' },
+                { value: 'hazard', label: '관리 위험 전체' },
+                { value: 'hazard_special_high', label: '특수 고위험' },
+                { value: 'hazard_flammable', label: '인화성' },
+                { value: 'hazard_corrosive', label: '부식성' },
+                { value: 'hazard_toxic', label: '독성' },
+                { value: 'hazard_other_managed', label: '기타 관리 위험' },
+                { value: 'expired', label: '만료/긴급' },
+                { value: 'expiring', label: '만료 임박' },
+                { value: 'missing_cas', label: 'CAS 누락' },
+                { value: 'low_remaining', label: '잔량 부족' },
+              ]}
+              buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
+            />
+            <AppSelect
+              value={casState}
+              onChange={setCasState}
+              options={[
+                { value: 'all', label: 'CAS 전체' },
+                { value: 'missing', label: 'CAS 누락' },
+                { value: 'present', label: 'CAS 있음' },
+              ]}
+              buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
+            />
+            <AppSelect
+              value={expiryState}
+              onChange={setExpiryState}
+              options={[
+                { value: 'all', label: '제조사 날짜 전체' },
+                { value: 'expired', label: '만료' },
+                { value: 'warning', label: '임박' },
+                { value: 'none', label: '미입력' },
+              ]}
+              buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
+            />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="시약명, CAS, 위치 검색" className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950" />
           </div>
         </div>
@@ -1834,19 +1853,21 @@ function RequestDraftModal({
             />
           </label>
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              우선순위
-              <select
+            <div className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+              <span>우선순위</span>
+              <AppSelect
                 value={draft.priority}
-                onChange={(event) => onChange({ ...draft, priority: event.target.value as SafetyCenterRequestPriority })}
-                className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal dark:border-slate-700 dark:bg-slate-950"
-              >
-                <option value="low">낮음</option>
-                <option value="normal">보통</option>
-                <option value="high">높음</option>
-                <option value="urgent">긴급</option>
-              </select>
-            </label>
+                onChange={(value) => onChange({ ...draft, priority: value as SafetyCenterRequestPriority })}
+                options={[
+                  { value: 'low', label: '낮음' },
+                  { value: 'normal', label: '보통' },
+                  { value: 'high', label: '높음' },
+                  { value: 'urgent', label: '긴급' },
+                ]}
+                className="mt-2 w-full"
+                buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
+              />
+            </div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
               마감일
               <input

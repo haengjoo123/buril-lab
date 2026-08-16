@@ -128,7 +128,8 @@ export function useSearchFlow({
         let analysis = analyzeChemical(chemicalData);
 
         // 규칙 기반 분류 실패 시에만 AI 분류를 보조로 사용한다.
-        if (analysis.category === 'UNKNOWN') {
+        if (analysis.category === 'UNKNOWN' &&
+          analysis.materialProfile?.kind !== 'possible_ionic_organic_material') {
           setIsAiAnalyzing(true);
           try {
             const aiResult = await classifyChemicalWithAI(chemicalData);

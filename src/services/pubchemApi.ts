@@ -103,6 +103,78 @@ const fetchSynonyms = async (cid: string | number): Promise<string[]> => {
     }
 };
 
+const MAX_EQUIVALENT_CIDS = 8;
+
+const unique = <T,>(values: T[]): T[] => Array.from(new Set(values));
+
+/**
+ * PUG View separates a compound's primary CAS identifiers from related and
+ * deprecated CAS values. Only read the exact `Other Identifiers > CAS`
+ * section so those weaker identifiers cannot be promoted automatically.
+ */
+const parsePrimaryCasNumbersFromRecord = (record: any): string[] => {
+    const casNumbers: string[] = [];
+
+    const traverse = (node: any, insideOtherIdentifiers = false) => {
+        if (!node || typeof node !== 'object') return;
+
+        const isOtherIdentifiers = insideOtherIdentifiers || node.TOCHeading === 'Other Identifiers';
+        if (isOtherIdentifiers && node.TOCHeading === 'CAS' && Array.isArray(node.Information)) {
+            for (const info of node.Information) {
+                const values = info?.Value?.StringWithMarkup;
+                if (!Array.isArray(values)) continue;
+
+                for (const value of values) {
+                    const casNumber = normalizeCasNumber(value?.String);
+                    if (casNumber) casNumbers.push(casNumber);
+                }
+            }
+        }
+
+        if (Array.isArray(node.Section)) {
+            for (const section of node.Section) traverse(section, isOtherIdentifiers);
+        }
+    };
+
+    traverse(record);
+    return unique(casNumbers);
+};
+
+const fetchEquivalentCidsByInchiKey = async (inchiKey: string): Promise<Array<string | number>> => {
+    try {
+        const url = `${PUBCHEM_BASE_URL}/compound/inchikey/${encodeURIComponent(inchiKey)}/cids/JSON`;
+        const response = await fetch(url);
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        const cids = data?.IdentifierList?.CID;
+        return Array.isArray(cids) ? unique(cids).slice(0, MAX_EQUIVALENT_CIDS) : [];
+    } catch (e) {
+        console.warn('[PubChem] Equivalent-CID lookup failed', e);
+        return [];
+    }
+};
+
+/**
+ * A name can resolve to a sparse PubChem CID while an identical-structure CID
+ * carries the registry identifiers. Recover a CAS only when the structured CAS
+ * evidence across those exact InChIKey matches is unique.
+ */
+const recoverCasFromEquivalentRecords = async (
+    inchiKey: string | undefined,
+    currentCid: string | number,
+): Promise<string | undefined> => {
+    if (!inchiKey) return undefined;
+
+    const equivalentCids = await fetchEquivalentCidsByInchiKey(inchiKey);
+    const alternativeCids = equivalentCids.filter((cid) => String(cid) !== String(currentCid));
+    if (alternativeCids.length === 0) return undefined;
+
+    const records = await Promise.all(alternativeCids.map((cid) => fetchFullPugView(cid)));
+    const candidates = unique(records.flatMap((record) => parsePrimaryCasNumbersFromRecord(record)));
+    return candidates.length === 1 ? candidates[0] : undefined;
+};
+
 export const fetchChemicalInfo = async (query: string): Promise<Chemical | null> => {
     if (!query) return null;
 
@@ -123,7 +195,7 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
 
     try {
         // 2. PubChem API Logic
-        const url = `${PUBCHEM_BASE_URL}/compound/name/${encodeURIComponent(query)}/property/MolecularFormula,MolecularWeight,IUPACName,Title,CanonicalSMILES/JSON`;
+        const url = `${PUBCHEM_BASE_URL}/compound/name/${encodeURIComponent(query)}/property/MolecularFormula,MolecularWeight,IUPACName,Title,ConnectivitySMILES,InChIKey/JSON`;
 
         const response = await fetch(url);
 
@@ -152,15 +224,26 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
         const ghsData = fullRecord ? parseGHSFromRecord(fullRecord) : undefined;
         const physicalProps = fullRecord ? parsePhysicalFromRecord(fullRecord) : undefined;
 
-        const validCasNumbers = synonyms
+        const validCasNumbers = unique(synonyms
             .map((synonym: string) => normalizeCasNumber(synonym))
-            .filter((casNumber: string | null): casNumber is string => Boolean(casNumber));
-        const foundCas = validCasNumbers[0];
+            .filter((casNumber: string | null): casNumber is string => Boolean(casNumber)));
+        const structuredCasNumbers = parsePrimaryCasNumbersFromRecord(fullRecord);
+        const confirmedCasNumbers = unique([...structuredCasNumbers, ...validCasNumbers]);
 
-        if (queriedCasNumber && !validCasNumbers.includes(queriedCasNumber)) {
+        if (queriedCasNumber && !confirmedCasNumbers.includes(queriedCasNumber)) {
             console.warn(`[PubChem] CAS ${queriedCasNumber} was not confirmed by the returned compound record.`);
             return null;
         }
+
+        const directCas = structuredCasNumbers.length === 1
+            ? structuredCasNumbers[0]
+            : structuredCasNumbers.length === 0 && validCasNumbers.length === 1
+                ? validCasNumbers[0]
+                : undefined;
+        const recoveredCas = queriedCasNumber || directCas
+            ? undefined
+            : await recoverCasFromEquivalentRecords(compoundProps.InChIKey, cid);
+        const foundCas = directCas || recoveredCas;
 
         // Name Priority: Title (Common Name) > Uppercase Query (if matched) > IUPACName > Query
         const displayName = compoundProps.Title || compoundProps.IUPACName || query;
@@ -171,7 +254,10 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
             casNumber: queriedCasNumber || foundCas || '',
             molecularFormula: compoundProps.MolecularFormula,
             molecularWeight: parseFloat(compoundProps.MolecularWeight),
+            connectivitySmiles: compoundProps.ConnectivitySMILES,
             properties: {
+                // Chemical identity only. Waste-stream routing is decided later
+                // from the material profile and the verified batch matrix.
                 isOrganic: compoundProps.MolecularFormula?.includes('C'),
                 isHalogenated: false, // Analyzer determines this
             },
