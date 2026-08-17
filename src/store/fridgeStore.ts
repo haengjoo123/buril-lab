@@ -7,7 +7,7 @@ import type {
     ShelfData,
 } from '../types/fridge';
 import { cabinetService } from '../services/cabinetService';
-import { lookupGHSByCAS } from '../services/pubchemService';
+import { lookupGHSByCAS, lookupGHSByIdentity } from '../services/pubchemService';
 import { useLabStore } from './useLabStore';
 import { buildCabinetAutoLayoutPlan } from '../utils/cabinetAutoLayoutPlanner';
 import { findNearbyReagentSlot } from '../utils/findNearbyReagentSlot';
@@ -452,8 +452,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             } : s)) ?? {}),
         }));
 
-        // Background: enrich with PubChem GHS data if CAS is available
-        if (newItem.casNo && newItem.hCodes.length === 0) {
+        // Background: the unified service can recover CAS from an exact name too.
+        if (newItem.name && newItem.hCodes.length === 0) {
             get().enrichReagentGHS(newItem.id);
         }
 
@@ -696,8 +696,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                             }
                         }, 4000);
 
-                        // Background: enrich with PubChem GHS data if CAS is available
-                        if (newItem.casNo && newItem.hCodes.length === 0) {
+                        // Background: the unified service can recover CAS from an exact name too.
+                        if (newItem.name && newItem.hCodes.length === 0) {
                             get().enrichReagentGHS(newItem.id);
                         }
 
@@ -769,7 +769,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             }
         }, 4000);
 
-        if (newItem.casNo && newItem.hCodes.length === 0) {
+        if (newItem.name && newItem.hCodes.length === 0) {
             get().enrichReagentGHS(newItem.id);
         }
 
@@ -785,7 +785,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             const found = shelf.items.find(i => i.id === reagentId);
             if (found) { targetItem = found; break; }
         }
-        if (!targetItem?.casNo) return;
+        if (!targetItem) return;
         GHS_IN_FLIGHT_ITEM_IDS.add(reagentId);
 
         set(st => ({
@@ -800,7 +800,12 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
         try {
             const { currentLabId } = useLabStore.getState();
-            const result = await lookupGHSByCAS(targetItem.casNo, { labId: currentLabId });
+            const result = targetItem.casNo
+                ? await lookupGHSByCAS(targetItem.casNo, { labId: currentLabId })
+                : await lookupGHSByIdentity({ name: targetItem.name }, { labId: currentLabId });
+            const recoveredCas = 'casNumber' in result && typeof result.casNumber === 'string'
+                ? result.casNumber
+                : undefined;
 
             // Persist every lookup outcome. An empty H-code list is not enough
             // to tell "verified no data" from "lookup never happened".
@@ -811,6 +816,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                         item.id === reagentId
                             ? {
                                 ...item,
+                                casNo: item.casNo || recoveredCas,
                                 hCodes: result.success ? result.hCodes : [],
                                 isAcidic: result.success ? result.isAcidic : false,
                                 isBasic: result.success ? result.isBasic : false,

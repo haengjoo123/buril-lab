@@ -66,6 +66,12 @@ export interface Chemical {
     molecularWeight?: number;
     /** PubChem structure with disconnected ionic fragments preserved. */
     connectivitySmiles?: string;
+    externalIdentifiers?: {
+        pubchemCid?: number;
+        equivalentPubchemCids?: number[];
+        standardInchiKey?: string;
+    };
+    hazardLookup?: ChemicalHazardLookup;
     properties?: {
         isHalogenated: boolean;
         isOrganic: boolean;
@@ -89,6 +95,80 @@ export interface Chemical {
         pictograms?: string[]; // URLs
     };
     koshaId?: number; // Added to support fetching KOSHA MSDS details
+}
+
+export type ChemicalHazardLookupStatus =
+    | 'classified'
+    | 'not_classified'
+    | 'source_absent'
+    | 'transient_error'
+    | 'identity_ambiguous';
+
+export interface ChemicalHazardLookup {
+    status: ChemicalHazardLookupStatus;
+    hCodes: string[];
+    hazardStatements: string[];
+    pictograms: string[];
+    signalWord?: string;
+    hazardFlags: WasteHazardFlag[];
+    sources: Array<{
+        source: 'pubchem' | 'kosha';
+        sourceId: string;
+    }>;
+    fetchedAt: string;
+    expiresAt?: string;
+    algorithmVersion: number;
+}
+
+export type PhCatalogMatchedBy = 'inchi_key' | 'cas' | 'pubchem_cid';
+
+export interface ChemicalPhCatalogMatch {
+    status: 'matched' | 'ambiguous' | 'unmatched';
+    id?: string;
+    candidateIds: string[];
+    matchedBy?: PhCatalogMatchedBy;
+    catalogVersion: string;
+    selection: 'automatic' | 'manual' | 'none';
+}
+
+export interface ChemicalEnrichmentRequestItem {
+    requestId: string;
+    name?: string;
+    casNumber?: string;
+    pubchemCid?: number;
+    standardInchiKey?: string;
+    molecularFormula?: string;
+    molecularWeight?: number;
+}
+
+export interface ChemicalEnrichmentRequest {
+    items: ChemicalEnrichmentRequestItem[];
+    scope?: { labId?: string };
+}
+
+export interface ChemicalEnrichmentResult {
+    requestId: string;
+    overallStatus: 'complete' | 'needs_review' | 'retryable';
+    identity: {
+        status: 'verified' | 'ambiguous' | 'not_found';
+        canonicalName?: string;
+        localizedName?: string;
+        casNumber?: string;
+        pubchemCid?: number;
+        equivalentPubchemCids: number[];
+        standardInchiKey?: string;
+        molecularFormula?: string;
+        molecularWeight?: number;
+        connectivitySmiles?: string;
+        evidence: Array<{
+            source: 'pubchem' | 'kosha';
+            sourceId: string;
+            method: 'exact_cas' | 'primary_cid' | 'equivalent_inchikey' | 'exact_name';
+        }>;
+    };
+    hazard: Omit<ChemicalHazardLookup, 'algorithmVersion'>;
+    phCatalog: Omit<ChemicalPhCatalogMatch, 'selection'>;
+    enrichmentVersion: 1;
 }
 
 export type AnalysisHazardWarningCode =
@@ -303,12 +383,20 @@ export interface WasteComponent extends CartItem {
     hazardDataConfirmedByUser?: boolean;
     capturedAt: string;
     hazardFlags: WasteHazardFlag[];
+    /** Automatically recovered GHS and exact identity-based hazard evidence. */
+    automaticHazardFlags?: WasteHazardFlag[];
+    /** Label/SDS flags explicitly selected by a person; automatic refresh never removes these. */
+    manualHazardFlags?: WasteHazardFlag[];
     /** Structured, field-level label scan evidence used to explain identity confirmation. */
     scanSnapshot?: Record<string, unknown>;
     concentration?: WasteConcentration;
     solutionVolume?: WasteSolutionVolume;
     /** Stable identifier for the exact chemical form in the approved pH catalog. */
     phCatalogId?: string;
+    phCatalogMatch?: ChemicalPhCatalogMatch;
+    enrichmentVersion?: number;
+    enrichmentLastAttemptAt?: string;
+    enrichmentRetryCount?: number;
     /** Number of inventory containers represented by this line that are physically discarded. */
     inventoryDisposalQuantity?: number;
     inventorySnapshot?: {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CartItem, DisposalCategory } from '../types';
+import type { CartItem, ChemicalEnrichmentResult, DisposalCategory } from '../types';
 import { createEmptyWasteBatch, createWasteComponentFromAnalysis } from '../utils/wasteBatch';
 import { useWasteStore } from './useWasteStore';
 
@@ -177,7 +177,7 @@ describe('useWasteStore V2 batch isolation', () => {
             draft?: { components?: Array<{ chemical?: { name?: string } }> };
             parkedDrafts?: unknown[];
         };
-        expect(stored.schemaVersion).toBe(4);
+        expect(stored.schemaVersion).toBe(5);
         expect(stored.ownerUserId).toBe('user-a');
         expect(stored.scopeKey).toBe('user-a:lab-a');
         expect(stored.draft?.components?.[0]?.chemical?.name).toBe('Acetone');
@@ -204,7 +204,7 @@ describe('useWasteStore V2 batch isolation', () => {
         draft.components = [createWasteComponentFromAnalysis(legacyAnalysis)];
 
         storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
-            schemaVersion: 4,
+            schemaVersion: 5,
             ownerUserId: 'user-a',
             scopeKey: 'user-a:lab-a',
             draft,
@@ -250,7 +250,7 @@ describe('useWasteStore V2 batch isolation', () => {
             draft?: { id?: string };
         };
         expect(upgraded).toMatchObject({
-            schemaVersion: 4,
+            schemaVersion: 5,
             ownerUserId: 'user-a',
             draft: { id: 'raw-v2-batch' },
         });
@@ -355,7 +355,7 @@ describe('useWasteStore V2 batch isolation', () => {
             parkedDrafts?: unknown[];
         };
         expect(upgraded).toMatchObject({
-            schemaVersion: 4,
+            schemaVersion: 5,
             draft: { incidentContext: 'none' },
             parkedDrafts: [],
         });
@@ -462,11 +462,177 @@ describe('useWasteStore V2 batch isolation', () => {
             draft?: typeof activeDraft;
             parkedDrafts?: typeof parkedDraft[];
         };
-        expect(upgraded.schemaVersion).toBe(4);
+        expect(upgraded.schemaVersion).toBe(5);
         expect(upgraded.draft?.components[0].solutionVolume?.normalizedMl).toBe(0.25);
         expect(upgraded.parkedDrafts?.[0].components[0].concentration).toEqual({
             value: 25,
             unit: 'mg/mL',
+        });
+    });
+
+    it('deduplicates and repairs schema-4 active and parked sodium acetate components atomically', async () => {
+        const makeAcetate = (id: string) => {
+            const input = cartItem(id, 'Sodium acetate', 'UNKNOWN');
+            input.chemical.casNumber = '';
+            input.chemical.molecularFormula = 'C2H3NaO2';
+            const component = createWasteComponentFromAnalysis(input);
+            component.hazardFlags = ['CORROSIVE'];
+            component.hazardDataConfirmedByUser = true;
+            component.manualHazardFlags = undefined;
+            component.automaticHazardFlags = undefined;
+            return component;
+        };
+        const active = createEmptyWasteBatch({
+            id: 'active-acetate', scopeKey: 'user-a:lab-a', userId: 'user-a', labId: 'lab-a',
+        });
+        const parked = createEmptyWasteBatch({
+            id: 'parked-acetate', scopeKey: 'user-a:lab-a', userId: 'user-a', labId: 'lab-a',
+        });
+        active.components = [makeAcetate('active')];
+        parked.components = [makeAcetate('parked')];
+        parked.parkedAt = '2026-08-17T00:00:00.000Z';
+        storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 4,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft: active,
+            parkedDrafts: [parked],
+        }));
+
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            const request = JSON.parse(String(init?.body)) as { items: Array<{ requestId: string }> };
+            const result: ChemicalEnrichmentResult = {
+                requestId: request.items[0].requestId,
+                overallStatus: 'complete',
+                identity: {
+                    status: 'verified',
+                    canonicalName: 'Sodium acetate',
+                    casNumber: '127-09-3',
+                    pubchemCid: 31372,
+                    equivalentPubchemCids: [31372, 517045],
+                    standardInchiKey: 'VMHLLURERBWHNL-UHFFFAOYSA-M',
+                    molecularFormula: 'C2H3NaO2',
+                    molecularWeight: 82.03,
+                    connectivitySmiles: '[Na+].CC(=O)[O-]',
+                    evidence: [],
+                },
+                hazard: {
+                    status: 'classified',
+                    hCodes: ['H225'],
+                    hazardStatements: ['H225 Highly flammable liquid and vapour'],
+                    pictograms: [],
+                    signalWord: 'Danger',
+                    hazardFlags: ['FLAMMABLE'],
+                    sources: [{ source: 'pubchem', sourceId: '517045' }],
+                    fetchedAt: '2026-08-17T00:00:00.000Z',
+                },
+                phCatalog: {
+                    status: 'matched', id: 'sodium-acetate', candidateIds: ['sodium-acetate'],
+                    matchedBy: 'inchi_key', catalogVersion: 'test',
+                },
+                enrichmentVersion: 1,
+            };
+            return Response.json({ results: [result] });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        await useWasteStore.getState().refreshChemicalEnrichment();
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        for (const component of [
+            useWasteStore.getState().batch.components[0],
+            useWasteStore.getState().parkedBatches[0].components[0],
+        ]) {
+            expect(component).toMatchObject({
+                ghsDataStatus: 'verified',
+                phCatalogId: 'sodium-acetate',
+                enrichmentVersion: 1,
+                manualHazardFlags: ['CORROSIVE'],
+            });
+            expect(component.chemical.casNumber).toBe('127-09-3');
+            expect(component.hazardFlags).toEqual(expect.arrayContaining(['FLAMMABLE', 'CORROSIVE']));
+        }
+        const persisted = JSON.parse(storage.getItem(`${V2_PREFIX}user-a:lab-a`) || '{}') as { schemaVersion?: number };
+        expect(persisted.schemaVersion).toBe(5);
+    });
+
+    it('repairs a schema-5 component that has CAS and pH metadata but no hazard lookup result', async () => {
+        const draft = createEmptyWasteBatch({
+            id: 'partial-acetate', scopeKey: 'user-a:lab-a', userId: 'user-a', labId: 'lab-a',
+        });
+        const input = cartItem('acetate', 'Sodium acetate', 'UNKNOWN');
+        input.chemical.casNumber = '127-09-3';
+        input.chemical.molecularFormula = 'C2H3NaO2';
+        const component = createWasteComponentFromAnalysis(input, {
+            phCatalogId: 'sodium-acetate',
+            phCatalogMatch: {
+                status: 'matched',
+                id: 'sodium-acetate',
+                candidateIds: ['sodium-acetate'],
+                matchedBy: 'cas',
+                catalogVersion: 'legacy',
+                selection: 'automatic',
+            },
+        });
+        component.enrichmentVersion = 1;
+        component.ghsDataStatus = 'lookup_failed';
+        component.chemical.hazardLookup = undefined;
+        draft.components = [component];
+        storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 5,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft,
+            parkedDrafts: [],
+        }));
+
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            const request = JSON.parse(String(init?.body)) as { items: Array<{ requestId: string }> };
+            const result: ChemicalEnrichmentResult = {
+                requestId: request.items[0].requestId,
+                overallStatus: 'complete',
+                identity: {
+                    status: 'verified',
+                    canonicalName: 'Sodium acetate',
+                    casNumber: '127-09-3',
+                    pubchemCid: 31372,
+                    equivalentPubchemCids: [31372, 517045],
+                    standardInchiKey: 'VMHLLURERBWHNL-UHFFFAOYSA-M',
+                    molecularFormula: 'C2H3NaO2',
+                    evidence: [],
+                },
+                hazard: {
+                    status: 'not_classified',
+                    hCodes: [],
+                    hazardStatements: [],
+                    pictograms: [],
+                    hazardFlags: [],
+                    sources: [{ source: 'pubchem', sourceId: '517045' }],
+                    fetchedAt: '2026-08-17T00:00:00.000Z',
+                },
+                phCatalog: {
+                    status: 'matched', id: 'sodium-acetate', candidateIds: ['sodium-acetate'],
+                    matchedBy: 'inchi_key', catalogVersion: 'test',
+                },
+                enrichmentVersion: 1,
+            };
+            return Response.json({ results: [result] });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        await useWasteStore.getState().refreshChemicalEnrichment();
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            ghsDataStatus: 'verified',
+            enrichmentVersion: 1,
+            phCatalogId: 'sodium-acetate',
+            chemical: {
+                casNumber: '127-09-3',
+                hazardLookup: { status: 'not_classified' },
+            },
         });
     });
 

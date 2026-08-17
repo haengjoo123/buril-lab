@@ -20,6 +20,7 @@ export {
     findPhCatalogRecordByCas,
     suggestPhCatalogRecordsByFormula,
 } from './catalog';
+export { resolvePhCatalogIdentity, type PhCatalogIdentityInput } from './catalogResolver';
 export { PH_CATALOG_SOURCE_MANIFEST } from './sourceManifest';
 export { validatePhCatalog } from './catalogValidation';
 export {

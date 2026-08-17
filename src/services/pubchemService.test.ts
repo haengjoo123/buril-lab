@@ -8,7 +8,7 @@ vi.mock('./supabaseClient', () => ({
     },
 }));
 
-import { clearPubChemCache, lookupGHSByCAS } from './pubchemService';
+import { clearPubChemCache, lookupGHSByCASLegacy as lookupGHSByCAS } from './pubchemService';
 
 const fetchMock = vi.fn();
 

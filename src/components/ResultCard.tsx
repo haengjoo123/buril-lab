@@ -36,6 +36,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 }) => {
     const { chemical, reason, isSafe, category, label } = result;
     const addToCart = useWasteStore((state) => state.addToCart);
+    const hasActiveBatch = useWasteStore((state) => state.batch.components.length > 0);
     const { t, i18n } = useTranslation();
     const [isGhsExpanded, setIsGhsExpanded] = React.useState(false);
 
@@ -99,6 +100,47 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             hazardStatements.flatMap(statement => statement.match(/H\d{3}/g) || [])
         ));
     }, [hazardStatements]);
+    const hazardLookupPresentation = React.useMemo(() => {
+        const status = chemical.hazardLookup?.status;
+        if (!status) return null;
+
+        switch (status) {
+            case 'classified':
+                return {
+                    translationKey: 'waste_component_hazard_classified',
+                    className: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100',
+                };
+            case 'not_classified':
+                // This is a completed internal lookup state, not an actionable
+                // safety message. Keep it out of the primary search result to
+                // avoid implying that the product or mixture is safe.
+                return null;
+            case 'transient_error':
+                return {
+                    translationKey: 'waste_component_hazard_pending',
+                    className: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100',
+                };
+            case 'identity_ambiguous':
+                return {
+                    translationKey: 'waste_component_hazard_identity_ambiguous',
+                    className: 'border-orange-200 bg-orange-50 text-orange-900 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-100',
+                };
+            case 'source_absent':
+                return {
+                    translationKey: 'waste_component_hazard_source_absent',
+                    className: 'border-orange-200 bg-orange-50 text-orange-900 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-100',
+                };
+            default:
+                return null;
+        }
+    }, [chemical.hazardLookup?.status]);
+    const hazardLookupSources = React.useMemo(() => (
+        chemical.hazardLookup?.sources.map(source => (
+            source.source === 'pubchem'
+                ? `PubChem CID ${source.sourceId}`
+                : `KOSHA ${source.sourceId}`
+        )).join(' · ') || ''
+    ), [chemical.hazardLookup?.sources]);
 
     return (
         <div
@@ -149,15 +191,31 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     </p>
                 )}
 
-                <h4 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-1">{t(label as any)}</h4>
+                <h4 className="mb-1 text-2xl font-bold text-slate-800 [text-wrap:balance] dark:text-slate-100">
+                    {label === 'label_ionic_organic_salt' ? (
+                        <>
+                            <span className="block sm:inline">{t('label_ionic_organic_salt_name' as any)}</span>{' '}
+                            <span className="block whitespace-nowrap sm:inline">{t('label_ionic_organic_salt_note' as any)}</span>
+                        </>
+                    ) : t(label as any)}
+                </h4>
 
-                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
+                <p className="mb-4 max-w-xl break-keep text-sm leading-relaxed text-slate-600 [text-wrap:pretty] dark:text-slate-300">
                     {t(reasonKey as any, result.reasonParams)}
                 </p>
 
                 <p className="mb-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                     {t('result_solution_notice_short' as any)}
                 </p>
+
+                {hazardLookupPresentation && (
+                    <div className={`mb-4 w-full rounded-xl border p-3 text-left text-sm font-medium ${hazardLookupPresentation.className}`}>
+                        <p>{t(hazardLookupPresentation.translationKey as any)}</p>
+                        {hazardLookupSources && (
+                            <p className="mt-1 text-xs font-normal opacity-75">{hazardLookupSources}</p>
+                        )}
+                    </div>
+                )}
 
                 {referencePh !== undefined && (
                     <p className="mb-4 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -223,7 +281,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     </div>
                 )}
 
-                <div className="w-full grid grid-cols-2 gap-3">
+                <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
                     <button
                         type="button"
                         onClick={onReset}
@@ -238,7 +296,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                         className="min-h-11 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 whitespace-nowrap"
                     >
                         <Plus className="w-4 h-4" aria-hidden="true" />
-                        {t('result_add_to_list_cta' as any)}
+                        {t(hasActiveBatch
+                            ? 'result_add_to_current_batch_cta' as any
+                            : 'result_start_waste_batch_cta' as any)}
                     </button>
                 </div>
             </div>

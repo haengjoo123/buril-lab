@@ -2,6 +2,8 @@
 import type { Chemical, MsdsSection } from '../types';
 import { COMMON_CHEMICALS } from '../data/commonChemicals';
 import { hasCasNumberFormat, normalizeCasNumber } from '../utils/casNumber';
+import { isChemicalEnrichmentEnabled } from '../config/featureFlags';
+import { chemicalFromEnrichment, enrichChemical } from './chemicalEnrichmentService';
 
 /**
  * Fetch autocomplete suggestions for a chemical name from PubChem
@@ -80,7 +82,7 @@ const parseGHSFromRecord = (record: any): Chemical['ghs'] | undefined => {
     traverse(record);
     if (!signal && hazardStatements.length === 0 && pictograms.length === 0) return undefined;
     return {
-        signal: signal || 'Warning',
+        signal,
         hazardStatements: [...new Set(hazardStatements)],
         pictograms: [...new Set(pictograms)]
     };
@@ -175,7 +177,7 @@ const recoverCasFromEquivalentRecords = async (
     return candidates.length === 1 ? candidates[0] : undefined;
 };
 
-export const fetchChemicalInfo = async (query: string): Promise<Chemical | null> => {
+export const fetchChemicalInfoLegacy = async (query: string): Promise<Chemical | null> => {
     if (!query) return null;
 
     const trimmedQuery = query.trim();
@@ -268,6 +270,24 @@ export const fetchChemicalInfo = async (query: string): Promise<Chemical | null>
     } catch (error) {
         console.error("Failed to fetch chemical info:", error);
         return null; // Return null on network error to allow manual retry or handling
+    }
+};
+
+export const fetchChemicalInfo = async (query: string): Promise<Chemical | null> => {
+    if (!isChemicalEnrichmentEnabled) return fetchChemicalInfoLegacy(query);
+    const trimmed = query.trim();
+    if (!trimmed) return null;
+    const casNumber = normalizeCasNumber(trimmed);
+    if (hasCasNumberFormat(trimmed) && !casNumber) return null;
+    try {
+        const result = await enrichChemical({
+            requestId: `search:${trimmed}`,
+            ...(casNumber ? { casNumber } : { name: trimmed }),
+        });
+        return chemicalFromEnrichment(result);
+    } catch (error) {
+        console.warn('[Chemical enrichment] Search lookup failed:', error);
+        return null;
     }
 };
 

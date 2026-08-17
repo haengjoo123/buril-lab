@@ -15,6 +15,9 @@ export function isExplicitlyDisabled(value: string | undefined): boolean {
 }
 
 export const isWasteV2Enabled = !isExplicitlyDisabled(import.meta.env.VITE_ENABLE_WASTE_V2)
+export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
+  import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
+)
 
 export function isPhPredictionDeploymentEnabled(
   value: string | undefined,

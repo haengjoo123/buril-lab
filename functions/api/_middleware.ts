@@ -91,6 +91,11 @@ const LIMIT_CONFIGS = {
     ip: { count: 5, window: "1 m" },
     pattern: /^\/api\/kosha/,
   },
+  CHEMICALS: {
+    user: { count: 30, window: "1 m" },
+    ip: { count: 8, window: "1 m" },
+    pattern: /^\/api\/chemicals\//,
+  },
   REAGENTS: {
     user: { count: 20, window: "1 m" },
     ip: { count: 5, window: "1 m" },
@@ -194,6 +199,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         userId = payload.sub
         identifier = userId
         isUser = true
+        context.data.userId = userId
       }
     } catch (err) {
       console.error('JWT Verification failed:', err)
@@ -221,6 +227,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   else if (LIMIT_CONFIGS.VOICE.pattern.test(path)) category = 'VOICE'
   else if (LIMIT_CONFIGS.AI.pattern.test(path)) category = 'AI'
   else if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) category = 'KOSHA'
+  else if (LIMIT_CONFIGS.CHEMICALS.pattern.test(path)) category = 'CHEMICALS'
   else if (LIMIT_CONFIGS.REAGENTS.pattern.test(path)) category = 'REAGENTS'
   else if (LIMIT_CONFIGS.WASTE.pattern.test(path)) category = 'WASTE'
 
