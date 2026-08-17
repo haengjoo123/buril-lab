@@ -111,10 +111,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     className: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100',
                 };
             case 'not_classified':
-                return {
-                    translationKey: 'waste_component_hazard_not_classified',
-                    className: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100',
-                };
+                // This is a completed internal lookup state, not an actionable
+                // safety message. Keep it out of the primary search result to
+                // avoid implying that the product or mixture is safe.
+                return null;
             case 'transient_error':
                 return {
                     translationKey: 'waste_component_hazard_pending',
