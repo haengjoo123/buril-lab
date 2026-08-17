@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import { searchChemical } from '../services/searchService';
-import { fetchPubchemSuggestions } from '../services/pubchemApi';
-import { fetchKoshaSuggestions } from '../services/koshaApi';
+import { fetchChemicalSuggestions } from '../services/chemicalSuggestionService';
 import { cabinetService, type CabinetSearchResult } from '../services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from '../services/mediaProductService';
 import { analyzeChemical } from '../utils/chemicalAnalyzer';
@@ -72,6 +71,8 @@ export function useSearchFlow({
   // Autocomplete states
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  const searchSequenceRef = useRef(0);
+  const referencePhRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const urlQuery = useMemo(() => searchParams.get('q'), [searchParams]);
   const isSearchTab = useMemo(() => {
@@ -87,6 +88,12 @@ export function useSearchFlow({
 
   const performSearch = useCallback(async (searchQuery: string, brand: string = 'all', sort: SortOption = 'relevance') => {
     if (!searchQuery.trim()) return;
+
+    const searchSequence = ++searchSequenceRef.current;
+    if (referencePhRetryRef.current) {
+      clearTimeout(referencePhRetryRef.current);
+      referencePhRetryRef.current = null;
+    }
 
     if (hasCasNumberFormat(searchQuery) && !normalizeCasNumber(searchQuery)) {
       setIsLoading(false);
@@ -124,6 +131,8 @@ export function useSearchFlow({
         cabinetService.searchCabinetItems(searchQuery),
       ]);
 
+      if (searchSequenceRef.current !== searchSequence) return;
+
       if (chemicalData) {
         let analysis = analyzeChemical(chemicalData);
 
@@ -141,7 +150,23 @@ export function useSearchFlow({
           }
         }
 
+        if (searchSequenceRef.current !== searchSequence) return;
+
         setResult(analysis);
+
+        const referencePhStatus = chemicalData.referencePhLookup?.status;
+        if (referencePhStatus === 'pending' || referencePhStatus === 'transient_error') {
+          const retryAfterMs = chemicalData.referencePhLookup?.retryAfterMs || 2_000;
+          referencePhRetryRef.current = setTimeout(async () => {
+            const refreshedChemical = await searchChemical(searchQuery);
+            if (!refreshedChemical || searchSequenceRef.current !== searchSequence) return;
+            const refreshedAnalysis = analyzeChemical(refreshedChemical);
+            setResult((previous) => previous?.isAiEstimated && refreshedAnalysis.category === 'UNKNOWN'
+              ? { ...previous, chemical: refreshedChemical }
+              : refreshedAnalysis);
+            referencePhRetryRef.current = null;
+          }, retryAfterMs);
+        }
       }
 
       if (mediaSearchResult.products.length > 0) {
@@ -160,12 +185,18 @@ export function useSearchFlow({
         addSearchHistory(searchQuery);
       }
     } catch (err) {
+      if (searchSequenceRef.current !== searchSequence) return;
       setError(t('search_error'));
-      console.error(err);
+      if (import.meta.env.DEV) console.error(err);
     } finally {
-      setIsLoading(false);
+      if (searchSequenceRef.current === searchSequence) setIsLoading(false);
     }
   }, [t, addSearchHistory]);
+
+  useEffect(() => () => {
+    searchSequenceRef.current += 1;
+    if (referencePhRetryRef.current) clearTimeout(referencePhRetryRef.current);
+  }, []);
 
   useEffect(() => {
     if (!isSearchTab) return;
@@ -208,15 +239,12 @@ export function useSearchFlow({
     }
 
     let isActive = true;
+    const controller = new AbortController();
 
     const timer = setTimeout(async () => {
       setIsSuggestionsLoading(true);
       try {
-        // 한글 입력은 KOSHA, 그 외는 PubChem을 사용해 자동완성 품질을 맞춘다.
-        const hasKorean = /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(trimmedQuery);
-        const newSuggestions = hasKorean
-          ? await fetchKoshaSuggestions(trimmedQuery)
-          : await fetchPubchemSuggestions(trimmedQuery);
+        const newSuggestions = await fetchChemicalSuggestions(trimmedQuery, 5, controller.signal);
         if (isActive) {
           setSuggestions(newSuggestions);
         }
@@ -233,6 +261,7 @@ export function useSearchFlow({
 
     return () => {
       isActive = false;
+      controller.abort();
       clearTimeout(timer);
     };
   }, [query, lastSearchQuery, isSearchTab]);
@@ -282,6 +311,11 @@ export function useSearchFlow({
   }, [navigateWithFreshFilters, query]);
 
   const handleReset = useCallback(() => {
+    searchSequenceRef.current += 1;
+    if (referencePhRetryRef.current) {
+      clearTimeout(referencePhRetryRef.current);
+      referencePhRetryRef.current = null;
+    }
     navigate(labAppRoute());
   }, [navigate]);
 

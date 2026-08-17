@@ -28,6 +28,7 @@ const result = (overrides: Partial<ChemicalEnrichmentResult> = {}): ChemicalEnri
     sources: [{ source: 'pubchem', sourceId: '517045' }],
     fetchedAt: '2026-08-17T00:00:00.000Z',
   },
+  referencePh: { status: 'source_absent', source: 'kosha' },
   phCatalog: {
     status: 'matched',
     id: 'sodium-acetate',
@@ -35,7 +36,7 @@ const result = (overrides: Partial<ChemicalEnrichmentResult> = {}): ChemicalEnri
     matchedBy: 'inchi_key',
     catalogVersion: 'test',
   },
-  enrichmentVersion: 1,
+  enrichmentVersion: 2,
   ...overrides,
 })
 
@@ -84,5 +85,16 @@ describe('chemical enrichment cache policy', () => {
     expect(sql).toContain('alter table public.chemical_enrichment_cache enable row level security')
     expect(sql).toContain('revoke all on table public.chemical_enrichment_cache from public, anon, authenticated')
     expect(sql).toContain('grant select, insert, update, delete on table public.chemical_enrichment_cache to service_role')
+  })
+
+  it('locks KOSHA source caches and leases to the service role', () => {
+    const sql = readFileSync(resolve(
+      'supabase/migrations/20260817034449_chemical_source_cache_and_leases.sql',
+    ), 'utf8').toLowerCase()
+    expect(sql).toContain('alter table public.chemical_source_cache enable row level security')
+    expect(sql).toContain('revoke all on table public.chemical_source_cache from public, anon, authenticated')
+    expect(sql).toContain('revoke all on table public.chemical_enrichment_leases from public, anon, authenticated')
+    expect(sql).toContain('grant execute on function public.try_acquire_chemical_enrichment_lease')
+    expect(sql).toContain('to service_role')
   })
 })

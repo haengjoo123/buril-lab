@@ -64,8 +64,15 @@ async function resolveCasSuggestionBatch(items: CasResolveItemInput[]): Promise<
         const response = await postJson<CasResolveResponse>('/api/reagents/cas-resolve', { items });
         return response.items || [];
     } catch {
-        const { resolveCasSuggestionsFallback } = await import('./casSuggestionFallback');
-        return await resolveCasSuggestionsFallback(items);
+        return items.map((item) => ({
+            id: item.id,
+            status: 'unavailable',
+            matchedInput: item.inputName,
+            evidence: [],
+            sources: [],
+            confidence: 'low',
+            reason: 'upstream_unavailable',
+        }));
     }
 }
 

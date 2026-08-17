@@ -5,6 +5,7 @@ import type {
 } from '../../../src/types'
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
 import {
+  getChemicalLookupKeys,
   projectLegacyGhsCache,
   readChemicalEnrichmentCache,
   verifyLabMembership,
@@ -12,6 +13,11 @@ import {
   type ChemicalCacheEnv,
 } from './_cache'
 import { enrichChemicalItem, type ChemicalEnrichmentEnv } from './_pipeline'
+import {
+  resolveKoshaIdentityByCas,
+  resolveKoshaReferencePh,
+  type KoshaIdentity,
+} from './_kosha'
 
 interface Env extends ChemicalCacheEnv, ChemicalEnrichmentEnv {}
 
@@ -27,6 +33,8 @@ const MAX_BODY_BYTES = 64 * 1024
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const INCHI_KEY_PATTERN = /^[A-Z]{14}-[A-Z]{10}-[A-Z]$/
 const FORMULA_PATTERN = /^[A-Za-z0-9()[\].+\-·]+$/
+const REFERENCE_PH_FOREGROUND_BUDGET_MS = 2_000
+const coreInFlight = new Map<string, Promise<ChemicalEnrichmentResult>>()
 
 function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -104,6 +112,111 @@ async function mapWithConcurrency<T, R>(values: readonly T[], limit: number, map
   return results
 }
 
+async function resolveCoreEnrichment(
+  item: ChemicalEnrichmentRequestItem,
+  env: Env,
+): Promise<ChemicalEnrichmentResult> {
+  const cached = await readChemicalEnrichmentCache(env, item)
+  if (cached) return cached
+  const key = getChemicalLookupKeys(item).sort().join('|') || `request:${item.requestId}`
+  const existing = coreInFlight.get(key)
+  if (existing) return { ...(await existing), requestId: item.requestId }
+
+  const created = enrichChemicalItem(item, env)
+  coreInFlight.set(key, created)
+  try {
+    return { ...(await created), requestId: item.requestId }
+  } finally {
+    if (coreInFlight.get(key) === created) coreInFlight.delete(key)
+  }
+}
+
+function pendingReferencePh(result: ChemicalEnrichmentResult): ChemicalEnrichmentResult {
+  return {
+    ...result,
+    referencePh: {
+      status: 'pending',
+      source: 'kosha',
+      ...(result.identity.koshaChemId ? { sourceId: String(result.identity.koshaChemId).padStart(6, '0') } : {}),
+      retryAfterMs: 2_000,
+    },
+    retryAfterMs: 2_000,
+  }
+}
+
+export async function hydrateKoshaSupplement(
+  result: ChemicalEnrichmentResult,
+  env: Env,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ChemicalEnrichmentResult> {
+  if (result.referencePh.status === 'available' || result.referencePh.status === 'source_absent') return result
+  if (result.identity.status === 'ambiguous') {
+    return { ...result, referencePh: { status: 'identity_ambiguous' } }
+  }
+  const casNumber = result.identity.casNumber
+  if (result.identity.status !== 'verified' || !casNumber) {
+    return { ...result, referencePh: { status: 'source_absent' } }
+  }
+
+  let identity: KoshaIdentity | undefined
+  if (result.identity.koshaChemId) {
+    identity = {
+      casNumber,
+      chemId: String(result.identity.koshaChemId).padStart(6, '0'),
+      ...(result.identity.localizedName ? { localizedName: result.identity.localizedName } : {}),
+    }
+  } else {
+    const identityOutcome = await resolveKoshaIdentityByCas(casNumber, env, fetchImpl)
+    if (identityOutcome.kind === 'ambiguous') {
+      return { ...result, referencePh: { status: 'identity_ambiguous' } }
+    }
+    if (identityOutcome.kind === 'not_found') {
+      return { ...result, referencePh: { status: 'source_absent', source: 'kosha' } }
+    }
+    if (identityOutcome.kind === 'transient_error') {
+      return {
+        ...result,
+        referencePh: { status: identityOutcome.pending ? 'pending' : 'transient_error', source: 'kosha', retryAfterMs: 2_000 },
+        retryAfterMs: 2_000,
+      }
+    }
+    identity = identityOutcome.identity
+  }
+
+  const referencePh = await resolveKoshaReferencePh(identity, env, fetchImpl)
+  const baseResult = { ...result }
+  delete baseResult.retryAfterMs
+  return {
+    ...baseResult,
+    identity: {
+      ...result.identity,
+      koshaChemId: Number(identity.chemId),
+      ...(identity.localizedName ? { localizedName: identity.localizedName } : {}),
+    },
+    referencePh,
+    ...(referencePh.status === 'pending' || referencePh.status === 'transient_error'
+      ? { retryAfterMs: referencePh.retryAfterMs || 2_000 }
+      : {}),
+  }
+}
+
+async function foregroundSupplement(
+  result: ChemicalEnrichmentResult,
+  completion: Promise<ChemicalEnrichmentResult>,
+): Promise<ChemicalEnrichmentResult> {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined
+  try {
+    return await Promise.race([
+      completion,
+      new Promise<ChemicalEnrichmentResult>((resolve) => {
+        timeoutId = globalThis.setTimeout(() => resolve(pendingReferencePh(result)), REFERENCE_PH_FOREGROUND_BUDGET_MS)
+      }),
+    ])
+  } finally {
+    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId)
+  }
+}
+
 export const onRequestPost = async (context: FunctionContext): Promise<Response> => {
   const contentLength = Number(context.request.headers.get('content-length') || 0)
   if (contentLength > MAX_BODY_BYTES) return jsonResponse({ error: 'Request body is too large.' }, 413)
@@ -125,16 +238,24 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
     return jsonResponse({ error: 'The requested laboratory scope is not accessible.' }, 403)
   }
 
-  const results = await mapWithConcurrency(requestBody.items, 3, async (item): Promise<ChemicalEnrichmentResult> => {
-    const cached = await readChemicalEnrichmentCache(context.env, item)
-    return cached || enrichChemicalItem(item, context.env)
+  const enriched = await mapWithConcurrency(requestBody.items, 3, async (item) => {
+    const core = await resolveCoreEnrichment(item, context.env)
+    const completion = hydrateKoshaSupplement(core, context.env).catch(() => ({
+      ...core,
+      referencePh: { status: 'transient_error' as const, source: 'kosha' as const, retryAfterMs: 2_000 },
+      retryAfterMs: 2_000,
+    }))
+    return {
+      result: await foregroundSupplement(core, completion),
+      completion,
+    }
   })
+  const results = enriched.map((value) => value.result)
 
-  const backgroundWrites = requestBody.items.flatMap((item, index) => {
-    const result = results[index]
-    const writes: Promise<void>[] = [writeChemicalEnrichmentCache(context.env, item, result)]
-    if (userId) writes.push(projectLegacyGhsCache(context.env, userId, labId, result))
-    return writes
+  const backgroundWrites = requestBody.items.map(async (item, index) => {
+    const result = await enriched[index].completion
+    await writeChemicalEnrichmentCache(context.env, item, result)
+    if (userId) await projectLegacyGhsCache(context.env, userId, labId, result)
   })
   context.waitUntil(Promise.all(backgroundWrites).then(() => undefined))
 
