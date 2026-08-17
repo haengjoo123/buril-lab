@@ -7,6 +7,8 @@
 
 import { supabase } from './supabaseClient';
 import { normalizeCasNumber } from '../utils/casNumber';
+import { isChemicalEnrichmentEnabled } from '../config/featureFlags';
+import { enrichChemical } from './chemicalEnrichmentService';
 
 export type PubChemGHSStatus =
     | 'success'
@@ -30,6 +32,18 @@ export interface PubChemGHSResult {
 
 export interface LookupGHSOptions {
     labId?: string | null;
+}
+
+export interface ChemicalGHSIdentityInput {
+    name?: string;
+    casNumber?: string;
+    molecularFormula?: string;
+    pubchemCid?: number;
+    standardInchiKey?: string;
+}
+
+export interface IdentifiedPubChemGHSResult extends PubChemGHSResult {
+    casNumber?: string;
 }
 
 interface ServerGhsCacheScope {
@@ -603,7 +617,7 @@ function storeCacheEntry(cas: string, result: PubChemGHSResult): GhsCacheEntry |
     return entry;
 }
 
-export async function lookupGHSByCAS(casNumber: string, options?: LookupGHSOptions): Promise<PubChemGHSResult> {
+export async function lookupGHSByCASLegacy(casNumber: string, options?: LookupGHSOptions): Promise<PubChemGHSResult> {
     purgeLegacyPersistentCache();
 
     const cas = normalizeCasNumber(casNumber);
@@ -681,6 +695,76 @@ export async function lookupGHSByCAS(casNumber: string, options?: LookupGHSOptio
 
     console.log(`[PubChem] ${cas} -> CID:${cidOutcome.data} | H-codes: [${result.hCodes.join(', ')}] | ${result.name}`);
     return result;
+}
+
+export async function lookupGHSByIdentity(
+    input: ChemicalGHSIdentityInput,
+    options?: LookupGHSOptions,
+): Promise<IdentifiedPubChemGHSResult> {
+    const cas = normalizeCasNumber(input.casNumber);
+    if (!isChemicalEnrichmentEnabled) {
+        return cas
+            ? { ...(await lookupGHSByCASLegacy(cas, options)), casNumber: cas }
+            : { ...createResult('invalid_cas', {}, 'A valid CAS is required by the legacy lookup.'), casNumber: undefined };
+    }
+    try {
+        const result = await enrichChemical(
+            {
+                requestId: `ghs:${cas || input.standardInchiKey || input.pubchemCid || input.name || 'unknown'}`,
+                ...(input.name ? { name: input.name } : {}),
+                ...(cas ? { casNumber: cas } : {}),
+                ...(input.molecularFormula ? { molecularFormula: input.molecularFormula } : {}),
+                ...(input.pubchemCid ? { pubchemCid: input.pubchemCid } : {}),
+                ...(input.standardInchiKey ? { standardInchiKey: input.standardInchiKey } : {}),
+            },
+            { labId: options?.labId },
+        );
+        if (result.identity.status === 'not_found') {
+            return { ...createResult('not_found', {}, 'Chemical identity was not found.'), casNumber: undefined };
+        }
+        if (result.hazard.status === 'transient_error') {
+            return {
+                ...createResult('transient_error', { cid: result.identity.pubchemCid }, 'Automatic hazard lookup is retrying.'),
+                casNumber: result.identity.casNumber,
+            };
+        }
+        if (result.hazard.status === 'source_absent' || result.hazard.status === 'identity_ambiguous') {
+            return {
+                ...createResult('no_ghs', {
+                    cid: result.identity.pubchemCid,
+                    name: result.identity.canonicalName,
+                }),
+                casNumber: result.identity.casNumber,
+            };
+        }
+        return {
+            ...createResult('success', {
+                cid: result.identity.pubchemCid,
+                name: result.identity.canonicalName,
+                hCodes: result.hazard.hCodes,
+                pictograms: result.hazard.pictograms,
+                signalWord: result.hazard.signalWord || null,
+                isAcidic: detectAcidic(result.hazard.hCodes, result.identity.canonicalName || ''),
+                isBasic: detectBasic(result.identity.canonicalName || ''),
+            }),
+            casNumber: result.identity.casNumber,
+        };
+    } catch (error) {
+        return {
+            ...createResult(
+                'transient_error',
+                {},
+                error instanceof Error ? error.message : 'Automatic hazard lookup is temporarily unavailable.',
+            ),
+            casNumber: cas || undefined,
+        };
+    }
+}
+
+export async function lookupGHSByCAS(casNumber: string, options?: LookupGHSOptions): Promise<PubChemGHSResult> {
+    const cas = normalizeCasNumber(casNumber);
+    if (!cas) return createResult('invalid_cas', {}, `Invalid CAS format: "${casNumber}"`);
+    return lookupGHSByIdentity({ casNumber: cas }, options);
 }
 
 export function clearPubChemCache(): void {

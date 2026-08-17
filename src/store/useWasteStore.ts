@@ -7,6 +7,8 @@ import type {
     WasteConcentration,
     WasteMatrix,
     WasteSolutionVolume,
+    ChemicalEnrichmentResult,
+    Chemical,
 } from '../types';
 import {
     createEmptyWasteBatch,
@@ -14,16 +16,20 @@ import {
     deriveWasteAmountFromComponentVolumes,
     inferWasteMatrixFromComponents,
     normalizeWasteAmount,
+    deriveWasteHazardFlags,
 } from '../utils/wasteBatch';
 import { deriveWizardMatrixFromComponents } from '../utils/wasteBatchWizard';
 import { searchHistoryService } from '../services/searchHistoryService';
-import { findPhCatalogRecordByCas } from '../features/phPrediction/catalog';
+import { resolvePhCatalogIdentity } from '../features/phPrediction';
 import { analyzeChemical, detectChemicalMaterial } from '../utils/chemicalAnalyzer';
+import { chemicalFromEnrichment, enrichChemicals } from '../services/chemicalEnrichmentService';
+import { isChemicalEnrichmentEnabled } from '../config/featureFlags';
 
 const BATCH_STORAGE_PREFIX = 'buril-waste-batch-v2:';
 const LEGACY_STORAGE_KEY = 'buril-waste-store';
-const BATCH_STORAGE_SCHEMA_VERSION = 4;
-const PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION = 3;
+const BATCH_STORAGE_SCHEMA_VERSION = 5;
+const PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION = 4;
+const PARKED_BATCH_STORAGE_SCHEMA_VERSION = 3;
 const LEGACY_BATCH_STORAGE_SCHEMA_VERSION = 2;
 export const MAX_PARKED_WASTE_BATCHES = 10;
 const PREVIOUS_MATRIX_STORAGE_PREFIX = 'buril-waste-previous-matrix-v2:';
@@ -45,6 +51,14 @@ interface LegacyWasteBatchStorageEnvelope {
 
 interface PreviousWasteBatchStorageEnvelope {
     schemaVersion: typeof PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION;
+    ownerUserId: string;
+    scopeKey: string;
+    draft: WasteBatchDraft;
+    parkedDrafts: WasteBatchDraft[];
+}
+
+interface ParkedWasteBatchStorageEnvelope {
+    schemaVersion: typeof PARKED_BATCH_STORAGE_SCHEMA_VERSION;
     ownerUserId: string;
     scopeKey: string;
     draft: WasteBatchDraft;
@@ -152,13 +166,32 @@ const parseLegacyConcentration = (
 
 const normalizeWasteComponent = (component: WasteComponent): WasteComponent => {
     const materialProfile = component.materialProfile ?? detectChemicalMaterial(component.chemical);
+    const legacyHazardFlags = component.hazardFlags ?? [];
+    const manualHazardFlags = component.manualHazardFlags ?? (
+        component.hazardDataConfirmedByUser ? legacyHazardFlags : []
+    );
+    const automaticHazardFlags = component.automaticHazardFlags ?? (
+        component.hazardDataConfirmedByUser ? [] : legacyHazardFlags
+    );
+    const phCatalogMatch = component.phCatalogMatch ?? resolvePhCatalogIdentity({
+        standardInchiKey: component.chemical.externalIdentifiers?.standardInchiKey,
+        casNumber: component.chemical.casNumber,
+        pubchemCid: component.chemical.externalIdentifiers?.pubchemCid,
+        equivalentPubchemCids: component.chemical.externalIdentifiers?.equivalentPubchemCids,
+        molecularFormula: component.chemical.molecularFormula,
+        currentPhCatalogId: component.phCatalogId,
+    });
     const normalized = {
         ...component,
         materialProfile,
         solutionVolume: component.solutionVolume ?? parseLegacySolutionVolume(component.volume),
         concentration: component.concentration ?? parseLegacyConcentration(component.molarity),
-        phCatalogId: component.phCatalogId
-            ?? findPhCatalogRecordByCas(component.chemical.casNumber)?.id,
+        phCatalogId: component.phCatalogId ?? (phCatalogMatch.status === 'matched' ? phCatalogMatch.id : undefined),
+        phCatalogMatch,
+        automaticHazardFlags,
+        manualHazardFlags,
+        hazardFlags: [...new Set([...automaticHazardFlags, ...manualHazardFlags])],
+        enrichmentVersion: component.enrichmentVersion ?? 0,
     };
     const legacyOrganicSaltCategory = (
         component.category === 'ORGANIC_NON_HALOGEN' ||
@@ -343,6 +376,18 @@ const isPreviousWasteBatchStorageEnvelope = (
         Array.isArray(envelope.parkedDrafts);
 };
 
+const isParkedWasteBatchStorageEnvelope = (
+    value: unknown,
+): value is ParkedWasteBatchStorageEnvelope => {
+    if (!value || typeof value !== 'object') return false;
+    const envelope = value as Partial<ParkedWasteBatchStorageEnvelope>;
+    return envelope.schemaVersion === PARKED_BATCH_STORAGE_SCHEMA_VERSION &&
+        typeof envelope.ownerUserId === 'string' &&
+        typeof envelope.scopeKey === 'string' &&
+        isWasteBatchDraft(envelope.draft) &&
+        Array.isArray(envelope.parkedDrafts);
+};
+
 const saveWasteScope = (
     batch: WasteBatchDraft,
     parkedBatches: WasteBatchDraft[],
@@ -415,6 +460,21 @@ const loadWasteScope = (
                             draft.id !== batch.id &&
                             isBatchOwnedByScope(draft, scopeKey, userId, labId)
                         );
+                    saveWasteScope(batch, parkedBatches);
+                    return { batch, parkedBatches };
+                }
+
+                if (
+                    isParkedWasteBatchStorageEnvelope(parsed) &&
+                    parsed.ownerUserId === userId &&
+                    parsed.scopeKey === scopeKey &&
+                    isBatchOwnedByScope(parsed.draft, scopeKey, userId, labId)
+                ) {
+                    const batch = normalizeWasteBatchDraft(parsed.draft);
+                    const parkedBatches = parsed.parkedDrafts
+                        .filter(isWasteBatchDraft)
+                        .map(normalizeWasteBatchDraft)
+                        .filter((draft) => draft.id !== batch.id && isBatchOwnedByScope(draft, scopeKey, userId, labId));
                     saveWasteScope(batch, parkedBatches);
                     return { batch, parkedBatches };
                 }
@@ -503,6 +563,114 @@ const touchBatch = (batch: WasteBatchDraft): WasteBatchDraft => ({
     ...batch,
     updatedAt: new Date().toISOString(),
 });
+
+const componentEnrichmentFingerprint = (component: WasteComponent): string => JSON.stringify({
+    chemical: component.chemical,
+    identityConfidence: component.identityConfidence,
+    hazardFlags: component.hazardFlags,
+    automaticHazardFlags: component.automaticHazardFlags,
+    manualHazardFlags: component.manualHazardFlags,
+    hazardDataConfirmedByUser: component.hazardDataConfirmedByUser,
+    phCatalogId: component.phCatalogId,
+    enrichmentVersion: component.enrichmentVersion,
+    enrichmentRetryCount: component.enrichmentRetryCount,
+});
+
+const componentIdentityKey = (component: WasteComponent): string => {
+    const identifiers = component.chemical.externalIdentifiers;
+    return identifiers?.standardInchiKey
+        ? `inchikey:${identifiers.standardInchiKey.toUpperCase()}`
+        : component.chemical.casNumber
+            ? `cas:${component.chemical.casNumber}`
+            : identifiers?.pubchemCid
+                ? `cid:${identifiers.pubchemCid}`
+                : `name:${component.chemical.name.trim().toLowerCase()}|formula:${component.chemical.molecularFormula}`;
+};
+
+const shouldEnrichComponent = (component: WasteComponent, retryImmediately = false): boolean => {
+    if ((component.enrichmentVersion ?? 0) < 1) return true;
+    if (!component.chemical.casNumber || !component.phCatalogMatch) return true;
+    if (component.chemical.hazardLookup?.status !== 'transient_error') return false;
+    if (retryImmediately) return true;
+    const attemptedAt = Date.parse(component.enrichmentLastAttemptAt || '');
+    return !Number.isFinite(attemptedAt) || Date.now() - attemptedAt >= 5 * 60 * 1000;
+};
+
+const applyEnrichmentToComponent = (
+    component: WasteComponent,
+    result: ChemicalEnrichmentResult,
+    retryCount: number,
+): WasteComponent => {
+    const returnedCas = result.identity.casNumber;
+    const existingCas = component.chemical.casNumber;
+    const hasCasConflict = Boolean(existingCas && returnedCas && existingCas !== returnedCas);
+    const enrichedChemical = chemicalFromEnrichment(result, component.chemical);
+    const chemical: Chemical = enrichedChemical
+        ? {
+            ...component.chemical,
+            ...enrichedChemical,
+            name: result.identity.status === 'verified'
+                ? enrichedChemical.name
+                : component.chemical.name,
+            casNumber: hasCasConflict
+                ? existingCas
+                : existingCas || enrichedChemical.casNumber,
+            properties: component.chemical.properties ?? enrichedChemical.properties,
+            physicalProperties: {
+                ...enrichedChemical.physicalProperties,
+                ...component.chemical.physicalProperties,
+            },
+            koshaId: component.chemical.koshaId,
+        }
+        : {
+            ...component.chemical,
+            hazardLookup: {
+                ...result.hazard,
+                status: hasCasConflict ? 'identity_ambiguous' as const : result.hazard.status,
+                algorithmVersion: result.enrichmentVersion,
+            },
+        };
+    const reanalysis = analyzeChemical(chemical);
+    const manualHazardFlags = component.manualHazardFlags ?? (
+        component.hazardDataConfirmedByUser ? component.hazardFlags : []
+    );
+    const automaticHazardFlags = [...new Set([
+        ...result.hazard.hazardFlags,
+        ...deriveWasteHazardFlags(reanalysis),
+    ])];
+    const hazardStatus = hasCasConflict ? 'identity_ambiguous' : result.hazard.status;
+    const ghsDataStatus = hazardStatus === 'classified' || hazardStatus === 'not_classified'
+        ? 'verified'
+        : hazardStatus === 'transient_error' && retryCount < 2
+            ? 'not_checked'
+            : 'lookup_failed';
+    const phCatalogMatch = resolvePhCatalogIdentity({
+        standardInchiKey: result.identity.standardInchiKey,
+        casNumber: hasCasConflict ? existingCas : returnedCas || existingCas,
+        pubchemCid: result.identity.pubchemCid,
+        equivalentPubchemCids: result.identity.equivalentPubchemCids,
+        molecularFormula: result.identity.molecularFormula || chemical.molecularFormula,
+        currentPhCatalogId: component.phCatalogId,
+    });
+
+    return {
+        ...component,
+        ...reanalysis,
+        chemical,
+        identityConfidence: result.identity.status === 'verified' && !hasCasConflict
+            ? 'verified'
+            : 'review_required',
+        ghsDataStatus,
+        automaticHazardFlags,
+        manualHazardFlags,
+        hazardFlags: [...new Set([...automaticHazardFlags, ...manualHazardFlags])],
+        phCatalogId: component.phCatalogId ?? (phCatalogMatch.status === 'matched' ? phCatalogMatch.id : undefined),
+        phCatalogMatch,
+        enrichmentVersion: result.enrichmentVersion,
+        enrichmentLastAttemptAt: new Date().toISOString(),
+        enrichmentRetryCount: hazardStatus === 'transient_error' ? retryCount : 0,
+    };
+};
 
 const hasBatchContent = (batch: WasteBatchDraft): boolean =>
     batch.components.length > 0 ||
@@ -604,9 +772,12 @@ export type AddWasteComponentOptions = Partial<Pick<
     | 'hazardDataConfirmedByUser'
     | 'capturedAt'
     | 'hazardFlags'
+    | 'automaticHazardFlags'
+    | 'manualHazardFlags'
     | 'concentration'
     | 'solutionVolume'
     | 'phCatalogId'
+    | 'phCatalogMatch'
     | 'inventoryDisposalQuantity'
     | 'inventorySnapshot'
     | 'scanSnapshot'
@@ -621,6 +792,7 @@ export interface WasteState {
     cart: WasteComponent[];
     previousMatrix: WasteMatrix | null;
     setScope: (userId: string | null, labId: string | null) => void;
+    refreshChemicalEnrichment: () => Promise<void>;
     addToCart: (result: CartItem, options?: AddWasteComponentOptions) => void;
     removeFromCart: (cartLineIdOrLegacyChemicalId: string) => void;
     updateComponent: (
@@ -635,7 +807,10 @@ export interface WasteState {
             | 'inventoryDisposalQuantity'
             | 'ghsDataStatus'
             | 'hazardFlags'
+            | 'automaticHazardFlags'
+            | 'manualHazardFlags'
             | 'hazardDataConfirmedByUser'
+            | 'phCatalogMatch'
             | 'solutionContext'
         >>,
     ) => void;
@@ -702,6 +877,142 @@ export const useWasteStore = create<WasteState>((set, get) => ({
             previousMatrix: userId ? readPreviousMatrix(scopeKey) : null,
             ...emptyAIState,
         });
+    },
+
+    refreshChemicalEnrichment: async () => {
+        if (!isChemicalEnrichmentEnabled) return;
+
+        const runPass = async (retryCount: number, retryImmediately: boolean): Promise<boolean> => {
+            const snapshot = get();
+            const requestedScopeKey = snapshot.scopeKey;
+            if (!snapshot.batch.userId) return false;
+
+            const drafts = [snapshot.batch, ...snapshot.parkedBatches];
+            const grouped = new Map<string, {
+                item: Parameters<typeof enrichChemicals>[0][number];
+                references: Array<{ batchId: string; cartLineId: string; fingerprint: string }>;
+            }>();
+            for (const draft of drafts) {
+                for (const component of draft.components) {
+                    if (!shouldEnrichComponent(component, retryImmediately)) continue;
+                    const key = componentIdentityKey(component);
+                    const existing = grouped.get(key);
+                    const reference = {
+                        batchId: draft.id,
+                        cartLineId: component.cartLineId,
+                        fingerprint: componentEnrichmentFingerprint(component),
+                    };
+                    if (existing) {
+                        existing.references.push(reference);
+                        continue;
+                    }
+                    const identifiers = component.chemical.externalIdentifiers;
+                    grouped.set(key, {
+                        item: {
+                            requestId: `draft:${grouped.size}`,
+                            name: component.chemical.name,
+                            ...(component.chemical.casNumber ? { casNumber: component.chemical.casNumber } : {}),
+                            ...(identifiers?.pubchemCid ? { pubchemCid: identifiers.pubchemCid } : {}),
+                            ...(identifiers?.standardInchiKey ? { standardInchiKey: identifiers.standardInchiKey } : {}),
+                            molecularFormula: component.chemical.molecularFormula,
+                            ...(component.chemical.molecularWeight ? { molecularWeight: component.chemical.molecularWeight } : {}),
+                        },
+                        references: [reference],
+                    });
+                }
+            }
+            if (grouped.size === 0) return false;
+
+            const entries = Array.from(grouped.entries());
+            const resultsByKey = new Map<string, ChemicalEnrichmentResult>();
+            for (let start = 0; start < entries.length; start += 25) {
+                const chunk = entries.slice(start, start + 25);
+                try {
+                    const results = await enrichChemicals(
+                        chunk.map(([, entry]) => entry.item),
+                        { labId: snapshot.batch.labId },
+                    );
+                    results.forEach((result, index) => {
+                        const key = chunk[index]?.[0];
+                        if (key) resultsByKey.set(key, result);
+                    });
+                } catch {
+                    const fetchedAt = new Date().toISOString();
+                    for (const [key, entry] of chunk) {
+                        const phCatalog = resolvePhCatalogIdentity({
+                            standardInchiKey: entry.item.standardInchiKey,
+                            casNumber: entry.item.casNumber,
+                            pubchemCid: entry.item.pubchemCid,
+                            molecularFormula: entry.item.molecularFormula,
+                        });
+                        resultsByKey.set(key, {
+                            requestId: entry.item.requestId,
+                            overallStatus: 'retryable',
+                            identity: {
+                                status: 'ambiguous',
+                                canonicalName: entry.item.name,
+                                casNumber: entry.item.casNumber,
+                                pubchemCid: entry.item.pubchemCid,
+                                equivalentPubchemCids: entry.item.pubchemCid ? [entry.item.pubchemCid] : [],
+                                standardInchiKey: entry.item.standardInchiKey,
+                                molecularFormula: entry.item.molecularFormula,
+                                molecularWeight: entry.item.molecularWeight,
+                                evidence: [],
+                            },
+                            hazard: {
+                                status: 'transient_error',
+                                hCodes: [],
+                                hazardStatements: [],
+                                pictograms: [],
+                                hazardFlags: [],
+                                sources: [],
+                                fetchedAt,
+                            },
+                            phCatalog: {
+                                status: phCatalog.status,
+                                id: phCatalog.id,
+                                candidateIds: phCatalog.candidateIds,
+                                matchedBy: phCatalog.matchedBy,
+                                catalogVersion: phCatalog.catalogVersion,
+                            },
+                            enrichmentVersion: 1,
+                        });
+                    }
+                }
+            }
+
+            if (get().scopeKey !== requestedScopeKey) return false;
+            set((current) => {
+                if (current.scopeKey !== requestedScopeKey) return current;
+                const updateDraft = (draft: WasteBatchDraft): WasteBatchDraft => {
+                    let changed = false;
+                    const components = draft.components.map((component) => {
+                        const key = componentIdentityKey(component);
+                        const result = resultsByKey.get(key);
+                        const reference = grouped.get(key)?.references.find((candidate) => (
+                            candidate.batchId === draft.id && candidate.cartLineId === component.cartLineId
+                        ));
+                        if (!result || !reference || reference.fingerprint !== componentEnrichmentFingerprint(component)) {
+                            return component;
+                        }
+                        changed = true;
+                        return applyEnrichmentToComponent(component, result, retryCount);
+                    });
+                    return changed ? { ...draft, components, updatedAt: new Date().toISOString() } : draft;
+                };
+                const batch = updateDraft(current.batch);
+                const parkedBatches = current.parkedBatches.map(updateDraft);
+                saveWasteScope(batch, parkedBatches);
+                return { batch, parkedBatches, cart: batch.components, ...emptyAIState };
+            });
+
+            return Array.from(resultsByKey.values()).some((result) => result.overallStatus === 'retryable');
+        };
+
+        const shouldRetry = await runPass(1, false);
+        if (!shouldRetry) return;
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 10_000));
+        await runPass(2, true);
     },
 
     addToCart: (result, options) => set((state) => {

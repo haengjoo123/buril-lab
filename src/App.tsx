@@ -14,7 +14,7 @@ import type { ScannerSelectionMeta } from './components/Scanner';
 
 import { CartView } from './components/CartView';
 import { WasteV2DisabledCartView } from './components/WasteV2DisabledCartView';
-import { isWasteV2Enabled } from './config/featureFlags';
+import { isChemicalEnrichmentEnabled, isWasteV2Enabled } from './config/featureFlags';
 import { AuthView } from './components/AuthView';
 import { ResetPasswordView } from './components/ResetPasswordView';
 import { SafetyDisclaimer } from './components/SafetyDisclaimer';
@@ -105,6 +105,7 @@ function App() {
   const parkedBatchCount = useWasteStore((state) => state.parkedBatches.length);
   const wasteDraftCount = parkedBatchCount + (cart.length > 0 ? 1 : 0);
   const setWasteScope = useWasteStore((state) => state.setScope);
+  const refreshChemicalEnrichment = useWasteStore((state) => state.refreshChemicalEnrichment);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
   const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
@@ -270,7 +271,11 @@ function App() {
       // Name-only lookups can resolve to similarly named materials. Only an
       // exact, checksum-valid CAS match is automatically confirmed.
       identityConfidence: identityWasVerifiedByCas ? 'verified' : 'review_required',
-      ghsDataStatus: chemical?.ghs ? 'verified' : chemical ? 'not_checked' : 'lookup_failed',
+      ghsDataStatus: chemical?.hazardLookup?.status === 'classified' || chemical?.hazardLookup?.status === 'not_classified'
+        ? 'verified'
+        : chemical?.hazardLookup?.status === 'source_absent' || chemical?.hazardLookup?.status === 'identity_ambiguous'
+          ? 'lookup_failed'
+          : chemical ? 'not_checked' : 'lookup_failed',
       inventoryDisposalQuantity: isCabinetItem || item.quantity <= 1 ? 1 : undefined,
       inventorySnapshot: {
         brand: item.brand,
@@ -324,6 +329,11 @@ function App() {
   useEffect(() => {
     setWasteScope(activeOnboardingUserId, currentLabId);
   }, [activeOnboardingUserId, currentLabId, setWasteScope]);
+
+  useEffect(() => {
+    if (!activeOnboardingUserId || !isChemicalEnrichmentEnabled) return;
+    void refreshChemicalEnrichment();
+  }, [activeOnboardingUserId, currentLabId, refreshChemicalEnrichment]);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;

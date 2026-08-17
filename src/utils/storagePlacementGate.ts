@@ -1,4 +1,4 @@
-import { lookupGHSByCAS } from '../services/pubchemService';
+import { lookupGHSByCAS, lookupGHSByIdentity } from '../services/pubchemService';
 import { useLabStore } from '../store/useLabStore';
 import type {
     ReagentGhsStatus,
@@ -67,15 +67,17 @@ export async function resolveAutoPlacementStorageData(
     let resolvedItem = item;
 
     if (item.ghsStatus !== 'success') {
-        if (!item.casNo?.trim()) {
-            const classification = classifyStoragePlacement(asPlacement(item));
-            return { allowed: false, item, classification, reason: 'missing_cas' };
-        }
-
-        const result = await lookupGHSByCAS(item.casNo, {
-            labId: useLabStore.getState().currentLabId,
-        });
-        resolvedItem = withGhsResult(item, result);
+        const labId = useLabStore.getState().currentLabId;
+        const identified = item.casNo?.trim()
+            ? await lookupGHSByCAS(item.casNo, { labId })
+            : await lookupGHSByIdentity({ name: item.name }, { labId });
+        const recoveredCas = 'casNumber' in identified && typeof identified.casNumber === 'string'
+            ? identified.casNumber
+            : undefined;
+        resolvedItem = withGhsResult({
+            ...item,
+            casNo: item.casNo || recoveredCas,
+        }, identified);
     }
 
     const classification = classifyStoragePlacement(asPlacement(resolvedItem));

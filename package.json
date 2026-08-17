@@ -32,6 +32,7 @@
     "ios:run": "npm run build:ios && npx cap run ios",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:chemical-live": "node scripts/run-chemical-live-smoke.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

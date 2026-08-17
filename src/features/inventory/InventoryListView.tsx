@@ -53,6 +53,7 @@ import {
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import { lookupGHSByCAS, type PubChemGHSResult } from '../../services/pubchemService';
+import { enrichChemicals } from '../../services/chemicalEnrichmentService';
 import { getPictogramCode, getPictogramUrl } from '../../data/ghsCodes';
 import { planBulkInventoryCabinetMove } from '../../utils/bulkInventoryMovePlanner';
 import {
@@ -222,6 +223,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     const bulkMoveInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const inventoryGhsByCasRef = useRef<Record<string, InventoryGhsState>>({});
     const inventoryGhsInFlightRef = useRef<Set<string>>(new Set());
+    const inventoryIdentityInFlightRef = useRef<Set<string>>(new Set());
     const bulkErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const bulkMoveRequestRef = useRef<{ signature: string; requestId: string } | null>(null);
 
@@ -515,6 +517,58 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     useEffect(() => {
         inventoryGhsByCasRef.current = inventoryGhsByCas;
     }, [inventoryGhsByCas]);
+
+    useEffect(() => {
+        const grouped = new Map<string, InventoryItem[]>();
+        for (const item of items) {
+            if (item.cas_number?.trim() || !item.name.trim()) continue;
+            const key = `${item.name.normalize('NFKC').trim().toLowerCase()}|${item.product_number || ''}`;
+            if (inventoryIdentityInFlightRef.current.has(key)) continue;
+            const matches = grouped.get(key) ?? [];
+            matches.push(item);
+            grouped.set(key, matches);
+        }
+        if (grouped.size === 0) return;
+
+        const entries = Array.from(grouped.entries());
+        entries.forEach(([key]) => inventoryIdentityInFlightRef.current.add(key));
+
+        const recoverMissingCasNumbers = async () => {
+            try {
+                for (let start = 0; start < entries.length; start += 25) {
+                    const chunk = entries.slice(start, start + 25);
+                    const results = await enrichChemicals(
+                        chunk.map(([key, matches]) => ({
+                            requestId: `inventory:${key}`,
+                            name: matches[0].name,
+                        })),
+                        { labId: currentLabId },
+                    );
+
+                    for (let index = 0; index < results.length; index += 1) {
+                        const result = results[index];
+                        const entry = chunk[index];
+                        if (!entry || result.identity.status !== 'verified' || !result.identity.casNumber) continue;
+                        for (const item of entry[1]) {
+                            if (useLabStore.getState().currentLabId !== currentLabId) return;
+                            await inventoryService.updateItemCasWithLinkedSync(item, result.identity.casNumber);
+                            setItems((current) => current.map((candidate) => (
+                                candidate.id === item.id && !candidate.cas_number
+                                    ? { ...candidate, cas_number: result.identity.casNumber || null }
+                                    : candidate
+                            )));
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('[Inventory] Automatic CAS recovery failed:', error);
+            } finally {
+                entries.forEach(([key]) => inventoryIdentityInFlightRef.current.delete(key));
+            }
+        };
+
+        void recoverMissingCasNumbers();
+    }, [currentLabId, items]);
 
     useEffect(() => {
         const casNumbersToLoad = Array.from(new Set(

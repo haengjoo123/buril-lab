@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchChemicalInfo } from './pubchemApi'
+import { fetchChemicalInfoLegacy as fetchChemicalInfo } from './pubchemApi'
 
 const fetchMock = vi.fn()
 

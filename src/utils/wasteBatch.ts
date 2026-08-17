@@ -347,6 +347,16 @@ export function createWasteComponentFromAnalysis(
 ): WasteComponent {
     const now = new Date().toISOString();
     const legacyItem = analysis as Partial<CartItem>;
+    const automaticHazardFlags = overrides.automaticHazardFlags ?? deriveWasteHazardFlags(analysis);
+    const manualHazardFlags = overrides.manualHazardFlags ?? [];
+    const hazardLookupStatus = analysis.chemical.hazardLookup?.status;
+    const ghsDataStatus = hazardLookupStatus === 'classified' || hazardLookupStatus === 'not_classified'
+        ? 'verified'
+        : hazardLookupStatus === 'transient_error'
+            ? 'not_checked'
+            : hazardLookupStatus === 'source_absent' || hazardLookupStatus === 'identity_ambiguous'
+                ? 'lookup_failed'
+                : analysis.chemical.ghs ? 'verified' : 'lookup_failed';
     return {
         ...analysis,
         cartLineId: overrides.cartLineId ?? generateId(),
@@ -362,11 +372,15 @@ export function createWasteComponentFromAnalysis(
                 : 'verified'
         ),
         identityConfirmedByUser: overrides.identityConfirmedByUser,
-        ghsDataStatus: overrides.ghsDataStatus ??
-            (analysis.chemical.ghs ? 'verified' : 'lookup_failed'),
+        ghsDataStatus: overrides.ghsDataStatus ?? ghsDataStatus,
         hazardDataConfirmedByUser: overrides.hazardDataConfirmedByUser,
         capturedAt: overrides.capturedAt ?? now,
-        hazardFlags: overrides.hazardFlags ?? deriveWasteHazardFlags(analysis),
+        hazardFlags: overrides.hazardFlags ?? [...new Set([...automaticHazardFlags, ...manualHazardFlags])],
+        automaticHazardFlags,
+        manualHazardFlags,
+        enrichmentVersion: analysis.chemical.hazardLookup?.algorithmVersion ?? 0,
+        phCatalogId: overrides.phCatalogId,
+        phCatalogMatch: overrides.phCatalogMatch,
         scanSnapshot: overrides.scanSnapshot,
         concentration: overrides.concentration,
         inventorySnapshot: overrides.inventorySnapshot,

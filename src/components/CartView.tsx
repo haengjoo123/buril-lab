@@ -1399,9 +1399,28 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_confirm_component_identity')}
                                                     </button>
                                                 )}
-                                                {activeStep === 'components' && component.ghsDataStatus !== 'verified' && !component.hazardDataConfirmedByUser && (
+                                                {activeStep === 'components' && component.chemical.hazardLookup?.status === 'classified' && (
+                                                    <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100" role="status">
+                                                        {t('waste_component_hazard_classified')}
+                                                    </p>
+                                                )}
+                                                {activeStep === 'components' && component.chemical.hazardLookup?.status === 'not_classified' && (
+                                                    <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200" role="status">
+                                                        {t('waste_component_hazard_not_classified')}
+                                                    </p>
+                                                )}
+                                                {activeStep === 'components' && component.chemical.hazardLookup?.status === 'transient_error' && (component.enrichmentRetryCount ?? 0) < 2 && (
+                                                    <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-100" role="status">
+                                                        {t('waste_component_hazard_pending')}
+                                                    </p>
+                                                )}
+                                                {activeStep === 'components' && component.ghsDataStatus === 'lookup_failed' && !component.hazardDataConfirmedByUser && (
                                                     <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
-                                                        {t('waste_component_hazard_lookup_failed')}
+                                                        {component.chemical.hazardLookup?.status === 'identity_ambiguous'
+                                                            ? t('waste_component_hazard_identity_ambiguous')
+                                                            : component.chemical.hazardLookup?.status === 'source_absent'
+                                                                ? t('waste_component_hazard_source_absent')
+                                                                : t('waste_component_hazard_lookup_failed')}
                                                     </p>
                                                 )}
                                             </div>
@@ -1720,6 +1739,14 @@ export const CartView: React.FC<CartViewProps> = ({
                                                                 : ''}
                                                             onChange={(value) => updateComponent(component.cartLineId, {
                                                                 phCatalogId: value || undefined,
+                                                                phCatalogMatch: value ? {
+                                                                    status: 'matched',
+                                                                    id: value,
+                                                                    candidateIds: component.phCatalogMatch?.candidateIds ?? [value],
+                                                                    matchedBy: component.phCatalogMatch?.matchedBy,
+                                                                    catalogVersion: component.phCatalogMatch?.catalogVersion ?? '',
+                                                                    selection: 'manual',
+                                                                } : undefined,
                                                             })}
                                                             options={[
                                                                 { value: '', label: t('waste_ph_catalog_form_unmatched') },
@@ -1734,12 +1761,16 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             menuClassName="w-full"
                                                         />
                                                         <span className="mt-1 block leading-relaxed text-slate-500 dark:text-slate-400">
-                                                            {t('waste_ph_catalog_form_help')}
+                                                            {component.phCatalogMatch?.status === 'matched' && component.phCatalogMatch.selection === 'automatic'
+                                                                ? t('waste_ph_catalog_auto_matched')
+                                                                : component.phCatalogMatch?.status === 'ambiguous' && component.phCatalogMatch.candidateIds.length > 0
+                                                                    ? t('waste_ph_catalog_candidates_only')
+                                                                    : t('waste_ph_catalog_form_help')}
                                                         </span>
                                                     </div>
                                                 )}
                                                 {activeStep === 'components' &&
-                                                    (component.ghsDataStatus !== 'verified' || component.hazardDataConfirmedByUser) && (
+                                                    (component.ghsDataStatus === 'lookup_failed' || component.hazardDataConfirmedByUser) && (
                                                     <fieldset className="rounded-xl border border-orange-200 bg-orange-50/70 p-3 dark:border-orange-900 dark:bg-orange-950/30">
                                                         <legend className="px-1 text-xs font-bold text-orange-950 dark:text-orange-100">
                                                             {t('waste_manual_hazard_title')}
@@ -1749,19 +1780,25 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         </p>
                                                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                                                             {MANUAL_HAZARD_OPTIONS.map((flag) => {
-                                                                const selected = component.hazardFlags.includes(flag);
+                                                                const selected = (component.manualHazardFlags ?? []).includes(flag);
                                                                 return (
                                                                     <button
                                                                         key={flag}
                                                                         type="button"
                                                                         aria-pressed={selected}
-                                                                        onClick={() => updateComponent(component.cartLineId, {
-                                                                            hazardFlags: selected
-                                                                                ? component.hazardFlags.filter((item) => item !== flag)
-                                                                                : [...component.hazardFlags, flag],
-                                                                            hazardDataConfirmedByUser: false,
-                                                                            ghsDataStatus: 'not_checked',
-                                                                        })}
+                                                                        onClick={() => {
+                                                                            const manualHazardFlags = selected
+                                                                                ? (component.manualHazardFlags ?? []).filter((item) => item !== flag)
+                                                                                : [...(component.manualHazardFlags ?? []), flag];
+                                                                            updateComponent(component.cartLineId, {
+                                                                                manualHazardFlags,
+                                                                                hazardFlags: [...new Set([
+                                                                                    ...(component.automaticHazardFlags ?? []),
+                                                                                    ...manualHazardFlags,
+                                                                                ])],
+                                                                                hazardDataConfirmedByUser: false,
+                                                                            });
+                                                                        }}
                                                                         className={`min-h-11 rounded-lg border px-2 py-1.5 text-left text-xs font-semibold ${selected
                                                                             ? 'border-orange-500 bg-orange-100 text-orange-950 dark:bg-orange-900/60 dark:text-orange-50'
                                                                             : 'border-orange-200 bg-white text-slate-700 dark:border-orange-900 dark:bg-slate-950 dark:text-slate-200'
