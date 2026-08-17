@@ -590,7 +590,20 @@ const componentIdentityKey = (component: WasteComponent): string => {
 const shouldEnrichComponent = (component: WasteComponent, retryImmediately = false): boolean => {
     if ((component.enrichmentVersion ?? 0) < 1) return true;
     if (!component.chemical.casNumber || !component.phCatalogMatch) return true;
-    if (component.chemical.hazardLookup?.status !== 'transient_error') return false;
+    const hazardStatus = component.chemical.hazardLookup?.status;
+    // A partially migrated draft can already have CAS/pH metadata while still
+    // missing the hazard result. Treat that as incomplete instead of allowing
+    // the legacy lookup_failed flag to become permanent.
+    if (!hazardStatus) return true;
+    if (
+        (hazardStatus === 'classified' || hazardStatus === 'not_classified') &&
+        component.ghsDataStatus !== 'verified'
+    ) return true;
+    if (
+        (hazardStatus === 'source_absent' || hazardStatus === 'identity_ambiguous') &&
+        component.ghsDataStatus !== 'lookup_failed'
+    ) return true;
+    if (hazardStatus !== 'transient_error') return false;
     if (retryImmediately) return true;
     const attemptedAt = Date.parse(component.enrichmentLastAttemptAt || '');
     return !Number.isFinite(attemptedAt) || Date.now() - attemptedAt >= 5 * 60 * 1000;

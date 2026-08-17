@@ -557,6 +557,85 @@ describe('useWasteStore V2 batch isolation', () => {
         expect(persisted.schemaVersion).toBe(5);
     });
 
+    it('repairs a schema-5 component that has CAS and pH metadata but no hazard lookup result', async () => {
+        const draft = createEmptyWasteBatch({
+            id: 'partial-acetate', scopeKey: 'user-a:lab-a', userId: 'user-a', labId: 'lab-a',
+        });
+        const input = cartItem('acetate', 'Sodium acetate', 'UNKNOWN');
+        input.chemical.casNumber = '127-09-3';
+        input.chemical.molecularFormula = 'C2H3NaO2';
+        const component = createWasteComponentFromAnalysis(input, {
+            phCatalogId: 'sodium-acetate',
+            phCatalogMatch: {
+                status: 'matched',
+                id: 'sodium-acetate',
+                candidateIds: ['sodium-acetate'],
+                matchedBy: 'cas',
+                catalogVersion: 'legacy',
+                selection: 'automatic',
+            },
+        });
+        component.enrichmentVersion = 1;
+        component.ghsDataStatus = 'lookup_failed';
+        component.chemical.hazardLookup = undefined;
+        draft.components = [component];
+        storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 5,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft,
+            parkedDrafts: [],
+        }));
+
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            const request = JSON.parse(String(init?.body)) as { items: Array<{ requestId: string }> };
+            const result: ChemicalEnrichmentResult = {
+                requestId: request.items[0].requestId,
+                overallStatus: 'complete',
+                identity: {
+                    status: 'verified',
+                    canonicalName: 'Sodium acetate',
+                    casNumber: '127-09-3',
+                    pubchemCid: 31372,
+                    equivalentPubchemCids: [31372, 517045],
+                    standardInchiKey: 'VMHLLURERBWHNL-UHFFFAOYSA-M',
+                    molecularFormula: 'C2H3NaO2',
+                    evidence: [],
+                },
+                hazard: {
+                    status: 'not_classified',
+                    hCodes: [],
+                    hazardStatements: [],
+                    pictograms: [],
+                    hazardFlags: [],
+                    sources: [{ source: 'pubchem', sourceId: '517045' }],
+                    fetchedAt: '2026-08-17T00:00:00.000Z',
+                },
+                phCatalog: {
+                    status: 'matched', id: 'sodium-acetate', candidateIds: ['sodium-acetate'],
+                    matchedBy: 'inchi_key', catalogVersion: 'test',
+                },
+                enrichmentVersion: 1,
+            };
+            return Response.json({ results: [result] });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        await useWasteStore.getState().refreshChemicalEnrichment();
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            ghsDataStatus: 'verified',
+            enrichmentVersion: 1,
+            phCatalogId: 'sodium-acetate',
+            chemical: {
+                casNumber: '127-09-3',
+                hazardLookup: { status: 'not_classified' },
+            },
+        });
+    });
+
     it('preserves unparseable legacy strings without inventing structured values', () => {
         const draft = createEmptyWasteBatch({
             id: 'ambiguous-v3',

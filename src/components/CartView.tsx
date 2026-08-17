@@ -1414,7 +1414,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_component_hazard_pending')}
                                                     </p>
                                                 )}
-                                                {activeStep === 'components' && component.ghsDataStatus === 'lookup_failed' && !component.hazardDataConfirmedByUser && (
+                                                {activeStep === 'components' && !component.chemical.hazardLookup && !component.hazardDataConfirmedByUser && (
+                                                    <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-100" role="status">
+                                                        {t('waste_component_hazard_pending')}
+                                                    </p>
+                                                )}
+                                                {activeStep === 'components' && component.ghsDataStatus === 'lookup_failed' && Boolean(component.chemical.hazardLookup) && !component.hazardDataConfirmedByUser && (
                                                     <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
                                                         {component.chemical.hazardLookup?.status === 'identity_ambiguous'
                                                             ? t('waste_component_hazard_identity_ambiguous')
