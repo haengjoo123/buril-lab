@@ -191,9 +191,16 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     </p>
                 )}
 
-                <h4 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-1">{t(label as any)}</h4>
+                <h4 className="mb-1 text-2xl font-bold text-slate-800 [text-wrap:balance] dark:text-slate-100">
+                    {label === 'label_ionic_organic_salt' ? (
+                        <>
+                            <span className="block sm:inline">{t('label_ionic_organic_salt_name' as any)}</span>{' '}
+                            <span className="block whitespace-nowrap sm:inline">{t('label_ionic_organic_salt_note' as any)}</span>
+                        </>
+                    ) : t(label as any)}
+                </h4>
 
-                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
+                <p className="mb-4 max-w-xl break-keep text-sm leading-relaxed text-slate-600 [text-wrap:pretty] dark:text-slate-300">
                     {t(reasonKey as any, result.reasonParams)}
                 </p>
 
