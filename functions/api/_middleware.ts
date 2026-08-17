@@ -96,6 +96,11 @@ const LIMIT_CONFIGS = {
     ip: { count: 8, window: "1 m" },
     pattern: /^\/api\/chemicals\//,
   },
+  CHEMICAL_SUGGEST: {
+    user: { count: 60, window: "1 m" },
+    ip: { count: 20, window: "1 m" },
+    pattern: /^\/api\/chemicals\/suggest(?:\/|$)/,
+  },
   REAGENTS: {
     user: { count: 20, window: "1 m" },
     ip: { count: 5, window: "1 m" },
@@ -227,6 +232,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   else if (LIMIT_CONFIGS.VOICE.pattern.test(path)) category = 'VOICE'
   else if (LIMIT_CONFIGS.AI.pattern.test(path)) category = 'AI'
   else if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) category = 'KOSHA'
+  else if (LIMIT_CONFIGS.CHEMICAL_SUGGEST.pattern.test(path)) category = 'CHEMICAL_SUGGEST'
   else if (LIMIT_CONFIGS.CHEMICALS.pattern.test(path)) category = 'CHEMICALS'
   else if (LIMIT_CONFIGS.REAGENTS.pattern.test(path)) category = 'REAGENTS'
   else if (LIMIT_CONFIGS.WASTE.pattern.test(path)) category = 'WASTE'

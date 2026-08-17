@@ -71,6 +71,19 @@ export function chemicalFromEnrichment(
       }
     : undefined
 
+  const fallbackProperties = fallback?.properties || {
+    isOrganic: molecularFormula.includes('C'),
+    isHalogenated: false,
+  }
+  const referencePh = result.referencePh.status === 'available'
+    ? result.referencePh.value
+    : fallbackProperties.referencePh ?? fallbackProperties.ph
+  const properties = {
+    ...fallbackProperties,
+    ...(referencePh !== undefined ? { referencePh } : {}),
+    ...(result.referencePh.status === 'available' ? { phSource: 'kosha_reference' as const } : {}),
+  }
+
   return {
     id: String(result.identity.pubchemCid),
     name,
@@ -87,12 +100,10 @@ export function chemicalFromEnrichment(
       ...result.hazard,
       algorithmVersion: result.enrichmentVersion,
     },
-    properties: fallback?.properties || {
-      isOrganic: molecularFormula.includes('C'),
-      isHalogenated: false,
-    },
+    referencePhLookup: result.referencePh,
+    properties,
     physicalProperties: fallback?.physicalProperties,
     ...(ghs ? { ghs } : {}),
-    koshaId: fallback?.koshaId,
+    koshaId: result.identity.koshaChemId || fallback?.koshaId,
   }
 }

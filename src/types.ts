@@ -72,6 +72,7 @@ export interface Chemical {
         standardInchiKey?: string;
     };
     hazardLookup?: ChemicalHazardLookup;
+    referencePhLookup?: ChemicalReferencePhLookup;
     properties?: {
         isHalogenated: boolean;
         isOrganic: boolean;
@@ -120,6 +121,23 @@ export interface ChemicalHazardLookup {
     algorithmVersion: number;
 }
 
+export type ChemicalReferencePhLookupStatus =
+    | 'available'
+    | 'pending'
+    | 'source_absent'
+    | 'transient_error'
+    | 'identity_ambiguous';
+
+export interface ChemicalReferencePhLookup {
+    status: ChemicalReferencePhLookupStatus;
+    value?: number;
+    source?: 'kosha';
+    sourceId?: string;
+    fetchedAt?: string;
+    expiresAt?: string;
+    retryAfterMs?: number;
+}
+
 export type PhCatalogMatchedBy = 'inchi_key' | 'cas' | 'pubchem_cid';
 
 export interface ChemicalPhCatalogMatch {
@@ -154,6 +172,7 @@ export interface ChemicalEnrichmentResult {
         canonicalName?: string;
         localizedName?: string;
         casNumber?: string;
+        koshaChemId?: number;
         pubchemCid?: number;
         equivalentPubchemCids: number[];
         standardInchiKey?: string;
@@ -167,8 +186,10 @@ export interface ChemicalEnrichmentResult {
         }>;
     };
     hazard: Omit<ChemicalHazardLookup, 'algorithmVersion'>;
+    referencePh: ChemicalReferencePhLookup;
     phCatalog: Omit<ChemicalPhCatalogMatch, 'selection'>;
-    enrichmentVersion: 1;
+    retryAfterMs?: number;
+    enrichmentVersion: 2;
 }
 
 export type AnalysisHazardWarningCode =

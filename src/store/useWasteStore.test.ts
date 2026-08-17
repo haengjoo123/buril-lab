@@ -177,7 +177,7 @@ describe('useWasteStore V2 batch isolation', () => {
             draft?: { components?: Array<{ chemical?: { name?: string } }> };
             parkedDrafts?: unknown[];
         };
-        expect(stored.schemaVersion).toBe(5);
+        expect(stored.schemaVersion).toBe(6);
         expect(stored.ownerUserId).toBe('user-a');
         expect(stored.scopeKey).toBe('user-a:lab-a');
         expect(stored.draft?.components?.[0]?.chemical?.name).toBe('Acetone');
@@ -204,7 +204,7 @@ describe('useWasteStore V2 batch isolation', () => {
         draft.components = [createWasteComponentFromAnalysis(legacyAnalysis)];
 
         storage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
-            schemaVersion: 5,
+            schemaVersion: 6,
             ownerUserId: 'user-a',
             scopeKey: 'user-a:lab-a',
             draft,
@@ -250,7 +250,7 @@ describe('useWasteStore V2 batch isolation', () => {
             draft?: { id?: string };
         };
         expect(upgraded).toMatchObject({
-            schemaVersion: 5,
+            schemaVersion: 6,
             ownerUserId: 'user-a',
             draft: { id: 'raw-v2-batch' },
         });
@@ -355,7 +355,7 @@ describe('useWasteStore V2 batch isolation', () => {
             parkedDrafts?: unknown[];
         };
         expect(upgraded).toMatchObject({
-            schemaVersion: 5,
+            schemaVersion: 6,
             draft: { incidentContext: 'none' },
             parkedDrafts: [],
         });
@@ -462,7 +462,7 @@ describe('useWasteStore V2 batch isolation', () => {
             draft?: typeof activeDraft;
             parkedDrafts?: typeof parkedDraft[];
         };
-        expect(upgraded.schemaVersion).toBe(5);
+        expect(upgraded.schemaVersion).toBe(6);
         expect(upgraded.draft?.components[0].solutionVolume?.normalizedMl).toBe(0.25);
         expect(upgraded.parkedDrafts?.[0].components[0].concentration).toEqual({
             value: 25,
@@ -526,11 +526,14 @@ describe('useWasteStore V2 batch isolation', () => {
                     sources: [{ source: 'pubchem', sourceId: '517045' }],
                     fetchedAt: '2026-08-17T00:00:00.000Z',
                 },
+                referencePh: {
+                    status: 'available', value: 7.5, source: 'kosha', sourceId: '003232',
+                },
                 phCatalog: {
                     status: 'matched', id: 'sodium-acetate', candidateIds: ['sodium-acetate'],
                     matchedBy: 'inchi_key', catalogVersion: 'test',
                 },
-                enrichmentVersion: 1,
+                enrichmentVersion: 2,
             };
             return Response.json({ results: [result] });
         });
@@ -547,14 +550,14 @@ describe('useWasteStore V2 batch isolation', () => {
             expect(component).toMatchObject({
                 ghsDataStatus: 'verified',
                 phCatalogId: 'sodium-acetate',
-                enrichmentVersion: 1,
+                enrichmentVersion: 2,
                 manualHazardFlags: ['CORROSIVE'],
             });
             expect(component.chemical.casNumber).toBe('127-09-3');
             expect(component.hazardFlags).toEqual(expect.arrayContaining(['FLAMMABLE', 'CORROSIVE']));
         }
         const persisted = JSON.parse(storage.getItem(`${V2_PREFIX}user-a:lab-a`) || '{}') as { schemaVersion?: number };
-        expect(persisted.schemaVersion).toBe(5);
+        expect(persisted.schemaVersion).toBe(6);
     });
 
     it('repairs a schema-5 component that has CAS and pH metadata but no hazard lookup result', async () => {
@@ -611,11 +614,12 @@ describe('useWasteStore V2 batch isolation', () => {
                     sources: [{ source: 'pubchem', sourceId: '517045' }],
                     fetchedAt: '2026-08-17T00:00:00.000Z',
                 },
+                referencePh: { status: 'source_absent', source: 'kosha' },
                 phCatalog: {
                     status: 'matched', id: 'sodium-acetate', candidateIds: ['sodium-acetate'],
                     matchedBy: 'inchi_key', catalogVersion: 'test',
                 },
-                enrichmentVersion: 1,
+                enrichmentVersion: 2,
             };
             return Response.json({ results: [result] });
         });
@@ -627,7 +631,7 @@ describe('useWasteStore V2 batch isolation', () => {
         expect(fetchMock).toHaveBeenCalledOnce();
         expect(useWasteStore.getState().batch.components[0]).toMatchObject({
             ghsDataStatus: 'verified',
-            enrichmentVersion: 1,
+            enrichmentVersion: 2,
             phCatalogId: 'sodium-acetate',
             chemical: {
                 casNumber: '127-09-3',

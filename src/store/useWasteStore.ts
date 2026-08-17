@@ -27,8 +27,9 @@ import { isChemicalEnrichmentEnabled } from '../config/featureFlags';
 
 const BATCH_STORAGE_PREFIX = 'buril-waste-batch-v2:';
 const LEGACY_STORAGE_KEY = 'buril-waste-store';
-const BATCH_STORAGE_SCHEMA_VERSION = 5;
-const PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION = 4;
+const BATCH_STORAGE_SCHEMA_VERSION = 6;
+const PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION = 5;
+const OLDER_BATCH_STORAGE_SCHEMA_VERSION = 4;
 const PARKED_BATCH_STORAGE_SCHEMA_VERSION = 3;
 const LEGACY_BATCH_STORAGE_SCHEMA_VERSION = 2;
 export const MAX_PARKED_WASTE_BATCHES = 10;
@@ -51,6 +52,14 @@ interface LegacyWasteBatchStorageEnvelope {
 
 interface PreviousWasteBatchStorageEnvelope {
     schemaVersion: typeof PREVIOUS_BATCH_STORAGE_SCHEMA_VERSION;
+    ownerUserId: string;
+    scopeKey: string;
+    draft: WasteBatchDraft;
+    parkedDrafts: WasteBatchDraft[];
+}
+
+interface OlderWasteBatchStorageEnvelope {
+    schemaVersion: typeof OLDER_BATCH_STORAGE_SCHEMA_VERSION;
     ownerUserId: string;
     scopeKey: string;
     draft: WasteBatchDraft;
@@ -376,6 +385,18 @@ const isPreviousWasteBatchStorageEnvelope = (
         Array.isArray(envelope.parkedDrafts);
 };
 
+const isOlderWasteBatchStorageEnvelope = (
+    value: unknown,
+): value is OlderWasteBatchStorageEnvelope => {
+    if (!value || typeof value !== 'object') return false;
+    const envelope = value as Partial<OlderWasteBatchStorageEnvelope>;
+    return envelope.schemaVersion === OLDER_BATCH_STORAGE_SCHEMA_VERSION &&
+        typeof envelope.ownerUserId === 'string' &&
+        typeof envelope.scopeKey === 'string' &&
+        isWasteBatchDraft(envelope.draft) &&
+        Array.isArray(envelope.parkedDrafts);
+};
+
 const isParkedWasteBatchStorageEnvelope = (
     value: unknown,
 ): value is ParkedWasteBatchStorageEnvelope => {
@@ -448,6 +469,24 @@ const loadWasteScope = (
                 // parked components to the structured volume/concentration model.
                 if (
                     isPreviousWasteBatchStorageEnvelope(parsed) &&
+                    parsed.ownerUserId === userId &&
+                    parsed.scopeKey === scopeKey &&
+                    isBatchOwnedByScope(parsed.draft, scopeKey, userId, labId)
+                ) {
+                    const batch = normalizeWasteBatchDraft(parsed.draft);
+                    const parkedBatches = parsed.parkedDrafts
+                        .filter(isWasteBatchDraft)
+                        .map(normalizeWasteBatchDraft)
+                        .filter((draft) =>
+                            draft.id !== batch.id &&
+                            isBatchOwnedByScope(draft, scopeKey, userId, labId)
+                        );
+                    saveWasteScope(batch, parkedBatches);
+                    return { batch, parkedBatches };
+                }
+
+                if (
+                    isOlderWasteBatchStorageEnvelope(parsed) &&
                     parsed.ownerUserId === userId &&
                     parsed.scopeKey === scopeKey &&
                     isBatchOwnedByScope(parsed.draft, scopeKey, userId, labId)
@@ -588,7 +627,7 @@ const componentIdentityKey = (component: WasteComponent): string => {
 };
 
 const shouldEnrichComponent = (component: WasteComponent, retryImmediately = false): boolean => {
-    if ((component.enrichmentVersion ?? 0) < 1) return true;
+    if ((component.enrichmentVersion ?? 0) < 2) return true;
     if (!component.chemical.casNumber || !component.phCatalogMatch) return true;
     const hazardStatus = component.chemical.hazardLookup?.status;
     // A partially migrated draft can already have CAS/pH metadata while still
@@ -603,6 +642,17 @@ const shouldEnrichComponent = (component: WasteComponent, retryImmediately = fal
         (hazardStatus === 'source_absent' || hazardStatus === 'identity_ambiguous') &&
         component.ghsDataStatus !== 'lookup_failed'
     ) return true;
+    const referencePhStatus = component.chemical.referencePhLookup?.status;
+    if (referencePhStatus === 'pending') {
+        if (retryImmediately) return true;
+        const attemptedAt = Date.parse(component.enrichmentLastAttemptAt || '');
+        return !Number.isFinite(attemptedAt) || Date.now() - attemptedAt >= 10_000;
+    }
+    if (referencePhStatus === 'transient_error') {
+        if (retryImmediately) return true;
+        const attemptedAt = Date.parse(component.enrichmentLastAttemptAt || '');
+        return !Number.isFinite(attemptedAt) || Date.now() - attemptedAt >= 5 * 60 * 1000;
+    }
     if (hazardStatus !== 'transient_error') return false;
     if (retryImmediately) return true;
     const attemptedAt = Date.parse(component.enrichmentLastAttemptAt || '');
@@ -618,6 +668,24 @@ const applyEnrichmentToComponent = (
     const existingCas = component.chemical.casNumber;
     const hasCasConflict = Boolean(existingCas && returnedCas && existingCas !== returnedCas);
     const enrichedChemical = chemicalFromEnrichment(result, component.chemical);
+    const existingProperties = component.chemical.properties;
+    const enrichedProperties = enrichedChemical?.properties;
+    const mergedProperties: Chemical['properties'] = existingProperties || enrichedProperties
+        ? {
+            ...existingProperties,
+            ...enrichedProperties,
+            isOrganic: enrichedProperties?.isOrganic ?? existingProperties?.isOrganic ?? false,
+            isHalogenated: enrichedProperties?.isHalogenated ?? existingProperties?.isHalogenated ?? false,
+            ...(
+                enrichedChemical?.referencePhLookup?.status !== 'available' && existingProperties?.referencePh !== undefined
+                    ? {
+                        referencePh: existingProperties.referencePh,
+                        ...(existingProperties.phSource ? { phSource: existingProperties.phSource } : {}),
+                    }
+                    : {}
+            ),
+        }
+        : undefined;
     const chemical: Chemical = enrichedChemical
         ? {
             ...component.chemical,
@@ -628,12 +696,12 @@ const applyEnrichmentToComponent = (
             casNumber: hasCasConflict
                 ? existingCas
                 : existingCas || enrichedChemical.casNumber,
-            properties: component.chemical.properties ?? enrichedChemical.properties,
+            properties: mergedProperties,
             physicalProperties: {
                 ...enrichedChemical.physicalProperties,
                 ...component.chemical.physicalProperties,
             },
-            koshaId: component.chemical.koshaId,
+            koshaId: enrichedChemical.koshaId ?? component.chemical.koshaId,
         }
         : {
             ...component.chemical,
@@ -642,6 +710,7 @@ const applyEnrichmentToComponent = (
                 status: hasCasConflict ? 'identity_ambiguous' as const : result.hazard.status,
                 algorithmVersion: result.enrichmentVersion,
             },
+            referencePhLookup: result.referencePh,
         };
     const reanalysis = analyzeChemical(chemical);
     const manualHazardFlags = component.manualHazardFlags ?? (
@@ -681,7 +750,10 @@ const applyEnrichmentToComponent = (
         phCatalogMatch,
         enrichmentVersion: result.enrichmentVersion,
         enrichmentLastAttemptAt: new Date().toISOString(),
-        enrichmentRetryCount: hazardStatus === 'transient_error' ? retryCount : 0,
+        enrichmentRetryCount: hazardStatus === 'transient_error' ||
+            result.referencePh.status === 'pending' || result.referencePh.status === 'transient_error'
+            ? retryCount
+            : 0,
     };
 };
 
@@ -981,6 +1053,11 @@ export const useWasteStore = create<WasteState>((set, get) => ({
                                 sources: [],
                                 fetchedAt,
                             },
+                            referencePh: {
+                                status: 'transient_error',
+                                source: 'kosha',
+                                retryAfterMs: 2_000,
+                            },
                             phCatalog: {
                                 status: phCatalog.status,
                                 id: phCatalog.id,
@@ -988,7 +1065,8 @@ export const useWasteStore = create<WasteState>((set, get) => ({
                                 matchedBy: phCatalog.matchedBy,
                                 catalogVersion: phCatalog.catalogVersion,
                             },
-                            enrichmentVersion: 1,
+                            retryAfterMs: 2_000,
+                            enrichmentVersion: 2,
                         });
                     }
                 }
@@ -1019,7 +1097,11 @@ export const useWasteStore = create<WasteState>((set, get) => ({
                 return { batch, parkedBatches, cart: batch.components, ...emptyAIState };
             });
 
-            return Array.from(resultsByKey.values()).some((result) => result.overallStatus === 'retryable');
+            return Array.from(resultsByKey.values()).some((result) =>
+                result.overallStatus === 'retryable' ||
+                result.referencePh.status === 'pending' ||
+                result.referencePh.status === 'transient_error'
+            );
         };
 
         const shouldRetry = await runPass(1, false);

@@ -12,9 +12,9 @@ interface CacheRow {
   expires_at: string | null
 }
 
-const RESULT_VERSION = 1
+export const CHEMICAL_ENRICHMENT_RESULT_VERSION = 2
 
-function createAdminClient(env: ChemicalCacheEnv): SupabaseClient | null {
+export function createChemicalCacheAdminClient(env: ChemicalCacheEnv): SupabaseClient | null {
   const url = env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim()
   const key = env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   if (!url || !key) return null
@@ -60,7 +60,7 @@ export async function readChemicalEnrichmentCache(
   env: ChemicalCacheEnv,
   item: ChemicalEnrichmentRequestItem,
 ): Promise<ChemicalEnrichmentResult | null> {
-  const supabase = createAdminClient(env)
+  const supabase = createChemicalCacheAdminClient(env)
   const keys = getChemicalLookupKeys(item)
   if (!supabase || keys.length === 0) return null
 
@@ -69,7 +69,7 @@ export async function readChemicalEnrichmentCache(
       .from('chemical_enrichment_cache')
       .select('result,expires_at')
       .in('lookup_key', keys)
-      .eq('result_version', RESULT_VERSION)
+      .eq('result_version', CHEMICAL_ENRICHMENT_RESULT_VERSION)
       .gt('expires_at', new Date().toISOString())
       .order('fetched_at', { ascending: false })
       .limit(1)
@@ -91,7 +91,7 @@ export async function writeChemicalEnrichmentCache(
   item: ChemicalEnrichmentRequestItem,
   result: ChemicalEnrichmentResult,
 ): Promise<void> {
-  const supabase = createAdminClient(env)
+  const supabase = createChemicalCacheAdminClient(env)
   const expiresAt = getChemicalCacheExpiry(result)
   if (!supabase || !expiresAt) return
 
@@ -109,7 +109,7 @@ export async function writeChemicalEnrichmentCache(
     const { error } = await supabase.from('chemical_enrichment_cache').upsert(
       keys.map((lookupKey) => ({
         lookup_key: lookupKey,
-        result_version: RESULT_VERSION,
+        result_version: CHEMICAL_ENRICHMENT_RESULT_VERSION,
         canonical_identity_key: canonicalIdentityKey,
         cache_status: cacheStatus,
         result,
@@ -130,7 +130,7 @@ export async function verifyLabMembership(
   userId: string,
   labId: string,
 ): Promise<boolean> {
-  const supabase = createAdminClient(env)
+  const supabase = createChemicalCacheAdminClient(env)
   if (!supabase) return false
   const { data, error } = await supabase
     .from('lab_members')
@@ -148,7 +148,7 @@ export async function projectLegacyGhsCache(
   labId: string | undefined,
   result: ChemicalEnrichmentResult,
 ): Promise<void> {
-  const supabase = createAdminClient(env)
+  const supabase = createChemicalCacheAdminClient(env)
   const casNumber = result.identity.casNumber
   if (!supabase || !casNumber || !['classified', 'not_classified'].includes(result.hazard.status)) return
 

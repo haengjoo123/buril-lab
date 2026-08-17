@@ -1,4 +1,3 @@
-import { XMLParser } from 'fast-xml-parser'
 import { DEFAULT_PH_CATALOG, resolvePhCatalogIdentity } from '../../../src/features/phPrediction'
 import type {
   ChemicalEnrichmentRequestItem,
@@ -6,10 +5,16 @@ import type {
   WasteHazardFlag,
 } from '../../../src/types'
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
+import {
+  fetchKoshaText,
+  parseKoshaItems,
+  resolveKoshaIdentityByCas,
+  resolveKoshaIdentityByExactName,
+  type KoshaEnv,
+  type KoshaIdentity,
+} from './_kosha'
 
-export interface ChemicalEnrichmentEnv {
-  KOSHA_API_KEY?: string
-}
+export type ChemicalEnrichmentEnv = KoshaEnv
 
 type FetchLike = typeof fetch
 
@@ -43,7 +48,6 @@ interface CandidateRecord {
 
 const PUG_REST_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug'
 const PUG_VIEW_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view'
-const KOSHA_BASE_URL = 'https://msds.kosha.or.kr/openapi/service/msdschem'
 const FETCH_TIMEOUT_MS = 8_000
 const MAX_FETCH_ATTEMPTS = 3
 const MAX_EQUIVALENT_CIDS = 16
@@ -225,34 +229,6 @@ async function fetchJson<T>(url: string, fetchImpl: FetchLike): Promise<FetchOut
   return { kind: 'transient_error', error: lastError }
 }
 
-async function fetchText(url: string, fetchImpl: FetchLike): Promise<FetchOutcome<string>> {
-  let lastError = 'Upstream request failed'
-  for (let attempt = 0; attempt < MAX_FETCH_ATTEMPTS; attempt += 1) {
-    const controller = new AbortController()
-    const timeoutId = globalThis.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-    try {
-      const response = await fetchImpl(url, { signal: controller.signal, headers: { Accept: 'application/xml,text/xml' } })
-      if (response.status === 404) return { kind: 'not_found' }
-      if (!response.ok) {
-        lastError = `Upstream HTTP ${response.status}`
-        const retryable = response.status === 408 || response.status === 429 || response.status >= 500
-        if (!retryable || attempt === MAX_FETCH_ATTEMPTS - 1) {
-          return { kind: 'transient_error', error: lastError }
-        }
-      } else {
-        return { kind: 'ok', data: await response.text() }
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : 'Upstream network error'
-      if (attempt === MAX_FETCH_ATTEMPTS - 1) return { kind: 'transient_error', error: lastError }
-    } finally {
-      globalThis.clearTimeout(timeoutId)
-    }
-    await waitBeforeRetry(attempt)
-  }
-  return { kind: 'transient_error', error: lastError }
-}
-
 function propertyLookupPath(item: ChemicalEnrichmentRequestItem): { path: string; method: ChemicalEnrichmentResult['identity']['evidence'][number]['method'] } | null {
   if (item.pubchemCid) return { path: `cid/${item.pubchemCid}`, method: 'primary_cid' }
   if (item.standardInchiKey) return { path: `inchikey/${encodeURIComponent(item.standardInchiKey)}`, method: 'equivalent_inchikey' }
@@ -349,54 +325,12 @@ interface KoshaHazardResult {
   signalWord?: string
 }
 
-const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+async function fetchKoshaHazard(identity: KoshaIdentity, env: ChemicalEnrichmentEnv, fetchImpl: FetchLike): Promise<KoshaHazardResult> {
+  const section = await fetchKoshaText('chemdetail02', new URLSearchParams({ chemId: identity.chemId }), env, fetchImpl)
+  if (section.kind === 'transient_error') return { kind: 'transient_error', chemId: identity.chemId, hCodes: [], hazardStatements: [], pictograms: [] }
+  if (section.kind === 'not_found') return { kind: 'source_absent', chemId: identity.chemId, hCodes: [], hazardStatements: [], pictograms: [] }
 
-function asXmlItems(value: unknown): Record<string, unknown>[] {
-  if (Array.isArray(value)) return value.filter(isRecord)
-  return isRecord(value) ? [value] : []
-}
-
-function nestedRecord(record: Record<string, unknown> | undefined, ...keys: string[]): Record<string, unknown> | undefined {
-  let current: unknown = record
-  for (const key of keys) {
-    if (!isRecord(current)) return undefined
-    current = current[key]
-  }
-  return isRecord(current) ? current : undefined
-}
-
-async function fetchKoshaHazard(casNumber: string, env: ChemicalEnrichmentEnv, fetchImpl: FetchLike): Promise<KoshaHazardResult> {
-  if (!env.KOSHA_API_KEY?.trim()) {
-    return { kind: 'transient_error', hCodes: [], hazardStatements: [], pictograms: [] }
-  }
-
-  const searchParams = new URLSearchParams({
-    serviceKey: env.KOSHA_API_KEY,
-    searchWrd: casNumber,
-    searchCnd: '1',
-    pageNo: '1',
-    numOfRows: '10',
-  })
-  const search = await fetchText(`${KOSHA_BASE_URL}/chemlist?${searchParams}`, fetchImpl)
-  if (search.kind === 'transient_error') return { kind: 'transient_error', hCodes: [], hazardStatements: [], pictograms: [] }
-  if (search.kind === 'not_found') return { kind: 'source_absent', hCodes: [], hazardStatements: [], pictograms: [] }
-
-  const parsedSearch = xmlParser.parse(search.data) as unknown
-  const searchRoot = isRecord(parsedSearch) ? parsedSearch : undefined
-  const itemsContainer = nestedRecord(searchRoot, 'response', 'body', 'items')
-  const matched = asXmlItems(itemsContainer?.item).find((item) => normalizeCasNumber(String(item.casNo ?? '')) === casNumber)
-  const chemId = matched?.chemId ? String(matched.chemId).padStart(6, '0') : ''
-  if (!chemId) return { kind: 'source_absent', hCodes: [], hazardStatements: [], pictograms: [] }
-
-  const sectionParams = new URLSearchParams({ serviceKey: env.KOSHA_API_KEY, chemId })
-  const section = await fetchText(`${KOSHA_BASE_URL}/chemdetail02?${sectionParams}`, fetchImpl)
-  if (section.kind === 'transient_error') return { kind: 'transient_error', chemId, hCodes: [], hazardStatements: [], pictograms: [] }
-  if (section.kind === 'not_found') return { kind: 'source_absent', chemId, hCodes: [], hazardStatements: [], pictograms: [] }
-
-  const parsedSection = xmlParser.parse(section.data) as unknown
-  const sectionRoot = isRecord(parsedSection) ? parsedSection : undefined
-  const sectionItemsContainer = nestedRecord(sectionRoot, 'response', 'body', 'items')
-  const sectionItems = asXmlItems(sectionItemsContainer?.item)
+  const sectionItems = parseKoshaItems(section.data)
   const texts = sectionItems.flatMap((item) => [String(item.msdsItemNameKor ?? ''), String(item.itemDetail ?? '')]).filter(Boolean)
   const allText = texts.join('\n')
   const hCodes = extractHCodes(allText)
@@ -409,8 +343,8 @@ async function fetchKoshaHazard(casNumber: string, env: ChemicalEnrichmentEnv, f
 
   return {
     kind: hCodes.length > 0 ? 'classified' : explicitlyNotClassified ? 'not_classified' : 'source_absent',
-    chemId,
-    localizedName: typeof matched?.chemNameKor === 'string' ? matched.chemNameKor : undefined,
+    chemId: identity.chemId,
+    localizedName: identity.localizedName,
     hCodes,
     hazardStatements,
     pictograms,
@@ -436,6 +370,9 @@ function emptyResult(item: ChemicalEnrichmentRequestItem, status: 'not_found' | 
       hCodes: [], hazardStatements: [], pictograms: [], hazardFlags: [], sources: [], fetchedAt,
       ...(expiresAt ? { expiresAt } : {}),
     },
+    referencePh: status === 'transient_error'
+      ? { status: 'transient_error', retryAfterMs: 2_000 }
+      : { status: 'source_absent' },
     phCatalog: {
       status: phCatalog.status,
       ...(phCatalog.id ? { id: phCatalog.id } : {}),
@@ -443,8 +380,39 @@ function emptyResult(item: ChemicalEnrichmentRequestItem, status: 'not_found' | 
       ...(phCatalog.matchedBy ? { matchedBy: phCatalog.matchedBy } : {}),
       catalogVersion: DEFAULT_PH_CATALOG.version,
     },
-    enrichmentVersion: 1,
+    ...(status === 'transient_error' ? { retryAfterMs: 2_000 } : {}),
+    enrichmentVersion: 2,
   }
+}
+
+function ambiguousKoshaIdentityResult(
+  item: ChemicalEnrichmentRequestItem,
+  candidates: readonly KoshaIdentity[],
+): ChemicalEnrichmentResult {
+  const result = emptyResult(item, 'not_found')
+  return {
+    ...result,
+    overallStatus: 'needs_review',
+    identity: {
+      status: 'ambiguous',
+      canonicalName: item.name,
+      equivalentPubchemCids: [],
+      evidence: candidates.map((candidate) => ({
+        source: 'kosha' as const,
+        sourceId: candidate.chemId,
+        method: 'exact_name' as const,
+      })),
+    },
+    hazard: {
+      ...result.hazard,
+      status: 'identity_ambiguous',
+    },
+    referencePh: { status: 'identity_ambiguous' },
+  }
+}
+
+function containsKorean(value: string | undefined): boolean {
+  return Boolean(value && /[\u3131-\u318e\uac00-\ud7a3]/.test(value))
 }
 
 export async function enrichChemicalItem(
@@ -452,7 +420,22 @@ export async function enrichChemicalItem(
   env: ChemicalEnrichmentEnv,
   fetchImpl: FetchLike = fetch,
 ): Promise<ChemicalEnrichmentResult> {
-  const lookup = propertyLookupPath(item)
+  let lookupItem = item
+  let koshaIdentity: KoshaIdentity | undefined
+
+  if (!item.casNumber && !item.pubchemCid && !item.standardInchiKey && containsKorean(item.name)) {
+    const koshaName = await resolveKoshaIdentityByExactName(item.name!, env, fetchImpl)
+    if (koshaName.kind === 'found') {
+      koshaIdentity = koshaName.identity
+      lookupItem = { ...item, casNumber: koshaName.identity.casNumber }
+    } else if (koshaName.kind === 'ambiguous') {
+      return ambiguousKoshaIdentityResult(item, koshaName.candidates)
+    } else if (koshaName.kind === 'transient_error') {
+      return emptyResult(item, 'transient_error')
+    }
+  }
+
+  const lookup = propertyLookupPath(lookupItem)
   if (!lookup) return emptyResult(item, 'not_found')
   const propertyOutcome = await fetchPropertiesByPath(lookup.path, fetchImpl)
   if (propertyOutcome.kind === 'transient_error') return emptyResult(item, 'transient_error')
@@ -460,7 +443,7 @@ export async function enrichChemicalItem(
 
   const primary = propertyOutcome.data[0]
   const primaryCid = primary?.CID
-  const standardInchiKey = primary?.InChIKey || item.standardInchiKey
+  const standardInchiKey = primary?.InChIKey || lookupItem.standardInchiKey
   if (!primary || !primaryCid || !standardInchiKey) return emptyResult(item, 'not_found')
 
   const equivalentOutcome = await fetchEquivalentCids(standardInchiKey, primaryCid, fetchImpl)
@@ -474,7 +457,7 @@ export async function enrichChemicalItem(
 
   const verifiedCandidates = candidates.filter((candidate) => candidate.property.InChIKey?.toUpperCase() === standardInchiKey.toUpperCase())
   const exactCasNumbers = unique(verifiedCandidates.flatMap((candidate) => candidate.casNumbers))
-  const inputCas = normalizeCasNumber(item.casNumber)
+  const inputCas = normalizeCasNumber(lookupItem.casNumber)
   const casNumbers = inputCas && (exactCasNumbers.length === 0 || exactCasNumbers.includes(inputCas))
     ? unique([inputCas, ...exactCasNumbers])
     : exactCasNumbers
@@ -496,7 +479,7 @@ export async function enrichChemicalItem(
   let finalHazardStatements = hazardStatements
   let finalPictograms = pictograms
   let finalSignalWord = signalWord
-  let localizedName: string | undefined
+  let localizedName = koshaIdentity?.localizedName
   let hazardSources: ChemicalEnrichmentResult['hazard']['sources'] = pubchemSources
 
   if (identityAmbiguous) {
@@ -508,14 +491,26 @@ export async function enrichChemicalItem(
   } else if (allCandidatesUnavailable) {
     hazardStatus = 'transient_error'
   } else if (casNumber) {
-    const kosha = await fetchKoshaHazard(casNumber, env, fetchImpl)
-    localizedName = kosha.localizedName
-    hazardStatus = kosha.kind
-    finalHCodes = kosha.hCodes
-    finalHazardStatements = kosha.hazardStatements
-    finalPictograms = kosha.pictograms
-    finalSignalWord = kosha.signalWord
-    hazardSources = kosha.chemId ? [{ source: 'kosha', sourceId: kosha.chemId }] : []
+    const koshaLookup = koshaIdentity?.casNumber === casNumber
+      ? { kind: 'found' as const, identity: koshaIdentity }
+      : await resolveKoshaIdentityByCas(casNumber, env, fetchImpl)
+    if (koshaLookup.kind === 'found') {
+      koshaIdentity = koshaLookup.identity
+      const kosha = await fetchKoshaHazard(koshaLookup.identity, env, fetchImpl)
+      localizedName = kosha.localizedName || localizedName
+      hazardStatus = kosha.kind
+      finalHCodes = kosha.hCodes
+      finalHazardStatements = kosha.hazardStatements
+      finalPictograms = kosha.pictograms
+      finalSignalWord = kosha.signalWord
+      hazardSources = kosha.chemId ? [{ source: 'kosha', sourceId: kosha.chemId }] : []
+    } else if (koshaLookup.kind === 'ambiguous') {
+      hazardStatus = 'identity_ambiguous'
+    } else if (koshaLookup.kind === 'transient_error') {
+      hazardStatus = 'transient_error'
+    } else {
+      hazardStatus = 'source_absent'
+    }
   } else {
     hazardStatus = 'source_absent'
   }
@@ -552,6 +547,7 @@ export async function enrichChemicalItem(
       canonicalName: verifiedProperty.Title || verifiedProperty.IUPACName || item.name,
       ...(localizedName ? { localizedName } : {}),
       ...(casNumber ? { casNumber } : {}),
+      ...(koshaIdentity ? { koshaChemId: Number(koshaIdentity.chemId) } : {}),
       pubchemCid: primaryCid,
       equivalentPubchemCids,
       standardInchiKey,
@@ -563,8 +559,23 @@ export async function enrichChemicalItem(
         ...equivalentPubchemCids
           .filter((cid) => cid !== primaryCid)
           .map((cid) => ({ source: 'pubchem' as const, sourceId: String(cid), method: 'equivalent_inchikey' as const })),
+        ...(koshaIdentity ? [{
+          source: 'kosha' as const,
+          sourceId: koshaIdentity.chemId,
+          method: 'exact_cas' as const,
+        }] : []),
       ],
     },
+    referencePh: identityAmbiguous
+      ? { status: 'identity_ambiguous' }
+      : casNumber
+        ? {
+            status: 'pending',
+            source: 'kosha',
+            ...(koshaIdentity ? { sourceId: koshaIdentity.chemId } : {}),
+            retryAfterMs: 2_000,
+          }
+        : { status: 'source_absent' },
     hazard: {
       status: hazardStatus,
       hCodes: finalHCodes,
@@ -583,6 +594,7 @@ export async function enrichChemicalItem(
       ...(phMatch.matchedBy ? { matchedBy: phMatch.matchedBy } : {}),
       catalogVersion: phMatch.catalogVersion,
     },
-    enrichmentVersion: 1,
+    ...(hazardStatus === 'transient_error' ? { retryAfterMs: 2_000 } : {}),
+    enrichmentVersion: 2,
   }
 }
