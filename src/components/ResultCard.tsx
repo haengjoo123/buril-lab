@@ -106,14 +106,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
         switch (status) {
             case 'classified':
-                return {
-                    translationKey: 'waste_component_hazard_classified',
-                    className: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100',
-                };
             case 'not_classified':
-                // This is a completed internal lookup state, not an actionable
-                // safety message. Keep it out of the primary search result to
-                // avoid implying that the product or mixture is safe.
+                // Completed lookup states are internal metadata. Classified
+                // hazards are already rendered in the GHS panel below, while
+                // not_classified must not be presented as a safety claim.
                 return null;
             case 'transient_error':
                 return {
@@ -134,14 +130,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 return null;
         }
     }, [chemical.hazardLookup?.status]);
-    const hazardLookupSources = React.useMemo(() => (
-        chemical.hazardLookup?.sources.map(source => (
-            source.source === 'pubchem'
-                ? `PubChem CID ${source.sourceId}`
-                : `KOSHA ${source.sourceId}`
-        )).join(' · ') || ''
-    ), [chemical.hazardLookup?.sources]);
-
     return (
         <div
             data-onboarding-target="result-card"
@@ -211,9 +199,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 {hazardLookupPresentation && (
                     <div className={`mb-4 w-full rounded-xl border p-3 text-left text-sm font-medium ${hazardLookupPresentation.className}`}>
                         <p>{t(hazardLookupPresentation.translationKey as any)}</p>
-                        {hazardLookupSources && (
-                            <p className="mt-1 text-xs font-normal opacity-75">{hazardLookupSources}</p>
-                        )}
                     </div>
                 )}
 
