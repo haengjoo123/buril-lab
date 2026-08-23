@@ -57,6 +57,16 @@ lint_*.txt
 scene_changes*.txt
 tmp_results*.txt
 
+# Local agent/browser and service state
+/.codex-tmp/
+/.playwright-cli/
+/tmp/
+/supabase/.temp/
+/output/**/.playwright-cli/
+/output/playwright/**/internal/
+*.inspect.ndjson
+*.pid
+
 # fastlane generated output
 /fastlane/build/
 /fastlane/report.xml
