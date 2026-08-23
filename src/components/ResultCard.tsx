@@ -160,21 +160,20 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             {/* Body: Disposal Guide */}
             <div className="p-5 flex flex-col items-center text-center">
 
-                <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {t('result_basis_badge' as any)}
-                    </span>
-                    {identityAutomaticallyVerified && (
-                        <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-200">
-                            {t('result_auto_verified' as any)}
-                        </span>
-                    )}
-                    {identityConfirmedByUser && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
-                            {t('result_user_verified' as any)}
-                        </span>
-                    )}
-                </div>
+                {(identityAutomaticallyVerified || identityConfirmedByUser) && (
+                    <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
+                        {identityAutomaticallyVerified && (
+                            <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-200">
+                                {t('result_auto_verified' as any)}
+                            </span>
+                        )}
+                        {identityConfirmedByUser && (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
+                                {t('result_user_verified' as any)}
+                            </span>
+                        )}
+                    </div>
+                )}
 
                 {scanSelectionMeta && !scanIdentityConfirmed && (
                     <p className="mb-4 w-full rounded-xl border border-orange-200 bg-orange-50 p-3 text-left text-sm font-medium text-orange-900 dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-100">

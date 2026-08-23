@@ -400,7 +400,7 @@ export function SearchTabView({
             : 'border-slate-100 dark:border-slate-700/70'
             }`}
         >
-          <div className={`flex items-center gap-3 transition-colors lg:min-h-[76px] lg:rounded-[24px] lg:border lg:px-3 lg:py-2 ${
+          <div className={`flex items-center gap-2 transition-colors lg:min-h-[76px] lg:gap-3 lg:rounded-[24px] lg:border lg:px-3 lg:py-2 ${
             error
               ? 'lg:border-red-200 lg:bg-red-50 dark:lg:border-red-900/60 dark:lg:bg-red-950/30'
               : 'lg:border-slate-200 lg:bg-slate-50/80 lg:ring-1 lg:ring-white lg:group-focus-within:border-blue-300 lg:group-focus-within:bg-white lg:group-focus-within:ring-blue-100 dark:lg:border-slate-700/70 dark:lg:bg-slate-900/70 dark:lg:ring-slate-700/50 dark:lg:group-focus-within:border-blue-500/60 dark:lg:group-focus-within:bg-slate-900 dark:lg:group-focus-within:ring-blue-500/20'
@@ -409,19 +409,11 @@ export function SearchTabView({
               type="button"
               onClick={onOpenScanner}
               aria-label={t('btn_scan')}
-              className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 lg:inline-flex"
+              disabled={isLoading}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 lg:h-12 lg:w-12"
             >
               <Camera className="h-5 w-5 stroke-[2.2]" />
             </button>
-
-            <div
-              className={`flex h-10 w-10 shrink-0 items-center justify-center transition-colors lg:hidden ${error
-                ? 'text-red-500 dark:text-red-400'
-                : 'text-slate-400 group-focus-within:text-blue-500 dark:text-slate-500 dark:group-focus-within:text-blue-400'
-                }`}
-            >
-              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-            </div>
 
             <div className="min-w-0 flex-1">
               <input
@@ -432,7 +424,7 @@ export function SearchTabView({
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
                 data-onboarding-target="search-input"
-              className="block w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400 dark:lg:text-slate-100 dark:lg:placeholder:text-slate-500"
+              className="block h-10 w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400 dark:lg:text-slate-100 dark:lg:placeholder:text-slate-500"
               placeholder={t('search_placeholder')}
               disabled={isLoading}
             />
@@ -449,12 +441,12 @@ export function SearchTabView({
                 <X className="h-4 w-4" />
               </button>
             )}
-            <div className="hidden items-center gap-1 lg:flex">
+            <div className="flex shrink-0 items-center gap-1">
               {query.trim() && (
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-950/30 transition-all duration-300 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-950/30 transition-all duration-300 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60 lg:h-12 lg:w-12"
                   aria-label={t('lab_mgmt_search_btn')}
                 >
                   {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5 stroke-[2.4]" />}
@@ -466,46 +458,12 @@ export function SearchTabView({
                   onClick={onOpenVoiceAgent}
                   disabled={isLoading}
                   aria-label={t('voice_agent_cta_speak')}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 lg:h-12 lg:w-12"
                 >
                   <Mic className="h-5 w-5 stroke-[2.3]" />
                 </button>
               )}
             </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 lg:hidden">
-            <button
-              type="button"
-              onClick={onOpenScanner}
-              className="inline-flex h-10 items-center gap-2 rounded-full bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40"
-            >
-              <Camera className="w-4 h-4" />
-              <span>{t('btn_scan')}</span>
-            </button>
-
-            {onOpenVoiceAgent && (
-              <button
-                type="button"
-                onClick={onOpenVoiceAgent}
-                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                <Mic className="w-4 h-4" />
-                <span>{t('voice_agent_cta_speak')}</span>
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={!query.trim() || isLoading}
-              className={`ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${
-                query.trim() 
-                  ? 'bg-slate-900 text-white shadow-md hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white' 
-                  : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
-              }`}
-              aria-label={t('lab_mgmt_search_btn')}
-            >
-              <ArrowUp className="w-5 h-5 stroke-[2.5]" />
-            </button>
           </div>
 
         </div>
