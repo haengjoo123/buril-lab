@@ -1371,7 +1371,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 : '';
             const storageLabel = `${item.cabinet_name || t('inventory_cabinet_unassigned')}${shelfLabel ? ` · ${shelfLabel}` : ''}`;
             return (
-                <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
+                <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800" title={storageLabel}>
                     <Archive className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{storageLabel}</span>
                 </span>
@@ -1380,7 +1380,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
         const storageLabel = `${item.storage_location_icon || '📦'} ${translateLocationName(item.storage_location_name, t) || t('inventory_other_storage')}`;
         return (
-            <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">
+            <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800" title={storageLabel}>
                 <MapPin className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{storageLabel}</span>
             </span>
@@ -2102,7 +2102,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             </div>
 
             {/* List */}
-            <div className="flex-1 space-y-3 overflow-y-auto p-4 pb-24 lg:col-start-1 lg:row-start-2 lg:[scrollbar-gutter:stable] lg:border-r lg:border-slate-200 lg:px-6 lg:pb-6 lg:pt-0 dark:lg:border-slate-800">
+            <div className="min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto p-4 pb-24 lg:col-start-1 lg:row-start-2 lg:[scrollbar-gutter:stable] lg:border-r lg:border-slate-200 lg:px-6 lg:pb-6 lg:pt-0 dark:lg:border-slate-800">
                 {/* Expiry Summary Banner */}
                 {!isLoading && (expirySummary.expiredCount > 0 || expirySummary.warningCount > 0) && (
                     <div className="flex items-start gap-3 rounded-lg border border-red-200/60 bg-red-50 p-3.5 animate-in fade-in slide-in-from-top-2 duration-300 dark:border-red-900/40 dark:bg-red-950/30">
@@ -2133,7 +2133,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     </div>
                 ) : (
                     <>
-                        <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
+                        <div className="hidden min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
                             <div className="border-b border-slate-200 p-3 dark:border-slate-800">
                                 <div className="grid grid-cols-[minmax(280px,1fr)_auto_auto_auto] items-center gap-2">
                                     <div className="relative min-w-0">
@@ -2289,29 +2289,29 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 ))}
                             </div>
 
-                            <div className="overflow-x-auto">
+                            <div className="min-w-0 overflow-x-hidden">
                             {visibleItems.length > 0 ? (
-                                <table className="w-full min-w-[960px] table-fixed text-left text-sm">
+                                <table className="w-full min-w-0 table-fixed text-left text-sm">
                                     <colgroup>
-                                        <col className="w-12" />
-                                        <col />
-                                        <col className="w-40" />
-                                        <col className="w-24" />
-                                        <col className="w-40" />
-                                        <col className="w-32" />
-                                        <col className="w-28" />
+                                        <col className="w-[5%]" />
+                                        <col className="w-[24%]" />
+                                        <col className="w-[18%]" />
+                                        <col className="w-[8%]" />
+                                        <col className="w-[17%]" />
+                                        <col className="w-[12%]" />
+                                        <col className="w-[16%]" />
                                     </colgroup>
                                     <thead className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
                                         <tr>
-                                            <th className="px-3 py-2.5">
+                                            <th className="px-2 py-2.5">
                                                 <span className="sr-only">{t('inventory_select_item')}</span>
                                             </th>
-                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_csv_table_name')}</th>
-                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_csv_table_storage')}</th>
-                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_quantity')}</th>
-                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_error_expiry_label')}</th>
-                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_capacity')}</th>
-                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_hazard_management')}</th>
+                                            <th className="break-words px-2 py-2.5 leading-4">{t('inventory_csv_table_name')}</th>
+                                            <th className="break-words px-2 py-2.5 leading-4">{t('inventory_csv_table_storage')}</th>
+                                            <th className="break-words px-2 py-2.5 leading-4">{t('inventory_quantity')}</th>
+                                            <th className="break-words px-2 py-2.5 leading-4">{t('inventory_error_expiry_label')}</th>
+                                            <th className="break-words px-2 py-2.5 leading-4">{t('inventory_capacity')}</th>
+                                            <th className="break-words px-2 py-2.5 leading-4">{t('inventory_hazard_management')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -2335,7 +2335,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                             : 'hover:bg-slate-50 dark:hover:bg-slate-800/70'
                                                     }`}
                                                 >
-                                                    <td className="px-3 py-3">
+                                                    <td className="px-2 py-3">
                                                         <input
                                                             type="checkbox"
                                                             checked={selectedItemIds.includes(item.id)}
@@ -2348,9 +2348,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                             className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                                         />
                                                     </td>
-                                                    <td className="px-3 py-3">
+                                                    <td className="min-w-0 px-2 py-3">
                                                         <div className="min-w-0">
-                                                            <div className="truncate font-semibold text-slate-900 dark:text-slate-100">{item.name}</div>
+                                                            <div className="truncate font-semibold text-slate-900 dark:text-slate-100" title={item.name}>{item.name}</div>
                                                             <div className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
                                                                 {[item.cas_number, item.brand, item.product_number].filter(Boolean).join(' · ') || t('common_unknown')}
                                                             </div>
@@ -2360,9 +2360,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="min-w-0 px-3 py-3">{renderStorageBadge(item)}</td>
-                                                    <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">{item.quantity}</td>
-                                                    <td className="px-3 py-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                                                    <td className="min-w-0 px-2 py-3">{renderStorageBadge(item)}</td>
+                                                    <td className="truncate whitespace-nowrap px-2 py-3 font-semibold text-slate-700 dark:text-slate-200">{item.quantity}</td>
+                                                    <td className="min-w-0 px-2 py-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
                                                         {trackedManufacturerDate ? (
                                                             <span
                                                                 className="block min-w-0 break-words"
@@ -2373,12 +2373,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                         ) : '-'}
                                                     </td>
                                                     <td
-                                                        className="truncate whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300"
+                                                        className="truncate whitespace-nowrap px-2 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300"
                                                         title={item.capacity || undefined}
                                                     >
                                                         {item.capacity || '-'}
                                                     </td>
-                                                    <td className="px-3 py-3 text-center align-middle">
+                                                    <td className="min-w-0 px-2 py-3 text-center align-middle">
                                                         {renderGhsPictograms(item, hazard)}
                                                     </td>
                                                 </tr>
