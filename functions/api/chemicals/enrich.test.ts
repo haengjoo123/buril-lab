@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   writeChemicalEnrichmentCache: vi.fn(),
   verifyLabMembership: vi.fn(),
   projectLegacyGhsCache: vi.fn(),
+  createChemicalCacheAdminClient: vi.fn(),
   resolveKoshaIdentityByCas: vi.fn(),
   resolveKoshaReferencePh: vi.fn(),
 }))
@@ -21,6 +22,7 @@ vi.mock('./_cache', () => ({
   writeChemicalEnrichmentCache: mocks.writeChemicalEnrichmentCache,
   verifyLabMembership: mocks.verifyLabMembership,
   projectLegacyGhsCache: mocks.projectLegacyGhsCache,
+  createChemicalCacheAdminClient: mocks.createChemicalCacheAdminClient,
 }))
 
 vi.mock('./_kosha', () => ({
@@ -64,6 +66,7 @@ describe('POST /api/chemicals/enrich', () => {
     mocks.enrichChemicalItem.mockResolvedValue(completeResult)
     mocks.writeChemicalEnrichmentCache.mockResolvedValue(undefined)
     mocks.projectLegacyGhsCache.mockResolvedValue(undefined)
+    mocks.createChemicalCacheAdminClient.mockReturnValue(null)
     mocks.verifyLabMembership.mockResolvedValue(true)
     mocks.resolveKoshaIdentityByCas.mockResolvedValue({ kind: 'not_found' })
     mocks.resolveKoshaReferencePh.mockResolvedValue({ status: 'source_absent', source: 'kosha' })
@@ -119,6 +122,29 @@ describe('POST /api/chemicals/enrich', () => {
     expect(mocks.enrichChemicalItem).toHaveBeenCalledOnce()
     expect(payload.results.map((result) => result.requestId)).toEqual(['first', 'second'])
     await Promise.all(request.background)
+  })
+
+  it('resolves only an approved server-managed alias before enrichment', async () => {
+    const aliasQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      in: vi.fn(),
+    }
+    aliasQuery.select.mockReturnValue(aliasQuery)
+    aliasQuery.eq.mockReturnValue(aliasQuery)
+    aliasQuery.in.mockResolvedValue({
+      data: [{ normalized_alias: '빙초산', canonical_name: 'Acetic acid', cas_number: '64-19-7' }],
+      error: null,
+    })
+    mocks.createChemicalCacheAdminClient.mockReturnValue({
+      from: vi.fn(() => aliasQuery),
+    })
+    const request = context({ items: [{ requestId: 'one', name: '빙초산' }] })
+    expect((await onRequestPost(request.value)).status).toBe(200)
+    expect(mocks.enrichChemicalItem).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Acetic acid', casNumber: '64-19-7' }),
+      expect.anything(),
+    )
   })
 
   it('returns a fresh server cache hit without repeating upstream enrichment', async () => {

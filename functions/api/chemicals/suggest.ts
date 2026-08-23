@@ -1,4 +1,5 @@
 import { searchKoshaNames, type KoshaEnv } from './_kosha'
+import { createChemicalCacheAdminClient } from './_cache'
 
 interface FunctionContext {
   request: Request
@@ -59,6 +60,31 @@ async function coalesce(key: string, factory: () => Promise<string[]>): Promise<
   }
 }
 
+async function fetchApprovedAliasSuggestions(
+  query: string,
+  limit: number,
+  env: KoshaEnv,
+): Promise<string[]> {
+  const adminClient = createChemicalCacheAdminClient(env)
+  if (!adminClient) return []
+  const normalized = query.normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ')
+  const { data, error } = await adminClient
+    .from('global_reagent_aliases')
+    .select('canonical_name')
+    .eq('is_active', true)
+    .gte('normalized_alias', normalized)
+    .lt('normalized_alias', `${normalized}\uffff`)
+    .order('normalized_alias')
+    .limit(limit)
+  if (error) {
+    console.warn('[chemicals/suggest] Approved alias lookup failed:', error.message)
+    return []
+  }
+  return Array.from(new Set((data || [])
+    .map((row) => row.canonical_name?.trim())
+    .filter((value): value is string => Boolean(value))))
+}
+
 export const onRequestGet = async (context: FunctionContext): Promise<Response> => {
   const url = new URL(context.request.url)
   const query = (url.searchParams.get('q') || '').normalize('NFKC').trim()
@@ -70,8 +96,15 @@ export const onRequestGet = async (context: FunctionContext): Promise<Response> 
 
   const source = containsKorean(query) ? 'kosha' : 'pubchem'
   const key = `${source}:${query.toLowerCase()}:${limit}`
-  const suggestions = await coalesce(key, () => source === 'kosha'
-    ? searchKoshaNames(query, limit, context.env)
-    : fetchPubChemSuggestions(query, limit))
-  return jsonResponse({ suggestions, source })
+  const [approvedAliases, upstream] = await Promise.all([
+    fetchApprovedAliasSuggestions(query, limit, context.env),
+    coalesce(key, () => source === 'kosha'
+      ? searchKoshaNames(query, limit, context.env)
+      : fetchPubChemSuggestions(query, limit)),
+  ])
+  const suggestions = Array.from(new Set([...approvedAliases, ...upstream])).slice(0, limit)
+  return jsonResponse({
+    suggestions,
+    source: approvedAliases.length > 0 ? `approved_alias+${source}` : source,
+  })
 }

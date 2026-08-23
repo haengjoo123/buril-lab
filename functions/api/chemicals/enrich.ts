@@ -8,6 +8,7 @@ import type {
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
 import {
   getChemicalLookupKeys,
+  createChemicalCacheAdminClient,
   projectLegacyGhsCache,
   readChemicalEnrichmentCache,
   verifyLabMembership,
@@ -37,6 +38,12 @@ const INCHI_KEY_PATTERN = /^[A-Z]{14}-[A-Z]{10}-[A-Z]$/
 const FORMULA_PATTERN = /^[A-Za-z0-9()[\].+\-·]+$/
 const REFERENCE_PH_FOREGROUND_BUDGET_MS = 2_000
 const coreInFlight = new Map<string, Promise<ChemicalEnrichmentResult>>()
+
+interface ApprovedAliasRow {
+  normalized_alias: string
+  canonical_name: string
+  cas_number: string | null
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -106,6 +113,42 @@ function parseRequest(value: unknown): ChemicalEnrichmentRequest {
     profile: profile as ChemicalEnrichmentProfile,
     ...(labId ? { scope: { labId } } : {}),
   }
+}
+
+async function resolveApprovedAliases(
+  items: ChemicalEnrichmentRequestItem[],
+  env: Env,
+): Promise<ChemicalEnrichmentRequestItem[]> {
+  const names = Array.from(new Set(items.flatMap((item) => (
+    item.name && !item.casNumber && !item.pubchemCid && !item.standardInchiKey
+      ? [item.name.normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ')]
+      : []
+  ))))
+  if (names.length === 0) return items
+  const adminClient = createChemicalCacheAdminClient(env)
+  if (!adminClient) return items
+  const { data, error } = await adminClient
+    .from('global_reagent_aliases')
+    .select('normalized_alias, canonical_name, cas_number')
+    .eq('is_active', true)
+    .in('normalized_alias', names)
+  if (error) {
+    console.warn('[chemicals/enrich] Approved alias resolution failed:', error.message)
+    return items
+  }
+  const aliases = new Map((data || []).map((row: ApprovedAliasRow) => [row.normalized_alias, row]))
+  return items.map((item) => {
+    if (!item.name || item.casNumber || item.pubchemCid || item.standardInchiKey) return item
+    const normalized = item.name.normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ')
+    const alias = aliases.get(normalized)
+    if (!alias) return item
+    const verifiedCas = normalizeCasNumber(alias.cas_number)
+    return {
+      ...item,
+      name: alias.canonical_name,
+      ...(verifiedCas ? { casNumber: verifiedCas } : {}),
+    }
+  })
 }
 
 async function mapWithConcurrency<T, R>(values: readonly T[], limit: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
@@ -292,7 +335,8 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
     return jsonResponse({ error: 'The requested laboratory scope is not accessible.' }, 403)
   }
 
-  const enriched = await mapWithConcurrency(requestBody.items, 3, async (item) => {
+  const resolvedItems = await resolveApprovedAliases(requestBody.items, context.env)
+  const enriched = await mapWithConcurrency(resolvedItems, 3, async (item) => {
     const profile = requestBody.profile || 'full'
     const resolution = await resolveCoreEnrichment(item, context.env, profile === 'inventory_hazard')
     const coreCompletion = resolution.revalidation || Promise.resolve(resolution.result)
@@ -317,7 +361,7 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
   })
   const results = enriched.map((value) => value.result)
 
-  const backgroundWrites = requestBody.items.map(async (item, index) => {
+  const backgroundWrites = resolvedItems.map(async (item, index) => {
     const result = await enriched[index].completion
     if (!result) return
     await writeChemicalEnrichmentCache(context.env, item, result)

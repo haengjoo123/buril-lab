@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 export interface FeedbackAdminEnv {
   SUPABASE_URL?: string
@@ -30,7 +30,7 @@ export interface FeedbackRow {
 }
 
 export interface FeedbackAdminContext {
-  adminClient: ReturnType<typeof createClient>
+  adminClient: SupabaseClient
   identity: FeedbackAdminIdentity
 }
 
@@ -126,7 +126,7 @@ export async function requireFeedbackAdmin(
     }
   }
 
-  let userClient: ReturnType<typeof createClient>
+  let userClient: SupabaseClient
   try {
     userClient = createSupabaseUserClient(env, authHeader)
   } catch (error) {
@@ -163,7 +163,7 @@ export async function requireFeedbackAdmin(
     }
   }
 
-  let adminClient: ReturnType<typeof createClient>
+  let adminClient: SupabaseClient
   try {
     adminClient = createSupabaseAdminClient(env)
   } catch (error) {

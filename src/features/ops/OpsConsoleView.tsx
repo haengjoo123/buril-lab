@@ -1,12 +1,13 @@
 import { Suspense, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { ArrowLeft, Building2, Inbox, LayoutDashboard, Loader2, LogOut, UserCircle } from 'lucide-react'
+import { ArrowLeft, BarChart3, Building2, Inbox, LayoutDashboard, Loader2, LogOut, UserCircle } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import logo from '../../assets/burillab_app_icon.png'
 import { FeedbackInboxView } from '../admin/FeedbackInboxView'
+import { OpsAnalyticsView } from './OpsAnalyticsView'
 import { SafetyCenterApprovalsView } from './SafetyCenterApprovalsView'
 
-type OpsSection = 'overview' | 'centers' | 'feedback'
+type OpsSection = 'overview' | 'analytics' | 'centers' | 'feedback'
 
 interface OpsConsoleViewProps {
   userEmail?: string
@@ -16,20 +17,30 @@ interface OpsConsoleViewProps {
 
 const OPS_NAV_ITEMS: Array<{ section: OpsSection; label: string; path: string; Icon: LucideIcon }> = [
   { section: 'overview', label: '운영 홈', path: '/ops', Icon: LayoutDashboard },
+  { section: 'analytics', label: '검색·배치 분석', path: '/ops/analytics', Icon: BarChart3 },
   { section: 'centers', label: '센터 승인', path: '/ops/centers', Icon: Building2 },
   { section: 'feedback', label: '개선 제안', path: '/ops/feedback', Icon: Inbox },
 ]
 
 function getOpsSection(pathname: string): OpsSection {
+  if (pathname.startsWith('/ops/analytics')) return 'analytics'
   if (pathname.startsWith('/ops/centers')) return 'centers'
   if (pathname.startsWith('/ops/feedback')) return 'feedback'
   return 'overview'
 }
 
 function getTitle(section: OpsSection): string {
+  if (section === 'analytics') return '검색·최종 배치 분석'
   if (section === 'centers') return '센터 승인'
   if (section === 'feedback') return '개선 제안'
   return '운영 홈'
+}
+
+function getDescription(section: OpsSection): string {
+  if (section === 'analytics') return '검색 흐름과 폐액 배치 현황을 살펴봅니다.'
+  if (section === 'centers') return '기관 안전관리센터의 신청 내용을 확인합니다.'
+  if (section === 'feedback') return '사용자가 남긴 개선 제안을 확인합니다.'
+  return '운영자가 직접 처리해야 하는 업무를 관리합니다.'
 }
 
 function OpsFallback() {
@@ -76,7 +87,13 @@ function OpsOverview({ navigate }: { navigate: (path: string) => void }) {
           기관 안전관리센터 승인, 앱 개선 제안 확인처럼 버릴랩 운영자가 직접 판단해야 하는 업무를 이 콘솔에서 처리합니다.
         </p>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <WorkCard
+          title="검색·최종 배치 분석"
+          body="제출 검색의 수요·혼동과 실제 혼합 배치를 확인하고 개선 후보를 검토합니다."
+          Icon={BarChart3}
+          onClick={() => navigate('/ops/analytics')}
+        />
         <WorkCard
           title="기관 센터 승인"
           body="기관 안전관리센터 개설 요청을 확인하고 승인 또는 거절합니다."
@@ -95,6 +112,7 @@ function OpsOverview({ navigate }: { navigate: (path: string) => void }) {
 }
 
 function renderSection(section: OpsSection, navigate: (path: string) => void): ReactNode {
+  if (section === 'analytics') return <OpsAnalyticsView />
   if (section === 'centers') return <SafetyCenterApprovalsView />
   if (section === 'feedback') return <FeedbackInboxView />
   return <OpsOverview navigate={navigate} />
@@ -115,7 +133,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
             </div>
             <div className="min-w-0">
               <p className="truncate text-base font-semibold">운영자 콘솔</p>
-              <p className="text-xs font-normal text-slate-300">Buril Lab Ops</p>
+              <p className="text-xs font-normal text-slate-300">버릴랩 운영 도구</p>
             </div>
           </div>
 
@@ -159,7 +177,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
                 운영자
               </div>
               <p className="mt-2 truncate text-xs font-normal text-slate-300">
-                {userEmail ?? 'operator@burillab.local'}
+                {userEmail ?? '운영자 계정'}
               </p>
             </div>
           </div>
@@ -170,7 +188,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold text-slate-950">{getTitle(activeSection)}</h1>
               <p className="hidden truncate text-xs font-normal text-slate-500 sm:block">
-                버릴랩 운영자가 처리해야 할 항목을 관리합니다.
+                {getDescription(activeSection)}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">

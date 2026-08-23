@@ -6,6 +6,15 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import { onRequestPost as postSearchAnalyticsEvent } from './functions/api/analytics/search-event'
+import { onRequestPost as postSearchAnalyticsAction } from './functions/api/analytics/search-action'
+import { onRequestPost as deleteGuestSearchAnalytics } from './functions/api/analytics/guest-delete'
+import { onRequestPost as deleteUserSearchAnalytics } from './functions/api/analytics/user-delete'
+import { onRequestPost as getAnalyticsSummary } from './functions/api/admin/analytics/summary'
+import { onRequestPost as getAnalyticsSearches } from './functions/api/admin/analytics/search'
+import { onRequestPost as getAnalyticsMixtures } from './functions/api/admin/analytics/mixtures'
+import { onRequestPost as manageAnalyticsReviews } from './functions/api/admin/analytics/reviews'
+import { onRequestPost as exportAnalyticsCsv } from './functions/api/admin/analytics/export'
 
 const disabledAutomaticClientEnvPrefix = 'BURIL_AUTO_ENV_DISABLED_'
 
@@ -29,6 +38,23 @@ type AdminIdentity = {
 type LocalAdminContext = {
   adminClient: SupabaseClient
   identity: AdminIdentity
+}
+
+type LocalPagesPostHandler = (context: {
+  request: Request
+  env: Record<string, string>
+}) => Promise<Response>
+
+const localPagesPostHandlers: Record<string, LocalPagesPostHandler> = {
+  '/api/analytics/search-event': postSearchAnalyticsEvent,
+  '/api/analytics/search-action': postSearchAnalyticsAction,
+  '/api/analytics/guest-delete': deleteGuestSearchAnalytics,
+  '/api/analytics/user-delete': deleteUserSearchAnalytics,
+  '/api/admin/analytics/summary': getAnalyticsSummary,
+  '/api/admin/analytics/search': getAnalyticsSearches,
+  '/api/admin/analytics/mixtures': getAnalyticsMixtures,
+  '/api/admin/analytics/reviews': manageAnalyticsReviews,
+  '/api/admin/analytics/export': exportAnalyticsCsv,
 }
 
 const feedbackSelectFields = [
@@ -103,6 +129,36 @@ async function readJsonBody<TBody>(request: IncomingMessage): Promise<TBody> {
   return (raw ? JSON.parse(raw) : {}) as TBody
 }
 
+async function runLocalPagesPostHandler(
+  handler: LocalPagesPostHandler,
+  request: IncomingMessage,
+  response: ServerResponse,
+  env: Record<string, string>,
+): Promise<void> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+  }
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (Array.isArray(value)) value.forEach((item) => headers.append(name, item))
+    else if (value !== undefined) headers.set(name, value)
+  }
+  const rawBody = Buffer.concat(chunks).toString('utf8')
+  const webRequest = new Request(
+    new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`),
+    {
+      method: 'POST',
+      headers,
+      body: rawBody,
+    },
+  )
+  const webResponse = await handler({ request: webRequest, env })
+  response.statusCode = webResponse.status
+  webResponse.headers.forEach((value, name) => response.setHeader(name, value))
+  response.end(Buffer.from(await webResponse.arrayBuffer()))
+}
+
 async function requireLocalAdmin(
   request: IncomingMessage,
   env: Record<string, string>,
@@ -172,6 +228,20 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const pathname = new URL(request.url || '/', 'http://localhost').pathname
+
+        const pagesHandler = localPagesPostHandlers[pathname]
+        if (pagesHandler) {
+          if (request.method !== 'POST') {
+            sendJson(response, 405, { error: 'Method not allowed.' })
+            return
+          }
+          try {
+            await runLocalPagesPostHandler(pagesHandler, request, response, env)
+          } catch (error) {
+            sendJson(response, 500, { error: error instanceof Error ? error.message : 'Local API request failed.' })
+          }
+          return
+        }
 
         if (!pathname.startsWith('/api/admin/feedback/') && !pathname.startsWith('/api/admin/safety-centers/')) {
           next()
