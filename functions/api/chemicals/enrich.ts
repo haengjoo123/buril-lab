@@ -1,4 +1,6 @@
 import type {
+  ChemicalEnrichmentDelivery,
+  ChemicalEnrichmentProfile,
   ChemicalEnrichmentRequest,
   ChemicalEnrichmentRequestItem,
   ChemicalEnrichmentResult,
@@ -90,12 +92,20 @@ function parseRequest(value: unknown): ChemicalEnrichmentRequest {
   const items = body.items.map(validateItem)
   const requestIds = new Set(items.map((item) => item.requestId))
   if (requestIds.size !== items.length) throw new Error('requestId values must be unique.')
+  const profile = body.profile === undefined ? 'full' : body.profile
+  if (profile !== 'full' && profile !== 'inventory_hazard') {
+    throw new Error('profile must be either full or inventory_hazard.')
+  }
   const scope = body.scope && typeof body.scope === 'object' && !Array.isArray(body.scope)
     ? body.scope as Record<string, unknown>
     : undefined
   const labId = typeof scope?.labId === 'string' ? scope.labId.trim() : undefined
   if (labId && !UUID_PATTERN.test(labId)) throw new Error('scope.labId is invalid.')
-  return { items, ...(labId ? { scope: { labId } } : {}) }
+  return {
+    items,
+    profile: profile as ChemicalEnrichmentProfile,
+    ...(labId ? { scope: { labId } } : {}),
+  }
 }
 
 async function mapWithConcurrency<T, R>(values: readonly T[], limit: number, mapper: (value: T) => Promise<R>): Promise<R[]> {
@@ -112,23 +122,67 @@ async function mapWithConcurrency<T, R>(values: readonly T[], limit: number, map
   return results
 }
 
-async function resolveCoreEnrichment(
+interface CoreEnrichmentResolution {
+  result: ChemicalEnrichmentResult
+  delivery: ChemicalEnrichmentDelivery
+  revalidation?: Promise<ChemicalEnrichmentResult>
+}
+
+function resolveUpstreamEnrichment(
   item: ChemicalEnrichmentRequestItem,
   env: Env,
 ): Promise<ChemicalEnrichmentResult> {
-  const cached = await readChemicalEnrichmentCache(env, item)
-  if (cached) return cached
   const key = getChemicalLookupKeys(item).sort().join('|') || `request:${item.requestId}`
   const existing = coreInFlight.get(key)
-  if (existing) return { ...(await existing), requestId: item.requestId }
+  if (existing) return existing.then((result) => ({ ...result, requestId: item.requestId }))
 
   const created = enrichChemicalItem(item, env)
   coreInFlight.set(key, created)
-  try {
-    return { ...(await created), requestId: item.requestId }
-  } finally {
+  return created.then((result) => ({ ...result, requestId: item.requestId })).finally(() => {
     if (coreInFlight.get(key) === created) coreInFlight.delete(key)
+  })
+}
+
+async function resolveCoreEnrichment(
+  item: ChemicalEnrichmentRequestItem,
+  env: Env,
+  allowStale: boolean,
+): Promise<CoreEnrichmentResolution> {
+  const cached = await readChemicalEnrichmentCache(env, item)
+  if (cached?.freshness === 'fresh') {
+    return {
+      result: cached.result,
+      delivery: { freshness: 'fresh', source: 'server_cache' },
+    }
   }
+  if (cached?.freshness === 'stale' && allowStale) {
+    return {
+      result: cached.result,
+      delivery: {
+        freshness: 'stale',
+        source: 'server_cache',
+        revalidationScheduled: true,
+      },
+      revalidation: resolveUpstreamEnrichment(item, env),
+    }
+  }
+  return {
+    result: await resolveUpstreamEnrichment(item, env),
+    delivery: { freshness: 'fresh', source: 'upstream' },
+  }
+}
+
+function inventoryHazardResult(
+  result: ChemicalEnrichmentResult,
+  delivery: ChemicalEnrichmentDelivery,
+): ChemicalEnrichmentResult {
+  const inventoryResult: ChemicalEnrichmentResult = {
+    ...result,
+    referencePh: { status: 'not_requested' },
+    delivery,
+  }
+  if (result.hazard.status !== 'transient_error') delete inventoryResult.retryAfterMs
+  return inventoryResult
 }
 
 function pendingReferencePh(result: ChemicalEnrichmentResult): ChemicalEnrichmentResult {
@@ -239,14 +293,25 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
   }
 
   const enriched = await mapWithConcurrency(requestBody.items, 3, async (item) => {
-    const core = await resolveCoreEnrichment(item, context.env)
-    const completion = hydrateKoshaSupplement(core, context.env).catch(() => ({
-      ...core,
+    const profile = requestBody.profile || 'full'
+    const resolution = await resolveCoreEnrichment(item, context.env, profile === 'inventory_hazard')
+    const coreCompletion = resolution.revalidation || Promise.resolve(resolution.result)
+    if (profile === 'inventory_hazard') {
+      return {
+        result: inventoryHazardResult(resolution.result, resolution.delivery),
+        completion: coreCompletion.catch(() => null),
+      }
+    }
+    const completion = coreCompletion.then((core) => hydrateKoshaSupplement(core, context.env)).catch(() => ({
+      ...resolution.result,
       referencePh: { status: 'transient_error' as const, source: 'kosha' as const, retryAfterMs: 2_000 },
       retryAfterMs: 2_000,
     }))
     return {
-      result: await foregroundSupplement(core, completion),
+      result: {
+        ...(await foregroundSupplement(resolution.result, completion)),
+        delivery: resolution.delivery,
+      },
       completion,
     }
   })
@@ -254,6 +319,7 @@ export const onRequestPost = async (context: FunctionContext): Promise<Response>
 
   const backgroundWrites = requestBody.items.map(async (item, index) => {
     const result = await enriched[index].completion
+    if (!result) return
     await writeChemicalEnrichmentCache(context.env, item, result)
     if (userId) await projectLegacyGhsCache(context.env, userId, labId, result)
   })

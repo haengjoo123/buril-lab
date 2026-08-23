@@ -37,7 +37,7 @@ const completeResult: ChemicalEnrichmentResult = {
   hazard: { status: 'not_classified', hCodes: [], hazardStatements: [], pictograms: [], hazardFlags: [], sources: [], fetchedAt: '2026-08-17T00:00:00.000Z' },
   referencePh: { status: 'source_absent', source: 'kosha' },
   phCatalog: { status: 'matched', id: 'sodium-acetate', candidateIds: ['sodium-acetate'], catalogVersion: 'test' },
-  enrichmentVersion: 2,
+  enrichmentVersion: 3,
 }
 
 function context(body: unknown, data: Record<string, unknown> = {}) {
@@ -94,7 +94,12 @@ describe('POST /api/chemicals/enrich', () => {
     }, { userId: '22222222-2222-4222-8222-222222222222' })
     const response = await onRequestPost(request.value)
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ results: [completeResult] })
+    await expect(response.json()).resolves.toEqual({
+      results: [{
+        ...completeResult,
+        delivery: { freshness: 'fresh', source: 'upstream' },
+      }],
+    })
     expect(mocks.verifyLabMembership).toHaveBeenCalledOnce()
     expect(request.background).toHaveLength(1)
     await Promise.all(request.background)
@@ -113,6 +118,87 @@ describe('POST /api/chemicals/enrich', () => {
     const payload = await response.json() as { results: ChemicalEnrichmentResult[] }
     expect(mocks.enrichChemicalItem).toHaveBeenCalledOnce()
     expect(payload.results.map((result) => result.requestId)).toEqual(['first', 'second'])
+    await Promise.all(request.background)
+  })
+
+  it('returns a fresh server cache hit without repeating upstream enrichment', async () => {
+    mocks.readChemicalEnrichmentCache.mockResolvedValue({
+      result: completeResult,
+      freshness: 'fresh',
+      resultVersion: 3,
+    })
+    const request = context({
+      profile: 'inventory_hazard',
+      items: [{ requestId: 'cached', casNumber: '127-09-3' }],
+    })
+    const response = await onRequestPost(request.value)
+    const payload = await response.json() as { results: ChemicalEnrichmentResult[] }
+    expect(payload.results[0]).toMatchObject({
+      referencePh: { status: 'not_requested' },
+      delivery: { freshness: 'fresh', source: 'server_cache' },
+    })
+    expect(mocks.enrichChemicalItem).not.toHaveBeenCalled()
+    expect(mocks.resolveKoshaIdentityByCas).not.toHaveBeenCalled()
+    await Promise.all(request.background)
+  })
+
+  it('returns stale inventory evidence immediately and revalidates it in waitUntil', async () => {
+    const stale = {
+      ...completeResult,
+      enrichmentVersion: 2,
+      hazard: {
+        ...completeResult.hazard,
+        fetchedAt: '2026-08-01T00:00:00.000Z',
+        expiresAt: '2026-08-08T00:00:00.000Z',
+      },
+    }
+    mocks.readChemicalEnrichmentCache.mockResolvedValue({
+      result: stale,
+      freshness: 'stale',
+      resultVersion: 2,
+    })
+    mocks.enrichChemicalItem.mockResolvedValue(completeResult)
+    const request = context({
+      profile: 'inventory_hazard',
+      items: [{ requestId: 'stale', casNumber: '127-09-3' }],
+    })
+    const response = await onRequestPost(request.value)
+    const payload = await response.json() as { results: ChemicalEnrichmentResult[] }
+    expect(payload.results[0]).toMatchObject({
+      enrichmentVersion: 2,
+      referencePh: { status: 'not_requested' },
+      delivery: {
+        freshness: 'stale',
+        source: 'server_cache',
+        revalidationScheduled: true,
+      },
+    })
+    expect(mocks.enrichChemicalItem).toHaveBeenCalledOnce()
+    await Promise.all(request.background)
+    expect(mocks.writeChemicalEnrichmentCache).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ requestId: 'stale' }),
+      expect.objectContaining({ enrichmentVersion: 3 }),
+    )
+  })
+
+  it('does not hydrate KOSHA reference pH for the inventory hazard profile', async () => {
+    const pending = {
+      ...completeResult,
+      referencePh: { status: 'pending' as const, source: 'kosha' as const, retryAfterMs: 2_000 },
+      retryAfterMs: 2_000,
+    }
+    mocks.enrichChemicalItem.mockResolvedValue(pending)
+    const request = context({
+      profile: 'inventory_hazard',
+      items: [{ requestId: 'hazard-only', casNumber: '127-09-3' }],
+    })
+    const response = await onRequestPost(request.value)
+    const payload = await response.json() as { results: ChemicalEnrichmentResult[] }
+    expect(payload.results[0].referencePh).toEqual({ status: 'not_requested' })
+    expect(payload.results[0]).not.toHaveProperty('retryAfterMs')
+    expect(mocks.resolveKoshaIdentityByCas).not.toHaveBeenCalled()
+    expect(mocks.resolveKoshaReferencePh).not.toHaveBeenCalled()
     await Promise.all(request.background)
   })
 

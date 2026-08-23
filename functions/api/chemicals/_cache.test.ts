@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ChemicalEnrichmentResult } from '../../../src/types'
 import {
+  CHEMICAL_ENRICHMENT_RESULT_VERSION,
   getChemicalCacheExpiry,
   getChemicalLookupKeys,
   getChemicalResultAliasKeys,
@@ -36,12 +37,16 @@ const result = (overrides: Partial<ChemicalEnrichmentResult> = {}): ChemicalEnri
     matchedBy: 'inchi_key',
     catalogVersion: 'test',
   },
-  enrichmentVersion: 2,
+  enrichmentVersion: 3,
   ...overrides,
 })
 
 describe('chemical enrichment cache policy', () => {
   afterEach(() => vi.useRealTimers())
+
+  it('uses result version 3 for the corrected identity semantics', () => {
+    expect(CHEMICAL_ENRICHMENT_RESULT_VERSION).toBe(3)
+  })
 
   it('writes and reads aliases for CAS, InChIKey, and all equivalent CIDs', () => {
     expect(getChemicalLookupKeys({

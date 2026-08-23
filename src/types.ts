@@ -70,6 +70,7 @@ export interface Chemical {
         pubchemCid?: number;
         equivalentPubchemCids?: number[];
         standardInchiKey?: string;
+        alternateCasNumbers?: string[];
     };
     hazardLookup?: ChemicalHazardLookup;
     referencePhLookup?: ChemicalReferencePhLookup;
@@ -124,6 +125,7 @@ export interface ChemicalHazardLookup {
 export type ChemicalReferencePhLookupStatus =
     | 'available'
     | 'pending'
+    | 'not_requested'
     | 'source_absent'
     | 'transient_error'
     | 'identity_ambiguous';
@@ -161,7 +163,27 @@ export interface ChemicalEnrichmentRequestItem {
 
 export interface ChemicalEnrichmentRequest {
     items: ChemicalEnrichmentRequestItem[];
+    profile?: ChemicalEnrichmentProfile;
     scope?: { labId?: string };
+}
+
+export type ChemicalEnrichmentProfile = 'full' | 'inventory_hazard';
+
+export type GhsPictogramCode =
+    | 'GHS01'
+    | 'GHS02'
+    | 'GHS03'
+    | 'GHS04'
+    | 'GHS05'
+    | 'GHS06'
+    | 'GHS07'
+    | 'GHS08'
+    | 'GHS09';
+
+export interface ChemicalEnrichmentDelivery {
+    freshness: 'fresh' | 'stale';
+    source: 'server_cache' | 'upstream';
+    revalidationScheduled?: boolean;
 }
 
 export interface ChemicalEnrichmentResult {
@@ -172,6 +194,7 @@ export interface ChemicalEnrichmentResult {
         canonicalName?: string;
         localizedName?: string;
         casNumber?: string;
+        alternateCasNumbers?: string[];
         koshaChemId?: number;
         pubchemCid?: number;
         equivalentPubchemCids: number[];
@@ -188,8 +211,9 @@ export interface ChemicalEnrichmentResult {
     hazard: Omit<ChemicalHazardLookup, 'algorithmVersion'>;
     referencePh: ChemicalReferencePhLookup;
     phCatalog: Omit<ChemicalPhCatalogMatch, 'selection'>;
+    delivery?: ChemicalEnrichmentDelivery;
     retryAfterMs?: number;
-    enrichmentVersion: 2;
+    enrichmentVersion: number;
 }
 
 export type AnalysisHazardWarningCode =

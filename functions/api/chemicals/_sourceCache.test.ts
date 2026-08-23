@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./_cache', () => ({
-  CHEMICAL_ENRICHMENT_RESULT_VERSION: 2,
+  CHEMICAL_ENRICHMENT_RESULT_VERSION: 3,
   createChemicalCacheAdminClient: mocks.createAdminClient,
 }))
 
@@ -22,7 +22,7 @@ describe('chemical source cache and distributed lease adapter', () => {
     vi.useRealTimers()
   })
 
-  it('reads only a fresh version-2 KOSHA source row', async () => {
+  it('reads only a fresh version-3 KOSHA source row', async () => {
     const query: Record<string, ReturnType<typeof vi.fn>> = {}
     query.select = vi.fn(() => query)
     query.eq = vi.fn(() => query)
@@ -42,7 +42,7 @@ describe('chemical source cache and distributed lease adapter', () => {
       status: 'complete',
       result: { status: 'available', value: 7.5 },
     })
-    expect(query.eq).toHaveBeenCalledWith('result_version', 2)
+    expect(query.eq).toHaveBeenCalledWith('result_version', 3)
     expect(query.gt).toHaveBeenCalledWith('expires_at', expect.any(String))
   })
 
@@ -62,7 +62,7 @@ describe('chemical source cache and distributed lease adapter', () => {
     )
     const rows = upsert.mock.calls[0][0] as Array<Record<string, unknown>>
     expect(rows.map((row) => row.lookup_key)).toEqual(['chem_id:003232', 'cas:127-09-3'])
-    expect(rows.every((row) => row.result_version === 2 && row.expires_at === '2026-08-17T00:01:00.000Z')).toBe(true)
+    expect(rows.every((row) => row.result_version === 3 && row.expires_at === '2026-08-17T00:01:00.000Z')).toBe(true)
   })
 
   it('acquires and releases a lease with owner-matched RPCs', async () => {
@@ -72,11 +72,11 @@ describe('chemical source cache and distributed lease adapter', () => {
     await expect(tryAcquireChemicalLease({}, 'kosha:reference_ph:003232', '11111111-1111-4111-8111-111111111111')).resolves.toBe(true)
     await releaseChemicalLease({}, 'kosha:reference_ph:003232', '11111111-1111-4111-8111-111111111111')
     expect(rpc).toHaveBeenNthCalledWith(1, 'try_acquire_chemical_enrichment_lease', expect.objectContaining({
-      p_result_version: 2,
+      p_result_version: 3,
       p_lease_seconds: 30,
     }))
     expect(rpc).toHaveBeenNthCalledWith(2, 'release_chemical_enrichment_lease', expect.objectContaining({
-      p_result_version: 2,
+      p_result_version: 3,
     }))
   })
 })

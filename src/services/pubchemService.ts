@@ -728,7 +728,11 @@ export async function lookupGHSByIdentity(
                 casNumber: result.identity.casNumber,
             };
         }
-        if (result.hazard.status === 'source_absent' || result.hazard.status === 'identity_ambiguous') {
+        if (
+            (result.hazard.status === 'source_absent' || result.hazard.status === 'identity_ambiguous')
+            && result.hazard.hCodes.length === 0
+            && result.hazard.pictograms.length === 0
+        ) {
             return {
                 ...createResult('no_ghs', {
                     cid: result.identity.pubchemCid,

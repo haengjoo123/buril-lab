@@ -1,6 +1,7 @@
 import { isChemicalEnrichmentEnabled } from '../config/featureFlags'
 import type {
   Chemical,
+  ChemicalEnrichmentProfile,
   ChemicalEnrichmentRequestItem,
   ChemicalEnrichmentResult,
 } from '../types'
@@ -29,14 +30,19 @@ function purgeLegacyClientCache(): void {
 
 export async function enrichChemicals(
   items: ChemicalEnrichmentRequestItem[],
-  options?: { labId?: string | null },
+  options?: {
+    labId?: string | null
+    profile?: ChemicalEnrichmentProfile
+    signal?: AbortSignal
+  },
 ): Promise<ChemicalEnrichmentResult[]> {
   if (!isChemicalEnrichmentEnabled) throw new Error('Chemical enrichment is disabled.')
   purgeLegacyClientCache()
   const response = await postJson<EnrichmentApiResponse>('/api/chemicals/enrich', {
     items,
+    ...(options?.profile ? { profile: options.profile } : {}),
     ...(options?.labId ? { scope: { labId: options.labId } } : {}),
-  })
+  }, { signal: options?.signal })
   if (!Array.isArray(response.results) || response.results.length !== items.length) {
     throw new Error('Chemical enrichment returned an incomplete result set.')
   }
@@ -95,6 +101,7 @@ export function chemicalFromEnrichment(
       pubchemCid: result.identity.pubchemCid,
       equivalentPubchemCids: result.identity.equivalentPubchemCids,
       standardInchiKey: result.identity.standardInchiKey,
+      alternateCasNumbers: result.identity.alternateCasNumbers,
     },
     hazardLookup: {
       ...result.hazard,

@@ -52,9 +52,19 @@ import {
 } from '../../utils/inventoryHazardClassifier';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
-import { lookupGHSByCAS, type PubChemGHSResult } from '../../services/pubchemService';
 import { enrichChemicals } from '../../services/chemicalEnrichmentService';
+import {
+    enrichInventoryHazardBatches,
+    type InventoryHazardRequestEntry,
+} from '../../services/inventoryHazardService';
 import { getPictogramCode, getPictogramUrl } from '../../data/ghsCodes';
+import {
+    buildInventoryHazardEntryKey,
+    createInventoryHazardSnapshot,
+    isInventoryHazardSnapshotFresh,
+    useInventoryHazardStore,
+    type InventoryHazardSnapshot,
+} from '../../store/useInventoryHazardStore';
 import { planBulkInventoryCabinetMove } from '../../utils/bulkInventoryMovePlanner';
 import {
     findInventoryIdentityConflictItemIds,
@@ -81,7 +91,13 @@ type InventoryScanResultItem = {
 };
 type InventoryGhsState =
     | { status: 'loading' }
-    | { status: 'loaded'; result: PubChemGHSResult }
+    | {
+        status: 'loaded';
+        snapshot: InventoryHazardSnapshot;
+        freshness: 'fresh' | 'stale';
+        isRefreshing: boolean;
+        updateError?: string;
+    }
     | { status: 'error'; error?: string };
 type InventoryGhsPictogram = {
     label: string;
@@ -90,11 +106,13 @@ type InventoryGhsPictogram = {
 };
 
 export interface InventoryListViewProps {
+    userId?: string | null;
     onStartWasteBatch?: (item: InventoryItem) => Promise<void>;
 }
 
 const normalizeGhsCas = (value?: string | null) => (value || '').replace(/\s+/g, '').trim();
-const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+const INVENTORY_GHS_RETRY_DELAY_MS = 10_000;
+const INVENTORY_GHS_FAILURE_COOLDOWN_MS = 5 * 60 * 1_000;
 const getTrackedManufacturerDate = (item: InventoryItem) => (
     hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date : null
 );
@@ -170,7 +188,7 @@ function buildInventoryGroups(sourceItems: InventoryItem[], sortBy: InventorySor
         .sort((left, right) => compareInventoryItems(left.primaryItem, right.primaryItem, sortBy));
 }
 
-export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWasteBatch }) => {
+export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, onStartWasteBatch }) => {
     const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.inventory);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
@@ -216,13 +234,18 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     const [bulkMoveInfo, setBulkMoveInfo] = useState<string | null>(null);
     const [expandedGroupIds, setExpandedGroupIds] = useState<string[]>([]);
     const [selectedDesktopItemId, setSelectedDesktopItemId] = useState<string | null>(null);
-    const [inventoryGhsByCas, setInventoryGhsByCas] = useState<Record<string, InventoryGhsState>>({});
+    const inventoryHazardSnapshots = useInventoryHazardStore((state) => state.snapshots);
+    const inventoryHazardRuntime = useInventoryHazardStore((state) => state.runtimeByKey);
+    const upsertInventoryHazardSnapshots = useInventoryHazardStore((state) => state.upsertSnapshots);
+    const touchInventoryHazardSnapshots = useInventoryHazardStore((state) => state.touchSnapshots);
+    const markInventoryHazardRuntime = useInventoryHazardStore((state) => state.markRuntime);
+    const clearInventoryHazardRuntime = useInventoryHazardStore((state) => state.clearRuntime);
+    const retryInventoryHazardNow = useInventoryHazardStore((state) => state.retryNow);
+    const [hazardRetryGeneration, setHazardRetryGeneration] = useState(0);
     const wasteBatchPendingRef = useRef<Set<string>>(new Set());
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const longPressTriggeredRef = useRef(false);
     const bulkMoveInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const inventoryGhsByCasRef = useRef<Record<string, InventoryGhsState>>({});
-    const inventoryGhsInFlightRef = useRef<Set<string>>(new Set());
     const inventoryIdentityInFlightRef = useRef<Set<string>>(new Set());
     const bulkErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const bulkMoveRequestRef = useRef<{ signature: string; requestId: string } | null>(null);
@@ -332,12 +355,27 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
 
     const getInventoryGhsState = useCallback((item: InventoryItem): InventoryGhsState | null => {
         const cas = normalizeGhsCas(item.cas_number);
-        return cas ? (inventoryGhsByCas[cas] || null) : null;
-    }, [inventoryGhsByCas]);
+        const entryKey = buildInventoryHazardEntryKey(userId, currentLabId, cas);
+        if (!entryKey) return null;
+        const snapshot = inventoryHazardSnapshots[entryKey];
+        const runtime = inventoryHazardRuntime[entryKey];
+        if (snapshot) {
+            return {
+                status: 'loaded',
+                snapshot,
+                freshness: isInventoryHazardSnapshotFresh(snapshot) ? 'fresh' : 'stale',
+                isRefreshing: runtime?.status === 'loading' || runtime?.status === 'refreshing',
+                ...(runtime?.status === 'error' && runtime.error ? { updateError: runtime.error } : {}),
+            };
+        }
+        if (runtime?.status === 'loading' || runtime?.status === 'refreshing') return { status: 'loading' };
+        if (runtime?.status === 'error') return { status: 'error', error: runtime.error };
+        return null;
+    }, [currentLabId, inventoryHazardRuntime, inventoryHazardSnapshots, userId]);
 
     const getInventoryGhsHCodes = useCallback((item: InventoryItem): string[] => {
         const ghsState = getInventoryGhsState(item);
-        return ghsState?.status === 'loaded' ? ghsState.result.hCodes : [];
+        return ghsState?.status === 'loaded' ? ghsState.snapshot.hCodes : [];
     }, [getInventoryGhsState]);
 
     const getInventoryGhsStatus = useCallback((item: InventoryItem) => {
@@ -345,7 +383,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         if (!ghsState) return 'not_checked' as const;
         if (ghsState.status === 'loading') return 'pending' as const;
         if (ghsState.status === 'error') return 'transient_error' as const;
-        return ghsState.result.status;
+        return ghsState.snapshot.status === 'classified' || ghsState.snapshot.status === 'not_classified'
+            ? 'success' as const
+            : 'no_ghs' as const;
     }, [getInventoryGhsState]);
 
     const classifyInventoryItemHazard = useCallback((item: InventoryItem) => (
@@ -515,10 +555,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     }, [selectedDesktopItemId, visibleItems]);
 
     useEffect(() => {
-        inventoryGhsByCasRef.current = inventoryGhsByCas;
-    }, [inventoryGhsByCas]);
-
-    useEffect(() => {
         const grouped = new Map<string, InventoryItem[]>();
         for (const item of items) {
             if (item.cas_number?.trim() || !item.name.trim()) continue;
@@ -571,66 +607,136 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     }, [currentLabId, items]);
 
     useEffect(() => {
-        const casNumbersToLoad = Array.from(new Set(
+        if (!userId) return;
+        const allCandidates = Array.from(new Map(
             items
-                .map((item) => normalizeGhsCas(item.cas_number))
-                .filter((cas): cas is string => Boolean(cas && /^\d{1,7}-\d{2}-\d$/.test(cas)))
-        )).filter((cas) => (
-            (!inventoryGhsByCasRef.current[cas] || inventoryGhsByCasRef.current[cas].status === 'loading')
-            && !inventoryGhsInFlightRef.current.has(cas)
-        ));
+                .map((item) => {
+                    const cas = normalizeGhsCas(item.cas_number);
+                    const key = buildInventoryHazardEntryKey(userId, currentLabId, cas);
+                    return cas && key ? [key, { cas, key } satisfies InventoryHazardRequestEntry] as const : null;
+                })
+                .filter((entry): entry is readonly [string, InventoryHazardRequestEntry] => Boolean(entry)),
+        ).values());
+        if (allCandidates.length === 0) return;
 
-        if (casNumbersToLoad.length === 0) return;
-
-        let isCancelled = false;
-        casNumbersToLoad.forEach((cas) => inventoryGhsInFlightRef.current.add(cas));
-        setInventoryGhsByCas((prev) => {
-            const next = { ...prev };
-            casNumbersToLoad.forEach((cas) => {
-                next[cas] = { status: 'loading' };
-            });
-            inventoryGhsByCasRef.current = next;
-            return next;
+        touchInventoryHazardSnapshots(allCandidates.map((candidate) => candidate.key));
+        const now = Date.now();
+        const initialStore = useInventoryHazardStore.getState();
+        const candidates = allCandidates.filter((candidate) => {
+            const snapshot = initialStore.snapshots[candidate.key];
+            if (snapshot && isInventoryHazardSnapshotFresh(snapshot, now)) return false;
+            const runtime = initialStore.runtimeByKey[candidate.key];
+            if (runtime?.status === 'loading' || runtime?.status === 'refreshing') return false;
+            return !(runtime?.status === 'error' && (runtime.retryAfter || 0) > now);
         });
+        if (candidates.length === 0) return;
 
-        const loadGhsPictograms = async () => {
-            for (const cas of casNumbersToLoad) {
-                try {
-                    const result = await lookupGHSByCAS(cas, { labId: currentLabId });
-                    if (!isCancelled) {
-                        const nextState: InventoryGhsState = { status: 'loaded', result };
-                        setInventoryGhsByCas((prev) => {
-                            const next = { ...prev, [cas]: nextState };
-                            inventoryGhsByCasRef.current = next;
-                            return next;
-                        });
-                    }
-                } catch (err) {
-                    if (!isCancelled) {
-                        const nextState: InventoryGhsState = {
-                            status: 'error',
-                            error: err instanceof Error ? err.message : String(err),
-                        };
-                        setInventoryGhsByCas((prev) => {
-                            const next = { ...prev, [cas]: nextState };
-                            inventoryGhsByCasRef.current = next;
-                            return next;
-                        });
-                    }
-                } finally {
-                    inventoryGhsInFlightRef.current.delete(cas);
-                }
+        const controller = new AbortController();
+        const requestToken = globalThis.crypto?.randomUUID?.()
+            || `inventory-ghs-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        let isCancelled = false;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-                await wait(150);
+        const isCurrentScope = () => (
+            !isCancelled && useLabStore.getState().currentLabId === currentLabId
+        );
+
+        const markActive = (entries: InventoryHazardRequestEntry[]) => {
+            const snapshotState = useInventoryHazardStore.getState().snapshots;
+            const loadingKeys = entries.filter((entry) => !snapshotState[entry.key]).map((entry) => entry.key);
+            const refreshingKeys = entries.filter((entry) => Boolean(snapshotState[entry.key])).map((entry) => entry.key);
+            if (loadingKeys.length > 0) {
+                markInventoryHazardRuntime(loadingKeys, { status: 'loading', requestToken });
+            }
+            if (refreshingKeys.length > 0) {
+                markInventoryHazardRuntime(refreshingKeys, { status: 'refreshing', requestToken });
             }
         };
 
-        void loadGhsPictograms();
+        const requestHazards = async (entries: InventoryHazardRequestEntry[]): Promise<InventoryHazardRequestEntry[]> => {
+            const outcomes = await enrichInventoryHazardBatches(entries, {
+                labId: currentLabId,
+                signal: controller.signal,
+            });
+
+            if (!isCurrentScope()) return [];
+            const snapshotUpdates: Array<{ key: string; snapshot: InventoryHazardSnapshot }> = [];
+            const completedKeys: string[] = [];
+            const retryEntries: InventoryHazardRequestEntry[] = [];
+
+            for (const outcome of outcomes) {
+                if ('error' in outcome) {
+                    retryEntries.push(...outcome.chunk);
+                    continue;
+                }
+                outcome.results.forEach((result, index) => {
+                    const entry = outcome.chunk[index];
+                    if (!entry) return;
+                    const snapshot = createInventoryHazardSnapshot(entry.cas, result);
+                    if (snapshot) snapshotUpdates.push({ key: entry.key, snapshot });
+                    if (result.delivery?.freshness === 'stale' || result.hazard.status === 'transient_error') {
+                        retryEntries.push(entry);
+                    } else {
+                        completedKeys.push(entry.key);
+                    }
+                });
+            }
+
+            if (snapshotUpdates.length > 0) upsertInventoryHazardSnapshots(snapshotUpdates);
+            if (completedKeys.length > 0) clearInventoryHazardRuntime(completedKeys, requestToken);
+            return Array.from(new Map(retryEntries.map((entry) => [entry.key, entry])).values());
+        };
+
+        markActive(candidates);
+        void (async () => {
+            try {
+                let retryEntries = await requestHazards(candidates);
+                if (!isCurrentScope() || retryEntries.length === 0) return;
+                markActive(retryEntries);
+                await new Promise<void>((resolve) => {
+                    retryTimer = setTimeout(resolve, INVENTORY_GHS_RETRY_DELAY_MS);
+                });
+                if (!isCurrentScope()) return;
+                retryEntries = await requestHazards(retryEntries);
+                if (!isCurrentScope() || retryEntries.length === 0) return;
+                markInventoryHazardRuntime(retryEntries.map((entry) => entry.key), {
+                    status: 'error',
+                    requestToken,
+                    retryAfter: Date.now() + INVENTORY_GHS_FAILURE_COOLDOWN_MS,
+                    error: t('inventory_ghs_update_needed'),
+                });
+            } catch (error) {
+                if (!isCurrentScope() || (error instanceof DOMException && error.name === 'AbortError')) return;
+                markInventoryHazardRuntime(candidates.map((entry) => entry.key), {
+                    status: 'error',
+                    requestToken,
+                    retryAfter: Date.now() + INVENTORY_GHS_FAILURE_COOLDOWN_MS,
+                    error: error instanceof Error ? error.message : t('inventory_ghs_update_needed'),
+                });
+            }
+        })();
 
         return () => {
             isCancelled = true;
+            controller.abort();
+            if (retryTimer) clearTimeout(retryTimer);
+            const runtimeState = useInventoryHazardStore.getState().runtimeByKey;
+            const activeKeys = candidates
+                .map((entry) => entry.key)
+                .filter((key) => runtimeState[key]?.requestToken === requestToken && runtimeState[key]?.status !== 'error');
+            clearInventoryHazardRuntime(activeKeys, requestToken);
         };
-    }, [currentLabId, items]);
+    }, [
+        clearInventoryHazardRuntime,
+        currentLabId,
+        hazardRetryGeneration,
+        items,
+        markInventoryHazardRuntime,
+        t,
+        touchInventoryHazardSnapshots,
+        upsertInventoryHazardSnapshots,
+        userId,
+    ]);
 
     const handleEdit = (item: InventoryItem) => {
         setInitialDraft(null);
@@ -1339,7 +1445,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         if (ghsState?.status !== 'loaded') return [];
 
         const seenUrls = new Set<string>();
-        return ghsState.result.pictograms
+        return ghsState.snapshot.pictogramCodes
             .flatMap((label): InventoryGhsPictogram[] => {
                 const url = getPictogramUrl(label);
                 if (!url || seenUrls.has(url)) return [];
@@ -1358,6 +1464,10 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
         const pictograms = getInventoryGhsPictograms(item);
         const isDetail = options?.variant === 'detail';
         const visiblePictograms = isDetail ? pictograms : pictograms.slice(0, 4);
+        const isStale = ghsState?.status === 'loaded' && ghsState.freshness === 'stale';
+        const staleLabel = ghsState?.status === 'loaded' && ghsState.isRefreshing
+            ? t('inventory_ghs_refreshing')
+            : t('inventory_ghs_update_needed');
 
         if (visiblePictograms.length > 0) {
             const detailColumnCount = Math.min(visiblePictograms.length, 6);
@@ -1379,36 +1489,41 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
             ].filter(Boolean).join(', ');
 
             return (
-                <div
-                    className={gridClassName}
-                    style={gridStyle}
-                    aria-label={title}
-                >
-                    {visiblePictograms.map((image) => {
-                        const tooltipLabel = image.code ? t(`ghs_pictogram_${image.code}`) : image.label;
+                <div className="inline-flex items-center gap-1" title={isStale ? staleLabel : title}>
+                    <div
+                        className={gridClassName}
+                        style={gridStyle}
+                        aria-label={title}
+                    >
+                        {visiblePictograms.map((image) => {
+                            const tooltipLabel = image.code ? t(`ghs_pictogram_${image.code}`) : image.label;
 
-                        return (
-                            <span
-                                key={image.url}
-                                className={`group/ghs relative inline-flex ${iconSize} ${iconRadius}`}
-                                tabIndex={0}
-                                aria-label={tooltipLabel}
-                            >
-                                <img
-                                    src={image.url}
-                                    alt={tooltipLabel}
-                                    className={`h-full w-full ${iconRadius} border border-red-100 bg-white object-contain ${iconPadding} shadow-sm`}
-                                    loading="lazy"
-                                />
+                            return (
                                 <span
-                                    role="tooltip"
-                                    className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-950 px-2 py-1 text-[11px] font-bold text-white shadow-lg ring-1 ring-white/10 group-hover/ghs:block group-focus-visible/ghs:block dark:bg-slate-50 dark:text-slate-950"
+                                    key={image.url}
+                                    className={`group/ghs relative inline-flex ${iconSize} ${iconRadius}`}
+                                    tabIndex={0}
+                                    aria-label={tooltipLabel}
                                 >
-                                    {tooltipLabel}
+                                    <img
+                                        src={image.url}
+                                        alt={tooltipLabel}
+                                        className={`h-full w-full ${iconRadius} border border-red-100 bg-white object-contain ${iconPadding} shadow-sm`}
+                                        loading="lazy"
+                                    />
+                                    <span
+                                        role="tooltip"
+                                        className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-950 px-2 py-1 text-[11px] font-bold text-white shadow-lg ring-1 ring-white/10 group-hover/ghs:block group-focus-visible/ghs:block dark:bg-slate-50 dark:text-slate-950"
+                                    >
+                                        {tooltipLabel}
+                                    </span>
                                 </span>
-                            </span>
-                        );
-                    })}
+                            );
+                        })}
+                    </div>
+                    {isStale && (
+                        <Clock className={`h-3.5 w-3.5 shrink-0 ${ghsState.isRefreshing ? 'animate-pulse text-blue-500' : 'text-amber-500'}`} aria-label={staleLabel} />
+                    )}
                 </div>
             );
         }
@@ -1417,8 +1532,41 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
             return <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-label={t('msds_loading')} />;
         }
 
+        if (!normalizeGhsCas(item.cas_number) && isDetail) {
+            return (
+                <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                    {t('inventory_ghs_cas_required')}
+                </span>
+            );
+        }
+
+        if (ghsState?.status === 'error' && isDetail) {
+            const entryKey = buildInventoryHazardEntryKey(userId, currentLabId, item.cas_number);
+            return (
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (entryKey) retryInventoryHazardNow(entryKey);
+                        setHazardRetryGeneration((generation) => generation + 1);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-600 hover:border-blue-300 hover:text-blue-600 dark:border-slate-700 dark:text-slate-300"
+                    title={ghsState.error}
+                >
+                    <Loader2 className="h-3.5 w-3.5" />
+                    {t('inventory_ghs_retry')}
+                </button>
+            );
+        }
+
+        if (
+            ghsState?.status === 'loaded'
+            && (ghsState.snapshot.status === 'not_classified' || ghsState.snapshot.status === 'source_absent')
+        ) {
+            return <span className="text-xs text-slate-400" title={t('inventory_ghs_no_pictogram')}>-</span>;
+        }
+
         if (hazard.filterCategories.length === 0) {
-            return <span className="text-xs text-slate-400">-</span>;
+            return <span className="text-xs text-slate-400" title={t('inventory_ghs_no_pictogram')}>-</span>;
         }
 
         return <ShieldAlert className={`h-4 w-4 ${hazard.filterCategories.includes('special_high') ? 'text-red-500' : 'text-orange-500'}`} />;
@@ -1740,7 +1888,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
     return (
         <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)]">
             {/* Header */}
-            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-800 lg:col-start-1 lg:row-start-1 lg:border-b-0 lg:border-r lg:border-slate-200 lg:bg-slate-50 lg:px-6 lg:pb-3 lg:pt-6 dark:lg:border-slate-800 dark:lg:bg-slate-900">
+            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-800 lg:col-start-1 lg:row-start-1 lg:overflow-y-auto lg:[scrollbar-gutter:stable] lg:border-b-0 lg:border-r lg:border-slate-200 lg:bg-slate-50 lg:px-6 lg:pb-3 lg:pt-6 dark:lg:border-slate-800 dark:lg:bg-slate-900">
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-3">
                         <h1 className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xl font-bold text-slate-800 dark:text-slate-100 lg:text-2xl">
@@ -1961,7 +2109,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
             </div>
 
             {/* List */}
-            <div className="flex-1 space-y-3 overflow-y-auto p-4 pb-24 lg:col-start-1 lg:row-start-2 lg:border-r lg:border-slate-200 lg:px-6 lg:pb-6 lg:pt-0 dark:lg:border-slate-800">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4 pb-24 lg:col-start-1 lg:row-start-2 lg:[scrollbar-gutter:stable] lg:border-r lg:border-slate-200 lg:px-6 lg:pb-6 lg:pt-0 dark:lg:border-slate-800">
                 {/* Expiry Summary Banner */}
                 {!isLoading && (expirySummary.expiredCount > 0 || expirySummary.warningCount > 0) && (
                     <div className="flex items-start gap-3 rounded-lg border border-red-200/60 bg-red-50 p-3.5 animate-in fade-in slide-in-from-top-2 duration-300 dark:border-red-900/40 dark:bg-red-950/30">
@@ -2150,33 +2298,34 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
 
                             <div className="overflow-x-auto">
                             {visibleItems.length > 0 ? (
-                                <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+                                <table className="w-full min-w-[960px] table-fixed text-left text-sm">
                                     <colgroup>
-                                        <col className="w-10" />
+                                        <col className="w-12" />
                                         <col />
-                                        <col className="w-36" />
-                                        <col className="w-14" />
+                                        <col className="w-40" />
                                         <col className="w-24" />
+                                        <col className="w-40" />
+                                        <col className="w-32" />
                                         <col className="w-28" />
-                                        <col className="w-20" />
                                     </colgroup>
                                     <thead className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
                                         <tr>
-                                            <th className="whitespace-nowrap px-3 py-2.5">
+                                            <th className="px-3 py-2.5">
                                                 <span className="sr-only">{t('inventory_select_item')}</span>
                                             </th>
-                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_csv_table_name')}</th>
-                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_csv_table_storage')}</th>
-                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_quantity')}</th>
-                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_error_expiry_label')}</th>
-                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_capacity')}</th>
-                                            <th className="whitespace-nowrap px-3 py-2.5">{t('inventory_hazard_management')}</th>
+                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_csv_table_name')}</th>
+                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_csv_table_storage')}</th>
+                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_quantity')}</th>
+                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_error_expiry_label')}</th>
+                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_capacity')}</th>
+                                            <th className="break-words px-3 py-2.5 leading-4">{t('inventory_hazard_management')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                         {visibleItems.map((item) => {
                                             const hazard = classifyInventoryItemHazard(item);
                                             const isSelected = selectedDesktopItem?.id === item.id;
+                                            const trackedManufacturerDate = getTrackedManufacturerDate(item);
                                             return (
                                                 <tr
                                                     key={item.id}
@@ -2220,10 +2369,15 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                                     </td>
                                                     <td className="min-w-0 px-3 py-3">{renderStorageBadge(item)}</td>
                                                     <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">{item.quantity}</td>
-                                                    <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600 dark:text-slate-300">
-                                                        {getTrackedManufacturerDate(item)
-                                                            ? `${t(getManufacturerDateLabelKey(item.manufacturer_date_type))}: ${getTrackedManufacturerDate(item)}`
-                                                            : '-'}
+                                                    <td className="px-3 py-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                                                        {trackedManufacturerDate ? (
+                                                            <span
+                                                                className="block min-w-0 break-words"
+                                                                title={`${t(getManufacturerDateLabelKey(item.manufacturer_date_type))}: ${trackedManufacturerDate}`}
+                                                            >
+                                                                {t(getManufacturerDateLabelKey(item.manufacturer_date_type))}: <span className="whitespace-nowrap">{trackedManufacturerDate}</span>
+                                                            </span>
+                                                        ) : '-'}
                                                     </td>
                                                     <td
                                                         className="truncate whitespace-nowrap px-3 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300"
@@ -2317,7 +2471,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ onStartWas
                                     const ghsState = getInventoryGhsState(selectedDesktopItem);
                                     const pictograms = getInventoryGhsPictograms(selectedDesktopItem);
 
-                                    if (pictograms.length > 0 || ghsState?.status === 'loading') {
+                                    if (
+                                        pictograms.length > 0
+                                        || Boolean(ghsState)
+                                        || !normalizeGhsCas(selectedDesktopItem.cas_number)
+                                    ) {
                                         return renderGhsPictograms(selectedDesktopItem, hazard, { variant: 'detail' });
                                     }
 

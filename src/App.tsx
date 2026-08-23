@@ -888,6 +888,7 @@ function App() {
           ) : activeTab === 'inventory' ? (
             <InventoryListView
               key={logRefreshKey}
+              userId={user?.id ?? null}
               onStartWasteBatch={isWasteV2Enabled ? handleStartInventoryWasteBatch : undefined}
             />
           ) : activeTab === 'admin' && isAdmin ? (

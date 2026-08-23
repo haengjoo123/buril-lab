@@ -10,9 +10,18 @@ export interface ChemicalCacheEnv {
 interface CacheRow {
   result: ChemicalEnrichmentResult | null
   expires_at: string | null
+  fetched_at: string | null
+  result_version: number
 }
 
-export const CHEMICAL_ENRICHMENT_RESULT_VERSION = 2
+export interface ChemicalEnrichmentCacheHit {
+  result: ChemicalEnrichmentResult
+  freshness: 'fresh' | 'stale'
+  resultVersion: number
+}
+
+export const CHEMICAL_ENRICHMENT_RESULT_VERSION = 3
+const PREVIOUS_CHEMICAL_ENRICHMENT_RESULT_VERSION = 2
 
 export function createChemicalCacheAdminClient(env: ChemicalCacheEnv): SupabaseClient | null {
   const url = env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim()
@@ -59,7 +68,7 @@ export function getChemicalCacheExpiry(result: ChemicalEnrichmentResult): Date |
 export async function readChemicalEnrichmentCache(
   env: ChemicalCacheEnv,
   item: ChemicalEnrichmentRequestItem,
-): Promise<ChemicalEnrichmentResult | null> {
+): Promise<ChemicalEnrichmentCacheHit | null> {
   const supabase = createChemicalCacheAdminClient(env)
   const keys = getChemicalLookupKeys(item)
   if (!supabase || keys.length === 0) return null
@@ -67,19 +76,47 @@ export async function readChemicalEnrichmentCache(
   try {
     const { data, error } = await supabase
       .from('chemical_enrichment_cache')
-      .select('result,expires_at')
+      .select('result,expires_at,fetched_at,result_version')
       .in('lookup_key', keys)
-      .eq('result_version', CHEMICAL_ENRICHMENT_RESULT_VERSION)
-      .gt('expires_at', new Date().toISOString())
+      .in('result_version', [
+        CHEMICAL_ENRICHMENT_RESULT_VERSION,
+        PREVIOUS_CHEMICAL_ENRICHMENT_RESULT_VERSION,
+      ])
+      .order('result_version', { ascending: false })
       .order('fetched_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(20)
     if (error) {
       console.warn(JSON.stringify({ message: 'chemical cache read failed', error: error.message }))
       return null
     }
-    const result = (data as CacheRow | null)?.result
-    return result ? { ...result, requestId: item.requestId } : null
+    const rows = Array.isArray(data) ? data as CacheRow[] : []
+    const now = Date.now()
+    const fresh = rows.find((row) => (
+      row.result_version === CHEMICAL_ENRICHMENT_RESULT_VERSION
+      && Boolean(row.result)
+      && Boolean(row.expires_at)
+      && new Date(row.expires_at!).getTime() > now
+    ))
+    if (fresh?.result) {
+      return {
+        result: { ...fresh.result, requestId: item.requestId },
+        freshness: 'fresh',
+        resultVersion: fresh.result_version,
+      }
+    }
+
+    const stale = rows.find((row) => {
+      if (!row.result) return false
+      if (row.result_version === CHEMICAL_ENRICHMENT_RESULT_VERSION) return true
+      return row.result_version === PREVIOUS_CHEMICAL_ENRICHMENT_RESULT_VERSION
+        && row.result.overallStatus === 'complete'
+        && (row.result.hazard.status === 'classified' || row.result.hazard.status === 'not_classified')
+    })
+    return stale?.result ? {
+      result: { ...stale.result, requestId: item.requestId },
+      freshness: 'stale',
+      resultVersion: stale.result_version,
+    } : null
   } catch (error) {
     console.warn(JSON.stringify({ message: 'chemical cache read failed', error: error instanceof Error ? error.message : String(error) }))
     return null
@@ -104,6 +141,8 @@ export async function writeChemicalEnrichmentCache(
     ? 'not_found'
     : result.overallStatus === 'complete' ? 'complete' : result.hazard.status
   const now = new Date().toISOString()
+  const cacheResult = { ...result }
+  delete cacheResult.delivery
 
   try {
     const { error } = await supabase.from('chemical_enrichment_cache').upsert(
@@ -112,7 +151,7 @@ export async function writeChemicalEnrichmentCache(
         result_version: CHEMICAL_ENRICHMENT_RESULT_VERSION,
         canonical_identity_key: canonicalIdentityKey,
         cache_status: cacheStatus,
-        result,
+        result: cacheResult,
         fetched_at: result.hazard.fetchedAt || now,
         expires_at: expiresAt.toISOString(),
         updated_at: now,

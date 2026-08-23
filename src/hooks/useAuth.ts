@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
 import { postJson } from '../services/internalApi';
+import { useInventoryHazardStore } from '../store/useInventoryHazardStore';
 
 interface AuthState {
     session: Session | null;
@@ -84,9 +85,12 @@ export function useAuth(): UseAuthReturn {
         return { error: error?.message ?? null };
     }, []);
 
+    const currentUserId = state.user?.id;
+
     const signOut = useCallback(async () => {
+        if (currentUserId) useInventoryHazardStore.getState().clearUser(currentUserId);
         await supabase.auth.signOut();
-    }, []);
+    }, [currentUserId]);
 
     const deleteAccount = useCallback(async () => {
         try {
@@ -95,9 +99,10 @@ export function useAuth(): UseAuthReturn {
             return { error: error instanceof Error ? error.message : 'Failed to delete account.' };
         }
 
+        if (currentUserId) useInventoryHazardStore.getState().clearUser(currentUserId);
         await supabase.auth.signOut();
         return { error: null };
-    }, []);
+    }, [currentUserId]);
 
     return {
         ...state,

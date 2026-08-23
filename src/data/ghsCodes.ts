@@ -1,3 +1,5 @@
+import type { GhsPictogramCode } from '../types';
+
 // H-Code to Korean Translation Dictionary
 export const GHS_KO: Record<string, string> = {
     // Physical Hazards (H200–H290)
@@ -151,19 +153,19 @@ export const formatGhsStatementList = (
     ];
 };
 
-export const GHS_PICTOGRAMS: Record<string, string> = {
-    "GHS01": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS01.svg", // Exploding Bomb
-    "GHS02": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS02.svg", // Flame
-    "GHS03": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS03.svg", // Flame over Circle
-    "GHS04": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS04.svg", // Gas Cylinder
-    "GHS05": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS05.svg", // Corrosion
-    "GHS06": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS06.svg", // Skull and Crossbones
-    "GHS07": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS07.svg", // Exclamation Mark
-    "GHS08": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS08.svg", // Health Hazard
-    "GHS09": "https://pubchem.ncbi.nlm.nih.gov/images/ghs/GHS09.svg", // Environment
+export const GHS_PICTOGRAMS: Record<GhsPictogramCode, string> = {
+    "GHS01": "/ghs/GHS01.svg", // Exploding Bomb
+    "GHS02": "/ghs/GHS02.svg", // Flame
+    "GHS03": "/ghs/GHS03.svg", // Flame over Circle
+    "GHS04": "/ghs/GHS04.svg", // Gas Cylinder
+    "GHS05": "/ghs/GHS05.svg", // Corrosion
+    "GHS06": "/ghs/GHS06.svg", // Skull and Crossbones
+    "GHS07": "/ghs/GHS07.svg", // Exclamation Mark
+    "GHS08": "/ghs/GHS08.svg", // Health Hazard
+    "GHS09": "/ghs/GHS09.svg", // Environment
 };
 
-const GHS_PICTOGRAM_ALIASES: Record<string, string> = {
+const GHS_PICTOGRAM_ALIASES: Record<string, GhsPictogramCode> = {
     'exploding bomb': 'GHS01',
     'explosive': 'GHS01',
     'flame': 'GHS02',
@@ -184,11 +186,12 @@ const GHS_PICTOGRAM_ALIASES: Record<string, string> = {
     'environmental hazard': 'GHS09',
 };
 
-export const getPictogramCode = (code: string): string | undefined => {
+export const getPictogramCode = (code: string): GhsPictogramCode | undefined => {
     const cleanCode = code.replace(/\.(gif|svg|png|jpg)$/i, '').trim();
     const codeMatch = cleanCode.match(/GHS\d{2}/i);
     if (codeMatch) {
-        return codeMatch[0].toUpperCase();
+        const normalizedCode = codeMatch[0].toUpperCase();
+        if (normalizedCode in GHS_PICTOGRAMS) return normalizedCode as GhsPictogramCode;
     }
 
     return GHS_PICTOGRAM_ALIASES[cleanCode.toLowerCase()];
@@ -196,7 +199,7 @@ export const getPictogramCode = (code: string): string | undefined => {
 
 export const getPictogramUrl = (code: string): string | undefined => {
     // Input format: "GHS01" or "GHS01.gif" or full URL
-    if (code.startsWith('http') || code.startsWith('data:image')) return code;
+    if (code.startsWith('data:image')) return code;
 
     const pictogramCode = getPictogramCode(code);
     return pictogramCode ? GHS_PICTOGRAMS[pictogramCode] : undefined;

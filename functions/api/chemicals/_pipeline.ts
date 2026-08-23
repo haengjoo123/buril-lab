@@ -381,7 +381,7 @@ function emptyResult(item: ChemicalEnrichmentRequestItem, status: 'not_found' | 
       catalogVersion: DEFAULT_PH_CATALOG.version,
     },
     ...(status === 'transient_error' ? { retryAfterMs: 2_000 } : {}),
-    enrichmentVersion: 2,
+    enrichmentVersion: 3,
   }
 }
 
@@ -445,6 +445,12 @@ export async function enrichChemicalItem(
   const primaryCid = primary?.CID
   const standardInchiKey = primary?.InChIKey || lookupItem.standardInchiKey
   if (!primary || !primaryCid || !standardInchiKey) return emptyResult(item, 'not_found')
+  const resolvedInchiKeys = unique(
+    propertyOutcome.data
+      .map((property) => property.InChIKey?.toUpperCase())
+      .filter((inchiKey): inchiKey is string => Boolean(inchiKey)),
+  )
+  const lookupResolvedMultipleStructures = resolvedInchiKeys.length > 1
 
   const equivalentOutcome = await fetchEquivalentCids(standardInchiKey, primaryCid, fetchImpl)
   if (equivalentOutcome.kind === 'transient_error') return emptyResult(item, 'transient_error')
@@ -458,11 +464,25 @@ export async function enrichChemicalItem(
   const verifiedCandidates = candidates.filter((candidate) => candidate.property.InChIKey?.toUpperCase() === standardInchiKey.toUpperCase())
   const exactCasNumbers = unique(verifiedCandidates.flatMap((candidate) => candidate.casNumbers))
   const inputCas = normalizeCasNumber(lookupItem.casNumber)
-  const casNumbers = inputCas && (exactCasNumbers.length === 0 || exactCasNumbers.includes(inputCas))
-    ? unique([inputCas, ...exactCasNumbers])
-    : exactCasNumbers
-  const identityAmbiguous = casNumbers.length > 1 || Boolean(inputCas && exactCasNumbers.length > 0 && !exactCasNumbers.includes(inputCas))
-  const casNumber = casNumbers.length === 1 ? casNumbers[0] : undefined
+  const isExactCasLookup = Boolean(inputCas && lookup.method === 'exact_cas')
+  const alternateCasNumbers = inputCas
+    ? exactCasNumbers.filter((candidateCas) => candidateCas !== inputCas)
+    : []
+  const casNumbers = isExactCasLookup
+    ? inputCas ? [inputCas] : []
+    : inputCas && (exactCasNumbers.length === 0 || exactCasNumbers.includes(inputCas))
+      ? unique([inputCas, ...exactCasNumbers])
+      : exactCasNumbers
+  const identityAmbiguous = lookupResolvedMultipleStructures
+    || (!isExactCasLookup && (
+      casNumbers.length > 1
+      || Boolean(inputCas && exactCasNumbers.length > 0 && !exactCasNumbers.includes(inputCas))
+    ))
+  const casNumber = identityAmbiguous
+    ? undefined
+    : isExactCasLookup
+      ? inputCas || undefined
+      : casNumbers.length === 1 ? casNumbers[0] : undefined
 
   const hCodes = unique(verifiedCandidates.flatMap((candidate) => candidate.hCodes))
   const hazardStatements = unique(verifiedCandidates.flatMap((candidate) => candidate.hazardStatements))
@@ -547,6 +567,7 @@ export async function enrichChemicalItem(
       canonicalName: verifiedProperty.Title || verifiedProperty.IUPACName || item.name,
       ...(localizedName ? { localizedName } : {}),
       ...(casNumber ? { casNumber } : {}),
+      ...(alternateCasNumbers.length > 0 ? { alternateCasNumbers } : {}),
       ...(koshaIdentity ? { koshaChemId: Number(koshaIdentity.chemId) } : {}),
       pubchemCid: primaryCid,
       equivalentPubchemCids,
@@ -595,6 +616,6 @@ export async function enrichChemicalItem(
       catalogVersion: phMatch.catalogVersion,
     },
     ...(hazardStatus === 'transient_error' ? { retryAfterMs: 2_000 } : {}),
-    enrichmentVersion: 2,
+    enrichmentVersion: 3,
   }
 }

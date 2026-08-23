@@ -162,4 +162,100 @@ describe('chemical enrichment PubChem equivalent-CID pipeline', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('chemdetail01'))).toBe(false)
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('chemdetail03'))).toBe(false)
   })
+
+  it('keeps an exact input CAS authoritative and records same-structure CAS aliases separately', async () => {
+    const acidProperty = (cid: number) => ({
+      PropertyTable: { Properties: [{
+        CID: cid,
+        Title: 'Acetic acid',
+        MolecularFormula: 'C2H4O2',
+        MolecularWeight: '60.05',
+        ConnectivitySMILES: 'CC(=O)O',
+        InChIKey: 'QTBSBXVTEAMEQO-UHFFFAOYSA-N',
+      }] },
+    })
+    const ghs = { Record: { Section: [{
+      TOCHeading: 'GHS Classification',
+      Information: [{
+        Name: 'GHS Hazard Statements',
+        Value: { StringWithMarkup: [{ String: 'H314 Causes severe skin burns and eye damage' }] },
+      }],
+    }] } }
+    const casRecord = (cas: string) => ({ Record: { Section: [{
+      TOCHeading: 'Other Identifiers',
+      Section: [{ TOCHeading: 'CAS', Information: [{
+        Value: { StringWithMarkup: [{ String: cas }] },
+      }] }],
+    }] } })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/compound/name/64-19-7/property/')) return Response.json(acidProperty(176))
+      if (url.includes('/compound/inchikey/') && url.endsWith('/cids/JSON')) {
+        return Response.json({ IdentifierList: { CID: [176, 999] } })
+      }
+      if (url.includes('/compound/cid/176/property/')) return Response.json(acidProperty(176))
+      if (url.includes('/compound/cid/999/property/')) return Response.json(acidProperty(999))
+      if (url.includes('/compound/176/JSON?heading=')) return Response.json(ghs)
+      if (url.includes('/compound/999/JSON?heading=')) return Response.json(ghs)
+      if (url.endsWith('/compound/176/JSON')) return Response.json(casRecord('64-19-7'))
+      if (url.endsWith('/compound/999/JSON')) return Response.json(casRecord('158998-76-6'))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+
+    const result = await enrichChemicalItem({ requestId: 'acetic-acid', casNumber: '64-19-7' }, {}, fetchMock)
+    expect(result.identity).toMatchObject({
+      status: 'verified',
+      casNumber: '64-19-7',
+      alternateCasNumbers: ['158998-76-6'],
+      standardInchiKey: 'QTBSBXVTEAMEQO-UHFFFAOYSA-N',
+    })
+    expect(result.hazard).toMatchObject({
+      status: 'classified',
+      hCodes: ['H314'],
+    })
+    expect(result.enrichmentVersion).toBe(3)
+  })
+
+  it('keeps an exact CAS ambiguous when PubChem resolves it to different structures', async () => {
+    const primary = {
+      CID: 176,
+      Title: 'Ambiguous acid',
+      MolecularFormula: 'C2H4O2',
+      MolecularWeight: '60.05',
+      InChIKey: 'QTBSBXVTEAMEQO-UHFFFAOYSA-N',
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/compound/name/64-19-7/property/')) {
+        return Response.json({ PropertyTable: { Properties: [primary, {
+          ...primary,
+          CID: 999,
+          InChIKey: 'AAAAAAAAAAAAAA-BBBBBBBBBB-C',
+        }] } })
+      }
+      if (url.includes('/compound/inchikey/') && url.endsWith('/cids/JSON')) {
+        return Response.json({ IdentifierList: { CID: [176] } })
+      }
+      if (url.includes('/compound/cid/176/property/')) {
+        return Response.json({ PropertyTable: { Properties: [primary] } })
+      }
+      if (url.includes('/compound/176/JSON?heading=')) {
+        return Response.json({ Record: { Section: [{
+          TOCHeading: 'GHS Classification',
+          Information: [{
+            Name: 'GHS Hazard Statements',
+            Value: { StringWithMarkup: [{ String: 'H314 Causes severe burns' }] },
+          }],
+        }] } })
+      }
+      if (url.endsWith('/compound/176/JSON')) return Response.json(casSection)
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+
+    const result = await enrichChemicalItem({ requestId: 'ambiguous-cas', casNumber: '64-19-7' }, {}, fetchMock)
+    expect(result.identity.status).toBe('ambiguous')
+    expect(result.identity.casNumber).toBeUndefined()
+    expect(result.hazard.status).toBe('identity_ambiguous')
+    expect(result.hazard.hCodes).toEqual(['H314'])
+  })
 })
