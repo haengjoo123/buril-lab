@@ -1464,10 +1464,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         const pictograms = getInventoryGhsPictograms(item);
         const isDetail = options?.variant === 'detail';
         const visiblePictograms = isDetail ? pictograms : pictograms.slice(0, 4);
-        const isStale = ghsState?.status === 'loaded' && ghsState.freshness === 'stale';
-        const staleLabel = ghsState?.status === 'loaded' && ghsState.isRefreshing
-            ? t('inventory_ghs_refreshing')
-            : t('inventory_ghs_update_needed');
 
         if (visiblePictograms.length > 0) {
             const detailColumnCount = Math.min(visiblePictograms.length, 6);
@@ -1489,7 +1485,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             ].filter(Boolean).join(', ');
 
             return (
-                <div className="inline-flex items-center gap-1" title={isStale ? staleLabel : title}>
+                <div className="inline-flex items-center gap-1" title={title}>
                     <div
                         className={gridClassName}
                         style={gridStyle}
@@ -1521,9 +1517,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             );
                         })}
                     </div>
-                    {isStale && (
-                        <Clock className={`h-3.5 w-3.5 shrink-0 ${ghsState.isRefreshing ? 'animate-pulse text-blue-500' : 'text-amber-500'}`} aria-label={staleLabel} />
-                    )}
                 </div>
             );
         }
