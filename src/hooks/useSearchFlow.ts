@@ -11,6 +11,11 @@ import { classifyChemicalWithAI } from '../services/geminiClassificationService'
 import type { AnalysisResult } from '../types';
 import { getLabAppScopedPath, labAppRoute } from '../utils/appRoutes';
 import { hasCasNumberFormat, normalizeCasNumber } from '../utils/casNumber';
+import {
+  recordSearchAction,
+  recordSearchEvent,
+  type SearchAnalyticsChannel,
+} from '../services/searchAnalyticsService';
 
 interface UseSearchFlowParams {
   pathname: string;
@@ -18,6 +23,7 @@ interface UseSearchFlowParams {
   navigate: NavigateFunction;
   t: TFunction;
   addSearchHistory: (query: string) => void;
+  labId?: string | null;
 }
 
 interface UseSearchFlowResult {
@@ -41,10 +47,11 @@ interface UseSearchFlowResult {
   handleClearFilters: () => void;
   handleSearch: (e?: FormEvent) => void;
   handleReset: () => void;
-  navigateWithFreshFilters: (rawQuery: string) => void;
+  navigateWithFreshFilters: (rawQuery: string, channel?: SearchAnalyticsChannel) => void;
   suggestions: string[];
   isSuggestionsLoading: boolean;
   clearSuggestions: () => void;
+  currentSearchEventId: string | null;
 }
 
 export function useSearchFlow({
@@ -53,6 +60,7 @@ export function useSearchFlow({
   navigate,
   t,
   addSearchHistory,
+  labId,
 }: UseSearchFlowParams): UseSearchFlowResult {
   const [query, setQuery] = useState('');
   const [lastSearchQuery, setLastSearchQuery] = useState('');
@@ -67,12 +75,14 @@ export function useSearchFlow({
   const [isLoading, setIsLoading] = useState(false);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentSearchEventId, setCurrentSearchEventId] = useState<string | null>(null);
 
   // Autocomplete states
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const searchSequenceRef = useRef(0);
   const referencePhRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSearchChannelRef = useRef<SearchAnalyticsChannel>('url');
 
   const urlQuery = useMemo(() => searchParams.get('q'), [searchParams]);
   const isSearchTab = useMemo(() => {
@@ -86,10 +96,21 @@ export function useSearchFlow({
       && !pathname.startsWith('/feedback-admin');
   }, [pathname]);
 
-  const performSearch = useCallback(async (searchQuery: string, brand: string = 'all', sort: SortOption = 'relevance') => {
+  const performSearch = useCallback(async (
+    searchQuery: string,
+    brand: string = 'all',
+    sort: SortOption = 'relevance',
+    trackSubmittedSearch: boolean = true,
+  ) => {
     if (!searchQuery.trim()) return;
 
     const searchSequence = ++searchSequenceRef.current;
+    const searchChannel = pendingSearchChannelRef.current;
+    const searchStartedAt = performance.now();
+    if (trackSubmittedSearch) {
+      pendingSearchChannelRef.current = 'url';
+      setCurrentSearchEventId(null);
+    }
     if (referencePhRetryRef.current) {
       clearTimeout(referencePhRetryRef.current);
       referencePhRetryRef.current = null;
@@ -105,6 +126,17 @@ export function useSearchFlow({
       setCabinetResults([]);
       setLastSearchQuery(searchQuery);
       setError(t('search_invalid_cas_checksum', 'CAS 번호의 검증 숫자가 올바르지 않습니다. 번호를 확인해 주세요.'));
+      if (trackSubmittedSearch) {
+        void recordSearchEvent({
+          rawQuery: searchQuery,
+          searchChannel,
+          outcome: 'invalid_query',
+          labId,
+          latencyMs: Math.round(performance.now() - searchStartedAt),
+        }).then((eventId) => {
+          if (searchSequenceRef.current === searchSequence) setCurrentSearchEventId(eventId);
+        });
+      }
       return;
     }
 
@@ -184,14 +216,58 @@ export function useSearchFlow({
       } else {
         addSearchHistory(searchQuery);
       }
+
+      if (trackSubmittedSearch) {
+        const chemical = chemicalData;
+        void recordSearchEvent({
+          rawQuery: searchQuery,
+          searchChannel,
+          outcome: chemicalData || mediaSearchResult.products.length > 0 || cabinetSearchResult.length > 0
+            ? 'matched'
+            : 'no_result',
+          labId,
+          chemicalResultCount: chemicalData ? 1 : 0,
+          productResultCount: mediaSearchResult.totalCount,
+          cabinetResultCount: cabinetSearchResult.length,
+          latencyMs: Math.round(performance.now() - searchStartedAt),
+          matchedCas: chemical?.casNumber || null,
+          matchedPubchemCid: chemical && /^\d+$/.test(chemical.id) ? Number(chemical.id) : null,
+          matchedKoshaId: chemical?.koshaId ?? null,
+          matchedStandardName: chemical?.name || null,
+        }).then((eventId) => {
+          if (searchSequenceRef.current !== searchSequence) return;
+          setCurrentSearchEventId(eventId);
+          if (eventId && chemical) {
+            void recordSearchAction({
+              eventId,
+              actionType: 'result_opened',
+              targetType: 'chemical',
+              targetRef: chemical.id,
+              matchedCas: chemical.casNumber || null,
+              matchedStandardName: chemical.name,
+            });
+          }
+        });
+      }
     } catch (err) {
       if (searchSequenceRef.current !== searchSequence) return;
       setError(t('search_error'));
       if (import.meta.env.DEV) console.error(err);
+      if (trackSubmittedSearch) {
+        void recordSearchEvent({
+          rawQuery: searchQuery,
+          searchChannel,
+          outcome: 'technical_error',
+          labId,
+          latencyMs: Math.round(performance.now() - searchStartedAt),
+        }).then((eventId) => {
+          if (searchSequenceRef.current === searchSequence) setCurrentSearchEventId(eventId);
+        });
+      }
     } finally {
       if (searchSequenceRef.current === searchSequence) setIsLoading(false);
     }
-  }, [t, addSearchHistory]);
+  }, [t, addSearchHistory, labId]);
 
   useEffect(() => () => {
     searchSequenceRef.current += 1;
@@ -223,6 +299,7 @@ export function useSearchFlow({
     setLastSearchQuery('');
     setError(null);
     setIsAiAnalyzing(false);
+    setCurrentSearchEventId(null);
   }, [urlQuery, lastSearchQuery, isLoading, performSearch, isSearchTab]);
 
   // Debounced autocomplete effect
@@ -274,7 +351,7 @@ export function useSearchFlow({
     setSelectedBrand(brand);
     setShowAllProducts(false);
     if (lastSearchQuery) {
-      performSearch(lastSearchQuery, brand, sortBy);
+      performSearch(lastSearchQuery, brand, sortBy, false);
     }
   }, [lastSearchQuery, performSearch, sortBy]);
 
@@ -282,7 +359,7 @@ export function useSearchFlow({
     setSortBy(sort);
     setShowAllProducts(false);
     if (lastSearchQuery) {
-      performSearch(lastSearchQuery, selectedBrand, sort);
+      performSearch(lastSearchQuery, selectedBrand, sort, false);
     }
   }, [lastSearchQuery, performSearch, selectedBrand]);
 
@@ -290,11 +367,14 @@ export function useSearchFlow({
     setSelectedBrand('all');
     setSortBy('relevance');
     if (lastSearchQuery) {
-      performSearch(lastSearchQuery, 'all', 'relevance');
+      performSearch(lastSearchQuery, 'all', 'relevance', false);
     }
   }, [lastSearchQuery, performSearch]);
 
-  const navigateWithFreshFilters = useCallback((rawQuery: string) => {
+  const navigateWithFreshFilters = useCallback((
+    rawQuery: string,
+    channel: SearchAnalyticsChannel = 'manual',
+  ) => {
     const normalized = rawQuery.trim();
     setSelectedBrand('all');
     setSortBy('relevance');
@@ -302,12 +382,13 @@ export function useSearchFlow({
       navigate(labAppRoute());
       return;
     }
+    pendingSearchChannelRef.current = channel;
     navigate(`${labAppRoute()}?q=${encodeURIComponent(normalized)}`);
   }, [navigate]);
 
   const handleSearch = useCallback((e?: FormEvent) => {
     e?.preventDefault();
-    navigateWithFreshFilters(query);
+    navigateWithFreshFilters(query, 'manual');
   }, [navigateWithFreshFilters, query]);
 
   const handleReset = useCallback(() => {
@@ -344,5 +425,6 @@ export function useSearchFlow({
     suggestions,
     isSuggestionsLoading,
     clearSuggestions,
+    currentSearchEventId,
   };
 }

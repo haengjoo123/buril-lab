@@ -418,6 +418,8 @@ export interface WasteComponent extends CartItem {
     cartLineId: string;
     sourceType: WasteComponentSource;
     sourceRef?: string;
+    /** Server-confirmed submitted search that produced this component. */
+    sourceSearchEventId?: string;
     inventoryId?: string;
     cabinetId?: string;
     identityConfidence: WasteIdentityConfidence;

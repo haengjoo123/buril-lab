@@ -18,6 +18,14 @@ export const isWasteV2Enabled = !isExplicitlyDisabled(import.meta.env.VITE_ENABL
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )
+/** Mandatory submitted-search analytics with an explicit incident kill switch. */
+export function isSearchAnalyticsDeploymentEnabled(value: string | undefined): boolean {
+  return !isExplicitlyDisabled(value)
+}
+
+export const isSearchAnalyticsEnabled = isSearchAnalyticsDeploymentEnabled(
+  import.meta.env.VITE_ENABLE_SEARCH_ANALYTICS,
+)
 
 export function isPhPredictionDeploymentEnabled(
   value: string | undefined,

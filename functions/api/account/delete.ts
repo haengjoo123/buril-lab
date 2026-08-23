@@ -203,6 +203,13 @@ async function removePersonalRows(
         tolerateConstraintErrors: true,
       })
 
+  await runCleanupStep(warnings, 'Delete and audit search analytics', () =>
+    adminClient.rpc('analytics_delete_user_search', {
+      p_user_id: userId,
+      p_query_normalized: null,
+      p_delete_all: true,
+      p_reason: 'account_deleted',
+    }))
   await deleteByUserId('user_search_history')
   await deleteByUserId('voice_query_feedback')
   await deleteByUserId('reagent_aliases')

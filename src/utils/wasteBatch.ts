@@ -362,6 +362,7 @@ export function createWasteComponentFromAnalysis(
         cartLineId: overrides.cartLineId ?? generateId(),
         sourceType: overrides.sourceType ?? 'search',
         sourceRef: overrides.sourceRef,
+        sourceSearchEventId: overrides.sourceSearchEventId,
         inventoryId: overrides.inventoryId,
         cabinetId: overrides.cabinetId,
         identityConfidence: overrides.identityConfidence ?? (

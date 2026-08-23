@@ -68,6 +68,7 @@ export interface WasteLogItemRecord {
     cartLineId: string;
     sourceType: 'search' | 'scan' | 'inventory' | 'cabinet' | 'manual' | 'import';
     sourceRef: string | null;
+    sourceSearchEventId: string | null;
     inventoryItemId: string | null;
     cabinetItemId: string | null;
     chemicalName: string;
@@ -379,6 +380,7 @@ export function normalizeWasteLogItemRow(row: unknown): WasteLogItemRecord {
         cartLineId: String(item.cart_line_id || ''),
         sourceType,
         sourceRef: asNullableString(item.source_ref),
+        sourceSearchEventId: asNullableString(item.source_search_event_id),
         inventoryItemId: asNullableString(item.inventory_item_id),
         cabinetItemId: asNullableString(item.cabinet_item_id),
         chemicalName: String(item.chemical_name || ''),
@@ -607,6 +609,7 @@ export function buildWasteHandlingComponents(
                 referencePhSource: component.chemical.properties?.phSource ?? null,
                 inventorySnapshot: component.inventorySnapshot ?? null,
                 inventoryDisposalQuantity: component.inventoryDisposalQuantity ?? null,
+                sourceSearchEventId: component.sourceSearchEventId ?? null,
                 ...(solutionContextSnapshot ? { solutionContext: solutionContextSnapshot } : {}),
                 ...(phPredictionInput ? { phPredictionInput } : {}),
                 ...(index === 0 && phPredictionSnapshot

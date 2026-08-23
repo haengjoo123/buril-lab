@@ -49,7 +49,7 @@ function getCorsHeaders(request: Request): HeadersInit {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Buril-Guest-Subject',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   }
@@ -110,6 +110,11 @@ const LIMIT_CONFIGS = {
     user: { count: 30, window: "1 m" },
     ip: { count: 2, window: "1 m" },
     pattern: /^\/api\/waste\//,
+  },
+  ANALYTICS: {
+    user: { count: 120, window: "1 m" },
+    ip: { count: 120, window: "1 m" },
+    pattern: /^\/api\/analytics\//,
   },
 } as const
 
@@ -212,6 +217,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
   }
 
+  // Submitted-search analytics never uses an IP address as its durable or
+  // rate-limit identifier. Signed-out clients send the random guest subject
+  // kept on that device; malformed/missing values share a low-trust bucket.
+  if (!isUser && LIMIT_CONFIGS.ANALYTICS.pattern.test(path)) {
+    const guestSubject = request.headers.get('X-Buril-Guest-Subject')
+    identifier = guestSubject && /^[0-9a-f-]{36}$/i.test(guestSubject)
+      ? `guest:${guestSubject}`
+      : 'analytics-guest-unidentified'
+  }
+
   if (isProtectedApiPath(path) && !isUser) {
     return withCors(
       new Response(JSON.stringify({
@@ -236,6 +251,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   else if (LIMIT_CONFIGS.CHEMICALS.pattern.test(path)) category = 'CHEMICALS'
   else if (LIMIT_CONFIGS.REAGENTS.pattern.test(path)) category = 'REAGENTS'
   else if (LIMIT_CONFIGS.WASTE.pattern.test(path)) category = 'WASTE'
+  else if (LIMIT_CONFIGS.ANALYTICS.pattern.test(path)) category = 'ANALYTICS'
 
   // If no category matches, we still apply a global safety limit
   const limitConfig = category 

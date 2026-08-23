@@ -19,6 +19,7 @@ interface ResultCardProps {
     /** 커스텀 취소/닫기 버튼 텍스트 (기본값: btn_reset) */
     secondaryBtnText?: string;
     scanSelectionMeta?: ScannerSelectionMeta;
+    sourceSearchEventId?: string;
 }
 
 const compactReasonKeyByCategory: Partial<Record<AnalysisResult['category'], string>> = {
@@ -33,6 +34,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     onRequireAuth,
     secondaryBtnText,
     scanSelectionMeta,
+    sourceSearchEventId,
 }) => {
     const { chemical, reason, isSafe, category, label } = result;
     const addToCart = useWasteStore((state) => state.addToCart);
@@ -79,7 +81,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 autoVerifiedIdentity: scanSelectionMeta.autoVerifiedIdentity,
                 matchedResultIdentity: scanIdentityMatchesResult,
             },
-        } : undefined);
+            sourceSearchEventId,
+        } : { sourceSearchEventId });
 
         onAddConfirmed?.();
         onReset(); // Clear current view

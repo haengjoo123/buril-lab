@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { postJson } from './internalApi';
 
 export interface SearchHistoryEntry {
     id: string;
@@ -68,6 +69,11 @@ export const searchHistoryService = {
         if (error) {
             console.error('Error removing search history:', error);
         }
+        try {
+            await postJson<{ success: boolean }>('/api/analytics/user-delete', { query });
+        } catch (analyticsError) {
+            console.warn('Error removing submitted-search analytics:', analyticsError);
+        }
     },
 
     async clearHistory() {
@@ -81,6 +87,11 @@ export const searchHistoryService = {
 
         if (error) {
             console.error('Error clearing search history:', error);
+        }
+        try {
+            await postJson<{ success: boolean }>('/api/analytics/user-delete', { all: true });
+        } catch (analyticsError) {
+            console.warn('Error clearing submitted-search analytics:', analyticsError);
         }
     }
 };

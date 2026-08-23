@@ -40,6 +40,7 @@ interface SearchTabViewProps {
   error: string | null;
   result: AnalysisResult | null;
   scanSelectionMeta?: ScannerSelectionMeta;
+  sourceSearchEventId?: string;
   mediaProducts: MediaProduct[];
   mediaBrands: string[];
   mediaCount: number;
@@ -53,6 +54,8 @@ interface SearchTabViewProps {
   onReset: () => void;
   onResultAddConfirmed?: () => void;
   onSuggestionClick: (term: string) => void;
+  onHistoryClick?: (term: string) => void;
+  onProductResultClick?: (product: MediaProduct) => void;
   onOpenScanner: () => void;
   onClearSearchHistory: () => void;
   onRemoveSearchHistory: (term: string) => void;
@@ -86,6 +89,7 @@ export function SearchTabView({
   error,
   result,
   scanSelectionMeta,
+  sourceSearchEventId,
   mediaProducts,
   mediaBrands,
   mediaCount,
@@ -99,6 +103,8 @@ export function SearchTabView({
   onReset,
   onResultAddConfirmed,
   onSuggestionClick,
+  onHistoryClick,
+  onProductResultClick,
   onOpenScanner,
   onClearSearchHistory,
   onRemoveSearchHistory,
@@ -597,6 +603,7 @@ export function SearchTabView({
               <ResultCard
                 result={result}
                 scanSelectionMeta={scanSelectionMeta}
+                sourceSearchEventId={sourceSearchEventId}
                 onReset={onReset}
                 onAddConfirmed={onResultAddConfirmed}
                 onRequireAuth={onRequireAuth}
@@ -624,7 +631,12 @@ export function SearchTabView({
 
               <div className="flex flex-col gap-3">
                 {(showAllProducts ? mediaProducts : mediaProducts.slice(0, 5)).map((product) => (
-                  <MediaProductCard key={product.id} product={product} onNavigateToCabinet={onNavigateToCabinet} />
+                  <MediaProductCard
+                    key={product.id}
+                    product={product}
+                    onSelected={onProductResultClick}
+                    onNavigateToCabinet={onNavigateToCabinet}
+                  />
                 ))}
               </div>
               {mediaProducts.length > 5 && (
@@ -682,7 +694,7 @@ export function SearchTabView({
                 {recentSearches.map((term) => (
                   <div
                     key={term}
-                    onClick={() => onSuggestionClick(term)}
+                    onClick={() => (onHistoryClick ? onHistoryClick(term) : onSuggestionClick(term))}
                     className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/70 p-4 rounded-xl flex items-center justify-between shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] hover:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.15)] active:scale-[0.98] transition-all cursor-pointer group"
                   >
                     <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center gap-2">
@@ -729,7 +741,7 @@ export function SearchTabView({
                 <button
                   key={term}
                   type="button"
-                  onClick={() => onSuggestionClick(term)}
+                  onClick={() => (onHistoryClick ? onHistoryClick(term) : onSuggestionClick(term))}
                   className="flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-3 text-left text-sm font-semibold text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-800 dark:text-slate-200 dark:hover:border-blue-900/60 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
                 >
                   <Search className="h-4 w-4 shrink-0 text-slate-400" />

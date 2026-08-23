@@ -5,6 +5,7 @@ import {
   isExplicitlyEnabled,
   isPhPredictionDeploymentEnabled,
   isPhPredictionEnabled,
+  isSearchAnalyticsDeploymentEnabled,
 } from './featureFlags'
 
 describe('isExplicitlyEnabled', () => {
@@ -26,6 +27,14 @@ describe('isExplicitlyEnabled', () => {
     expect(isExplicitlyDisabled('')).toBe(false)
     expect(isExplicitlyDisabled('true')).toBe(false)
     expect(isExplicitlyDisabled(' FALSE ')).toBe(true)
+  })
+
+  it('enables submitted-search analytics by default with an explicit false kill switch', () => {
+    expect(isSearchAnalyticsDeploymentEnabled(undefined)).toBe(true)
+    expect(isSearchAnalyticsDeploymentEnabled('')).toBe(true)
+    expect(isSearchAnalyticsDeploymentEnabled('true')).toBe(true)
+    expect(isSearchAnalyticsDeploymentEnabled('false')).toBe(false)
+    expect(isSearchAnalyticsDeploymentEnabled(' FALSE ')).toBe(false)
   })
 
   it('enables an approved catalog by default and keeps an explicit emergency rollback', () => {

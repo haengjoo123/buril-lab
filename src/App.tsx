@@ -44,6 +44,7 @@ import {
 } from './utils/appRoutes';
 import { focusCabinetItem } from './services/cabinetFocusService';
 import { analyticsService } from './services/analyticsService';
+import { recordSearchAction } from './services/searchAnalyticsService';
 import type { VoiceQueryResponse, VoiceUiAction } from './utils/voiceAgent';
 import {
   requiresSolidSlurryWasteBatch,
@@ -160,12 +161,14 @@ function App() {
     suggestions,
     isSuggestionsLoading,
     clearSuggestions,
+    currentSearchEventId,
   } = useSearchFlow({
     pathname: location.pathname,
     searchParams,
     navigate,
     t,
     addSearchHistory,
+    labId: currentLabId,
   });
 
   useEffect(() => {
@@ -629,6 +632,15 @@ function App() {
   }, [navigate, session]);
 
   const handleCabinetSearchResultClick = useCallback(async (item: CabinetSearchResult) => {
+    if (currentSearchEventId) {
+      void recordSearchAction({
+        eventId: currentSearchEventId,
+        actionType: 'result_selected',
+        targetType: 'cabinet',
+        targetRef: item.itemId,
+        matchedStandardName: item.itemName,
+      });
+    }
     if (!session) {
       const returnTo = labAppRoute(`/cabinet?id=${item.cabinetId}`);
       navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
@@ -641,7 +653,7 @@ function App() {
       itemId: item.itemId,
       shelfId: item.shelfId,
     });
-  }, [navigate, session]);
+  }, [currentSearchEventId, navigate, session]);
 
   const handleVoiceUiAction = useCallback(async (action: VoiceUiAction, _result: VoiceQueryResponse) => {
     if (action.type === 'search_reagent') {
@@ -650,7 +662,7 @@ function App() {
         return;
       }
 
-      navigate(`${labAppRoute()}?q=${encodeURIComponent(searchQuery)}`);
+      navigateWithFreshFilters(searchQuery, 'voice');
       return;
     }
 
@@ -679,12 +691,12 @@ function App() {
       itemId: action.highlightItemId,
       shelfId: action.shelfId,
     });
-  }, [navigate, navigateToLogin, session]);
+  }, [navigate, navigateToLogin, navigateWithFreshFilters, session]);
 
   const handleScan = (scannedText: string, selectionMeta: ScannerSelectionMeta) => {
     setIsScanning(false);
     setScanSelection({ searchTerm: scannedText, meta: selectionMeta });
-    navigateWithFreshFilters(scannedText);
+    navigateWithFreshFilters(scannedText, 'scan');
   };
 
   if (isAuthLoading) {
@@ -924,6 +936,7 @@ function App() {
                 scanSelection.searchTerm.trim().toLowerCase() === lastSearchQuery.trim().toLowerCase()
                 ? scanSelection.meta
                 : undefined}
+              sourceSearchEventId={currentSearchEventId ?? undefined}
               mediaProducts={mediaProducts}
               mediaBrands={mediaBrands}
               mediaCount={mediaCount}
@@ -947,6 +960,39 @@ function App() {
                 handleReset();
               }}
               onResultAddConfirmed={() => {
+                if (currentSearchEventId && result) {
+                  void recordSearchAction({
+                    eventId: currentSearchEventId,
+                    actionType: 'result_selected',
+                    targetType: 'chemical',
+                    targetRef: result.chemical.id,
+                    matchedCas: result.chemical.casNumber || null,
+                    matchedStandardName: result.chemical.name,
+                  });
+                  void recordSearchAction({
+                    eventId: currentSearchEventId,
+                    actionType: 'added_to_batch',
+                    targetType: 'batch',
+                    targetRef: useWasteStore.getState().batch.id,
+                    matchedCas: result.chemical.casNumber || null,
+                    matchedStandardName: result.chemical.name,
+                    metadata: { searchMode: isAddingWasteComponent ? 'add_component' : 'new_batch' },
+                  });
+                  if (scanSelection && (scanSelection.meta.userConfirmed || !scanSelection.meta.autoVerifiedIdentity)) {
+                    void recordSearchAction({
+                      eventId: currentSearchEventId,
+                      actionType: 'scan_corrected',
+                      targetType: 'chemical',
+                      targetRef: result.chemical.id,
+                      matchedCas: result.chemical.casNumber || null,
+                      matchedStandardName: result.chemical.name,
+                      metadata: {
+                        selectedField: scanSelection.meta.selectedField,
+                        corrected: true,
+                      },
+                    });
+                  }
+                }
                 if (isAddingWasteComponent) {
                   setIsAddingWasteComponent(false);
                   setIsCartOpen(true);
@@ -957,7 +1003,21 @@ function App() {
               }}
               onSuggestionClick={(term) => {
                 setScanSelection(null);
-                navigateWithFreshFilters(term);
+                navigateWithFreshFilters(term, 'autocomplete');
+              }}
+              onHistoryClick={(term) => {
+                setScanSelection(null);
+                navigateWithFreshFilters(term, 'history');
+              }}
+              onProductResultClick={(product) => {
+                if (!currentSearchEventId) return;
+                void recordSearchAction({
+                  eventId: currentSearchEventId,
+                  actionType: 'result_selected',
+                  targetType: 'product',
+                  targetRef: product.id,
+                  matchedStandardName: product.product_name,
+                });
               }}
               onOpenScanner={() => setIsScanning(true)}
               onClearSearchHistory={clearSearchHistory}

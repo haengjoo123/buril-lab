@@ -110,6 +110,7 @@ describe('wasteLogService V2 mutations', () => {
         const batch = createBatch();
         batch.mixingState = 'already_mixed';
         batch.totalAmount.source = 'component_sum';
+        batch.components[0].sourceSearchEventId = '55555555-5555-4555-8555-555555555555';
         batch.components[0].solutionContext = {
             physicalForm: 'organic_solvent',
             solventClass: 'organic_non_halogen',
@@ -160,6 +161,7 @@ describe('wasteLogService V2 mutations', () => {
             pubchemCid: null,
             koshaChemId: null,
             analysisSnapshot: {
+                sourceSearchEventId: '55555555-5555-4555-8555-555555555555',
                 solutionContext: {
                     physicalForm: 'organic_solvent',
                     solventClass: 'organic_non_halogen',
@@ -695,6 +697,7 @@ describe('wasteLogService V2 mutations', () => {
                 cart_line_id: 'line-1',
                 source_type: 'inventory',
                 source_ref: 'inventory-ref',
+                source_search_event_id: '66666666-6666-4666-8666-666666666666',
                 inventory_item_id: '44444444-4444-4444-8444-444444444444',
                 cabinet_item_id: null,
                 chemical_name: 'Acetone',
@@ -744,6 +747,7 @@ describe('wasteLogService V2 mutations', () => {
         expect(order).toHaveBeenCalledWith('line_number', { ascending: true });
         expect(rows).toEqual([expect.objectContaining({
             wasteLogId: LOG_ID,
+            sourceSearchEventId: '66666666-6666-4666-8666-666666666666',
             lineNumber: 1,
             chemicalName: 'Acetone',
             casNumber: '67-64-1',

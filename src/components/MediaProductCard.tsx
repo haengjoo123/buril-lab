@@ -12,11 +12,12 @@ import { InventoryRegistrationModal } from './InventoryRegistrationModal';
 interface MediaProductCardProps {
     product: MediaProduct;
     onClose?: () => void;
+    onSelected?: (product: MediaProduct) => void;
     /** Called when user wants to navigate to a cabinet to see placed item */
     onNavigateToCabinet?: (cabinetId: string, itemId: string) => void;
 }
 
-export const MediaProductCard: React.FC<MediaProductCardProps> = ({ product, onClose, onNavigateToCabinet }) => {
+export const MediaProductCard: React.FC<MediaProductCardProps> = ({ product, onClose, onSelected, onNavigateToCabinet }) => {
     const { t } = useTranslation();
     const [showInventoryModal, setShowInventoryModal] = useState(false);
 
@@ -97,7 +98,10 @@ export const MediaProductCard: React.FC<MediaProductCardProps> = ({ product, onC
 
                     {/* Action Button */}
                     <button
-                        onClick={() => setShowInventoryModal(true)}
+                        onClick={() => {
+                            onSelected?.(product);
+                            setShowInventoryModal(true);
+                        }}
                         className="mt-4 w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium rounded-xl transition-all active:scale-[0.98]"
                     >
                         <PackagePlus className="w-4 h-4" />

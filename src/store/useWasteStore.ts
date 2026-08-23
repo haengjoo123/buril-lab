@@ -849,6 +849,7 @@ export type AddWasteComponentOptions = Partial<Pick<
     | 'cartLineId'
     | 'sourceType'
     | 'sourceRef'
+    | 'sourceSearchEventId'
     | 'inventoryId'
     | 'cabinetId'
     | 'identityConfidence'

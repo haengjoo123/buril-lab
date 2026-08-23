@@ -18,6 +18,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_WASTE_V2',
   'VITE_ENABLE_PH_PREDICTION',
   'VITE_ENABLE_CHEMICAL_ENRICHMENT',
+  'VITE_ENABLE_SEARCH_ANALYTICS',
 ] as const
 
 type AdminIdentity = {
@@ -374,6 +375,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_WASTE_V2': JSON.stringify(explicitClientEnv.VITE_ENABLE_WASTE_V2),
     'import.meta.env.VITE_ENABLE_PH_PREDICTION': JSON.stringify(explicitClientEnv.VITE_ENABLE_PH_PREDICTION),
     'import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT': JSON.stringify(explicitClientEnv.VITE_ENABLE_CHEMICAL_ENRICHMENT),
+    'import.meta.env.VITE_ENABLE_SEARCH_ANALYTICS': JSON.stringify(explicitClientEnv.VITE_ENABLE_SEARCH_ANALYTICS),
   },
   resolve: {
     alias: {
