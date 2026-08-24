@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('./internalApi', () => ({ getJson: vi.fn() }));
+
 import { parseKoshaPhDetail } from './koshaApi';
 
 describe('parseKoshaPhDetail', () => {

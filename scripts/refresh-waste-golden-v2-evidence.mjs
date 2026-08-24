@@ -7,6 +7,9 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as cheerio from 'cheerio';
+import { requireKoshaBulkCollectionPermission } from './kosha-bulk-collection-guard.mjs';
+
+requireKoshaBulkCollectionPermission();
 
 const root = process.cwd();
 const directory = path.join(root, 'data', 'waste-golden-set-v2');

@@ -7,6 +7,8 @@ import { fetchKoshaMsds } from '../services/koshaApi';
 import { fetchPubChemMsds } from '../services/pubchemApi';
 import { Loader2, X, FileText, ChevronDown, ChevronRight } from 'lucide-react';
 
+const KOSHA_REFERENCE_URL = 'https://msds.kosha.or.kr/MSDSInfo/kcic/msdssearchMsds.do';
+
 interface MsdsModalProps {
     chemical: Chemical;
     isOpen: boolean;
@@ -19,6 +21,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
     const [sections, setSections] = useState<MsdsSection[]>([]);
     const [missingSections, setMissingSections] = useState<number[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [koshaReferenceUrl, setKoshaReferenceUrl] = useState(KOSHA_REFERENCE_URL);
 
     // Prevent body scroll when modal is open
     useEffect(() => {
@@ -38,6 +41,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
         setError(null);
         setSections([]);
         setMissingSections([]);
+        setKoshaReferenceUrl(KOSHA_REFERENCE_URL);
 
         try {
             let data: MsdsSection[] = [];
@@ -53,6 +57,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                 if (data.length === 0 && chemical.koshaId) {
                     console.log('Fallback to KOSHA...');
                     const koshaData = await fetchKoshaMsds(chemical.koshaId);
+                    setKoshaReferenceUrl(koshaData.officialUrl || KOSHA_REFERENCE_URL);
                     data = koshaData.sections;
                     missing = koshaData.missingSections;
                 }
@@ -61,6 +66,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                 if (chemical.koshaId) {
                     console.log('Fetching from KOSHA (KO priority)...');
                     const koshaData = await fetchKoshaMsds(chemical.koshaId);
+                    setKoshaReferenceUrl(koshaData.officialUrl || KOSHA_REFERENCE_URL);
                     data = koshaData.sections;
                     missing = koshaData.missingSections;
                 }
@@ -115,6 +121,18 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-900">
+                    {chemical.koshaId && (
+                        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100">
+                            <p>
+                                {i18n.language === 'en'
+                                    ? 'KOSHA is a reference. The exact product manufacturer SDS and your institution rules take priority.'
+                                    : 'KOSHA는 참고자료입니다. 정확한 제품의 제조사 SDS와 소속 기관 규칙을 우선 확인하세요.'}
+                            </p>
+                            <a href={koshaReferenceUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex font-semibold underline">
+                                {i18n.language === 'en' ? 'Open official KOSHA page' : 'KOSHA 공식 페이지 열기'}
+                            </a>
+                        </div>
+                    )}
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-full space-y-4">
                             <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />

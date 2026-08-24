@@ -6,7 +6,6 @@ import { getJson } from './internalApi'
 export { parseKoshaPhDetail } from '../utils/koshaPh'
 
 const KOSHA_MSDS_SECTION_COUNT = 16
-const MSDS_CLIENT_CACHE_TTL_MS = 5 * 60 * 1000
 
 interface KoshaMsdsSectionResponse {
   sectionNumber: number
@@ -15,21 +14,19 @@ interface KoshaMsdsSectionResponse {
 }
 
 interface KoshaMsdsApiResponse {
+  mode?: 'full' | 'link_only'
+  officialUrl?: string
   sections?: KoshaMsdsSectionResponse[]
   missingSections?: number[]
 }
 
 export interface KoshaMsdsResult {
+  mode: 'full' | 'link_only'
+  officialUrl?: string
   sections: MsdsSection[]
   missingSections: number[]
 }
 
-interface CachedMsdsResult {
-  result: KoshaMsdsResult
-  expiresAt: number
-}
-
-const msdsResultCache = new Map<number, CachedMsdsResult>()
 const msdsPendingRequests = new Map<number, Promise<KoshaMsdsResult>>()
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
 
@@ -55,20 +52,12 @@ const msdsSectionNames = [
 /** Full MSDS is the only browser-facing KOSHA operation. It is still one
  * internal API request; identity and section 9 pH belong to enrichment. */
 export async function fetchKoshaMsds(chemId: number): Promise<KoshaMsdsResult> {
-  const cached = msdsResultCache.get(chemId)
-  if (cached && cached.expiresAt > Date.now()) return cached.result
-  if (cached) msdsResultCache.delete(chemId)
-
   const pending = msdsPendingRequests.get(chemId)
   if (pending) return pending
   const request = fetchKoshaMsdsDocument(chemId)
   msdsPendingRequests.set(chemId, request)
   try {
-    const result = await request
-    if (result.missingSections.length === 0) {
-      msdsResultCache.set(chemId, { result, expiresAt: Date.now() + MSDS_CLIENT_CACHE_TTL_MS })
-    }
-    return result
+    return await request
   } finally {
     msdsPendingRequests.delete(chemId)
   }
@@ -76,7 +65,18 @@ export async function fetchKoshaMsds(chemId: number): Promise<KoshaMsdsResult> {
 
 async function fetchKoshaMsdsDocument(chemId: number): Promise<KoshaMsdsResult> {
   const paddedId = String(chemId).padStart(6, '0')
-  const response = await getJson<KoshaMsdsApiResponse>(`/api/kosha/msds?chemId=${encodeURIComponent(paddedId)}`)
+  const response = await getJson<KoshaMsdsApiResponse>(
+    `/api/kosha/msds?chemId=${encodeURIComponent(paddedId)}&policy=20260824.1`,
+    { cache: 'no-store' },
+  )
+  if (response.mode === 'link_only') {
+    return {
+      mode: 'link_only',
+      officialUrl: response.officialUrl,
+      sections: [],
+      missingSections: Array.from({ length: KOSHA_MSDS_SECTION_COUNT }, (_, index) => index + 1),
+    }
+  }
   const responseSections = response.sections || []
   const missingSections = new Set(response.missingSections || [])
   const sections: MsdsSection[] = []
@@ -112,5 +112,10 @@ async function fetchKoshaMsdsDocument(chemId: number): Promise<KoshaMsdsResult> 
   for (let sectionNumber = 1; sectionNumber <= KOSHA_MSDS_SECTION_COUNT; sectionNumber += 1) {
     if (!responseSections.some((section) => section.sectionNumber === sectionNumber)) missingSections.add(sectionNumber)
   }
-  return { sections, missingSections: Array.from(missingSections).sort((left, right) => left - right) }
+  return {
+    mode: 'full',
+    officialUrl: response.officialUrl,
+    sections,
+    missingSections: Array.from(missingSections).sort((left, right) => left - right),
+  }
 }
