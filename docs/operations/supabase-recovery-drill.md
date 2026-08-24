@@ -21,22 +21,90 @@ Supabase의 자동 DB 백업은 Storage의 파일 본문을 포함하지 않고 
 다음 항목이 하나라도 충족되지 않으면 프로젝트를 만들거나 운영 DB를 읽지 않습니다.
 
 - [x] 2026-08-24 23:32 KST 기준 대상 Supabase 조직의 현재 구성원 1명, 역할 `Owner`, 권한 범위 `organization-scoped`를 읽기 전용으로 확인했고 사용자가 해당 구성원의 BurilLab 운영 데이터 열람 권한을 명시 확인함; 공개 문서에 이메일·조직 ID 미기록
-- [ ] Supabase가 표시하는 프로젝트 비용 계약을 사용자가 명시적으로 확인함
+- [ ] Supabase가 표시하는 프로젝트 비용 계약을 사용자가 명시적으로 확인하고 별도 확인 ID를 발급함
 - [ ] 같은 지역, Micro, 24시간 안에 삭제라는 조건을 확인함
 - [ ] 생성 전 예상 Compute 비용이 1달러 이하임을 다시 확인함
 - [ ] 운영의 가장 최근 사용 가능한 백업 시각과 일일 백업 상태를 확인함
 - [ ] 작업자가 Supabase·GitHub·Cloudflare 계정 MFA를 사용함
-- [ ] PowerShell 7, Supabase CLI `2.115.0`, Docker Desktop, 호환되는 `psql`이 실제로 실행됨
-- [ ] 복구 파일을 둘 암호화된 로컬 임시 디렉터리의 절대경로와 작업 종료 시 안전하게 지울 방법을 준비함
+- [ ] PowerShell 7, Supabase CLI `2.115.0`, Docker Desktop 서버, target PostgreSQL보다 오래되지 않은 `psql`이 실제로 실행됨
+- [ ] 복구 파일을 둘 BitLocker 보호 로컬 임시 디렉터리의 절대경로와 작업 종료 시 안전하게 지울 방법을 준비함
 - [ ] 임시 디렉터리의 정규화된 절대경로가 저장소·OneDrive·다른 동기화 폴더 아래가 아님
 - [ ] 운영과 다른 Supabase 키, URL, 저장소, Redis, KV만 사용하도록 확인함
 - [ ] 외부 메일·예약 작업·삭제 worker·웹훅을 켜지 않는다는 확인문구를 기록함
 - [ ] 논리 덤프와 R2 파일을 같은 복구 시점으로 맞추기 위한 짧은 운영 쓰기·사진 업로드·삭제 중단 창을 별도로 승인받음
-- [ ] 쓰기 중단 후 생성된 최근 시약장 파일의 완전한 R2 manifest와 실제 파일 본문이 존재함
+- [ ] 최근 시약장 파일의 R2 `latest → complete → manifest → manifest.sha256` 연결과 실제 파일 본문이 존재함
+- [ ] 아래 로컬 전용 자동 사전점검이 통과함
 
 조직 접근자 확인은 시점 증거입니다. 임시 프로젝트 생성 직전에 구성원 수·역할·권한 범위가 그대로인지 읽기 전용으로 다시 확인하고, 달라졌으면 이 항목을 다시 미완료로 돌린 뒤 프로젝트 생성과 운영 DB 읽기를 중단합니다.
 
 비용 확인 API가 월 단위 금액을 표시하면 시간당 예상액보다 큰 그 표시값을 사용자에게 먼저 알립니다. 승인 전에는 `confirm_cost`나 프로젝트 생성 호출을 하지 않습니다.
+
+### 2026-08-25 읽기 전용 확인 현황
+
+다음은 준비 상태를 파악하기 위한 시점 정보이며, 빈 체크박스를 닫거나 복구훈련 완료를 뜻하지 않습니다.
+
+- 운영 프로젝트는 `ACTIVE_HEALTHY`, 지역 `us-east-2`, PostgreSQL `17.6`으로 확인됨
+- 일일 백업이 켜져 있고 2026-08-24 08:40:29 UTC가 가장 최근이며 8개 복구 지점이 보임; Storage 파일 본문은 포함되지 않음
+- 프로젝트 생성 비용 화면/API의 월 표시액은 10달러였지만 사용자 비용 확인 ID는 아직 없음
+- 로컬 PowerShell `7.6.4`와 Supabase CLI `2.115.0`은 확인됐지만 Docker Desktop 서버와 `psql`은 아직 실행할 수 없음
+- 최근 production R2 `complete` manifest 증거가 아직 없음
+
+따라서 현재는 자동 사전점검이 의도대로 실패해야 합니다. 비용 확인 ID, Docker·`psql`, 암호화 작업 디렉터리, target 프로젝트 메타데이터, R2 완료 증거가 모두 생기기 전에는 프로젝트 생성 이후의 운영 DB 읽기나 덤프 단계로 넘어가지 않습니다.
+
+## 0. 로컬 전용 자동 사전점검
+
+`scripts/verify-supabase-recovery-preflight.mjs`는 원격 API를 호출하지 않고 다음 자료만 확인합니다.
+
+- 명령행에서 다시 지정한 source·target ref와 로컬 증거의 ref가 글자 단위로 같은지, target이 기존 Staging ref와 다른지
+- source·target 지역이 같고 target 크기가 정확히 `MICRO`인지
+- 월 표시액, 실제 Compute 상한 1달러, 24시간 내 삭제 조건을 묶은 사용자 확인 ID와 확인문구가 있는지
+- 일일 DB 백업이 켜져 있고 Storage 본문이 제외된다는 사실을 기록했는지
+- 작업 디렉터리가 저장소·OneDrive·기타 알려진 동기화 경로 밖에 있으며 실제 BitLocker 상태가 `protected`인지
+- PowerShell 7+, Supabase CLI `2.115.0`, 실행 중인 Docker Desktop 서버, target PostgreSQL major 이상인 `psql`인지
+- 메일·예약 작업·삭제 worker·웹훅·외부 API·Realtime publication·maintenance worker가 모두 명시적으로 `false`인지
+- production R2의 `control/latest.json`, `complete.json`, `manifest.json`, `manifest.sha256`가 같은 snapshot·환경·해시·개수·바이트 합계로 이어지고 26시간 이내인지
+
+이 도구는 프로젝트 생성·삭제, 원격 DB 조회, `db dump`, 복원, R2 원격 조회나 배포 명령을 가지고 있지 않습니다. 검사 입력 파일도 모두 BitLocker 작업 디렉터리 안의 일반 파일이어야 하며, 비밀번호·토큰·서비스 역할 키처럼 보이는 필드가 있으면 거부합니다.
+
+필수 로컬 증거 JSON은 다음 항목을 정확히 가집니다. ref, 시각, 확인 ID는 공개 저장소에 넣지 않습니다.
+
+| 묶음 | 필수 내용 |
+|---|---|
+| `source` | `projectRef`, `health=ACTIVE_HEALTHY`, `region`, `postgresVersion` |
+| `target` | `projectRef`, 같은 `region`, `computeSize=MICRO`, `postgresVersion` |
+| `cost` | `displayedMonthlyUsd`, `actualComputeCapUsd=1`, `deleteWithinHours=24`, `confirmationId`, `confirmedAt`, 정확한 `confirmation` |
+| `databaseBackup` | `dailyEnabled=true`, 최근 확인·백업 시각, 보이는 복구 지점 수, `storageBodiesIncluded=false` |
+| `workDirectory` | 절대경로, `encryptionProvider=bitlocker`, `encryptionStatus=protected`, 최근 확인 시각 |
+| `isolation` | 모든 `*Enabled=false`, target ref를 포함한 정확한 `confirmation` |
+| `r2` | `environment=production`, `storageBucket=cabinets`, `maxSnapshotAgeHours=26` |
+
+비용 확인문구 형식은 아래와 같습니다. `<confirmation-id>`와 `<displayed-usd>`는 같은 JSON의 값과 정확히 일치해야 합니다.
+
+```text
+CONFIRM RECOVERY COST <confirmation-id> DISPLAY_USD_<displayed-usd> ACTUAL_COMPUTE_CAP_USD_1 DELETE_WITHIN_24H
+```
+
+격리 확인문구는 target ref가 정해진 뒤 아래 형식으로 기록합니다.
+
+```text
+CONFIRM RECOVERY ISOLATION <target-ref> ALL_EXTERNAL_CALLS_AND_SCHEDULERS_OFF
+```
+
+R2 Worker가 내려놓는 로컬 증거는 원격 키 구조를 그대로 유지합니다. `latest`는 `complete`를, `complete`는 `manifest`와 그 원문 SHA-256을 가리켜야 합니다. `complete`가 없거나 object 수가 0이거나 manifest의 각 본문 백업 키·크기·SHA-256을 확인할 수 없으면 실패합니다.
+
+```powershell
+npm run ops:recovery-preflight -- `
+  --evidence "$env:BURILLAB_RECOVERY_WORK_DIR\preflight.json" `
+  --source-ref $env:BURILLAB_SOURCE_PROJECT_REF `
+  --staging-ref $env:BURILLAB_STAGING_PROJECT_REF `
+  --target-ref $env:BURILLAB_RECOVERY_PROJECT_REF `
+  --r2-latest "$env:BURILLAB_RECOVERY_WORK_DIR\r2\latest.json" `
+  --r2-complete "$env:BURILLAB_RECOVERY_WORK_DIR\r2\complete.json" `
+  --r2-manifest "$env:BURILLAB_RECOVERY_WORK_DIR\r2\manifest.json" `
+  --r2-manifest-sha256 "$env:BURILLAB_RECOVERY_WORK_DIR\r2\manifest.sha256"
+```
+
+성공 출력에는 경로·ref·확인 ID·원본 manifest를 넣지 않습니다. 실패 메시지는 어떤 조건이 닫히지 않았는지만 알리고 비밀값이나 원본 자료를 출력하지 않습니다.
 
 ## 1. 시작 증거
 
