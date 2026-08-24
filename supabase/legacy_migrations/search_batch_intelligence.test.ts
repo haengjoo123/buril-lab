@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest'
 const migration = readFileSync(
   new URL('./20260823085224_search_batch_intelligence.sql', import.meta.url),
   'utf8',
-)
+).replace(/\r\n/g, '\n')
 const hardeningMigration = readFileSync(
   new URL('./20260823100604_harden_search_analytics_server_only_policies.sql', import.meta.url),
   'utf8',
-)
+).replace(/\r\n/g, '\n')
 
 describe('search and finalized-batch intelligence migration', () => {
   it('keeps raw analytics server-only behind RLS and revoked browser grants', () => {
