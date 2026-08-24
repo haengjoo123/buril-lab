@@ -42,7 +42,7 @@ function verifyWranglerConfig(config, {
     throw new Error(`${name} must enable nodejs_compat.`)
   }
   if ('keep_vars' in config || 'secrets' in config) {
-    throw new Error(`${name} contains Wrangler Worker-only keys that Pages rejects.`)
+    throw new Error(`${name} contains Wrangler keys that Pages does not support.`)
   }
   if (config.send_metrics !== false) {
     throw new Error(`${name} Wrangler telemetry policy is invalid.`)

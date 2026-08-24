@@ -1210,7 +1210,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       expect(() => verifyReleaseConfiguration({
         ...configuration,
         productionRaw: JSON.stringify(invalidProduction),
-      })).toThrow(/Worker-only keys that Pages rejects/)
+      })).toThrow(/Wrangler keys that Pages does not support/)
     }
 
     const oneQualityVerification = productionWorkflow.replace(
