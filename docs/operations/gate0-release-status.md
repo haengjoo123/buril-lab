@@ -1,6 +1,6 @@
 # Gate 0 운영 배포 상태
 
-기준 시각: 2026-08-24 19:27 KST
+기준 시각: 2026-08-24 20:03 KST
 
 이 문서는 코드 준비, 외부 통제, 실제 훈련, 운영 배포를 구분합니다. 체크되지 않은 관문은 완료로 해석하지 않습니다.
 
@@ -16,7 +16,7 @@
 
 - 기준 커밋: `bf8dcc726061f0e89bc8fbf39e63e1db8e90e2b2`
 - 운영 후보 브랜치: `codex/ops-hardening`
-- 현재 검증 기준 커밋: `ee6b6518095fc4d73cc262187fb9c5e81775bca6`
+- 현재 검증 기준: PR #4 최신 SHA의 성공한 `Quality and security` 실행
 - Pull Request: [#4](https://github.com/haengjoo123/buril-lab/pull/4)
 - 전체 후속 구현 보존 커밋: `3b30751bc24ae955be6ab2abb73ff75d30178ec0`
 - 전체 후속 구현 보존 커밋은 운영 배포 대상이 아닙니다.
@@ -36,7 +36,7 @@
 - [x] Cloudflare API의 전체 SHA, deployment UUID, 고유 URL을 함께 검증하도록 구현
 - [x] `release:verify`는 유료 출시 차단 상태 유지, `ops:verify`를 별도 제공
 
-검증 기준 커밋의 GitHub Actions run `32715784729`에서 네 필수 검사가 모두 통과했습니다. 해당 시점의 Vitest는 570개 통과, 7개 제외입니다. 계획 작성 당시의 781개 수치는 현재 Gate 0 릴리스 조각과 시험 구성이 달라 동일한 분모로 주장하지 않습니다. 후속 전체 snapshot에서는 861개 통과, 7개 제외였지만 운영 후보 증거로 사용하지 않습니다.
+PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해야 이 문서의 검증 기준을 만족합니다. 현재 Gate 0 후보의 Vitest는 583개 통과, 7개 제외입니다. 계획 작성 당시의 781개 수치는 현재 Gate 0 릴리스 조각과 시험 구성이 달라 동일한 분모로 주장하지 않습니다. 후속 전체 snapshot에서는 861개 통과, 7개 제외였지만 운영 후보 증거로 사용하지 않습니다.
 
 보안 권고 exact baseline 변경이 추가되면 PR 최신 SHA에서 네 필수 검사를 다시 통과해야 합니다. 이전 run의 성공만으로 새 SHA를 배포하지 않습니다.
 
@@ -51,7 +51,8 @@
 - [x] 실제 Chromium Gate 0 흐름 통과: 로그인→연구실→재고 검색→폐액 배치 검토→화면 버튼 기록→기록 목록→직접 링크
 - [x] 브라우저 시험 중 외부 화학정보 보강 요청 0건 확인
 - [x] seed는 loopback DB만 허용하고 원격 URL을 client 생성 전에 거부
-- [ ] 운영·Staging Supabase Security Advisor의 정확한 허용 목록을 PR 최신 SHA에 고정하고 hosted 검사 통과
+- [x] 운영 53건·Staging 50건의 Security Advisor 종류·대상·역할 권한을 정확한 기준선으로 고정하고 정적 검사 및 Supabase 플러그인 읽기 전용 대조 완료
+- [ ] GitHub environment별 Supabase 비밀값을 등록하고 `main`의 hosted Advisor 검사 통과
 
 ## 완료한 외부 통제
 
@@ -89,7 +90,7 @@ Security Advisor는 운영 53건, Staging 50건을 읽기 전용으로 확인했
 
 ## 아직 닫지 않은 항목
 
-- [ ] PR 최신 SHA의 네 필수 품질검사 성공
+- [x] PR 최신 SHA의 네 필수 품질검사 성공
 - [ ] Cloudflare Access로 `staging.burillab.com`, `buril-lab-staging.pages.dev`, `*.buril-lab-staging.pages.dev`를 각각 보호
 - [ ] 운영과 다른 Staging Upstash 준비
 - [ ] GitHub environment별 Pages·Supabase·KV·Access 비밀값 등록
