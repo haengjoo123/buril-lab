@@ -16,15 +16,18 @@ export const GATE0_ISOLATION_EVIDENCE_KEYS = Object.freeze([
   'fixturePoliciesOutsideReservedPolicy',
   'otherPoliciesInsideReservedLab',
   'fixtureInventoryOutsideReservedLab',
-  'otherInventoryInsideReservedLab',
-  'fixtureStorageLocationsOutsideReservedLab',
-  'otherStorageLocationsInsideReservedLab',
+  'unexpectedInventoryInsideReservedLab',
+  'fixtureStorageLocationsInOtherLabs',
+  'unexpectedStorageLocationsInsideReservedLab',
   'fixtureCabinetsOutsideReservedLab',
-  'otherCabinetsInsideReservedLab',
+  'unexpectedCabinetsInsideReservedLab',
   'fixtureWasteLogsOutsideReservedLab',
   'otherWasteLogsInsideReservedLab',
   'fixtureOverridesOutsideReservedLab',
-  'otherOverridesInsideReservedLab',
+  'unexpectedOverridesInsideReservedLab',
+  'unexpectedPolicyStreamsInsideReservedPolicy',
+  'safetyCenterLabLinksInsideReservedLab',
+  'safetyCenterRequestsInsideReservedLab',
 ])
 
 function normalizedEmail(value) {
@@ -56,7 +59,7 @@ export function verifyExistingFixtureOwnership({
   }
 
   if (user.user_metadata?.synthetic !== true) {
-    throw new Error('Gate0 seed refuses to delete a non-synthetic user with the fixture email.')
+    throw new Error('Gate0 seed refuses a non-synthetic user with the fixture email.')
   }
   const hasReservedOwnerMarker = (
     user.app_metadata?.synthetic === true
@@ -64,7 +67,7 @@ export function verifyExistingFixtureOwnership({
     && user.app_metadata?.gate0_lab_id === GATE0_RESERVED_LAB_ID
   )
   if (!hasReservedOwnerMarker) {
-    throw new Error('Gate0 seed refuses automatic deletion without the trusted reserved app_metadata owner marker; review and run convert-gate0-legacy-owner.mjs manually if this is an approved legacy fixture.')
+    throw new Error('Gate0 seed refuses automatic fixture reuse without the trusted reserved app_metadata owner marker; review and run convert-gate0-legacy-owner.mjs manually if this is an approved legacy fixture.')
   }
   if (lab) {
     if (lab.id !== GATE0_RESERVED_LAB_ID || lab.created_by !== user.id) {
