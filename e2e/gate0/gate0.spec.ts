@@ -16,7 +16,7 @@ test('login → lab → inventory search → reviewed waste record → direct li
     window.localStorage.setItem('i18nextLng', 'ko')
     // Support the versioned Gate0 contract and the pre-Gate0 local snapshot.
     window.localStorage.setItem('buril:safety-acknowledgement', JSON.stringify({
-      version: '2026-08-24.2',
+      version: '2026-08-24.1',
       acknowledgedAt: '2026-08-24T00:00:00.000Z',
     }))
     window.localStorage.setItem('buril-safety-acknowledged', 'true')

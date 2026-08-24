@@ -198,6 +198,58 @@ jobs:
         if: steps.browser-contract.outputs.enabled != 'true'
         run: echo "Gate 0 browser artifacts are not integrated yet; no browser was installed or started."
 
+      - name: Set up Supabase CLI
+        if: steps.browser-contract.outputs.enabled == 'true'
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+
+      - name: Start isolated local Supabase
+        if: steps.browser-contract.outputs.enabled == 'true'
+        run: supabase start
+
+      - name: Export only loopback Supabase credentials
+        if: steps.browser-contract.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          eval "$(supabase status -o env)"
+          case "$API_URL" in
+            http://127.0.0.1:*|http://localhost:*) ;;
+            *) echo "Gate 0 E2E refused non-loopback Supabase: $API_URL" >&2; exit 1 ;;
+          esac
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "VITE_SUPABASE_URL=$API_URL"
+            echo "VITE_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "VITE_PUBLIC_APP_URL=http://127.0.0.1:4173"
+            echo "VITE_INTERNAL_API_BASE_URL=http://127.0.0.1:4173"
+            echo "VITE_AUTH_REDIRECT_URL=http://127.0.0.1:4173/auth/callback"
+            echo "VITE_ENABLE_WASTE_V2=true"
+            echo "VITE_ENABLE_CHEMICAL_ENRICHMENT=false"
+            echo "VITE_ENABLE_SEARCH_ANALYTICS=false"
+            echo "VITE_ENABLE_PH_PREDICTION=false"
+          } >> "$GITHUB_ENV"
+
+      - name: Prove the synthetic seed rejects remote databases
+        if: steps.browser-contract.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          if SUPABASE_URL="https://project.supabase.co" \
+            SUPABASE_SERVICE_ROLE_KEY="local-test-placeholder" \
+            node scripts/seed-gate0-e2e.mjs; then
+            echo "Gate 0 seed accepted a remote Supabase URL" >&2
+            exit 1
+          fi
+
+      - name: Seed the synthetic Gate 0 lab
+        if: steps.browser-contract.outputs.enabled == 'true'
+        run: node scripts/seed-gate0-e2e.mjs
+
+      - name: Build against the isolated local stack
+        if: steps.browser-contract.outputs.enabled == 'true'
+        run: npm run build
+
       - name: Install Chromium
         if: steps.browser-contract.outputs.enabled == 'true'
         run: npx playwright install --with-deps chromium
@@ -209,3 +261,7 @@ jobs:
       - name: Run only the reviewed Gate 0 browser flow
         if: steps.browser-contract.outputs.enabled == 'true'
         run: npm run test:e2e:gate0
+
+      - name: Stop isolated local Supabase
+        if: always() && steps.browser-contract.outputs.enabled == 'true'
+        run: supabase stop --no-backup
