@@ -1457,6 +1457,23 @@ describe('Prep 0 Cloudflare release controls', () => {
     }
     expect(verifyReleaseConfiguration(configuration)).toMatchObject({ projectCount: 2 })
 
+    const missingStorageBackupCheck = qualityWorkflow.replace(
+      'run: npm run storage-backup:check',
+      'run: npm run cloudflare:verify',
+    )
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: { ...configuration.workflows, quality: missingStorageBackupCheck },
+    })).toThrow(/storage backup contract exactly once/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        production: `${productionWorkflow}\n# storage-backup`,
+      },
+    })).toThrow(/deployment workflows contain deferred scope: storage-backup/)
+
     for (const unsupported of ['keep_vars', 'secrets']) {
       const invalidProduction = JSON.parse(productionRaw)
       invalidProduction[unsupported] = unsupported === 'keep_vars'

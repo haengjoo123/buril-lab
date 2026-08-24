@@ -3,6 +3,8 @@ const SOURCE_BUCKET = 'cabinets'
 const LOCK_KEY = 'control/active-lock.json'
 const LATEST_KEY = 'control/latest.json'
 const SNAPSHOT_SCHEMA_VERSION = 1
+const CLEANUP_SUBREQUEST_RESERVE = 2
+const FREE_PLATFORM_SUBREQUEST_LIMIT = 50
 
 const ENVIRONMENT_CONTRACT = Object.freeze({
   staging: Object.freeze({
@@ -17,13 +19,17 @@ const ENVIRONMENT_CONTRACT = Object.freeze({
 
 export type BackupEnvironmentName = keyof typeof ENVIRONMENT_CONTRACT
 export type SourcePointerMode = 'legacy_url' | 'private_path'
+export type WorkersUsagePlan = 'free_off_only' | 'paid'
 
 export type BackupCode =
   | 'backup_completed'
+  | 'backup_completed_with_quarantine'
   | 'backup_disabled'
   | 'backup_locked'
+  | 'backup_locked_extended'
   | 'config_invalid'
   | 'empty_source'
+  | 'execution_deadline_exceeded'
   | 'flag_disabled_before_complete'
   | 'lock_acquire_failed'
   | 'lock_invalid'
@@ -43,17 +49,19 @@ export type BackupCode =
   | 'source_drift'
   | 'source_http_rejected'
   | 'source_limit_exceeded'
-  | 'source_orphan_object'
   | 'source_request_failed'
   | 'source_retry_exhausted'
   | 'source_timeout'
+  | 'subrequest_budget_exceeded'
   | 'unexpected_failure'
+  | 'workers_paid_plan_required'
 
 export interface SafeLogEntry {
   code: BackupCode
   count: number
   bytes: number
   durationMs: number
+  orphanCount: number
 }
 
 export interface BackupRunResult extends SafeLogEntry {
@@ -107,6 +115,8 @@ export interface StorageBackupBindings {
   SOURCE_POINTER_MODE?: string
   SOURCE_STORAGE_BUCKET?: string
   SUPABASE_SERVICE_ROLE_KEY?: string
+  WORKERS_SUBREQUEST_LIMIT?: string
+  WORKERS_USAGE_PLAN?: string
 }
 
 export interface BackupLimits {
@@ -124,24 +134,35 @@ export interface BackupLimits {
   retryCount: number
   retryDelayMs: number
   lockTtlMs: number
+  maxLockClockSkewMs: number
+  maxRunDurationMs: number
+  maxSubrequests: number
 }
 
-const DEFAULT_LIMITS: Readonly<BackupLimits> = Object.freeze({
+export const STORAGE_BACKUP_LIMITS: Readonly<BackupLimits> = Object.freeze({
   dbPageSize: 100,
   storagePageSize: 100,
-  maxDbPages: 100,
-  maxStoragePages: 1_000,
-  maxStorageDepth: 12,
-  maxPointers: 5_000,
-  maxStorageObjects: 5_000,
+  maxDbPages: 5,
+  maxStoragePages: 25,
+  maxStorageDepth: 8,
+  maxPointers: 50,
+  maxStorageObjects: 50,
   maxJsonBytes: 1_048_576,
   maxObjectBytes: 20 * 1_048_576,
   maxTotalBytes: 2 * 1_073_741_824,
-  requestTimeoutMs: 20_000,
+  requestTimeoutMs: 5_000,
   retryCount: 2,
   retryDelayMs: 150,
   lockTtlMs: 30 * 60_000,
+  maxLockClockSkewMs: 60_000,
+  maxRunDurationMs: 14 * 60_000,
+  maxSubrequests: 700,
 })
+
+interface RunGuard {
+  deadlineAt: number
+  subrequests: number
+}
 
 interface BackupDependencies {
   fetch: typeof fetch
@@ -150,6 +171,7 @@ interface BackupDependencies {
   sleep: (milliseconds: number) => Promise<void>
   log: (entry: SafeLogEntry) => void
   limits: BackupLimits
+  guard: RunGuard
 }
 
 export interface BackupDependencyOverrides {
@@ -169,6 +191,7 @@ interface SourceConfig {
   serviceRoleKey: string
   runtimeConfig: RuntimeConfigKv
   r2: BackupR2Bucket
+  workersUsagePlan: WorkersUsagePlan
 }
 
 interface CabinetPointer {
@@ -188,7 +211,8 @@ interface StorageObject {
 
 interface BackupPlanEntry {
   object: StorageObject
-  ownerScope: 'lab' | 'user'
+  classification: 'referenced' | 'unreferenced'
+  ownerScope?: 'lab' | 'user'
 }
 
 interface BackedObject {
@@ -196,7 +220,8 @@ interface BackedObject {
   backupKey: string
   bytes: number
   sha256: string
-  ownerScope: 'lab' | 'user'
+  classification: 'referenced' | 'unreferenced'
+  ownerScope?: 'lab' | 'user'
   contentType: string
 }
 
@@ -208,6 +233,15 @@ interface DownloadedObject {
 interface LockLease {
   etag: string
   token: string
+  acquiredAt: string
+  expiresAt: string
+}
+
+type LockSkipCode = 'backup_locked' | 'backup_locked_extended'
+
+interface LockAcquisition {
+  lease: LockLease | null
+  skipCode?: LockSkipCode
 }
 
 class BackupFailure extends Error {
@@ -253,8 +287,12 @@ function createDefaultDependencies(overrides: BackupDependencyOverrides): Backup
       console.log(JSON.stringify(entry))
     }),
     limits: {
-      ...DEFAULT_LIMITS,
+      ...STORAGE_BACKUP_LIMITS,
       ...overrides.limits,
+    },
+    guard: {
+      deadlineAt: 0,
+      subrequests: 0,
     },
   }
 }
@@ -274,6 +312,7 @@ function createRunResult(
   startedAt: number,
   count = 0,
   bytes = 0,
+  orphanCount = 0,
 ): BackupRunResult {
   return {
     status,
@@ -281,6 +320,7 @@ function createRunResult(
     count,
     bytes,
     durationMs: Math.max(0, Math.round(dependencies.now() - startedAt)),
+    orphanCount,
   } satisfies BackupRunResult
 }
 
@@ -293,16 +333,69 @@ function emitRunResult(
     count: result.count,
     bytes: result.bytes,
     durationMs: result.durationMs,
+    orphanCount: result.orphanCount,
   })
   return result
 }
 
+export function calculateWorstCaseSubrequests(limits: BackupLimits): number {
+  const attempts = limits.retryCount + 1
+  const sourceRequests = (
+    (2 * limits.maxDbPages)
+    + (3 * limits.maxStoragePages)
+    + limits.maxPointers
+  ) * attempts
+  const runtimeFlagReads = limits.maxPointers + 5
+  const r2Requests = (3 * limits.maxStorageObjects) + 15
+  return sourceRequests + runtimeFlagReads + r2Requests
+}
+
 function isValidLimits(limits: BackupLimits): boolean {
+  const worstCaseSubrequests = calculateWorstCaseSubrequests(limits)
+  const maximumPossibleBytes = limits.maxObjectBytes * limits.maxStorageObjects
   return Object.values(limits).every((value) => Number.isSafeInteger(value) && value > 0)
+    && Number.isSafeInteger(worstCaseSubrequests)
+    && Number.isSafeInteger(maximumPossibleBytes)
     && limits.dbPageSize <= 1_000
     && limits.storagePageSize <= 1_000
+    && limits.maxDbPages <= 10
+    && limits.maxStoragePages <= 50
+    && limits.maxPointers === limits.maxStorageObjects
+    && limits.maxPointers <= 100
     && limits.retryCount <= 5
     && limits.maxObjectBytes <= limits.maxTotalBytes
+    && maximumPossibleBytes <= limits.maxTotalBytes
+    && limits.maxRunDurationMs <= 15 * 60_000
+    && limits.lockTtlMs >= limits.maxRunDurationMs + limits.maxLockClockSkewMs
+    && limits.requestTimeoutMs * (limits.retryCount + 1) < limits.maxRunDurationMs
+    && limits.maxSubrequests <= 10_000
+    && worstCaseSubrequests <= limits.maxSubrequests
+}
+
+function startRunGuard(
+  dependencies: BackupDependencies,
+  startedAt: number,
+): void {
+  const deadlineAt = startedAt + dependencies.limits.maxRunDurationMs
+  if (!Number.isFinite(startedAt) || !Number.isSafeInteger(deadlineAt)) fail('config_invalid')
+  dependencies.guard.deadlineAt = deadlineAt
+  dependencies.guard.subrequests = 0
+}
+
+function consumeSubrequest(
+  dependencies: BackupDependencies,
+  allowAfterDeadline = false,
+): void {
+  if (!allowAfterDeadline && dependencies.now() >= dependencies.guard.deadlineAt) {
+    fail('execution_deadline_exceeded')
+  }
+  const availableLimit = allowAfterDeadline
+    ? dependencies.limits.maxSubrequests
+    : dependencies.limits.maxSubrequests - CLEANUP_SUBREQUEST_RESERVE
+  if (dependencies.guard.subrequests >= availableLimit) {
+    fail('subrequest_budget_exceeded')
+  }
+  dependencies.guard.subrequests += 1
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -321,9 +414,16 @@ function hasSafeSecretShape(value: string | undefined): value is string {
     && !hasControlCharacters(value)
 }
 
+function parsePlatformSubrequestLimit(value: string | undefined): number {
+  if (typeof value !== 'string' || !/^[1-9][0-9]{0,7}$/.test(value)) fail('config_invalid')
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || String(parsed) !== value) fail('config_invalid')
+  return parsed
+}
+
 export function resolveSourceConfig(
   bindings: StorageBackupBindings,
-  limits: BackupLimits = { ...DEFAULT_LIMITS },
+  limits: BackupLimits = { ...STORAGE_BACKUP_LIMITS },
 ): SourceConfig {
   const environment = bindings.BACKUP_ENVIRONMENT
   if (environment !== 'staging' && environment !== 'production') fail('config_invalid')
@@ -366,6 +466,22 @@ export function resolveSourceConfig(
     fail('config_invalid')
   }
 
+  const workersUsagePlan = bindings.WORKERS_USAGE_PLAN
+  if (workersUsagePlan !== 'free_off_only' && workersUsagePlan !== 'paid') fail('config_invalid')
+  const platformSubrequestLimit = parsePlatformSubrequestLimit(bindings.WORKERS_SUBREQUEST_LIMIT)
+  if (
+    (workersUsagePlan === 'free_off_only' && platformSubrequestLimit !== FREE_PLATFORM_SUBREQUEST_LIMIT)
+    || (
+      workersUsagePlan === 'paid'
+      && (
+        platformSubrequestLimit !== limits.maxSubrequests
+        || calculateWorstCaseSubrequests(limits) > platformSubrequestLimit
+      )
+    )
+  ) {
+    fail('config_invalid')
+  }
+
   return {
     environment,
     origin: expected.origin,
@@ -374,6 +490,7 @@ export function resolveSourceConfig(
     serviceRoleKey: bindings.SUPABASE_SERVICE_ROLE_KEY,
     runtimeConfig: bindings.BURILLAB_RUNTIME_CONFIG,
     r2: bindings.CABINET_BACKUPS,
+    workersUsagePlan,
   }
 }
 
@@ -383,6 +500,23 @@ export async function isStorageBackupEnabled(namespace: RuntimeConfigKv): Promis
     return isRecord(value) && value.storage_backup_enabled === true
   } catch {
     return false
+  }
+}
+
+async function readStorageBackupEnabled(
+  config: SourceConfig,
+  dependencies: BackupDependencies,
+): Promise<boolean> {
+  consumeSubrequest(dependencies)
+  return isStorageBackupEnabled(config.runtimeConfig)
+}
+
+async function requireStorageBackupEnabled(
+  config: SourceConfig,
+  dependencies: BackupDependencies,
+): Promise<void> {
+  if (!await readStorageBackupEnabled(config, dependencies)) {
+    fail('flag_disabled_before_complete')
   }
 }
 
@@ -554,7 +688,12 @@ async function requestWithRetry<T>(
     }, dependencies.limits.requestTimeoutMs)
 
     try {
-      const response = await dependencies.fetch(url, { ...init, signal: controller.signal })
+      consumeSubrequest(dependencies)
+      const response = await dependencies.fetch(url, {
+        ...init,
+        redirect: 'error',
+        signal: controller.signal,
+      })
       if (response.status === 429 || response.status >= 500) {
         lastCode = 'source_retry_exhausted'
         await discardResponse(response)
@@ -611,7 +750,7 @@ function parseCabinetRow(
   value: unknown,
   pointerMode: SourcePointerMode,
   origin: string,
-): CabinetPointer {
+): CabinetPointer | null {
   if (!isRecord(value)) fail('source_contract_invalid')
   const pointerColumn = pointerMode === 'legacy_url' ? 'image_url' : 'image_path'
   if (
@@ -622,6 +761,8 @@ function parseCabinetRow(
   ) {
     fail('source_contract_invalid')
   }
+
+  if (value[pointerColumn] === '') return null
 
   return {
     cabinetId: value.id,
@@ -652,10 +793,12 @@ async function listCabinetPointers(
     if (!Array.isArray(raw) || raw.length > dependencies.limits.dbPageSize) fail('source_contract_invalid')
 
     for (const item of raw) {
+      if (!isRecord(item) || !isUuid(item.id)) fail('source_contract_invalid')
+      if (ids.has(item.id)) fail('source_drift')
+      ids.add(item.id)
       const row = parseCabinetRow(item, config.pointerMode, config.origin)
-      if (ids.has(row.cabinetId)) fail('source_drift')
+      if (!row) continue
       if (paths.has(row.objectPath)) fail('pointer_duplicate')
-      ids.add(row.cabinetId)
       paths.add(row.objectPath)
       rows.push(row)
       if (rows.length > dependencies.limits.maxPointers) fail('source_limit_exceeded')
@@ -696,12 +839,14 @@ function parseStorageObject(value: Record<string, unknown>, path: string): Stora
   if (!Number.isSafeInteger(size) || (size as number) < 0) fail('source_contract_invalid')
   const updatedAt = value.updated_at
   if (!Number.isFinite(Date.parse(updatedAt))) fail('source_contract_invalid')
+  const etag = normalizeEtag(value.metadata.eTag ?? value.metadata.etag)
+  if (!etag) fail('source_contract_invalid')
 
   return {
     id: value.id,
     path,
     size: size as number,
-    etag: normalizeEtag(value.metadata.eTag ?? value.metadata.etag),
+    etag,
     updatedAt,
   }
 }
@@ -713,6 +858,7 @@ async function listStorageObjects(
   const endpoint = `${config.origin}/storage/v1/object/list/${SOURCE_BUCKET}`
   const queue: Array<{ prefix: string; depth: number }> = [{ prefix: '', depth: 0 }]
   const visitedPrefixes = new Set<string>()
+  const objectIds = new Set<string>()
   const objectPaths = new Set<string>()
   const objects: StorageObject[] = []
   let pageCount = 0
@@ -756,7 +902,9 @@ async function listStorageObjects(
           continue
         }
 
-        if (objectPaths.has(fullPath)) fail('source_drift')
+        if (!isUuid(item.id)) fail('source_contract_invalid')
+        if (objectIds.has(item.id) || objectPaths.has(fullPath)) fail('source_drift')
+        objectIds.add(item.id)
         objectPaths.add(fullPath)
         objects.push(parseStorageObject(item, fullPath))
         if (objects.length > dependencies.limits.maxStorageObjects) fail('source_limit_exceeded')
@@ -792,7 +940,7 @@ function buildBackupPlan(
   pointers: CabinetPointer[],
   objects: StorageObject[],
 ): BackupPlanEntry[] {
-  if (pointers.length === 0 || objects.length === 0) fail('empty_source')
+  if (objects.length === 0) fail('empty_source')
   const storageByPath = new Map(objects.map((object) => [object.path, object]))
   const referenced = new Set<string>()
   const plan: BackupPlanEntry[] = []
@@ -800,14 +948,22 @@ function buildBackupPlan(
   for (const pointer of pointers) {
     const hasLab = pointer.labId !== null
     const hasUser = pointer.userId !== null
-    if (hasLab === hasUser) fail('ownership_ambiguous')
+    if (!hasLab && !hasUser) fail('ownership_ambiguous')
     const object = storageByPath.get(pointer.objectPath)
     if (!object) fail('pointer_missing_object')
     referenced.add(pointer.objectPath)
-    plan.push({ object, ownerScope: hasLab ? 'lab' : 'user' })
+    plan.push({
+      object,
+      classification: 'referenced',
+      ownerScope: hasLab ? 'lab' : 'user',
+    })
   }
 
-  if (objects.some((object) => !referenced.has(object.path))) fail('source_orphan_object')
+  for (const object of objects) {
+    if (!referenced.has(object.path)) {
+      plan.push({ object, classification: 'unreferenced' })
+    }
+  }
   return plan.sort((left, right) => left.object.path.localeCompare(right.object.path, 'en'))
 }
 
@@ -829,7 +985,8 @@ async function downloadObject(
     const contentEncoding = response.headers.get('content-encoding')
     if (contentEncoding && contentEncoding.toLowerCase() !== 'identity') fail('object_download_invalid')
     const responseEtag = normalizeEtag(response.headers.get('etag'))
-    if (object.etag && responseEtag !== object.etag) fail('source_drift')
+    if (!responseEtag) fail('object_download_invalid')
+    if (responseEtag !== object.etag) fail('source_drift')
     const body = await readBodyLimited(response, dependencies.limits.maxObjectBytes)
     if (body.byteLength !== object.size) fail('source_drift')
     const contentType = response.headers.get('content-type')?.trim() || 'application/octet-stream'
@@ -845,10 +1002,13 @@ async function verifyR2Object(
   key: string,
   body: Uint8Array,
   digest: ArrayBuffer,
+  dependencies: BackupDependencies,
   expectedEtag?: string,
+  allowAfterDeadline = false,
 ): Promise<R2HeadLike> {
   let head: R2HeadLike | null
   try {
+    consumeSubrequest(dependencies, allowAfterDeadline)
     head = await r2.head(key)
   } catch {
     fail('r2_verify_failed')
@@ -863,12 +1023,15 @@ async function putVerified(
   r2: BackupR2Bucket,
   key: string,
   body: Uint8Array,
+  dependencies: BackupDependencies,
   onlyIf: NonNullable<R2PutOptionsLike['onlyIf']>,
   options: Omit<R2PutOptionsLike, 'onlyIf' | 'sha256'> = {},
+  allowAfterDeadline = false,
 ): Promise<R2HeadLike> {
   const digest = await sha256(body)
   let written: R2HeadLike | null
   try {
+    consumeSubrequest(dependencies, allowAfterDeadline)
     written = await r2.put(key, body, {
       ...options,
       onlyIf,
@@ -878,16 +1041,25 @@ async function putVerified(
     fail('r2_write_failed')
   }
   if (!written) fail('r2_lock_conflict')
-  return verifyR2Object(r2, key, body, digest.bytes, written.etag)
+  return verifyR2Object(
+    r2,
+    key,
+    body,
+    digest.bytes,
+    dependencies,
+    written.etag,
+    allowAfterDeadline,
+  )
 }
 
 async function putNewVerified(
   r2: BackupR2Bucket,
   key: string,
   body: Uint8Array,
+  dependencies: BackupDependencies,
   options: Omit<R2PutOptionsLike, 'onlyIf' | 'sha256'> = {},
 ): Promise<R2HeadLike> {
-  return putVerified(r2, key, body, { etagDoesNotMatch: '*' }, options)
+  return putVerified(r2, key, body, dependencies, { etagDoesNotMatch: '*' }, options)
 }
 
 function randomToken(dependencies: BackupDependencies): string {
@@ -896,13 +1068,70 @@ function randomToken(dependencies: BackupDependencies): string {
   return bytesToHex(bytes)
 }
 
+interface ParsedExistingLock {
+  state: 'active' | 'released'
+  acquiredAt: number
+  expiresAt: number
+}
+
+function parseCanonicalTimestamp(value: unknown): { text: string; time: number } {
+  if (typeof value !== 'string') fail('lock_invalid')
+  const time = Date.parse(value)
+  if (!Number.isFinite(time) || new Date(time).toISOString() !== value) fail('lock_invalid')
+  return { text: value, time }
+}
+
+function parseExistingLock(
+  existing: R2HeadLike,
+  now: number,
+  limits: BackupLimits,
+): ParsedExistingLock {
+  if (
+    existing.key !== LOCK_KEY
+    || !normalizeEtag(existing.etag)
+    || !isRecord(existing.customMetadata)
+  ) {
+    fail('lock_invalid')
+  }
+
+  const state = existing.customMetadata['lock-state']
+  const token = existing.customMetadata['lock-token']
+  if (
+    (state !== 'active' && state !== 'released')
+    || typeof token !== 'string'
+    || !/^[0-9a-f]{32}$/.test(token)
+  ) {
+    fail('lock_invalid')
+  }
+
+  const acquired = parseCanonicalTimestamp(existing.customMetadata['acquired-at'])
+  const expires = parseCanonicalTimestamp(existing.customMetadata['expires-at'])
+  const lifetime = expires.time - acquired.time
+  if (
+    acquired.time > now + limits.maxLockClockSkewMs
+    || lifetime < 0
+    || lifetime > limits.lockTtlMs
+    || (state === 'active' && lifetime === 0)
+    || (state === 'released' && expires.time > now + limits.maxLockClockSkewMs)
+  ) {
+    fail('lock_invalid')
+  }
+
+  return {
+    state,
+    acquiredAt: acquired.time,
+    expiresAt: expires.time,
+  }
+}
+
 async function acquireLock(
   config: SourceConfig,
   dependencies: BackupDependencies,
-): Promise<LockLease | null> {
+): Promise<LockAcquisition> {
   const now = dependencies.now()
   let existing: R2HeadLike | null
   try {
+    consumeSubrequest(dependencies)
     existing = await config.r2.head(LOCK_KEY)
   } catch {
     fail('lock_acquire_failed')
@@ -921,14 +1150,20 @@ async function acquireLock(
   const customMetadata = {
     'lock-state': 'active',
     'lock-token': token,
+    'acquired-at': acquiredAt,
     'expires-at': expiresAt,
   }
 
   if (existing) {
-    const rawExpiry = existing.customMetadata?.['expires-at']
-    const expiry = rawExpiry ? Date.parse(rawExpiry) : Number.NaN
-    if (!Number.isFinite(expiry)) fail('lock_invalid')
-    if (expiry > now) return null
+    const parsed = parseExistingLock(existing, now, dependencies.limits)
+    if (parsed.state === 'active' && parsed.expiresAt > now) {
+      return {
+        lease: null,
+        skipCode: now - parsed.acquiredAt >= dependencies.limits.lockTtlMs / 2
+          ? 'backup_locked_extended'
+          : 'backup_locked',
+      }
+    }
   }
 
   let written: R2HeadLike
@@ -937,20 +1172,35 @@ async function acquireLock(
       config.r2,
       LOCK_KEY,
       body,
+      dependencies,
       existing ? { etagMatches: existing.etag } : { etagDoesNotMatch: '*' },
       { customMetadata, httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' } },
     )
   } catch (error) {
-    if (error instanceof BackupFailure && error.code === 'r2_lock_conflict') return null
+    if (error instanceof BackupFailure && error.code === 'r2_lock_conflict') {
+      return { lease: null, skipCode: 'backup_locked' }
+    }
     throw error
   }
 
-  return { etag: written.etag, token }
+  return {
+    lease: {
+      etag: written.etag,
+      token,
+      acquiredAt,
+      expiresAt,
+    },
+  }
 }
 
-async function verifyLock(config: SourceConfig, lease: LockLease): Promise<void> {
+async function verifyLock(
+  config: SourceConfig,
+  lease: LockLease,
+  dependencies: BackupDependencies,
+): Promise<void> {
   let current: R2HeadLike | null
   try {
+    consumeSubrequest(dependencies)
     current = await config.r2.head(LOCK_KEY)
   } catch {
     fail('lock_lost')
@@ -960,6 +1210,9 @@ async function verifyLock(config: SourceConfig, lease: LockLease): Promise<void>
     || current.etag !== lease.etag
     || current.customMetadata?.['lock-state'] !== 'active'
     || current.customMetadata?.['lock-token'] !== lease.token
+    || current.customMetadata?.['acquired-at'] !== lease.acquiredAt
+    || current.customMetadata?.['expires-at'] !== lease.expiresAt
+    || Date.parse(lease.expiresAt) <= dependencies.now()
   ) {
     fail('lock_lost')
   }
@@ -981,14 +1234,18 @@ async function releaseLock(
       config.r2,
       LOCK_KEY,
       body,
+      dependencies,
       { etagMatches: lease.etag },
       {
         customMetadata: {
           'lock-state': 'released',
+          'lock-token': lease.token,
+          'acquired-at': lease.acquiredAt,
           'expires-at': releasedAt,
         },
         httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' },
       },
+      true,
     )
   } catch {
     fail('lock_release_failed')
@@ -1007,9 +1264,11 @@ function jsonDocument(value: unknown): Uint8Array {
 async function updateLatest(
   config: SourceConfig,
   body: Uint8Array,
+  dependencies: BackupDependencies,
 ): Promise<void> {
   let existing: R2HeadLike | null
   try {
+    consumeSubrequest(dependencies)
     existing = await config.r2.head(LATEST_KEY)
   } catch {
     fail('r2_verify_failed')
@@ -1018,6 +1277,7 @@ async function updateLatest(
     config.r2,
     LATEST_KEY,
     body,
+    dependencies,
     existing ? { etagMatches: existing.etag } : { etagDoesNotMatch: '*' },
     { httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' } },
   )
@@ -1027,7 +1287,7 @@ async function executeBackup(
   config: SourceConfig,
   lease: LockLease,
   dependencies: BackupDependencies,
-): Promise<{ count: number; bytes: number }> {
+): Promise<{ count: number; bytes: number; orphanCount: number }> {
   const pointers = await listCabinetPointers(config, dependencies)
   const firstStorageList = await listStorageObjects(config, dependencies)
   const secondStorageList = await listStorageObjects(config, dependencies)
@@ -1046,12 +1306,18 @@ async function executeBackup(
   for (const entry of plan) {
     const downloaded = await downloadObject(entry.object, config, dependencies)
     const digest = await sha256(downloaded.body)
-    const backupKey = `${prefix}/objects/${entry.object.path}`
-    await putNewVerified(config.r2, backupKey, downloaded.body, {
-      customMetadata: {
-        'source-sha256': digest.hex,
-        'owner-scope': entry.ownerScope,
-      },
+    const backupKey = entry.classification === 'referenced'
+      ? `${prefix}/objects/${entry.object.path}`
+      : `${prefix}/quarantine/unreferenced/${entry.object.path}`
+    const customMetadata: Record<string, string> = {
+      'source-sha256': digest.hex,
+      classification: entry.classification,
+    }
+    if (entry.ownerScope) customMetadata['owner-scope'] = entry.ownerScope
+
+    await requireStorageBackupEnabled(config, dependencies)
+    await putNewVerified(config.r2, backupKey, downloaded.body, dependencies, {
+      customMetadata,
       httpMetadata: {
         contentType: downloaded.contentType,
         cacheControl: 'no-store',
@@ -1062,12 +1328,15 @@ async function executeBackup(
       backupKey,
       bytes: downloaded.body.byteLength,
       sha256: digest.hex,
+      classification: entry.classification,
       ownerScope: entry.ownerScope,
       contentType: downloaded.contentType,
     })
   }
 
   const totalBytes = backedObjects.reduce((sum, object) => sum + object.bytes, 0)
+  const orphanCount = backedObjects.filter((object) => object.classification === 'unreferenced').length
+  const referencedObjectCount = backedObjects.length - orphanCount
   const createdAt = new Date(dependencies.now()).toISOString()
   const manifest = {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
@@ -1080,6 +1349,8 @@ async function executeBackup(
       pointerMode: config.pointerMode,
     },
     objectCount: backedObjects.length,
+    referencedObjectCount,
+    orphanCount,
     totalBytes,
     objects: backedObjects,
   }
@@ -1089,10 +1360,12 @@ async function executeBackup(
   const manifestHashKey = `${prefix}/manifest.sha256`
   const completeKey = `${prefix}/complete.json`
 
-  await putNewVerified(config.r2, manifestKey, manifestBody, {
+  await requireStorageBackupEnabled(config, dependencies)
+  await putNewVerified(config.r2, manifestKey, manifestBody, dependencies, {
     httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' },
   })
-  await putNewVerified(config.r2, manifestHashKey, textBytes(`${manifestDigest.hex}\n`), {
+  await requireStorageBackupEnabled(config, dependencies)
+  await putNewVerified(config.r2, manifestHashKey, textBytes(`${manifestDigest.hex}\n`), dependencies, {
     httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: 'no-store' },
   })
 
@@ -1109,6 +1382,7 @@ async function executeBackup(
     const bodyDigest = new Uint8Array(object.sha256.match(/.{2}/g)?.map((value) => Number.parseInt(value, 16)) ?? [])
     let head: R2HeadLike | null
     try {
+      consumeSubrequest(dependencies)
       head = await config.r2.head(object.backupKey)
     } catch {
       fail('r2_verify_failed')
@@ -1122,8 +1396,8 @@ async function executeBackup(
     }
   }
 
-  await verifyLock(config, lease)
-  if (!await isStorageBackupEnabled(config.runtimeConfig)) fail('flag_disabled_before_complete')
+  await verifyLock(config, lease, dependencies)
+  await requireStorageBackupEnabled(config, dependencies)
 
   const completedAt = new Date(dependencies.now()).toISOString()
   const completion = {
@@ -1134,12 +1408,15 @@ async function executeBackup(
     manifestKey,
     manifestSha256: manifestDigest.hex,
     objectCount: backedObjects.length,
+    referencedObjectCount,
+    orphanCount,
     totalBytes,
   }
   const completeBody = jsonDocument(completion)
-  await putNewVerified(config.r2, completeKey, completeBody, {
+  await putNewVerified(config.r2, completeKey, completeBody, dependencies, {
     httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' },
   })
+  await requireStorageBackupEnabled(config, dependencies)
   await updateLatest(config, jsonDocument({
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
     snapshotId: runId,
@@ -1147,9 +1424,10 @@ async function executeBackup(
     completeKey,
     manifestSha256: manifestDigest.hex,
     completedAt,
-  }))
+    orphanCount,
+  }), dependencies)
 
-  return { count: backedObjects.length, bytes: totalBytes }
+  return { count: backedObjects.length, bytes: totalBytes, orphanCount }
 }
 
 function failureCode(error: unknown): BackupCode {
@@ -1163,9 +1441,12 @@ export async function runScheduledBackup(
   const dependencies = createDefaultDependencies(overrides)
   const startedAt = dependencies.now()
   let config: SourceConfig
+  let enabled: boolean
 
   try {
     config = resolveSourceConfig(bindings, dependencies.limits)
+    startRunGuard(dependencies, startedAt)
+    enabled = await readStorageBackupEnabled(config, dependencies)
   } catch (error) {
     return emitRunResult(
       dependencies,
@@ -1173,31 +1454,46 @@ export async function runScheduledBackup(
     )
   }
 
-  if (!await isStorageBackupEnabled(config.runtimeConfig)) {
+  if (!enabled) {
     return emitRunResult(
       dependencies,
       createRunResult(dependencies, 'disabled', 'backup_disabled', startedAt),
     )
   }
 
+
+  if (config.workersUsagePlan !== 'paid') {
+    return emitRunResult(
+      dependencies,
+      createRunResult(dependencies, 'failed', 'workers_paid_plan_required', startedAt),
+    )
+  }
+
   let lease: LockLease | null = null
   let result: BackupRunResult
   try {
-    lease = await acquireLock(config, dependencies)
+    const acquisition = await acquireLock(config, dependencies)
+    lease = acquisition.lease
     if (!lease) {
       return emitRunResult(
         dependencies,
-        createRunResult(dependencies, 'skipped', 'backup_locked', startedAt),
+        createRunResult(
+          dependencies,
+          'skipped',
+          acquisition.skipCode ?? 'backup_locked',
+          startedAt,
+        ),
       )
     }
     const completed = await executeBackup(config, lease, dependencies)
     result = createRunResult(
       dependencies,
       'completed',
-      'backup_completed',
+      completed.orphanCount > 0 ? 'backup_completed_with_quarantine' : 'backup_completed',
       startedAt,
       completed.count,
       completed.bytes,
+      completed.orphanCount,
     )
   } catch (error) {
     result = createRunResult(dependencies, 'failed', failureCode(error), startedAt)
@@ -1215,6 +1511,7 @@ export async function runScheduledBackup(
           startedAt,
           result.count,
           result.bytes,
+          result.orphanCount,
         )
       }
     }

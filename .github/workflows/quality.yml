@@ -109,6 +109,9 @@ jobs:
       - name: Verify committed environment separation
         run: npm run cloudflare:verify
 
+      - name: Verify storage backup Worker contracts and dry-runs
+        run: npm run storage-backup:check
+
       - name: Verify release manifest round trips
         shell: bash
         run: |

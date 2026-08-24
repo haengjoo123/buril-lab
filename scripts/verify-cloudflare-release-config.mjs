@@ -8,8 +8,8 @@ const FORBIDDEN_PREP0_WORKFLOW_TERMS = [
   'deploy_scheduler',
   'mfa',
   'paid release',
-  'storage-backup',
 ]
+const FORBIDDEN_PREP0_DEPLOYMENT_TERMS = ['storage-backup']
 
 function parseConfig(raw, name) {
   let parsed
@@ -103,6 +103,14 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   const forbidden = FORBIDDEN_PREP0_WORKFLOW_TERMS.filter((term) => workflowText.includes(term))
   if (forbidden.length > 0) {
     throw new Error(`Prep 0 workflows contain deferred scope: ${forbidden.join(', ')}`)
+  }
+  const deploymentWorkflowText = [workflows.staging || '', workflows.production || '']
+    .join('\n')
+    .toLowerCase()
+  const forbiddenDeployment = FORBIDDEN_PREP0_DEPLOYMENT_TERMS
+    .filter((term) => deploymentWorkflowText.includes(term))
+  if (forbiddenDeployment.length > 0) {
+    throw new Error(`Prep 0 deployment workflows contain deferred scope: ${forbiddenDeployment.join(', ')}`)
   }
 
   const stagingWorkflow = workflows.staging || ''
@@ -289,6 +297,9 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   }
 
   const qualityWorkflow = workflows.quality || ''
+  if (occurrenceCount(qualityWorkflow, 'npm run storage-backup:check') !== 1) {
+    throw new Error('Quality workflow must run the storage backup contract exactly once.')
+  }
   const hostedAdvisorGuard = "if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && github.repository == 'haengjoo123/buril-lab'"
   if (!qualityWorkflow.includes(hostedAdvisorGuard)) {
     throw new Error('Quality workflow lacks the exact hosted Advisor push/manual-main guard.')

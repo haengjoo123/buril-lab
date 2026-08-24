@@ -7,16 +7,27 @@
   "publicAccess": false,
   "customDomain": false,
   "publicDevelopmentUrl": false,
-  "lifecycle": {
-    "name": "expire-snapshots-31-days",
-    "prefix": "snapshots/",
-    "deleteAfterDays": 31,
-    "abortMultipartUploadsAfterDays": 1
+  "requiredUserPolicies": {
+    "lifecycle": {
+      "name": "expire-snapshots-31-days",
+      "prefix": "snapshots/",
+      "deleteAfterDays": 31,
+      "abortMultipartUploadsAfterDays": 1
+    },
+    "bucketLock": {
+      "name": "retain-snapshots-30-days",
+      "prefix": "snapshots/",
+      "retainForDays": 30
+    }
   },
-  "bucketLock": {
-    "name": "retain-snapshots-30-days",
-    "prefix": "snapshots/",
-    "retainForDays": 30
-  },
-  "controlPrefixExcluded": true
+  "allowedCloudflareManagedRules": [
+    {
+      "name": "Default Multipart Abort Rule",
+      "prefix": "",
+      "abortMultipartUploadsAfterDays": 7,
+      "multipartOnly": true
+    }
+  ],
+  "controlPrefixExcludedFromUserPolicies": true,
+  "rejectOtherRules": true
 }

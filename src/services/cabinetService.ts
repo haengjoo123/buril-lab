@@ -5,6 +5,7 @@ import { normalizeTemplateFromDb } from '../utils/normalizeTemplateFromDb';
 import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
+import { buildCabinetImagePath, validateCabinetImage } from './cabinetImageValidation';
 
 const mapCabinetActionToAuditAction = (actionType: ActivityActionType): 'create' | 'update' | 'delete' => {
     if (actionType === 'add') return 'create';
@@ -133,13 +134,15 @@ export const cabinetService = {
     },
 
     async uploadCabinetImage(cabinetId: string, file: File): Promise<string> {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${cabinetId}-${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const validated = await validateCabinetImage(file);
+        const filePath = buildCabinetImagePath(cabinetId, validated.extension);
 
         const { error: uploadError } = await supabase.storage
             .from('cabinets')
-            .upload(filePath, file, { upsert: true });
+            .upload(filePath, file, {
+                upsert: false,
+                contentType: validated.mimeType,
+            });
 
         if (uploadError) {
             console.error('Error uploading cabinet image:', uploadError);
@@ -152,6 +155,8 @@ export const cabinetService = {
 
         const publicUrl = data.publicUrl;
 
+        // The prior object is intentionally retained. Replacement/deletion must
+        // move to a reviewed cleanup queue instead of an unsafe immediate delete.
         await this.updateCabinet(cabinetId, { image_url: publicUrl });
         return publicUrl;
     },
