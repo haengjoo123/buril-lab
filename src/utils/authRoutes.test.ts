@@ -21,10 +21,13 @@ describe('sanitizeReturnTo', () => {
     '/%255cevil.example/path',
     '/%2f%2fevil.example/path',
     '/%252f%252fevil.example/path',
+    '/%2525255cevil.example/path',
+    `/${'%2525'.repeat(20)}5cevil.example/path`,
     '/app\n/ops',
     '/app%0d%0a/ops',
     '/app%2500/ops',
     '/app/%',
+    `/${'a'.repeat(2_048)}`,
   ])('rejects an unsafe destination: %s', (value) => {
     expect(sanitizeReturnTo(value)).toBeNull();
   });

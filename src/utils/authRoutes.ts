@@ -20,6 +20,8 @@ export function isAuthRequiredPath(pathname: string): boolean {
 }
 
 const RETURN_TO_BASE_URL = 'https://buril.invalid';
+const MAX_RETURN_TO_LENGTH = 2_048;
+const MAX_RETURN_TO_DECODE_DEPTH = 16;
 
 function containsUnsafeReturnToCharacter(value: string): boolean {
   return Array.from(value).some((character) => {
@@ -39,19 +41,27 @@ function hasUnsafeReturnToValue(value: string): boolean {
 
 /** Open redirect 방지: 정규화 뒤에도 앱 내부 상대 경로만 허용 */
 export function sanitizeReturnTo(raw: string | null): string | null {
-  if (!raw || hasUnsafeReturnToValue(raw)) return null;
+  if (!raw || raw.length > MAX_RETURN_TO_LENGTH || hasUnsafeReturnToValue(raw)) return null;
 
   let decoded = raw;
-  for (let depth = 0; depth < 2; depth += 1) {
+  let stabilized = false;
+  for (let depth = 0; depth < MAX_RETURN_TO_DECODE_DEPTH; depth += 1) {
     try {
       const next = decodeURIComponent(decoded);
       if (hasUnsafeReturnToValue(next)) return null;
-      if (next === decoded) break;
+      if (next === decoded) {
+        stabilized = true;
+        break;
+      }
       decoded = next;
     } catch {
       return null;
     }
   }
+
+  // Deeply nested encodings are not a legitimate navigation target. Reject
+  // rather than trusting a value that has not reached a stable representation.
+  if (!stabilized) return null;
 
   try {
     if (new URL(raw, RETURN_TO_BASE_URL).origin !== RETURN_TO_BASE_URL) return null;
