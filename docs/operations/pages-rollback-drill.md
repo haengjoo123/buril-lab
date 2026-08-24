@@ -6,7 +6,7 @@
 
 Cloudflare Pages는 성공한 production 배포만 되돌림 대상으로 사용할 수 있습니다. 공식 동작은 [Cloudflare Pages Rollbacks](https://developers.cloudflare.com/pages/configuration/rollbacks/)와 [Pages Deployments API](https://developers.cloudflare.com/api/resources/pages/subresources/projects/subresources/deployments/)를 기준으로 합니다.
 
-현재 구성 증거(2026-08-24): `BurilLab Staging` Access 앱의 세 destination과 단일 `Emails` 허용 규칙을 확인했고, 비인증 요청은 custom domain·project `pages.dev`·대표 preview hostname에서 모두 Access 로그인 경로로 302 응답했습니다. 허용 이메일 값은 기록하지 않습니다. 이는 현재 경계 보호 증거이며 되돌림 훈련 완료 증거가 아니므로 실행 시 아래 항목을 다시 확인합니다.
+현재 구성 증거(2026-08-24): `BurilLab Staging` Access 앱의 세 destination과 단일 `Emails` 허용 규칙을 확인했고, 비인증 요청은 custom domain·project `pages.dev`·대표 preview hostname에서 모두 Access 로그인 경로로 302 응답했습니다. 1년 유효기간의 Staging 전용 service token과 그 토큰 하나만 포함하는 `Service Auth` 정책도 적용했습니다. 서비스 토큰 요청은 세 경계 모두 Access를 통과했으며, 아직 Pages 배포물이 없어 원본 단계에서 522 응답했습니다. 이는 Access 정책 통과 증거일 뿐 실제 배포물이나 `release.json` 자동 검증 성공 증거가 아닙니다. 두 인증값은 GitHub `staging` environment의 `STAGING_ACCESS_CLIENT_ID`, `STAGING_ACCESS_CLIENT_SECRET`에 저장했고 공개 증거에는 이름만 기록합니다. GitHub `production` environment 등록은 아직 하지 않았고 허용 이메일 값도 기록하지 않습니다. 이는 현재 경계 보호 증거이며 되돌림 훈련 완료 증거가 아니므로 실행 시 아래 항목을 다시 확인합니다.
 
 ## 실행 전 중단 조건
 

@@ -1,13 +1,13 @@
 # Gate 0 운영 배포 상태
 
-기준 시각: 2026-08-24 23:08 KST
+기준 시각: 2026-08-24 23:16 KST
 
 이 문서는 코드 준비, 외부 통제, 실제 훈련, 운영 배포를 구분합니다. 체크되지 않은 관문은 완료로 해석하지 않습니다.
 
 ## 현재 결론
 
 - Gate 0 코드 후보와 로컬 DB·브라우저 검사는 준비됐습니다.
-- Staging의 세 공개 경계에 대한 Cloudflare Access 보호는 완료됐지만, 환경 비밀값·별도 Redis·키 회전·합성 데이터 초기화가 남아 있어 Staging 배포는 아직 금지입니다.
+- Staging의 세 공개 경계에 대한 Cloudflare Access 보호, 전용 service token 정책, GitHub `staging` environment 등록은 완료됐지만, `production` environment의 같은 Access 비밀값과 나머지 Pages·Supabase·KV 비밀값, 별도 Redis, 키 회전, 합성 데이터 초기화가 남아 있어 Staging 배포는 아직 금지입니다.
 - Supabase 복구 프로젝트에 대한 조직 접근자·비용 승인이 없어 복구훈련은 아직 실행하지 않았습니다.
 - Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
 - 관문 0, 준비 1, 준비 2를 완료로 표시하지 않습니다.
@@ -63,13 +63,15 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] 빈 direct-upload Pages 프로젝트 `buril-lab-staging` 생성
 - [x] `staging.burillab.com`을 `buril-lab-staging` Pages custom domain으로 연결
 - [x] `BurilLab Staging` Access 앱에 custom domain, project `pages.dev`, preview wildcard를 등록하고 단일 `Emails` 허용 규칙 적용; 비인증 요청은 custom domain·project `pages.dev`·대표 preview hostname 모두 Access 로그인 경로로 302 응답
+- [x] 1년 유효기간의 Staging 전용 Access service token을 만들고 해당 토큰 하나만 포함하는 `Service Auth` 정책 적용; 인증 요청은 세 공개 경계 모두 Access를 통과하고, 아직 Pages 배포물이 없어 원본 단계에서 522 응답
+- [x] GitHub `staging` environment에 `STAGING_ACCESS_CLIENT_ID`, `STAGING_ACCESS_CLIENT_SECRET` 등록; 활성 값은 공개 문서·저장소·GitHub 로그에 기록하지 않음
 - [x] 운영·Staging 전용 runtime KV namespace 분리
 - [x] 운영·Staging 전용 비공개 R2 백업 버킷 분리 및 30일 보존 규칙 설정
 - [x] runtime KV 안전 스위치를 `redirect`, `full`, `false`, `false`, `false`로 기록
 - [x] GitHub `staging`, `production` environment 생성 및 `main` 배포 브랜치 제한
 - [x] 운영·Staging Supabase 프로젝트가 다른 프로젝트인지 확인
 
-2026-08-24 확인 시 저장소와 두 GitHub environment의 secret·variable 목록은 모두 비어 있습니다. 값이 준비되기 전 배포 workflow는 실행하지 않습니다.
+2026-08-24 확인 시 GitHub `staging` environment에는 Access용 비밀값 이름 2개만 등록돼 있고, `production` environment는 비어 있습니다. 나머지 필수 비밀값과 변수가 준비되기 전 배포 workflow는 실행하지 않습니다.
 
 ## Staging 초기화 전 익명 증거
 
@@ -94,8 +96,9 @@ Security Advisor는 운영 53건, Staging 50건을 읽기 전용으로 확인했
 
 - [x] PR 최신 SHA의 네 필수 품질검사 성공
 - [x] Cloudflare Access로 `staging.burillab.com`, `buril-lab-staging.pages.dev`, `*.buril-lab-staging.pages.dev`를 보호하고 세 경계의 비인증 요청 302 확인
+- [x] Staging 전용 Access service token과 토큰별 `Service Auth` 정책을 만들고 GitHub `staging` environment에 두 Access 비밀값 등록
 - [ ] 운영과 다른 Staging Upstash 준비
-- [ ] GitHub environment별 Pages·Supabase·KV·Access 비밀값 등록
+- [ ] GitHub `production` environment의 Staging Access 비밀값 2개와 environment별 나머지 Pages·Supabase·KV 비밀값·필수 변수 등록
 - [ ] 제거한 외부 API 키 3개의 공급자 측 회전
 - [ ] Staging의 현재 집계 증거 보존 후 합성 데이터로 초기화
 - [ ] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
