@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { detectDatabaseQualityGate, validateDatabaseQualityContract } from './detect-database-quality-gate.mjs'
 import { detectGate0BrowserQuality, validateGate0BrowserContract } from './detect-gate0-browser-quality.mjs'
-import { findPagesDeployment } from './read-pages-deployment.mjs'
+import { findPagesDeployment, readPagesDeployment } from './read-pages-deployment.mjs'
 import {
   materializeWranglerConfig,
   renderWranglerConfig,
@@ -93,6 +93,28 @@ function validDeployEnvironment(environment: 'staging' | 'production') {
     VITE_SUPABASE_ANON_KEY: 'anon-key-value-that-is-long-enough',
     STAGING_ACCESS_CLIENT_ID: 'access-client-id',
     STAGING_ACCESS_CLIENT_SECRET: 'access-client-secret-value',
+  }
+}
+
+function deploymentFixture(environment: 'staging' | 'production', overrides = {}) {
+  const production = environment === 'production'
+  const shortId = production ? 'production-id' : 'staging-id'
+  return {
+    id: '123e4567-e89b-42d3-a456-426614174000',
+    short_id: shortId,
+    url: `https://${shortId}.${production ? 'buril-lab' : 'buril-lab-staging'}.pages.dev`,
+    environment: 'production',
+    production_branch: 'main',
+    project_name: production ? 'buril-lab' : 'buril-lab-staging',
+    created_on: '2026-08-24T01:00:00Z',
+    deployment_trigger: {
+      metadata: {
+        branch: 'main',
+        commit_hash: COMMIT,
+      },
+    },
+    latest_stage: { name: 'deploy', status: 'success' },
+    ...overrides,
   }
 }
 
@@ -187,24 +209,99 @@ describe('Prep 0 Cloudflare release controls', () => {
   })
 
   it('selects the newest immutable Staging deployment for the exact SHA', () => {
-    const older = {
-      id: '123e4567-e89b-42d3-a456-426614174000',
+    const older = deploymentFixture('staging', {
+      short_id: 'older',
       url: 'https://older.buril-lab-staging.pages.dev',
-      created_on: '2026-08-24T01:00:00Z',
-      deployment_trigger: { metadata: { commit_hash: COMMIT } },
-    }
+    })
     const newer = {
       ...older,
       id: '123e4567-e89b-42d3-a456-426614174001',
+      short_id: 'newer',
       url: 'https://newer.buril-lab-staging.pages.dev',
       created_on: '2026-08-24T02:00:00Z',
     }
-    expect(findPagesDeployment({ result: [older, newer] }, COMMIT)).toMatchObject({
+    expect(findPagesDeployment({ success: true, result: [older, newer] }, COMMIT, {
+      environment: 'staging',
+      project: 'buril-lab-staging',
+    })).toMatchObject({
       id: newer.id,
       url: newer.url,
+      environment: 'staging',
+      project: 'buril-lab-staging',
     })
     expect(() => findPagesDeployment([{ ...newer, url: 'https://buril-lab-staging.pages.dev' }], COMMIT))
-      .toThrow(/isolated Staging/)
+      .toThrow(/immutable buril-lab-staging/)
+  })
+
+  it('accepts only the exact successful main production deployment and immutable production host', () => {
+    const production = deploymentFixture('production')
+    const options = { environment: 'production', project: 'buril-lab' }
+    expect(findPagesDeployment({ success: true, result: [production] }, COMMIT, options)).toMatchObject({
+      id: production.id,
+      url: production.url,
+      commitSha: COMMIT,
+      environment: 'production',
+      pagesEnvironment: 'production',
+      project: 'buril-lab',
+      branch: 'main',
+    })
+
+    for (const url of [
+      'https://burillab.com',
+      'https://buril-lab.pages.dev',
+      'https://staging.burillab.com',
+      'https://staging-id.buril-lab-staging.pages.dev',
+      'https://nested.production-id.buril-lab.pages.dev',
+    ]) {
+      expect(() => findPagesDeployment([{ ...production, url }], COMMIT, options))
+        .toThrow(/immutable buril-lab deployment hostname/)
+    }
+
+    for (const invalid of [
+      { ...production, project_name: 'buril-lab-staging' },
+      { ...production, environment: 'preview' },
+      { ...production, production_branch: 'release' },
+      {
+        ...production,
+        deployment_trigger: { metadata: { branch: 'release', commit_hash: COMMIT } },
+      },
+      { ...production, latest_stage: { name: 'deploy', status: 'failure' } },
+      { ...production, latest_stage: { name: 'build', status: 'success' } },
+    ]) {
+      expect(() => findPagesDeployment([invalid], COMMIT, options))
+        .toThrow(/No successful buril-lab main\/production/)
+    }
+    expect(() => findPagesDeployment([production], COMMIT, {
+      environment: 'production',
+      project: 'buril-lab-staging',
+    })).toThrow(/must use Pages project buril-lab/)
+  })
+
+  it('records exact production deployment evidence in GitHub outputs and step summary', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'burillab-deployment-evidence-'))
+    const evidence = join(directory, 'deployments.json')
+    const output = join(directory, 'github-output.txt')
+    const summary = join(directory, 'github-summary.md')
+    try {
+      const production = deploymentFixture('production')
+      await writeFile(evidence, JSON.stringify({ success: true, result: [production] }), 'utf8')
+      await readPagesDeployment({
+        file: evidence,
+        commitSha: COMMIT,
+        environment: 'production',
+        project: 'buril-lab',
+        outputPath: output,
+        summaryPath: summary,
+      })
+      await expect(readFile(output, 'utf8')).resolves.toContain(`deployment_id=${production.id}`)
+      await expect(readFile(output, 'utf8')).resolves.toContain(`deployment_commit_sha=${COMMIT}`)
+      await expect(readFile(output, 'utf8')).resolves.toContain('deployment_project=buril-lab')
+      await expect(readFile(summary, 'utf8')).resolves.toContain('Cloudflare Pages production deployment evidence')
+      await expect(readFile(summary, 'utf8')).resolves.toContain(`Release commit: \`${COMMIT}\``)
+      await expect(readFile(summary, 'utf8')).resolves.toContain(`Immutable deployment URL: ${production.url}`)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 
   it('materializes one protected KV ID without overwriting templates', async () => {

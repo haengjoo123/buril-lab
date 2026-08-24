@@ -105,13 +105,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p .wrangler/evidence
-          npx wrangler pages deployment list \
-            --project-name buril-lab-staging \
-            --environment production \
-            --json > .wrangler/evidence/staging-deployments.json
+          curl --fail-with-body --silent --show-error --proto '=https' \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header "Accept: application/json" \
+            --output .wrangler/evidence/staging-deployments.json \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/buril-lab-staging/deployments?env=production"
           node scripts/read-pages-deployment.mjs \
             --file .wrangler/evidence/staging-deployments.json \
-            --commit "$DEPLOY_COMMIT_SHA"
+            --commit "$DEPLOY_COMMIT_SHA" \
+            --environment staging \
+            --project buril-lab-staging
 
       - name: Verify all Staging boundaries remain protected by Access
         shell: bash
@@ -200,6 +203,45 @@ jobs:
           --commit-hash "$DEPLOY_COMMIT_SHA"
           --commit-message "manually approved production deployment"
           --commit-dirty=false
+
+      - name: Resolve the exact immutable production deployment
+        id: production-deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          mkdir -p .wrangler/evidence
+          evidence_found=false
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail-with-body --silent --show-error --proto '=https' \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              --header "Accept: application/json" \
+              --output .wrangler/evidence/production-deployments.json \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production" \
+              && node scripts/read-pages-deployment.mjs \
+                --file .wrangler/evidence/production-deployments.json \
+                --commit "$DEPLOY_COMMIT_SHA" \
+                --environment production \
+                --project "$CLOUDFLARE_PAGES_PROJECT"; then
+              evidence_found=true
+              break
+            fi
+            if [[ "$attempt" -lt 6 ]]; then sleep 5; fi
+          done
+          if [[ "$evidence_found" != true ]]; then
+            echo "The exact production Pages deployment did not become verifiable." >&2
+            exit 1
+          fi
+
+      - name: Verify the immutable production deployment serves the same SHA
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "${{ steps.production-deployment.outputs.deployment_url }}/release.json?commit=$DEPLOY_COMMIT_SHA"
+          --commit "$DEPLOY_COMMIT_SHA"
+          --environment production
+          --retries 6
+          --retry-delay-ms 5000
 
       - name: Verify the public production release manifest
         run: >-

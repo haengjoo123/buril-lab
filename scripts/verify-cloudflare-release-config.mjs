@@ -128,6 +128,9 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'ref: ${{ github.event.workflow_run.head_sha }}',
     'steps.staging-deployment.outputs.deployment_url',
     'node scripts/read-pages-deployment.mjs',
+    'api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production',
+    '--environment staging',
+    '--project "$CLOUDFLARE_PAGES_PROJECT"',
   ]) {
     if (!stagingWorkflow.includes(required)) {
       throw new Error(`Staging workflow lacks trusted-quality guard: ${required}`)
@@ -143,6 +146,11 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'https://buril-lab-staging.pages.dev/release.json',
     'steps.staging-deployment.outputs.deployment_url',
     'node scripts/read-pages-deployment.mjs',
+    'id: production-deployment',
+    'api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production',
+    '--environment production',
+    '--project "$CLOUDFLARE_PAGES_PROJECT"',
+    'steps.production-deployment.outputs.deployment_url',
   ]) {
     if (!productionWorkflow.includes(required)) {
       throw new Error(`Production workflow lacks a manual release guard: ${required}`)

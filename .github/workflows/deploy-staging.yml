@@ -143,13 +143,27 @@ jobs:
         shell: bash
         run: |
           mkdir -p .wrangler/evidence
-          npx wrangler pages deployment list \
-            --project-name "$CLOUDFLARE_PAGES_PROJECT" \
-            --environment production \
-            --json > .wrangler/evidence/staging-deployments.json
-          node scripts/read-pages-deployment.mjs \
-            --file .wrangler/evidence/staging-deployments.json \
-            --commit "$DEPLOY_COMMIT_SHA"
+          evidence_found=false
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail-with-body --silent --show-error --proto '=https' \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              --header "Accept: application/json" \
+              --output .wrangler/evidence/staging-deployments.json \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production" \
+              && node scripts/read-pages-deployment.mjs \
+                --file .wrangler/evidence/staging-deployments.json \
+                --commit "$DEPLOY_COMMIT_SHA" \
+                --environment staging \
+                --project "$CLOUDFLARE_PAGES_PROJECT"; then
+              evidence_found=true
+              break
+            fi
+            if [[ "$attempt" -lt 6 ]]; then sleep 5; fi
+          done
+          if [[ "$evidence_found" != true ]]; then
+            echo "The exact Staging Pages deployment did not become verifiable." >&2
+            exit 1
+          fi
 
       - name: Verify all Staging boundaries remain protected by Access
         shell: bash
