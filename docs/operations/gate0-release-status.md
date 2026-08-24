@@ -6,19 +6,19 @@
 
 ## 현재 결론
 
-- Gate 0 코드 후보와 로컬 DB·브라우저 검사는 준비됐습니다. PR #5 병합 SHA `bc162cc5083eda0ab4284794b094a3c88f0b18ad`의 `main` 품질검사와 운영·Staging Hosted Advisor는 통과했습니다.
+- Gate 0 실행 코드 후보는 PR #8의 병합 SHA `7b661b25771e6ea84ccc4c1c4547a9caf5323d52`입니다. `main` 품질검사 6개, 운영·Staging Hosted Advisor, custom domain과 immutable URL의 Gate 0 브라우저 흐름이 모두 통과했습니다.
 - GitHub `staging`·`production` environment의 배포 입력, 별도 Staging Redis, 합성 데이터 초기화와 Gate 0 소유 표시는 준비됐습니다.
-- 같은 SHA를 Staging Pages에 실제 배포해 Access 세 경계, 고유 URL, `release.json`, KOSHA `link_only` 계약과 합성 fixture 초기화까지 확인했습니다. 실제 브라우저 흐름의 모든 화면 동작은 끝났지만, 활성 보강 기능의 브라우저 요청 3건을 시험이 0건으로 잘못 기대해 마지막 판정이 실패했습니다. 해당 요청은 Playwright에서 모두 중단되어 Pages API나 유료 외부 공급자에는 도달하지 않았습니다. 판정 수정은 새 SHA의 필수 검사를 다시 통과해야 하므로 Staging 전체 관문은 아직 닫지 않습니다.
+- 같은 SHA를 Staging Pages에 배포해 Access 경계, 전체 SHA의 `release.json`, KOSHA `link_only`, 환경 격리와 합성 fixture 재생성을 확인했습니다. 직전 성공 배포로 실제 되돌린 뒤 원래 후보로 복귀하는 훈련과 양쪽 Gate 0 재검사도 완료했습니다.
 - Supabase 조직 접근자 확인은 완료됐지만 임시 복구 프로젝트 생성과 복구훈련은 아직 실행하지 않았습니다.
 - Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
-- 관문 0, 준비 1, 준비 2를 완료로 표시하지 않습니다.
+- 준비 1은 완료했습니다. 관문 0 운영 배포·관찰과 준비 2 Supabase 복구훈련은 완료로 표시하지 않습니다.
 
 ## 릴리스 경계
 
-- 기준 커밋: `bf8dcc726061f0e89bc8fbf39e63e1db8e90e2b2`
-- 운영 후보 브랜치: `codex/ops-hardening`
-- 현재 검증 기준: PR #4 최신 SHA의 성공한 `Quality and security` 실행
-- Pull Request: [#4](https://github.com/haengjoo123/buril-lab/pull/4)
+- Gate 0 실행 코드 기준 커밋: `7b661b25771e6ea84ccc4c1c4547a9caf5323d52`
+- 운영 후보 기준: 보호된 `main`의 위 실행 코드와 후속 문서·운영 증거 변경
+- 검증 기준: PR #8 병합 뒤 성공한 `Quality and security`와 `Deploy Staging` 실행
+- Pull Request: [#8](https://github.com/haengjoo123/buril-lab/pull/8)
 - 전체 후속 구현 보존 커밋: `3b30751bc24ae955be6ab2abb73ff75d30178ec0`
 - 전체 후속 구현 보존 커밋은 운영 배포 대상이 아닙니다.
 - Gate 0 운영 후보에는 즉시 위험 차단, 최소 배포 통제, DB 기준선 재구성 경로만 포함합니다.
@@ -37,7 +37,7 @@
 - [x] Cloudflare API의 전체 SHA, deployment UUID, 고유 URL을 함께 검증하도록 구현
 - [x] `release:verify`는 유료 출시 차단 상태 유지, `ops:verify`를 별도 제공
 
-PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해야 이 문서의 검증 기준을 만족합니다. 2026-08-25 현재 로컬 worktree는 CI와 같은 공개용 Supabase placeholder를 사용했을 때 Vitest 601개 통과, 7개 제외이며, Cloudflare 계약시험 36개가 통과했습니다. 이 로컬 결과는 원격 PR SHA의 CI 증거를 대신하지 않습니다. 계획 작성 당시의 781개 수치는 현재 Gate 0 릴리스 조각과 시험 구성이 달라 동일한 분모로 주장하지 않습니다. 후속 전체 snapshot의 수치도 운영 후보 증거로 사용하지 않습니다.
+PR #8 병합 SHA의 GitHub Actions에서 Application, Cloudflare release contract, Gate 0 browser, Blank database와 운영·Staging Hosted Advisor가 모두 통과했습니다. 전체 Vitest는 607개, Cloudflare 계약시험은 42개가 통과했습니다. 계획 작성 당시의 781개 수치는 현재 Gate 0 릴리스 조각과 시험 구성이 달라 같은 분모로 주장하지 않습니다. 후속 전체 snapshot의 수치도 운영 후보 증거로 사용하지 않습니다.
 
 보안 권고 exact baseline 변경이 추가되면 PR 최신 SHA에서 네 필수 검사를 다시 통과해야 합니다. 이전 run의 성공만으로 새 SHA를 배포하지 않습니다.
 
@@ -54,7 +54,7 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] seed는 loopback DB만 허용하고 원격 URL을 client 생성 전에 거부
 - [x] 운영·Staging 각각 53건의 Security Advisor 종류·대상·역할 권한을 정확한 기준선으로 고정하고 정적 검사 및 Supabase 플러그인 읽기 전용 대조 완료
 - [x] GitHub environment별 Supabase 배포 입력 이름 등록; 실제 값은 공개 증거에 남기지 않음
-- [ ] 새 `main` SHA의 hosted Advisor 검사 통과
+- [x] Gate 0 실행 코드가 포함된 `main` SHA의 운영·Staging Hosted Advisor 검사 통과
 
 ## 완료한 외부 통제
 
@@ -70,7 +70,7 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] 회전본으로 custom domain·project `pages.dev` 인증 경계를 통과해 Pages 원점까지 도달함을 확인; 아직 배포가 없어 원점은 522를 반환
 - [x] 실제 immutable deployment URL에서 회전한 Access service token 인증과 전체 SHA 확인
 - [x] 운영·Staging 전용 runtime KV namespace 분리
-- [x] 운영·Staging 전용 비공개 R2 백업 버킷 분리 및 30일 보존 규칙 설정
+- [x] 운영·Staging 전용 비공개 R2 백업 버킷 분리 및 30일 삭제 수명주기 설정; Bucket Lock과 실제 백업은 아직 미적용
 - [x] 운영 runtime KV의 Gate 0 안전 스위치 기록
 - [x] Staging runtime KV를 `redirect`, `link_only`, `false`, `false` 안전값으로 다시 확인
 - [x] 실제 배포 뒤 KOSHA API가 `link_only` 계약과 공식 링크만 반환함을 검증
@@ -84,9 +84,9 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 
 GitHub environment 등록은 값이 존재한다는 증거일 뿐 Cloudflare Pages Functions의 암호값이나 외부 공급자 프로젝트가 올바른 Staging 대상을 가리킨다는 증거는 아닙니다. `ops:verify`, Access 인증 요청, 실제 Staging API smoke test가 모두 통과하기 전 배포 workflow를 실행하지 않습니다.
 
-## Staging 합성 초기화 후 익명 증거
+## Staging 최초 합성 초기화 당시 익명 증거
 
-Supabase 플러그인으로 2026-08-25에 행 수와 합성 소유 표시 여부만 조회했습니다. 사용자 정보, 연구실명, 시약명, 파일 경로는 읽거나 저장하지 않았습니다.
+Supabase 플러그인으로 2026-08-25 최초 초기화 직후 행 수와 합성 소유 표시 여부만 조회했습니다. 아래 수치는 현재 행 수가 아니며, 이후 Gate 0 반복검사에서 합성 폐기 기록이 추가됐습니다. 사용자 정보, 연구실명, 시약명, 파일 경로는 읽거나 저장하지 않았습니다.
 
 | 대상 | 행 수 |
 |---|---:|
@@ -106,7 +106,7 @@ Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인
 
 ## 아직 닫지 않은 항목
 
-- [ ] 현재 배포 후보인 PR 최신 SHA의 네 필수 품질검사 성공
+- [x] Gate 0 실행 코드 SHA의 모든 필수 품질검사 성공
 - [x] Cloudflare Access로 `staging.burillab.com`, `buril-lab-staging.pages.dev`, `*.buril-lab-staging.pages.dev`를 보호하고 세 경계의 비인증 요청 302 확인
 - [x] Staging 전용 Access service token과 토큰별 `Service Auth` 정책을 만들고 GitHub `staging` environment에 두 Access 비밀값 등록
 - [x] 운영과 다른 Staging Upstash 준비와 연결 시험
@@ -120,7 +120,7 @@ Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인
 - [x] 배포 뒤 API가 공식 링크만 반환하는지 검증
 - [x] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
 - [ ] Staging에서 실제 외부 화학정보 연동시험
-- [ ] 직전 Pages deployment 되돌림 훈련
+- [x] 직전 Pages deployment 실제 되돌림과 원래 후보 복귀 훈련
 - [ ] 운영 쓰기와 일관된 복구 시점을 만들 수 있는 비공개 R2 사진 본문·완전한 manifest·해시 준비
 - [x] Supabase 조직 접근자 확인 — 2026-08-24 23:32 KST: 현재 구성원 1명, 역할 `Owner`, 권한 범위 `organization-scoped`를 읽기 전용으로 확인했고 사용자가 해당 구성원의 BurilLab 운영 데이터 열람 권한을 명시 확인함; 공개 증거에는 이메일·조직 ID를 기록하지 않음
 - [ ] Supabase 플러그인이 반환한 새 프로젝트 비용 `월 10달러`를 사용자에게 알리고 명시적 비용 확인
@@ -128,7 +128,7 @@ Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인
 - [ ] Gate 0 운영 수동 배포
 - [ ] 운영 배포 뒤 30분·24시간·7일 관찰
 
-되돌림과 복구 절차서는 각각 [Pages 되돌림 훈련](./pages-rollback-drill.md), [Supabase 복구훈련](./supabase-recovery-drill.md)에 준비했습니다. 두 문서는 실행 체크리스트이며 완료 증거가 아닙니다.
+[Pages 되돌림 훈련](./pages-rollback-drill.md)은 Staging 실제 실행 증거를 포함합니다. [Supabase 복구훈련](./supabase-recovery-drill.md)은 아직 실행하지 않은 절차서이며 완료 증거가 아닙니다.
 
 조직 접근자 확인은 위 시점의 증거입니다. 임시 복구 프로젝트 생성 직전에 구성원 수·역할·권한 범위를 다시 확인하고 달라졌으면 운영 DB 읽기와 프로젝트 생성을 중단합니다.
 
@@ -136,7 +136,7 @@ Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인
 
 - 운영 Pages 코드 배포 금지
 - 운영 Supabase migration 또는 기준선 SQL 실행 금지
-- PR 최신 SHA의 네 필수 검사가 모두 성공하기 전 Staging 배포 금지
+- 새 실행 코드 SHA의 필수 검사가 모두 성공하기 전 Staging 배포 금지
 - 음성 `guided` 운영 전환 금지
 - 계정·연구실 삭제 UI와 Scheduler 활성화 금지
 - 시약장 사진 이관·원본 삭제 금지
