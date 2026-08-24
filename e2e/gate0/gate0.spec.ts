@@ -1,9 +1,24 @@
 import { expect, test } from '@playwright/test'
+import { fulfillStagingAccessRoute } from '../../scripts/gate0-access-route.mjs'
 
 const E2E_EMAIL = process.env.GATE0_E2E_EMAIL || 'gate0-browser@burillab.test'
 const E2E_PASSWORD = process.env.GATE0_E2E_PASSWORD || 'Local-Gate0-Only!2026'
 const LAB_NAME = 'Gate0 합성 연구실'
 const INVENTORY_NAME = 'Gate0 Synthetic Powder'
+const STAGING_ORIGIN = 'https://staging.burillab.com'
+
+test.beforeEach(async ({ context }) => {
+  const clientId = process.env.STAGING_ACCESS_CLIENT_ID?.trim()
+  const clientSecret = process.env.STAGING_ACCESS_CLIENT_SECRET?.trim()
+  if (!clientId && !clientSecret) return
+  if (!clientId || !clientSecret) {
+    throw new Error('Both Staging Access service-token values are required together.')
+  }
+
+  await context.route(`${STAGING_ORIGIN}/**`, async (route) => {
+    await fulfillStagingAccessRoute(route, { clientId, clientSecret })
+  })
+})
 
 test('login → lab → inventory search → reviewed waste record → direct link', async ({ page }) => {
   let enrichmentRequests = 0

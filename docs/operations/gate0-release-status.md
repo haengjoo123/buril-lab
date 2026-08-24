@@ -1,14 +1,15 @@
 # Gate 0 운영 배포 상태
 
-기준 시각: 2026-08-24 23:32 KST
+기준 시각: 2026-08-25 KST
 
 이 문서는 코드 준비, 외부 통제, 실제 훈련, 운영 배포를 구분합니다. 체크되지 않은 관문은 완료로 해석하지 않습니다.
 
 ## 현재 결론
 
-- Gate 0 코드 후보와 로컬 DB·브라우저 검사는 준비됐습니다.
-- Staging의 세 공개 경계에 대한 Cloudflare Access 보호, 전용 service token 정책, GitHub `staging` environment 등록은 완료됐지만, `production` environment의 같은 Access 비밀값과 나머지 Pages·Supabase·KV 비밀값, 별도 Redis, 키 회전, 합성 데이터 초기화가 남아 있어 Staging 배포는 아직 금지입니다.
-- Supabase 조직 접근자 확인은 완료됐지만 새 프로젝트 비용 승인이 없어 복구훈련은 아직 실행하지 않았습니다.
+- Gate 0 코드 후보와 로컬 DB·브라우저 검사는 준비됐습니다. 아래 추가 변경은 배포 후보인 PR 최신 SHA에서 필수 검사를 다시 통과해야 합니다.
+- GitHub `staging`·`production` environment의 배포 입력, 별도 Staging Redis, 합성 데이터 초기화와 Gate 0 소유 표시는 준비됐습니다.
+- 회전한 Cloudflare Access service token, Pages Functions 암호값, 분리된 외부 API 키와 Staging KV 안전값은 준비됐습니다. 실제 배포 URL과 KOSHA API 계약은 배포가 있어야 검증할 수 있으므로 PR 최신 SHA의 필수 검사 전에는 Staging 배포를 시작하지 않습니다.
+- Supabase 조직 접근자 확인은 완료됐지만 임시 복구 프로젝트 생성과 복구훈련은 아직 실행하지 않았습니다.
 - Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
 - 관문 0, 준비 1, 준비 2를 완료로 표시하지 않습니다.
 
@@ -36,7 +37,7 @@
 - [x] Cloudflare API의 전체 SHA, deployment UUID, 고유 URL을 함께 검증하도록 구현
 - [x] `release:verify`는 유료 출시 차단 상태 유지, `ops:verify`를 별도 제공
 
-PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해야 이 문서의 검증 기준을 만족합니다. 현재 Gate 0 후보의 Vitest는 583개 통과, 7개 제외입니다. 계획 작성 당시의 781개 수치는 현재 Gate 0 릴리스 조각과 시험 구성이 달라 동일한 분모로 주장하지 않습니다. 후속 전체 snapshot에서는 861개 통과, 7개 제외였지만 운영 후보 증거로 사용하지 않습니다.
+PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해야 이 문서의 검증 기준을 만족합니다. 2026-08-25 현재 로컬 worktree는 CI와 같은 공개용 Supabase placeholder를 사용했을 때 Vitest 601개 통과, 7개 제외이며, Cloudflare 계약시험 36개가 통과했습니다. 이 로컬 결과는 원격 PR SHA의 CI 증거를 대신하지 않습니다. 계획 작성 당시의 781개 수치는 현재 Gate 0 릴리스 조각과 시험 구성이 달라 동일한 분모로 주장하지 않습니다. 후속 전체 snapshot의 수치도 운영 후보 증거로 사용하지 않습니다.
 
 보안 권고 exact baseline 변경이 추가되면 PR 최신 SHA에서 네 필수 검사를 다시 통과해야 합니다. 이전 run의 성공만으로 새 SHA를 배포하지 않습니다.
 
@@ -51,8 +52,9 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] 실제 Chromium Gate 0 흐름 통과: 로그인→연구실→재고 검색→폐액 배치 검토→화면 버튼 기록→기록 목록→직접 링크
 - [x] 브라우저 시험 중 외부 화학정보 보강 요청 0건 확인
 - [x] seed는 loopback DB만 허용하고 원격 URL을 client 생성 전에 거부
-- [x] 운영 53건·Staging 50건의 Security Advisor 종류·대상·역할 권한을 정확한 기준선으로 고정하고 정적 검사 및 Supabase 플러그인 읽기 전용 대조 완료
-- [ ] GitHub environment별 Supabase 비밀값을 등록하고 `main`의 hosted Advisor 검사 통과
+- [x] 운영·Staging 각각 53건의 Security Advisor 종류·대상·역할 권한을 정확한 기준선으로 고정하고 정적 검사 및 Supabase 플러그인 읽기 전용 대조 완료
+- [x] GitHub environment별 Supabase 배포 입력 이름 등록; 실제 값은 공개 증거에 남기지 않음
+- [ ] 새 `main` SHA의 hosted Advisor 검사 통과
 
 ## 완료한 외부 통제
 
@@ -63,44 +65,59 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] 빈 direct-upload Pages 프로젝트 `buril-lab-staging` 생성
 - [x] `staging.burillab.com`을 `buril-lab-staging` Pages custom domain으로 연결
 - [x] `BurilLab Staging` Access 앱에 custom domain, project `pages.dev`, preview wildcard를 등록하고 단일 `Emails` 허용 규칙 적용; 비인증 요청은 custom domain·project `pages.dev`·대표 preview hostname 모두 Access 로그인 경로로 302 응답
-- [x] 1년 유효기간의 Staging 전용 Access service token을 만들고 해당 토큰 하나만 포함하는 `Service Auth` 정책 적용; 인증 요청은 세 공개 경계 모두 Access를 통과하고, 아직 Pages 배포물이 없어 원본 단계에서 522 응답
-- [x] GitHub `staging` environment에 `STAGING_ACCESS_CLIENT_ID`, `STAGING_ACCESS_CLIENT_SECRET` 등록; 활성 값은 공개 문서·저장소·GitHub 로그에 기록하지 않음
+- [x] Staging 전용 Access service token과 해당 토큰 하나만 포함하는 `Service Auth` 정책 생성
+- [x] Access service token 회전 후 GitHub `staging`·`production` environment에 같은 회전본의 비밀값 이름 등록; 활성 값은 공개 문서·저장소·GitHub 로그에 기록하지 않음
+- [x] 회전본으로 custom domain·project `pages.dev` 인증 경계를 통과해 Pages 원점까지 도달함을 확인; 아직 배포가 없어 원점은 522를 반환
+- [ ] 실제 immutable deployment URL 인증 통과 재검증
 - [x] 운영·Staging 전용 runtime KV namespace 분리
 - [x] 운영·Staging 전용 비공개 R2 백업 버킷 분리 및 30일 보존 규칙 설정
-- [x] runtime KV 안전 스위치를 `redirect`, `full`, `false`, `false`, `false`로 기록
+- [x] 운영 runtime KV의 Gate 0 안전 스위치 기록
+- [x] Staging runtime KV를 `redirect`, `link_only`, `false`, `false` 안전값으로 다시 확인
+- [ ] 실제 배포 뒤 KOSHA API가 `link_only` 계약을 반환하는지 검증
 - [x] GitHub `staging`, `production` environment 생성 및 `main` 배포 브랜치 제한
+- [x] GitHub 양쪽 environment에 Cloudflare 계정·Pages 배포·KV·Access·Supabase 입력 이름과 Gate 0 Staging 입력 이름 등록
+- [x] 운영과 다른 Staging Upstash 생성, 분리된 자격값의 연결 시험 성공; 활성 값은 기록하지 않음
+- [x] `buril-lab` Google Cloud 프로젝트에 Vision 전용 키와 서비스 계정에 바인드된 Gemini 전용 키를 발급하고 실제 API 인증 성공; Cloudflare 운영 설정에는 다음 배포용 암호값으로 등록
+- [x] 과거 공개 Gemini 키가 Google에서 `API_KEY_INVALID`임을 확인하고 GitHub secret-scanning 경고를 `revoked`로 해결
+- [ ] 아직 유효한 과거 공개 Vision 키는 새 운영 비밀값이 실제 배포에 반영된 직후 폐기하고 남은 GitHub 경고를 해결
 - [x] 운영·Staging Supabase 프로젝트가 다른 프로젝트인지 확인
 
-2026-08-24 확인 시 GitHub `staging` environment에는 Access용 비밀값 이름 2개만 등록돼 있고, `production` environment는 비어 있습니다. 나머지 필수 비밀값과 변수가 준비되기 전 배포 workflow는 실행하지 않습니다.
+GitHub environment 등록은 값이 존재한다는 증거일 뿐 Cloudflare Pages Functions의 암호값이나 외부 공급자 프로젝트가 올바른 Staging 대상을 가리킨다는 증거는 아닙니다. `ops:verify`, Access 인증 요청, 실제 Staging API smoke test가 모두 통과하기 전 배포 workflow를 실행하지 않습니다.
 
-## Staging 초기화 전 익명 증거
+## Staging 합성 초기화 후 익명 증거
 
-Supabase 플러그인으로 2026-08-24에 행 수만 조회했습니다. 사용자 정보, 연구실명, 시약명, 파일 경로는 읽거나 저장하지 않았습니다.
+Supabase 플러그인으로 2026-08-25에 행 수와 합성 소유 표시 여부만 조회했습니다. 사용자 정보, 연구실명, 시약명, 파일 경로는 읽거나 저장하지 않았습니다.
 
 | 대상 | 행 수 |
 |---|---:|
-| `labs` | 3 |
-| `lab_members` | 5 |
-| `inventory` | 57 |
-| `cabinets` | 9 |
-| `cabinet_items` | 116 |
-| `waste_logs` | 42 |
-| `waste_log_items` | 3 |
-| `audit_logs` | 597 |
+| `labs` | 1 |
+| `lab_members` | 1 |
+| `inventory` | 1 |
+| `cabinets` | 0 |
+| `cabinet_items` | 0 |
+| `waste_logs` | 0 |
+| `waste_log_items` | 0 |
+| `audit_logs` | 0 |
+| Storage objects | 0 |
 
-현재 Staging migration 이력은 기준선 1개와 보안·삭제·파일럿 후보 22개를 합친 23개입니다. 승인된 Gate 0 활성 경로와 다르므로 초기화 전에는 배포 검증 환경으로 사용하지 않습니다.
+Staging에는 예약 UUID를 사용하는 Gate 0 합성 연구실·회원·재고만 남아 있고, 합성 사용자의 신뢰된 소유 표시도 확인했습니다. 이메일, 사용자 UUID, 연구실명, 시약명, 파일 경로는 공개 증거에 기록하지 않습니다. 데이터 초기화는 완료됐지만 실제 배포 검증 환경 통과를 뜻하지 않습니다.
 
-Security Advisor는 운영 53건, Staging 50건을 읽기 전용으로 확인했습니다. 숫자만 허용하지 않고 각 권고의 종류·대상·함수 언어·실제 역할 권한·임시 허용 사유를 정확히 고정해야 합니다. 새 차이는 실패로 처리합니다.
+Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인했습니다. 숫자만 허용하지 않고 각 권고의 종류·대상·함수 언어·실제 역할 권한·임시 허용 사유를 정확히 고정했으며, 새 차이는 실패로 처리합니다.
 
 ## 아직 닫지 않은 항목
 
-- [x] PR 최신 SHA의 네 필수 품질검사 성공
+- [ ] 현재 배포 후보인 PR 최신 SHA의 네 필수 품질검사 성공
 - [x] Cloudflare Access로 `staging.burillab.com`, `buril-lab-staging.pages.dev`, `*.buril-lab-staging.pages.dev`를 보호하고 세 경계의 비인증 요청 302 확인
 - [x] Staging 전용 Access service token과 토큰별 `Service Auth` 정책을 만들고 GitHub `staging` environment에 두 Access 비밀값 등록
-- [ ] 운영과 다른 Staging Upstash 준비
-- [ ] GitHub `production` environment의 Staging Access 비밀값 2개와 environment별 나머지 Pages·Supabase·KV 비밀값·필수 변수 등록
-- [ ] 제거한 외부 API 키 3개의 공급자 측 회전
-- [ ] Staging의 현재 집계 증거 보존 후 합성 데이터로 초기화
+- [x] 운영과 다른 Staging Upstash 준비와 연결 시험
+- [x] GitHub `staging`·`production` environment의 배포 입력 이름·필수 변수 등록
+- [x] Cloudflare Pages Staging의 필수 Functions 암호값 12개를 모두 암호 형식으로 등록하고 `ops:verify` 통과; KOSHA 키는 `link_only` 계약에 따라 의도적으로 미등록
+- [x] 회전한 Access service token으로 보호된 custom domain과 project `pages.dev` 경계 통과
+- [x] Staging용 OpenAI·Google AI 키를 별도 프로젝트와 사용량 제한으로 분리하고 실제 인증 요청 성공
+- [ ] 새 운영 Google 키가 적용되는 다음 운영 배포 직후 과거 공개 유출 키를 폐기하고 GitHub 경고 해결
+- [x] Staging의 익명 집계 증거 보존 후 Gate 0 합성 데이터로 초기화하고 신뢰된 합성 소유 표시 확인
+- [x] Staging KV의 KOSHA 모드를 실제 `link_only`로 확인
+- [ ] 배포 뒤 API가 공식 링크만 반환하는지 검증
 - [ ] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
 - [ ] Staging에서 실제 외부 화학정보 연동시험
 - [ ] 직전 Pages deployment 되돌림 훈련
@@ -119,7 +136,7 @@ Security Advisor는 운영 53건, Staging 50건을 읽기 전용으로 확인했
 
 - 운영 Pages 코드 배포 금지
 - 운영 Supabase migration 또는 기준선 SQL 실행 금지
-- 별도 Staging Redis, GitHub environment 비밀값, 공급자 키 회전과 합성 데이터 초기화가 준비되기 전 Staging 배포 금지
+- PR 최신 SHA의 네 필수 검사가 모두 성공하기 전 Staging 배포 금지
 - 음성 `guided` 운영 전환 금지
 - 계정·연구실 삭제 UI와 Scheduler 활성화 금지
 - 시약장 사진 이관·원본 삭제 금지

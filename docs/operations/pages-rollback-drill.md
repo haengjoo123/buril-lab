@@ -6,12 +6,13 @@
 
 Cloudflare Pages는 성공한 production 배포만 되돌림 대상으로 사용할 수 있습니다. 공식 동작은 [Cloudflare Pages Rollbacks](https://developers.cloudflare.com/pages/configuration/rollbacks/)와 [Pages Deployments API](https://developers.cloudflare.com/api/resources/pages/subresources/projects/subresources/deployments/)를 기준으로 합니다.
 
-현재 구성 증거(2026-08-24): `BurilLab Staging` Access 앱의 세 destination과 단일 `Emails` 허용 규칙을 확인했고, 비인증 요청은 custom domain·project `pages.dev`·대표 preview hostname에서 모두 Access 로그인 경로로 302 응답했습니다. 1년 유효기간의 Staging 전용 service token과 그 토큰 하나만 포함하는 `Service Auth` 정책도 적용했습니다. 서비스 토큰 요청은 세 경계 모두 Access를 통과했으며, 아직 Pages 배포물이 없어 원본 단계에서 522 응답했습니다. 이는 Access 정책 통과 증거일 뿐 실제 배포물이나 `release.json` 자동 검증 성공 증거가 아닙니다. 두 인증값은 GitHub `staging` environment의 `STAGING_ACCESS_CLIENT_ID`, `STAGING_ACCESS_CLIENT_SECRET`에 저장했고 공개 증거에는 이름만 기록합니다. GitHub `production` environment 등록은 아직 하지 않았고 허용 이메일 값도 기록하지 않습니다. 이는 현재 경계 보호 증거이며 되돌림 훈련 완료 증거가 아니므로 실행 시 아래 항목을 다시 확인합니다.
+현재 구성 증거(2026-08-25): `BurilLab Staging` Access 앱의 custom domain, project `pages.dev`, preview wildcard destination과 단일 이메일 허용 규칙, Staging 전용 service token만 포함하는 `Service Auth` 정책을 확인했습니다. 비인증 요청은 현재 존재하는 custom domain과 project `pages.dev` 경계에서 Access 로그인 경로로 302 응답합니다. service token은 회전했고 GitHub `staging`·`production` environment에 회전본의 비밀값 이름을 등록했지만, 회전본으로 보호 경계를 통과하는 재검증은 아직 완료되지 않았습니다. 아직 성공한 Staging Pages 배포와 실제 immutable deployment URL도 없습니다. 따라서 이는 비인증 경계 보호와 설정 준비 증거일 뿐, service auth·배포물·`release.json`·되돌림 훈련 성공 증거가 아닙니다. 허용 이메일과 인증값은 기록하지 않으며 실행 시 아래 항목을 모두 다시 확인합니다.
 
 ## 실행 전 중단 조건
 
 - [ ] 대상은 정확히 `buril-lab-staging`이며 `buril-lab`이 아님
 - [ ] Cloudflare Access가 custom domain, project `pages.dev`, preview wildcard를 모두 보호함
+- [ ] 회전한 Access service token이 세 보호 경계에서 인증됨
 - [ ] 서로 다른 성공한 Pages production 배포가 최소 2개 있음
 - [ ] 두 배포의 전체 Git SHA가 서로 다름
 - [ ] 현재 후보와 직전 성공 배포의 전체 Git SHA를 Cloudflare API로 확인함

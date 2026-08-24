@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url'
 import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 
 const MAX_PROJECT_RESPONSE_BYTES = 1024 * 1024
+const KOSHA_CONTENT_MODES = Object.freeze(['full', 'link_only'])
 const REQUIRED_SERVER_SECRETS = Object.freeze([
   'FEEDBACK_ADMIN_EMAILS',
   'GEMINI_API_KEY',
@@ -49,7 +50,7 @@ function runtimeConfigNamespace(project) {
     : null
 }
 
-function verifyProjectIdentity(project, environment) {
+function verifyProjectIdentity(project, environment, stagingKoshaContentMode) {
   const expected = RELEASE_ENVIRONMENTS[environment]
   if (!isRecord(project) || project.name !== expected.project) {
     throw new Error(`${environment} Pages project identity does not match.`)
@@ -88,7 +89,10 @@ function verifyProjectIdentity(project, environment) {
 
   const productionVars = environmentVariables(production)
   const previewVars = environmentVariables(project?.deployment_configs?.preview)
-  const missingSecrets = REQUIRED_SERVER_SECRETS.filter((name) => productionVars[name]?.type !== 'secret_text')
+  const requiredServerSecrets = environment === 'staging' && stagingKoshaContentMode === 'link_only'
+    ? REQUIRED_SERVER_SECRETS.filter((name) => name !== 'KOSHA_API_KEY')
+    : REQUIRED_SERVER_SECRETS
+  const missingSecrets = requiredServerSecrets.filter((name) => productionVars[name]?.type !== 'secret_text')
   if (missingSecrets.length > 0) {
     throw new Error(`${expected.project} lacks encrypted server secrets: ${missingSecrets.join(', ')}`)
   }
@@ -106,12 +110,16 @@ export function verifyPagesProjectPair({
   selectedEnvironment,
   selectedRuntimeConfigKvId,
   requireCurrentBinding = false,
+  stagingKoshaContentMode = 'full',
 }) {
   if (!['staging', 'production'].includes(selectedEnvironment)) {
     throw new Error('Selected environment must be staging or production.')
   }
-  verifyProjectIdentity(staging, 'staging')
-  verifyProjectIdentity(production, 'production')
+  if (!KOSHA_CONTENT_MODES.includes(stagingKoshaContentMode)) {
+    throw new Error('STAGING_KOSHA_CONTENT_MODE must be full or link_only.')
+  }
+  verifyProjectIdentity(staging, 'staging', stagingKoshaContentMode)
+  verifyProjectIdentity(production, 'production', stagingKoshaContentMode)
 
   const selected = selectedEnvironment === 'staging' ? staging : production
   const peer = selectedEnvironment === 'staging' ? production : staging
@@ -135,6 +143,7 @@ export function verifyPagesProjectPair({
     selectedProject: selected.name,
     currentBindingVerified: requireCurrentBinding,
     peerBindingPresent: Boolean(peerBinding),
+    stagingKoshaContentMode,
   }
 }
 
@@ -213,6 +222,7 @@ export async function fetchAndVerifyPagesProjectPair(environment = process.env) 
     selectedEnvironment,
     selectedRuntimeConfigKvId,
     requireCurrentBinding: environment.VERIFY_CURRENT_RUNTIME_BINDING === 'true',
+    stagingKoshaContentMode: environment.STAGING_KOSHA_CONTENT_MODE?.trim() || 'full',
   })
 }
 

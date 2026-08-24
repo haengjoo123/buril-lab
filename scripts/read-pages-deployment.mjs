@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
+const MAX_DEPLOYMENT_PAYLOAD_BYTES = 5 * 1024 * 1024
 const DEPLOYMENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const DEPLOYMENT_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
 const DEPLOYMENT_TARGETS = Object.freeze({
@@ -124,8 +125,23 @@ export function findPagesDeployment(payload, commitSha, {
   }
 }
 
+async function readBoundedStream(stream) {
+  let bytes = 0
+  const chunks = []
+  for await (const chunk of stream) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    bytes += buffer.byteLength
+    if (bytes > MAX_DEPLOYMENT_PAYLOAD_BYTES) {
+      throw new Error('Pages deployment evidence exceeds the permitted size.')
+    }
+    chunks.push(buffer)
+  }
+  return Buffer.concat(chunks).toString('utf8')
+}
+
 export async function readPagesDeployment({
   file,
+  input = process.stdin,
   commitSha,
   environment = 'staging',
   project = DEPLOYMENT_TARGETS[environment]?.project,
@@ -134,7 +150,10 @@ export async function readPagesDeployment({
 }) {
   let deployments
   try {
-    deployments = JSON.parse(await readFile(resolve(file), 'utf8'))
+    const raw = file === '-'
+      ? await readBoundedStream(input)
+      : await readFile(resolve(file), 'utf8')
+    deployments = JSON.parse(raw)
   } catch {
     throw new Error('Pages deployment evidence is not valid JSON.')
   }
@@ -181,7 +200,7 @@ async function main() {
   const project = args.get('project')
   if (!file || !commitSha || !environment || !project) {
     throw new Error(
-      'Usage: node scripts/read-pages-deployment.mjs --file <json> --commit <sha> --environment <staging|production> --project <name>',
+      'Usage: node scripts/read-pages-deployment.mjs --file <json|-> --commit <sha> --environment <staging|production> --project <name>',
     )
   }
   const deployment = await readPagesDeployment({ file, commitSha, environment, project })

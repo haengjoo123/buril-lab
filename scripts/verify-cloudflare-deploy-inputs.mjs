@@ -1,13 +1,35 @@
 import { pathToFileURL } from 'node:url'
+import { GATE0_STAGING_CONFIRMATION } from './gate0-seed-safety.mjs'
 import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const CLOUDFLARE_ID_PATTERN = /^[0-9a-f]{32}$/
+const KOSHA_CONTENT_MODES = new Set(['full', 'link_only'])
+const CLIENT_FEATURE_FLAGS = [
+  'VITE_ENABLE_WASTE_V2',
+  'VITE_ENABLE_PH_PREDICTION',
+  'VITE_ENABLE_CHEMICAL_ENRICHMENT',
+  'VITE_ENABLE_SEARCH_ANALYTICS',
+]
+const GATE0_FEATURE_PROFILE = Object.freeze({
+  VITE_ENABLE_WASTE_V2: 'true',
+  VITE_ENABLE_PH_PREDICTION: 'true',
+  VITE_ENABLE_CHEMICAL_ENRICHMENT: 'true',
+  VITE_ENABLE_SEARCH_ANALYTICS: 'false',
+})
 
 function requireValue(environment, name, minimumLength = 1) {
   const value = environment[name]?.trim()
   if (!value || value.length < minimumLength) throw new Error(`${name} is missing or too short.`)
   if (/[\r\n\0]/.test(value)) throw new Error(`${name} contains forbidden characters.`)
+  return value
+}
+
+function requireBooleanLiteral(environment, name) {
+  const value = environment[name]
+  if (value !== 'true' && value !== 'false') {
+    throw new Error(`${name} must be exactly true or false.`)
+  }
   return value
 }
 
@@ -31,6 +53,11 @@ export function verifyCloudflareDeployInputs(environment) {
   }
   const expected = RELEASE_ENVIRONMENTS[deploymentEnvironment]
 
+  const stagingKoshaContentMode = requireValue(environment, 'STAGING_KOSHA_CONTENT_MODE')
+  if (!KOSHA_CONTENT_MODES.has(stagingKoshaContentMode)) {
+    throw new Error('STAGING_KOSHA_CONTENT_MODE must be full or link_only.')
+  }
+
   if (requireValue(environment, 'CLOUDFLARE_PAGES_PROJECT') !== expected.project) {
     throw new Error('CLOUDFLARE_PAGES_PROJECT does not match DEPLOY_ENVIRONMENT.')
   }
@@ -41,6 +68,9 @@ export function verifyCloudflareDeployInputs(environment) {
   const runtimeConfigKvId = requireValue(environment, 'BURILLAB_RUNTIME_CONFIG_KV_ID')
   if (!CLOUDFLARE_ID_PATTERN.test(runtimeConfigKvId)) {
     throw new Error('BURILLAB_RUNTIME_CONFIG_KV_ID is malformed.')
+  }
+  if (runtimeConfigKvId !== expected.runtimeConfigKvId) {
+    throw new Error('BURILLAB_RUNTIME_CONFIG_KV_ID is not the approved namespace for this environment.')
   }
 
   const commitSha = requireValue(environment, 'DEPLOY_COMMIT_SHA')
@@ -73,12 +103,37 @@ export function verifyCloudflareDeployInputs(environment) {
     'VITE_SUPABASE_URL',
     `https://${expected.supabaseProjectRef}.supabase.co/`,
   )
-  requireValue(environment, 'VITE_SUPABASE_ANON_KEY', 20)
+  const supabaseAnonKey = requireValue(environment, 'VITE_SUPABASE_ANON_KEY', 20)
+
+  for (const name of CLIENT_FEATURE_FLAGS) {
+    const value = requireBooleanLiteral(environment, name)
+    if (value !== GATE0_FEATURE_PROFILE[name]) {
+      throw new Error(`${name} does not match the approved Gate0 feature profile.`)
+    }
+  }
 
   const accessClientId = requireValue(environment, 'STAGING_ACCESS_CLIENT_ID', 10)
   const accessClientSecret = requireValue(environment, 'STAGING_ACCESS_CLIENT_SECRET', 20)
   if (accessClientId === accessClientSecret) {
     throw new Error('Cloudflare Access client ID and secret must not be identical.')
+  }
+
+  if (deploymentEnvironment === 'staging') {
+    const serviceRoleKey = requireValue(environment, 'SUPABASE_SERVICE_ROLE_KEY', 20)
+    if (serviceRoleKey === supabaseAnonKey) {
+      throw new Error('Staging service-role and anonymous Supabase keys must not be identical.')
+    }
+    const fixtureEmail = requireValue(environment, 'GATE0_E2E_EMAIL', 6)
+    if (
+      fixtureEmail.length > 254
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fixtureEmail)
+    ) {
+      throw new Error('GATE0_E2E_EMAIL is malformed.')
+    }
+    requireValue(environment, 'GATE0_E2E_PASSWORD', 20)
+    if (environment.GATE0_STAGING_SEED_CONFIRMATION !== GATE0_STAGING_CONFIRMATION) {
+      throw new Error('GATE0_STAGING_SEED_CONFIRMATION does not match the exact Staging target.')
+    }
   }
 
   return {
@@ -87,6 +142,7 @@ export function verifyCloudflareDeployInputs(environment) {
     origin: expected.origin,
     commitSha,
     runtimeConfigKvId,
+    stagingKoshaContentMode,
   }
 }
 

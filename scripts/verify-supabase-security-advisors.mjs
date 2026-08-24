@@ -3,10 +3,12 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
+import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 
 export const ADVISOR_CLI_VERSION = '2.115.0'
 export const BASELINE_ENVIRONMENTS = ['production', 'staging']
-export const EXPECTED_COUNTS = Object.freeze({ production: 53, staging: 50 })
+export const EXPECTED_COUNTS = Object.freeze({ production: 53, staging: 53 })
+const SUPABASE_CLI_EXECUTABLE = 'supabase'
 
 const repoRoot = resolve(import.meta.dirname, '..')
 const baselineDirectory = resolve(repoRoot, 'supabase/security-advisors')
@@ -374,7 +376,14 @@ export function normalizeAdvisorPayload(payload) {
 
   const normalized = root.results.map((raw, index) => {
     const row = assertRecord(raw, `advisor results[${index}]`)
-    const cacheKey = assertString(row.cache_key, `advisor results[${index}].cache_key`)
+    if (
+      typeof row.cache_key === 'string'
+      && typeof row.cacheKey === 'string'
+      && row.cache_key !== row.cacheKey
+    ) {
+      fail(`advisor results[${index}] returned conflicting cache-key fields`)
+    }
+    const cacheKey = assertString(row.cache_key ?? row.cacheKey, `advisor results[${index}].cache_key`)
     const rule = assertString(row.name, `advisor results[${index}].name`)
     if (!ALLOWED_RULES.has(rule)) fail(`advisor returned an unreviewed rule: ${rule}`)
     const level = assertString(row.level, `advisor results[${index}].level`).toUpperCase()
@@ -392,15 +401,11 @@ export function normalizeAdvisorPayload(payload) {
         kind: 'function',
         schema: assertString(metadata.schema, `advisor results[${index}].metadata.schema`),
         name: assertString(metadata.name, `advisor results[${index}].metadata.name`),
-        identity_arguments: assertString(
-          metadata.arguments,
-          `advisor results[${index}].metadata.arguments`,
-          { allowEmpty: true },
-        ),
-        language: assertString(metadata.language, `advisor results[${index}].metadata.language`),
-        security_definer: metadata.security_definer,
       }
-      if (object.security_definer !== true) fail(`advisor results[${index}] is not SECURITY DEFINER`)
+      const expectedPrefix = `${rule}_${object.schema}_${object.name}_`
+      if (!cacheKey.startsWith(expectedPrefix)) {
+        fail(`advisor results[${index}].cache_key does not identify its function`)
+      }
     } else if (rule === 'rls_enabled_no_policy') {
       if (metadata.type !== 'table') fail(`advisor results[${index}] is not a table`)
       object = {
@@ -456,6 +461,7 @@ export function normalizePermissionPayload(payload) {
       }
       return {
         lookup_key: functionLookupKey(object),
+        advisor_cache_key: `authenticated_security_definer_function_executable_${object.schema}_${object.name}_${object.identity_arguments}`,
         object,
         evidence: {
           kind: 'function_execute',
@@ -479,6 +485,7 @@ export function normalizePermissionPayload(payload) {
       }
       return {
         lookup_key: tableLookupKey(object),
+        advisor_cache_key: `rls_enabled_no_policy_${object.schema}_${object.name}`,
         object,
         evidence: {
           kind: 'table_access',
@@ -500,20 +507,21 @@ export function normalizePermissionPayload(payload) {
 }
 
 export function buildObservedEntries(advisorEntries, permissionEntries) {
-  const permissions = new Map(permissionEntries.map((entry) => [entry.lookup_key, entry]))
+  const permissions = new Map(permissionEntries.map((entry) => [entry.advisor_cache_key, entry]))
   const consumed = new Set()
   const observed = advisorEntries.map((entry) => {
     if (entry.object.kind === 'auth_setting') return entry
-    const lookupKey = entry.object.kind === 'function'
-      ? functionLookupKey(entry.object)
-      : tableLookupKey(entry.object)
-    const permission = permissions.get(lookupKey)
+    const permission = permissions.get(entry.cache_key)
     if (!permission) fail(`permission evidence is missing for ${entry.cache_key}`)
-    consumed.add(lookupKey)
-    if (JSON.stringify(permission.object) !== JSON.stringify(entry.object)) {
+    consumed.add(entry.cache_key)
+    if (
+      permission.object.kind !== entry.object.kind
+      || permission.object.schema !== entry.object.schema
+      || permission.object.name !== entry.object.name
+    ) {
       fail(`advisor and permission metadata differ for ${entry.cache_key}`)
     }
-    return { ...entry, evidence: permission.evidence }
+    return { ...entry, object: permission.object, evidence: permission.evidence }
   })
 
   const unconsumed = [...permissions.keys()].filter((key) => !consumed.has(key))
@@ -531,10 +539,7 @@ function technicalProjection(entry) {
   }
 }
 
-export function compareObservedWithBaseline(baseline, observedEntries) {
-  if (observedEntries.length !== baseline.expected_count) {
-    fail(`${baseline.environment} hosted advisor count changed`)
-  }
+export function compareObservedWithBaseline(baseline, observedEntries, { includeKeys = false } = {}) {
   const expected = new Map(baseline.entries.map((entry) => [entry.cache_key, technicalProjection(entry)]))
   const actual = new Map(observedEntries.map((entry) => [entry.cache_key, technicalProjection(entry)]))
   const missing = [...expected.keys()].filter((key) => !actual.has(key))
@@ -542,13 +547,24 @@ export function compareObservedWithBaseline(baseline, observedEntries) {
   const changed = [...expected.keys()].filter(
     (key) => actual.has(key) && JSON.stringify(expected.get(key)) !== JSON.stringify(actual.get(key)),
   )
-  if (missing.length || unexpected.length || changed.length) {
+  if (
+    observedEntries.length !== baseline.expected_count
+    || missing.length
+    || unexpected.length
+    || changed.length
+  ) {
     const summary = [
+      observedEntries.length !== baseline.expected_count
+        ? `count=${baseline.expected_count}->${observedEntries.length}`
+        : '',
       missing.length ? `missing=${missing.length}` : '',
       unexpected.length ? `unexpected=${unexpected.length}` : '',
       changed.length ? `changed=${changed.length}` : '',
     ].filter(Boolean).join(', ')
-    fail(`${baseline.environment} hosted advisor differs from the reviewed baseline (${summary})`)
+    const keyDetails = includeKeys
+      ? `; missing_keys=${JSON.stringify(missing)}; unexpected_keys=${JSON.stringify(unexpected)}; changed_keys=${JSON.stringify(changed)}`
+      : ''
+    fail(`${baseline.environment} hosted advisor differs from the reviewed baseline (${summary})${keyDetails}`)
   }
 }
 
@@ -561,6 +577,9 @@ export function assertHostedEnvironment(environment, env = process.env) {
   }
   if (typeof projectRef !== 'string' || !PROJECT_REF_PATTERN.test(projectRef)) {
     fail('hosted advisor check requires a valid environment-scoped SUPABASE_PROJECT_REF variable')
+  }
+  if (projectRef !== RELEASE_ENVIRONMENTS[environment].supabaseProjectRef) {
+    fail('SUPABASE_PROJECT_REF does not match the selected hosted advisor environment')
   }
   return { accessToken, projectRef }
 }
@@ -575,16 +594,24 @@ function parseStrictJson(text, label) {
 }
 
 function runSupabaseJson(args, label, env) {
-  const result = spawnSync('supabase', args, {
+  const result = spawnSync(SUPABASE_CLI_EXECUTABLE, args, {
     cwd: repoRoot,
     env,
     encoding: 'utf8',
+    shell: process.platform === 'win32',
     timeout: 120_000,
     maxBuffer: 8 * 1024 * 1024,
     windowsHide: true,
   })
-  if (result.error || result.status !== 0) {
-    fail(`${label} failed closed before producing a reviewed result`)
+  if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') fail(`${label} timed out before producing a reviewed result`)
+    fail(`${label} could not start the pinned CLI (${result.error.code || 'unknown error'})`)
+  }
+  if (result.signal) {
+    fail(`${label} was terminated by ${result.signal} before producing a reviewed result`)
+  }
+  if (result.status !== 0) {
+    fail(`${label} exited with status ${result.status} before producing a reviewed result`)
   }
   return parseStrictJson(result.stdout, label)
 }
@@ -596,6 +623,7 @@ export function runHostedCheck(environment, env = process.env) {
   const advisorPayload = runSupabaseJson(
     [
       'db', 'advisors',
+      '--linked',
       '--project-ref', projectRef,
       '--type', 'security',
       '--level', 'info',
@@ -609,6 +637,7 @@ export function runHostedCheck(environment, env = process.env) {
   const permissionPayload = runSupabaseJson(
     [
       'db', 'query',
+      '--linked',
       '--project-ref', projectRef,
       '--file', permissionQueryPath,
       '--output-format', 'json',
@@ -620,7 +649,9 @@ export function runHostedCheck(environment, env = process.env) {
   const advisors = normalizeAdvisorPayload(advisorPayload)
   const permissions = normalizePermissionPayload(permissionPayload)
   const observed = buildObservedEntries(advisors, permissions)
-  compareObservedWithBaseline(baseline, observed)
+  compareObservedWithBaseline(baseline, observed, {
+    includeKeys: env.ADVISOR_DIAGNOSTICS === 'true',
+  })
   return { environment, findings: observed.length }
 }
 

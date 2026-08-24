@@ -8,11 +8,13 @@ export const RELEASE_ENVIRONMENTS = Object.freeze({
     project: 'buril-lab-staging',
     origin: 'https://staging.burillab.com',
     supabaseProjectRef: 'qpgnomuqdcucjmxrunnw',
+    runtimeConfigKvId: 'dcaa52254fa6447bbe7c21f54354ad0d',
   }),
   production: Object.freeze({
     project: 'buril-lab',
     origin: 'https://burillab.com',
     supabaseProjectRef: 'zafxzidbtbryiksemlwc',
+    runtimeConfigKvId: 'dd6866f35f794a91b0fb5a24cbe57cf3',
   }),
 })
 

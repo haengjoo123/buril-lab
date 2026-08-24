@@ -35,6 +35,17 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Validate exact Gitleaks exceptions
+        run: npm run security:gitleaks-ignore
+
+      - name: Scan changes for committed secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_VERSION: "8.24.3"
+
       - name: Install locked dependencies
         run: npm ci
 

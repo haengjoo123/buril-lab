@@ -117,12 +117,41 @@ describe('Supabase hosted Security Advisor contract', () => {
     expect(JSON.stringify(observed)).not.toContain('detail')
   })
 
+  it('accepts the pinned CLI camelCase cacheKey shape and uses catalog metadata as authority', () => {
+    const currentCliFixture = structuredClone(advisorFixture)
+    for (const finding of currentCliFixture.results) {
+      finding.cacheKey = finding.cache_key
+      delete finding.cache_key
+      if (finding.name === 'authenticated_security_definer_function_executable') {
+        delete finding.metadata.arguments
+        delete finding.metadata.language
+        delete finding.metadata.security_definer
+      }
+    }
+
+    const observed = buildObservedEntries(
+      normalizeAdvisorPayload(currentCliFixture),
+      normalizePermissionPayload(structuredClone(permissionFixture)),
+    )
+
+    expect(observed[1].object).toMatchObject({
+      identity_arguments: 'target_id uuid',
+      language: 'plpgsql',
+      security_definer: true,
+    })
+  })
+
   it('rejects malformed output, duplicate findings, and unpaired permission evidence', () => {
     expect(() => normalizeAdvisorPayload({ lints: [] })).toThrow('results array')
 
     const duplicate = structuredClone(advisorFixture)
     duplicate.results.push(structuredClone(duplicate.results[0]))
     expect(() => normalizeAdvisorPayload(duplicate)).toThrow('duplicate cache_key')
+
+    const conflictingCacheFields = structuredClone(advisorFixture)
+    conflictingCacheFields.results[0].cacheKey = 'different_cache_key'
+    expect(() => normalizeAdvisorPayload(conflictingCacheFields))
+      .toThrow('conflicting cache-key fields')
 
     const extraPermission = structuredClone(permissionFixture)
     extraPermission.rows.push({
@@ -180,11 +209,22 @@ describe('Supabase hosted Security Advisor contract', () => {
     })).toThrow('SUPABASE_PROJECT_REF')
     expect(assertHostedEnvironment('production', {
       SUPABASE_ACCESS_TOKEN: 'not-empty',
-      SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst',
+      SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc',
     })).toEqual({
       accessToken: 'not-empty',
-      projectRef: 'abcdefghijklmnopqrst',
+      projectRef: 'zafxzidbtbryiksemlwc',
     })
+  })
+
+  it('fails closed when staging and production project refs are swapped', () => {
+    expect(() => assertHostedEnvironment('staging', {
+      SUPABASE_ACCESS_TOKEN: 'not-empty',
+      SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc',
+    })).toThrow('does not match the selected hosted advisor environment')
+    expect(() => assertHostedEnvironment('production', {
+      SUPABASE_ACCESS_TOKEN: 'not-empty',
+      SUPABASE_PROJECT_REF: 'qpgnomuqdcucjmxrunnw',
+    })).toThrow('does not match the selected hosted advisor environment')
   })
 
   it('rejects duplicate, unsorted, and expired committed entries', () => {
@@ -249,38 +289,23 @@ describe('Supabase hosted Security Advisor contract', () => {
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
       { environment: 'production', findings: 53 },
-      { environment: 'staging', findings: 50 },
+      { environment: 'staging', findings: 53 },
     ])
 
     const production = loadBaseline('production', { today: '2026-08-24' })
     const staging = loadBaseline('staging', { today: '2026-08-24' })
     const productionKeys = new Set(production.entries.map((entry) => entry.cache_key))
     const stagingKeys = new Set(staging.entries.map((entry) => entry.cache_key))
-    expect([...productionKeys].filter((key) => stagingKeys.has(key))).toHaveLength(46)
-    expect(production.entries
-      .filter((entry) => !stagingKeys.has(entry.cache_key))
-      .map((entry) => entry.object.name)
-      .sort()).toEqual([
-      'create_inventory_item_atomic',
-      'delete_inventory_item_atomic',
-      'delete_user',
-      'insert_audit_log_rpc',
-      'join_lab',
-      'leaked_password_protection',
-      'update_inventory_item_atomic',
-    ])
-    expect(staging.entries
-      .filter((entry) => !productionKeys.has(entry.cache_key))
-      .map((entry) => entry.object.name)
-      .sort()).toEqual([
-      'account_deletion_jobs',
-      'get_lab_password_security_status',
-      'lab_join_attempts',
-      'record_cabinet_activity',
-    ])
-    expect(production.entries.find((entry) => entry.object.name === 'get_cabinet_activity_logs')?.object)
-      .toMatchObject({ language: 'sql' })
-    expect(staging.entries.find((entry) => entry.object.name === 'get_cabinet_activity_logs')?.object)
-      .toMatchObject({ language: 'plpgsql' })
+    expect([...stagingKeys]).toEqual([...productionKeys])
+    const technicalProjection = (entry: (typeof production.entries)[number]) => ({
+      cache_key: entry.cache_key,
+      rule: entry.rule,
+      level: entry.level,
+      object: entry.object,
+      evidence: entry.evidence,
+    })
+    expect(staging.entries.map(technicalProjection)).toEqual(
+      production.entries.map(technicalProjection),
+    )
   })
 })

@@ -37,6 +37,7 @@ jobs:
       DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
       DEPLOY_CONFIRMATION: ${{ inputs.confirmation }}
       CLOUDFLARE_PAGES_PROJECT: buril-lab
+      STAGING_KOSHA_CONTENT_MODE: link_only
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -98,6 +99,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/verify-github-quality-run.mjs
 
+      - name: Verify the latest exact-SHA Staging workflow succeeded
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-staging-run.mjs
+
       - name: Verify environment-scoped deployment inputs
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -114,14 +120,15 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
-          mkdir -p .wrangler/evidence
+          set -o pipefail
           curl --fail-with-body --silent --show-error --proto '=https' \
+            --connect-timeout 10 \
+            --max-time 30 \
             --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             --header "Accept: application/json" \
-            --output .wrangler/evidence/staging-deployments.json \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/buril-lab-staging/deployments?env=production"
-          node scripts/read-pages-deployment.mjs \
-            --file .wrangler/evidence/staging-deployments.json \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/buril-lab-staging/deployments?env=production" \
+          | node scripts/read-pages-deployment.mjs \
+            --file - \
             --commit "$DEPLOY_COMMIT_SHA" \
             --environment staging \
             --project buril-lab-staging
@@ -217,6 +224,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/verify-github-quality-run.mjs
 
+      - name: Recheck the latest exact-SHA Staging workflow still succeeded
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-staging-run.mjs
+
       - name: Recheck that production still targets the current main tip
         shell: bash
         run: |
@@ -242,16 +254,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
-          mkdir -p .wrangler/evidence
+          set -o pipefail
           evidence_found=false
           for attempt in 1 2 3 4 5 6; do
             if curl --fail-with-body --silent --show-error --proto '=https' \
+              --connect-timeout 10 \
+              --max-time 30 \
               --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               --header "Accept: application/json" \
-              --output .wrangler/evidence/production-deployments.json \
               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production" \
-              && node scripts/read-pages-deployment.mjs \
-                --file .wrangler/evidence/production-deployments.json \
+              | node scripts/read-pages-deployment.mjs \
+                --file - \
                 --commit "$DEPLOY_COMMIT_SHA" \
                 --environment production \
                 --project "$CLOUDFLARE_PAGES_PROJECT"; then

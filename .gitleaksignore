@@ -1,0 +1,11 @@
+60b2e3ef9524af3ecc5d60fac3a9abd58e33a5bb:.env:gcp-api-key:5
+68aaa96c60a37ffec33cc10bbb94dc007990b735:.env:jwt:3
+bfc4351b7149e70c9db8d810aa22d6b4ebe0f68b:scripts/scrape_thermo_chemicals.js:jwt:22
+29807a9fc47c1c88f22d06d9b1a9ed7d6cac36c7:scripts/scrape_thermo_gibco.js:jwt:29
+ade9fe3142cd1d75c930513322c1faca5038bf99:scripts/scrape_welgene.js:jwt:33
+68aaa96c60a37ffec33cc10bbb94dc007990b735:scripts/migrate_images.js:jwt:10
+68aaa96c60a37ffec33cc10bbb94dc007990b735:scripts/scrape_duksan.js:jwt:20
+68aaa96c60a37ffec33cc10bbb94dc007990b735:scripts/scrape_solbioparm.js:jwt:21
+2cbc86fa6d9dc91a55dd59b68a78a181144febb0:functions/api/analytics/_shared.test.ts:jwt:22
+35b3d72d3f446115c901482c4b3a37eaf1f28fd1:supabase/tests/waste_disposal_v2_verification.sql:generic-api-key:218
+35b3d72d3f446115c901482c4b3a37eaf1f28fd1:supabase/migrations/20260801162628_waste_disposal_v2_security_and_schema.sql:generic-api-key:561

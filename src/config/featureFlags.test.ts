@@ -29,12 +29,12 @@ describe('isExplicitlyEnabled', () => {
     expect(isExplicitlyDisabled(' FALSE ')).toBe(true)
   })
 
-  it('enables submitted-search analytics by default with an explicit false kill switch', () => {
-    expect(isSearchAnalyticsDeploymentEnabled(undefined)).toBe(true)
-    expect(isSearchAnalyticsDeploymentEnabled('')).toBe(true)
+  it('keeps submitted-search analytics off unless explicitly enabled', () => {
+    expect(isSearchAnalyticsDeploymentEnabled(undefined)).toBe(false)
+    expect(isSearchAnalyticsDeploymentEnabled('')).toBe(false)
     expect(isSearchAnalyticsDeploymentEnabled('true')).toBe(true)
     expect(isSearchAnalyticsDeploymentEnabled('false')).toBe(false)
-    expect(isSearchAnalyticsDeploymentEnabled(' FALSE ')).toBe(false)
+    expect(isSearchAnalyticsDeploymentEnabled(' TRUE ')).toBe(true)
   })
 
   it('enables an approved catalog by default and keeps an explicit emergency rollback', () => {
