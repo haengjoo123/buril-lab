@@ -1,0 +1,38 @@
+{
+  "rows": [
+    {
+      "object_kind": "function",
+      "schema_name": "public",
+      "object_name": "reviewed_rpc",
+      "identity_arguments": "target_id uuid",
+      "language": "plpgsql",
+      "security_definer": true,
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "service_role_execute": true
+    },
+    {
+      "object_kind": "table",
+      "schema_name": "public",
+      "object_name": "server_receipts",
+      "rls_enabled": true,
+      "rls_forced": false,
+      "policy_count": 0,
+      "anon_schema_usage": true,
+      "anon_select": false,
+      "anon_insert": false,
+      "anon_update": false,
+      "anon_delete": false,
+      "authenticated_schema_usage": true,
+      "authenticated_select": false,
+      "authenticated_insert": false,
+      "authenticated_update": false,
+      "authenticated_delete": false,
+      "service_role_schema_usage": true,
+      "service_role_select": true,
+      "service_role_insert": true,
+      "service_role_update": true,
+      "service_role_delete": true
+    }
+  ]
+}

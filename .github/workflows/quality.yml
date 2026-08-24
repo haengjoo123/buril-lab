@@ -2,6 +2,7 @@ name: Quality and security
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -45,6 +46,9 @@ jobs:
 
       - name: Full unit and regression suite
         run: npm test -- --reporter=dot
+
+      - name: Verify committed Supabase Security Advisor baselines
+        run: npm run security:supabase-advisors
 
       - name: Production build
         run: npm run build
@@ -267,3 +271,42 @@ jobs:
       - name: Stop isolated local Supabase
         if: always() && steps.browser-contract.outputs.enabled == 'true'
         run: supabase stop --no-backup
+
+  hosted-supabase-advisor:
+    name: Hosted Supabase security advisor (${{ matrix.environment }})
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ matrix.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - staging
+          - production
+    env:
+      ADVISOR_ENVIRONMENT: ${{ matrix.environment }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up the pinned Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+
+      - name: Fail closed on hosted advisor or permission drift
+        run: >-
+          npm run security:supabase-advisors:hosted --
+          --environment "$ADVISOR_ENVIRONMENT"

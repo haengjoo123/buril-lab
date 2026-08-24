@@ -1,0 +1,1453 @@
+{
+  "schema_version": 1,
+  "environment": "staging",
+  "advisor_cli_version": "2.115.0",
+  "expected_count": 50,
+  "observed_at": "2026-08-24T00:00:00Z",
+  "entries": [
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_activate_waste_policy_v2_p_policy_version_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "activate_waste_policy_v2",
+        "identity_arguments": "p_policy_version_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.activate_waste_policy_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_add_safety_center_request_event_p_request_id uuid, p_body text, p_to_status text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "add_safety_center_request_event",
+        "identity_arguments": "p_request_id uuid, p_body text, p_to_status text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.add_safety_center_request_event은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_attach_safety_center_verification_document_p_center_id uuid, p_path text, p_name text, p_mime_type text, p_size bigint",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "attach_safety_center_verification_document",
+        "identity_arguments": "p_center_id uuid, p_path text, p_name text, p_mime_type text, p_size bigint",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.attach_safety_center_verification_document은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_inventory_item_with_dates_atomic_p_name text, p_storage_type text, p_brand text, p_product_number text, p_cas_number text, p_quantity integer, p_capacity text, p_cabinet_id uuid, p_storage_location_id uuid, p_product_id uuid, p_expiry_date date, p_manufacturer_date_type text, p_received_date date, p_opened_date date, p_memo text, p_remaining_percent integer, p_lab_id uuid, p_actor_user_id uuid, p_actor_name text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_inventory_item_with_dates_atomic",
+        "identity_arguments": "p_name text, p_storage_type text, p_brand text, p_product_number text, p_cas_number text, p_quantity integer, p_capacity text, p_cabinet_id uuid, p_storage_location_id uuid, p_product_id uuid, p_expiry_date date, p_manufacturer_date_type text, p_received_date date, p_opened_date date, p_memo text, p_remaining_percent integer, p_lab_id uuid, p_actor_user_id uuid, p_actor_name text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.create_inventory_item_with_dates_atomic은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_lab_secure_p_name text, p_password text, p_nickname text, p_institution_type text, p_research_field text, p_institution_name text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_lab_secure",
+        "identity_arguments": "p_name text, p_password text, p_nickname text, p_institution_type text, p_research_field text, p_institution_name text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.create_lab_secure은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 7 연구실 비밀번호 권한 강화"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_safety_center_p_institution_name text, p_institution_domain text, p_center_name text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_safety_center",
+        "identity_arguments": "p_institution_name text, p_institution_domain text, p_center_name text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.create_safety_center은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_safety_center_request_p_center_id uuid, p_lab_id uuid, p_title text, p_description text, p_priority text, p_due_date date, p_target_type text, p_target_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_safety_center_request",
+        "identity_arguments": "p_center_id uuid, p_lab_id uuid, p_title text, p_description text, p_priority text, p_due_date date, p_target_type text, p_target_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.create_safety_center_request은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_active_waste_policy_v2_p_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_active_waste_policy_v2",
+        "identity_arguments": "p_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_active_waste_policy_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_cabinet_activity_logs_target_cabinet_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_cabinet_activity_logs",
+        "identity_arguments": "target_cabinet_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_cabinet_activity_logs은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_cabinet_audit_logs_p_cabinet_id uuid, p_limit integer",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_cabinet_audit_logs",
+        "identity_arguments": "p_cabinet_id uuid, p_limit integer",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_cabinet_audit_logs은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_cabinet_disposal_logs_target_cabinet_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_cabinet_disposal_logs",
+        "identity_arguments": "target_cabinet_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_cabinet_disposal_logs은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_lab_members_target_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_lab_members",
+        "identity_arguments": "target_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_lab_members은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_lab_password_security_status_target_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_lab_password_security_status",
+        "identity_arguments": "target_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_lab_password_security_status은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 7 연구실 비밀번호 권한 강화"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_lab_safety_center_link_requests_p_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_lab_safety_center_link_requests",
+        "identity_arguments": "p_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_lab_safety_center_link_requests은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_lab_safety_center_requests_p_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_lab_safety_center_requests",
+        "identity_arguments": "p_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_lab_safety_center_requests은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_my_safety_centers_",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_my_safety_centers",
+        "identity_arguments": "",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_my_safety_centers은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_audit_logs_p_center_id uuid, p_limit integer",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_safety_center_audit_logs",
+        "identity_arguments": "p_center_id uuid, p_limit integer",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_safety_center_audit_logs은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_lab_candidates_p_center_id uuid, p_search text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_safety_center_lab_candidates",
+        "identity_arguments": "p_center_id uuid, p_search text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_safety_center_lab_candidates은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_requests_p_center_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_safety_center_requests",
+        "identity_arguments": "p_center_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_safety_center_requests은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_risk_items_p_center_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_safety_center_risk_items",
+        "identity_arguments": "p_center_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_safety_center_risk_items은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_waste_logs_p_center_id uuid, p_created_after timestamp with time zone, p_created_before timestamp with time zone",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_safety_center_waste_logs",
+        "identity_arguments": "p_center_id uuid, p_created_after timestamp with time zone, p_created_before timestamp with time zone",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.get_safety_center_waste_logs은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_is_lab_admin_target_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "is_lab_admin",
+        "identity_arguments": "target_lab_id uuid",
+        "language": "sql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.is_lab_admin은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_is_safety_center_member_target_center_id uuid, allowed_roles text[]",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "is_safety_center_member",
+        "identity_arguments": "target_center_id uuid, allowed_roles text[]",
+        "language": "sql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.is_safety_center_member은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_leave_lab_target_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "leave_lab",
+        "identity_arguments": "target_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.leave_lab은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_log_safety_center_export_p_center_id uuid, p_format text, p_datasets text[], p_lab_ids uuid[], p_filters jsonb, p_row_count integer",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "log_safety_center_export",
+        "identity_arguments": "p_center_id uuid, p_format text, p_datasets text[], p_lab_ids uuid[], p_filters jsonb, p_row_count integer",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.log_safety_center_export은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_move_inventory_records_v2_p_targets jsonb, p_destination jsonb, p_request_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "move_inventory_records_v2",
+        "identity_arguments": "p_targets jsonb, p_destination jsonb, p_request_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.move_inventory_records_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_cabinet_activity_p_cabinet_id uuid, p_action_type text, p_item_name text, p_reason text, p_memo text, p_request_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_cabinet_activity",
+        "identity_arguments": "p_cabinet_id uuid, p_action_type text, p_item_name text, p_reason text, p_memo text, p_request_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.record_cabinet_activity은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 6 기존 RPC 권한 Contract"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_inventory_disposal_v2_p_request_id uuid, p_items jsonb, p_batch jsonb, p_lab_id uuid, p_actor_name text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_inventory_disposal_v2",
+        "identity_arguments": "p_request_id uuid, p_items jsonb, p_batch jsonb, p_lab_id uuid, p_actor_name text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.record_inventory_disposal_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_inventory_usage_completion_v2_p_cabinet_item_id uuid, p_request_id uuid, p_completion_kind text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_inventory_usage_completion_v2",
+        "identity_arguments": "p_cabinet_item_id uuid, p_request_id uuid, p_completion_kind text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.record_inventory_usage_completion_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_waste_handling_v2_p_request_id uuid, p_batch jsonb, p_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_waste_handling_v2",
+        "identity_arguments": "p_request_id uuid, p_batch jsonb, p_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.record_waste_handling_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_remove_inventory_record_v2_p_items jsonb, p_lab_id uuid, p_actor_name text, p_reason text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "remove_inventory_record_v2",
+        "identity_arguments": "p_items jsonb, p_lab_id uuid, p_actor_name text, p_reason text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.remove_inventory_record_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_remove_lab_member_target_lab_id uuid, target_user_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "remove_lab_member",
+        "identity_arguments": "target_lab_id uuid, target_user_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.remove_lab_member은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_request_safety_center_lab_link_p_center_id uuid, p_lab_id uuid, p_scope text[]",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "request_safety_center_lab_link",
+        "identity_arguments": "p_center_id uuid, p_lab_id uuid, p_scope text[]",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.request_safety_center_lab_link은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_respond_safety_center_lab_link_p_link_id uuid, p_status text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "respond_safety_center_lab_link",
+        "identity_arguments": "p_link_id uuid, p_status text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.respond_safety_center_lab_link은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_save_safety_center_waste_policy_draft_v2_p_center_id uuid, p_version_label text, p_name text, p_streams jsonb, p_source_refs jsonb",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "save_safety_center_waste_policy_draft_v2",
+        "identity_arguments": "p_center_id uuid, p_version_label text, p_name text, p_streams jsonb, p_source_refs jsonb",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.save_safety_center_waste_policy_draft_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_search_labs_search_query text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "search_labs",
+        "identity_arguments": "search_query text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.search_labs은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_set_lab_join_password_target_lab_id uuid, p_password text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "set_lab_join_password",
+        "identity_arguments": "target_lab_id uuid, p_password text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.set_lab_join_password은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 7 연구실 비밀번호 권한 강화"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_transfer_admin_target_lab_id uuid, new_admin_user_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "transfer_admin",
+        "identity_arguments": "target_lab_id uuid, new_admin_user_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.transfer_admin은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_update_inventory_item_with_dates_atomic_p_item_id uuid, p_item_source text, p_updates jsonb, p_actor_name text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "update_inventory_item_with_dates_atomic",
+        "identity_arguments": "p_item_id uuid, p_item_source text, p_updates jsonb, p_actor_name text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.update_inventory_item_with_dates_atomic은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_update_lab_member_role_target_lab_id uuid, target_user_id uuid, new_role text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "update_lab_member_role",
+        "identity_arguments": "target_lab_id uuid, target_user_id uuid, new_role text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.update_lab_member_role은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_upsert_lab_waste_stream_override_v2_p_lab_id uuid, p_stream_code text, p_container_label text, p_container_color text, p_location text, p_handler_contact text, p_replacement_location text, p_is_disabled boolean",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "upsert_lab_waste_stream_override_v2",
+        "identity_arguments": "p_lab_id uuid, p_stream_code text, p_container_label text, p_container_color text, p_location text, p_handler_contact text, p_replacement_location text, p_is_disabled boolean",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.upsert_lab_waste_stream_override_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_void_waste_log_v2_p_waste_log_id uuid, p_reason text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "void_waste_log_v2",
+        "identity_arguments": "p_waste_log_id uuid, p_reason text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.void_waste_log_v2은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": "2026-12-31",
+      "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_lab_join_attempts",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "lab_join_attempts"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.lab_join_attempts은 브라우저 역할에 스키마 사용권과 DML 권한이 없고 service_role에도 직접 DML을 부여하지 않은 내부 전용 표이므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_account_deletion_jobs",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "account_deletion_jobs"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.account_deletion_jobs은 브라우저 역할의 DML을 모두 거부하고 service_role에도 필요한 조회·추가·수정만 허용하며 삭제는 거부한 작업표이므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_chemical_enrichment_cache",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "chemical_enrichment_cache"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.chemical_enrichment_cache은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있는 서버 전용 표임을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_chemical_enrichment_leases",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "chemical_enrichment_leases"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.chemical_enrichment_leases은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있는 서버 전용 표임을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_chemical_source_cache",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "chemical_source_cache"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.chemical_source_cache은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있는 서버 전용 표임을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_inventory_move_receipts",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "inventory_move_receipts"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.inventory_move_receipts은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있는 서버 전용 표임을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_inventory_usage_completion_receipts",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "inventory_usage_completion_receipts"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.inventory_usage_completion_receipts은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있는 서버 전용 표임을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_waste_ph_prediction_authorizations",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "waste_ph_prediction_authorizations"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.waste_ph_prediction_authorizations은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있는 서버 전용 표임을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    }
+  ]
+}

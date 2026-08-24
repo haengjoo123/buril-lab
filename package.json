@@ -9,6 +9,8 @@
     "assets:capacitor": "npx @capacitor/assets generate --ios --android --assetPath resources --iconBackgroundColor \"#0f172a\" --iconBackgroundColorDark \"#0f172a\" --splashBackgroundColor \"#0f172a\" --splashBackgroundColorDark \"#0f172a\"",
     "build": "npm run ph:verify-release && npm run golden:verify && tsc -b && vite build && node scripts/verify-no-client-secrets.mjs",
     "security:client-secrets": "node scripts/verify-no-client-secrets.mjs",
+    "security:supabase-advisors": "node scripts/verify-supabase-security-advisors.mjs static",
+    "security:supabase-advisors:hosted": "node scripts/verify-supabase-security-advisors.mjs hosted",
     "cloudflare:test": "vitest run scripts/cloudflare-release.test.ts --reporter=dot",
     "cloudflare:verify": "node scripts/verify-cloudflare-release-config.mjs",
     "ops:verify": "node scripts/verify-pages-project-config.mjs",
