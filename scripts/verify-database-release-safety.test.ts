@@ -27,6 +27,8 @@ describe('Prep 1 database release safety manifest', () => {
     expect(verifyDatabaseReleaseSafety()).toEqual({
       activeMigrations: 1,
       legacySqlFiles: 50,
+      activePgTapTests: 1,
+      legacySqlTests: 8,
       baseline: {
         publicTables: 49,
         explicitRoleGrants: {

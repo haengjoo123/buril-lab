@@ -16,6 +16,16 @@ export const EXPECTED_REMOTE_HISTORY_SHA256 = 'ff169071822bd12de18c5485473e000aa
 export const EXPECTED_SNAPSHOT_ROW_COUNT = 118
 export const EXPECTED_SNAPSHOT_SHA256 = 'c72f031e8d459e2db425352d9f97daadecada97e3f0c57060fe2b57217a964d6'
 export const EXPECTED_LOCAL_ONLY_WITHOUT_SQL = ['20260823163832']
+export const EXPECTED_LEGACY_TESTS = [
+  'cabinet_state_atomic.sql',
+  'reagent_date_tracking.sql',
+  'search_batch_intelligence.sql',
+  'waste_disposal_v2_inventory_disposal.sql',
+  'waste_disposal_v2_inventory_move.sql',
+  'waste_disposal_v2_inventory_usage.sql',
+  'waste_disposal_v2_policy.sql',
+  'waste_disposal_v2_verification.sql',
+]
 export const EXPECTED_PERMISSION_TEST_SHA256 = '48edb5c96bfdfa8f42ae1660b4c15f229cbf5b2a6fc0aa6ece3ddff625d350d3'
 export const EXPECTED_CI_MARKER = '{"schema_version":1,"enabled":true,"reset_count":2,"permission_tests":true}'
 
@@ -167,6 +177,8 @@ export function verifySnapshot(snapshot, legacyVersionsOnDisk) {
 export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
   const activeDirectory = resolve(repoRoot, 'supabase/migrations')
   const legacyDirectory = resolve(repoRoot, 'supabase/legacy_migrations')
+  const activeTestsDirectory = resolve(repoRoot, 'supabase/tests')
+  const legacyTestsDirectory = resolve(repoRoot, 'supabase/legacy_tests')
   const deferredDirectory = resolve(repoRoot, 'supabase/deferred_migrations')
 
   const activeNames = readdirSync(activeDirectory).sort()
@@ -175,6 +187,19 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
     `Active migration directory contains unreviewed files: ${activeNames.join(', ')}`,
   )
   assert(!existsSync(deferredDirectory), 'Deferred pilot migrations must not be present in the Prep 1 release slice.')
+
+  const activeTests = readdirSync(activeTestsDirectory).sort()
+  assert(
+    JSON.stringify(activeTests) === JSON.stringify(['baseline_permissions.sql']),
+    `Active database test directory contains non-pgTAP files: ${activeTests.join(', ')}`,
+  )
+  const legacyTests = readdirSync(legacyTestsDirectory)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+  assert(
+    JSON.stringify(legacyTests) === JSON.stringify([...EXPECTED_LEGACY_TESTS].sort()),
+    `Legacy database test archive changed: ${legacyTests.join(', ')}`,
+  )
 
   const baselineSql = readFileSync(resolve(activeDirectory, BASELINE_FILE), 'utf8')
   const baseline = verifyBaselineSql(baselineSql)
@@ -253,6 +278,8 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
   return {
     activeMigrations: 1,
     legacySqlFiles: legacyFiles.length,
+    activePgTapTests: activeTests.length,
+    legacySqlTests: legacyTests.length,
     baseline,
     evidence,
   }

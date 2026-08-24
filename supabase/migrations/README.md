@@ -20,6 +20,11 @@ Prep 1 완료 시점의 활성 SQL은 다음 기준선 하나뿐입니다.
 Repair 도구는 검토한 Supabase CLI `2.115.0`이 이미 설치되어 있을 때만
 `npx --no-install`로 실행됩니다. 실행 중 최신 CLI를 자동 다운로드하지 않습니다.
 
+`supabase test db`가 실행하는 활성 SQL 검사는
+`supabase/tests/baseline_permissions.sql` 하나뿐입니다. 기준선 전환 전의 절차형 SQL
+검증문은 삭제하지 않고 `supabase/legacy_tests`에 보관하며 활성 pgTAP 검사에 섞지
+않습니다.
+
 ## 이력 전환과 복구
 
 - `plan`: 원격 이력을 읽기만 하며 `legacy`, `transition`, `baseline` 중 정확한
