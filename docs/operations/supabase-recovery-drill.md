@@ -26,14 +26,16 @@ Supabase의 자동 DB 백업은 Storage의 파일 본문을 포함하지 않고 
 - [ ] 생성 전 예상 Compute 비용이 1달러 이하임을 다시 확인함
 - [ ] 운영의 가장 최근 사용 가능한 백업 시각과 일일 백업 상태를 확인함
 - [ ] 작업자가 Supabase·GitHub·Cloudflare 계정 MFA를 사용함
-- [ ] PowerShell 7, Supabase CLI `2.115.0`, Docker Desktop 서버, target PostgreSQL보다 오래되지 않은 `psql`이 실제로 실행됨
-- [ ] 복구 파일을 둘 BitLocker 보호 로컬 임시 디렉터리의 절대경로와 작업 종료 시 안전하게 지울 방법을 준비함
+- [ ] PowerShell 7, Supabase CLI `2.115.0`, Docker Desktop 서버, 공식 portable PostgreSQL `17.11`의 `pg_dump`·`pg_restore`·`psql`이 실제로 실행됨
+- [ ] 공식 portable PostgreSQL 원본 압축파일의 실제 SHA-256이 `6EABDF00D2893713B75DB4336A23C3FDF505F056E217EC6E2E95D901750CFEA3`과 일치함
+- [ ] 복구 파일을 둘 BitLocker 보호 로컬 디렉터리 또는 EFS가 적용된 정확한 로컬 디렉터리의 절대경로와 작업 종료 시 안전하게 지울 방법을 준비함
+- [ ] EFS를 사용하면 작업 디렉터리 바로 아래 새 확인 파일에도 `Encrypted` 속성이 상속됐음을 읽기 전용으로 다시 확인함
 - [ ] 임시 디렉터리의 정규화된 절대경로가 저장소·OneDrive·다른 동기화 폴더 아래가 아님
 - [ ] 운영과 다른 Supabase 키, URL, 저장소, Redis, KV만 사용하도록 확인함
 - [ ] 외부 메일·예약 작업·삭제 worker·웹훅을 켜지 않는다는 확인문구를 기록함
 - [ ] 논리 덤프와 R2 파일을 같은 복구 시점으로 맞추기 위한 짧은 운영 쓰기·사진 업로드·삭제 중단 창을 별도로 승인받음
 - [ ] 최근 시약장 파일의 R2 `latest → complete → manifest → manifest.sha256` 연결과 실제 파일 본문이 존재함
-- [ ] 아래 로컬 전용 자동 사전점검이 통과함
+- [ ] 아래 읽기 전용 자동 사전점검이 통과함
 
 조직 접근자 확인은 시점 증거입니다. 임시 프로젝트 생성 직전에 구성원 수·역할·권한 범위가 그대로인지 읽기 전용으로 다시 확인하고, 달라졌으면 이 항목을 다시 미완료로 돌린 뒤 프로젝트 생성과 운영 DB 읽기를 중단합니다.
 
@@ -46,42 +48,47 @@ Supabase의 자동 DB 백업은 Storage의 파일 본문을 포함하지 않고 
 - 운영 프로젝트는 `ACTIVE_HEALTHY`, 지역 `us-east-2`, PostgreSQL `17.6`으로 확인됨
 - 일일 백업이 켜져 있고 2026-08-24 08:40:29 UTC가 가장 최근이며 8개 복구 지점이 보임; Storage 파일 본문은 포함되지 않음
 - 프로젝트 생성 비용 화면/API의 월 표시액은 10달러였지만 사용자 비용 확인 ID는 아직 없음
-- 로컬 PowerShell `7.6.4`와 Supabase CLI `2.115.0`은 확인됐지만 Docker Desktop 서버와 `psql`은 아직 실행할 수 없음
+- 로컬 PowerShell `7.6.4`, Supabase CLI `2.115.0`, 공식 portable PostgreSQL `17.11`의 세 도구와 원본 압축파일 해시는 확인됨; Docker Desktop 서버는 아직 실행할 수 없음
+- 비관리자 세션에서는 BitLocker 상태 조회가 불가능했지만, 사용자 경로를 공개 문서에 남기지 않은 별도 로컬 작업 디렉터리에 EFS와 새 파일 암호화 상속이 확인됨
 - 최근 production R2 `complete` manifest 증거가 아직 없음
 
-따라서 현재는 자동 사전점검이 의도대로 실패해야 합니다. 비용 확인 ID, Docker·`psql`, 암호화 작업 디렉터리, target 프로젝트 메타데이터, R2 완료 증거가 모두 생기기 전에는 프로젝트 생성 이후의 운영 DB 읽기나 덤프 단계로 넘어가지 않습니다.
+따라서 현재는 자동 사전점검이 의도대로 실패해야 합니다. 비용 확인 ID, Docker 서버, target 프로젝트 메타데이터, R2 완료 증거가 모두 생기기 전에는 프로젝트 생성 이후의 운영 DB 읽기나 덤프 단계로 넘어가지 않습니다.
 
-## 0. 로컬 전용 자동 사전점검
+## 0. 읽기 전용 자동 사전점검
 
-`scripts/verify-supabase-recovery-preflight.mjs`는 원격 API를 호출하지 않고 다음 자료만 확인합니다.
+`scripts/verify-supabase-recovery-preflight.mjs`는 Supabase Management API의 고정된 `GET` 3개와 로컬 자료만 확인합니다. DB 행, Storage 원격 본문, 비밀값 API는 읽지 않습니다.
 
-- 명령행에서 다시 지정한 source·target ref와 로컬 증거의 ref가 글자 단위로 같은지, target이 기존 Staging ref와 다른지
-- source·target 지역이 같고 target 크기가 정확히 `MICRO`인지
-- 월 표시액, 실제 Compute 상한 1달러, 24시간 내 삭제 조건을 묶은 사용자 확인 ID와 확인문구가 있는지
+- source와 기존 Staging ref를 `scripts/write-release-manifest.mjs`의 운영 환경 상수에서만 가져오고 target이 둘과 다른지
+- Management API의 실시간 project 응답에서 source·target이 `ACTIVE_HEALTHY`, 고정 기대 지역 `us-east-2`, 같은 지역인지
+- 실시간 billing addons 응답에서 target이 정확히 `ci_micro`이고 월 표시액이 정확히 10달러인지
+- JSON이나 명령행이 아닌 별도 환경값으로 사용자 비용 확인 ID·시각·확인문구가 전달됐는지
+- Micro 시간당 0.01344달러 × 월 환산 744시간이 10달러 표시와 반올림 기준으로 일치하고, 24시간 예상액 0.32256달러가 1달러 상한보다 작은지
 - 일일 DB 백업이 켜져 있고 Storage 본문이 제외된다는 사실을 기록했는지
-- 작업 디렉터리가 저장소·OneDrive·기타 알려진 동기화 경로 밖에 있으며 실제 BitLocker 상태가 `protected`인지
-- PowerShell 7+, Supabase CLI `2.115.0`, 실행 중인 Docker Desktop 서버, target PostgreSQL major 이상인 `psql`인지
+- 작업 디렉터리가 실행 시 지정한 승인 루트의 하위 폴더이고, 그 승인 루트가 Windows `TEMP`·`TMP` 또는 현재 `USERPROFILE` 아래 `.codex-tmp`와 정확히 같은지
+- 작업 디렉터리가 저장소·OneDrive·Dropbox·Box·Google Drive·iCloud·Windows SyncRootManager의 알려진 동기화 루트 밖이며 상위 경로에 reparse point가 없는지
+- BitLocker를 쓰면 실제 볼륨 상태가 `protected`인지, EFS를 쓰면 정확한 작업 디렉터리와 그 바로 아래 확인 파일이 모두 실제 `Encrypted` 상태인지
+- PowerShell 7+, Supabase CLI `2.115.0`, 실행 중인 Docker Desktop 서버, 실행 시 지정한 같은 `bin` 폴더의 `pg_dump`·`pg_restore`·`psql`이 모두 정확히 `17.11`인지
+- 실행 시 지정한 공식 portable PostgreSQL 원본 압축파일을 직접 해시해 고정 SHA-256과 일치하는지
 - 메일·예약 작업·삭제 worker·웹훅·외부 API·Realtime publication·maintenance worker가 모두 명시적으로 `false`인지
-- production R2의 `control/latest.json`, `complete.json`, `manifest.json`, `manifest.sha256`가 같은 snapshot·환경·해시·개수·바이트 합계로 이어지고 26시간 이내인지
+- production R2의 `control/latest.json`, `complete.json`, `manifest.json`, `manifest.sha256`가 같은 snapshot·환경·해시·분류별 개수·바이트 합계로 이어지고 26시간 이내인지
+- DB 참조 파일은 `snapshots/<snapshot-id>/objects/`, 미참조 파일은 `snapshots/<snapshot-id>/quarantine/unreferenced/` 아래에만 있고 manifest의 모든 body가 실제 파일로 존재하며 각 크기·SHA-256이 일치하는지
+- `objectCount = referencedObjectCount + orphanCount`인지, 분류되지 않은 누락·중복·추가 파일이 0개인지, 기본 복구 대상 수가 `referencedObjectCount`로만 고정됐는지
 
-이 도구는 프로젝트 생성·삭제, 원격 DB 조회, `db dump`, 복원, R2 원격 조회나 배포 명령을 가지고 있지 않습니다. 검사 입력 파일도 모두 BitLocker 작업 디렉터리 안의 일반 파일이어야 하며, 비밀번호·토큰·서비스 역할 키처럼 보이는 필드가 있으면 거부합니다.
+이 도구는 프로젝트 생성·삭제, 원격 DB 행 조회, `db dump`, 복원, R2 원격 조회나 배포 명령을 가지고 있지 않습니다. Management API는 source project, target project, target billing addons만 `GET`합니다. 검사 입력과 body 파일은 모두 실제 암호화 상태를 확인한 작업 디렉터리 안의 일반 파일이어야 하며, 비밀번호·토큰·서비스 역할 키처럼 보이는 JSON 필드가 있으면 거부합니다.
 
-필수 로컬 증거 JSON은 다음 항목을 정확히 가집니다. ref, 시각, 확인 ID는 공개 저장소에 넣지 않습니다.
+필수 로컬 증거 JSON schema는 `3`이며 다음 항목만 정확히 가집니다. source·target·비용·확인 ID·도구 경로는 이 JSON에 넣을 수 없습니다.
 
 | 묶음 | 필수 내용 |
 |---|---|
-| `source` | `projectRef`, `health=ACTIVE_HEALTHY`, `region`, `postgresVersion` |
-| `target` | `projectRef`, 같은 `region`, `computeSize=MICRO`, `postgresVersion` |
-| `cost` | `displayedMonthlyUsd`, `actualComputeCapUsd=1`, `deleteWithinHours=24`, `confirmationId`, `confirmedAt`, 정확한 `confirmation` |
 | `databaseBackup` | `dailyEnabled=true`, 최근 확인·백업 시각, 보이는 복구 지점 수, `storageBodiesIncluded=false` |
-| `workDirectory` | 절대경로, `encryptionProvider=bitlocker`, `encryptionStatus=protected`, 최근 확인 시각 |
+| `workDirectory` | 승인 루트 아래 절대경로, `encryptionProvider=bitlocker|efs`, 최근 확인 시각 |
 | `isolation` | 모든 `*Enabled=false`, target ref를 포함한 정확한 `confirmation` |
 | `r2` | `environment=production`, `storageBucket=cabinets`, `maxSnapshotAgeHours=26` |
 
-비용 확인문구 형식은 아래와 같습니다. `<confirmation-id>`와 `<displayed-usd>`는 같은 JSON의 값과 정확히 일치해야 합니다.
+비용 확인 ID·시각·문구는 로컬 JSON과 명령행 옵션으로 받지 않습니다. Supabase `get_cost`와 사용자 승인 흐름이 별도로 전달한 세 환경값 `BURILLAB_RECOVERY_GET_COST_CONFIRMATION_ID`, `BURILLAB_RECOVERY_GET_COST_CONFIRMED_AT`, `BURILLAB_RECOVERY_GET_COST_CONFIRMATION`이 모두 있어야 합니다. 문구는 아래 값과 정확히 같아야 합니다.
 
 ```text
-CONFIRM RECOVERY COST <confirmation-id> DISPLAY_USD_<displayed-usd> ACTUAL_COMPUTE_CAP_USD_1 DELETE_WITHIN_24H
+CONFIRM RECOVERY COST <confirmation-id> DISPLAY_USD_10 EXPECTED_24H_COMPUTE_USD_0.32256 COMPUTE_CAP_USD_1 DELETE_WITHIN_24H
 ```
 
 격리 확인문구는 target ref가 정해진 뒤 아래 형식으로 기록합니다.
@@ -90,21 +97,30 @@ CONFIRM RECOVERY COST <confirmation-id> DISPLAY_USD_<displayed-usd> ACTUAL_COMPU
 CONFIRM RECOVERY ISOLATION <target-ref> ALL_EXTERNAL_CALLS_AND_SCHEDULERS_OFF
 ```
 
-R2 Worker가 내려놓는 로컬 증거는 원격 키 구조를 그대로 유지합니다. `latest`는 `complete`를, `complete`는 `manifest`와 그 원문 SHA-256을 가리켜야 합니다. `complete`가 없거나 object 수가 0이거나 manifest의 각 본문 백업 키·크기·SHA-256을 확인할 수 없으면 실패합니다.
+R2 Worker가 내려놓는 로컬 증거는 원격 키 구조를 그대로 유지합니다. `latest`는 `complete`를, `complete`는 `manifest`와 그 원문 SHA-256을 가리켜야 합니다. body root는 정확히 `snapshots/<snapshot-id>/`여야 합니다. 참조된 파일은 `classification=referenced`와 `ownerScope=lab|user`를 가지며 `objects/`에 있어야 합니다. DB에서 참조되지 않은 파일은 `classification=unreferenced`이고 `ownerScope`가 없어야 하며 `quarantine/unreferenced/`에만 보존합니다. 도구는 두 트리의 실제 파일을 전부 열어 크기와 SHA-256을 다시 계산하며 `complete` 없음, 참조 파일 수 0, 분류별 개수 불일치, 누락, 중복, manifest에 없는 추가 body, symlink·junction·reparse alias 중 하나라도 있으면 실패합니다.
+
+격리 파일까지 해시를 확인하는 것은 그 파일의 복구를 승인한다는 뜻이 아닙니다. 이 사전점검은 어떤 파일도 복구하지 않으며 기본 복구 대상 수는 항상 `referencedObjectCount`입니다. `quarantine/unreferenced/` 파일을 실제로 복구하는 기능이나 옵션은 제공하지 않고, 필요하면 별도 검토와 승인을 거친 전용 절차를 사용합니다.
 
 ```powershell
 npm run ops:recovery-preflight -- `
   --evidence "$env:BURILLAB_RECOVERY_WORK_DIR\preflight.json" `
-  --source-ref $env:BURILLAB_SOURCE_PROJECT_REF `
-  --staging-ref $env:BURILLAB_STAGING_PROJECT_REF `
   --target-ref $env:BURILLAB_RECOVERY_PROJECT_REF `
-  --r2-latest "$env:BURILLAB_RECOVERY_WORK_DIR\r2\latest.json" `
-  --r2-complete "$env:BURILLAB_RECOVERY_WORK_DIR\r2\complete.json" `
-  --r2-manifest "$env:BURILLAB_RECOVERY_WORK_DIR\r2\manifest.json" `
-  --r2-manifest-sha256 "$env:BURILLAB_RECOVERY_WORK_DIR\r2\manifest.sha256"
+  --allowed-work-root $env:BURILLAB_RECOVERY_ALLOWED_WORK_ROOT `
+  --pg-archive-path $env:BURILLAB_RECOVERY_PG_ARCHIVE `
+  --pg-dump-path $env:BURILLAB_RECOVERY_PG_DUMP `
+  --pg-restore-path $env:BURILLAB_RECOVERY_PG_RESTORE `
+  --psql-path $env:BURILLAB_RECOVERY_PSQL `
+  --efs-probe-file $env:BURILLAB_RECOVERY_EFS_PROBE_FILE `
+  --r2-latest "$env:BURILLAB_RECOVERY_WORK_DIR\r2\control\latest.json" `
+  --r2-complete "$env:BURILLAB_RECOVERY_WORK_DIR\r2\snapshots\$env:BURILLAB_R2_SNAPSHOT_ID\complete.json" `
+  --r2-manifest "$env:BURILLAB_RECOVERY_WORK_DIR\r2\snapshots\$env:BURILLAB_R2_SNAPSHOT_ID\manifest.json" `
+  --r2-manifest-sha256 "$env:BURILLAB_RECOVERY_WORK_DIR\r2\snapshots\$env:BURILLAB_R2_SNAPSHOT_ID\manifest.sha256" `
+  --r2-body-root "$env:BURILLAB_RECOVERY_WORK_DIR\r2\snapshots\$env:BURILLAB_R2_SNAPSHOT_ID"
 ```
 
-성공 출력에는 경로·ref·확인 ID·원본 manifest를 넣지 않습니다. 실패 메시지는 어떤 조건이 닫히지 않았는지만 알리고 비밀값이나 원본 자료를 출력하지 않습니다.
+`--efs-probe-file`은 `encryptionProvider=efs`일 때만 사용하고, 정확한 작업 디렉터리 바로 아래에 외부 절차가 미리 만든 상속 확인 파일을 지정합니다. BitLocker를 쓰면 이 옵션을 넣지 않습니다. 승인 루트·도구·압축파일·EFS 확인 파일의 절대경로는 실행 환경에서만 전달하며 저장소나 공개 증거에 기록하지 않습니다.
+
+Management API token과 비용 승인 환경값은 현재 PowerShell 프로세스에서만 설정하고 실행 직후 지웁니다. 성공 출력에는 경로·ref·확인 ID·원본 manifest·body 내용을 넣지 않습니다. 실패 메시지는 어떤 조건이 닫히지 않았는지만 알리고 비밀값, 파일 경로, 원본 자료를 출력하지 않습니다.
 
 ## 1. 시작 증거
 
@@ -206,7 +222,7 @@ Supabase의 [관리 스키마 SQL 제한](https://supabase.com/changelog/34270-r
 여기까지 source 읽기가 끝나면 `PGPASSWORD`, `SUPABASE_ACCESS_TOKEN`, source URL·ref 환경 변수를 현재 프로세스에서 지웁니다. 파일 6개의 해시를 다시 확인한 뒤에만 서로 다른 target 비밀번호를 `PGPASSWORD`에 새로 설정합니다. source 비밀번호로 target 연결을 재시도하지 않습니다.
 
 ```powershell
-psql --single-transaction --variable ON_ERROR_STOP=1 --file "$env:BURILLAB_RECOVERY_WORK_DIR\roles.sql" --command "ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated" --file "$env:BURILLAB_RECOVERY_WORK_DIR\schema.sql" --command "SET session_replication_role = replica" --file "$env:BURILLAB_RECOVERY_WORK_DIR\data.sql" --command "SET session_replication_role = origin" --file "$env:BURILLAB_RECOVERY_WORK_DIR\history_schema.sql" --file "$env:BURILLAB_RECOVERY_WORK_DIR\history_data.sql" --file "$env:BURILLAB_RECOVERY_WORK_DIR\auth-storage-changes.sql" --dbname $env:BURILLAB_RECOVERY_DB_URL_NO_PASSWORD
+& $env:BURILLAB_RECOVERY_PSQL --single-transaction --variable ON_ERROR_STOP=1 --file "$env:BURILLAB_RECOVERY_WORK_DIR\roles.sql" --command "ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated" --file "$env:BURILLAB_RECOVERY_WORK_DIR\schema.sql" --command "SET session_replication_role = replica" --file "$env:BURILLAB_RECOVERY_WORK_DIR\data.sql" --command "SET session_replication_role = origin" --file "$env:BURILLAB_RECOVERY_WORK_DIR\history_schema.sql" --file "$env:BURILLAB_RECOVERY_WORK_DIR\history_data.sql" --file "$env:BURILLAB_RECOVERY_WORK_DIR\auth-storage-changes.sql" --dbname $env:BURILLAB_RECOVERY_DB_URL_NO_PASSWORD
 ```
 
 공식 문제 해결에 따라 `roles.sql`이나 `schema.sql`을 수정해야 하면 원본을 보존하고 수정 diff를 사람이 검토한 뒤 6개 파일의 해시를 새로 고정합니다. 부분 재실행은 금지합니다. 전체 트랜잭션의 rollback과 target이 최초 상태임을 증명하면 재승인 후 같은 target에서 전체 복원을 처음부터 다시 실행할 수 있습니다. 이를 증명할 수 없으면 새 target 생성·비용을 다시 승인받습니다. custom login role의 새 비밀번호도 SQL 문자열·명령행·로그에 넣지 않는 마스킹 절차로만 설정합니다.
