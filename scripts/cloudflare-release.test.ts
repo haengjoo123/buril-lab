@@ -508,7 +508,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     })
   })
 
-  it('deletes only the synthetic user that owns the complete reserved Gate0 fixture', () => {
+  it('trusts only the synthetic user that owns the complete reserved Gate0 fixture', () => {
     const legacyUser = {
       id: '90000000-0000-4000-8000-000000000010',
       email: 'Gate0-Browser@BurilLab.Test',
@@ -599,7 +599,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     })).toThrow(/policy owned outside/)
   })
 
-  it('refuses remote fixture deletion when ownership isolation is incomplete or non-empty', () => {
+  it('refuses remote fixture restoration when ownership isolation is incomplete or non-empty', () => {
     const isolated = Object.fromEntries(GATE0_ISOLATION_EVIDENCE_KEYS.map((key) => [key, 0]))
     expect(verifyFixtureIsolationEvidence(isolated)).toBe(true)
 
@@ -612,7 +612,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verifyFixtureIsolationEvidence(incomplete)).toThrow(/evidence is incomplete/)
     expect(() => verifyFixtureIsolationEvidence({
       ...isolated,
-      otherInventoryInsideReservedLab: null,
+      unexpectedInventoryInsideReservedLab: null,
     })).toThrow(/evidence is incomplete/)
   })
 
@@ -760,22 +760,32 @@ describe('Prep 0 Cloudflare release controls', () => {
       .toThrow(/must not contain cached sections/)
   })
 
-  it('cleans the synthetic lab cascade before its restricted policy and omits fixture email output', async () => {
+  it('restores only reserved fixture identities without deleting rows or users', async () => {
     const seedScript = await readFile('scripts/seed-gate0-e2e.mjs', 'utf8')
     const ownershipCheck = seedScript.indexOf('verifyExistingFixtureOwnership({')
     const isolationCheck = seedScript.indexOf('await verifyRemoteFixtureIsolation(fixtureUser.id)')
-    const labCleanup = seedScript.indexOf("supabase.from('labs').delete().eq('id', LAB_ID)")
-    const policyCleanup = seedScript.indexOf("supabase.from('waste_policy_versions').delete().eq('id', POLICY_ID)")
-    const userCleanup = seedScript.indexOf('supabase.auth.admin.deleteUser(fixtureUser.id)')
+    const userRefresh = seedScript.indexOf('supabase.auth.admin.updateUserById(fixtureUser.id')
+    const labRestore = seedScript.indexOf("supabase.from('labs').upsert({")
     const outputBlock = seedScript.slice(seedScript.lastIndexOf('console.log(JSON.stringify'))
     expect(ownershipCheck).toBeGreaterThan(-1)
     expect(isolationCheck).toBeGreaterThan(ownershipCheck)
-    expect(labCleanup).toBeGreaterThan(isolationCheck)
-    expect(policyCleanup).toBeGreaterThan(labCleanup)
-    expect(userCleanup).toBeGreaterThan(policyCleanup)
+    expect(userRefresh).toBeGreaterThan(isolationCheck)
+    expect(labRestore).toBeGreaterThan(userRefresh)
     expect(outputBlock).not.toContain('email:')
+    expect(seedScript).not.toContain('deleteUser(')
+    expect(seedScript).not.toContain('.delete()')
     expect(seedScript).toContain('verifyExistingFixtureOwnership')
     expect(seedScript).toContain('verifyFixtureIsolationEvidence')
+    expect(seedScript).toContain(".not('lab_id', 'is', null).neq('lab_id', LAB_ID)")
+    expect(seedScript).toContain(".from('safety_center_lab_links')")
+    expect(seedScript).toContain(".from('safety_center_requests')")
+    expect(seedScript).toContain("join_password: ''")
+    expect(seedScript).toContain("fixtureSessionClient.rpc('set_lab_join_password'")
+    expect(seedScript).toContain("fixtureSessionClient.auth.signOut({ scope: 'global' })")
+    expect(seedScript).toContain('cabinet_id: null')
+    expect(seedScript).toContain('parent_policy_version_id: null')
+    expect(seedScript).toContain('replacement_location: null')
+    expect(seedScript).toContain('is_disabled: false')
     expect(seedScript).toContain(".from('cabinets')")
     expect(seedScript).toContain(".from('waste_logs')")
     expect(seedScript).toContain(".eq('id', POLICY_ID)")
