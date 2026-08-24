@@ -22,6 +22,7 @@ import {
   verifyLegacyFixtureConversion,
 } from './gate0-seed-safety.mjs'
 import { fulfillStagingAccessRoute } from './gate0-access-route.mjs'
+import { verifyGate0EnrichmentIsolation } from './gate0-enrichment-policy.mjs'
 import { findPagesDeployment, readPagesDeployment } from './read-pages-deployment.mjs'
 import {
   materializeWranglerConfig,
@@ -163,6 +164,40 @@ function deploymentFixture(environment: 'staging' | 'production', overrides = {}
 }
 
 describe('Prep 0 Cloudflare release controls', () => {
+  it('keeps Gate0 enrichment disabled locally and bounded behind an abort in Staging', () => {
+    expect(verifyGate0EnrichmentIsolation({
+      featureFlag: 'false',
+      blockedRequests: 0,
+    })).toEqual({ featureEnabled: false, blockedRequests: 0 })
+    for (const blockedRequests of [1, 2, 3]) {
+      expect(verifyGate0EnrichmentIsolation({
+        featureFlag: 'true',
+        blockedRequests,
+      })).toEqual({ featureEnabled: true, blockedRequests })
+    }
+
+    expect(() => verifyGate0EnrichmentIsolation({
+      featureFlag: 'false',
+      blockedRequests: 1,
+    })).toThrow(/Disabled chemical enrichment/)
+    for (const blockedRequests of [0, 4]) {
+      expect(() => verifyGate0EnrichmentIsolation({
+        featureFlag: 'true',
+        blockedRequests,
+      })).toThrow(/attempt budget/)
+    }
+    for (const blockedRequests of [-1, 1.5]) {
+      expect(() => verifyGate0EnrichmentIsolation({
+        featureFlag: 'false',
+        blockedRequests,
+      })).toThrow(/non-negative integer/)
+    }
+    expect(() => verifyGate0EnrichmentIsolation({
+      featureFlag: 'unset',
+      blockedRequests: 0,
+    })).toThrow(/exactly true or false/)
+  })
+
   it('writes and verifies immutable release identities for both Pages projects', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'burillab-release-'))
     const output = join(directory, 'release.json')

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { fulfillStagingAccessRoute } from '../../scripts/gate0-access-route.mjs'
+import { verifyGate0EnrichmentIsolation } from '../../scripts/gate0-enrichment-policy.mjs'
 
 const E2E_EMAIL = process.env.GATE0_E2E_EMAIL || 'gate0-browser@burillab.test'
 const E2E_PASSWORD = process.env.GATE0_E2E_PASSWORD || 'Local-Gate0-Only!2026'
@@ -21,9 +22,11 @@ test.beforeEach(async ({ context }) => {
 })
 
 test('login → lab → inventory search → reviewed waste record → direct link', async ({ page }) => {
-  let enrichmentRequests = 0
+  let blockedEnrichmentRequests = 0
   await page.route('**/api/chemicals/enrich', async (route) => {
-    enrichmentRequests += 1
+    blockedEnrichmentRequests += 1
+    // Gate0 validates the core workflow without invoking the deployed
+    // enrichment endpoint or any of its paid upstream providers.
     await route.abort('blockedbyclient')
   })
 
@@ -103,5 +106,8 @@ test('login → lab → inventory search → reviewed waste record → direct li
   await expect(page).toHaveURL(/\/app\/logs\?record=[0-9a-f-]{36}/)
   await expect(page.getByRole('main').locator('aside:visible').filter({ hasText: INVENTORY_NAME }))
     .toContainText(`ID: ${recordId?.slice(0, 12)}`)
-  expect(enrichmentRequests).toBe(0)
+  verifyGate0EnrichmentIsolation({
+    featureFlag: process.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
+    blockedRequests: blockedEnrichmentRequests,
+  })
 })
