@@ -14,6 +14,9 @@ const dataDirectory = path.resolve(process.cwd(), 'data', 'waste-golden-set-v2')
 const datasetPath = path.join(dataDirectory, 'materials.json');
 const manifestPath = path.join(dataDirectory, 'source-manifest.json');
 const datasetText = readFileSync(datasetPath, 'utf8');
+// Git stores this reviewed artifact with LF line endings. Windows checkouts may
+// expose CRLF in the worktree, which must not change the canonical content hash.
+const canonicalDatasetText = datasetText.replace(/\r\n?/gu, '\n');
 const rows = JSON.parse(datasetText) as WasteGoldenSetV2Row[];
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as WasteGoldenSetV2Manifest;
 
@@ -22,7 +25,7 @@ describe('CAS·SDS actual-substance golden set V2', () => {
         expect(rows).toHaveLength(1000);
         expect(manifest.schemaVersion).toBe(GOLDEN_SET_V2_VERSION);
         expect(manifest.rowCount).toBe(1000);
-        expect(createHash('sha256').update(datasetText).digest('hex')).toBe(manifest.datasetSha256);
+        expect(createHash('sha256').update(canonicalDatasetText).digest('hex')).toBe(manifest.datasetSha256);
         expect(validateWasteGoldenSetV2(rows, manifest)).toEqual([]);
     });
 
