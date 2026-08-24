@@ -3,7 +3,6 @@ import type { FormEvent } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import { searchChemical } from '../services/searchService';
-import { isChemicalSearchError } from '../services/chemicalSearchError';
 import { getSearchErrorMessageKey } from '../utils/searchErrorMessage';
 import { fetchChemicalSuggestions } from '../services/chemicalSuggestionService';
 import { cabinetService, type CabinetSearchResult } from '../services/cabinetService';
