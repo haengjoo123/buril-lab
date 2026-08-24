@@ -98,6 +98,7 @@ Security Advisor는 운영 53건, Staging 50건을 읽기 전용으로 확인했
 - [ ] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
 - [ ] Staging에서 실제 외부 화학정보 연동시험
 - [ ] 직전 Pages deployment 되돌림 훈련
+- [ ] 운영 쓰기와 일관된 복구 시점을 만들 수 있는 비공개 R2 사진 본문·완전한 manifest·해시 준비
 - [ ] Supabase 조직 접근자 확인
 - [ ] Supabase 플러그인이 반환한 새 프로젝트 비용 `월 10달러`를 사용자에게 알리고 명시적 비용 확인
 - [ ] 임시 Micro 프로젝트에서 4시간 이내 논리 복구훈련 후 24시간 안에 삭제
