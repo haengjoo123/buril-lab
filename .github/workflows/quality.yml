@@ -274,7 +274,7 @@ jobs:
 
   hosted-supabase-advisor:
     name: Hosted Supabase security advisor (${{ matrix.environment }})
-    if: github.event_name != 'pull_request'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && github.repository == 'haengjoo123/buril-lab'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:

@@ -58,7 +58,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
           git fetch --no-tags origin main
-          git merge-base --is-ancestor "$DEPLOY_COMMIT_SHA" origin/main
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -122,6 +122,12 @@ jobs:
           npx wrangler pages functions build functions
           --config wrangler.staging.generated.jsonc
           --outdir "$GITHUB_WORKSPACE/.wrangler/pages-functions-staging"
+
+      - name: Recheck that Staging still targets the current main tip
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
 
       - name: Deploy the exact commit to Staging Pages
         env:

@@ -12,7 +12,11 @@ import {
 } from './render-wrangler-config.mjs'
 import { verifyReleaseConfiguration } from './verify-cloudflare-release-config.mjs'
 import { verifyCloudflareDeployInputs } from './verify-cloudflare-deploy-inputs.mjs'
-import { findTrustedQualityRun } from './verify-github-quality-run.mjs'
+import {
+  fetchTrustedQualityRun,
+  findTrustedQualityRun,
+  QUALITY_RUN_MAX_AGE_MS,
+} from './verify-github-quality-run.mjs'
 import { verifyPagesProjectPair } from './verify-pages-project-config.mjs'
 import { loadAndVerifyReleaseManifest, verifyReleaseManifest } from './verify-release-manifest.mjs'
 import {
@@ -23,6 +27,7 @@ import {
 import { createReleaseManifest, writeReleaseManifest } from './write-release-manifest.mjs'
 
 const COMMIT = '0123456789abcdef0123456789abcdef01234567'
+const QUALITY_NOW = Date.parse('2026-08-24T12:00:00Z')
 const REQUIRED_SECRETS = [
   'FEEDBACK_ADMIN_EMAILS',
   'GEMINI_API_KEY',
@@ -394,25 +399,206 @@ describe('Prep 0 Cloudflare release controls', () => {
     })).toThrow(/forbidden client-prefixed/)
   })
 
-  it('accepts only a successful trusted push-to-main quality run for production', () => {
+  it('accepts fresh successful push and manual main quality runs from the exact repository', () => {
     const trusted = {
       id: 1,
+      status: 'completed',
       conclusion: 'success',
       event: 'push',
       head_branch: 'main',
       head_sha: COMMIT,
       head_repository: { full_name: 'owner/buril-lab' },
+      created_at: '2026-08-24T10:00:00Z',
+      run_started_at: '2026-08-24T10:05:00Z',
+      updated_at: '2026-08-24T11:00:00Z',
     }
     expect(findTrustedQualityRun([trusted], {
       repository: 'owner/buril-lab',
       commitSha: COMMIT,
+      now: QUALITY_NOW,
     })).toBe(trusted)
+    expect(findTrustedQualityRun([{ ...trusted, id: 2, event: 'workflow_dispatch' }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toMatchObject({ id: 2, event: 'workflow_dispatch' })
+
     expect(() => findTrustedQualityRun([
       { ...trusted, event: 'pull_request' },
     ], {
       repository: 'owner/buril-lab',
       commitSha: COMMIT,
-    })).toThrow(/No successful trusted/)
+      now: QUALITY_NOW,
+    })).toThrow(/No trusted main/)
+    expect(() => findTrustedQualityRun([
+      { ...trusted, event: 'workflow_dispatch', head_branch: 'release' },
+      { ...trusted, event: 'workflow_dispatch', head_repository: { full_name: 'fork/buril-lab' } },
+    ], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/No trusted main/)
+  })
+
+  it('lets the newest trusted run block an older success while it is pending or failed', () => {
+    const olderSuccess = {
+      id: 1,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'push',
+      head_branch: 'main',
+      head_sha: COMMIT,
+      head_repository: { full_name: 'owner/buril-lab' },
+      created_at: '2026-08-24T09:00:00Z',
+      run_started_at: '2026-08-24T09:05:00Z',
+      updated_at: '2026-08-24T09:30:00Z',
+    }
+    const newerPending = {
+      ...olderSuccess,
+      id: 2,
+      status: 'in_progress',
+      conclusion: null,
+      created_at: '2026-08-24T10:00:00Z',
+      run_started_at: '2026-08-24T10:05:00Z',
+      updated_at: '2026-08-24T10:30:00Z',
+    }
+    expect(() => findTrustedQualityRun([olderSuccess, newerPending], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/not completed successfully/)
+    expect(() => findTrustedQualityRun([
+      { ...newerPending, status: 'completed', conclusion: 'failure' },
+      olderSuccess,
+    ], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/not completed successfully/)
+  })
+
+  it('uses the current attempt start so a rerun of an older-created run blocks an older success', () => {
+    const laterCreatedSuccess = {
+      id: 10,
+      run_attempt: 1,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'push',
+      head_branch: 'main',
+      head_sha: COMMIT,
+      head_repository: { full_name: 'owner/buril-lab' },
+      created_at: '2026-08-24T10:00:00Z',
+      run_started_at: '2026-08-24T10:05:00Z',
+      updated_at: '2026-08-24T10:30:00Z',
+    }
+    const olderCreatedRerun = {
+      ...laterCreatedSuccess,
+      id: 9,
+      run_attempt: 2,
+      status: 'completed',
+      conclusion: 'failure',
+      created_at: '2026-08-24T09:00:00Z',
+      run_started_at: '2026-08-24T11:00:00Z',
+      updated_at: '2026-08-24T11:30:00Z',
+    }
+    expect(() => findTrustedQualityRun([laterCreatedSuccess, olderCreatedRerun], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/not completed successfully/)
+  })
+
+  it('rejects stale, future-dated, and internally inconsistent quality evidence', () => {
+    const trusted = {
+      id: 1,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'push',
+      head_branch: 'main',
+      head_sha: COMMIT,
+      head_repository: { full_name: 'owner/buril-lab' },
+      created_at: '2026-08-24T10:00:00Z',
+      run_started_at: '2026-08-24T10:05:00Z',
+      updated_at: '2026-08-24T11:00:00Z',
+    }
+    expect(() => findTrustedQualityRun([{
+      ...trusted,
+      created_at: new Date(QUALITY_NOW - QUALITY_RUN_MAX_AGE_MS - 60_000).toISOString(),
+      run_started_at: new Date(QUALITY_NOW - QUALITY_RUN_MAX_AGE_MS - 30_000).toISOString(),
+      updated_at: new Date(QUALITY_NOW - QUALITY_RUN_MAX_AGE_MS - 1).toISOString(),
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/created more than eight days ago/)
+    expect(() => findTrustedQualityRun([{
+      ...trusted,
+      created_at: new Date(QUALITY_NOW - QUALITY_RUN_MAX_AGE_MS - 1).toISOString(),
+      run_started_at: '2026-08-24T10:30:00Z',
+      updated_at: '2026-08-24T11:00:00Z',
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/created more than eight days ago/)
+    expect(() => findTrustedQualityRun([{
+      ...trusted,
+      created_at: '2026-08-24T12:06:00Z',
+      run_started_at: '2026-08-24T12:06:00Z',
+      updated_at: '2026-08-24T12:06:00Z',
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/future timestamp/)
+    expect(() => findTrustedQualityRun([{
+      ...trusted,
+      updated_at: '2026-08-24T09:59:59Z',
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/timestamps are inconsistent/)
+    expect(() => findTrustedQualityRun([{
+      ...trusted,
+      run_started_at: null,
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/lacks run_started_at/)
+  })
+
+  it('requests all run states so a newer pending or failed run cannot be hidden', async () => {
+    const trusted = {
+      id: 1,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'push',
+      head_branch: 'main',
+      head_sha: COMMIT,
+      head_repository: { full_name: 'owner/buril-lab' },
+      created_at: '2026-08-24T10:00:00Z',
+      run_started_at: '2026-08-24T10:05:00Z',
+      updated_at: '2026-08-24T11:00:00Z',
+    }
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ workflow_runs: [trusted] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(fetchTrustedQualityRun({
+        GITHUB_TOKEN: 'not-a-real-token',
+        GITHUB_REPOSITORY: 'owner/buril-lab',
+        DEPLOY_COMMIT_SHA: COMMIT,
+      }, { now: QUALITY_NOW })).resolves.toStrictEqual(trusted)
+      const endpoint = new URL(String(fetchMock.mock.calls[0][0]))
+      expect(endpoint.searchParams.get('head_sha')).toBe(COMMIT)
+      expect(endpoint.searchParams.has('status')).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('keeps the database reset job off until Prep 1 supplies the exact contract', async () => {
@@ -466,7 +652,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('.github/workflows/deploy-production.yml', 'utf8'),
       readFile('.github/workflows/quality.yml', 'utf8'),
     ])
-    expect(verifyReleaseConfiguration({
+    const configuration = {
       productionRaw,
       stagingRaw,
       workflows: {
@@ -474,6 +660,25 @@ describe('Prep 0 Cloudflare release controls', () => {
         production: productionWorkflow,
         quality: qualityWorkflow,
       },
-    })).toMatchObject({ projectCount: 2 })
+    }
+    expect(verifyReleaseConfiguration(configuration)).toMatchObject({ projectCount: 2 })
+
+    const oneQualityVerification = productionWorkflow.replace(
+      'run: node scripts/verify-github-quality-run.mjs',
+      'run: echo "removed early quality verification"',
+    )
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: { ...configuration.workflows, production: oneQualityVerification },
+    })).toThrow(/both early and immediately before deployment/)
+
+    const outOfOrderFinalGuards = productionWorkflow
+      .replace('Recheck production Supabase Security Advisor immediately before deployment', '__ADVISOR__')
+      .replace('Recheck the exact commit still passes trusted main quality', 'Recheck production Supabase Security Advisor immediately before deployment')
+      .replace('__ADVISOR__', 'Recheck the exact commit still passes trusted main quality')
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: { ...configuration.workflows, production: outOfOrderFinalGuards },
+    })).toThrow(/guards are out of order/)
   })
 })

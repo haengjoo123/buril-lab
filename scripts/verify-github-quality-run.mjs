@@ -2,17 +2,82 @@ import { pathToFileURL } from 'node:url'
 
 const MAX_RESPONSE_BYTES = 1024 * 1024
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
+export const QUALITY_RUN_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1000
+export const QUALITY_RUN_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
-export function findTrustedQualityRun(runs, { repository, commitSha }) {
-  if (!Array.isArray(runs)) throw new Error('GitHub quality-run response is malformed.')
-  const run = runs.find((candidate) => (
-    candidate?.conclusion === 'success'
-    && candidate?.event === 'push'
+function parseTimestamp(value, label) {
+  if (typeof value !== 'string') throw new Error(`Latest trusted quality run lacks ${label}.`)
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) throw new Error(`Latest trusted quality run has invalid ${label}.`)
+  return timestamp
+}
+
+function parseNow(now) {
+  const timestamp = now instanceof Date ? now.getTime() : Number(now)
+  if (!Number.isFinite(timestamp)) throw new Error('Quality-run verification time is invalid.')
+  return timestamp
+}
+
+function isTrustedQualityRun(candidate, repository, commitSha) {
+  return (
+    (candidate?.event === 'push' || candidate?.event === 'workflow_dispatch')
     && candidate?.head_branch === 'main'
     && candidate?.head_sha === commitSha
     && candidate?.head_repository?.full_name === repository
-  ))
-  if (!run) throw new Error('No successful trusted main Quality and security run exists for this commit.')
+  )
+}
+
+export function findTrustedQualityRun(runs, {
+  repository,
+  commitSha,
+  now = Date.now(),
+}) {
+  if (!Array.isArray(runs)) throw new Error('GitHub quality-run response is malformed.')
+  const nowTimestamp = parseNow(now)
+  const trustedRuns = runs
+    .filter((candidate) => isTrustedQualityRun(candidate, repository, commitSha))
+    .map((candidate) => {
+      const createdAt = parseTimestamp(candidate.created_at, 'created_at')
+      const runStartedAt = parseTimestamp(candidate.run_started_at, 'run_started_at')
+      const updatedAt = parseTimestamp(candidate.updated_at, 'updated_at')
+      if (createdAt > nowTimestamp + QUALITY_RUN_FUTURE_TOLERANCE_MS
+          || runStartedAt > nowTimestamp + QUALITY_RUN_FUTURE_TOLERANCE_MS
+          || updatedAt > nowTimestamp + QUALITY_RUN_FUTURE_TOLERANCE_MS) {
+        throw new Error('Trusted main Quality and security run has an unreasonable future timestamp.')
+      }
+      if (createdAt > runStartedAt || runStartedAt > updatedAt) {
+        throw new Error('Trusted main Quality and security run timestamps are inconsistent.')
+      }
+      return { candidate, createdAt, runStartedAt, updatedAt }
+    })
+    .sort((left, right) => {
+      if (right.runStartedAt !== left.runStartedAt) return right.runStartedAt - left.runStartedAt
+      if (right.createdAt !== left.createdAt) return right.createdAt - left.createdAt
+      const rightAttempt = Number(right.candidate.run_attempt) || 0
+      const leftAttempt = Number(left.candidate.run_attempt) || 0
+      if (rightAttempt !== leftAttempt) return rightAttempt - leftAttempt
+      return (Number(right.candidate.id) || 0) - (Number(left.candidate.id) || 0)
+    })
+
+  if (trustedRuns.length === 0) {
+    throw new Error('No trusted main Quality and security run exists for this commit.')
+  }
+
+  const run = trustedRuns[0].candidate
+  if (run.status !== 'completed' || run.conclusion !== 'success') {
+    throw new Error('Latest trusted main Quality and security run is not completed successfully.')
+  }
+
+  const { createdAt, runStartedAt, updatedAt } = trustedRuns[0]
+  if (nowTimestamp - createdAt > QUALITY_RUN_MAX_AGE_MS) {
+    throw new Error('Latest trusted main Quality and security run was created more than eight days ago.')
+  }
+  if (nowTimestamp - runStartedAt > QUALITY_RUN_MAX_AGE_MS) {
+    throw new Error('Latest trusted main Quality and security run attempt is older than eight days.')
+  }
+  if (nowTimestamp - updatedAt > QUALITY_RUN_MAX_AGE_MS) {
+    throw new Error('Latest trusted main Quality and security run is older than eight days.')
+  }
   return run
 }
 
@@ -49,7 +114,7 @@ async function readBoundedJson(response) {
   }
 }
 
-export async function fetchTrustedQualityRun(environment = process.env) {
+export async function fetchTrustedQualityRun(environment = process.env, { now = Date.now() } = {}) {
   const token = environment.GITHUB_TOKEN?.trim()
   const repository = environment.GITHUB_REPOSITORY?.trim()
   const commitSha = environment.DEPLOY_COMMIT_SHA?.trim()
@@ -66,7 +131,6 @@ export async function fetchTrustedQualityRun(environment = process.env) {
     'https://api.github.com',
   )
   endpoint.searchParams.set('head_sha', commitSha)
-  endpoint.searchParams.set('status', 'completed')
   endpoint.searchParams.set('per_page', '100')
 
   const response = await fetch(endpoint, {
@@ -81,7 +145,7 @@ export async function fetchTrustedQualityRun(environment = process.env) {
   })
   if (!response.ok) throw new Error(`GitHub quality-run lookup failed with HTTP ${response.status}.`)
   const payload = await readBoundedJson(response)
-  return findTrustedQualityRun(payload.workflow_runs, { repository, commitSha })
+  return findTrustedQualityRun(payload.workflow_runs, { repository, commitSha, now })
 }
 
 async function main() {

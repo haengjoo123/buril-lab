@@ -126,6 +126,8 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     "github.event.workflow_run.head_branch == 'main'",
     'github.event.workflow_run.head_repository.full_name == github.repository',
     'ref: ${{ github.event.workflow_run.head_sha }}',
+    'test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"',
+    'Recheck that Staging still targets the current main tip',
     'steps.staging-deployment.outputs.deployment_url',
     'node scripts/read-pages-deployment.mjs',
     'api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production',
@@ -137,11 +139,26 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     }
   }
 
+  const qualityWorkflow = workflows.quality || ''
+  const hostedAdvisorGuard = "if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && github.repository == 'haengjoo123/buril-lab'"
+  if (!qualityWorkflow.includes(hostedAdvisorGuard)) {
+    throw new Error('Quality workflow lacks the exact hosted Advisor push/manual-main guard.')
+  }
+
   const productionWorkflow = workflows.production || ''
   for (const required of [
     'workflow_dispatch:',
+    "if: github.event_name == 'workflow_dispatch' && github.repository == 'haengjoo123/buril-lab' && github.ref == 'refs/heads/main'",
     'DEPLOY buril-lab production $DEPLOY_COMMIT_SHA',
+    'if [[ "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]',
+    'test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"',
     'node scripts/verify-github-quality-run.mjs',
+    'version: 2.115.0',
+    'npm audit --omit=dev --audit-level=high',
+    'npm run security:supabase-advisors:hosted --',
+    '--environment production',
+    'SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}',
+    'Recheck the exact commit still passes trusted main quality',
     'https://staging.burillab.com/release.json',
     'https://buril-lab-staging.pages.dev/release.json',
     'steps.staging-deployment.outputs.deployment_url',
@@ -155,6 +172,21 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     if (!productionWorkflow.includes(required)) {
       throw new Error(`Production workflow lacks a manual release guard: ${required}`)
     }
+  }
+
+  const qualityRunVerifier = 'node scripts/verify-github-quality-run.mjs'
+  if (productionWorkflow.split(qualityRunVerifier).length - 1 < 2) {
+    throw new Error('Production workflow must verify trusted main quality both early and immediately before deployment.')
+  }
+  const finalGuardOrder = [
+    'Recheck production Supabase Security Advisor immediately before deployment',
+    'Recheck the exact commit still passes trusted main quality',
+    'Recheck that production still targets the current main tip',
+    'Deploy the exact commit to production Pages',
+  ].map((marker) => productionWorkflow.indexOf(marker))
+  if (finalGuardOrder.some((position) => position < 0)
+      || finalGuardOrder.some((position, index) => index > 0 && position <= finalGuardOrder[index - 1])) {
+    throw new Error('Production final Advisor, quality, main-tip, and Pages deploy guards are out of order.')
   }
 
   return { projectCount: 2, requiredServerSecretCount: EXPECTED_REQUIRED_SECRETS.length }
