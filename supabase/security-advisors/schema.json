@@ -8,7 +8,7 @@
     "environment",
     "advisor_cli_version",
     "expected_count",
-    "observed_at",
+    "observed_on",
     "entries"
   ],
   "properties": {
@@ -16,7 +16,7 @@
     "environment": { "enum": ["production", "staging"] },
     "advisor_cli_version": { "const": "2.115.0" },
     "expected_count": { "type": "integer", "minimum": 0 },
-    "observed_at": { "type": "string", "format": "date-time" },
+    "observed_on": { "type": "string", "format": "date" },
     "entries": {
       "type": "array",
       "items": { "$ref": "#/$defs/entry" }
@@ -26,9 +26,10 @@
     "role_table_permissions": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_usage", "select", "insert", "update", "delete"],
+      "required": ["schema_usage", "bypass_rls", "select", "insert", "update", "delete"],
       "properties": {
         "schema_usage": { "type": "boolean" },
+        "bypass_rls": { "type": "boolean" },
         "select": { "type": "boolean" },
         "insert": { "type": "boolean" },
         "update": { "type": "boolean" },
@@ -175,6 +176,25 @@
           "if": { "properties": { "disposition": { "const": "temporary_open" } } },
           "then": {
             "properties": {
+              "expires_on": { "type": "string", "format": "date" },
+              "target_gate": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rule": {
+                "enum": [
+                  "auth_leaked_password_protection",
+                  "authenticated_security_definer_function_executable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "disposition": { "const": "temporary_open" },
               "expires_on": { "type": "string", "format": "date" },
               "target_gate": { "type": "string", "minLength": 1 }
             }

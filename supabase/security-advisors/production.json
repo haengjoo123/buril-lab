@@ -3,7 +3,7 @@
   "environment": "production",
   "advisor_cli_version": "2.115.0",
   "expected_count": 53,
-  "observed_at": "2026-08-24T00:00:00Z",
+  "observed_on": "2026-08-24",
   "entries": [
     {
       "cache_key": "auth_leaked_password_protection",
@@ -1238,6 +1238,7 @@
         "policy_count": 0,
         "anon": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1245,6 +1246,7 @@
         },
         "authenticated": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1252,6 +1254,7 @@
         },
         "service_role": {
           "schema_usage": true,
+          "bypass_rls": true,
           "select": true,
           "insert": true,
           "update": true,
@@ -1282,6 +1285,7 @@
         "policy_count": 0,
         "anon": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1289,6 +1293,7 @@
         },
         "authenticated": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1296,6 +1301,7 @@
         },
         "service_role": {
           "schema_usage": true,
+          "bypass_rls": true,
           "select": true,
           "insert": true,
           "update": true,
@@ -1326,6 +1332,7 @@
         "policy_count": 0,
         "anon": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1333,6 +1340,7 @@
         },
         "authenticated": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1340,6 +1348,7 @@
         },
         "service_role": {
           "schema_usage": true,
+          "bypass_rls": true,
           "select": true,
           "insert": true,
           "update": true,
@@ -1370,6 +1379,7 @@
         "policy_count": 0,
         "anon": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1377,6 +1387,7 @@
         },
         "authenticated": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1384,6 +1395,7 @@
         },
         "service_role": {
           "schema_usage": true,
+          "bypass_rls": true,
           "select": true,
           "insert": true,
           "update": true,
@@ -1414,6 +1426,7 @@
         "policy_count": 0,
         "anon": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1421,6 +1434,7 @@
         },
         "authenticated": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1428,6 +1442,7 @@
         },
         "service_role": {
           "schema_usage": true,
+          "bypass_rls": true,
           "select": true,
           "insert": true,
           "update": true,
@@ -1458,6 +1473,7 @@
         "policy_count": 0,
         "anon": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1465,6 +1481,7 @@
         },
         "authenticated": {
           "schema_usage": true,
+          "bypass_rls": false,
           "select": false,
           "insert": false,
           "update": false,
@@ -1472,6 +1489,7 @@
         },
         "service_role": {
           "schema_usage": true,
+          "bypass_rls": true,
           "select": true,
           "insert": true,
           "update": true,

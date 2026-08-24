@@ -37,9 +37,36 @@ describe('Supabase hosted Security Advisor contract', () => {
     expect(baselineSchema).toMatchObject({
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       $id: 'https://burillab.com/schemas/supabase-security-advisor-baseline.schema.json',
+      required: expect.arrayContaining(['observed_on']),
       additionalProperties: false,
       properties: {
         advisor_cli_version: { const: '2.115.0' },
+      },
+    })
+    expect(baselineSchema.required).not.toContain('observed_at')
+    expect(baselineSchema.$defs.role_table_permissions.required).toEqual([
+      'schema_usage',
+      'bypass_rls',
+      'select',
+      'insert',
+      'update',
+      'delete',
+    ])
+    expect(baselineSchema.$defs.entry.allOf[1]).toMatchObject({
+      if: {
+        properties: {
+          rule: {
+            enum: [
+              'auth_leaked_password_protection',
+              'authenticated_security_definer_function_executable',
+            ],
+          },
+        },
+      },
+      then: {
+        properties: {
+          disposition: { const: 'temporary_open' },
+        },
       },
     })
     expect(baselineSchema.$defs.entry.additionalProperties).toBe(false)
@@ -53,6 +80,10 @@ describe('Supabase hosted Security Advisor contract', () => {
       'pg_catalog.pg_get_function_identity_arguments',
       'pg_catalog.pg_get_functiondef',
     ))).toThrow('function bodies')
+    expect(() => validatePermissionQuery(permissionQuery.replace(
+      'procedure.prosecdef as security_definer',
+      '(select pg_catalog.pg_sleep(1) is null) as security_definer',
+    ))).toThrow('reviewed SHA-256 contract')
   })
 
   it('normalizes strict CLI fixtures without retaining raw descriptions', () => {
@@ -77,6 +108,11 @@ describe('Supabase hosted Security Advisor contract', () => {
         service_role_execute: true,
       },
     })
+    expect(observed[2].evidence).toMatchObject({
+      anon: { bypass_rls: false },
+      authenticated: { bypass_rls: false },
+      service_role: { bypass_rls: true },
+    })
     expect(JSON.stringify(observed)).not.toContain('description')
     expect(JSON.stringify(observed)).not.toContain('detail')
   })
@@ -97,6 +133,11 @@ describe('Supabase hosted Security Advisor contract', () => {
       normalizeAdvisorPayload(structuredClone(advisorFixture)),
       normalizePermissionPayload(extraPermission),
     )).toThrow('objects absent from the advisor result')
+
+    const unexpectedColumn = structuredClone(permissionFixture)
+    unexpectedColumn.rows[0].unexpected_column = true
+    expect(() => normalizePermissionPayload(unexpectedColumn))
+      .toThrow('unexpected or missing fields')
   })
 
   it('detects metadata and permission drift even when cache_key is unchanged', () => {
@@ -106,7 +147,7 @@ describe('Supabase hosted Security Advisor contract', () => {
       environment: 'fixture',
       advisor_cli_version: '2.115.0',
       expected_count: 3,
-      observed_at: '2026-08-24T00:00:00Z',
+      observed_on: '2026-08-24',
       entries: observed.map((entry) => ({
         ...entry,
         disposition: 'temporary_open',
@@ -125,6 +166,10 @@ describe('Supabase hosted Security Advisor contract', () => {
     const permissionDrift = structuredClone(observed)
     permissionDrift[2].evidence.authenticated.select = true
     expect(() => compareObservedWithBaseline(baseline, permissionDrift)).toThrow('changed=1')
+
+    const bypassDrift = structuredClone(observed)
+    bypassDrift[2].evidence.authenticated.bypass_rls = true
+    expect(() => compareObservedWithBaseline(baseline, bypassDrift)).toThrow('changed=1')
   })
 
   it('fails closed when hosted environment credentials are absent or malformed', () => {
@@ -158,7 +203,7 @@ describe('Supabase hosted Security Advisor contract', () => {
       environment: 'production',
       advisor_cli_version: '2.115.0',
       expected_count: 53,
-      observed_at: '2026-08-24T00:00:00Z',
+      observed_on: '2026-08-24',
       entries: Array.from({ length: 53 }, (_, index) => ({
         ...structuredClone(entries[index % entries.length]),
         cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
@@ -173,6 +218,32 @@ describe('Supabase hosted Security Advisor contract', () => {
     })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1)
     baseline.entries[0].expires_on = '2026-08-24'
     expect(() => validateBaseline(baseline, 'production', { today: '2026-08-24' })).toThrow('expired')
+  })
+
+  it('never accepts leaked-password or SECURITY DEFINER warnings as design decisions', () => {
+    const production = loadBaseline('production', { today: '2026-08-24' })
+
+    const leakedPasswordAccepted = structuredClone(production)
+    const leakedPasswordEntry = leakedPasswordAccepted.entries.find(
+      (entry) => entry.rule === 'auth_leaked_password_protection',
+    )
+    if (!leakedPasswordEntry) throw new Error('production fixture is missing the leaked-password finding')
+    leakedPasswordEntry.disposition = 'accepted_design'
+    leakedPasswordEntry.expires_on = null
+    leakedPasswordEntry.target_gate = null
+    expect(() => validateBaseline(leakedPasswordAccepted, 'production', { today: '2026-08-24' }))
+      .toThrow('only a reviewed default-deny RLS finding may be accepted_design')
+
+    const securityDefinerAccepted = structuredClone(production)
+    const securityDefinerEntry = securityDefinerAccepted.entries.find(
+      (entry) => entry.rule === 'authenticated_security_definer_function_executable',
+    )
+    if (!securityDefinerEntry) throw new Error('production fixture is missing a SECURITY DEFINER finding')
+    securityDefinerEntry.disposition = 'accepted_design'
+    securityDefinerEntry.expires_on = null
+    securityDefinerEntry.target_gate = null
+    expect(() => validateBaseline(securityDefinerAccepted, 'production', { today: '2026-08-24' }))
+      .toThrow('only a reviewed default-deny RLS finding may be accepted_design')
   })
 
   it('validates the full public-safe production and staging baselines', () => {

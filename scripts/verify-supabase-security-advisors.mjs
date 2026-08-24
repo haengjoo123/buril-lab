@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
@@ -20,9 +21,42 @@ const ALLOWED_RULES = new Set([
   'rls_enabled_no_policy',
 ])
 const PERMISSION_QUERY_MARKER = 'This query intentionally returns no application rows, function bodies, or secrets.'
+const PERMISSION_QUERY_SHA256 = '0fc48a1f1aeb55fa908490e38864161ee12bcda5445acae973d6dcfb9deeca95'
 const FORBIDDEN_SQL_STATEMENTS = /\b(?:alter|call|comment|copy|create|delete|do|drop|execute|grant|insert|refresh|reset|revoke|set|truncate|update|vacuum)\b/i
 const SECRET_VALUE_PATTERN = /(?:sb_secret_|sbp_)[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.|postgres(?:ql)?:\/\/[^\s"']+/i
 const EMAIL_VALUE_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
+const PERMISSION_ROW_FIELDS = [
+  'object_kind',
+  'schema_name',
+  'object_name',
+  'identity_arguments',
+  'language',
+  'security_definer',
+  'anon_execute',
+  'authenticated_execute',
+  'service_role_execute',
+  'rls_enabled',
+  'rls_forced',
+  'policy_count',
+  'anon_schema_usage',
+  'anon_bypass_rls',
+  'anon_select',
+  'anon_insert',
+  'anon_update',
+  'anon_delete',
+  'authenticated_schema_usage',
+  'authenticated_bypass_rls',
+  'authenticated_select',
+  'authenticated_insert',
+  'authenticated_update',
+  'authenticated_delete',
+  'service_role_schema_usage',
+  'service_role_bypass_rls',
+  'service_role_select',
+  'service_role_insert',
+  'service_role_update',
+  'service_role_delete',
+]
 
 export class AdvisorContractError extends Error {
   constructor(message) {
@@ -108,6 +142,7 @@ function assertOfficialRemediationUrl(value, label) {
 function rolePermissionsFromRow(row, role, label) {
   return {
     schema_usage: assertBoolean(row[`${role}_schema_usage`], `${label}.${role}_schema_usage`),
+    bypass_rls: assertBoolean(row[`${role}_bypass_rls`], `${label}.${role}_bypass_rls`),
     select: assertBoolean(row[`${role}_select`], `${label}.${role}_select`),
     insert: assertBoolean(row[`${role}_insert`], `${label}.${role}_insert`),
     update: assertBoolean(row[`${role}_update`], `${label}.${role}_update`),
@@ -116,8 +151,8 @@ function rolePermissionsFromRow(row, role, label) {
 }
 
 function validateRolePermissions(value, label) {
-  assertExactKeys(value, ['schema_usage', 'select', 'insert', 'update', 'delete'], label)
-  for (const key of ['schema_usage', 'select', 'insert', 'update', 'delete']) {
+  assertExactKeys(value, ['schema_usage', 'bypass_rls', 'select', 'insert', 'update', 'delete'], label)
+  for (const key of ['schema_usage', 'bypass_rls', 'select', 'insert', 'update', 'delete']) {
     assertBoolean(value[key], `${label}.${key}`)
   }
 }
@@ -250,6 +285,9 @@ function validateEntry(entry, index, today) {
   } else if (expiresOn !== null || entry.target_gate !== null) {
     fail(`${label} accepted_design findings must not carry an expiry or target gate`)
   }
+  if (entry.disposition === 'accepted_design' && rule !== 'rls_enabled_no_policy') {
+    fail(`${label} only a reviewed default-deny RLS finding may be accepted_design`)
+  }
 
   if (rule === 'authenticated_security_definer_function_executable' && entry.object.kind !== 'function') {
     fail(`${label} must identify a function`)
@@ -266,7 +304,7 @@ export function validateBaseline(baseline, expectedEnvironment, { today = new Da
   assertDate(today, 'today')
   assertExactKeys(
     baseline,
-    ['schema_version', 'environment', 'advisor_cli_version', 'expected_count', 'observed_at', 'entries'],
+    ['schema_version', 'environment', 'advisor_cli_version', 'expected_count', 'observed_on', 'entries'],
     `${expectedEnvironment} baseline`,
   )
   if (baseline.schema_version !== 1) fail(`${expectedEnvironment} schema_version must be 1`)
@@ -274,9 +312,7 @@ export function validateBaseline(baseline, expectedEnvironment, { today = new Da
   if (baseline.advisor_cli_version !== ADVISOR_CLI_VERSION) {
     fail(`${expectedEnvironment} advisor CLI version is not pinned to ${ADVISOR_CLI_VERSION}`)
   }
-  if (typeof baseline.observed_at !== 'string' || Number.isNaN(Date.parse(baseline.observed_at))) {
-    fail(`${expectedEnvironment} observed_at must be an ISO timestamp`)
-  }
+  assertDate(baseline.observed_on, `${expectedEnvironment} observed_on`)
   if (!Array.isArray(baseline.entries)) fail(`${expectedEnvironment} entries must be an array`)
   const expectedCount = EXPECTED_COUNTS[expectedEnvironment]
   if (baseline.expected_count !== expectedCount || baseline.entries.length !== expectedCount) {
@@ -323,6 +359,11 @@ export function validatePermissionQuery(sql = readFileSync(permissionQueryPath, 
   }
   if ((withoutStrings.match(/;/g) || []).length !== 1 || !/;\s*$/.test(withoutStrings)) {
     fail('permission query must contain exactly one statement')
+  }
+  const canonical = sql.replace(/\r\n/g, '\n').trimEnd() + '\n'
+  const digest = createHash('sha256').update(canonical).digest('hex')
+  if (digest !== PERMISSION_QUERY_SHA256) {
+    fail('permission query differs from the reviewed SHA-256 contract')
   }
   return true
 }
@@ -395,6 +436,7 @@ export function normalizePermissionPayload(payload) {
   if (!Array.isArray(root.rows)) fail('permission payload must contain a rows array')
   const normalized = root.rows.map((raw, index) => {
     const row = assertRecord(raw, `permission rows[${index}]`)
+    assertExactKeys(row, PERMISSION_ROW_FIELDS, `permission rows[${index}]`)
     const kind = assertString(row.object_kind, `permission rows[${index}].object_kind`)
     if (kind === 'function') {
       const object = {
