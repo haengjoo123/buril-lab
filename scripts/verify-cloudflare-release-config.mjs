@@ -184,6 +184,9 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'context.route(`${STAGING_ORIGIN}/**`',
     "import { fulfillStagingAccessRoute } from '../../scripts/gate0-access-route.mjs'",
     'fulfillStagingAccessRoute(route, { clientId, clientSecret })',
+    "page.route('**/api/chemicals/enrich'",
+    "route.abort('blockedbyclient')",
+    'verifyGate0EnrichmentIsolation({',
   ]) {
     if (!gate0Spec.includes(required)) {
       throw new Error(`Gate0 Access routing lacks an exact-origin control: ${required}`)

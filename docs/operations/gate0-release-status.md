@@ -6,9 +6,9 @@
 
 ## 현재 결론
 
-- Gate 0 코드 후보와 로컬 DB·브라우저 검사는 준비됐습니다. 아래 추가 변경은 배포 후보인 PR 최신 SHA에서 필수 검사를 다시 통과해야 합니다.
+- Gate 0 코드 후보와 로컬 DB·브라우저 검사는 준비됐습니다. PR #5 병합 SHA `bc162cc5083eda0ab4284794b094a3c88f0b18ad`의 `main` 품질검사와 운영·Staging Hosted Advisor는 통과했습니다.
 - GitHub `staging`·`production` environment의 배포 입력, 별도 Staging Redis, 합성 데이터 초기화와 Gate 0 소유 표시는 준비됐습니다.
-- 회전한 Cloudflare Access service token, Pages Functions 암호값, 분리된 외부 API 키와 Staging KV 안전값은 준비됐습니다. 실제 배포 URL과 KOSHA API 계약은 배포가 있어야 검증할 수 있으므로 PR 최신 SHA의 필수 검사 전에는 Staging 배포를 시작하지 않습니다.
+- 같은 SHA를 Staging Pages에 실제 배포해 Access 세 경계, 고유 URL, `release.json`, KOSHA `link_only` 계약과 합성 fixture 초기화까지 확인했습니다. 실제 브라우저 흐름의 모든 화면 동작은 끝났지만, 활성 보강 기능의 브라우저 요청 3건을 시험이 0건으로 잘못 기대해 마지막 판정이 실패했습니다. 해당 요청은 Playwright에서 모두 중단되어 Pages API나 유료 외부 공급자에는 도달하지 않았습니다. 판정 수정은 새 SHA의 필수 검사를 다시 통과해야 하므로 Staging 전체 관문은 아직 닫지 않습니다.
 - Supabase 조직 접근자 확인은 완료됐지만 임시 복구 프로젝트 생성과 복구훈련은 아직 실행하지 않았습니다.
 - Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
 - 관문 0, 준비 1, 준비 2를 완료로 표시하지 않습니다.
@@ -50,7 +50,7 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] 운영 89개 이력과 정확히 일치하지 않으면 이력 정리를 중단하도록 구현
 - [x] 기준선 SQL은 운영에 실행하지 않고 이력만 정리하도록 제한
 - [x] 실제 Chromium Gate 0 흐름 통과: 로그인→연구실→재고 검색→폐액 배치 검토→화면 버튼 기록→기록 목록→직접 링크
-- [x] 브라우저 시험 중 외부 화학정보 보강 요청 0건 확인
+- [x] 로컬 Gate 0에서는 보강 기능 OFF와 요청 0건 확인; 활성 Staging에서는 보강 시도 3건을 브라우저에서 모두 중단해 Pages API·유료 외부 공급자 도달 0건 확인
 - [x] seed는 loopback DB만 허용하고 원격 URL을 client 생성 전에 거부
 - [x] 운영·Staging 각각 53건의 Security Advisor 종류·대상·역할 권한을 정확한 기준선으로 고정하고 정적 검사 및 Supabase 플러그인 읽기 전용 대조 완료
 - [x] GitHub environment별 Supabase 배포 입력 이름 등록; 실제 값은 공개 증거에 남기지 않음
@@ -68,12 +68,12 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] Staging 전용 Access service token과 해당 토큰 하나만 포함하는 `Service Auth` 정책 생성
 - [x] Access service token 회전 후 GitHub `staging`·`production` environment에 같은 회전본의 비밀값 이름 등록; 활성 값은 공개 문서·저장소·GitHub 로그에 기록하지 않음
 - [x] 회전본으로 custom domain·project `pages.dev` 인증 경계를 통과해 Pages 원점까지 도달함을 확인; 아직 배포가 없어 원점은 522를 반환
-- [ ] 실제 immutable deployment URL 인증 통과 재검증
+- [x] 실제 immutable deployment URL에서 회전한 Access service token 인증과 전체 SHA 확인
 - [x] 운영·Staging 전용 runtime KV namespace 분리
 - [x] 운영·Staging 전용 비공개 R2 백업 버킷 분리 및 30일 보존 규칙 설정
 - [x] 운영 runtime KV의 Gate 0 안전 스위치 기록
 - [x] Staging runtime KV를 `redirect`, `link_only`, `false`, `false` 안전값으로 다시 확인
-- [ ] 실제 배포 뒤 KOSHA API가 `link_only` 계약을 반환하는지 검증
+- [x] 실제 배포 뒤 KOSHA API가 `link_only` 계약과 공식 링크만 반환함을 검증
 - [x] GitHub `staging`, `production` environment 생성 및 `main` 배포 브랜치 제한
 - [x] GitHub 양쪽 environment에 Cloudflare 계정·Pages 배포·KV·Access·Supabase 입력 이름과 Gate 0 Staging 입력 이름 등록
 - [x] 운영과 다른 Staging Upstash 생성, 분리된 자격값의 연결 시험 성공; 활성 값은 기록하지 않음
@@ -117,8 +117,8 @@ Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인
 - [ ] 새 운영 Google 키가 적용되는 다음 운영 배포 직후 과거 공개 유출 키를 폐기하고 GitHub 경고 해결
 - [x] Staging의 익명 집계 증거 보존 후 Gate 0 합성 데이터로 초기화하고 신뢰된 합성 소유 표시 확인
 - [x] Staging KV의 KOSHA 모드를 실제 `link_only`로 확인
-- [ ] 배포 뒤 API가 공식 링크만 반환하는지 검증
-- [ ] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
+- [x] 배포 뒤 API가 공식 링크만 반환하는지 검증
+- [x] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
 - [ ] Staging에서 실제 외부 화학정보 연동시험
 - [ ] 직전 Pages deployment 되돌림 훈련
 - [ ] 운영 쓰기와 일관된 복구 시점을 만들 수 있는 비공개 R2 사진 본문·완전한 manifest·해시 준비
