@@ -1,22 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
-
-const EXPECTED_REQUIRED_SECRETS = [
-  'FEEDBACK_ADMIN_EMAILS',
-  'GEMINI_API_KEY',
-  'GOOGLE_VISION_API_KEY',
-  'KOSHA_API_KEY',
-  'OPENAI_API_KEY',
-  'OPS_ADMIN_EMAILS',
-  'OPS_ANALYTICS_EXPORT_EMAILS',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_JWT_SECRET',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_URL',
-  'UPSTASH_REDIS_REST_TOKEN',
-  'UPSTASH_REDIS_REST_URL',
-]
+import { REQUIRED_SERVER_SECRETS } from './verify-pages-project-config.mjs'
 const FORBIDDEN_PREP0_WORKFLOW_TERMS = [
   'account deletion',
   'deletion-scheduler',
@@ -56,8 +41,11 @@ function verifyWranglerConfig(config, {
   if (!Array.isArray(config.compatibility_flags) || !config.compatibility_flags.includes('nodejs_compat')) {
     throw new Error(`${name} must enable nodejs_compat.`)
   }
-  if (config.keep_vars !== true || config.send_metrics !== false) {
-    throw new Error(`${name} Wrangler variable preservation or telemetry policy is invalid.`)
+  if ('keep_vars' in config || 'secrets' in config) {
+    throw new Error(`${name} contains Wrangler keys that Pages does not support.`)
+  }
+  if (config.send_metrics !== false) {
+    throw new Error(`${name} Wrangler telemetry policy is invalid.`)
   }
   if (
     !Array.isArray(config.kv_namespaces)
@@ -69,11 +57,6 @@ function verifyWranglerConfig(config, {
   }
   if (config.vars?.APP_ENVIRONMENT !== environment || config.vars?.PUBLIC_APP_ORIGIN !== origin) {
     throw new Error(`${name} public environment identity is invalid.`)
-  }
-
-  const requiredSecrets = [...(config.secrets?.required || [])].sort()
-  if (JSON.stringify(requiredSecrets) !== JSON.stringify(EXPECTED_REQUIRED_SECRETS)) {
-    throw new Error(`${name} required server-secret names drifted.`)
   }
 
   if (requireEmptyPreview) {
@@ -299,7 +282,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     throw new Error('Production final Advisor, quality, Staging-run, main-tip, and Pages deploy guards are out of order.')
   }
 
-  return { projectCount: 2, requiredServerSecretCount: EXPECTED_REQUIRED_SECRETS.length }
+  return { projectCount: 2, requiredServerSecretCount: REQUIRED_SERVER_SECRETS.length }
 }
 
 async function main() {

@@ -1202,6 +1202,17 @@ describe('Prep 0 Cloudflare release controls', () => {
     }
     expect(verifyReleaseConfiguration(configuration)).toMatchObject({ projectCount: 2 })
 
+    for (const unsupported of ['keep_vars', 'secrets']) {
+      const invalidProduction = JSON.parse(productionRaw)
+      invalidProduction[unsupported] = unsupported === 'keep_vars'
+        ? true
+        : { required: ['SUPABASE_URL'] }
+      expect(() => verifyReleaseConfiguration({
+        ...configuration,
+        productionRaw: JSON.stringify(invalidProduction),
+      })).toThrow(/Wrangler keys that Pages does not support/)
+    }
+
     const oneQualityVerification = productionWorkflow.replace(
       'run: node scripts/verify-github-quality-run.mjs',
       'run: echo "removed early quality verification"',
