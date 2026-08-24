@@ -1,5 +1,5 @@
 ﻿/* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
     fetchWasteLogItemsV2,
     fetchWasteLogs,
@@ -29,6 +29,10 @@ import {
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
 import { useAuth } from '../hooks/useAuth';
 import { formatGhsStatementList } from '../data/ghsCodes';
+import {
+    canCommitWasteLogListRequest,
+    type WasteLogListRequestToken,
+} from './wasteLogRequestScope';
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
@@ -563,6 +567,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [logs, setLogs] = useState<WasteLogRecord[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadedLabId, setLoadedLabId] = useState<string | null | undefined>(undefined);
     const [error, setError] = useState<string | null>(null);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [page, setPage] = useState(0);
@@ -597,12 +602,21 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const v2ItemsCacheRef = useRef<Record<string, WasteLogItemRecord[]>>({});
     const v2ItemsRequestsRef = useRef<Set<string>>(new Set());
     const v2ItemsGenerationRef = useRef(0);
+    const logListRequestRef = useRef(0);
+    const auditRequestRef = useRef(0);
     const exportOptionsContainerRef = useRef<HTMLDivElement>(null);
     const customExportSectionRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        const requestId = ++auditRequestRef.current;
+        const requestLabId = currentLabId;
+        const isCurrentRequest = () => (
+            requestId === auditRequestRef.current
+            && requestLabId === useLabStore.getState().currentLabId
+        );
         if (!viewingAuditLogForId) {
             setAuditLogs([]);
+            setIsLoadingAudit(false);
             return;
         }
 
@@ -622,18 +636,38 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
         setIsLoadingAudit(true);
         auditService.getLogs({ entity_id: targetId, limit: 10 })
-            .then(setAuditLogs)
-            .catch(console.error)
-            .finally(() => setIsLoadingAudit(false));
-    }, [viewingAuditLogForId]);
+            .then((nextAuditLogs) => {
+                if (isCurrentRequest()) setAuditLogs(nextAuditLogs);
+            })
+            .catch((auditError) => {
+                if (isCurrentRequest()) console.error(auditError);
+            })
+            .finally(() => {
+                if (isCurrentRequest()) setIsLoadingAudit(false);
+            });
+        return () => {
+            if (auditRequestRef.current === requestId) auditRequestRef.current += 1;
+        };
+    }, [currentLabId, viewingAuditLogForId]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
+        logListRequestRef.current += 1;
+        auditRequestRef.current += 1;
         v2ItemsGenerationRef.current += 1;
         v2ItemsCacheRef.current = {};
         v2ItemsRequestsRef.current.clear();
         setV2ItemsByLogId({});
         setV2ItemsLoading({});
         setV2ItemsError({});
+        setLogs([]);
+        setTotalCount(0);
+        setExpandedId(null);
+        setSelectedDesktopLogId(null);
+        setViewingAuditLogForId(null);
+        setAuditLogs([]);
+        setError(null);
+        setLoadedLabId(undefined);
+        setIsLoading(true);
     }, [currentLabId]);
 
     const loadV2Items = useCallback(async (wasteLogId: string, force = false) => {
@@ -727,6 +761,15 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     );
 
     const loadLogs = useCallback(async (reset: boolean = false) => {
+        const token: WasteLogListRequestToken = {
+            requestId: ++logListRequestRef.current,
+            labId: currentLabId,
+        };
+        const isCurrentRequest = () => canCommitWasteLogListRequest(
+            token,
+            logListRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
         setIsLoading(true);
         setError(null);
         try {
@@ -738,6 +781,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                 createdAfter,
                 createdBefore,
             });
+            if (!isCurrentRequest()) return;
             if (reset) {
                 setLogs(result.logs);
                 setPage(0);
@@ -746,16 +790,25 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             }
             setTotalCount(result.count);
         } catch {
+            if (!isCurrentRequest()) return;
+            setLogs([]);
+            setTotalCount(0);
             setError(t('log_fetch_error'));
         } finally {
-            setIsLoading(false);
+            if (isCurrentRequest()) {
+                setLoadedLabId(token.labId);
+                setIsLoading(false);
+            }
         }
-    }, [createdAfter, createdBefore, page, searchQuery, sortBy, sortOrder, t]);
+    }, [createdAfter, createdBefore, currentLabId, page, searchQuery, sortBy, sortOrder, t]);
 
     // 실험실/검색/정렬/기간 변경 시 재조회
     useEffect(() => {
-        loadLogs(true);
+        void loadLogs(true);
         setExpandedSections({});
+        return () => {
+            logListRequestRef.current += 1;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, currentLabId, dateRange, searchQuery, sortBy, sortOrder]);
 
@@ -769,6 +822,15 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             return;
         }
 
+        const token: WasteLogListRequestToken = {
+            requestId: ++logListRequestRef.current,
+            labId: currentLabId,
+        };
+        const isCurrentRequest = () => canCommitWasteLogListRequest(
+            token,
+            logListRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
         const nextPage = page + 1;
         setIsLoading(true);
         setError(null);
@@ -781,6 +843,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                 createdAfter,
                 createdBefore,
             });
+            if (!isCurrentRequest()) return;
 
             if (result.logs.length === 0) {
                 setTotalCount(result.count);
@@ -791,9 +854,10 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             setTotalCount(result.count);
             setPage(nextPage);
         } catch {
+            if (!isCurrentRequest()) return;
             setError(t('log_fetch_error'));
         } finally {
-            setIsLoading(false);
+            if (isCurrentRequest()) setIsLoading(false);
         }
     };
 
@@ -1410,6 +1474,14 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
         await handleExportExcel(exportScope);
     };
+
+    if (loadedLabId !== currentLabId) {
+        return (
+            <div className="flex min-h-64 items-center justify-center p-8">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            </div>
+        );
+    }
 
     return (
         <div className="p-5 lg:p-8" style={{ paddingBottom: '100px' }}>

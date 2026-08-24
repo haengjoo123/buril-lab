@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import {
     Package,
     Plus,
@@ -30,6 +30,7 @@ import {
     type StorageLocation,
 } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
+import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
 import { InventoryFormModal } from './InventoryFormModal';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
@@ -198,6 +199,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const [locations, setLocations] = useState<StorageLocation[]>([]);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [loadedLabId, setLoadedLabId] = useState<string | null | undefined>(undefined);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<InventorySortOption>('expiry_asc');
     const [hazardFilter, setHazardFilter] = useState<InventoryHazardFilter>('all');
@@ -249,28 +252,66 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const inventoryIdentityInFlightRef = useRef<Set<string>>(new Set());
     const bulkErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const bulkMoveRequestRef = useRef<{ signature: string; requestId: string } | null>(null);
+    const loadRequestRef = useRef(0);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
+        const token: LabRequestToken = {
+            generation: ++loadRequestRef.current,
+            labId: currentLabId,
+        };
+        const isCurrentRequest = () => canCommitLabRequest(
+            token,
+            loadRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
         setIsLoading(true);
+        setLoadError(null);
         try {
             const [fetchedItems, fetchedLocations, fetchedCabinets] = await Promise.all([
                 inventoryService.getItems(),
                 storageLocationService.getLocations(),
                 cabinetService.getCabinets(),
             ]);
+            if (!isCurrentRequest()) return;
             setItems(fetchedItems);
             setLocations(fetchedLocations);
             setCabinets(fetchedCabinets);
+            setLoadedLabId(token.labId);
         } catch (error) {
+            if (!isCurrentRequest()) return;
             console.error('Failed to load inventory data:', error);
+            setItems([]);
+            setLocations([]);
+            setCabinets([]);
+            setLoadedLabId(token.labId);
+            setLoadError(t('search_error'));
         } finally {
-            setIsLoading(false);
+            if (isCurrentRequest()) setIsLoading(false);
         }
-    };
+    }, [currentLabId, t]);
+
+    useLayoutEffect(() => {
+        loadRequestRef.current += 1;
+        setItems([]);
+        setLocations([]);
+        setCabinets([]);
+        setLoadedLabId(undefined);
+        setLoadError(null);
+        setIsLoading(true);
+        setSelectedDesktopItemId(null);
+        setItemActionMenuItem(null);
+        setItemToDelete(null);
+        setIsFormOpen(false);
+        setIsCameraOpen(false);
+        setIsCsvImportOpen(false);
+    }, [currentLabId]);
 
     useEffect(() => {
-        loadData();
-    }, [currentLabId]);
+        void loadData();
+        return () => {
+            loadRequestRef.current += 1;
+        };
+    }, [loadData]);
 
     useEffect(() => {
         setIsSelectMode(false);
@@ -1877,6 +1918,27 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             </div>
         );
     };
+
+    if (loadedLabId !== currentLabId || isLoading) {
+        return (
+            <div className="flex h-full items-center justify-center p-8">
+                <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div className="flex h-full items-center justify-center p-6">
+                <div role="alert" className="max-w-md rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+                    <p>{loadError}</p>
+                    <button type="button" onClick={() => void loadData()} className="mt-3 font-bold underline">
+                        {t('msds_retry')}
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)]">
