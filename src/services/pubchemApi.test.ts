@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('./chemicalEnrichmentService', () => ({
+  chemicalFromEnrichment: vi.fn(),
+  enrichChemical: vi.fn(),
+}))
+
 import { fetchChemicalInfoLegacy as fetchChemicalInfo } from './pubchemApi'
 
 const fetchMock = vi.fn()

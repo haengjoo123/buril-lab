@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import { searchChemical } from '../services/searchService';
+import { isChemicalSearchError } from '../services/chemicalSearchError';
+import { getSearchErrorMessageKey } from '../utils/searchErrorMessage';
 import { fetchChemicalSuggestions } from '../services/chemicalSuggestionService';
 import { cabinetService, type CabinetSearchResult } from '../services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from '../services/mediaProductService';
@@ -190,13 +192,18 @@ export function useSearchFlow({
         if (referencePhStatus === 'pending' || referencePhStatus === 'transient_error') {
           const retryAfterMs = chemicalData.referencePhLookup?.retryAfterMs || 2_000;
           referencePhRetryRef.current = setTimeout(async () => {
-            const refreshedChemical = await searchChemical(searchQuery);
-            if (!refreshedChemical || searchSequenceRef.current !== searchSequence) return;
-            const refreshedAnalysis = analyzeChemical(refreshedChemical);
-            setResult((previous) => previous?.isAiEstimated && refreshedAnalysis.category === 'UNKNOWN'
-              ? { ...previous, chemical: refreshedChemical }
-              : refreshedAnalysis);
-            referencePhRetryRef.current = null;
+            try {
+              const refreshedChemical = await searchChemical(searchQuery);
+              if (!refreshedChemical || searchSequenceRef.current !== searchSequence) return;
+              const refreshedAnalysis = analyzeChemical(refreshedChemical);
+              setResult((previous) => previous?.isAiEstimated && refreshedAnalysis.category === 'UNKNOWN'
+                ? { ...previous, chemical: refreshedChemical }
+                : refreshedAnalysis);
+            } catch (retryError) {
+              if (import.meta.env.DEV) console.warn('[Chemical search] Refresh failed:', retryError);
+            } finally {
+              referencePhRetryRef.current = null;
+            }
           }, retryAfterMs);
         }
       }
@@ -251,7 +258,8 @@ export function useSearchFlow({
       }
     } catch (err) {
       if (searchSequenceRef.current !== searchSequence) return;
-      setError(t('search_error'));
+      const isOnline = typeof navigator === 'undefined' || navigator.onLine;
+      setError(t(getSearchErrorMessageKey(err, isOnline)));
       if (import.meta.env.DEV) console.error(err);
       if (trackSubmittedSearch) {
         void recordSearchEvent({

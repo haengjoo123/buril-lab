@@ -159,7 +159,14 @@ const recoverCasFromEquivalentRecords = async (
     return candidates.length === 1 ? candidates[0] : undefined;
 };
 
-export const fetchChemicalInfoLegacy = async (query: string): Promise<Chemical | null> => {
+export interface LegacyChemicalFetchOptions {
+    throwOnUnavailable?: boolean;
+}
+
+export const fetchChemicalInfoLegacy = async (
+    query: string,
+    options: LegacyChemicalFetchOptions = {},
+): Promise<Chemical | null> => {
     if (!query) return null;
 
     const trimmedQuery = query.trim();
@@ -251,6 +258,7 @@ export const fetchChemicalInfoLegacy = async (query: string): Promise<Chemical |
 
     } catch (error) {
         console.error("Failed to fetch chemical info:", error);
+        if (options.throwOnUnavailable) throw error;
         return null; // Return null on network error to allow manual retry or handling
     }
 };

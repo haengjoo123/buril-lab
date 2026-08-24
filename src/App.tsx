@@ -17,7 +17,7 @@ import { WasteV2DisabledCartView } from './components/WasteV2DisabledCartView';
 import { isChemicalEnrichmentEnabled, isWasteV2Enabled } from './config/featureFlags';
 import { AuthView } from './components/AuthView';
 import { ResetPasswordView } from './components/ResetPasswordView';
-import { SafetyDisclaimer } from './components/SafetyDisclaimer';
+import { SafetyDisclaimer, hasCurrentSafetyAcknowledgement } from './components/SafetyDisclaimer';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import type { CabinetSearchResult } from './services/cabinetService';
 import type { InventoryItem } from './services/inventoryService';
@@ -108,7 +108,13 @@ function App() {
   const setWasteScope = useWasteStore((state) => state.setScope);
   const refreshChemicalEnrichment = useWasteStore((state) => state.refreshChemicalEnrichment);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
-  const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
+  const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => {
+    try {
+      return hasCurrentSafetyAcknowledgement(window.localStorage);
+    } catch {
+      return false;
+    }
+  });
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
   const [isAddingWasteComponent, setIsAddingWasteComponent] = useState(false);
   const [wasteComponentSearchRequestKey, setWasteComponentSearchRequestKey] = useState(0);

@@ -10,6 +10,10 @@ import { useAuth } from '../hooks/useAuth';
 import { useThemeMode } from '../hooks/useThemeMode';
 import type { FeedbackType } from '../types/feedback';
 import { analyticsService } from '../services/analyticsService';
+import {
+    LEGACY_SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY,
+    SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY,
+} from './SafetyDisclaimer';
 
 const onboardingPlatform = Capacitor.isNativePlatform() ? 'native' : 'web';
 
@@ -94,7 +98,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             title: t('settings_view_guide'),
             description: t('settings_view_guide_confirm_desc'),
             onConfirm: () => {
-                localStorage.removeItem('buril-safety-acknowledged');
+                localStorage.removeItem(SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY);
+                localStorage.removeItem(LEGACY_SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY);
                 setDialogConfig({
                     isOpen: true,
                     type: 'alert',
