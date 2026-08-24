@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://burillab.com/schemas/supabase-security-advisor-baseline.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "environment",
+    "advisor_cli_version",
+    "expected_count",
+    "observed_on",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "environment": { "enum": ["production", "staging"] },
+    "advisor_cli_version": { "const": "2.115.0" },
+    "expected_count": { "type": "integer", "minimum": 0 },
+    "observed_on": { "type": "string", "format": "date" },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "role_table_permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_usage", "bypass_rls", "select", "insert", "update", "delete"],
+      "properties": {
+        "schema_usage": { "type": "boolean" },
+        "bypass_rls": { "type": "boolean" },
+        "select": { "type": "boolean" },
+        "insert": { "type": "boolean" },
+        "update": { "type": "boolean" },
+        "delete": { "type": "boolean" }
+      }
+    },
+    "function_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "schema",
+        "name",
+        "identity_arguments",
+        "language",
+        "security_definer"
+      ],
+      "properties": {
+        "kind": { "const": "function" },
+        "schema": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "identity_arguments": { "type": "string" },
+        "language": { "type": "string", "minLength": 1 },
+        "security_definer": { "const": true }
+      }
+    },
+    "table_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "schema", "name"],
+      "properties": {
+        "kind": { "const": "table" },
+        "schema": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "auth_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "entity", "name"],
+      "properties": {
+        "kind": { "const": "auth_setting" },
+        "entity": { "const": "Auth" },
+        "name": { "const": "leaked_password_protection" }
+      }
+    },
+    "function_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "anon_execute", "authenticated_execute", "service_role_execute"],
+      "properties": {
+        "kind": { "const": "function_execute" },
+        "anon_execute": { "type": "boolean" },
+        "authenticated_execute": { "type": "boolean" },
+        "service_role_execute": { "type": "boolean" }
+      }
+    },
+    "table_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "rls_enabled",
+        "rls_forced",
+        "policy_count",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "properties": {
+        "kind": { "const": "table_access" },
+        "rls_enabled": { "type": "boolean" },
+        "rls_forced": { "type": "boolean" },
+        "policy_count": { "type": "integer", "minimum": 0 },
+        "anon": { "$ref": "#/$defs/role_table_permissions" },
+        "authenticated": { "$ref": "#/$defs/role_table_permissions" },
+        "service_role": { "$ref": "#/$defs/role_table_permissions" }
+      }
+    },
+    "auth_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "advisor_assertion"],
+      "properties": {
+        "kind": { "const": "advisor_only" },
+        "advisor_assertion": { "const": "auth_leaked_password_protection" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cache_key",
+        "rule",
+        "level",
+        "object",
+        "evidence",
+        "remediation_url",
+        "disposition",
+        "reason",
+        "reviewed_by_role",
+        "reviewed_at",
+        "expires_on",
+        "target_gate"
+      ],
+      "properties": {
+        "cache_key": { "type": "string", "minLength": 1 },
+        "rule": { "type": "string", "minLength": 1 },
+        "level": { "enum": ["ERROR", "WARN", "INFO"] },
+        "object": {
+          "oneOf": [
+            { "$ref": "#/$defs/function_object" },
+            { "$ref": "#/$defs/table_object" },
+            { "$ref": "#/$defs/auth_object" }
+          ]
+        },
+        "evidence": {
+          "oneOf": [
+            { "$ref": "#/$defs/function_evidence" },
+            { "$ref": "#/$defs/table_evidence" },
+            { "$ref": "#/$defs/auth_evidence" }
+          ]
+        },
+        "remediation_url": { "type": "string", "format": "uri" },
+        "disposition": { "enum": ["accepted_design", "temporary_open"] },
+        "reason": { "type": "string", "minLength": 20 },
+        "reviewed_by_role": { "type": "string", "minLength": 1 },
+        "reviewed_at": { "type": "string", "format": "date" },
+        "expires_on": {
+          "oneOf": [
+            { "type": "string", "format": "date" },
+            { "type": "null" }
+          ]
+        },
+        "target_gate": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "disposition": { "const": "temporary_open" } } },
+          "then": {
+            "properties": {
+              "expires_on": { "type": "string", "format": "date" },
+              "target_gate": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rule": {
+                "enum": [
+                  "auth_leaked_password_protection",
+                  "authenticated_security_definer_function_executable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "disposition": { "const": "temporary_open" },
+              "expires_on": { "type": "string", "format": "date" },
+              "target_gate": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

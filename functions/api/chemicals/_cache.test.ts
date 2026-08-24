@@ -85,7 +85,7 @@ describe('chemical enrichment cache policy', () => {
 
   it('locks the new public cache table to the server role in the migration', () => {
     const sql = readFileSync(resolve(
-      'supabase/migrations/20260817010927_chemical_enrichment_cache.sql',
+      'supabase/legacy_migrations/20260817010927_chemical_enrichment_cache.sql',
     ), 'utf8').toLowerCase()
     expect(sql).toContain('alter table public.chemical_enrichment_cache enable row level security')
     expect(sql).toContain('revoke all on table public.chemical_enrichment_cache from public, anon, authenticated')
@@ -94,7 +94,7 @@ describe('chemical enrichment cache policy', () => {
 
   it('locks KOSHA source caches and leases to the service role', () => {
     const sql = readFileSync(resolve(
-      'supabase/migrations/20260817034449_chemical_source_cache_and_leases.sql',
+      'supabase/legacy_migrations/20260817034449_chemical_source_cache_and_leases.sql',
     ), 'utf8').toLowerCase()
     expect(sql).toContain('alter table public.chemical_source_cache enable row level security')
     expect(sql).toContain('revoke all on table public.chemical_source_cache from public, anon, authenticated')

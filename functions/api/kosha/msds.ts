@@ -1,4 +1,6 @@
-interface Env {
+import { resolveRuntimeConfig, type RuntimeConfigEnv } from '../_runtimeConfig'
+
+interface Env extends RuntimeConfigEnv {
   KOSHA_API_KEY?: string
 }
 
@@ -9,6 +11,7 @@ interface SectionResponse {
 }
 
 const KOSHA_BASE_URL = 'https://msds.kosha.or.kr/openapi/service/msdschem'
+const KOSHA_REFERENCE_URL = 'https://msds.kosha.or.kr/MSDSInfo/kcic/msdssearchMsds.do'
 const SECTION_NUMBERS = Array.from({ length: 16 }, (_, index) => index + 1)
 const MAX_CONCURRENCY = 3
 const RETRY_DELAYS_MS = [500, 1_500]
@@ -18,6 +21,7 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
     ...init,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
       ...(init?.headers || {}),
     },
   })
@@ -98,6 +102,17 @@ export const onRequestGet = async (context: {
   request: Request
   env: Env
 }) => {
+  const { koshaContentMode } = await resolveRuntimeConfig(context.env)
+  if (koshaContentMode === 'link_only') {
+    return jsonResponse({
+      mode: 'link_only',
+      officialUrl: KOSHA_REFERENCE_URL,
+      sections: [],
+      missingSections: SECTION_NUMBERS,
+      complete: false,
+    })
+  }
+
   if (!context.env.KOSHA_API_KEY?.trim()) {
     return jsonResponse({ error: 'KOSHA API key is not configured.' }, { status: 500 })
   }
@@ -115,7 +130,9 @@ export const onRequestGet = async (context: {
   const cacheKey = new Request(requestUrl.toString(), { method: 'GET' })
   const cached = await cache.match(cacheKey)
   if (cached) {
-    return cached
+    const browserResponse = new Response(cached.body, cached)
+    browserResponse.headers.set('Cache-Control', 'no-store')
+    return browserResponse
   }
 
   const sections = await mapWithConcurrency(
@@ -132,23 +149,20 @@ export const onRequestGet = async (context: {
     .map((section) => section.sectionNumber)
   const complete = missingSections.length === 0
 
-  const response = jsonResponse(
-    { sections, missingSections, complete },
-    {
-      headers: {
-        // Browsers reuse a recent result, while the edge retains a complete
-        // document longer so reopening a modal does not repeat 16 upstream calls.
-        'Cache-Control': complete
-          ? 'public, max-age=300, s-maxage=86400'
-          : 'no-store',
-      },
-    },
-  )
+  const response = jsonResponse({
+    mode: 'full',
+    officialUrl: KOSHA_REFERENCE_URL,
+    sections,
+    missingSections,
+    complete,
+  })
 
   // Never cache a partial document: a retry must be able to recover sections
   // that were temporarily unavailable upstream.
   if (complete) {
-    await cache.put(cacheKey, response.clone())
+    const edgeCachedResponse = response.clone()
+    edgeCachedResponse.headers.set('Cache-Control', 'public, s-maxage=86400')
+    await cache.put(cacheKey, edgeCachedResponse)
   }
 
   return response

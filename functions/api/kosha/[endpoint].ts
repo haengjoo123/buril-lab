@@ -1,4 +1,6 @@
-interface Env {
+import { resolveRuntimeConfig, type RuntimeConfigEnv } from '../_runtimeConfig'
+
+interface Env extends RuntimeConfigEnv {
   KOSHA_API_KEY?: string
 }
 
@@ -10,7 +12,7 @@ function textResponse(body: string, init?: ResponseInit) {
     ...init,
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': 'no-store',
       ...(init?.headers || {}),
     },
   })
@@ -25,6 +27,13 @@ export const onRequestGet = async (context: {
 
   if (typeof endpoint !== 'string' || !ALLOWED_ENDPOINT_PATTERN.test(endpoint)) {
     return textResponse('<error>Invalid KOSHA endpoint.</error>', { status: 400 })
+  }
+
+  const runtimeConfig = await resolveRuntimeConfig(context.env)
+  if (runtimeConfig.koshaContentMode === 'link_only') {
+    return textResponse('<error code="KOSHA_LINK_ONLY">Use the official KOSHA reference page.</error>', {
+      status: 403,
+    })
   }
 
   if (!context.env.KOSHA_API_KEY) {

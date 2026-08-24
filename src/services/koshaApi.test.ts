@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { parseKoshaPhDetail } from './koshaApi';
+import { describe, expect, it, vi } from 'vitest';
+
+const getJsonMock = vi.hoisted(() => vi.fn());
+
+vi.mock('./internalApi', () => ({ getJson: getJsonMock }));
+
+import { fetchKoshaMsds, parseKoshaPhDetail } from './koshaApi';
 
 describe('parseKoshaPhDetail', () => {
     it('reads plain and explicitly labeled reference pH values', () => {
@@ -17,5 +22,22 @@ describe('parseKoshaPhDetail', () => {
         expect(parseKoshaPhDetail('pH 20')).toBeUndefined();
         expect(parseKoshaPhDetail('2.5 또는 7.0')).toBeUndefined();
         expect(parseKoshaPhDetail('자료없음')).toBeUndefined();
+    });
+});
+
+describe('fetchKoshaMsds policy boundary', () => {
+    it('uses the .2 policy cache key and bypasses browser caching', async () => {
+        getJsonMock.mockResolvedValueOnce({
+            mode: 'link_only',
+            officialUrl: 'https://msds.kosha.or.kr/MSDSInfo/kcic/msdssearchMsds.do',
+            sections: [],
+            missingSections: [],
+        });
+
+        await expect(fetchKoshaMsds(321)).resolves.toMatchObject({ mode: 'link_only' });
+        expect(getJsonMock).toHaveBeenCalledWith(
+            '/api/kosha/msds?chemId=000321&policy=20260824.2',
+            { cache: 'no-store' },
+        );
     });
 });

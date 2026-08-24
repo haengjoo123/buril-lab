@@ -8,6 +8,10 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as cheerio from 'cheerio';
+import { requireKoshaBulkCollectionPermission } from './kosha-bulk-collection-guard.mjs';
+
+const reclassOnly = process.env.V2_RECLASS_ONLY === '1';
+if (!reclassOnly) requireKoshaBulkCollectionPermission();
 
 const root = process.cwd();
 const directory = path.join(root, 'data', 'waste-golden-set-v2');
@@ -181,7 +185,7 @@ function takeBalanced(rows) {
 }
 
 const existing = JSON.parse(await readFile(dataPath, 'utf8')).map(enrichExisting);
-if (process.env.V2_RECLASS_ONLY === '1') {
+if (reclassOnly) {
     const reclassified = existing.map((row, index) => ({
         ...row,
         id: `v2-${String(index + 1).padStart(4, '0')}-${row.casNumber}`,

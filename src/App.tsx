@@ -17,7 +17,7 @@ import { WasteV2DisabledCartView } from './components/WasteV2DisabledCartView';
 import { isChemicalEnrichmentEnabled, isWasteV2Enabled } from './config/featureFlags';
 import { AuthView } from './components/AuthView';
 import { ResetPasswordView } from './components/ResetPasswordView';
-import { SafetyDisclaimer } from './components/SafetyDisclaimer';
+import { SafetyDisclaimer, hasCurrentSafetyAcknowledgement } from './components/SafetyDisclaimer';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import type { CabinetSearchResult } from './services/cabinetService';
 import type { InventoryItem } from './services/inventoryService';
@@ -108,7 +108,13 @@ function App() {
   const setWasteScope = useWasteStore((state) => state.setScope);
   const refreshChemicalEnrichment = useWasteStore((state) => state.refreshChemicalEnrichment);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
-  const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => localStorage.getItem('buril-safety-acknowledged') === 'true');
+  const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => {
+    try {
+      return hasCurrentSafetyAcknowledgement(window.localStorage);
+    } catch {
+      return false;
+    }
+  });
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
   const [isAddingWasteComponent, setIsAddingWasteComponent] = useState(false);
   const [wasteComponentSearchRequestKey, setWasteComponentSearchRequestKey] = useState(0);
@@ -656,6 +662,12 @@ function App() {
   }, [currentSearchEventId, navigate, session]);
 
   const handleVoiceUiAction = useCallback(async (action: VoiceUiAction, _result: VoiceQueryResponse) => {
+    if (action.type === 'open_waste_batch_review') {
+      setIsAddingWasteComponent(false);
+      setIsCartOpen(true);
+      return;
+    }
+
     if (action.type === 'search_reagent') {
       const searchQuery = action.query?.trim() || _result.match?.name?.trim() || _result.resolvedText.trim();
       if (!searchQuery) {
@@ -691,7 +703,7 @@ function App() {
       itemId: action.highlightItemId,
       shelfId: action.shelfId,
     });
-  }, [navigate, navigateToLogin, navigateWithFreshFilters, session]);
+  }, [navigate, navigateToLogin, navigateWithFreshFilters, session, setIsCartOpen]);
 
   const handleScan = (scannedText: string, selectionMeta: ScannerSelectionMeta) => {
     setIsScanning(false);

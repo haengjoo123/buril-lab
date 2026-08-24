@@ -1,0 +1,312 @@
+name: Deploy production manually
+
+run-name: Deploy production ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Lowercase full SHA already deployed and verified on Staging
+        required: true
+        type: string
+      confirmation:
+        description: Type "DEPLOY buril-lab production <SHA>"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  deployments: write
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Manually deploy verified commit to buril-lab
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'haengjoo123/buril-lab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: production
+      url: https://burillab.com
+    env:
+      DEPLOY_ENVIRONMENT: production
+      DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
+      DEPLOY_CONFIRMATION: ${{ inputs.confirmation }}
+      CLOUDFLARE_PAGES_PROJECT: buril-lab
+      STAGING_KOSHA_CONTENT_MODE: link_only
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_PUBLIC_APP_URL: https://burillab.com
+      VITE_INTERNAL_API_BASE_URL: https://burillab.com
+      VITE_AUTH_REDIRECT_URL: https://burillab.com/auth/callback
+      VITE_ENABLE_WASTE_V2: ${{ vars.VITE_ENABLE_WASTE_V2 }}
+      VITE_ENABLE_PH_PREDICTION: ${{ vars.VITE_ENABLE_PH_PREDICTION }}
+      VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
+      VITE_ENABLE_SEARCH_ANALYTICS: ${{ vars.VITE_ENABLE_SEARCH_ANALYTICS }}
+
+    steps:
+      - name: Validate the manual confirmation
+        shell: bash
+        run: |
+          if [[ ! "$DEPLOY_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit_sha must be a lowercase, full Git SHA" >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
+            echo "Production can deploy only the main SHA that dispatched this workflow" >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_CONFIRMATION" != "DEPLOY buril-lab production $DEPLOY_COMMIT_SHA" ]]; then
+            echo "Production confirmation did not match the selected SHA" >&2
+            exit 1
+          fi
+
+      - name: Check out the exact selected commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the selected commit is trusted main history
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Set up the pinned Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+
+      - name: Verify the exact commit passed trusted main quality
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Verify the latest exact-SHA Staging workflow succeeded
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-staging-run.mjs
+
+      - name: Verify environment-scoped deployment inputs
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: node scripts/verify-cloudflare-deploy-inputs.mjs
+
+      - name: Resolve the immutable Staging deployment for this SHA
+        id: staging-deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -o pipefail
+          curl --fail-with-body --silent --show-error --proto '=https' \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            --header "Accept: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/buril-lab-staging/deployments?env=production" \
+          | node scripts/read-pages-deployment.mjs \
+            --file - \
+            --commit "$DEPLOY_COMMIT_SHA" \
+            --environment staging \
+            --project buril-lab-staging
+
+      - name: Verify all Staging boundaries remain protected by Access
+        shell: bash
+        run: |
+          node scripts/verify-staging-access.mjs "https://staging.burillab.com/release.json?access-probe=$DEPLOY_COMMIT_SHA"
+          node scripts/verify-staging-access.mjs "https://buril-lab-staging.pages.dev/release.json?access-probe=$DEPLOY_COMMIT_SHA"
+          node scripts/verify-staging-access.mjs "${{ steps.staging-deployment.outputs.deployment_url }}/release.json?access-probe=$DEPLOY_COMMIT_SHA"
+
+      - name: Verify the same SHA is live on protected Staging
+        env:
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "https://staging.burillab.com/release.json?commit=$DEPLOY_COMMIT_SHA"
+          --commit "$DEPLOY_COMMIT_SHA"
+          --environment staging
+
+      - name: Verify the Pages apex serves the same Staging SHA
+        env:
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "https://buril-lab-staging.pages.dev/release.json?commit=$DEPLOY_COMMIT_SHA"
+          --commit "$DEPLOY_COMMIT_SHA"
+          --environment staging
+
+      - name: Verify the immutable deployment URL serves the same Staging SHA
+        env:
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "${{ steps.staging-deployment.outputs.deployment_url }}/release.json?commit=$DEPLOY_COMMIT_SHA"
+          --commit "$DEPLOY_COMMIT_SHA"
+          --environment staging
+
+      - name: Verify Pages control-plane safeguards before deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          VERIFY_CURRENT_RUNTIME_BINDING: "false"
+        run: npm run ops:verify
+
+      - name: Build the production artifact
+        run: npm run build
+
+      - name: Attach and verify the public release identity
+        shell: bash
+        run: |
+          node scripts/write-release-manifest.mjs \
+            --output dist/release.json \
+            --commit "$DEPLOY_COMMIT_SHA" \
+            --environment production \
+            --built-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          node scripts/verify-release-manifest.mjs \
+            --file dist/release.json \
+            --commit "$DEPLOY_COMMIT_SHA" \
+            --environment production
+
+      - name: Materialize the production Wrangler config
+        env:
+          BURILLAB_PRODUCTION_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+        run: >-
+          node scripts/render-wrangler-config.mjs
+          --input wrangler.jsonc
+          --output wrangler.production.generated.jsonc
+          --pages-deploy-redirect .wrangler/deploy/config.json
+
+      - name: Compile Pages Functions with the selected binding
+        run: >-
+          npx wrangler pages functions build functions
+          --config wrangler.production.generated.jsonc
+          --outdir "$GITHUB_WORKSPACE/.wrangler/pages-functions-production"
+
+      - name: Recheck high and critical runtime advisories
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Recheck production Supabase Security Advisor immediately before deployment
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: >-
+          npm run security:supabase-advisors:hosted --
+          --environment production
+
+      - name: Recheck the exact commit still passes trusted main quality
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Recheck the latest exact-SHA Staging workflow still succeeded
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-staging-run.mjs
+
+      - name: Recheck that production still targets the current main tip
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+
+      - name: Deploy the exact commit to production Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: >-
+          npx wrangler pages deploy dist
+          --project-name "$CLOUDFLARE_PAGES_PROJECT"
+          --branch main
+          --commit-hash "$DEPLOY_COMMIT_SHA"
+          --commit-message "manually approved production deployment"
+          --commit-dirty=false
+
+      - name: Resolve the exact immutable production deployment
+        id: production-deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -o pipefail
+          evidence_found=false
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail-with-body --silent --show-error --proto '=https' \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              --header "Accept: application/json" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production" \
+              | node scripts/read-pages-deployment.mjs \
+                --file - \
+                --commit "$DEPLOY_COMMIT_SHA" \
+                --environment production \
+                --project "$CLOUDFLARE_PAGES_PROJECT"; then
+              evidence_found=true
+              break
+            fi
+            if [[ "$attempt" -lt 6 ]]; then sleep 5; fi
+          done
+          if [[ "$evidence_found" != true ]]; then
+            echo "The exact production Pages deployment did not become verifiable." >&2
+            exit 1
+          fi
+
+      - name: Verify the immutable production deployment serves the same SHA
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "${{ steps.production-deployment.outputs.deployment_url }}/release.json?commit=$DEPLOY_COMMIT_SHA"
+          --commit "$DEPLOY_COMMIT_SHA"
+          --environment production
+          --retries 6
+          --retry-delay-ms 5000
+
+      - name: Verify the public production release manifest
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "https://burillab.com/release.json?commit=$DEPLOY_COMMIT_SHA"
+          --commit "$DEPLOY_COMMIT_SHA"
+          --environment production
+          --retries 6
+          --retry-delay-ms 5000
+
+      - name: Verify both applied KV bindings remain isolated
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          VERIFY_CURRENT_RUNTIME_BINDING: "true"
+        run: npm run ops:verify
+
+      - name: Record deployment evidence
+        shell: bash
+        run: |
+          echo "- Environment: production" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Pages project: $CLOUDFLARE_PAGES_PROJECT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Release commit: \`$DEPLOY_COMMIT_SHA\`" >> "$GITHUB_STEP_SUMMARY"

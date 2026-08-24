@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { AlertTriangle, ArrowRight, Camera, Clock, Edit2, FileEdit, Loader2, PackagePlus, Plus, Trash2, X, Beaker, Search } from 'lucide-react';
 import { cabinetService, type ActivityActionType, type Cabinet } from '../../services/cabinetService';
 import { auditService, type AuditLog } from '../../services/auditService';
@@ -18,6 +18,7 @@ import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
+import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
 
 interface CabinetListViewProps {
     onSelectCabinet: (cabinetId: string) => void;
@@ -48,6 +49,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadedLabId, setLoadedLabId] = useState<string | null | undefined>(undefined);
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedCabinetId, setSelectedCabinetId] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
 
     const { currentLabId, myLabs } = useLabStore();
     const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
-    const canCreateCabinet = !currentLabId || currentRole === 'admin';
+    const canCreateCabinet = !error && (!currentLabId || currentRole === 'admin');
 
     // Dialog State
     const [dialogConfig, setDialogConfig] = useState<{
@@ -91,6 +93,9 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     const [imageMenu, setImageMenu] = useState<{ isOpen: boolean, cabinetId?: string }>({ isOpen: false });
     const [cameraModal, setCameraModal] = useState<{ isOpen: boolean, cabinetId?: string }>({ isOpen: false });
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const listRequestRef = useRef(0);
+    const activityRequestRef = useRef(0);
+    const inventoryRequestRef = useRef(0);
 
     const closeDialog = () => setDialogConfig(prev => ({ ...prev, isOpen: false }));
     const closeFormDialog = () => setFormDialogConfig(prev => ({ ...prev, isOpen: false }));
@@ -107,9 +112,19 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
 
     const handleInventory = async (e: React.MouseEvent, cabinet: Cabinet) => {
         e.stopPropagation();
+        const token: LabRequestToken = {
+            generation: ++inventoryRequestRef.current,
+            labId: currentLabId,
+        };
+        const isCurrentRequest = () => canCommitLabRequest(
+            token,
+            inventoryRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
         setInventoryModal({ isOpen: true, cabinetName: cabinet.name, items: [], isLoading: true });
         try {
             const { shelves } = await cabinetService.getCabinetDetails(cabinet.id);
+            if (!isCurrentRequest()) return;
             const items = shelves.flatMap(shelf =>
                 shelf.items.map(item => ({
                     name: item.name,
@@ -122,6 +137,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             );
             setInventoryModal(prev => ({ ...prev, items, isLoading: false }));
         } catch (err) {
+            if (!isCurrentRequest()) return;
             console.error('Failed to load inventory:', err);
             setInventoryModal(prev => ({ ...prev, isLoading: false }));
         }
@@ -193,12 +209,22 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     };
 
     const loadCabinetActivityFeed = async (cabinetId: string) => {
+        const token: LabRequestToken = {
+            generation: ++activityRequestRef.current,
+            labId: currentLabId,
+        };
+        const isCurrentRequest = () => canCommitLabRequest(
+            token,
+            activityRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
         setIsActivityFeedLoading(true);
         try {
             const [activityRes, auditRes] = await Promise.allSettled([
                 cabinetService.getActivityLogs(cabinetId),
                 auditService.getCabinetAuditLogs(cabinetId, 20),
             ]);
+            if (!isCurrentRequest()) return;
 
             const nextFeed: CabinetActivityFeedItem[] = [];
             if (activityRes.status === 'fulfilled') {
@@ -228,16 +254,22 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             nextFeed.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
             setActivityFeed((prev) => ({ ...prev, [cabinetId]: nextFeed.slice(0, 4) }));
         } catch (err) {
+            if (!isCurrentRequest()) return;
             console.error('Failed to load cabinet activity feed:', err);
             setActivityFeed((prev) => ({ ...prev, [cabinetId]: [] }));
         } finally {
-            setIsActivityFeedLoading(false);
+            if (isCurrentRequest()) setIsActivityFeedLoading(false);
         }
     };
 
-    const loadCabinetStats = async (cabinetIds: string[]) => {
+    const loadCabinetStats = async (cabinetIds: string[], token: LabRequestToken) => {
+        const isCurrentRequest = () => canCommitLabRequest(
+            token,
+            listRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
         if (cabinetIds.length === 0) {
-            setCabinetStats({});
+            if (isCurrentRequest()) setCabinetStats({});
             return;
         }
 
@@ -282,34 +314,67 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             console.error('Failed to load cabinet history counts:', err);
         }
 
-        setCabinetStats(nextStats);
+        if (isCurrentRequest()) setCabinetStats(nextStats);
     };
 
     const loadCabinets = async () => {
+        const token: LabRequestToken = {
+            generation: ++listRequestRef.current,
+            labId: currentLabId,
+        };
+        const isCurrentRequest = () => canCommitLabRequest(
+            token,
+            listRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
         try {
             setIsLoading(true);
             setError(null);
             const data = await cabinetService.getCabinets();
+            if (!isCurrentRequest()) return;
             setCabinets(data);
-            await loadCabinetStats(data.map((cabinet) => cabinet.id));
+            setLoadedLabId(token.labId);
+            await loadCabinetStats(data.map((cabinet) => cabinet.id), token);
         } catch (err) {
+            if (!isCurrentRequest()) return;
             console.error(err);
+            setCabinets([]);
             setError(t('cabinet_list_load_error'));
             setCabinetStats({});
+            setLoadedLabId(token.labId);
         } finally {
-            setIsLoading(false);
+            if (isCurrentRequest()) setIsLoading(false);
         }
     };
 
+    useLayoutEffect(() => {
+        listRequestRef.current += 1;
+        activityRequestRef.current += 1;
+        inventoryRequestRef.current += 1;
+        setCabinets([]);
+        setCabinetStats({});
+        setActivityFeed({});
+        setSelectedCabinetId(null);
+        setLoadedLabId(undefined);
+        setError(null);
+        setIsLoading(true);
+        setIsActivityFeedLoading(false);
+        setInventoryModal({ isOpen: false, cabinetName: '', items: [], isLoading: false });
+        setDisposalLogModal({ isOpen: false, cabinetId: '', cabinetName: '' });
+        closeImageMenu();
+        closeCameraModal();
+        closeFormDialog();
+    }, [currentLabId]);
+
     useEffect(() => {
-        loadCabinets();
+        void loadCabinets();
 
         let reloadTimeout: ReturnType<typeof setTimeout>;
 
         const handleChange = () => {
             clearTimeout(reloadTimeout);
             reloadTimeout = setTimeout(() => {
-                loadCabinets();
+                void loadCabinets();
             }, 500);
         };
 
@@ -320,6 +385,9 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             .subscribe();
 
         return () => {
+            listRequestRef.current += 1;
+            activityRequestRef.current += 1;
+            inventoryRequestRef.current += 1;
             supabase.removeChannel(channel);
             clearTimeout(reloadTimeout);
         };
@@ -567,7 +635,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         });
     };
 
-    if (isLoading) {
+    if (isLoading || loadedLabId !== currentLabId) {
         return (
             <div className="h-full flex flex-col items-center justify-center p-6 gap-4">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />

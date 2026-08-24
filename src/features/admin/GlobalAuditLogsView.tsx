@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,7 @@ import { isWasteV2Enabled } from '../../config/featureFlags';
 import { MemberManagementPanel } from './MemberManagementPanel';
 import { LabSafetyCenterPanel } from './LabSafetyCenterPanel';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
+import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
 import {
     buildAuditEventDescription,
     formatAuditActionName,
@@ -35,6 +36,8 @@ export const GlobalAuditLogsView: React.FC = () => {
     const [activeTab, setActiveTab] = useState<AdminTab>('members');
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [loadedLabId, setLoadedLabId] = useState<string | null | undefined>(undefined);
     const [limit, setLimit] = useState(100);
     const [actionFilter, setActionFilter] = useState<ActionFilter>('all');
     const [entityFilter, setEntityFilter] = useState<string>('all');
@@ -42,6 +45,7 @@ export const GlobalAuditLogsView: React.FC = () => {
     const [keyword, setKeyword] = useState('');
     const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
     const [selectedAuditLogId, setSelectedAuditLogId] = useState<string | null>(null);
+    const loadRequestRef = useRef(0);
 
     useEffect(() => {
         if (isDesktop) {
@@ -55,21 +59,58 @@ export const GlobalAuditLogsView: React.FC = () => {
         }
     }, [activeTab, isDesktop, showWasteSettingsTab]);
 
+    useLayoutEffect(() => {
+        loadRequestRef.current += 1;
+        setLogs([]);
+        setSelectedAuditLogId(null);
+        setExpandedLogIds({});
+        setLoadError(null);
+        setLoadedLabId(undefined);
+        setIsLoading(true);
+    }, [currentLabId]);
+
     useEffect(() => {
-        if (!currentLabId || activeTab !== 'audit') return;
+        const token: LabRequestToken = {
+            generation: ++loadRequestRef.current,
+            labId: currentLabId,
+        };
+        const isCurrentRequest = () => canCommitLabRequest(
+            token,
+            loadRequestRef.current,
+            useLabStore.getState().currentLabId,
+        );
+
+        setLogs([]);
+        setSelectedAuditLogId(null);
+        setLoadError(null);
+        if (!currentLabId || activeTab !== 'audit') {
+            setLoadedLabId(currentLabId);
+            setIsLoading(false);
+            return;
+        }
         const run = async () => {
             setIsLoading(true);
             try {
                 const fetchedLogs = await auditService.getLogs({ limit });
+                if (!isCurrentRequest()) return;
                 setLogs(fetchedLogs);
             } catch (error) {
+                if (!isCurrentRequest()) return;
                 console.error(error);
+                setLogs([]);
+                setLoadError(t('search_error'));
             } finally {
-                setIsLoading(false);
+                if (isCurrentRequest()) {
+                    setLoadedLabId(token.labId);
+                    setIsLoading(false);
+                }
             }
         };
         void run();
-    }, [currentLabId, limit, activeTab]);
+        return () => {
+            if (loadRequestRef.current === token.generation) loadRequestRef.current += 1;
+        };
+    }, [currentLabId, limit, activeTab, t]);
 
     const filteredLogs = useMemo(() => {
         return logs.filter((log) => {
@@ -183,10 +224,18 @@ export const GlobalAuditLogsView: React.FC = () => {
         );
     };
 
-    if (isLoading && activeTab === 'audit') {
+    if ((isLoading || loadedLabId !== currentLabId) && activeTab === 'audit') {
         return (
             <div className="flex items-center justify-center p-8">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+            </div>
+        );
+    }
+
+    if (loadError && activeTab === 'audit') {
+        return (
+            <div role="alert" className="p-8 text-center text-sm text-red-700">
+                {loadError}
             </div>
         );
     }

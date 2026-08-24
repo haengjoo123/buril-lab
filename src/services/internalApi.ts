@@ -51,8 +51,16 @@ export async function postJson<TResponse>(
   return parseJsonResponse<TResponse>(response)
 }
 
-export async function getJson<TResponse>(url: string, options?: { signal?: AbortSignal }): Promise<TResponse> {
+export async function getJson<TResponse>(
+  url: string,
+  options?: { signal?: AbortSignal; cache?: RequestCache },
+): Promise<TResponse> {
   const headers = await authorizedHeaders(false)
-  const response = await fetch(getInternalApiUrl(url), { method: 'GET', headers, signal: options?.signal })
+  const response = await fetch(getInternalApiUrl(url), {
+    method: 'GET',
+    headers,
+    signal: options?.signal,
+    cache: options?.cache,
+  })
   return parseJsonResponse<TResponse>(response)
 }

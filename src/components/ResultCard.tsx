@@ -198,6 +198,14 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     {t('result_solution_notice_short' as any)}
                 </p>
 
+                {chemical.koshaId && (
+                    <p className="mb-4 w-full rounded-lg border border-blue-200 bg-blue-50 p-3 text-left text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                        {i18n.language === 'en'
+                            ? 'KOSHA is a reference. The exact product manufacturer SDS and your institution rules take priority.'
+                            : 'KOSHA는 참고자료입니다. 정확한 제품의 제조사 SDS와 소속 기관 규칙을 우선 확인하세요.'}
+                    </p>
+                )}
+
                 {hazardLookupPresentation && (
                     <div className={`mb-4 w-full rounded-xl border p-3 text-left text-sm font-medium ${hazardLookupPresentation.className}`}>
                         <p>{t(hazardLookupPresentation.translationKey as any)}</p>

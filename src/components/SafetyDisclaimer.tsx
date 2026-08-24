@@ -3,13 +3,50 @@ import React, { useState, useEffect } from 'react';
 import { ShieldAlert, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+export const SAFETY_DISCLAIMER_VERSION = '2026-08-24.1';
+export const SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY = 'buril:safety-acknowledgement';
+export const LEGACY_SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY = 'buril-safety-acknowledged';
+
+export interface SafetyAcknowledgementRecord {
+    version: string;
+    acknowledgedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function parseSafetyAcknowledgement(raw: string | null): SafetyAcknowledgementRecord | null {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw) as Partial<SafetyAcknowledgementRecord>;
+        if (
+            parsed.version !== SAFETY_DISCLAIMER_VERSION
+            || typeof parsed.acknowledgedAt !== 'string'
+            || !Number.isFinite(Date.parse(parsed.acknowledgedAt))
+        ) {
+            return null;
+        }
+        return { version: parsed.version, acknowledgedAt: parsed.acknowledgedAt };
+    } catch {
+        return null;
+    }
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function hasCurrentSafetyAcknowledgement(storage: Pick<Storage, 'getItem'>): boolean {
+    return Boolean(parseSafetyAcknowledgement(storage.getItem(SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY)));
+}
+
 export const SafetyDisclaimer: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
     const { t, i18n } = useTranslation();
 
     useEffect(() => {
-        const hasAcknowledged = localStorage.getItem('buril-safety-acknowledged');
+        let hasAcknowledged = false;
+        try {
+            hasAcknowledged = hasCurrentSafetyAcknowledgement(window.localStorage);
+        } catch {
+            // Keep the notice visible when browser storage is unavailable.
+        }
         if (!hasAcknowledged) {
             setIsOpen(true);
         }
@@ -18,7 +55,19 @@ export const SafetyDisclaimer: React.FC = () => {
     const handleAcknowledge = () => {
         setIsClosing(true);
         setTimeout(() => {
-            localStorage.setItem('buril-safety-acknowledged', 'true');
+            const acknowledgement: SafetyAcknowledgementRecord = {
+                version: SAFETY_DISCLAIMER_VERSION,
+                acknowledgedAt: new Date().toISOString(),
+            };
+            try {
+                localStorage.setItem(
+                    SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY,
+                    JSON.stringify(acknowledgement),
+                );
+                localStorage.removeItem(LEGACY_SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY);
+            } catch {
+                // Do not trap the user when storage is blocked for this visit.
+            }
             window.dispatchEvent(new Event('buril:safety-acknowledged'));
             setIsOpen(false);
         }, 300); // Wait for animation

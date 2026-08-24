@@ -1,0 +1,1 @@
+{"schema_version":1,"enabled":true,"browser":"chromium","config":"playwright.gate0.config.ts","spec":"e2e/gate0/gate0.spec.ts"}

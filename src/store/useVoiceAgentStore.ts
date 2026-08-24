@@ -441,7 +441,10 @@ export const useVoiceAgentStore = create<VoiceAgentStore>((set, get) => ({
     if (result.uiAction.type !== 'none' && result.uiAction.type !== 'clarify') {
       await options?.onUiAction?.(result.uiAction, result)
 
-      if (result.uiAction.type === 'search_reagent') {
+      if (
+        result.uiAction.type === 'search_reagent'
+        || result.uiAction.type === 'open_waste_batch_review'
+      ) {
         if (get().isOpen) {
           get().closeSheet()
         } else {
