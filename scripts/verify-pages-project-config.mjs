@@ -3,7 +3,7 @@ import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 
 const MAX_PROJECT_RESPONSE_BYTES = 1024 * 1024
 const KOSHA_CONTENT_MODES = Object.freeze(['full', 'link_only'])
-const REQUIRED_SERVER_SECRETS = Object.freeze([
+export const REQUIRED_SERVER_SECRETS = Object.freeze([
   'FEEDBACK_ADMIN_EMAILS',
   'GEMINI_API_KEY',
   'GOOGLE_VISION_API_KEY',

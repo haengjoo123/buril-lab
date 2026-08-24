@@ -4,26 +4,8 @@
   "pages_build_output_dir": "./dist",
   "compatibility_date": "2026-08-24",
   "compatibility_flags": ["nodejs_compat"],
-  "keep_vars": true,
   "send_metrics": false,
   "upload_source_maps": true,
-  "secrets": {
-    "required": [
-      "FEEDBACK_ADMIN_EMAILS",
-      "GEMINI_API_KEY",
-      "GOOGLE_VISION_API_KEY",
-      "KOSHA_API_KEY",
-      "OPENAI_API_KEY",
-      "OPS_ADMIN_EMAILS",
-      "OPS_ANALYTICS_EXPORT_EMAILS",
-      "SUPABASE_ANON_KEY",
-      "SUPABASE_JWT_SECRET",
-      "SUPABASE_SERVICE_ROLE_KEY",
-      "SUPABASE_URL",
-      "UPSTASH_REDIS_REST_TOKEN",
-      "UPSTASH_REDIS_REST_URL"
-    ]
-  },
   "kv_namespaces": [
     {
       "binding": "BURILLAB_RUNTIME_CONFIG",
