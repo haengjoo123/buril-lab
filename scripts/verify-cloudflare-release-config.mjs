@@ -130,6 +130,11 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}',
     'GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}',
     'GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}',
+    'GATE0_BASE_URL: https://staging.burillab.com',
+    'GATE0_BASE_URL: ${{ steps.staging-deployment.outputs.deployment_url }}',
+    'GATE0_EXPECTED_COMMIT_SHA: ${{ steps.staging-deployment.outputs.deployment_commit_sha }}',
+    'GATE0_EXPECTED_DEPLOYMENT_ID: ${{ steps.staging-deployment.outputs.deployment_id }}',
+    'GATE0_STAGING_TARGET_CONFIRMATION: RUN GATE0 buril-lab-staging',
     'GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw',
     'SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}',
     'node scripts/seed-gate0-e2e.mjs',
@@ -157,22 +162,36 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   ) {
     throw new Error('Staging Gate0 secrets must be checked before deployment and scoped to fixture reset/test steps.')
   }
+  if (
+    occurrenceCount(stagingWorkflow, 'npm run test:e2e:gate0:staging') !== 2
+    || occurrenceCount(stagingWorkflow, 'node scripts/seed-gate0-e2e.mjs') !== 2
+    || occurrenceCount(stagingWorkflow, 'GATE0_EXPECTED_COMMIT_SHA: ${{ steps.staging-deployment.outputs.deployment_commit_sha }}') !== 2
+    || occurrenceCount(stagingWorkflow, 'GATE0_EXPECTED_DEPLOYMENT_ID: ${{ steps.staging-deployment.outputs.deployment_id }}') !== 2
+    || occurrenceCount(stagingWorkflow, 'GATE0_STAGING_TARGET_CONFIRMATION: RUN GATE0 buril-lab-staging') !== 2
+    || occurrenceCount(stagingWorkflow, 'GATE0_BASE_URL: https://staging.burillab.com') !== 1
+    || occurrenceCount(stagingWorkflow, 'GATE0_BASE_URL: ${{ steps.staging-deployment.outputs.deployment_url }}') !== 1
+  ) {
+    throw new Error('Staging must reset and run Gate0 once on each exact custom and immutable deployment target.')
+  }
   const stagingGateOrder = [
     'Verify environment-scoped deployment inputs',
     'Deploy the exact commit to Staging Pages',
     'Verify the protected Staging release manifest',
     'Verify the Staging KOSHA link-only runtime contract',
-    'Reset the exact Staging Gate 0 synthetic fixture',
-    'Run the protected Staging Gate 0 browser flow',
+    'Reset the exact Staging Gate 0 synthetic fixture for the custom domain',
+    'Run the protected custom-domain Staging Gate 0 browser flow',
+    'Reset the exact Staging Gate 0 synthetic fixture for the immutable deployment',
+    'Run the protected immutable-deployment Staging Gate 0 browser flow',
   ].map((marker) => stagingWorkflow.indexOf(marker))
   if (stagingGateOrder.some((position) => position < 0)
       || stagingGateOrder.some((position, index) => index > 0 && position <= stagingGateOrder[index - 1])) {
-    throw new Error('Staging preflight, deployment, release, KOSHA, synthetic reset, and browser gates are out of order.')
+    throw new Error('Staging preflight, deployment, release, KOSHA, exact-target resets, and browser gates are out of order.')
   }
 
   const stagingPlaywrightConfig = browser.stagingConfig || ''
   const gate0Spec = browser.gate0Spec || ''
   const gate0AccessRoute = browser.accessRoute || ''
+  const gate0TargetConfig = browser.targetConfig || ''
   if (stagingPlaywrightConfig.includes('extraHTTPHeaders')) {
     throw new Error('Staging Playwright must not send Access credentials through context-wide headers.')
   }
@@ -180,10 +199,32 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     throw new Error('Staging Playwright traces must remain off while Access credentials are in memory.')
   }
   for (const required of [
-    "const STAGING_ORIGIN = 'https://staging.burillab.com'",
-    'context.route(`${STAGING_ORIGIN}/**`',
+    "import { resolveStagingGate0Target } from './scripts/gate0-staging-target.mjs'",
+    'const gate0Target = resolveStagingGate0Target(process.env)',
+    'baseURL: gate0Target.origin',
+    "'GATE0_EXPECTED_COMMIT_SHA'",
+    "'GATE0_EXPECTED_DEPLOYMENT_ID'",
+    "'GATE0_STAGING_TARGET_CONFIRMATION'",
+  ]) {
+    if (!stagingPlaywrightConfig.includes(required)) {
+      throw new Error(`Staging Playwright target selection lacks a required exact-target control: ${required}`)
+    }
+  }
+  for (const required of [
+    "from '../../scripts/gate0-staging-target.mjs'",
+    'isStagingGate0AccessRequest,',
+    "import { verifyReleaseManifest } from '../../scripts/verify-release-manifest.mjs'",
+    'for (const routePattern of stagingTarget.accessRoutePatterns)',
+    'context.route(routePattern',
     "import { fulfillStagingAccessRoute } from '../../scripts/gate0-access-route.mjs'",
-    'fulfillStagingAccessRoute(route, { clientId, clientSecret })',
+    'targetOrigin: stagingTarget.origin',
+    'deploymentId: stagingTarget.deploymentId',
+    '/release.json?gate0-commit=${stagingTarget.commitSha}',
+    'expectExactStagingTargetOrigin(',
+    'manifestResponse.url()',
+    'verifyReleaseManifest(manifest, {',
+    'unapprovedAccessHeaderRequests',
+    'unexpectedTopLevelNavigations',
     "page.route('**/api/chemicals/enrich'",
     "route.abort('blockedbyclient')",
     'verifyGate0EnrichmentIsolation({',
@@ -195,7 +236,14 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   if (gate0Spec.includes('route.continue(')) {
     throw new Error('Gate0 Access routing must not continue credentials across a redirect chain.')
   }
+  if (gate0Spec.includes("context.route('**/*'") || gate0Spec.includes('context.route("**/*"')) {
+    throw new Error('Gate0 Access routing must not use a broad all-origin route.')
+  }
   for (const required of [
+    'if (!isStagingGate0AccessRequest({',
+    'requestUrl: route.request().url()',
+    'deploymentId,',
+    '.filter(([name]) => !ACCESS_HEADER_PATTERN.test(name))',
     'const response = await route.fetch({',
     "'CF-Access-Client-Id': clientId",
     "'CF-Access-Client-Secret': clientSecret",
@@ -208,6 +256,30 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   }
   if (occurrenceCount(gate0AccessRoute, 'route.fetch(') !== 1) {
     throw new Error('Gate0 Access routing must make exactly one bounded protected-origin fetch per route.')
+  }
+  for (const required of [
+    "export const GATE0_STAGING_CUSTOM_ORIGIN = 'https://staging.burillab.com'",
+    "const GATE0_STAGING_PAGES_APEX = 'buril-lab-staging.pages.dev'",
+    'labels.length === 4',
+    'const DEPLOYMENT_LABEL_PATTERN = /^[0-9a-f]{8}$/',
+    'FULL_SHA_PATTERN',
+    'DEPLOYMENT_ID_PATTERN',
+    'target.immutableLabel !== canonicalDeploymentId.slice(0, 8)',
+    'GATE0_STAGING_TARGET_CONFIRMATION !== expectedConfirmation',
+    'stagingGate0AccessRoutePatterns({',
+    '`${GATE0_STAGING_CUSTOM_ORIGIN}/api/**`',
+    "request.pathname.startsWith('/api/')",
+  ]) {
+    if (!gate0TargetConfig.includes(required)) {
+      throw new Error(`Gate0 target validation lacks a required exact-deployment control: ${required}`)
+    }
+  }
+  if (
+    gate0TargetConfig.includes('buril-lab.pages.dev')
+    || gate0TargetConfig.includes("'https://burillab.com'")
+    || gate0TargetConfig.includes('*.pages.dev')
+  ) {
+    throw new Error('Gate0 target validation must not allow production or broad Pages origins.')
   }
   if (
     stagingWorkflow.includes('convert-gate0-legacy-owner.mjs')
@@ -297,6 +369,7 @@ async function main() {
     qualityWorkflow,
     stagingPlaywrightConfig,
     gate0AccessRoute,
+    gate0TargetConfig,
     gate0Spec,
   ] = await Promise.all([
     readFile('wrangler.jsonc', 'utf8'),
@@ -306,6 +379,7 @@ async function main() {
     readFile('.github/workflows/quality.yml', 'utf8'),
     readFile('playwright.staging.config.ts', 'utf8'),
     readFile('scripts/gate0-access-route.mjs', 'utf8'),
+    readFile('scripts/gate0-staging-target.mjs', 'utf8'),
     readFile('e2e/gate0/gate0.spec.ts', 'utf8'),
   ])
   const result = verifyReleaseConfiguration({
@@ -319,6 +393,7 @@ async function main() {
     browser: {
       stagingConfig: stagingPlaywrightConfig,
       accessRoute: gate0AccessRoute,
+      targetConfig: gate0TargetConfig,
       gate0Spec,
     },
   })

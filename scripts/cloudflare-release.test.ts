@@ -23,6 +23,13 @@ import {
 } from './gate0-seed-safety.mjs'
 import { fulfillStagingAccessRoute } from './gate0-access-route.mjs'
 import { verifyGate0EnrichmentIsolation } from './gate0-enrichment-policy.mjs'
+import {
+  buildStagingGate0TargetConfirmation,
+  GATE0_STAGING_CUSTOM_ORIGIN,
+  isStagingGate0AccessRequest,
+  resolveStagingGate0Target,
+  stagingGate0AccessRoutePatterns,
+} from './gate0-staging-target.mjs'
 import { findPagesDeployment, readPagesDeployment } from './read-pages-deployment.mjs'
 import {
   materializeWranglerConfig,
@@ -54,6 +61,8 @@ import {
 import { createReleaseManifest, writeReleaseManifest } from './write-release-manifest.mjs'
 
 const COMMIT = '0123456789abcdef0123456789abcdef01234567'
+const STAGING_DEPLOYMENT_ID = '123e4567-e89b-42d3-a456-426614174000'
+const STAGING_IMMUTABLE_ORIGIN = 'https://123e4567.buril-lab-staging.pages.dev'
 const QUALITY_NOW = Date.parse('2026-08-24T12:00:00Z')
 const REQUIRED_SECRETS = [
   'FEEDBACK_ADMIN_EMAILS',
@@ -163,6 +172,20 @@ function deploymentFixture(environment: 'staging' | 'production', overrides = {}
   }
 }
 
+function validGate0TargetEnvironment(origin = STAGING_IMMUTABLE_ORIGIN) {
+  const confirmation = buildStagingGate0TargetConfirmation({
+    origin,
+    commitSha: COMMIT,
+    deploymentId: STAGING_DEPLOYMENT_ID,
+  })
+  return {
+    GATE0_BASE_URL: origin,
+    GATE0_EXPECTED_COMMIT_SHA: COMMIT,
+    GATE0_EXPECTED_DEPLOYMENT_ID: STAGING_DEPLOYMENT_ID,
+    GATE0_STAGING_TARGET_CONFIRMATION: confirmation,
+  }
+}
+
 describe('Prep 0 Cloudflare release controls', () => {
   it('keeps Gate0 enrichment disabled locally and bounded behind an abort in Staging', () => {
     expect(verifyGate0EnrichmentIsolation({
@@ -196,6 +219,107 @@ describe('Prep 0 Cloudflare release controls', () => {
       featureFlag: 'unset',
       blockedRequests: 0,
     })).toThrow(/exactly true or false/)
+  })
+
+  it('binds Gate0 to the exact Staging custom or immutable deployment target', () => {
+    const immutable = resolveStagingGate0Target(validGate0TargetEnvironment())
+    expect(immutable).toEqual({
+      origin: STAGING_IMMUTABLE_ORIGIN,
+      commitSha: COMMIT,
+      deploymentId: STAGING_DEPLOYMENT_ID,
+      accessRoutePatterns: [
+        `${STAGING_IMMUTABLE_ORIGIN}/**`,
+        `${GATE0_STAGING_CUSTOM_ORIGIN}/api/**`,
+      ],
+    })
+    expect(stagingGate0AccessRoutePatterns({
+      targetOrigin: STAGING_IMMUTABLE_ORIGIN,
+      deploymentId: STAGING_DEPLOYMENT_ID,
+    })).toEqual([
+      `${STAGING_IMMUTABLE_ORIGIN}/**`,
+      `${GATE0_STAGING_CUSTOM_ORIGIN}/api/**`,
+    ])
+
+    const customEnvironment = validGate0TargetEnvironment(GATE0_STAGING_CUSTOM_ORIGIN)
+    customEnvironment.GATE0_EXPECTED_DEPLOYMENT_ID = 'abcdef01-e89b-42d3-a456-426614174000'
+    customEnvironment.GATE0_STAGING_TARGET_CONFIRMATION = buildStagingGate0TargetConfirmation({
+      origin: GATE0_STAGING_CUSTOM_ORIGIN,
+      commitSha: COMMIT,
+      deploymentId: customEnvironment.GATE0_EXPECTED_DEPLOYMENT_ID,
+    })
+    const custom = resolveStagingGate0Target(customEnvironment)
+    expect(custom.origin).toBe(GATE0_STAGING_CUSTOM_ORIGIN)
+    expect(custom.accessRoutePatterns).toEqual([`${GATE0_STAGING_CUSTOM_ORIGIN}/**`])
+  })
+
+  it('rejects non-exact, production, mutable, nested, and deceptive Gate0 origins', () => {
+    const invalidOrigins = [
+      'http://staging.burillab.com',
+      'https://staging.burillab.com/',
+      'https://staging.burillab.com/path',
+      'https://staging.burillab.com?query=1',
+      'https://staging.burillab.com#fragment',
+      'https://user:password@staging.burillab.com',
+      'https://staging.burillab.com:443',
+      'https://burillab.com',
+      'https://buril-lab-staging.pages.dev',
+      'https://staging-id.buril-lab.pages.dev',
+      'https://main.buril-lab-staging.pages.dev',
+      'https://feature-branch.buril-lab-staging.pages.dev',
+      'https://arbitrary.buril-lab-staging.pages.dev',
+      'https://123e456.buril-lab-staging.pages.dev',
+      'https://123e45678.buril-lab-staging.pages.dev',
+      'https://ABCDEF01.buril-lab-staging.pages.dev',
+      'https://nested.staging-id.buril-lab-staging.pages.dev',
+      'https://staging-id.buril-lab-staging.pages.dev.evil.test',
+      'https://staging-id.evil.pages.dev',
+      ' https://staging-id.buril-lab-staging.pages.dev',
+    ]
+
+    for (const origin of invalidOrigins) {
+      expect(() => resolveStagingGate0Target({
+        ...validGate0TargetEnvironment(),
+        GATE0_BASE_URL: origin,
+      })).toThrow(/exact|BurilLab Staging/)
+    }
+
+    const mismatchedImmutableOrigin = 'https://deadbeef.buril-lab-staging.pages.dev'
+    expect(() => resolveStagingGate0Target({
+      ...validGate0TargetEnvironment(),
+      GATE0_BASE_URL: mismatchedImmutableOrigin,
+      GATE0_STAGING_TARGET_CONFIRMATION: `RUN GATE0 buril-lab-staging ${STAGING_DEPLOYMENT_ID} ${COMMIT} ${mismatchedImmutableOrigin}`,
+    })).toThrow(/must match the deployment UUID prefix/)
+  })
+
+  it('rejects an invalid Gate0 SHA, deployment UUID, or exact confirmation', () => {
+    const valid = validGate0TargetEnvironment()
+    for (const commitSha of ['01234567', COMMIT.toUpperCase(), `${COMMIT}0`]) {
+      expect(() => resolveStagingGate0Target({
+        ...valid,
+        GATE0_EXPECTED_COMMIT_SHA: commitSha,
+      })).toThrow(/full 40-character Git SHA/)
+    }
+    for (const deploymentId of [
+      'not-a-uuid',
+      '123e4567-e89b-02d3-a456-426614174000',
+      STAGING_DEPLOYMENT_ID.toUpperCase(),
+    ]) {
+      expect(() => resolveStagingGate0Target({
+        ...valid,
+        GATE0_EXPECTED_DEPLOYMENT_ID: deploymentId,
+      })).toThrow(/deployment UUID/)
+    }
+    for (const confirmation of [
+      '',
+      `${valid.GATE0_STAGING_TARGET_CONFIRMATION} `,
+      valid.GATE0_STAGING_TARGET_CONFIRMATION.replace(COMMIT, 'f'.repeat(40)),
+      valid.GATE0_STAGING_TARGET_CONFIRMATION.replace(STAGING_IMMUTABLE_ORIGIN, GATE0_STAGING_CUSTOM_ORIGIN),
+    ]) {
+      expect(() => resolveStagingGate0Target({
+        ...valid,
+        GATE0_STAGING_TARGET_CONFIRMATION: confirmation,
+      })).toThrow(/does not match/)
+    }
   })
 
   it('writes and verifies immutable release identities for both Pages projects', async () => {
@@ -681,12 +805,22 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(converter).not.toMatch(/\.from\([^)]*\)\.delete\(/)
   })
 
-  it('fulfills one Access-protected hop without following a cross-origin redirect', async () => {
-    const redirectResponse = { status: 302, headers: { location: 'https://example.test/landing' } }
+  it('does not forward Access across an immutable-to-custom top-level redirect', async () => {
+    const redirectResponse = {
+      status: 302,
+      headers: { location: `${GATE0_STAGING_CUSTOM_ORIGIN}/login` },
+    }
     const fetch = vi.fn(async () => redirectResponse)
     const fulfill = vi.fn(async () => undefined)
     const route = {
-      request: () => ({ headers: () => ({ accept: 'text/html' }) }),
+      request: () => ({
+        url: () => `${STAGING_IMMUTABLE_ORIGIN}/login`,
+        headers: () => ({
+          accept: 'text/html',
+          'cf-access-client-id': 'caller-controlled-id',
+          'CF-Access-Client-Secret': 'caller-controlled-secret',
+        }),
+      }),
       fetch,
       fulfill,
     }
@@ -694,6 +828,8 @@ describe('Prep 0 Cloudflare release controls', () => {
     await fulfillStagingAccessRoute(route, {
       clientId: 'test-client-id',
       clientSecret: 'test-client-secret',
+      targetOrigin: STAGING_IMMUTABLE_ORIGIN,
+      deploymentId: STAGING_DEPLOYMENT_ID,
     })
 
     expect(fetch).toHaveBeenCalledOnce()
@@ -707,6 +843,77 @@ describe('Prep 0 Cloudflare release controls', () => {
     })
     expect(fulfill).toHaveBeenCalledOnce()
     expect(fulfill).toHaveBeenCalledWith({ response: redirectResponse })
+    expect(isStagingGate0AccessRequest({
+      targetOrigin: STAGING_IMMUTABLE_ORIGIN,
+      deploymentId: STAGING_DEPLOYMENT_ID,
+      requestUrl: redirectResponse.headers.location,
+    })).toBe(false)
+  })
+
+  it('refuses to attach Staging Access credentials to Supabase or production origins', async () => {
+    for (const url of [
+      'https://qpgnomuqdcucjmxrunnw.supabase.co/rest/v1/inventory',
+      'https://burillab.com/api/chemicals/enrich',
+      'https://production-id.buril-lab.pages.dev/login',
+      'https://other-project.pages.dev/login',
+      `${GATE0_STAGING_CUSTOM_ORIGIN}/`,
+      `${GATE0_STAGING_CUSTOM_ORIGIN}/login`,
+      `${GATE0_STAGING_CUSTOM_ORIGIN}/release.json`,
+      `${GATE0_STAGING_CUSTOM_ORIGIN}/api`,
+      `${GATE0_STAGING_CUSTOM_ORIGIN}/api-evil`,
+      `${GATE0_STAGING_CUSTOM_ORIGIN}/api/../login`,
+      'https://user:password@staging.burillab.com/api/analytics/search-event',
+    ]) {
+      const fetch = vi.fn()
+      const fulfill = vi.fn()
+      const route = {
+        request: () => ({ url: () => url, headers: () => ({ accept: 'application/json' }) }),
+        fetch,
+        fulfill,
+      }
+
+      await expect(fulfillStagingAccessRoute(route, {
+        clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
+        targetOrigin: STAGING_IMMUTABLE_ORIGIN,
+        deploymentId: STAGING_DEPLOYMENT_ID,
+      })).rejects.toThrow(/approved request origin and path/)
+      expect(fetch).not.toHaveBeenCalled()
+      expect(fulfill).not.toHaveBeenCalled()
+    }
+  })
+
+  it('allows only the exact fixed Staging API origin alongside an immutable target', async () => {
+    const response = { status: 200 }
+    const fetch = vi.fn(async () => response)
+    const fulfill = vi.fn(async () => undefined)
+    const route = {
+      request: () => ({
+        url: () => `${GATE0_STAGING_CUSTOM_ORIGIN}/api/analytics/search-event`,
+        headers: () => ({ accept: 'application/json' }),
+      }),
+      fetch,
+      fulfill,
+    }
+
+    await fulfillStagingAccessRoute(route, {
+      clientId: 'test-client-id',
+      clientSecret: 'test-client-secret',
+      targetOrigin: STAGING_IMMUTABLE_ORIGIN,
+      deploymentId: STAGING_DEPLOYMENT_ID,
+    })
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(fulfill).toHaveBeenCalledWith({ response })
+    expect(isStagingGate0AccessRequest({
+      targetOrigin: STAGING_IMMUTABLE_ORIGIN,
+      deploymentId: STAGING_DEPLOYMENT_ID,
+      requestUrl: `${GATE0_STAGING_CUSTOM_ORIGIN}/api/kosha/msds`,
+    })).toBe(true)
+    expect(isStagingGate0AccessRequest({
+      targetOrigin: STAGING_IMMUTABLE_ORIGIN,
+      deploymentId: STAGING_DEPLOYMENT_ID,
+      requestUrl: `${GATE0_STAGING_CUSTOM_ORIGIN}/api-evil`,
+    })).toBe(false)
   })
 
   it('verifies the live Staging KOSHA link-only response through Access', async () => {
@@ -1220,6 +1427,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       qualityWorkflow,
       stagingPlaywrightConfig,
       gate0AccessRoute,
+      gate0TargetConfig,
       gate0Spec,
     ] = await Promise.all([
       readFile('wrangler.jsonc', 'utf8'),
@@ -1229,6 +1437,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('.github/workflows/quality.yml', 'utf8'),
       readFile('playwright.staging.config.ts', 'utf8'),
       readFile('scripts/gate0-access-route.mjs', 'utf8'),
+      readFile('scripts/gate0-staging-target.mjs', 'utf8'),
       readFile('e2e/gate0/gate0.spec.ts', 'utf8'),
     ])
     const configuration = {
@@ -1242,6 +1451,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       browser: {
         stagingConfig: stagingPlaywrightConfig,
         accessRoute: gate0AccessRoute,
+        targetConfig: gate0TargetConfig,
         gate0Spec,
       },
     }
@@ -1323,6 +1533,52 @@ describe('Prep 0 Cloudflare release controls', () => {
 
     expect(() => verifyReleaseConfiguration({
       ...configuration,
+      browser: {
+        ...configuration.browser,
+        gate0Spec: `${gate0Spec}\ncontext.route('**/*', () => undefined)`,
+      },
+    })).toThrow(/broad all-origin route/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      browser: {
+        ...configuration.browser,
+        targetConfig: gate0TargetConfig.replace('labels.length === 4', 'labels.length >= 4'),
+      },
+    })).toThrow(/exact-deployment control/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      browser: {
+        ...configuration.browser,
+        gate0Spec: gate0Spec.replaceAll('expectExactStagingTargetOrigin(', 'removedOriginCheck('),
+      },
+    })).toThrow(/exact-origin control/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      browser: {
+        ...configuration.browser,
+        targetConfig: gate0TargetConfig.replaceAll(
+          'target.immutableLabel !== canonicalDeploymentId.slice(0, 8)',
+          'false',
+        ),
+      },
+    })).toThrow(/exact-deployment control/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      browser: {
+        ...configuration.browser,
+        targetConfig: gate0TargetConfig.replace(
+          "request.pathname.startsWith('/api/')",
+          "request.pathname.startsWith('/')",
+        ),
+      },
+    })).toThrow(/exact-deployment control/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
       workflows: {
         ...configuration.workflows,
         staging: `${stagingWorkflow}\nnode scripts/convert-gate0-legacy-owner.mjs`,
@@ -1354,12 +1610,15 @@ describe('Prep 0 Cloudflare release controls', () => {
     })).toThrow(/bounded curl timeouts/)
 
     const outOfOrderStagingFixture = stagingWorkflow
-      .replace('Reset the exact Staging Gate 0 synthetic fixture', '__FIXTURE__')
-      .replace('Run the protected Staging Gate 0 browser flow', 'Reset the exact Staging Gate 0 synthetic fixture')
-      .replace('__FIXTURE__', 'Run the protected Staging Gate 0 browser flow')
+      .replace('Reset the exact Staging Gate 0 synthetic fixture for the custom domain', '__FIXTURE__')
+      .replace(
+        'Run the protected custom-domain Staging Gate 0 browser flow',
+        'Reset the exact Staging Gate 0 synthetic fixture for the custom domain',
+      )
+      .replace('__FIXTURE__', 'Run the protected custom-domain Staging Gate 0 browser flow')
     expect(() => verifyReleaseConfiguration({
       ...configuration,
       workflows: { ...configuration.workflows, staging: outOfOrderStagingFixture },
-    })).toThrow(/synthetic reset, and browser gates are out of order/)
+    })).toThrow(/exact-target resets, and browser gates are out of order/)
   })
 })

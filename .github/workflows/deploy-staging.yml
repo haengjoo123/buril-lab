@@ -229,7 +229,7 @@ jobs:
       - name: Install the Staging browser runtime
         run: npx playwright install --with-deps chromium
 
-      - name: Reset the exact Staging Gate 0 synthetic fixture
+      - name: Reset the exact Staging Gate 0 synthetic fixture for the custom domain
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
@@ -238,10 +238,35 @@ jobs:
           GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw
         run: node scripts/seed-gate0-e2e.mjs
 
-      - name: Run the protected Staging Gate 0 browser flow
+      - name: Run the protected custom-domain Staging Gate 0 browser flow
         env:
+          GATE0_BASE_URL: https://staging.burillab.com
           GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
           GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_EXPECTED_COMMIT_SHA: ${{ steps.staging-deployment.outputs.deployment_commit_sha }}
+          GATE0_EXPECTED_DEPLOYMENT_ID: ${{ steps.staging-deployment.outputs.deployment_id }}
+          GATE0_STAGING_TARGET_CONFIRMATION: RUN GATE0 buril-lab-staging ${{ steps.staging-deployment.outputs.deployment_id }} ${{ steps.staging-deployment.outputs.deployment_commit_sha }} https://staging.burillab.com
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: npm run test:e2e:gate0:staging
+
+      - name: Reset the exact Staging Gate 0 synthetic fixture for the immutable deployment
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw
+        run: node scripts/seed-gate0-e2e.mjs
+
+      - name: Run the protected immutable-deployment Staging Gate 0 browser flow
+        env:
+          GATE0_BASE_URL: ${{ steps.staging-deployment.outputs.deployment_url }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_EXPECTED_COMMIT_SHA: ${{ steps.staging-deployment.outputs.deployment_commit_sha }}
+          GATE0_EXPECTED_DEPLOYMENT_ID: ${{ steps.staging-deployment.outputs.deployment_id }}
+          GATE0_STAGING_TARGET_CONFIRMATION: RUN GATE0 buril-lab-staging ${{ steps.staging-deployment.outputs.deployment_id }} ${{ steps.staging-deployment.outputs.deployment_commit_sha }} ${{ steps.staging-deployment.outputs.deployment_url }}
           STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
           STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
         run: npm run test:e2e:gate0:staging
