@@ -6,6 +6,8 @@
 
 Cloudflare Pages는 성공한 production 배포만 되돌림 대상으로 사용할 수 있습니다. 공식 동작은 [Cloudflare Pages Rollbacks](https://developers.cloudflare.com/pages/configuration/rollbacks/)와 [Pages Deployments API](https://developers.cloudflare.com/api/resources/pages/subresources/projects/subresources/deployments/)를 기준으로 합니다.
 
+현재 구성 증거(2026-08-24): `BurilLab Staging` Access 앱의 세 destination과 단일 `Emails` 허용 규칙을 확인했고, 비인증 요청은 custom domain·project `pages.dev`·대표 preview hostname에서 모두 Access 로그인 경로로 302 응답했습니다. 허용 이메일 값은 기록하지 않습니다. 이는 현재 경계 보호 증거이며 되돌림 훈련 완료 증거가 아니므로 실행 시 아래 항목을 다시 확인합니다.
+
 ## 실행 전 중단 조건
 
 - [ ] 대상은 정확히 `buril-lab-staging`이며 `buril-lab`이 아님

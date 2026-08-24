@@ -1,13 +1,13 @@
 # Gate 0 운영 배포 상태
 
-기준 시각: 2026-08-24 20:03 KST
+기준 시각: 2026-08-24 23:08 KST
 
 이 문서는 코드 준비, 외부 통제, 실제 훈련, 운영 배포를 구분합니다. 체크되지 않은 관문은 완료로 해석하지 않습니다.
 
 ## 현재 결론
 
 - Gate 0 코드 후보와 로컬 DB·브라우저 검사는 준비됐습니다.
-- Staging 보호·환경 비밀값·별도 Redis·키 회전이 남아 있어 Staging 배포는 아직 금지입니다.
+- Staging의 세 공개 경계에 대한 Cloudflare Access 보호는 완료됐지만, 환경 비밀값·별도 Redis·키 회전·합성 데이터 초기화가 남아 있어 Staging 배포는 아직 금지입니다.
 - Supabase 복구 프로젝트에 대한 조직 접근자·비용 승인이 없어 복구훈련은 아직 실행하지 않았습니다.
 - Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
 - 관문 0, 준비 1, 준비 2를 완료로 표시하지 않습니다.
@@ -61,6 +61,8 @@ PR #4 최신 SHA의 GitHub Actions에서 네 필수 검사가 모두 통과해�
 - [x] 해당 키가 포함됐을 가능성이 있는 preview deployment 9개 제거
 - [x] 운영 rollback용 production deployment는 보존
 - [x] 빈 direct-upload Pages 프로젝트 `buril-lab-staging` 생성
+- [x] `staging.burillab.com`을 `buril-lab-staging` Pages custom domain으로 연결
+- [x] `BurilLab Staging` Access 앱에 custom domain, project `pages.dev`, preview wildcard를 등록하고 단일 `Emails` 허용 규칙 적용; 비인증 요청은 custom domain·project `pages.dev`·대표 preview hostname 모두 Access 로그인 경로로 302 응답
 - [x] 운영·Staging 전용 runtime KV namespace 분리
 - [x] 운영·Staging 전용 비공개 R2 백업 버킷 분리 및 30일 보존 규칙 설정
 - [x] runtime KV 안전 스위치를 `redirect`, `full`, `false`, `false`, `false`로 기록
@@ -91,7 +93,7 @@ Security Advisor는 운영 53건, Staging 50건을 읽기 전용으로 확인했
 ## 아직 닫지 않은 항목
 
 - [x] PR 최신 SHA의 네 필수 품질검사 성공
-- [ ] Cloudflare Access로 `staging.burillab.com`, `buril-lab-staging.pages.dev`, `*.buril-lab-staging.pages.dev`를 각각 보호
+- [x] Cloudflare Access로 `staging.burillab.com`, `buril-lab-staging.pages.dev`, `*.buril-lab-staging.pages.dev`를 보호하고 세 경계의 비인증 요청 302 확인
 - [ ] 운영과 다른 Staging Upstash 준비
 - [ ] GitHub environment별 Pages·Supabase·KV·Access 비밀값 등록
 - [ ] 제거한 외부 API 키 3개의 공급자 측 회전
@@ -112,7 +114,7 @@ Security Advisor는 운영 53건, Staging 50건을 읽기 전용으로 확인했
 
 - 운영 Pages 코드 배포 금지
 - 운영 Supabase migration 또는 기준선 SQL 실행 금지
-- custom domain, project `pages.dev`, preview wildcard 세 경계의 Staging Access와 별도 Redis가 준비되기 전 Staging 배포 금지
+- 별도 Staging Redis, GitHub environment 비밀값, 공급자 키 회전과 합성 데이터 초기화가 준비되기 전 Staging 배포 금지
 - 음성 `guided` 운영 전환 금지
 - 계정·연구실 삭제 UI와 Scheduler 활성화 금지
 - 시약장 사진 이관·원본 삭제 금지
