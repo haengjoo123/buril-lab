@@ -66,7 +66,7 @@ export async function fetchKoshaMsds(chemId: number): Promise<KoshaMsdsResult> {
 async function fetchKoshaMsdsDocument(chemId: number): Promise<KoshaMsdsResult> {
   const paddedId = String(chemId).padStart(6, '0')
   const response = await getJson<KoshaMsdsApiResponse>(
-    `/api/kosha/msds?chemId=${encodeURIComponent(paddedId)}&policy=20260824.1`,
+    `/api/kosha/msds?chemId=${encodeURIComponent(paddedId)}&policy=20260824.2`,
     { cache: 'no-store' },
   )
   if (response.mode === 'link_only') {
