@@ -1,0 +1,3 @@
+# Type generation only. Set the real value with `wrangler secret put` for each
+# exact config; never copy a service-role key into this file.
+SUPABASE_SERVICE_ROLE_KEY=replace-with-dashboard-secret

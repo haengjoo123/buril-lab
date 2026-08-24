@@ -1,0 +1,37 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "buril-lab-storage-backup-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": ["15 17 * * *"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "BURILLAB_RUNTIME_CONFIG",
+      "id": "dcaa52254fa6447bbe7c21f54354ad0d"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CABINET_BACKUPS",
+      "bucket_name": "buril-lab-cabinet-backups-staging"
+    }
+  ],
+  "vars": {
+    "BACKUP_ENVIRONMENT": "staging",
+    "SUPABASE_PROJECT_REF": "qpgnomuqdcucjmxrunnw",
+    "SUPABASE_URL": "https://qpgnomuqdcucjmxrunnw.supabase.co",
+    "SOURCE_POINTER_MODE": "legacy_url",
+    "SOURCE_STORAGE_BUCKET": "cabinets"
+  }
+}

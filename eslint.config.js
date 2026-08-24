@@ -6,7 +6,13 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'android/**/build/**', '.codex-tmp/**', '.wrangler/**']),
+  globalIgnores([
+    'dist',
+    'android/**/build/**',
+    '.codex-tmp/**',
+    '.wrangler/**',
+    'workers/storage-backup/worker-configuration.d.ts',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
