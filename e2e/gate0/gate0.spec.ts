@@ -54,7 +54,10 @@ test('login → lab → inventory search → reviewed waste record → direct li
   await batchDialog.getByRole('button', { name: '라벨과 일치함 — 이 성분으로 확인' }).click()
   await batchDialog.getByRole('button', { name: `${INVENTORY_NAME} 수정` }).click()
   await batchDialog.getByRole('button', { name: '라벨·SDS 확인 완료' }).click()
-  await batchDialog.getByRole('button', { name: '다음' }).click()
+  await batchDialog.getByLabel('실제로 폐기하는 용기 수').fill('1')
+  const nextButton = batchDialog.getByRole('button', { name: '다음' })
+  await expect(nextButton).toBeEnabled()
+  await nextButton.click()
   await expect(batchDialog.getByText(/1\s*\/\s*1/).first()).toBeVisible()
   await batchDialog.getByRole('button', { name: '다음' }).click()
 
