@@ -656,6 +656,12 @@ function App() {
   }, [currentSearchEventId, navigate, session]);
 
   const handleVoiceUiAction = useCallback(async (action: VoiceUiAction, _result: VoiceQueryResponse) => {
+    if (action.type === 'open_waste_batch_review') {
+      setIsAddingWasteComponent(false);
+      setIsCartOpen(true);
+      return;
+    }
+
     if (action.type === 'search_reagent') {
       const searchQuery = action.query?.trim() || _result.match?.name?.trim() || _result.resolvedText.trim();
       if (!searchQuery) {
@@ -691,7 +697,7 @@ function App() {
       itemId: action.highlightItemId,
       shelfId: action.shelfId,
     });
-  }, [navigate, navigateToLogin, navigateWithFreshFilters, session]);
+  }, [navigate, navigateToLogin, navigateWithFreshFilters, session, setIsCartOpen]);
 
   const handleScan = (scannedText: string, selectionMeta: ScannerSelectionMeta) => {
     setIsScanning(false);

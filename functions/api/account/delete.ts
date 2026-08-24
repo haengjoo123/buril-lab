@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
+import { resolveRuntimeConfig, type RuntimeConfigEnv } from '../_runtimeConfig'
 
-interface AccountDeleteEnv {
+interface AccountDeleteEnv extends RuntimeConfigEnv {
   SUPABASE_URL?: string
   SUPABASE_ANON_KEY?: string
   SUPABASE_SERVICE_ROLE_KEY?: string
@@ -256,6 +257,14 @@ export const onRequestPost = async (context: {
   const authHeader = context.request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return json({ error: 'Authentication is required.' }, { status: 401 })
+  }
+
+  const runtimeConfig = await resolveRuntimeConfig(context.env)
+  if (!runtimeConfig.accountDeletionEnabled) {
+    return json(
+      { error: 'Account deletion is temporarily unavailable.' },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    )
   }
 
   let userClient: SupabaseClient

@@ -106,6 +106,12 @@ const VALID_INTENTS: VoiceAgentIntent[] = ['location', 'expiration', 'remaining'
 const MAX_QUERY_ALIASES = 6
 const CANDIDATE_ALIAS_CONFIDENCE_THRESHOLD = 0.72
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const DISPOSAL_SAFETY_PATTERNS = [
+  /폐(?:기|액|시약)|버리|처리(?:법|방법|해|하)|혼합|섞|희석|묽게|중화|배수구|싱크대?|하수|폐액통|폐기통/i,
+  /용기.{0,16}(?:넣|투입|붓|부어|담)|(?:넣|투입|붓|부어|담).{0,16}용기/i,
+  /\b(?:dispose|disposal|discard|trash|waste|throw(?:\s+\w+){0,4}\s+away|mix|mixing|combine|dilute|dilution|neutralize|neutralise|neutralization|neutralisation|drain|sink|sewer|pour|deposit)\b/i,
+  /\b(?:put|add|transfer)\b.{0,32}\b(?:container|bottle|drum)\b|\b(?:container|bottle|drum)\b.{0,32}\b(?:put|add|transfer|pour)\b/i,
+]
 const INTENT_HINTS: Array<{ intent: VoiceAgentIntent; patterns: RegExp[] }> = [
   {
     intent: 'expiration',
@@ -257,66 +263,28 @@ async function generateGeminiJson<T>(
   return JSON.parse(rawText) as T
 }
 
-async function generateDisposalGuide(
-  apiKey: string,
-  chemical: { name: string; casNumber?: string | null },
+export function isDisposalSafetyQuery(input: string): boolean {
+  const normalized = input.normalize('NFKC').toLowerCase()
+  return DISPOSAL_SAFETY_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+function buildDisposalRedirectResponse(
+  rawText: string,
   language: VoiceLanguage,
-  allowFallback = true,
-): Promise<string> {
-  const model = allowFallback ? GEMINI_PRIMARY_MODEL : GEMINI_FALLBACK_MODEL
-  const prompt = language === 'ko'
-    ? [
-      '당신은 실험실 시약 폐기 보조 도우미입니다.',
-      `시약명: ${chemical.name}`,
-      `CAS: ${chemical.casNumber || 'unknown'}`,
-      '한국어로 2문장 이내로 답하세요.',
-      '첫 문장은 바로 실행 가능한 폐기 방향을 말하고,',
-      '둘째 문장은 불확실하면 "MSDS 확인 필요"를 반드시 포함하세요.',
-      '과장하지 말고, 확실하지 않은 경우 보수적으로 답하세요.',
-    ].join('\n')
-    : [
-      'You are a lab reagent disposal assistant.',
-      `Reagent: ${chemical.name}`,
-      `CAS: ${chemical.casNumber || 'unknown'}`,
-      'Answer in English in no more than 2 sentences.',
-      'Sentence 1 should give the likely disposal direction.',
-      'Sentence 2 must include "Check the MSDS" if there is any uncertainty.',
-      'Be conservative and do not overstate certainty.',
-    ].join('\n')
+): VoiceQueryResponse {
+  const answerText = language === 'ko'
+    ? '폐액 배치 검토 화면을 열겠습니다. 필요한 정보를 화면에서 확인해 주세요.'
+    : 'I will open the waste batch review. Please check the required information on screen.'
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      }),
-    },
-  )
-
-  if (!response.ok) {
-    if (allowFallback && response.status === 503) {
-      return generateDisposalGuide(apiKey, chemical, language, false)
-    }
-
-    throw new Error(`Gemini disposal request failed with status ${response.status}.`)
+  return {
+    resolvedText: rawText,
+    intent: 'disposal',
+    answerText,
+    speech: { mode: 'remote_audio', text: answerText },
+    match: null,
+    uiAction: buildVoiceUiAction('disposal', null),
+    clarification: null,
   }
-
-  const data = await response.json() as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string }>
-      }
-    }>
-  }
-
-  return (data.candidates?.[0]?.content?.parts || [])
-    .map((part) => part.text || '')
-    .join(' ')
-    .trim()
 }
 
 function fallbackIntentExtraction(input: string, preferredLanguage?: VoiceLanguage): IntentExtraction {
@@ -675,42 +643,7 @@ function buildRemainingAnswer(match: VoiceMatch, language: VoiceLanguage): strin
   return `For ${match.name}, ${remainingSpeech}`
 }
 
-async function buildDisposalAnswer(
-  env: VoiceQueryEnv,
-  match: VoiceMatch,
-  language: VoiceLanguage,
-): Promise<string> {
-  if (!env.GEMINI_API_KEY?.trim()) {
-    return language === 'ko'
-      ? `${match.name}의 폐기 방법은 자동 안내를 만들지 못했어요. MSDS 확인 필요.`
-      : `I could not generate a disposal guide for ${match.name}. Check the MSDS.`
-  }
-
-  try {
-    const guide = await generateDisposalGuide(
-      env.GEMINI_API_KEY,
-      {
-        name: match.name,
-        casNumber: match.casNumber,
-      },
-      language,
-    )
-
-    return guide || (
-      language === 'ko'
-        ? `${match.name}의 폐기 방법을 확정할 수 없어요. MSDS 확인 필요.`
-        : `I could not confirm the disposal method for ${match.name}. Check the MSDS.`
-    )
-  } catch (error) {
-    console.warn('[voice/query] disposal guide fallback:', error)
-    return language === 'ko'
-      ? `${match.name}의 폐기 방법은 보수적으로 확인해야 해요. MSDS 확인 필요.`
-      : `Please verify the disposal method for ${match.name} conservatively. Check the MSDS.`
-  }
-}
-
 async function buildAnswerText(
-  env: VoiceQueryEnv,
   intent: VoiceAgentIntent,
   match: VoiceMatch,
   language: VoiceLanguage,
@@ -727,7 +660,9 @@ async function buildAnswerText(
     return buildRemainingAnswer(match, language)
   }
 
-  return buildDisposalAnswer(env, match, language)
+  return language === 'ko'
+    ? '폐액 배치 검토 화면에서 필요한 정보를 확인해 주세요.'
+    : 'Please check the required information in the waste batch review.'
 }
 
 export const onRequestPost = async (context: {
@@ -737,10 +672,6 @@ export const onRequestPost = async (context: {
   const authHeader = context.request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return json({ error: 'Authentication is required.' }, { status: 401 })
-  }
-
-  if (!context.env.GEMINI_API_KEY?.trim()) {
-    return json({ error: 'Gemini API key is not configured.' }, { status: 500 })
   }
 
   let body: VoiceQueryRequest
@@ -764,6 +695,17 @@ export const onRequestPost = async (context: {
     return json({ error: 'A valid current lab is required.' }, { status: 400 })
   }
   const labId = requestedLabId.toLowerCase()
+
+  // Do not send disposal, mixing, dilution, neutralization, drain, or
+  // container-deposit wording to an AI or a chemical lookup service.
+  if (isDisposalSafetyQuery(rawText)) {
+    const language = body.context?.language || detectVoiceLanguage(rawText)
+    return json(buildDisposalRedirectResponse(rawText, language))
+  }
+
+  if (!context.env.GEMINI_API_KEY?.trim()) {
+    return json({ error: 'Gemini API key is not configured.' }, { status: 500 })
+  }
 
   try {
     const supabase = createSupabaseUserClient(context.env, authHeader)
@@ -792,9 +734,15 @@ export const onRequestPost = async (context: {
       rawText,
       body.context?.language,
     )
-    let queryVariants = buildQueryVariants(extracted, rawText)
-
     const language = body.context?.language || extracted.language || detectVoiceLanguage(rawText)
+
+    // A model may classify an indirect phrase as disposal even when the
+    // deterministic pre-filter did not. Stop before any inventory query.
+    if (extracted.intent === 'disposal') {
+      return json(buildDisposalRedirectResponse(rawText, language))
+    }
+
+    let queryVariants = buildQueryVariants(extracted, rawText)
 
     const [cabinetItemsResult, inventoryResult, aliasRowsResult] = await Promise.all([
       supabase
@@ -1028,7 +976,7 @@ export const onRequestPost = async (context: {
         intent: extracted.intent,
       },
     )
-    const answerText = await buildAnswerText(context.env, extracted.intent, chosenMatch, language)
+    const answerText = await buildAnswerText(extracted.intent, chosenMatch, language)
     const response: VoiceQueryResponse = {
       resolvedText: extracted.reagentQuery,
       intent: extracted.intent,

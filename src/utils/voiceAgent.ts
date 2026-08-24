@@ -6,6 +6,7 @@ export type VoiceUiActionType =
   | 'focus_cabinet_item'
   | 'show_storage_location'
   | 'search_reagent'
+  | 'open_waste_batch_review'
   | 'clarify'
   | 'none'
 export type VoiceFailureReason = 'no_match' | 'ambiguous' | 'user_corrected'
@@ -95,6 +96,10 @@ export function buildVoiceUiAction(
   intent: VoiceAgentIntent,
   match: VoiceMatch | null,
 ): VoiceUiAction {
+  if (intent === 'disposal') {
+    return { type: 'open_waste_batch_review' }
+  }
+
   if (!match) {
     return { type: 'none' }
   }
@@ -116,13 +121,6 @@ export function buildVoiceUiAction(
     }
 
     return { type: 'none' }
-  }
-
-  if (intent === 'disposal') {
-    return {
-      type: 'search_reagent',
-      query: match.name,
-    }
   }
 
   return { type: 'none' }
