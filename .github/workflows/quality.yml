@@ -1,0 +1,211 @@
+name: Quality and security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    name: Application checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      VITE_SUPABASE_URL: https://quality.invalid
+      VITE_SUPABASE_ANON_KEY: quality-test-anon-key-not-a-real-credential
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npx tsc -b
+
+      - name: Full unit and regression suite
+        run: npm test -- --reporter=dot
+
+      - name: Production build
+        run: npm run build
+
+      - name: Scan the client artifact for server secrets
+        run: npm run security:client-secrets
+
+      - name: Reject high or critical runtime advisories
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check patch whitespace
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]] \
+            && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            git diff --check "$BASE_SHA" "$GITHUB_SHA"
+          else
+            git show --check --format=oneline "$GITHUB_SHA"
+          fi
+
+  cloudflare-contract:
+    name: Cloudflare release contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify Wrangler version
+        run: test "$(npx wrangler --version)" = "4.125.0"
+
+      - name: Run Cloudflare release regression tests
+        run: npm run cloudflare:test
+
+      - name: Verify committed environment separation
+        run: npm run cloudflare:verify
+
+      - name: Verify release manifest round trips
+        shell: bash
+        run: |
+          for environment in staging production; do
+            node scripts/write-release-manifest.mjs \
+              --output ".wrangler/release-$environment.json" \
+              --commit "$GITHUB_SHA" \
+              --environment "$environment" \
+              --built-at "2026-08-24T00:00:00Z"
+            node scripts/verify-release-manifest.mjs \
+              --file ".wrangler/release-$environment.json" \
+              --commit "$GITHUB_SHA" \
+              --environment "$environment"
+          done
+
+      - name: Materialize isolated non-production validation configs
+        env:
+          BURILLAB_PRODUCTION_RUNTIME_CONFIG_KV_ID: "11111111111111111111111111111111"
+          BURILLAB_STAGING_RUNTIME_CONFIG_KV_ID: "22222222222222222222222222222222"
+        run: |
+          node scripts/render-wrangler-config.mjs --input wrangler.jsonc --output wrangler.production.generated.jsonc
+          node scripts/render-wrangler-config.mjs --input wrangler.staging.jsonc --output wrangler.staging.generated.jsonc
+
+      - name: Compile Pages Functions against both Wrangler configs
+        run: |
+          npx wrangler pages functions build functions --config wrangler.production.generated.jsonc --outdir "$GITHUB_WORKSPACE/.wrangler/pages-functions-production"
+          npx wrangler pages functions build functions --config wrangler.staging.generated.jsonc --outdir "$GITHUB_WORKSPACE/.wrangler/pages-functions-staging"
+
+  database-interface:
+    name: Blank database interface
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Detect the reviewed Prep 1 database contract
+        id: database-contract
+        run: node scripts/detect-database-quality-gate.mjs
+
+      - name: Explain deferred database checks
+        if: steps.database-contract.outputs.enabled != 'true'
+        run: echo "Prep 1 has not enabled supabase/ci-quality.json; no database mutation was attempted."
+
+      - name: Set up Supabase CLI
+        if: steps.database-contract.outputs.enabled == 'true'
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+
+      - name: Start isolated local Supabase
+        if: steps.database-contract.outputs.enabled == 'true'
+        run: supabase start
+
+      - name: Rebuild a blank database twice
+        if: steps.database-contract.outputs.enabled == 'true'
+        run: |
+          supabase db reset --local --no-seed
+          supabase db reset --local --no-seed
+
+      - name: Verify the database release safety boundary
+        if: steps.database-contract.outputs.enabled == 'true'
+        run: node scripts/verify-database-release-safety.mjs
+
+      - name: Run SQL permission tests
+        if: steps.database-contract.outputs.enabled == 'true'
+        run: supabase test db supabase/tests/baseline_permissions.sql
+
+      - name: Stop isolated local Supabase
+        if: always() && steps.database-contract.outputs.enabled == 'true'
+        run: supabase stop --no-backup
+
+  gate0-browser-interface:
+    name: Gate 0 browser interface
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Detect the reviewed Gate 0 browser contract
+        id: browser-contract
+        run: node scripts/detect-gate0-browser-quality.mjs
+
+      - name: Explain deferred browser checks
+        if: steps.browser-contract.outputs.enabled != 'true'
+        run: echo "Gate 0 browser artifacts are not integrated yet; no browser was installed or started."
+
+      - name: Install Chromium
+        if: steps.browser-contract.outputs.enabled == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify the Gate 0 release scope
+        if: steps.browser-contract.outputs.enabled == 'true'
+        run: node scripts/verify-gate0-release-scope.mjs
+
+      - name: Run only the reviewed Gate 0 browser flow
+        if: steps.browser-contract.outputs.enabled == 'true'
+        run: npm run test:e2e:gate0
