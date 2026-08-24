@@ -38,8 +38,10 @@ const E2E_PASSWORD = process.env.GATE0_E2E_PASSWORD || 'Local-Gate0-Only!2026'
 const LAB_ID = '10000000-0000-4000-8000-000000000010'
 const INVENTORY_ID = '20000000-0000-4000-8000-000000000010'
 const STORAGE_LOCATION_ID = '40000000-0000-4000-8000-000000000010'
+const POLICY_ID = '50000000-0000-4000-8000-000000000010'
 const LAB_NAME = 'Gate0 합성 연구실'
 const INVENTORY_NAME = 'Gate0 Synthetic Powder'
+const POLICY_NAME = 'Gate0 합성 시스템 폐기 정책'
 
 async function requireNoError(result, operation) {
   if (result.error) throw new Error(`${operation} failed: ${result.error.message}`)
@@ -61,6 +63,27 @@ const existingInventory = await requireNoError(
 if (existingInventory && (existingInventory.lab_id !== LAB_ID || existingInventory.name !== INVENTORY_NAME)) {
   throw new Error('Gate0 seed refuses to replace non-synthetic inventory at its reserved UUID.')
 }
+
+const existingActiveSystemPolicy = await requireNoError(
+  await supabase
+    .from('waste_policy_versions')
+    .select('id,name')
+    .eq('scope_type', 'system')
+    .eq('status', 'active')
+    .maybeSingle(),
+  'Reading the prior active system policy',
+)
+if (
+  existingActiveSystemPolicy
+  && (existingActiveSystemPolicy.id !== POLICY_ID || existingActiveSystemPolicy.name !== POLICY_NAME)
+) {
+  throw new Error('Gate0 seed refuses to replace a non-synthetic active system waste policy.')
+}
+
+await requireNoError(
+  await supabase.from('waste_policy_versions').delete().eq('id', POLICY_ID),
+  'Cleaning the prior synthetic system policy',
+)
 
 // Removing the reserved lab cascades prior synthetic inventory and any waste
 // records created by an earlier run. No production or remote URL can reach
@@ -87,6 +110,23 @@ if (created.error || !created.data.user) {
   throw new Error(`Creating the synthetic user failed: ${created.error?.message || 'missing user'}`)
 }
 const userId = created.data.user.id
+
+const solidStreamCatalog = await requireNoError(
+  await supabase
+    .from('waste_stream_catalog')
+    .select('code')
+    .eq('code', 'SOLID_CONTAMINATED')
+    .maybeSingle(),
+  'Checking the synthetic waste stream catalog',
+)
+if (!solidStreamCatalog) {
+  await requireNoError(await supabase.from('waste_stream_catalog').insert({
+    code: 'SOLID_CONTAMINATED',
+    display_name_ko: '오염 고체 폐기물',
+    display_name_en: 'Contaminated solid waste',
+    sort_order: 80,
+  }), 'Creating the synthetic waste stream catalog entry')
+}
 
 await requireNoError(await supabase.from('labs').insert({
   id: LAB_ID,
@@ -128,17 +168,36 @@ await requireNoError(await supabase.from('inventory').insert({
   manufacturer_date_type: 'unlabeled',
 }), 'Creating the synthetic inventory')
 
-const activePolicy = await requireNoError(
-  await supabase
-    .from('waste_policy_versions')
-    .select('id')
-    .eq('scope_type', 'system')
-    .eq('status', 'active')
-    .limit(1)
-    .maybeSingle(),
-  'Checking the baseline waste policy',
-)
-if (!activePolicy) throw new Error('The baseline has no active system waste policy.')
+await requireNoError(await supabase.from('waste_policy_versions').insert({
+  id: POLICY_ID,
+  policy_key: 'gate0-synthetic-system-policy',
+  scope_type: 'system',
+  version_label: 'gate0-v1',
+  name: POLICY_NAME,
+  jurisdiction: 'KR',
+  status: 'active',
+  source_refs: [{ title: 'Gate0 synthetic browser fixture' }],
+  created_by: userId,
+  activated_by: userId,
+  activated_at: '2026-08-24T00:00:00.000Z',
+}), 'Creating the synthetic active system policy')
+
+await requireNoError(await supabase.from('waste_policy_streams').insert({
+  policy_version_id: POLICY_ID,
+  stream_code: 'SOLID_CONTAMINATED',
+  display_name_ko: '합성 오염 고체 폐기물',
+  display_name_en: 'Synthetic contaminated solid waste',
+  description_ko: 'Gate0 브라우저 시험용 합성 고체 폐기물 분류',
+  container_label: 'Gate0 합성 고체 폐기물통',
+  location: 'Gate0 합성 보관 위치',
+  handler_contact: 'Gate0 안전 담당자',
+  allowed_hazard_flags: [],
+  blocked_hazard_flags: [],
+  prohibitions: [],
+  label_requirements: ['성분명', '양'],
+  is_enabled: true,
+  sort_order: 80,
+}), 'Creating the synthetic active policy stream')
 
 await requireNoError(await supabase.from('waste_policy_lab_overrides').insert({
   lab_id: LAB_ID,
@@ -159,4 +218,5 @@ console.log(JSON.stringify({
   labId: LAB_ID,
   inventoryId: INVENTORY_ID,
   storageLocationId: STORAGE_LOCATION_ID,
+  policyId: POLICY_ID,
 }))
