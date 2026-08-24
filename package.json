@@ -36,7 +36,7 @@
     "capacitor:normalize-ios-spm": "node scripts/normalize-capacitor-ios-spm.mjs",
     "ios:run": "npm run build:ios && npx cap run ios",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --exclude=e2e/**",
     "test:chemical-live": "node scripts/run-chemical-live-smoke.mjs",
     "preview": "vite preview"
   },
