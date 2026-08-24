@@ -26,7 +26,7 @@ Supabase의 자동 DB 백업은 Storage의 파일 본문을 포함하지 않고 
 - [ ] 생성 전 예상 Compute 비용이 1달러 이하임을 다시 확인함
 - [ ] 운영의 가장 최근 사용 가능한 백업 시각과 일일 백업 상태를 확인함
 - [ ] 작업자가 Supabase·GitHub·Cloudflare 계정 MFA를 사용함
-- [ ] PowerShell 7, Supabase CLI `2.115.0`, Docker Desktop 서버, 공식 portable PostgreSQL `17.11`의 `pg_dump`·`pg_restore`·`psql`이 실제로 실행됨
+- [ ] PowerShell 7, Supabase CLI `2.115.0`, 공식 portable PostgreSQL `17.11`의 `pg_dump`·`pg_restore`·`psql`이 실제로 실행됨
 - [ ] 공식 portable PostgreSQL 원본 압축파일의 실제 SHA-256이 `6EABDF00D2893713B75DB4336A23C3FDF505F056E217EC6E2E95D901750CFEA3`과 일치함
 - [ ] 복구 파일을 둘 BitLocker 보호 로컬 디렉터리 또는 EFS가 적용된 정확한 로컬 디렉터리의 절대경로와 작업 종료 시 안전하게 지울 방법을 준비함
 - [ ] EFS를 사용하면 작업 디렉터리 바로 아래 새 확인 파일에도 `Encrypted` 속성이 상속됐음을 읽기 전용으로 다시 확인함
@@ -48,11 +48,13 @@ Supabase의 자동 DB 백업은 Storage의 파일 본문을 포함하지 않고 
 - 운영 프로젝트는 `ACTIVE_HEALTHY`, 지역 `us-east-2`, PostgreSQL `17.6`으로 확인됨
 - 일일 백업이 켜져 있고 2026-08-24 08:40:29 UTC가 가장 최근이며 8개 복구 지점이 보임; Storage 파일 본문은 포함되지 않음
 - 프로젝트 생성 비용 화면/API의 월 표시액은 10달러였지만 사용자 비용 확인 ID는 아직 없음
-- 로컬 PowerShell `7.6.4`, Supabase CLI `2.115.0`, 공식 portable PostgreSQL `17.11`의 세 도구와 원본 압축파일 해시는 확인됨; Docker Desktop 서버는 아직 실행할 수 없음
+- 로컬 PowerShell `7.6.4`, Supabase CLI `2.115.0`, 공식 portable PostgreSQL `17.11`의 세 도구와 원본 압축파일 해시는 확인됨
 - 비관리자 세션에서는 BitLocker 상태 조회가 불가능했지만, 사용자 경로를 공개 문서에 남기지 않은 별도 로컬 작업 디렉터리에 EFS와 새 파일 암호화 상속이 확인됨
 - 최근 production R2 `complete` manifest 증거가 아직 없음
 
-따라서 현재는 자동 사전점검이 의도대로 실패해야 합니다. 비용 확인 ID, Docker 서버, target 프로젝트 메타데이터, R2 완료 증거가 모두 생기기 전에는 프로젝트 생성 이후의 운영 DB 읽기나 덤프 단계로 넘어가지 않습니다.
+따라서 현재는 자동 사전점검이 의도대로 실패해야 합니다. 비용 확인 ID, target 프로젝트 메타데이터, R2 완료 증거가 모두 생기기 전에는 프로젝트 생성 이후의 운영 DB 읽기나 덤프 단계로 넘어가지 않습니다.
+
+Docker Desktop은 이 hosted Micro 복구훈련의 전제조건이 아닙니다. source dump와 target restore는 위 portable PostgreSQL 도구가 직접 수행합니다. Docker가 필요한 `supabase db reset`과 빈 로컬 DB 재구성은 별도 데이터베이스 기준선 관문에서 증거를 수집하며, Docker 부재가 이 복구 사전점검을 막지 않습니다.
 
 ## 0. 읽기 전용 자동 사전점검
 
@@ -67,7 +69,7 @@ Supabase의 자동 DB 백업은 Storage의 파일 본문을 포함하지 않고 
 - 작업 디렉터리가 실행 시 지정한 승인 루트의 하위 폴더이고, 그 승인 루트가 Windows `TEMP`·`TMP` 또는 현재 `USERPROFILE` 아래 `.codex-tmp`와 정확히 같은지
 - 작업 디렉터리가 저장소·OneDrive·Dropbox·Box·Google Drive·iCloud·Windows SyncRootManager의 알려진 동기화 루트 밖이며 상위 경로에 reparse point가 없는지
 - BitLocker를 쓰면 실제 볼륨 상태가 `protected`인지, EFS를 쓰면 정확한 작업 디렉터리와 그 바로 아래 확인 파일이 모두 실제 `Encrypted` 상태인지
-- PowerShell 7+, Supabase CLI `2.115.0`, 실행 중인 Docker Desktop 서버, 실행 시 지정한 같은 `bin` 폴더의 `pg_dump`·`pg_restore`·`psql`이 모두 정확히 `17.11`인지
+- PowerShell 7+, Supabase CLI `2.115.0`, 실행 시 지정한 같은 `bin` 폴더의 `pg_dump`·`pg_restore`·`psql`이 모두 정확히 `17.11`인지
 - 실행 시 지정한 공식 portable PostgreSQL 원본 압축파일을 직접 해시해 고정 SHA-256과 일치하는지
 - 메일·예약 작업·삭제 worker·웹훅·외부 API·Realtime publication·maintenance worker가 모두 명시적으로 `false`인지
 - production R2의 `control/latest.json`, `complete.json`, `manifest.json`, `manifest.sha256`가 같은 snapshot·환경·해시·분류별 개수·바이트 합계로 이어지고 26시간 이내인지

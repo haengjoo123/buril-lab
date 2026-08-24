@@ -1028,7 +1028,6 @@ function parseSemver(output, label) {
 export function verifyReadOnlyToolVersions({
   pwsh,
   supabase,
-  docker,
   pgDump,
   pgRestore,
   psql,
@@ -1039,7 +1038,6 @@ export function verifyReadOnlyToolVersions({
   if (supabaseVersion !== REQUIRED_SUPABASE_CLI_VERSION) {
     throw new Error(`Supabase CLI ${REQUIRED_SUPABASE_CLI_VERSION} is required.`)
   }
-  const dockerVersion = parseSemver(docker, 'Docker Desktop server')
   const pgDumpVersion = parseSemver(pgDump, 'pg_dump')
   const pgRestoreVersion = parseSemver(pgRestore, 'pg_restore')
   const psqlVersion = parseSemver(psql, 'psql')
@@ -1056,7 +1054,6 @@ export function verifyReadOnlyToolVersions({
   return {
     pwshVersion,
     supabaseVersion,
-    dockerVersion,
     pgDumpVersion,
     pgRestoreVersion,
     psqlVersion,
@@ -1168,7 +1165,6 @@ export async function probeReadOnlyPrerequisites({
   const outputs = {
     pwsh,
     supabase: await runner('npx.cmd', ['--no-install', 'supabase', '--version']),
-    docker: await runner('docker', ['version', '--format', '{{.Server.Version}}']),
     pgDump: await runner(postgresTools.pgDumpPath, ['--version']),
     pgRestore: await runner(postgresTools.pgRestorePath, ['--version']),
     psql: await runner(postgresTools.psqlPath, ['--version']),

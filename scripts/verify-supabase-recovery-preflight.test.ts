@@ -614,14 +614,12 @@ describe('Windows temporary directory and local tool isolation', () => {
     expect(verifyReadOnlyToolVersions({
       pwsh: '7.6.4',
       supabase: '2.115.0',
-      docker: '28.3.3',
       pgDump: 'pg_dump (PostgreSQL) 17.11',
       pgRestore: 'pg_restore (PostgreSQL) 17.11',
       psql: 'psql (PostgreSQL) 17.11',
     }, 17)).toEqual({
       pwshVersion: '7.6.4',
       supabaseVersion: '2.115.0',
-      dockerVersion: '28.3.3',
       pgDumpVersion: '17.11.0',
       pgRestoreVersion: '17.11.0',
       psqlVersion: '17.11.0',
@@ -629,7 +627,6 @@ describe('Windows temporary directory and local tool isolation', () => {
     expect(() => verifyReadOnlyToolVersions({
       pwsh: '7.6.4',
       supabase: '2.115.0',
-      docker: '28.3.3',
       pgDump: 'pg_dump (PostgreSQL) 17.10',
       pgRestore: 'pg_restore (PostgreSQL) 17.11',
       psql: 'psql (PostgreSQL) 17.11',
@@ -660,12 +657,12 @@ describe('Windows temporary directory and local tool isolation', () => {
     })).rejects.toThrow('SHA-256')
   })
 
-  it('runs only fixed read-only local probes including BitLocker and reparse checks', async () => {
+  it('passes hosted recovery probes with portable tools when Docker is unavailable', async () => {
     const calls: Array<[string, string[]]> = []
     const runner = vi.fn(async (executable: string, args: string[]) => {
       calls.push([executable, args])
       if (executable === 'npx.cmd') return '2.115.0\n'
-      if (executable === 'docker') return '28.3.3\n'
+      if (executable === 'docker') throw new Error('Docker is unavailable')
       if (executable.endsWith('pg_dump.exe')) return 'pg_dump (PostgreSQL) 17.11\n'
       if (executable.endsWith('pg_restore.exe')) return 'pg_restore (PostgreSQL) 17.11\n'
       if (executable.endsWith('psql.exe')) return 'psql (PostgreSQL) 17.11\n'
@@ -687,14 +684,13 @@ describe('Windows temporary directory and local tool isolation', () => {
       },
       runner,
     })).resolves.toMatchObject({ encryptionStatus: 'protected', reparseStatus: 'clear', syncProbeStatus: 'clear' })
-    expect(calls).toHaveLength(9)
+    expect(calls).toHaveLength(8)
     expect(calls.map(([executable]) => executable)).toEqual([
       'pwsh',
       'pwsh',
       'pwsh',
       'pwsh',
       'npx.cmd',
-      'docker',
       'C:\\approved\\pgsql\\bin\\pg_dump.exe',
       'C:\\approved\\pgsql\\bin\\pg_restore.exe',
       'C:\\approved\\pgsql\\bin\\psql.exe',
@@ -708,6 +704,7 @@ describe('Windows temporary directory and local tool isolation', () => {
     expect(calls.filter(([executable]) => executable.endsWith('.exe')).every(([, args]) => (
       args.length === 1 && args[0] === '--version'
     ))).toBe(true)
+    expect(calls.some(([executable]) => executable === 'docker')).toBe(false)
     expect(probeArguments).not.toMatch(/\b(?:create|delete|restore|push|deploy)\b/i)
   })
 
@@ -716,7 +713,7 @@ describe('Windows temporary directory and local tool isolation', () => {
     const runner = vi.fn(async (executable: string, args: string[]) => {
       calls.push([executable, args])
       if (executable === 'npx.cmd') return '2.115.0\n'
-      if (executable === 'docker') return '28.3.3\n'
+      if (executable === 'docker') throw new Error('Docker is unavailable')
       if (executable.endsWith('pg_dump.exe')) return 'pg_dump (PostgreSQL) 17.11\n'
       if (executable.endsWith('pg_restore.exe')) return 'pg_restore (PostgreSQL) 17.11\n'
       if (executable.endsWith('psql.exe')) return 'psql (PostgreSQL) 17.11\n'
@@ -763,6 +760,7 @@ describe('Windows temporary directory and local tool isolation', () => {
     expect(source).not.toContain('shell: true')
     expect(source).not.toContain("'--source-ref'")
     expect(source).not.toContain("'--staging-ref'")
+    expect(source.toLowerCase()).not.toContain('docker')
     expect(source).toContain("import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'")
   })
 })
