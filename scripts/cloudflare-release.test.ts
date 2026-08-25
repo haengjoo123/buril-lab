@@ -937,6 +937,16 @@ describe('Prep 0 Cloudflare release controls', () => {
       deploymentUrl: 'https://123e4567.buril-lab-staging.pages.dev',
       commitSha: COMMIT,
     })
+    expect(verifyWranglerPagesDeployOutput(raw.replace(
+      '"alias":"main.buril-lab-staging.pages.dev",',
+      '',
+    ), options)).toMatchObject({
+      deploymentId: '123e4567-e89b-42d3-a456-426614174000',
+    })
+    expect(() => verifyWranglerPagesDeployOutput(raw.replace(
+      '"alias":"main.buril-lab-staging.pages.dev",',
+      '"alias":false,',
+    ), options)).toThrow(/alias is invalid/)
     expect(() => verifyWranglerPagesDeployOutput(raw.replace(COMMIT, 'f'.repeat(40)), options))
       .toThrow(/pinned Wrangler command contract/)
     expect(() => verifyWranglerPagesDeployOutput(raw, {

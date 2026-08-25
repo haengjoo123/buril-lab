@@ -17,6 +17,15 @@ function exactKeys(value, expected, label) {
   if (JSON.stringify(actual) !== JSON.stringify(wanted)) throw new Error(`${label} fields differ from the pinned Wrangler contract.`)
 }
 
+function exactKeysWithOptional(value, required, optional, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} is malformed.`)
+  const actual = Object.keys(value)
+  const allowed = new Set([...required, ...optional])
+  if (required.some((key) => !actual.includes(key)) || actual.some((key) => !allowed.has(key))) {
+    throw new Error(`${label} fields differ from the pinned Wrangler contract.`)
+  }
+}
+
 function timestamp(value, label) {
   if (typeof value !== 'string') throw new Error(`${label} is missing.`)
   const result = Date.parse(value)
@@ -134,10 +143,10 @@ export function verifyWranglerPagesDeployOutput(raw, {
   const outputWindow = { started, now: nowTime }
   const sessionTime = verifyWranglerSession(session, { commitSha, environment, target, outputWindow })
   exactKeys(summary, ['type', 'version', 'pages_project', 'deployment_id', 'url', 'timestamp'], 'Wrangler Pages summary')
-  exactKeys(detailed, [
-    'type', 'version', 'pages_project', 'deployment_id', 'url', 'alias', 'environment',
+  exactKeysWithOptional(detailed, [
+    'type', 'version', 'pages_project', 'deployment_id', 'url', 'environment',
     'production_branch', 'deployment_trigger', 'timestamp',
-  ], 'Wrangler Pages detail')
+  ], ['alias'], 'Wrangler Pages detail')
   exactKeys(detailed.deployment_trigger, ['metadata'], 'Wrangler Pages deployment trigger')
   exactKeys(detailed.deployment_trigger.metadata, ['commit_hash'], 'Wrangler Pages deployment metadata')
   if (
@@ -153,6 +162,14 @@ export function verifyWranglerPagesDeployOutput(raw, {
     || !DEPLOYMENT_ID_PATTERN.test(summary.deployment_id || '')
   ) {
     throw new Error('Wrangler structured output does not match the exact deployment request.')
+  }
+  if ('alias' in detailed && (
+    typeof detailed.alias !== 'string'
+    || detailed.alias.length === 0
+    || detailed.alias.length > 4096
+    || /[\u0000-\u001f\u007f]/.test(detailed.alias)
+  )) {
+    throw new Error('Wrangler Pages deployment alias is invalid.')
   }
   const summaryTime = outputTimestamp(summary.timestamp, 'Wrangler Pages summary timestamp', outputWindow)
   const detailedTime = outputTimestamp(detailed.timestamp, 'Wrangler Pages detail timestamp', outputWindow)
