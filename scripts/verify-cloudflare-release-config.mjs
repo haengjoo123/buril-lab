@@ -45,7 +45,7 @@ const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   '"storage_backup_enabled": true',
 ]
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
-  staging: '46c270046d972b2a1cf33ab6215d9757eefed78e4185eb87606563c828a65c60',
+  staging: 'd5352720e8d03d0b2583bede31900f55ad96448383491169831b559de8ab58f3',
   production: 'afd7fd6823a6b5f65b3414121607613d2f796f95f98381ca87b0503834edb91b',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
@@ -653,6 +653,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'confirmation:',
     'lease_id:',
     'deploy_storage_backup:',
+    'lease_grant:',
     'type: boolean',
     'default: false',
     'actions: read',
@@ -662,7 +663,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'DEPLOY_CONFIRMATION: ${{ inputs.confirmation }}',
     'DEPLOY_LEASE_ID: ${{ inputs.lease_id }}',
     'DEPLOY_STORAGE_BACKUP: ${{ inputs.deploy_storage_backup }}',
-    'EPHEMERAL_LEASE_GRANT: ${{ vars.EPHEMERAL_LEASE_GRANT }}',
+    'EPHEMERAL_LEASE_GRANT: ${{ inputs.lease_grant }}',
     'EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}',
     'DEPLOY buril-lab-staging $DEPLOY_COMMIT_SHA LEASE $DEPLOY_LEASE_ID WITH EPHEMERAL TOKENS',
     'if [[ "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]',

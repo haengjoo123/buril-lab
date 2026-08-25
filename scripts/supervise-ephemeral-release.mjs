@@ -898,6 +898,10 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
     ]
     if (environment === 'staging') {
       dispatchArguments.push('-f', `deploy_storage_backup=${storageBackup}`)
+      // The grant contains signed hashes, never a provider secret. It is passed
+      // as an immutable dispatch input because environment variables can be
+      // snapshotted before a just-written value becomes visible to a runner.
+      dispatchArguments.push('-f', `lease_grant=${material.grant}`)
     } else {
       dispatchArguments.push('-f', `staging_run_id=${stagingEvidence.runId}`)
     }
@@ -1202,7 +1206,12 @@ export async function findJournalRun(pending, {
   return null
 }
 
-async function collectRecoveryProviderEvidence(pending, cloudflareAccountId, inputIterator) {
+async function collectRecoveryProviderEvidence(
+  pending,
+  cloudflareAccountId,
+  inputIterator,
+  { allowMaterializedDashboardRevocation = false } = {},
+) {
   const providers = pending.payload.storage_backup
     ? ['supabase', 'cloudflare_pages', 'cloudflare_worker']
     : ['supabase', 'cloudflare_pages']
@@ -1224,12 +1233,14 @@ async function collectRecoveryProviderEvidence(pending, cloudflareAccountId, inp
       continue
     }
     if (value === dashboardRevokedConfirmation) {
-      if (pending.payload.lease_evidence) {
+      if (pending.payload.lease_evidence && !allowMaterializedDashboardRevocation) {
         throw new Error(`${provider} was already materialized in the signed phase journal; exact revoked credential proof is required.`)
       }
       providerEvidence.push({
         provider,
-        status: 'operator_verified_dashboard_revoked',
+        status: pending.payload.lease_evidence
+          ? 'operator_verified_dashboard_revoked_pre_deployment'
+          : 'operator_verified_dashboard_revoked',
         credentialSha256: null,
       })
       continue
@@ -1364,21 +1375,33 @@ async function recoverPendingProviderCreation(environment, leaseId, cloudflareAc
   }
 
   await clearGithubCredentialState(environment)
-  const providerEvidence = await collectRecoveryProviderEvidence(pending, cloudflareAccountId, inputIterator)
+  const discoveredRun = await findJournalRun(pending)
+  if (discoveredRun && discoveredRun.status !== 'completed') {
+    throw new Error('The exact recovered workflow run is not terminal; credentials are inactive and the journal remains for retry.')
+  }
+  const allowMaterializedDashboardRevocation = Boolean(
+    pending.payload.lease_evidence
+    && discoveredRun
+    && credentialGateResult(discoveredRun, contract) === 'failed',
+  )
+  const providerEvidence = await collectRecoveryProviderEvidence(
+    pending,
+    cloudflareAccountId,
+    inputIterator,
+    { allowMaterializedDashboardRevocation },
+  )
   verifyProviderCreationRecoveryEvidence({
     journal: recoveryMarker,
     providerEvidence,
     publicKey,
+    allowMaterializedDashboardRevocation,
   })
   if (leaseGrantFailure) {
     throw new AggregateError([leaseGrantFailure], 'Stored lease grant could not be reconciled after provider revocation; the signed journal remains.')
   }
   let currentJournal = recoveryMarker
   let currentPending = pending
-  const run = await findJournalRun(currentPending)
-  if (run && run.status !== 'completed') {
-    throw new Error('The exact recovered workflow run is not terminal; credentials are inactive and the journal remains for retry.')
-  }
+  const run = discoveredRun ?? await findJournalRun(currentPending)
   if (run && !currentPending.payload.lease_evidence) {
     throw new Error('A workflow run exists but the signed journal lacks its exact lease evidence; the journal remains for review.')
   }
@@ -1470,6 +1493,7 @@ async function recoverPendingProviderCreation(environment, leaseId, cloudflareAc
     publicKey,
     privateKey,
     providerEvidence,
+    allowMaterializedDashboardRevocation,
   })
   await setVariable(environment, 'EPHEMERAL_LAST_ABORTED_LEASE_RECEIPT', abortedReceipt)
   const stored = await getVariable(environment, 'EPHEMERAL_LAST_ABORTED_LEASE_RECEIPT')
