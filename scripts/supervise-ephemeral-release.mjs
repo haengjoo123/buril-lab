@@ -50,6 +50,12 @@ const RECOVERY_CLOCK_SKEW_MS = 5 * 60 * 1000
 // created. Give a just-written environment secret time to reach that control
 // plane before dispatching the one permitted ephemeral-credential run.
 const SECRET_DISPATCH_PROPAGATION_DELAY_MS = 75_000
+// GitHub can acknowledge workflow_dispatch before the corresponding run is
+// visible to the run-list API. Keep the signed dispatch-intent journal and
+// reconcile for five minutes instead of treating the first minute of absence
+// as proof that no run exists.
+const DISPATCH_RECONCILIATION_ATTEMPTS = 60
+const DISPATCH_RECONCILIATION_INTERVAL_MS = 5_000
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const HASH_PATTERN = /^[0-9a-f]{64}$/
 const RUN_URL_PATTERN = /^https:\/\/github\.com\/haengjoo123\/buril-lab\/actions\/runs\/([1-9]\d*)\/?$/
@@ -692,16 +698,17 @@ export function credentialGatesSucceeded(run, contract) {
 }
 
 // A dashboard-only revocation attestation is acceptable only when the exact
-// supervised run is terminal, failed, and GitHub proves that its Pages write
-// step was skipped. This lets recovery close a pre-deployment failure without
-// requiring an already-deleted credential to be re-entered, while never
-// treating a possible Pages mutation as safely aborted.
+// supervised run is terminal, unsuccessful, and GitHub proves that its Pages
+// write step was skipped. This lets recovery close a pre-deployment failure or
+// an intentional cancellation without requiring an already-deleted credential
+// to be re-entered, while never treating a possible Pages mutation as safely
+// aborted.
 export function failedBeforePagesMutation(run, contract) {
   if (
     !contract?.jobName
     || !contract?.pagesMutationStep
     || run?.status !== 'completed'
-    || run?.conclusion !== 'failure'
+    || !['failure', 'cancelled'].includes(run?.conclusion)
     || !Array.isArray(run?.jobs)
   ) return false
   const jobs = run.jobs.filter((job) => job?.name === contract.jobName)
@@ -721,21 +728,28 @@ function journalRunEvidence(run) {
   })
 }
 
-async function findDispatchedRun(contract, expectedTitle, commitSha, {
+export async function findDispatchedRun(contract, expectedTitle, commitSha, {
   dispatchOutput = '',
   dispatchedAfter = Date.now(),
+  attempts = DISPATCH_RECONCILIATION_ATTEMPTS,
+  wait = (milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds)),
+  runGhImpl = runGh,
+  runDetailsImpl = runDetails,
 } = {}) {
+  if (!Number.isInteger(attempts) || attempts < 1 || typeof wait !== 'function') {
+    throw new Error('Dispatch reconciliation options are invalid.')
+  }
   const exactRunId = parseDispatchedRunId(dispatchOutput)
-  for (let attempt = 1; attempt <= 12; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     if (exactRunId !== null) {
       try {
-        const details = await runDetails(exactRunId)
+        const details = await runDetailsImpl(exactRunId)
         return validateDispatchedRun(details, contract, expectedTitle, commitSha, exactRunId)
       } catch (error) {
-        if (attempt === 12 || /does not match/.test(String(error?.message || ''))) throw error
+        if (attempt === attempts || /does not match/.test(String(error?.message || ''))) throw error
       }
     } else {
-      const raw = await runGh([
+      const raw = await runGhImpl([
         'run', 'list', '--repo', REPOSITORY, '--workflow', contract.workflow, '--branch', 'main',
         '--event', 'workflow_dispatch', '--limit', '100',
         '--json', 'databaseId,displayTitle,headSha,status,conclusion,createdAt,updatedAt,attempt,event,headBranch,url,workflowName',
@@ -758,7 +772,7 @@ async function findDispatchedRun(contract, expectedTitle, commitSha, {
         return validateDispatchedRun(matches[0], contract, expectedTitle, commitSha)
       }
     }
-    if (attempt < 12) await new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000))
+    if (attempt < attempts) await wait(DISPATCH_RECONCILIATION_INTERVAL_MS)
   }
   throw new Error('The exact supervised workflow run did not appear in GitHub.')
 }
