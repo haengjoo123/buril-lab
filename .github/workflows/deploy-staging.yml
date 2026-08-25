@@ -1,15 +1,30 @@
 name: Deploy staging
 
+run-name: Deploy staging ${{ inputs.commit_sha }} (lease=${{ inputs.lease_id }}, storage-backup=${{ inputs.deploy_storage_backup }})
+
 on:
-  workflow_run:
-    workflows:
-      - Quality and security
-    types:
-      - completed
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Lowercase full SHA at the current main tip with a successful Quality and security run
+        required: true
+        type: string
+      confirmation:
+        description: Type "DEPLOY buril-lab-staging <SHA> LEASE <LEASE> WITH EPHEMERAL TOKENS"
+        required: true
+        type: string
+      lease_id:
+        description: Fresh 32-character lowercase hex lease prepared by the cleanup supervisor
+        required: true
+        type: string
+      deploy_storage_backup:
+        description: Also deploy and verify the OFF-only Staging storage backup Worker
+        required: true
+        type: boolean
+        default: false
 
 permissions:
+  actions: read
   contents: read
   deployments: write
 
@@ -18,24 +33,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy verified commit to buril-lab-staging
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+  build:
+    name: Build exact Staging artifact without deployment credentials
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     environment:
       name: staging
-      url: https://staging.burillab.com
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.upload-release-artifact.outputs.artifact-id }}
+      artifact_service_digest: ${{ steps.upload-release-artifact.outputs.artifact-digest }}
+      manifest_sha256: ${{ steps.release-artifact-manifest.outputs.manifest_sha256 }}
     env:
+      BASH_ENV: /dev/null
+      ENV: /dev/null
+      NODE_OPTIONS: ""
       DEPLOY_ENVIRONMENT: staging
-      DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
-      CLOUDFLARE_PAGES_PROJECT: buril-lab-staging
-      STAGING_KOSHA_CONTENT_MODE: link_only
-      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       VITE_PUBLIC_APP_URL: https://staging.burillab.com
@@ -47,58 +62,66 @@ jobs:
       VITE_ENABLE_SEARCH_ANALYTICS: ${{ vars.VITE_ENABLE_SEARCH_ANALYTICS }}
 
     steps:
-      - name: Check out the exact quality-approved commit
-        uses: actions/checkout@v4
+      - name: Validate the credential-free Staging build request
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REPOSITORY" != "haengjoo123/buril-lab" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Staging artifacts must be built by a manual dispatch from protected main" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
+            echo "Workflow re-runs are forbidden; dispatch a new run" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_COMMIT_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
+            echo "Staging build must target the exact lowercase main SHA that dispatched this workflow" >&2
+            exit 1
+          fi
+
+      - name: Check out the exact Staging build commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify the commit is trusted main history
+      - name: Verify the Staging build commit is current main
         shell: bash
         run: |
           test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
           git fetch --no-tags origin main
           test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js for the Staging build
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
 
-      - name: Install locked dependencies
-        run: npm ci
-
-      - name: Verify environment-scoped deployment inputs
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
-          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
-          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
-          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
-          GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw
-        run: node scripts/verify-cloudflare-deploy-inputs.mjs
-
-      - name: Verify Pages control-plane safeguards before deployment
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
-          VERIFY_CURRENT_RUNTIME_BINDING: "false"
-        run: npm run ops:verify
-
-      - name: Verify Staging is protected by Cloudflare Access
-        shell: bash
-        run: |
-          node scripts/verify-staging-access.mjs "https://staging.burillab.com/release.json?access-probe=$DEPLOY_COMMIT_SHA"
-          node scripts/verify-staging-access.mjs "https://buril-lab-staging.pages.dev/release.json?access-probe=$DEPLOY_COMMIT_SHA"
+      - name: Install locked Staging build dependencies
+        run: npm ci --ignore-scripts
 
       - name: Build the Staging artifact
         run: npm run build
+
+      - name: Compile Staging Pages Functions without deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e dist/_worker.js
+          test ! -e dist/_routes.json
+          test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" pages functions build functions \
+            --outdir "$GITHUB_WORKSPACE/dist/_worker.js" \
+            --output-routes-path "$GITHUB_WORKSPACE/dist/_routes.json" \
+            --compatibility-date 2026-08-24 \
+            --compatibility-flag nodejs_compat
+          test -s dist/_worker.js/index.js
+          node scripts/verify-pages-functions-routes.mjs dist/_routes.json
+          if [[ -n "$(/usr/bin/find dist/_worker.js -mindepth 1 ! -type f ! -type d -print -quit)" ]]; then
+            echo "Compiled Staging Pages Worker contains an unsupported file type" >&2
+            exit 1
+          fi
 
       - name: Attach and verify the public release identity
         shell: bash
@@ -113,20 +136,269 @@ jobs:
             --commit "$DEPLOY_COMMIT_SHA" \
             --environment staging
 
-      - name: Materialize the Staging Wrangler config
-        env:
-          BURILLAB_STAGING_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
-        run: >-
-          node scripts/render-wrangler-config.mjs
-          --input wrangler.staging.jsonc
-          --output wrangler.staging.generated.jsonc
-          --pages-deploy-redirect .wrangler/deploy/config.json
+      - name: Create the exact Staging artifact manifest
+        id: release-artifact-manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d dist ]] || [[ -n "$(/usr/bin/find dist -mindepth 1 ! -type f ! -type d -print -quit)" ]]; then
+            echo "Staging artifact must contain only regular files and directories" >&2
+            exit 1
+          fi
+          /usr/bin/find dist -type f -print0 | node scripts/verify-release-artifact-paths.mjs
+          /usr/bin/find dist -type f -print0 \
+            | LC_ALL=C /usr/bin/sort -z \
+            | /usr/bin/xargs -0 /usr/bin/sha256sum > .release-artifact.sha256
+          test -s .release-artifact.sha256
+          manifest_sha256="$(/usr/bin/sha256sum .release-artifact.sha256 | /usr/bin/cut -d ' ' -f 1)"
+          [[ "$manifest_sha256" =~ ^[0-9a-f]{64}$ ]]
+          echo "manifest_sha256=$manifest_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Compile Pages Functions with the selected binding
-        run: >-
-          npx wrangler pages functions build functions
-          --config wrangler.staging.generated.jsonc
-          --outdir "$GITHUB_WORKSPACE/.wrangler/pages-functions-staging"
+      - name: Upload the exact Staging release artifact
+        id: upload-release-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: buril-lab-staging-${{ inputs.commit_sha }}
+          path: |
+            dist
+            .release-artifact.sha256
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+          overwrite: false
+
+  deploy:
+    name: Supervised deploy of verified commit to buril-lab-staging
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: staging
+      url: https://staging.burillab.com
+    env:
+      BASH_ENV: /dev/null
+      ENV: /dev/null
+      NODE_OPTIONS: ""
+      DEPLOY_ENVIRONMENT: staging
+      DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
+      DEPLOY_CONFIRMATION: ${{ inputs.confirmation }}
+      DEPLOY_LEASE_ID: ${{ inputs.lease_id }}
+      DEPLOY_STORAGE_BACKUP: ${{ inputs.deploy_storage_backup }}
+      EPHEMERAL_LEASE_GRANT: ${{ vars.EPHEMERAL_LEASE_GRANT }}
+      EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}
+      CLOUDFLARE_PAGES_PROJECT: buril-lab-staging
+      STAGING_KOSHA_CONTENT_MODE: link_only
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_PUBLIC_APP_URL: https://staging.burillab.com
+      VITE_INTERNAL_API_BASE_URL: https://staging.burillab.com
+      VITE_AUTH_REDIRECT_URL: https://staging.burillab.com/auth/callback
+      VITE_ENABLE_WASTE_V2: ${{ vars.VITE_ENABLE_WASTE_V2 }}
+      VITE_ENABLE_PH_PREDICTION: ${{ vars.VITE_ENABLE_PH_PREDICTION }}
+      VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
+      VITE_ENABLE_SEARCH_ANALYTICS: ${{ vars.VITE_ENABLE_SEARCH_ANALYTICS }}
+
+    steps:
+      - name: Validate the supervised Staging confirmation
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REPOSITORY" != "haengjoo123/buril-lab" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Staging deployment must be a manual dispatch from the protected main branch in the canonical repository" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
+            echo "Workflow re-runs are forbidden; create a fresh lease and dispatch a new run" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit_sha must be a lowercase, full Git SHA" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_LEASE_ID" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "lease_id must be fresh lowercase hex" >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
+            echo "Staging can deploy only the current main SHA that dispatched this workflow" >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_CONFIRMATION" != "DEPLOY buril-lab-staging $DEPLOY_COMMIT_SHA LEASE $DEPLOY_LEASE_ID WITH EPHEMERAL TOKENS" ]]; then
+            echo "Staging confirmation did not acknowledge the exact SHA, lease, and ephemeral-token lifecycle" >&2
+            exit 1
+          fi
+
+      - name: Check out the exact quality-approved commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the commit is trusted main history
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Capture the clean Staging deploy runner boundary
+        id: deploy-runner-boundary
+        shell: bash
+        run: |
+          if [[ "${BASH_ENV:-}" != "/dev/null" || "${ENV:-}" != "/dev/null" || -n "${NODE_OPTIONS:-}" || "$PATH" == *$'\n'* || "$PATH" == *$'\r'* ]]; then
+            echo "Staging deploy runner startup environment is unsafe" >&2
+            exit 1
+          fi
+          echo "trusted_path=$PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download the exact Staging release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: ${{ runner.temp }}/burillab-release-artifact
+          merge-multiple: true
+
+      - name: Independently verify the uploaded Staging artifact archive digest
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+          EXPECTED_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          EXPECTED_ARTIFACT_SERVICE_DIGEST: ${{ needs.build.outputs.artifact_service_digest }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/git diff --quiet --exit-code
+          /usr/bin/git diff --cached --quiet --exit-code
+          printf '%s  %s\n' 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe' scripts/verify-github-artifact-digest.mjs \
+            | /usr/bin/sha256sum --check --strict
+          node scripts/verify-github-artifact-digest.mjs
+
+      - name: Verify and activate the exact Staging release artifact
+        env:
+          ARTIFACT_ROOT: ${{ runner.temp }}/burillab-release-artifact
+          EXPECTED_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          EXPECTED_ARTIFACT_SERVICE_DIGEST: ${{ needs.build.outputs.artifact_service_digest }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_ARTIFACT_SERVICE_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test -d "$ARTIFACT_ROOT/dist"
+          test -f "$ARTIFACT_ROOT/.release-artifact.sha256"
+          test -s "$ARTIFACT_ROOT/dist/_worker.js/index.js"
+          node scripts/verify-pages-functions-routes.mjs "$ARTIFACT_ROOT/dist/_routes.json"
+          if [[ -n "$(/usr/bin/find "$ARTIFACT_ROOT" -mindepth 1 -maxdepth 1 ! -name dist ! -name .release-artifact.sha256 -print -quit)" ]] \
+            || [[ -n "$(/usr/bin/find "$ARTIFACT_ROOT/dist" -mindepth 1 ! -type f ! -type d -print -quit)" ]]; then
+            echo "Downloaded Staging artifact contains an unapproved entry" >&2
+            exit 1
+          fi
+          (
+            cd "$ARTIFACT_ROOT"
+            /usr/bin/find dist -type f -print0 \
+              | node "$GITHUB_WORKSPACE/scripts/verify-release-artifact-paths.mjs"
+          )
+          printf '%s  %s\n' "$EXPECTED_MANIFEST_SHA256" "$ARTIFACT_ROOT/.release-artifact.sha256" \
+            | /usr/bin/sha256sum --check --strict
+          manifest_count="$(/usr/bin/wc -l < "$ARTIFACT_ROOT/.release-artifact.sha256")"
+          file_count="$(/usr/bin/find "$ARTIFACT_ROOT/dist" -type f | /usr/bin/wc -l)"
+          [[ "$manifest_count" = "$file_count" ]]
+          (
+            cd "$ARTIFACT_ROOT"
+            /usr/bin/sha256sum --check --strict .release-artifact.sha256
+          )
+          node scripts/verify-release-manifest.mjs \
+            --file "$ARTIFACT_ROOT/dist/release.json" \
+            --commit "$DEPLOY_COMMIT_SHA" \
+            --environment staging
+          test ! -e dist
+          /usr/bin/mv "$ARTIFACT_ROOT/dist" dist
+
+      - name: Verify the signed current ephemeral lease
+        run: node scripts/verify-ephemeral-lease-grant.mjs
+
+      - name: Verify the signed cumulative credential cleanup receipt
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-ephemeral-cleanup-receipt.mjs
+
+      - name: Verify the exact commit passed trusted main quality
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Verify the current Staging Supabase Advisor state
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}
+        run: |
+          node scripts/verify-ephemeral-supabase-lease.mjs
+          npm run security:supabase-advisors:hosted -- --environment staging
+
+      - name: Verify environment-scoped deployment inputs
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_EPHEMERAL_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw
+        run: node scripts/verify-cloudflare-deploy-inputs.mjs
+
+      - name: Verify Pages control-plane safeguards before deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          VERIFY_CURRENT_RUNTIME_BINDING: "false"
+        run: npm run ops:verify
+
+      - name: Verify Staging is protected by Cloudflare Access
+        shell: bash
+        run: |
+          node scripts/verify-staging-access.mjs "https://staging.burillab.com/release.json?access-probe=$DEPLOY_COMMIT_SHA"
+          node scripts/verify-staging-access.mjs "https://buril-lab-staging.pages.dev/release.json?access-probe=$DEPLOY_COMMIT_SHA"
 
       - name: Recheck that Staging still targets the current main tip
         shell: bash
@@ -134,39 +406,159 @@ jobs:
           git fetch --no-tags origin main
           test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
 
-      - name: Deploy the exact commit to Staging Pages
+      - name: Recheck the exact commit still passes trusted main quality
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Recheck the current Staging Supabase Advisor state before Pages deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}
+        run: |
+          node scripts/verify-ephemeral-supabase-lease.mjs
+          npm run security:supabase-advisors:hosted -- --environment staging
+
+      - name: Recheck the active Staging Pages token and deployment inputs at the mutation boundary
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          EPHEMERAL_LEASE_MIN_REMAINING_SECONDS: "600"
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PAGES_EPHEMERAL_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw
+        run: node scripts/verify-cloudflare-deploy-inputs.mjs
+
+      - name: Recheck the signed Staging cleanup receipt at the Pages mutation boundary
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-ephemeral-cleanup-receipt.mjs
+
+      - name: Recheck the signed Staging lease with ten minutes remaining for Pages mutation
+        env:
+          EPHEMERAL_LEASE_MIN_REMAINING_SECONDS: "600"
+        run: node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600
+
+      - name: Materialize the Staging Wrangler config after final guards
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          BURILLAB_STAGING_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
         run: >-
-          npx wrangler pages deploy dist
-          --project-name "$CLOUDFLARE_PAGES_PROJECT"
-          --branch main
-          --commit-hash "$DEPLOY_COMMIT_SHA"
-          --commit-message "quality-approved Staging deployment"
-          --commit-dirty=false
+          /usr/bin/timeout --signal=TERM --kill-after=5s 30s
+          node scripts/render-wrangler-config.mjs
+          --input wrangler.staging.jsonc
+          --output wrangler.staging.generated.jsonc
+          --pages-deploy-redirect .wrangler/deploy/config.json
+
+      - name: Deploy the exact commit to Staging Pages
+        id: pages-deploy-command
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/burillab-staging-pages-deploy.jsonl
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/git diff --quiet --exit-code
+          /usr/bin/git diff --cached --quiet --exit-code
+          printf '%s  %s\n' 'f4c12e353d2caf18b1dc47a3bdc1a00a88e58c09cc675e5998ff16915e63cacf' scripts/verify-wrangler-pages-deploy-output.mjs \
+            | /usr/bin/sha256sum --check --strict
+          test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          test -s dist/_worker.js/index.js
+          test -d functions
+          test ! -e "$WRANGLER_OUTPUT_FILE_PATH"
+          /usr/bin/timeout --signal=TERM --kill-after=5s 30s git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+          deploy_message="quality-approved staging run $GITHUB_RUN_ID lease $DEPLOY_LEASE_ID"
+          deploy_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          disabled_functions="$RUNNER_TEMP/burillab-pages-functions-$GITHUB_RUN_ID"
+          test ! -e "$disabled_functions"
+          /usr/bin/mv functions "$disabled_functions"
+          restore_functions() {
+            if [[ -d "$disabled_functions" && ! -e functions ]]; then
+              /usr/bin/mv "$disabled_functions" functions
+            fi
+          }
+          trap restore_functions EXIT
+          test ! -e functions
+          env -u CLOUDFLARE_API_TOKEN \
+            /usr/bin/timeout --signal=TERM --kill-after=5s 15s \
+              node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600
+          /usr/bin/timeout --signal=TERM --kill-after=15s 540s \
+            "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" pages deploy dist \
+              --project-name "$CLOUDFLARE_PAGES_PROJECT" \
+              --branch main \
+              --commit-hash "$DEPLOY_COMMIT_SHA" \
+              --commit-message "$deploy_message" \
+              --commit-dirty=false \
+              --no-bundle
+          restore_functions
+          trap - EXIT
+          test -d functions
+          env -u CLOUDFLARE_API_TOKEN node scripts/verify-wrangler-pages-deploy-output.mjs \
+            --file "$WRANGLER_OUTPUT_FILE_PATH" \
+            --commit "$DEPLOY_COMMIT_SHA" \
+            --environment staging \
+            --project "$CLOUDFLARE_PAGES_PROJECT" \
+            --started-at "$deploy_started_at"
 
       - name: Resolve the immutable Staging deployment URL
         id: staging-deployment
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
+          /usr/bin/git diff --quiet --exit-code
+          /usr/bin/git diff --cached --quiet --exit-code
+          printf '%s  %s\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs \
+            | /usr/bin/sha256sum --check --strict
           evidence_found=false
           for attempt in 1 2 3 4 5 6; do
-            if curl --fail-with-body --silent --show-error --proto '=https' \
-              --connect-timeout 10 \
-              --max-time 30 \
-              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              --header "Accept: application/json" \
-              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production" \
-              | node scripts/read-pages-deployment.mjs \
+            if node scripts/cloudflare-api-get.mjs \
+              --include-status false \
+              --url "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT/deployments?env=production" \
+              | env -u CLOUDFLARE_API_TOKEN node scripts/read-pages-deployment.mjs \
                 --file - \
                 --commit "$DEPLOY_COMMIT_SHA" \
                 --environment staging \
-                --project "$CLOUDFLARE_PAGES_PROJECT"; then
+                --project "$CLOUDFLARE_PAGES_PROJECT" \
+                --deployment-id "${{ steps.pages-deploy-command.outputs.deployment_id }}" \
+                --deployment-url "${{ steps.pages-deploy-command.outputs.deployment_url }}" \
+                --not-before "${{ steps.pages-deploy-command.outputs.deployment_started_at }}" \
+                --commit-message "quality-approved staging run $GITHUB_RUN_ID lease $DEPLOY_LEASE_ID"; then
               evidence_found=true
               break
             fi
@@ -186,6 +578,10 @@ jobs:
 
       - name: Verify the protected Staging release manifest
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
           STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
         run: >-
@@ -198,12 +594,20 @@ jobs:
 
       - name: Verify the Staging KOSHA link-only runtime contract
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
           STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
         run: node scripts/verify-staging-kosha-link-only.mjs
 
       - name: Verify the protected Pages subdomain serves the same SHA
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
           STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
         run: >-
@@ -216,6 +620,10 @@ jobs:
 
       - name: Verify the immutable deployment URL serves the same SHA
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
           STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
         run: >-
@@ -226,11 +634,28 @@ jobs:
           --retries 6
           --retry-delay-ms 5000
 
+      - name: Verify the applied Staging KV binding remains isolated
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          VERIFY_CURRENT_RUNTIME_BINDING: "true"
+        run: npm run ops:verify
+
+
       - name: Install the Staging browser runtime
         run: npx playwright install --with-deps chromium
 
       - name: Reset the exact Staging Gate 0 synthetic fixture for the custom domain
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
           GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
@@ -240,6 +665,10 @@ jobs:
 
       - name: Run the protected custom-domain Staging Gate 0 browser flow
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           GATE0_BASE_URL: https://staging.burillab.com
           GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
           GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
@@ -252,6 +681,10 @@ jobs:
 
       - name: Reset the exact Staging Gate 0 synthetic fixture for the immutable deployment
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
           GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
@@ -261,6 +694,10 @@ jobs:
 
       - name: Run the protected immutable-deployment Staging Gate 0 browser flow
         env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
           GATE0_BASE_URL: ${{ steps.staging-deployment.outputs.deployment_url }}
           GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
           GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
@@ -271,17 +708,427 @@ jobs:
           STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
         run: npm run test:e2e:gate0:staging
 
-      - name: Verify the applied Staging KV binding remains isolated
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
-          VERIFY_CURRENT_RUNTIME_BINDING: "true"
-        run: npm run ops:verify
-
-      - name: Record deployment evidence
+      - name: Record Pages deployment evidence
         shell: bash
         run: |
           echo "- Environment: staging" >> "$GITHUB_STEP_SUMMARY"
           echo "- Pages project: $CLOUDFLARE_PAGES_PROJECT" >> "$GITHUB_STEP_SUMMARY"
           echo "- Release commit: \`$DEPLOY_COMMIT_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record cleanup pending before the next lease
+        if: always()
+        shell: bash
+        run: |
+          echo "::warning::The next lease is blocked until every temporary GitHub secret is absent, both provider tokens are inactive, and the cleanup receipt matches this run."
+          echo "- Cleanup pending: remove every temporary Cloudflare and Supabase token secret, revoke the provider tokens, verify inactivity, and record the receipt for this exact run." >> "$GITHUB_STEP_SUMMARY"
+
+  worker:
+    name: Supervised fresh-runner deploy of the OFF-only Staging backup Worker
+    needs: deploy
+    if: ${{ inputs.deploy_storage_backup }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+    env:
+      BASH_ENV: /dev/null
+      ENV: /dev/null
+      NODE_OPTIONS: ""
+      DEPLOY_ENVIRONMENT: staging
+      DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
+      DEPLOY_CONFIRMATION: ${{ inputs.confirmation }}
+      DEPLOY_LEASE_ID: ${{ inputs.lease_id }}
+      DEPLOY_STORAGE_BACKUP: ${{ inputs.deploy_storage_backup }}
+      EPHEMERAL_LEASE_GRANT: ${{ vars.EPHEMERAL_LEASE_GRANT }}
+      EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}
+
+    steps:
+      - name: Validate the supervised Staging Worker confirmation
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REPOSITORY" != "haengjoo123/buril-lab" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Staging Worker deployment must be a manual dispatch from protected main" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" || "$DEPLOY_STORAGE_BACKUP" != "true" ]]; then
+            echo "Staging Worker deployment requires a fresh explicit true request" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_COMMIT_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
+            echo "Staging Worker deployment must target the exact lowercase main SHA" >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_LEASE_ID" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "lease_id must be fresh lowercase hex" >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_CONFIRMATION" != "DEPLOY buril-lab-staging $DEPLOY_COMMIT_SHA LEASE $DEPLOY_LEASE_ID WITH EPHEMERAL TOKENS" ]]; then
+            echo "Staging Worker confirmation does not match the supervised lease" >&2
+            exit 1
+          fi
+
+      - name: Check out the exact Worker deployment commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the Worker commit is current main
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+
+      - name: Set up Node.js for the Worker deployment
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Capture the clean Staging Worker runner boundary
+        id: worker-runner-boundary
+        shell: bash
+        run: |
+          if [[ "${BASH_ENV:-}" != "/dev/null" || "${ENV:-}" != "/dev/null" || -n "${NODE_OPTIONS:-}" || "$PATH" == *$'\n'* || "$PATH" == *$'\r'* ]]; then
+            echo "Staging Worker runner startup environment is unsafe" >&2
+            exit 1
+          fi
+          echo "trusted_path=$PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Install locked Worker dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify the signed Worker lease
+        run: node scripts/verify-ephemeral-lease-grant.mjs
+
+      - name: Verify the signed Worker cleanup receipt
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-ephemeral-cleanup-receipt.mjs
+
+      - name: Verify trusted main quality for the Worker
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Verify the current Staging Supabase Advisor state for the Worker
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}
+        run: |
+          node scripts/verify-ephemeral-supabase-lease.mjs
+          npm run security:supabase-advisors:hosted -- --environment staging
+
+      - name: Verify the explicitly requested Worker ephemeral token
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_EPHEMERAL_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          VERIFY_CLOUDFLARE_DEPLOY_INPUT_SCOPE: worker
+        run: node scripts/verify-cloudflare-deploy-inputs.mjs
+
+      - name: Verify Staging storage backup remains exactly OFF before Worker deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_config_json="$(
+            /usr/bin/timeout --signal=TERM --kill-after=5s 30s \
+              "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" kv key get runtime_config \
+              --config workers/storage-backup/wrangler.staging.jsonc \
+              --namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID" \
+              --remote \
+              --text
+          )"
+          STORAGE_BACKUP_RUNTIME_CONFIG_JSON="$runtime_config_json" \
+            node scripts/verify-storage-backup-runtime-off.mjs
+
+      - name: Verify no unapproved Staging Worker secrets exist before deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          STORAGE_BACKUP_WORKER_NAME: buril-lab-storage-backup-staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/git diff --quiet --exit-code
+          /usr/bin/git diff --cached --quiet --exit-code
+          printf '%s  %s\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs \
+            | /usr/bin/sha256sum --check --strict
+          worker_secret_response="$(
+            node scripts/cloudflare-api-get.mjs \
+              --include-status true \
+              --url "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$STORAGE_BACKUP_WORKER_NAME/secrets"
+          )"
+          worker_secret_status="${worker_secret_response##*$'\n'}"
+          worker_secret_body="${worker_secret_response%$'\n'*}"
+          STORAGE_BACKUP_SECRET_PREFLIGHT_JSON="$worker_secret_body" \
+            STORAGE_BACKUP_SECRET_PREFLIGHT_STATUS="$worker_secret_status" \
+            env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-worker-deployment.mjs preflight
+
+      - name: Recheck that Staging still targets the current main tip before backup Worker deployment
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+
+      - name: Recheck trusted main quality before backup Worker deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Recheck the current Staging Supabase Advisor state before backup Worker deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}
+        run: |
+          node scripts/verify-ephemeral-supabase-lease.mjs
+          npm run security:supabase-advisors:hosted -- --environment staging
+
+      - name: Recheck the active Worker token set at the mutation boundary
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          EPHEMERAL_LEASE_MIN_REMAINING_SECONDS: "600"
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_EPHEMERAL_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          VERIFY_CLOUDFLARE_DEPLOY_INPUT_SCOPE: worker
+        run: node scripts/verify-cloudflare-deploy-inputs.mjs
+
+      - name: Recheck Staging storage backup is exactly OFF at the mutation boundary
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          runtime_config_json="$(
+            /usr/bin/timeout --signal=TERM --kill-after=5s 30s \
+              "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" kv key get runtime_config \
+                --config workers/storage-backup/wrangler.staging.jsonc \
+                --namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID" \
+                --remote \
+                --text
+          )"
+          STORAGE_BACKUP_RUNTIME_CONFIG_JSON="$runtime_config_json" \
+            env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-runtime-off.mjs
+
+      - name: Recheck the signed Worker cleanup receipt at the mutation boundary
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-ephemeral-cleanup-receipt.mjs
+
+      - name: Create isolated temporary Worker secret file
+        id: storage-backup-secret-file
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/storage-backup-secret-file.mjs create
+
+      - name: Recheck the signed Worker lease with ten minutes remaining for mutation
+        env:
+          EPHEMERAL_LEASE_MIN_REMAINING_SECONDS: "600"
+        run: node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600
+
+      - name: Deploy the OFF-only Staging storage backup Worker
+        id: worker-deploy-command
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          STORAGE_BACKUP_WORKER_NAME: buril-lab-storage-backup-staging
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/burillab-staging-worker-deploy.jsonl
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          test ! -e "$WRANGLER_OUTPUT_FILE_PATH"
+          /usr/bin/timeout --signal=TERM --kill-after=5s 30s git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+          worker_tag="r$GITHUB_RUN_ID-l$DEPLOY_LEASE_ID"
+          worker_message="quality-approved staging storage backup run $GITHUB_RUN_ID lease $DEPLOY_LEASE_ID commit $DEPLOY_COMMIT_SHA"
+          worker_deploy_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          env -u CLOUDFLARE_API_TOKEN \
+            /usr/bin/timeout --signal=TERM --kill-after=5s 15s \
+              node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600
+          /usr/bin/timeout --signal=TERM --kill-after=15s 540s \
+            "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" deploy \
+            --config workers/storage-backup/wrangler.staging.jsonc \
+            --secrets-file "${{ steps.storage-backup-secret-file.outputs.secret_file }}" \
+            --strict \
+            --autoconfig=false \
+            --tag "$worker_tag" \
+            --message "$worker_message"
+          WORKER_DEPLOY_STARTED_AT="$worker_deploy_started_at" \
+            env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-worker-deployment.mjs wrangler-output
+
+      - name: Always remove temporary Worker secret material
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          STORAGE_BACKUP_SECRET_FILE: ${{ steps.storage-backup-secret-file.outputs.secret_file }}
+        run: node scripts/storage-backup-secret-file.mjs cleanup
+
+      - name: Verify the active Staging storage backup Worker deployment
+        id: storage-backup-deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          STORAGE_BACKUP_WORKER_NAME: buril-lab-storage-backup-staging
+          EXPECTED_WORKER_VERSION_ID: ${{ steps.worker-deploy-command.outputs.worker_version_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/git diff --quiet --exit-code
+          /usr/bin/git diff --cached --quiet --exit-code
+          printf '%s  %s\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs \
+            | /usr/bin/sha256sum --check --strict
+          cloudflare_worker_surface_get() {
+            local surface="$1"
+            local endpoint
+            case "$surface" in
+              bindings) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/bindings" ;;
+              routes) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/routes?show_zonename=true" ;;
+              domains) endpoint="workers/domains/records?page=0&per_page=5&service=$STORAGE_BACKUP_WORKER_NAME&environment=production" ;;
+              subdomain) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/subdomain" ;;
+              service) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production" ;;
+              schedules) endpoint="workers/scripts/$STORAGE_BACKUP_WORKER_NAME/schedules" ;;
+              *) echo "Refusing an unapproved Worker control-plane surface." >&2; return 64 ;;
+            esac
+            node scripts/cloudflare-api-get.mjs \
+              --include-status false \
+              --url "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/$endpoint"
+          }
+          worker_verified=false
+          for attempt in 1 2 3 4 5 6; do
+            if deployment_json="$(/usr/bin/timeout --signal=TERM --kill-after=5s 30s "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" deployments status --config workers/storage-backup/wrangler.staging.jsonc --name "$STORAGE_BACKUP_WORKER_NAME" --json)" \
+              && versions_json="$(/usr/bin/timeout --signal=TERM --kill-after=5s 30s "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" versions list --config workers/storage-backup/wrangler.staging.jsonc --name "$STORAGE_BACKUP_WORKER_NAME" --json)" \
+              && secrets_json="$(/usr/bin/timeout --signal=TERM --kill-after=5s 30s "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" secret list --config workers/storage-backup/wrangler.staging.jsonc --name "$STORAGE_BACKUP_WORKER_NAME" --format json)" \
+              && bindings_json="$(cloudflare_worker_surface_get bindings)" \
+              && routes_json="$(cloudflare_worker_surface_get routes)" \
+              && domains_json="$(cloudflare_worker_surface_get domains)" \
+              && subdomain_json="$(cloudflare_worker_surface_get subdomain)" \
+              && service_json="$(cloudflare_worker_surface_get service)" \
+              && schedules_json="$(cloudflare_worker_surface_get schedules)" \
+              && STORAGE_BACKUP_DEPLOYMENT_JSON="$deployment_json" \
+              STORAGE_BACKUP_VERSIONS_JSON="$versions_json" \
+              STORAGE_BACKUP_SECRETS_JSON="$secrets_json" \
+              STORAGE_BACKUP_BINDINGS_JSON="$bindings_json" \
+              STORAGE_BACKUP_ROUTES_JSON="$routes_json" \
+              STORAGE_BACKUP_DOMAINS_JSON="$domains_json" \
+              STORAGE_BACKUP_SUBDOMAIN_JSON="$subdomain_json" \
+              STORAGE_BACKUP_SERVICE_JSON="$service_json" \
+              STORAGE_BACKUP_SCHEDULES_JSON="$schedules_json" \
+              env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-worker-deployment.mjs active; then
+              worker_verified=true
+              break
+            fi
+            if [[ "$attempt" -lt 6 ]]; then sleep 5; fi
+          done
+          if [[ "$worker_verified" != true ]]; then
+            echo "The exact Staging storage backup Worker deployment did not become verifiable." >&2
+            exit 1
+          fi
+
+      - name: Verify Staging storage backup remains exactly OFF after Worker deployment
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.worker-runner-boundary.outputs.trusted_path }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_config_json="$(
+            /usr/bin/timeout --signal=TERM --kill-after=5s 30s \
+              "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" kv key get runtime_config \
+              --config workers/storage-backup/wrangler.staging.jsonc \
+              --namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID" \
+              --remote \
+              --text
+          )"
+          STORAGE_BACKUP_RUNTIME_CONFIG_JSON="$runtime_config_json" \
+            node scripts/verify-storage-backup-runtime-off.mjs
+
+      - name: Record optional storage backup Worker evidence
+        shell: bash
+        run: |
+          echo "- Storage backup Worker: ${{ steps.storage-backup-deployment.outputs.worker_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Worker deployment: \`${{ steps.storage-backup-deployment.outputs.deployment_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Worker version: \`${{ steps.storage-backup-deployment.outputs.version_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Storage backup switch: exact OFF" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record Worker cleanup pending before the next lease
+        if: always()
+        shell: bash
+        run: |
+          echo "::warning::Worker credential cleanup is required before the next lease."
+          echo "- Worker cleanup pending: revoke and remove the temporary Worker token and record this exact run." >> "$GITHUB_STEP_SUMMARY"

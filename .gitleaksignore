@@ -9,3 +9,4 @@ ade9fe3142cd1d75c930513322c1faca5038bf99:scripts/scrape_welgene.js:jwt:33
 2cbc86fa6d9dc91a55dd59b68a78a181144febb0:functions/api/analytics/_shared.test.ts:jwt:22
 35b3d72d3f446115c901482c4b3a37eaf1f28fd1:supabase/tests/waste_disposal_v2_verification.sql:generic-api-key:218
 35b3d72d3f446115c901482c4b3a37eaf1f28fd1:supabase/migrations/20260801162628_waste_disposal_v2_security_and_schema.sql:generic-api-key:561
+93ea565951d70ef1ac096187e56e9244a79fc9f9:scripts/verify-cloudflare-release-config.mjs:generic-api-key:53

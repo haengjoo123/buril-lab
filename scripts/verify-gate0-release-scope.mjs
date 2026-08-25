@@ -40,7 +40,9 @@ const forbiddenChangedPathPatterns = [
   /^src\/utils\/(?:barcodeScan|monthlySafetyReportExport|publicRoutes|voiceWasteDraft)/u,
   /^supabase\/deferred_migrations\//u,
   /^public\/_headers$/u,
-  /^workers\//u,
+  // The backup Worker remains OFF-only and is checked separately by
+  // storage-backup:check. Any other Worker still belongs to a later gate.
+  /^workers\/(?!storage-backup(?:\/|$))/u,
 ]
 
 for (const file of changedFiles()) {

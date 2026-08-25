@@ -56,6 +56,12 @@ function isImmutablePagesHostname(hostname, pagesApex) {
 export function findPagesDeployment(payload, commitSha, {
   environment = 'staging',
   project = DEPLOYMENT_TARGETS[environment]?.project,
+  deploymentId,
+  deploymentUrl,
+  notBefore,
+  notAfter,
+  commitMessage,
+  now = Date.now(),
 } = {}) {
   if (!FULL_SHA_PATTERN.test(commitSha)) {
     throw new Error('Expected deployment commit must be a lowercase, full Git SHA.')
@@ -67,6 +73,57 @@ export function findPagesDeployment(payload, commitSha, {
   const deployments = Array.isArray(payload) ? payload : payload?.result
   if (!Array.isArray(deployments)) throw new Error('Pages deployment list has an unexpected shape.')
 
+  const hasId = deploymentId !== undefined
+  const hasUrl = deploymentUrl !== undefined
+  const hasBoundary = notBefore !== undefined || notAfter !== undefined || commitMessage !== undefined
+  if (
+    hasId !== hasUrl
+    || (hasBoundary && (notBefore === undefined || commitMessage === undefined))
+    || ((hasId || hasUrl) && !hasBoundary)
+  ) {
+    throw new Error('Bound Pages deployment evidence requires a message and creation boundary, with ID and URL supplied together.')
+  }
+  const boundMode = hasBoundary
+  const exactMode = boundMode && hasId
+  let expectedUrl
+  let notBeforeTime
+  let notAfterTime
+  if (boundMode) {
+    if (exactMode) {
+      if (!DEPLOYMENT_ID_PATTERN.test(deploymentId)) throw new Error('Expected Pages deployment ID is malformed.')
+      try {
+        expectedUrl = new URL(deploymentUrl)
+      } catch {
+        throw new Error('Expected Pages deployment URL is malformed.')
+      }
+      if (
+        expectedUrl.origin !== deploymentUrl
+        || expectedUrl.pathname !== '/'
+        || !isImmutablePagesHostname(expectedUrl.hostname, target.pagesApex)
+      ) {
+        throw new Error('Expected Pages deployment URL is not an immutable deployment origin.')
+      }
+    }
+    notBeforeTime = Date.parse(notBefore)
+    notAfterTime = notAfter === undefined ? undefined : Date.parse(notAfter)
+    const nowTime = now instanceof Date ? now.getTime() : Number(now)
+    if (
+      !Number.isFinite(notBeforeTime)
+      || (notAfter !== undefined && (!Number.isFinite(notAfterTime) || notAfterTime < notBeforeTime))
+      || !Number.isFinite(nowTime)
+      || notBeforeTime > nowTime + 60_000
+      || typeof commitMessage !== 'string'
+      || commitMessage.length < 1
+      || commitMessage.length > 200
+      || /[\u0000-\u001f\u007f]/.test(commitMessage)
+    ) {
+      throw new Error('Exact Pages deployment creation boundary or commit message is invalid.')
+    }
+    if (notAfterTime !== undefined && notAfterTime > nowTime + 60_000) {
+      throw new Error('Exact Pages deployment completion boundary is invalid.')
+    }
+  }
+
   const matches = deployments
     .filter((deployment) => (
       deploymentCommit(deployment) === commitSha
@@ -74,6 +131,13 @@ export function findPagesDeployment(payload, commitSha, {
       && deployment?.environment === 'production'
       && deployment?.production_branch === 'main'
       && deployment?.deployment_trigger?.metadata?.branch === 'main'
+      && (!boundMode || deployment?.deployment_trigger?.metadata?.commit_message === commitMessage)
+      && (!boundMode || (
+        Number.isFinite(Date.parse(deployment?.created_on || ''))
+        && Date.parse(deployment.created_on) >= notBeforeTime
+        && (notAfterTime === undefined || Date.parse(deployment.created_on) <= notAfterTime)
+      ))
+      && (!exactMode || (deployment?.id === deploymentId && deployment?.url === deploymentUrl))
       && deployment?.latest_stage?.name === 'deploy'
       && deployment?.latest_stage?.status === 'success'
     ))
@@ -82,6 +146,9 @@ export function findPagesDeployment(payload, commitSha, {
       const leftTime = Date.parse(left.created_on || '')
       return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime)
     })
+  if (boundMode && matches.length > 1) {
+    throw new Error('Cloudflare returned duplicate evidence for the bound Pages deployment identity.')
+  }
   const deployment = matches[0]
   if (!deployment) {
     throw new Error(
@@ -145,6 +212,11 @@ export async function readPagesDeployment({
   commitSha,
   environment = 'staging',
   project = DEPLOYMENT_TARGETS[environment]?.project,
+  deploymentId,
+  deploymentUrl,
+  notBefore,
+  notAfter,
+  commitMessage,
   outputPath = process.env.GITHUB_OUTPUT,
   summaryPath = process.env.GITHUB_STEP_SUMMARY,
 }) {
@@ -157,7 +229,15 @@ export async function readPagesDeployment({
   } catch {
     throw new Error('Pages deployment evidence is not valid JSON.')
   }
-  const result = findPagesDeployment(deployments, commitSha, { environment, project })
+  const result = findPagesDeployment(deployments, commitSha, {
+    environment,
+    project,
+    deploymentId,
+    deploymentUrl,
+    notBefore,
+    notAfter,
+    commitMessage,
+  })
   if (outputPath) {
     await appendFile(
       outputPath,
@@ -198,12 +278,27 @@ async function main() {
   const commitSha = args.get('commit')
   const environment = args.get('environment')
   const project = args.get('project')
+  const deploymentId = args.get('deployment-id')
+  const deploymentUrl = args.get('deployment-url')
+  const notBefore = args.get('not-before')
+  const notAfter = args.get('not-after')
+  const commitMessage = args.get('commit-message')
   if (!file || !commitSha || !environment || !project) {
     throw new Error(
-      'Usage: node scripts/read-pages-deployment.mjs --file <json|-> --commit <sha> --environment <staging|production> --project <name>',
+      'Usage: node scripts/read-pages-deployment.mjs --file <json|-> --commit <sha> --environment <staging|production> --project <name> [--deployment-id <uuid> --deployment-url <url>] [--not-before <iso> --not-after <iso> --commit-message <message>]',
     )
   }
-  const deployment = await readPagesDeployment({ file, commitSha, environment, project })
+  const deployment = await readPagesDeployment({
+    file,
+    commitSha,
+    environment,
+    project,
+    deploymentId,
+    deploymentUrl,
+    notBefore,
+    notAfter,
+    commitMessage,
+  })
   console.log(`Selected Pages deployment ${deployment.id} for ${deployment.commitSha}.`)
 }
 

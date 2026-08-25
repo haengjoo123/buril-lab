@@ -1,0 +1,3 @@
+# Example name only. Deploy the real value atomically with the reviewed
+# `--secrets-file` workflow; never copy a backend key into this file.
+SUPABASE_SERVICE_ROLE_KEY=replace-with-dashboard-secret

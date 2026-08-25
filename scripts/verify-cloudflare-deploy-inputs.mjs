@@ -1,10 +1,18 @@
+import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { GATE0_STAGING_CONFIRMATION } from './gate0-seed-safety.mjs'
 import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
+import { verifyCloudflareTokenTtl } from './verify-cloudflare-token-ttl.mjs'
+import { verifyEphemeralLeaseGrant } from './verify-ephemeral-lease-grant.mjs'
 
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const CLOUDFLARE_ID_PATTERN = /^[0-9a-f]{32}$/
 const KOSHA_CONTENT_MODES = new Set(['full', 'link_only'])
+const LEGACY_CLOUDFLARE_TOKEN_NAMES = [
+  'CLOUDFLARE_API_TOKEN',
+  'STAGING_CLOUDFLARE_API_TOKEN',
+  'PRODUCTION_CLOUDFLARE_API_TOKEN',
+]
 const CLIENT_FEATURE_FLAGS = [
   'VITE_ENABLE_WASTE_V2',
   'VITE_ENABLE_PH_PREDICTION',
@@ -46,7 +54,39 @@ function exactUrl(raw, name, expectedUrl) {
   return parsed
 }
 
+function rejectLegacyCloudflareTokens(environment) {
+  for (const name of LEGACY_CLOUDFLARE_TOKEN_NAMES) {
+    if (environment[name]?.trim()) {
+      throw new Error(`${name} is a forbidden legacy long-lived deployment input.`)
+    }
+  }
+}
+
+function verifyCommonCloudflareTarget(environment, expectedEnvironment) {
+  rejectLegacyCloudflareTokens(environment)
+  const deploymentEnvironment = requireValue(environment, 'DEPLOY_ENVIRONMENT')
+  if (deploymentEnvironment !== expectedEnvironment) {
+    throw new Error(`DEPLOY_ENVIRONMENT must be exactly ${expectedEnvironment} for this token scope.`)
+  }
+  const expected = RELEASE_ENVIRONMENTS[deploymentEnvironment]
+  const accountId = requireValue(environment, 'CLOUDFLARE_ACCOUNT_ID')
+  if (!CLOUDFLARE_ID_PATTERN.test(accountId)) throw new Error('CLOUDFLARE_ACCOUNT_ID is malformed.')
+  const runtimeConfigKvId = requireValue(environment, 'BURILLAB_RUNTIME_CONFIG_KV_ID')
+  if (!CLOUDFLARE_ID_PATTERN.test(runtimeConfigKvId)) {
+    throw new Error('BURILLAB_RUNTIME_CONFIG_KV_ID is malformed.')
+  }
+  if (runtimeConfigKvId !== expected.runtimeConfigKvId) {
+    throw new Error('BURILLAB_RUNTIME_CONFIG_KV_ID is not the approved namespace for this environment.')
+  }
+  const commitSha = requireValue(environment, 'DEPLOY_COMMIT_SHA')
+  if (!FULL_SHA_PATTERN.test(commitSha)) {
+    throw new Error('DEPLOY_COMMIT_SHA must be a lowercase, full 40-character Git SHA.')
+  }
+  return { deploymentEnvironment, expected, accountId, runtimeConfigKvId, commitSha }
+}
+
 export function verifyCloudflareDeployInputs(environment) {
+  rejectLegacyCloudflareTokens(environment)
   const deploymentEnvironment = requireValue(environment, 'DEPLOY_ENVIRONMENT')
   if (!Object.hasOwn(RELEASE_ENVIRONMENTS, deploymentEnvironment)) {
     throw new Error('DEPLOY_ENVIRONMENT must be staging or production.')
@@ -63,7 +103,11 @@ export function verifyCloudflareDeployInputs(environment) {
   }
   const accountId = requireValue(environment, 'CLOUDFLARE_ACCOUNT_ID')
   if (!CLOUDFLARE_ID_PATTERN.test(accountId)) throw new Error('CLOUDFLARE_ACCOUNT_ID is malformed.')
-  requireValue(environment, 'CLOUDFLARE_API_TOKEN', 20)
+  requireValue(environment, 'PAGES_EPHEMERAL_TOKEN', 20)
+  if (environment.WORKER_EPHEMERAL_TOKEN?.trim()) {
+    throw new Error('WORKER_EPHEMERAL_TOKEN must not be exposed to the Pages deployment preflight.')
+  }
+  requireBooleanLiteral(environment, 'DEPLOY_STORAGE_BACKUP')
 
   const runtimeConfigKvId = requireValue(environment, 'BURILLAB_RUNTIME_CONFIG_KV_ID')
   if (!CLOUDFLARE_ID_PATTERN.test(runtimeConfigKvId)) {
@@ -146,9 +190,57 @@ export function verifyCloudflareDeployInputs(environment) {
   }
 }
 
+export function verifyCloudflareWorkerDeployInputs(environment) {
+  const {
+    accountId,
+    runtimeConfigKvId,
+    commitSha,
+  } = verifyCommonCloudflareTarget(environment, 'staging')
+  if (requireBooleanLiteral(environment, 'DEPLOY_STORAGE_BACKUP') !== 'true') {
+    throw new Error('The Worker token may be exposed only for an explicit storage-backup deployment request.')
+  }
+  if (environment.PAGES_EPHEMERAL_TOKEN?.trim()) {
+    throw new Error('PAGES_EPHEMERAL_TOKEN must not be exposed to the Worker deployment preflight.')
+  }
+  requireValue(environment, 'WORKER_EPHEMERAL_TOKEN', 20)
+  return {
+    environment: 'staging',
+    accountId,
+    runtimeConfigKvId,
+    commitSha,
+    tokenScope: 'worker',
+  }
+}
+
 async function main() {
-  const result = verifyCloudflareDeployInputs(process.env)
-  console.log(`Cloudflare ${result.environment} deployment inputs passed for ${result.project}.`)
+  const scope = process.env.VERIFY_CLOUDFLARE_DEPLOY_INPUT_SCOPE?.trim() || 'pages'
+  const publicKey = await readFile('config/ephemeral-release-public-key.pem', 'utf8')
+  const grant = verifyEphemeralLeaseGrant(process.env, publicKey)
+  if (scope === 'pages') {
+    const result = verifyCloudflareDeployInputs(process.env)
+    const pagesToken = await verifyCloudflareTokenTtl({
+      CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+      CLOUDFLARE_EPHEMERAL_TOKEN: process.env.PAGES_EPHEMERAL_TOKEN,
+    })
+    if (pagesToken.tokenIdHash !== grant.cloudflareTokenIdHashes[0]) {
+      throw new Error('Cloudflare Pages token does not match the signed ephemeral lease.')
+    }
+    console.log(`Cloudflare ${result.environment} Pages deployment inputs passed for ${result.project}.`)
+    return
+  }
+  if (scope === 'worker') {
+    const result = verifyCloudflareWorkerDeployInputs(process.env)
+    const workerToken = await verifyCloudflareTokenTtl({
+      CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+      CLOUDFLARE_EPHEMERAL_TOKEN: process.env.WORKER_EPHEMERAL_TOKEN,
+    })
+    if (workerToken.tokenIdHash !== grant.cloudflareTokenIdHashes[1]) {
+      throw new Error('Cloudflare Worker token does not match the signed ephemeral lease.')
+    }
+    console.log(`Cloudflare ${result.environment} Worker deployment inputs passed for ${result.commitSha}.`)
+    return
+  }
+  throw new Error('VERIFY_CLOUDFLARE_DEPLOY_INPUT_SCOPE must be pages or worker.')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

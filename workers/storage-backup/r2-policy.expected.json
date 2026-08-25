@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "buckets": [
+    "buril-lab-cabinet-backups-staging",
+    "buril-lab-cabinet-backups-production"
+  ],
+  "publicAccess": false,
+  "customDomain": false,
+  "publicDevelopmentUrl": false,
+  "requiredUserPolicies": {
+    "lifecycle": {
+      "name": "expire-snapshots-31-days",
+      "prefix": "snapshots/",
+      "deleteAfterDays": 31,
+      "abortMultipartUploadsAfterDays": 1
+    },
+    "bucketLock": {
+      "name": "retain-snapshots-30-days",
+      "prefix": "snapshots/",
+      "retainForDays": 30
+    }
+  },
+  "allowedCloudflareManagedRules": [
+    {
+      "name": "Default Multipart Abort Rule",
+      "prefix": "",
+      "abortMultipartUploadsAfterDays": 7,
+      "multipartOnly": true
+    }
+  ],
+  "controlPrefixExcludedFromUserPolicies": true,
+  "rejectOtherRules": true
+}
