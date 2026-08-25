@@ -56,16 +56,19 @@ const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
   '8fc72c88d0324308',
   '1f71f2eb2ed1f0e8',
 ].join('')
+const STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256 = 'd278ccb8f65af20551fbc065fa84b21a36953804944bf35c53f08f2885aedc89'
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
   production: 'b0777d86852a3bd7a145c59aeb282fa72ef7df54d618ed9ae4706f72afc92ebb',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
   'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,
+  'verify-staging-rollback.yml': STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256,
 })
 const PINNED_CLOUDFLARE_API_HELPER_SHA256 = '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee'
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
 const PINNED_WRANGLER_OUTPUT_HELPER_SHA256 = 'f6f7f7f615d022fd971e0df2b39c8e6e6be2dde23efdb6e7f604c90b4041d299'
+const PINNED_STAGING_ROLLBACK_PREPARATION_HELPER_SHA256 = '85695732038b715b4d62c0ebacd240ff35255423de726a452effba99d03c50af'
 const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
   staging: [
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
@@ -99,6 +102,10 @@ const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
     'supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1',
   ],
   'verify-staging-ephemeral-credentials.yml': [
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+  ],
+  'verify-staging-rollback.yml': [
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
     'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
   ],
@@ -296,6 +303,78 @@ function requireOnlyEnvMappings(workflow, envName, allowedMappings, expectedCoun
   }
 }
 
+function verifyStagingRollbackVerificationWorkflow(workflow) {
+  const requiredMarkers = [
+    'name: Verify Staging rollback target',
+    'group: cloudflare-staging',
+    'cancel-in-progress: false',
+    'name: staging',
+    'Validate the protected-main rollback verification request before checkout',
+    'Check out the protected-main verification code',
+    'Prepare the exact Staging rollback verification target',
+    'Verify that the selected rollback commit is trusted main history',
+    'Verify custom and immutable Staging origins remain Access-protected',
+    'Verify the custom-domain rollback release identity',
+    'Verify the immutable rollback release identity',
+    'Reset the exact Staging Gate 0 synthetic fixture for the custom domain',
+    'Run the protected custom-domain Staging Gate 0 rollback flow',
+    'Reset the exact Staging Gate 0 synthetic fixture for the immutable deployment',
+    'Run the protected immutable Staging Gate 0 rollback flow',
+    'Record safe rollback-verification evidence',
+    'node scripts/prepare-staging-rollback-verification.mjs',
+    'git merge-base --is-ancestor',
+    'node scripts/verify-staging-access.mjs',
+    'node scripts/verify-release-manifest.mjs',
+    'node scripts/seed-gate0-e2e.mjs',
+    'npm run test:e2e:gate0:staging',
+    'STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}',
+    'STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}',
+    'SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}',
+    'GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw',
+    'target_immutable_origin',
+  ]
+  if (requiredMarkers.some((marker) => !workflow.includes(marker))) {
+    throw new Error('Staging rollback verification workflow lacks a required protected-target guard.')
+  }
+  if (
+    workflow.includes('buril-lab-storage-backup')
+    || workflow.includes('CLOUDFLARE_API_TOKEN')
+    || workflow.includes('secrets.STAGING_PAGES_EPHEMERAL_TOKEN')
+    || workflow.includes('secrets.STAGING_WORKER_EPHEMERAL_TOKEN')
+    || workflow.includes('inputs.target_origin')
+    || /\bproduction\b/i.test(workflow)
+  ) {
+    throw new Error('Staging rollback verification workflow must not receive production, deployment-token, or caller-supplied-origin scope.')
+  }
+  if (
+    occurrenceCount(workflow, 'npm ci --ignore-scripts') !== 1
+    || occurrenceCount(workflow, 'npx playwright install --with-deps chromium') !== 1
+    || occurrenceCount(workflow, 'node scripts/seed-gate0-e2e.mjs') !== 2
+    || occurrenceCount(workflow, 'npm run test:e2e:gate0:staging') !== 2
+    || occurrenceCount(workflow, 'node scripts/verify-staging-access.mjs') !== 2
+    || occurrenceCount(workflow, 'node scripts/verify-release-manifest.mjs') !== 2
+  ) {
+    throw new Error('Staging rollback verification workflow must run each protected-origin check exactly once and each Gate 0 flow exactly once.')
+  }
+  const order = [
+    'Validate the protected-main rollback verification request before checkout',
+    'Check out the protected-main verification code',
+    'Prepare the exact Staging rollback verification target',
+    'Verify that the selected rollback commit is trusted main history',
+    'Verify custom and immutable Staging origins remain Access-protected',
+    'Verify the custom-domain rollback release identity',
+    'Verify the immutable rollback release identity',
+    'Reset the exact Staging Gate 0 synthetic fixture for the custom domain',
+    'Run the protected custom-domain Staging Gate 0 rollback flow',
+    'Reset the exact Staging Gate 0 synthetic fixture for the immutable deployment',
+    'Run the protected immutable Staging Gate 0 rollback flow',
+  ].map((marker) => workflow.indexOf(marker))
+  if (order.some((position) => position < 0) || order.some((position, index) => index > 0 && position <= order[index - 1])) {
+    throw new Error('Staging rollback verification guards, target identity checks, and Gate 0 flows are out of order.')
+  }
+  return true
+}
+
 function verifyWranglerConfig(config, {
   name,
   environment,
@@ -410,6 +489,8 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   const productionWorkflow = workflows.production || ''
   const qualityWorkflow = workflows.quality || ''
   const credentialProbeWorkflow = workflows['verify-staging-ephemeral-credentials.yml'] || ''
+  const rollbackVerificationWorkflow = workflows['verify-staging-rollback.yml'] || ''
+  verifyStagingRollbackVerificationWorkflow(rollbackVerificationWorkflow)
   if (
     occurrenceCount(stagingWorkflow, 'npm ci --ignore-scripts') !== 3
     || occurrenceCount(productionWorkflow, 'npm ci --ignore-scripts') !== 2
@@ -1830,6 +1911,7 @@ async function main() {
     cloudflareApiHelper,
     githubArtifactDigestHelper,
     wranglerOutputHelper,
+    stagingRollbackPreparationHelper,
   ] = await Promise.all([
     readFile('wrangler.jsonc', 'utf8'),
     readFile('wrangler.staging.jsonc', 'utf8'),
@@ -1843,6 +1925,7 @@ async function main() {
     readFile('scripts/cloudflare-api-get.mjs', 'utf8'),
     readFile('scripts/verify-github-artifact-digest.mjs', 'utf8'),
     readFile('scripts/verify-wrangler-pages-deploy-output.mjs', 'utf8'),
+    readFile('scripts/prepare-staging-rollback-verification.mjs', 'utf8'),
   ])
   verifyCloudflareApiHelperSource(cloudflareApiHelper)
   if (rawSourceHash(githubArtifactDigestHelper) !== PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256) {
@@ -1850,6 +1933,9 @@ async function main() {
   }
   if (rawSourceHash(wranglerOutputHelper) !== PINNED_WRANGLER_OUTPUT_HELPER_SHA256) {
     throw new Error('Wrangler output helper differs from the fully reviewed exact-deployment contract.')
+  }
+  if (rawSourceHash(stagingRollbackPreparationHelper) !== PINNED_STAGING_ROLLBACK_PREPARATION_HELPER_SHA256) {
+    throw new Error('Staging rollback preparation helper differs from the fully reviewed target-binding contract.')
   }
   const result = verifyReleaseConfiguration({
     productionRaw,

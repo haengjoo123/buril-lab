@@ -2433,6 +2433,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       productionWorkflowRaw,
       qualityWorkflowRaw,
       credentialProbeWorkflowRaw,
+      rollbackVerificationWorkflowRaw,
       iosWorkflowRaw,
       stagingPlaywrightConfig,
       gate0AccessRoute,
@@ -2446,6 +2447,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('.github/workflows/deploy-production.yml', 'utf8'),
       readFile('.github/workflows/quality.yml', 'utf8'),
       readFile('.github/workflows/verify-staging-ephemeral-credentials.yml', 'utf8'),
+      readFile('.github/workflows/verify-staging-rollback.yml', 'utf8'),
       readFile('.github/workflows/ios-testflight.yml', 'utf8'),
       readFile('playwright.staging.config.ts', 'utf8'),
       readFile('scripts/gate0-access-route.mjs', 'utf8'),
@@ -2458,6 +2460,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     const productionWorkflow = normalizeLineEndings(productionWorkflowRaw)
     const qualityWorkflow = normalizeLineEndings(qualityWorkflowRaw)
     const credentialProbeWorkflow = normalizeLineEndings(credentialProbeWorkflowRaw)
+    const rollbackVerificationWorkflow = normalizeLineEndings(rollbackVerificationWorkflowRaw)
     const iosWorkflow = normalizeLineEndings(iosWorkflowRaw)
     expect(verifyCloudflareApiHelperSource(cloudflareApiHelper)).toBe(true)
     expect(createHash('sha256').update(cloudflareApiHelper.replace(/\r\n/g, '\n'), 'utf8').digest('hex'))
@@ -2474,6 +2477,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         production: productionWorkflow,
         quality: qualityWorkflow,
         'verify-staging-ephemeral-credentials.yml': credentialProbeWorkflow,
+        'verify-staging-rollback.yml': rollbackVerificationWorkflow,
         'ios-testflight.yml': iosWorkflow,
       },
       browser: {
@@ -2505,6 +2509,26 @@ describe('Prep 0 Cloudflare release controls', () => {
         ),
       },
     })).toThrow(/credential-injection probe|unexpected or legacy|fully reviewed command contract/)
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        'verify-staging-rollback.yml': rollbackVerificationWorkflow.replace(
+          'secrets.STAGING_ACCESS_CLIENT_SECRET',
+          'secrets.STAGING_PAGES_EPHEMERAL_TOKEN',
+        ),
+      },
+    })).toThrow(/rollback verification workflow|fully reviewed command contract/)
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        'verify-staging-rollback.yml': rollbackVerificationWorkflow.replace(
+          'buril-lab-staging',
+          'buril-lab',
+        ),
+      },
+    })).toThrow(/rollback verification workflow|fully reviewed command contract/)
 
     for (const [workflowName, mutatedWorkflow, expectedError] of [
       [
