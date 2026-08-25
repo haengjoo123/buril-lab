@@ -422,7 +422,6 @@ function wranglerOutputFixture(environment: 'staging' | 'production') {
         '--no-bundle',
       ],
       log_file_path: '/tmp/wrangler-debug.log',
-      timestamp: '2026-08-25T01:00:00.500Z',
     },
     {
       type: 'pages-deploy',
@@ -430,7 +429,6 @@ function wranglerOutputFixture(environment: 'staging' | 'production') {
       pages_project: project,
       deployment_id: '123e4567-e89b-42d3-a456-426614174000',
       url,
-      timestamp: '2026-08-25T01:00:01.000Z',
     },
     {
       type: 'pages-deploy-detailed',
@@ -442,7 +440,6 @@ function wranglerOutputFixture(environment: 'staging' | 'production') {
       environment: 'production',
       production_branch: 'main',
       deployment_trigger: { metadata: { commit_hash: COMMIT } },
-      timestamp: '2026-08-25T01:00:02.000Z',
     },
   ].map((entry) => JSON.stringify(entry)).join('\n') + '\n'
 }
@@ -939,13 +936,13 @@ describe('Prep 0 Cloudflare release controls', () => {
     })
     expect(() => verifyWranglerPagesDeployOutput(raw.replace(COMMIT, 'f'.repeat(40)), options))
       .toThrow(/pinned Wrangler command contract/)
-    expect(() => verifyWranglerPagesDeployOutput(raw.replace(
-      '"timestamp":"2026-08-25T01:00:01.000Z"',
-      '"timestamp":"2026-08-25T00:59:59.000Z"',
-    ), options)).toThrow(/time boundary/)
+    expect(() => verifyWranglerPagesDeployOutput(raw, {
+      ...options,
+      startedAt: '2026-08-25T01:02:01Z',
+    })).toThrow(/time boundary/)
     expect(() => verifyWranglerPagesDeployOutput(raw.replace(
       '"pages_project":"buril-lab-staging"',
-      '"pages_project":"buril-lab-staging","unexpected":true',
+      '"pages_project":"buril-lab-staging","timestamp":"2026-08-25T01:00:01.000Z"',
     ), options)).toThrow(/fields differ/)
     expect(() => verifyWranglerPagesDeployOutput(raw.replace(
       '"--no-bundle"',
