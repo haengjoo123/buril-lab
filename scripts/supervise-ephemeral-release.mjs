@@ -46,6 +46,10 @@ const INPUT_MAX_BYTES = 64 * 1024
 const MAX_RECOVERY_RUN_PAGES = 10
 const RECOVERY_RUNS_PER_PAGE = 100
 const RECOVERY_CLOCK_SKEW_MS = 5 * 60 * 1000
+// GitHub evaluates environment-secret expressions when a workflow run is
+// created. Give a just-written environment secret time to reach that control
+// plane before dispatching the one permitted ephemeral-credential run.
+const SECRET_DISPATCH_PROPAGATION_DELAY_MS = 75_000
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const HASH_PATTERN = /^[0-9a-f]{64}$/
 const RUN_URL_PATTERN = /^https:\/\/github\.com\/haengjoo123\/buril-lab\/actions\/runs\/([1-9]\d*)\/?$/
@@ -71,12 +75,14 @@ const CONTRACTS = Object.freeze({
     workflow: 'deploy-staging.yml',
     workflowName: 'Deploy staging',
     jobName: 'Supervised deploy of verified commit to buril-lab-staging',
+    pagesMutationStep: 'Deploy the exact commit to Staging Pages',
     projectRef: 'qpgnomuqdcucjmxrunnw',
   }),
   production: Object.freeze({
     workflow: 'deploy-production.yml',
     workflowName: 'Deploy production manually',
     jobName: 'Manually deploy verified commit to buril-lab',
+    pagesMutationStep: 'Deploy the exact commit to production Pages',
     projectRef: 'zafxzidbtbryiksemlwc',
   }),
 })
@@ -263,6 +269,11 @@ export async function withSupervisorProcessLock(action, {
 }
 
 export function runGh(args, { input, timeoutMs = 30_000, spawnImpl = spawn } = {}) {
+  const operation = args[0] === 'secret' || args[0] === 'variable'
+    ? `GitHub ${args[0]} ${args[1] || 'operation'} failed.`
+    : args[0] === 'workflow' || args[0] === 'run' || args[0] === 'api'
+      ? `GitHub ${args[0]} operation failed.`
+      : 'GitHub CLI operation failed.'
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawnImpl('gh', args, {
       windowsHide: true,
@@ -303,7 +314,7 @@ export function runGh(args, { input, timeoutMs = 30_000, spawnImpl = spawn } = {
     })
     child.on('close', (code) => {
       if (code !== 0) {
-        finish(new Error('GitHub CLI operation failed.'))
+        finish(new Error(operation))
         return
       }
       finish(null, Buffer.concat(stdout).toString('utf8').trim())
@@ -680,6 +691,27 @@ export function credentialGatesSucceeded(run, contract) {
   return credentialGateResult(run, contract) === 'succeeded'
 }
 
+// A dashboard-only revocation attestation is acceptable only when the exact
+// supervised run is terminal, failed, and GitHub proves that its Pages write
+// step was skipped. This lets recovery close a pre-deployment failure without
+// requiring an already-deleted credential to be re-entered, while never
+// treating a possible Pages mutation as safely aborted.
+export function failedBeforePagesMutation(run, contract) {
+  if (
+    !contract?.jobName
+    || !contract?.pagesMutationStep
+    || run?.status !== 'completed'
+    || run?.conclusion !== 'failure'
+    || !Array.isArray(run?.jobs)
+  ) return false
+  const jobs = run.jobs.filter((job) => job?.name === contract.jobName)
+  if (jobs.length !== 1 || jobs[0].status !== 'completed' || !Array.isArray(jobs[0].steps)) return false
+  const mutationSteps = jobs[0].steps.filter((step) => step?.name === contract.pagesMutationStep)
+  return mutationSteps.length === 1
+    && mutationSteps[0].status === 'completed'
+    && mutationSteps[0].conclusion === 'skipped'
+}
+
 function journalRunEvidence(run) {
   return Object.freeze({
     run_id: String(run.databaseId),
@@ -886,6 +918,8 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
     if (storageBackup) {
       await setSecret(environment, 'STAGING_WORKER_EPHEMERAL_TOKEN', credentials.cloudflare_worker_token)
     }
+    console.log('Waiting for GitHub environment-secret propagation before the one supervised dispatch.')
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, SECRET_DISPATCH_PROPAGATION_DELAY_MS))
 
     const confirmation = environment === 'staging'
       ? `DEPLOY buril-lab-staging ${commitSha} LEASE ${leaseId} WITH EPHEMERAL TOKENS`
@@ -1382,7 +1416,7 @@ async function recoverPendingProviderCreation(environment, leaseId, cloudflareAc
   const allowMaterializedDashboardRevocation = Boolean(
     pending.payload.lease_evidence
     && discoveredRun
-    && credentialGateResult(discoveredRun, contract) === 'failed',
+    && failedBeforePagesMutation(discoveredRun, contract),
   )
   const providerEvidence = await collectRecoveryProviderEvidence(
     pending,
@@ -1446,7 +1480,10 @@ async function recoverPendingProviderCreation(environment, leaseId, cloudflareAc
     if (!currentPending.payload.lease_evidence) {
       throw new Error('Recovered gated run lacks signed lease evidence.')
     }
-    if (providerEvidence.some((entry) => entry.status !== 'api_verified_inactive')) {
+    if (
+      providerEvidence.some((entry) => entry.status !== 'api_verified_inactive')
+      && !failedBeforePagesMutation(run, contract)
+    ) {
       throw new Error('A gated run requires API-verified inactivity for every captured provider credential.')
     }
     await assertCleanupReceiptUnchanged(environment, cleanupReceipt)

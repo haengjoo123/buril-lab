@@ -8,6 +8,7 @@ import {
   assertNoRepositoryCredentialState,
   credentialGateResult,
   credentialGatesSucceeded,
+  failedBeforePagesMutation,
   findJournalRun,
   finalizeEphemeralReleaseLifecycle,
   parseDispatchedRunId,
@@ -138,6 +139,30 @@ describe('ephemeral release lifecycle finalization', () => {
       conclusion: 'success',
     })
     expect(credentialGateResult(run, contract)).toBe('indeterminate')
+  })
+
+  it('accepts dashboard-only revocation evidence only after a Pages write was skipped', () => {
+    const contract = {
+      jobName: 'supervised job',
+      pagesMutationStep: 'Deploy the exact commit to Staging Pages',
+    }
+    const run = {
+      status: 'completed',
+      conclusion: 'failure',
+      jobs: [{
+        name: contract.jobName,
+        status: 'completed',
+        steps: [{
+          name: contract.pagesMutationStep,
+          status: 'completed',
+          conclusion: 'skipped',
+        }],
+      }],
+    }
+    expect(failedBeforePagesMutation(run, contract)).toBe(true)
+
+    run.jobs[0].steps[0].conclusion = 'success'
+    expect(failedBeforePagesMutation(run, contract)).toBe(false)
   })
 
   it('paginates recovery history instead of treating the 101st exact run as absent', async () => {
