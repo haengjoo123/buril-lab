@@ -2,131 +2,76 @@
 
 상태: **Staging 훈련 완료 — 운영에서는 실행하지 않음**
 
-이 문서는 Staging Pages 프로젝트에서 직전 성공 배포로 되돌리고 다시 원래 후보 배포로 복귀하는 훈련 체크리스트입니다. 운영 배포를 실행하거나 운영 프로젝트를 되돌렸다는 증거가 아닙니다.
+이 문서는 Staging Pages 프로젝트에서 이전의 정상 배포본으로 되돌린 뒤, 원래의 검증된 배포본으로 복구하는 실제 훈련 기록입니다. `buril-lab` 운영 프로젝트, 운영 Supabase, 운영 KV에는 변경을 가하지 않았습니다.
 
-Cloudflare Pages는 성공한 production 배포만 되돌림 대상으로 사용할 수 있습니다. 공식 동작은 [Cloudflare Pages Rollbacks](https://developers.cloudflare.com/pages/configuration/rollbacks/)와 [Pages Deployments API](https://developers.cloudflare.com/api/resources/pages/subresources/projects/subresources/deployments/)를 기준으로 합니다.
+Cloudflare Pages는 성공한 production 배포만 되돌림 대상으로 사용할 수 있습니다. 동작 기준은 [Cloudflare Pages Rollbacks](https://developers.cloudflare.com/pages/configuration/rollbacks/)입니다.
 
-실행 증거(2026-08-25 KST): Quality run `32765013272`와 Deploy Staging run `32765476574`가 성공했습니다. 배포 workflow는 합성 fixture를 각각 다시 만든 뒤 custom domain과 immutable deployment URL에서 Gate 0 전체 흐름을 따로 실행해 모두 통과했습니다. 이후 Cloudflare의 공식 rollback 동작으로 직전 성공 배포를 선택하고 다시 최신 후보를 선택하는 실제 훈련을 수행했습니다. 허용 이메일, Access token, API token, 환경 비밀값, API 원문 응답은 기록하지 않았습니다.
+## 최신 실행 증거
+
+2026-08-26 KST에 Cloudflare Dashboard에서 정확히 `buril-lab-staging` 프로젝트만 선택해 아래 순서로 훈련했습니다.
+
+1. 현재 Staging 배포 `e8ecd58d-4b06-4418-8a63-bc1f2c7fef8d`를 이전 정상 배포 `2f1af91b-4269-4964-b983-b6a4100dd8b2`로 전환했습니다.
+2. [되돌림 검증 workflow #32896389408](https://github.com/haengjoo123/buril-lab/actions/runs/32896389408)이 성공했습니다.
+3. 원래 Staging 배포 `e8ecd58d-4b06-4418-8a63-bc1f2c7fef8d`로 복구했습니다.
+4. [복구 검증 workflow #32896640768](https://github.com/haengjoo123/buril-lab/actions/runs/32896640768)이 성공했습니다.
+
+두 workflow는 custom domain과 고유 Pages 배포 주소를 각각 검사했습니다. Access 보호, `/release.json`의 전체 커밋 SHA, 로그인 → 연구실 → 검색 → 폐액 배치 → 화면의 최종 기록 → 직접 링크(Gate 0) 흐름을 모두 확인합니다. 시험용 합성 fixture만 Staging에 다시 만들며, 운영 데이터에는 접근하지 않습니다.
+
+## 대상 식별값
+
+| 단계 | Pages 프로젝트 | deployment ID | 앱 전체 SHA | 결과 |
+|---|---|---|---|---|
+| 훈련 시작 배포 | `buril-lab-staging` | `e8ecd58d-4b06-4418-8a63-bc1f2c7fef8d` | `5c7e385cceb62171ce9614410f14a716eeecbc85` | 성공 |
+| 되돌림 대상 | `buril-lab-staging` | `2f1af91b-4269-4964-b983-b6a4100dd8b2` | `7b661b25771e6ea84ccc4c1c4547a9caf5323d52` | 성공 |
+| 최종 복구 배포 | `buril-lab-staging` | `e8ecd58d-4b06-4418-8a63-bc1f2c7fef8d` | `5c7e385cceb62171ce9614410f14a716eeecbc85` | 성공 |
+
+검증 workflow 자체는 보호된 `main`의 `a4584c9a8f4ba4b40c0d4b72d3da7e436351ada6`에서 실행됐습니다. 이 커밋은 검증 절차를 추가한 것이며, Pages 앱 배포본의 SHA와는 별개입니다.
 
 ## 실행 전 중단 조건
 
-- [x] 대상은 정확히 `buril-lab-staging`이며 `buril-lab`이 아님
-- [x] Cloudflare Access가 custom domain, project `pages.dev`, preview wildcard를 모두 보호함
-- [x] 회전한 Access service token이 세 보호 경계에서 인증됨
-- [x] 서로 다른 성공한 Pages production 배포가 최소 2개 있음
-- [x] 두 배포의 전체 Git SHA가 서로 다름
-- [x] 현재 후보와 직전 성공 배포의 전체 Git SHA를 Cloudflare API로 확인함
-- [x] 두 배포의 UUID와 고유 배포 URL을 확인함
-- [x] 두 고유 URL의 `release.json`이 각각 기대한 전체 SHA와 일치함
-- [x] 현재 Pages 프로젝트 제어면을 `ops:verify`로 검사해 Staging 전용 환경 변수·KV binding만 사용함
-- [x] 두 배포의 API metadata에 존재하는 불변 식별자·전체 SHA·분기·환경·성공 상태를 검증함
-- [x] 두 고유 URL의 HTML·참조된 JS를 메모리에서 검사해 운영 Supabase ref·운영 API origin·금지된 클라이언트 키 패턴이 0건임
-- [x] Gate 0 요청의 환경 경계를 검사했고 운영 Supabase·Redis·R2 요청은 0건이었음
-- [x] 되돌림 권한이 있는 Cloudflare 토큰과 Access service token을 현재 프로세스의 비공개 환경에만 준비함
-- [x] 훈련 시간 동안 다른 Staging 배포·검증을 시작하지 않음
+- 대상 프로젝트가 정확히 `buril-lab-staging`인지 확인한다. `buril-lab`은 어떤 경우에도 대상이 아니다.
+- 두 대상이 모두 성공한 Pages production 배포인지, deployment UUID와 전체 앱 SHA가 정확히 일치하는지 확인한다.
+- 대상의 고유 Pages URL과 `staging.burillab.com`이 모두 Cloudflare Access로 보호되는지 확인한다.
+- 되돌림 전 원래 후보와 되돌림 대상의 고유 URL에서 각각 `release.json`을 검증한다.
+- Staging 검증에 운영 Supabase, 운영 Redis, 운영 R2, 운영 KV가 쓰이지 않음을 확인한다.
+- 다른 Staging 배포나 검증이 동시에 진행 중이면 중단한다.
 
-하나라도 맞지 않으면 되돌림 API를 호출하지 않습니다. 대표 도메인이나 짧은 SHA만으로 대상을 고르지 않습니다.
+하나라도 맞지 않으면 되돌림을 실행하지 않습니다. 대표 도메인이나 짧은 SHA만으로 대상을 고르지 않습니다.
 
-## 1. 시작 증거
+## 실제 검증 범위
 
-| 항목 | 기록값 |
-|---|---|
-| 시작 시각(KST) | 2026-08-25 04:03:18 |
-| Pages 프로젝트 | `buril-lab-staging` |
-| 현재 후보 전체 SHA | `7b661b25771e6ea84ccc4c1c4547a9caf5323d52` |
-| 현재 후보 deployment ID | `2f1af91b-4269-4964-b983-b6a4100dd8b2` |
-| 되돌릴 전체 SHA | `1762d85063ab1e31408e1b87b0515fb7814f71b2` |
-| 되돌릴 deployment ID | `ed851aa7-f229-4e62-a5a9-56b4443f2b6c` |
-| 실행자 확인문구 | 프로젝트·deployment UUID·전체 SHA·immutable URL을 모두 포함한 정확한 문구 일치 |
+두 workflow는 아래 항목을 순서대로 통과했습니다.
 
-저장소에는 위 값과 시험 결과만 남깁니다. API 토큰, Access service token, 계정 ID, 환경 비밀값, 응답 본문, 원본 로그는 남기지 않습니다. Pages project·deployment·rollback API 응답은 환경 설정을 포함할 수 있으므로 원문 JSON을 터미널·파일·GitHub artifact에 출력하거나 저장하지 않습니다. 승인된 검증기가 메모리에서 필요한 필드만 골라 `success`, project name, environment, deployment ID, 전체 SHA, stage status만 기록합니다. 토큰을 URL, 명령행 인자, query string에 넣지 않고 verbose curl을 사용하지 않습니다.
+- 보호된 `main`에서만 실행되는 확인문구·UUID·전체 SHA 검증
+- 대상 앱 SHA가 신뢰할 수 있는 `main` 이력인지 확인
+- custom domain과 고유 Pages URL의 Access 보호 확인
+- 두 URL의 `/release.json`이 기대한 전체 앱 SHA와 같은지 확인
+- custom domain의 Gate 0 합성 fixture 재설정 및 브라우저 흐름
+- 고유 Pages URL의 Gate 0 합성 fixture 재설정 및 브라우저 흐름
+- 비밀값, 사용자 정보, 원시 API 응답을 남기지 않는 실행 증거 기록
 
-## 2. 되돌림 직전 확인
+되돌림 상태 검증은 2026-08-26 05:37~05:39 KST에 성공했고, 복구 상태 검증은 05:40~05:41 KST에 성공했습니다.
 
-- [x] 현재 후보 고유 URL의 `/release.json`이 후보 SHA와 일치함
-- [x] 대표 Staging 주소의 `/release.json`이 후보 SHA와 일치함
-- [x] 현재 후보 deployment metadata와 배포된 JS의 환경 격리 검사가 통과함
-- [x] Gate 0 브라우저 흐름이 현재 후보에서 통과함
-- [x] 되돌릴 직전 배포의 고유 URL에서 동일한 Gate 0 브라우저 흐름과 환경 격리 검사가 먼저 통과함
-- [x] 되돌릴 배포에서도 음성 폐기는 `redirect`이고 위험한 행동 지침이 0건임
-- [x] 음성 폐기는 `redirect`임
-- [x] KOSHA는 Staging에서 `link_only`임
-- [x] 계정 삭제·maintenance worker·storage backup이 OFF임
-- [x] 현재 시각과 검증 결과를 기록함
-
-## 3. 직전 성공 배포로 되돌리기
-
-Cloudflare Dashboard 또는 공식 Pages rollback API에서 **확인한 deployment UUID**를 대상으로 사용합니다. API 호출 시 계정과 프로젝트 이름을 문자열 조합으로 추측하지 않고, 사전 조회한 정확한 값을 사용합니다. API를 쓰면 토큰을 환경에서 읽는 승인된 도구만 사용하고, 원문 응답은 터미널·파일·GitHub artifact에 남기지 않으며 허용 필드만 검증합니다.
-
-- [x] 대상 deployment가 성공한 Pages production 배포인지 마지막으로 확인함
-- [x] 대상 전체 SHA가 기대한 직전 SHA와 일치함
-- [x] `buril-lab-staging`과 정확한 UUID·SHA·URL을 포함한 확인문구가 일치함
-- [x] 되돌림 요청이 성공함
-- [x] 대표 Staging 주소가 대상 deployment를 가리킬 때까지 제한된 횟수로 확인함
-- [x] 대표 주소의 `/release.json`이 직전 전체 SHA와 일치함
-- [x] 되돌린 deployment metadata와 배포된 JS의 환경 격리 검사가 다시 통과함
-- [x] 되돌림 소요 시간은 약 3.12초였음
-
-## 4. 되돌림 상태 검사
-
-- [x] 로그인→연구실→검색→폐액 배치 검토→화면 최종 기록→직접 링크가 통과함
-- [x] 음성 폐기 행동 지침 0건
-- [x] 연구실 전환 안전 회귀시험이 통과함
-- [x] 검사한 핵심 요청에서 Pages 5xx 또는 화면 진행을 막는 브라우저 오류가 0건이었음
-- [x] 대표 주소와 고유 배포 URL의 SHA 관계를 기록함
-
-핵심 확인이 두 번 연속 실패하거나 위험한 음성 응답, 인증 우회, 연구실 간 노출, 비밀값 노출이 한 건이라도 있으면 Cloudflare Access로 Staging 사용을 즉시 차단하고 원인을 기록합니다. 원래 후보가 독립적으로 안전하게 재검증된 경우에만 그 후보로 복귀하며, 아니면 가장 최근의 검증된 배포를 선택하고 차단을 유지합니다.
-
-## 5. 원래 후보 배포로 복귀
-
-원래 후보도 성공한 Pages production 배포이며 전체 SHA·deployment UUID·고유 URL 검증이 유지되는지 다시 확인합니다.
-
-- [x] 후보 deployment가 여전히 성공 상태임
-- [x] 후보 고유 URL의 `/release.json`이 후보 전체 SHA와 일치함
-- [x] 후보 deployment metadata와 배포된 JS의 환경 격리 검사가 다시 통과함
-- [x] 공식 rollback 동작으로 후보 deployment를 다시 선택함
-- [x] 대표 Staging 주소의 `/release.json`이 후보 전체 SHA와 일치함
-- [x] custom domain과 immutable URL에서 Gate 0 브라우저 흐름을 각각 다시 실행해 통과함
-- [x] 최종 runtime 안전 스위치와 Pages KV binding을 확인함
-- [x] 최종 Pages deployment ID와 종료 시각을 기록함
-
-후보로 복귀할 수 없으면 새 운영 배포를 만들지 않습니다. Staging을 가장 최근의 검증된 배포에 두고 Access 차단을 유지한 채 원인과 후속 조치를 기록합니다.
-
-## 6. 실제 실행 결과
+## 최종 결과
 
 | 항목 | 결과 |
 |---|---|
-| 직전 배포 전환 요청 | 성공 |
-| 대표 주소에서 직전 SHA 확인 | 약 3.12초, 두 번째 제한 확인에서 성공 |
-| 되돌린 상태 Gate 0 | 1/1 성공 |
-| 최신 후보 복귀 요청 | 성공 |
-| 대표 주소에서 최신 SHA 확인 | 약 0.85초, 첫 번째 제한 확인에서 성공 |
-| 복귀 후 custom domain Gate 0 | 1/1 성공 |
-| 복귀 후 immutable URL Gate 0 | 1/1 성공 |
-| 최종 Pages deployment ID | `2f1af91b-4269-4964-b983-b6a4100dd8b2` |
-| 최종 전체 SHA | `7b661b25771e6ea84ccc4c1c4547a9caf5323d52` |
-| 종료 시각(KST) | 2026-08-25 04:04:15 |
+| 이전 정상 배포로 전환 | 성공 |
+| 되돌림 상태 custom domain Gate 0 | 성공 |
+| 되돌림 상태 고유 Pages URL Gate 0 | 성공 |
+| 원래 검증 배포로 복구 | 성공 |
+| 복구 후 custom domain Gate 0 | 성공 |
+| 복구 후 고유 Pages URL Gate 0 | 성공 |
+| 최종 Pages deployment ID | `e8ecd58d-4b06-4418-8a63-bc1f2c7fef8d` |
+| 최종 앱 전체 SHA | `5c7e385cceb62171ce9614410f14a716eeecbc85` |
 | 운영 Pages·DB·KV 변경 | 0건 |
 
-확인문구에 남아 있던 더 오래된 deployment UUID·SHA 조합으로 한 번 실행을 시도했을 때, 브라우저가 열리거나 네트워크 검사가 시작되기 전에 정확한 대상 검사에서 거부됐습니다. 올바른 직전 deployment UUID·전체 SHA로 다시 구성한 뒤 통과했으며, 이 거부는 배포 대상 안전장치가 의도대로 작동한 회귀 증거로 기록합니다.
+## 되돌림 원칙
 
-최종 Staging runtime 값은 음성 폐기 `redirect`, KOSHA `link_only`, 계정 삭제·maintenance worker·storage backup `false`입니다. Pages 제어면 재검사도 `buril-lab-staging`이 Staging 전용 KV namespace를 사용한다고 확인했습니다.
+- 웹 문제는 검증된 이전 Pages deployment로만 되돌린다.
+- DB 구조·데이터, KV 값, R2 파일, Redis 상태와 외부 호출은 Pages 되돌림으로 되돌아가지 않는다. 이들이 원인일 때는 별도 복구 절차를 쓴다.
+- 되돌림 뒤에는 대표 Staging 주소와 고유 Pages URL을 모두 확인한다.
+- 원래 후보 배포도 독립적으로 검증한 뒤에만 복구한다. 복구에 실패하면 새 배포를 만들지 않고, 가장 최근 검증된 배포를 유지한다.
+- 운영에서 같은 절차를 사용할 때는 운영용 확인문구와 별도 운영 승인·관찰 절차를 적용한다.
 
-## 통과 판정
-
-다음을 모두 만족해야 “Pages 되돌림 훈련 완료”로 표시합니다.
-
-- 직전 성공 배포로 되돌림 성공
-- 전환 전 직전 배포의 고유 URL에서 Gate 0·환경 격리 검사 성공
-- 대표 주소의 전체 SHA 검증 성공
-- 되돌림 상태의 Gate 0 브라우저 흐름 성공
-- 원래 후보 배포로 복귀 성공
-- 복귀 후 전체 SHA와 Gate 0 브라우저 흐름 재검증 성공
-- 운영 Pages·운영 DB·운영 KV 변경 0건
-- 저장소에 토큰·원본 로그·사용자 정보 0건
-
-실제 운영에서 웹 문제가 발생하면 검증된 직전 운영 deployment로 같은 절차를 적용하되, 한 주 한 묶음 원칙과 운영 확인문구를 별도로 요구합니다.
-
-Pages 되돌림은 웹 배포만 바꿉니다. Supabase 데이터·마이그레이션, KV 값, R2 파일, Redis 상태와 이미 발생한 외부 호출은 되돌리지 않습니다. 이 상태 중 하나가 원인일 수 있으면 Pages 되돌림만으로 복구됐다고 판정하지 않고 해당 시스템의 별도 절차를 사용합니다.
-
-JSON 404/405, API 보안 헤더, canonical 308, HSTS 검사는 운영 2 묶음에서 추가합니다. 현재 Gate 0 되돌림 훈련의 통과조건으로 사용하지 않습니다.
+저장소에는 deployment ID, 전체 SHA, workflow 결과처럼 공개 가능한 증거만 남깁니다. Access token, API token, 환경 비밀값, 사용자 정보, 원시 로그와 API 응답은 기록하지 않습니다.
