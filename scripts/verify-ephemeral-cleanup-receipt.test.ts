@@ -20,7 +20,10 @@ function run(overrides: Record<string, unknown> = {}) {
   return {
     id: 101,
     run_attempt: 1,
-    name: 'Deploy staging',
+    // GitHub's workflow-runs API reports the evaluated run-name here, rather
+    // than the static workflow `name`. The path and signed title are the
+    // stable identity checks used by the production verifier.
+    name: `Deploy staging ${SHA} (lease=${OLD_LEASE}, storage-backup=true)`,
     path: '.github/workflows/deploy-staging.yml',
     display_title: `Deploy staging ${SHA} (lease=${OLD_LEASE}, storage-backup=true)`,
     event: 'workflow_dispatch',
@@ -40,6 +43,7 @@ function run(overrides: Record<string, unknown> = {}) {
 function currentRun() {
   return run({
     id: 202,
+    name: `Deploy staging ${SHA} (lease=${NEW_LEASE}, storage-backup=false)`,
     display_title: `Deploy staging ${SHA} (lease=${NEW_LEASE}, storage-backup=false)`,
     created_at: '2026-08-25T04:00:00Z',
     updated_at: '2026-08-25T04:30:00Z',

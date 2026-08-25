@@ -39,14 +39,12 @@ export const MAX_CUMULATIVE_LEASES = 32
 
 const WORKFLOW_CONTRACTS = Object.freeze({
   staging: Object.freeze({
-    name: 'Deploy staging',
     path: '.github/workflows/deploy-staging.yml',
     filename: 'deploy-staging.yml',
     job: 'Supervised deploy of verified commit to buril-lab-staging',
     title: /^Deploy staging ([0-9a-f]{40}) \(lease=([0-9a-f]{32}), storage-backup=(true|false)\)$/,
   }),
   production: Object.freeze({
-    name: 'Deploy production manually',
     path: '.github/workflows/deploy-production.yml',
     filename: 'deploy-production.yml',
     job: 'Manually deploy verified commit to buril-lab',
@@ -65,7 +63,6 @@ function parseTrustedRun(run, contract, repository, currentRunId, { requireLease
   if (
     !run || typeof run !== 'object' || Array.isArray(run)
     || String(run.id) === currentRunId
-    || run.name !== contract.name
     || run.path !== contract.path
     || run.event !== 'workflow_dispatch'
     || run.head_branch !== 'main'
@@ -106,7 +103,6 @@ function assertCurrentRunAnchor(runs, contract, repository, currentRunId, leaseI
     !Number.isSafeInteger(anchor.id)
     || anchor.id <= 0
     || anchor.run_attempt !== 1
-    || anchor.name !== contract.name
     || anchor.path !== contract.path
     || anchor.event !== 'workflow_dispatch'
     || anchor.head_branch !== 'main'
