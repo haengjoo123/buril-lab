@@ -1,101 +1,23 @@
-name: iOS TestFlight
+name: iOS TestFlight (deferred)
 
 on:
   workflow_dispatch:
-    inputs:
-      bootstrap_signing:
-        description: "Create or repair fastlane match signing assets before building"
-        required: true
-        type: boolean
-        default: false
-      marketing_version:
-        description: "CFBundleShortVersionString, for example 1.0.0"
-        required: true
-        type: string
-        default: "1.0.0"
-      changelog:
-        description: "TestFlight What to Test text"
-        required: true
-        type: string
-        default: "Automated TestFlight build from GitHub Actions."
-      external_beta:
-        description: "Submit/distribute to the configured external TestFlight group"
-        required: true
-        type: boolean
-        default: false
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
-  group: ios-testflight
-  cancel-in-progress: false
+  group: ios-testflight-deferred
+  cancel-in-progress: true
 
 jobs:
-  testflight:
-    name: Build and upload iOS app
-    runs-on: macos-26
-    timeout-minutes: 90
-    env:
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      APP_STORE_CONNECT_TEAM_ID: ${{ secrets.APP_STORE_CONNECT_TEAM_ID }}
-      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-      APP_STORE_CONNECT_KEY_CONTENT_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT_BASE64 }}
-      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
-      MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
-      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-      IOS_MARKETING_VERSION: ${{ inputs.marketing_version }}
-      IOS_BUILD_NUMBER: ${{ github.run_number }}
-      BOOTSTRAP_SIGNING: ${{ inputs.bootstrap_signing }}
-      TESTFLIGHT_CHANGELOG: ${{ inputs.changelog }}
-      TESTFLIGHT_EXTERNAL_BETA: ${{ inputs.external_beta }}
-      TESTFLIGHT_EXTERNAL_GROUP: ${{ secrets.TESTFLIGHT_EXTERNAL_GROUP }}
-      TESTFLIGHT_NOTIFY_EXTERNAL_TESTERS: ${{ secrets.TESTFLIGHT_NOTIFY_EXTERNAL_TESTERS }}
-      BETA_REVIEW_CONTACT_EMAIL: ${{ secrets.BETA_REVIEW_CONTACT_EMAIL }}
-      BETA_REVIEW_CONTACT_FIRST_NAME: ${{ secrets.BETA_REVIEW_CONTACT_FIRST_NAME }}
-      BETA_REVIEW_CONTACT_LAST_NAME: ${{ secrets.BETA_REVIEW_CONTACT_LAST_NAME }}
-      BETA_REVIEW_CONTACT_PHONE: ${{ secrets.BETA_REVIEW_CONTACT_PHONE }}
-      BETA_DEMO_ACCOUNT_NAME: ${{ secrets.BETA_DEMO_ACCOUNT_NAME }}
-      BETA_DEMO_ACCOUNT_PASSWORD: ${{ secrets.BETA_DEMO_ACCOUNT_PASSWORD }}
-      BETA_REVIEW_NOTES: ${{ secrets.BETA_REVIEW_NOTES }}
-      BETA_PRIVACY_POLICY_URL: ${{ secrets.BETA_PRIVACY_POLICY_URL }}
-      BETA_MARKETING_URL: ${{ secrets.BETA_MARKETING_URL }}
-      BETA_DESCRIPTION: ${{ secrets.BETA_DESCRIPTION }}
-      FASTLANE_DISABLE_COLORS: "true"
-      FASTLANE_SKIP_UPDATE_CHECK: "true"
-
+  deferred:
+    name: Refuse deferred App Store deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Select Xcode 26 when available
+      - name: Explain the release boundary
+        shell: bash
         run: |
-          XCODE_26_PATH="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | tail -n 1 || true)"
-          if [ -n "$XCODE_26_PATH" ]; then
-            sudo xcode-select -s "$XCODE_26_PATH/Contents/Developer"
-          fi
-          xcodebuild -version
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Build and sync Capacitor iOS assets
-        run: |
-          npm run assets:capacitor
-          npm run build:ios
-
-      - name: Set up Ruby and fastlane
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.3"
-          bundler-cache: true
-
-      - name: Upload to TestFlight
-        run: bundle exec fastlane ios testflight
+          echo "TestFlight and App Store deployment remain outside the approved operations-hardening scope." >&2
+          echo "No repository or environment secret was loaded." >&2
+          exit 1

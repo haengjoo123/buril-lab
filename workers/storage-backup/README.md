@@ -21,6 +21,85 @@ fail the invocation.
 | Staging | `buril-lab-storage-backup-staging` | `qpgnomuqdcucjmxrunnw` | `dcaa52254fa6447bbe7c21f54354ad0d` | `buril-lab-cabinet-backups-staging` | `17:15` |
 | Production | `buril-lab-storage-backup-production` | `zafxzidbtbryiksemlwc` | `dd6866f35f794a91b0fb5a24cbe57cf3` | `buril-lab-cabinet-backups-production` | `17:45` |
 
+## Supervised ephemeral deployment tokens
+
+No Cloudflare write token may remain stored in a GitHub environment between
+deployments. Immediately before a supervised run, create separate short-TTL
+tokens, install only the token or tokens selected for that run, and then remove
+the GitHub secrets and revoke the Cloudflare tokens immediately after the run
+finishes, whether it succeeds or fails. The Access service credentials
+`STAGING_ACCESS_CLIENT_ID` and `STAGING_ACCESS_CLIENT_SECRET` are a separate
+read-only application boundary; they must never be reused as deployment API
+tokens.
+
+The manually dispatched Staging workflow always requires
+`STAGING_PAGES_EPHEMERAL_TOKEN` with **Cloudflare Pages Edit**. It accepts only
+the exact current `main` SHA after the named `Quality and security` workflow
+succeeds and requires the confirmation text shown by the workflow. The
+`deploy_storage_backup` input defaults to `false`. Only when an operator
+explicitly sets it to `true` may the workflow read
+`STAGING_WORKER_EPHEMERAL_TOKEN`, which needs **Workers Scripts Edit** and
+**Workers KV Storage Read** for the OFF-only Worker deployment and its live
+verification. The Pages and Worker token values must differ. Production uses a
+third temporary secret, `PRODUCTION_PAGES_EPHEMERAL_TOKEN`, with Cloudflare
+Pages Edit only; production has no Worker deployment path.
+
+The local supervisor writes and reads back a signed phase journal before it
+tells the operator to create any provider credential. The journal advances
+sequentially through credential creation, lease materialization, dispatch
+intent, exact-run binding, both credential gates, and cleanup-receipt storage.
+Its signed lease binds
+the exact commit, environment, cleanup receipt, actual Supabase PAT SHA-256,
+Cloudflare token-ID hashes, and—for production—the exact cleaned Staging run.
+Credential values are accepted only through hidden terminal input or a
+non-interactive standard-input pipe. Repository-scoped fallback secrets and
+variables are forbidden; only the selected GitHub environment may hold the
+temporary values.
+
+Cloudflare control-plane GETs use `scripts/cloudflare-api-get.mjs`. The token
+is read from the process environment and is never placed in a command-line
+argument. The helper permits only the exact Pages and Staging Worker read
+surfaces used by the reviewed workflows, rejects redirects and unexpected
+response URLs, accepts only JSON, caps responses at 1 MiB and requests at 30
+seconds, and cancels oversized streams. Downstream parsers explicitly remove
+`CLOUDFLARE_API_TOKEN` from their environments. Both deployment workflows and
+this helper source are pinned by reviewed SHA-256 contracts.
+
+If credential capture or a dispatched run is interrupted, the phase journal
+intentionally blocks another lease. `supervise-ephemeral-release.mjs recover`
+verifies provider inactivity—or records an explicit operator dashboard
+attestation that a specific credential was never created—and reconciles the
+exact run. A run that passed both credential gates must appear in the exact
+signed cleanup-receipt successor; only a run that did not pass both gates may
+end in a signed aborted-lease receipt. Recovery accepts only the journal's
+exact base receipt or that single verified successor. Manual journal deletion
+is not an approved recovery path. Submitted recovery credentials must hash to
+the exact values recorded in the signed journal, and a `NOT_CREATED`
+attestation is forbidden after credential hashes have been materialized.
+
+These Cloudflare permissions are account-scoped, not Pages-project,
+Worker-script, KV-namespace, or R2-bucket scoped. During its short lifetime, a
+Pages token can modify other Pages projects in the account. More importantly,
+a Workers Scripts token can modify other Workers and can deploy code with an
+R2 runtime binding; omitting R2 API permission does not prevent that deployed
+code from using the bound bucket. Short TTL, supervised dispatch, separate
+tokens, immediate GitHub-secret removal, and immediate Cloudflare revocation
+reduce the exposure window but do not create true environment isolation. A
+separate Cloudflare account for Staging remains the open long-term boundary.
+
+When `deploy_storage_backup=true`, the workflow retains the exact post-deploy
+checks over six bounded Cloudflare control-plane requests and fails closed
+unless the approved state is visible: ten bindings, zero routes, zero custom
+domains, `workers.dev=false`, preview URLs disabled, only cron `15 17 * * *`,
+only the scheduled handler, and the pinned compatibility date and flag. It
+also checks the account, Worker name, environment endpoint, active version,
+commit SHA, deployment annotation, and secret-name allow-list. Some of these
+service-environment endpoints are used by the pinned Wrangler version but are
+not all documented as stable public API surfaces, so an API shape change may
+stop the deployment until reviewed. API errors, malformed or oversized
+responses, extra response fields, duplicates, and hidden pagination counts
+all fail the deployment.
+
 The source bucket is exactly `cabinets`. `SOURCE_POINTER_MODE` must be exactly
 `legacy_url` or `private_path`; the Worker never falls back between columns.
 The current configs intentionally use `legacy_url` until the private-path app

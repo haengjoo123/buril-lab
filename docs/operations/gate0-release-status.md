@@ -6,12 +6,40 @@
 
 ## 현재 결론
 
-- Gate 0 실행 코드 후보는 PR #8의 병합 SHA `7b661b25771e6ea84ccc4c1c4547a9caf5323d52`입니다. `main` 품질검사 6개, 운영·Staging Hosted Advisor, custom domain과 immutable URL의 Gate 0 브라우저 흐름이 모두 통과했습니다.
+- PR #8의 병합 SHA `7b661b25771e6ea84ccc4c1c4547a9caf5323d52`는 과거 Gate 0 기준선입니다. 당시 품질검사, Hosted Advisor, Staging 브라우저 흐름과 Pages 되돌림 훈련을 통과한 기록은 보존하지만 현재 보안 강화 분기의 배포 증거로 재사용하지 않습니다.
+- 현재 `codex/storage-recovery-hardening` 변경은 아직 PR 병합·새 SHA의 Staging 감독형 배포를 하지 않았습니다. 서명 공개키는 저장소에 고정했지만, 현재 후보의 Staging·운영 배포와 되돌림 훈련은 여전히 미완료입니다.
 - GitHub `staging`·`production` environment의 배포 입력, 별도 Staging Redis, 합성 데이터 초기화와 Gate 0 소유 표시는 준비됐습니다.
-- 같은 SHA를 Staging Pages에 배포해 Access 경계, 전체 SHA의 `release.json`, KOSHA `link_only`, 환경 격리와 합성 fixture 재생성을 확인했습니다. 직전 성공 배포로 실제 되돌린 뒤 원래 후보로 복귀하는 훈련과 양쪽 Gate 0 재검사도 완료했습니다.
+- 과거 기준선 SHA는 Staging Pages 배포와 되돌림 훈련을 완료했습니다. 새 서명 임대·누적 정리 영수증·숨김 토큰 입력 계약으로는 아직 실행하지 않았습니다.
 - Supabase 조직 접근자 확인은 완료됐지만 임시 복구 프로젝트 생성과 복구훈련은 아직 실행하지 않았습니다.
 - Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
-- 준비 1은 완료했습니다. 관문 0 운영 배포·관찰과 준비 2 Supabase 복구훈련은 완료로 표시하지 않습니다.
+- 과거 준비 1 증거는 완료 상태로 보존합니다. 현재 보안 강화 후보의 Staging 재검증, 관문 0 운영 배포·관찰과 준비 2 Supabase 복구훈련은 완료로 표시하지 않습니다.
+
+## 현재 보안 강화 후보의 로컬 상태
+
+- Staging·운영·Quality·보류된 TestFlight workflow 전체와 Cloudflare 읽기 helper 소스를 SHA-256으로 고정했습니다. 허용 workflow 파일은 이 4개뿐이며 외부 Action도 검토된 40자리 커밋 SHA만 사용합니다.
+- TestFlight workflow는 이번 범위에서 실행할 수 없습니다. 비밀값·소스·외부 Action을 전혀 읽지 않고 보류 사유를 출력한 뒤 실패합니다.
+- CI와 배포의 `npm ci`는 lifecycle script를 실행하지 않습니다. Cloudflare helper를 쓰는 각 단계는 토큰 사용 직전에 tracked worktree와 helper의 고정 SHA-256을 다시 확인합니다.
+- Staging과 운영은 자격값이 없는 build runner와 임시 자격값을 쓰는 새 deploy runner를 분리합니다. build 결과는 이름이 아니라 GitHub artifact ID로 가져오며 서비스 digest, 자체 manifest, 파일별 SHA-256, 파일 수와 `release.json`을 deploy runner에서 다시 확인합니다. 선택적 Staging 백업 Worker도 Pages와 다른 새 runner에서만 실행합니다.
+- Cloudflare API 토큰은 프로세스 인수로 넘기지 않고 환경변수에서만 읽습니다. helper는 승인된 Pages·Staging Worker 읽기 URL만 허용하고, JSON·1 MiB·30초·redirect 경계를 강제합니다.
+- Ed25519 서명 임대에는 실제 Supabase PAT 값의 해시, Cloudflare 토큰 ID 해시, cleanup 영수증 해시와 운영용 exact Staging run ID를 포함합니다.
+- 토큰 생성 안내 전에 서명된 pending 표식을 저장합니다. 입력 중단은 공급자 비활성 또는 화면상 미생성 확인을 담은 서명 abort 영수증 없이는 해제할 수 없습니다.
+- 저장소 범위의 같은 이름 secret·variable은 environment 격리를 우회하므로 감독기가 거부합니다.
+- 누적 영수증 32회 한계는 자격값 생성 전에 중단합니다. 자동 epoch rollover는 아직 구현하지 않았고 별도 검토 관문으로 남깁니다.
+- 로컬 Cloudflare·임대 수명주기 회귀시험은 현재 143개를 통과했습니다. 깨끗한 잠금파일 설치 뒤 전체 Vitest는 856개 통과·7개 보류였고 위험한 자동 폐액 경로는 0건이었습니다. 이 수치는 실제 Staging 성공을 뜻하지 않습니다.
+- 사용자의 별도 직전 확인 후 로컬 Windows 계정에만 복호화 가능한 DPAPI Ed25519 개인키를 만들고, 공개키와 SHA-256 지문 `b5fc8397c8eeb2e2a16b1ffc0feb0b0563f76302ee7b78c08b754651ae455cb2`만 저장소에 고정했습니다. DPAPI 실제 왕복·공개키 지문 검사를 통과했습니다. 이것은 토큰 생성이나 실제 배포 승인이 아닙니다.
+
+## 2026-08-25 Cloudflare 배포 자격값 교정
+
+아래에 남아 있는 Staging 자동 배포 구현과 GitHub environment 배포 입력 등록 기록은 당시 완료한 사실을 보존한 과거 증거입니다. 이후 권한 범위를 다시 확인한 결과 Cloudflare Pages Edit와 Workers Scripts Edit는 특정 Pages 프로젝트나 Worker로 제한되지 않고 계정 범위에 영향을 줄 수 있으므로, 그 자동·지속 자격값 운영 방식은 앞으로 사용하지 않습니다.
+
+- 이후 Staging 배포는 `workflow_dispatch`에서 현재 `main`의 전체 SHA와 정확한 확인문구를 입력하는 감독형 실행만 허용합니다. 같은 SHA의 이름이 `Quality and security`인 workflow가 성공했는지 배포 초반과 Pages 반영 직전에 다시 확인합니다.
+- Pages 배포 직전에 짧은 유효기간의 `STAGING_PAGES_EPHEMERAL_TOKEN`과 최대 45분짜리 서명 임대를 GitHub `staging` environment에 넣고, 실행 종료 즉시 GitHub에서 제거한 뒤 Cloudflare에서 폐기합니다. Cloudflare 토큰은 실행 시점에 남은 시간이 45분 이상 26시간 이하인지 API로 확인합니다.
+- Storage 백업 Worker는 `deploy_storage_backup=true`를 명시한 실행에서만 별도의 `STAGING_WORKER_EPHEMERAL_TOKEN`을 읽습니다. 기본값은 `false`이며 Pages 토큰과 Worker 토큰은 서로 다른 값이어야 합니다.
+- Hosted Advisor의 24시간짜리 별도 실행 증거는 재사용하지 않습니다. 감독형 배포 안에서 환경별 임시 Supabase PAT로 현재 상태를 초반과 변경 직전에 직접 확인합니다.
+- 운영 수동 배포도 같은 방식으로 `PRODUCTION_PAGES_EPHEMERAL_TOKEN`과 운영 전용 임시 Supabase PAT만 잠시 사용하고 실행 종료 즉시 제거·폐기합니다. 기존 `CLOUDFLARE_API_TOKEN`, `STAGING_CLOUDFLARE_API_TOKEN`, 일반 `SUPABASE_ACCESS_TOKEN` 이름은 workflow에서 거부합니다.
+- 각 실행은 새 32자리 임대 ID를 사용합니다. GitHub secret 삭제와 공급자 폐기를 확인한 정리 영수증이 가장 최근 실행과 맞지 않으면 다음 배포는 시작되지 않습니다. workflow 재시도 대신 새 임대를 만듭니다.
+- `STAGING_ACCESS_CLIENT_ID`와 `STAGING_ACCESS_CLIENT_SECRET`은 보호된 Staging을 읽기 위한 별도 Access service token이며 Cloudflare 배포 쓰기 토큰과 섞지 않습니다.
+- 짧은 유효기간은 노출 시간을 줄일 뿐 프로젝트 단위 권한 경계를 만들지 않습니다. 진짜 Staging 격리를 위한 별도 Cloudflare 계정 전환은 아직 열린 항목입니다.
 
 ## 릴리스 경계
 
@@ -33,7 +61,7 @@
 - [x] 필수 검사 4개 고정: Application, Cloudflare release contract, Blank database, Gate 0 browser
 - [x] `gate-*` tag 수정·삭제를 막는 활성 ruleset 생성
 - [x] 최종 Gate 0 tag는 실제 배포·관찰 전까지 만들지 않음
-- [x] Staging 자동·운영 수동 workflow와 `release.json` 전체 SHA 검증 구현
+- [x] 과거 Staging 자동 workflow를 계정 범위 장기 토큰 위험 때문에 폐기하고, Staging·운영 모두 감독형 수동 임대 workflow와 `release.json` 전체 SHA 검증으로 전환
 - [x] Cloudflare API의 전체 SHA, deployment UUID, 고유 URL을 함께 검증하도록 구현
 - [x] `release:verify`는 유료 출시 차단 상태 유지, `ops:verify`를 별도 제공
 
@@ -102,7 +130,7 @@ Supabase 플러그인으로 2026-08-25 최초 초기화 직후 행 수와 합성
 
 Staging에는 예약 UUID를 사용하는 Gate 0 합성 연구실·회원·재고만 남아 있고, 합성 사용자의 신뢰된 소유 표시도 확인했습니다. 이메일, 사용자 UUID, 연구실명, 시약명, 파일 경로는 공개 증거에 기록하지 않습니다. 데이터 초기화는 완료됐지만 실제 배포 검증 환경 통과를 뜻하지 않습니다.
 
-Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인했습니다. 숫자만 허용하지 않고 각 권고의 종류·대상·함수 언어·실제 역할 권한·임시 허용 사유를 정확히 고정했으며, 새 차이는 실패로 처리합니다.
+Security Advisor는 2026-08-25에 운영과 Staging 각각 53건(정보 6, 경고 47)을 다시 읽기 전용으로 확인했습니다. 두 환경 모두 저장소에 고정한 53개 식별자와 정확히 일치했습니다. 숫자만 허용하지 않고 각 권고의 종류·대상·함수 언어·실제 역할 권한·임시 허용 사유를 고정했으며, 새 차이는 실패로 처리합니다.
 
 ## 아직 닫지 않은 항목
 
@@ -120,6 +148,8 @@ Security Advisor는 운영과 Staging 각각 53건을 읽기 전용으로 확인
 - [x] 배포 뒤 API가 공식 링크만 반환하는지 검증
 - [x] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
 - [ ] Staging에서 실제 외부 화학정보 연동시험
+- [ ] 현재 보안 강화 SHA의 공개키 고정, PR 품질검사, 감독형 Staging 배포와 되돌림 재훈련
+- [ ] 누적 32회 이전에 과거 영수증 해시와 run 경계를 보존하는 epoch rollover 설계
 - [x] 직전 Pages deployment 실제 되돌림과 원래 후보 복귀 훈련
 - [ ] 운영 쓰기와 일관된 복구 시점을 만들 수 있는 비공개 R2 사진 본문·완전한 manifest·해시 준비
 - [x] Supabase 조직 접근자 확인 — 2026-08-24 23:32 KST: 현재 구성원 1명, 역할 `Owner`, 권한 범위 `organization-scoped`를 읽기 전용으로 확인했고 사용자가 해당 구성원의 BurilLab 운영 데이터 열람 권한을 명시 확인함; 공개 증거에는 이메일·조직 ID를 기록하지 않음
