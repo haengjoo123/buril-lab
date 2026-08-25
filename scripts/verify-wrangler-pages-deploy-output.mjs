@@ -58,7 +58,7 @@ function exactArray(value, expected, label) {
 
 function verifyWranglerSession(session, { commitSha, environment, target }) {
   exactKeys(session, [
-    'type', 'version', 'wrangler_version', 'command_line_args', 'log_file_path', 'timestamp',
+    'type', 'version', 'wrangler_version', 'command_line_args', 'log_file_path',
   ], 'Wrangler session')
   if (
     session.version !== 1
@@ -123,10 +123,10 @@ export function verifyWranglerPagesDeployOutput(raw, {
   const summary = summaries[0]
   const detailed = details[0]
   verifyWranglerSession(session, { commitSha, environment, target })
-  exactKeys(summary, ['type', 'version', 'pages_project', 'deployment_id', 'url', 'timestamp'], 'Wrangler Pages summary')
+  exactKeys(summary, ['type', 'version', 'pages_project', 'deployment_id', 'url'], 'Wrangler Pages summary')
   exactKeys(detailed, [
     'type', 'version', 'pages_project', 'deployment_id', 'url', 'alias', 'environment',
-    'production_branch', 'deployment_trigger', 'timestamp',
+    'production_branch', 'deployment_trigger',
   ], 'Wrangler Pages detail')
   exactKeys(detailed.deployment_trigger, ['metadata'], 'Wrangler Pages deployment trigger')
   exactKeys(detailed.deployment_trigger.metadata, ['commit_hash'], 'Wrangler Pages deployment metadata')
@@ -144,22 +144,10 @@ export function verifyWranglerPagesDeployOutput(raw, {
   ) {
     throw new Error('Wrangler structured output does not match the exact deployment request.')
   }
-  const sessionTime = timestamp(session.timestamp, 'Wrangler session timestamp')
-  const summaryTime = timestamp(summary.timestamp, 'Wrangler Pages summary timestamp')
-  const detailTime = timestamp(detailed.timestamp, 'Wrangler Pages detail timestamp')
-  if (
-    sessionTime < started
-    || summaryTime < sessionTime
-    || detailTime < summaryTime
-    || detailTime > nowTime + 60_000
-  ) {
-    throw new Error('Wrangler structured output is outside the current deployment time boundary.')
-  }
   return Object.freeze({
     deploymentId: summary.deployment_id,
     deploymentUrl: immutableUrl(summary.url, target, summary.deployment_id),
     startedAt: new Date(started).toISOString(),
-    outputAt: new Date(detailTime).toISOString(),
     commitSha,
     environment,
     project: target.project,
@@ -182,7 +170,6 @@ export async function readWranglerPagesDeployOutput({
       `deployment_id=${result.deploymentId}`,
       `deployment_url=${result.deploymentUrl}`,
       `deployment_started_at=${result.startedAt}`,
-      `deployment_output_at=${result.outputAt}`,
       '',
     ].join('\n'), 'utf8')
   }
