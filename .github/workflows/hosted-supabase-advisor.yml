@@ -1,0 +1,119 @@
+name: Hosted Supabase advisor attestation
+
+run-name: Hosted Supabase advisor ${{ inputs.environment }} ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Hosted Supabase project to inspect
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      commit_sha:
+        description: Lowercase full SHA at the current main tip with a successful Quality and security run
+        required: true
+        type: string
+      confirmation:
+        description: Type "ATTEST SUPABASE ADVISOR <environment> <SHA> WITH EPHEMERAL TOKEN"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: supabase-hosted-advisor-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  attest:
+    name: Hosted Supabase advisor (${{ inputs.environment }})
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'haengjoo123/buril-lab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ inputs.environment }}
+    env:
+      ADVISOR_ENVIRONMENT: ${{ inputs.environment }}
+      DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}
+      ADVISOR_CONFIRMATION: ${{ inputs.confirmation }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Validate the exact main-SHA attestation request
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$ADVISOR_ENVIRONMENT" != "staging" && "$ADVISOR_ENVIRONMENT" != "production" ]]; then
+            echo "Advisor environment must be staging or production." >&2
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "commit_sha must be a lowercase, full Git SHA." >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
+            echo "Advisor attestation can inspect only the main SHA that dispatched this workflow." >&2
+            exit 1
+          fi
+          if [[ "$ADVISOR_CONFIRMATION" != "ATTEST SUPABASE ADVISOR $ADVISOR_ENVIRONMENT $DEPLOY_COMMIT_SHA WITH EPHEMERAL TOKEN" ]]; then
+            echo "Advisor confirmation did not acknowledge the exact environment, SHA, and ephemeral-token lifecycle." >&2
+            exit 1
+          fi
+
+      - name: Check out the exact selected commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the selected commit is the current trusted main tip
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies and the pinned Supabase CLI
+        run: npm ci
+
+      - name: Verify the exact commit passed trusted main quality
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Verify the pinned Supabase CLI version
+        run: test "$(node node_modules/supabase/dist/supabase.js --version)" = "2.115.0"
+
+      - name: Fail closed on hosted advisor or permission drift
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}
+        run: >-
+          npm run security:supabase-advisors:hosted --
+          --environment "$ADVISOR_ENVIRONMENT"
+
+      - name: Record public-safe attestation evidence
+        shell: bash
+        run: |
+          echo "- Environment: $ADVISOR_ENVIRONMENT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`$DEPLOY_COMMIT_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Result: hosted Supabase Advisor baseline and permission evidence matched" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record mandatory ephemeral-token cleanup
+        if: always()
+        shell: bash
+        run: |
+          echo "::warning::Immediately remove SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN from the selected GitHub environment and revoke the token in Supabase."
+          echo "- Operator action required now: remove the temporary GitHub environment secret and revoke its Supabase token." >> "$GITHUB_STEP_SUMMARY"
