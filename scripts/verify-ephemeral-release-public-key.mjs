@@ -12,9 +12,10 @@ export function verifyEphemeralReleasePublicKey(
   if (typeof pem !== 'string' || pem.length === 0 || Buffer.byteLength(pem, 'utf8') > 8 * 1024) {
     throw new Error('Pinned ephemeral release public key is missing or oversized.')
   }
+  const platformCanonicalPem = pem.replace(/\r\n/g, '\n')
   let key
   try {
-    key = createPublicKey(pem)
+    key = createPublicKey(platformCanonicalPem)
   } catch {
     throw new Error('Pinned ephemeral release public key is invalid.')
   }
@@ -22,7 +23,7 @@ export function verifyEphemeralReleasePublicKey(
     throw new Error('Pinned ephemeral release public key must be Ed25519.')
   }
   const canonicalPem = key.export({ type: 'spki', format: 'pem' })
-  if (pem !== canonicalPem) {
+  if (platformCanonicalPem !== canonicalPem) {
     throw new Error('Pinned ephemeral release public key must use canonical PEM encoding.')
   }
   const fingerprint = publicKeyFingerprint(key)

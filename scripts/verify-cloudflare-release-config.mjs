@@ -45,10 +45,10 @@ const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   '"storage_backup_enabled": true',
 ]
 const STAGING_RELEASE_WORKFLOW_SHA256 = [
-  'b0b263cb869c0f0b',
-  '6bbacc6308b79c89',
-  'fc6e31c244c62dc4',
-  '8f640c8d28ef667f',
+  '0a6db55535d85903',
+  'f2dde64cc8dc2dbc',
+  '57e52364a01dd72d',
+  'bbe37f9bba552e58',
 ].join('')
 const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
   '0c986e96cb6324fb',
@@ -58,14 +58,14 @@ const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
 ].join('')
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
-  production: 'afd7fd6823a6b5f65b3414121607613d2f796f95f98381ca87b0503834edb91b',
+  production: 'f616491ded5f72c1905b56d2866e9009e6cb97d34870a1ef91b6a8ed8166ad82',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
   'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,
 })
 const PINNED_CLOUDFLARE_API_HELPER_SHA256 = '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee'
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
-const PINNED_WRANGLER_OUTPUT_HELPER_SHA256 = 'f4c12e353d2caf18b1dc47a3bdc1a00a88e58c09cc675e5998ff16915e63cacf'
+const PINNED_WRANGLER_OUTPUT_HELPER_SHA256 = 'b5b33eb30de37a5c2b2ba300a0d9e4d73e6b6da9171d4884cb49ef9f223c0d6a'
 const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
   staging: [
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
@@ -123,13 +123,17 @@ function exactTrimmedLineCount(text, expected) {
   return text.split(/\r?\n/).filter((line) => line.trim() === expected).length
 }
 
+function normalizeLineEndings(value) {
+  return String(value).replace(/\r\n/g, '\n')
+}
+
 function normalizedWorkflowHash(workflow) {
-  const normalized = workflow.replace(/\r\n/g, '\n').trimEnd()
+  const normalized = normalizeLineEndings(workflow).trimEnd()
   return createHash('sha256').update(normalized, 'utf8').digest('hex')
 }
 
 function rawSourceHash(source) {
-  return createHash('sha256').update(String(source), 'utf8').digest('hex')
+  return createHash('sha256').update(normalizeLineEndings(source), 'utf8').digest('hex')
 }
 
 function externalActionReferences(workflow) {
@@ -338,6 +342,16 @@ function verifyWranglerConfig(config, {
 }
 
 export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflows, browser = {} }) {
+  productionRaw = normalizeLineEndings(productionRaw)
+  stagingRaw = normalizeLineEndings(stagingRaw)
+  workflows = Object.fromEntries(Object.entries(workflows || {}).map(([name, workflow]) => [
+    name,
+    normalizeLineEndings(workflow),
+  ]))
+  browser = Object.fromEntries(Object.entries(browser || {}).map(([name, source]) => [
+    name,
+    normalizeLineEndings(source),
+  ]))
   const workflowNames = Object.keys(workflows || {}).sort()
   const approvedWorkflowNames = Object.keys(APPROVED_WORKFLOW_ACTION_REFERENCES).sort()
   if (JSON.stringify(workflowNames) !== JSON.stringify(approvedWorkflowNames)) {
