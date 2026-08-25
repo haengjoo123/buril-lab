@@ -1,7 +1,7 @@
 import { generateKeyPairSync, createPrivateKey } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { dirname, join, win32 } from 'node:path'
 
 const MAX_DPAPI_OUTPUT_BYTES = 64 * 1024
 const DPAPI_TIMEOUT_MS = 15_000
@@ -34,13 +34,13 @@ const DPAPI_COMMANDS = Object.freeze({
 
 export function defaultEphemeralKeyPath(environment = process.env) {
   const localAppData = environment.LOCALAPPDATA
-  if (!localAppData || !isAbsolute(localAppData)) {
+  if (!localAppData || !win32.isAbsolute(localAppData)) {
     throw new Error('LOCALAPPDATA is unavailable for the protected release key.')
   }
-  const base = resolve(localAppData, 'BurilLab', 'credentials')
-  const target = resolve(base, 'ephemeral-release-ed25519.pkcs8.dpapi')
-  const relationship = relative(base, target)
-  if (relationship.startsWith('..') || isAbsolute(relationship)) {
+  const base = win32.resolve(localAppData, 'BurilLab', 'credentials')
+  const target = win32.resolve(base, 'ephemeral-release-ed25519.pkcs8.dpapi')
+  const relationship = win32.relative(base, target)
+  if (relationship.startsWith('..') || win32.isAbsolute(relationship)) {
     throw new Error('Protected release key path escaped its credential directory.')
   }
   return target
