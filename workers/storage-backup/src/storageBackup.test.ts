@@ -28,7 +28,21 @@ const USER_A = '33333333-3333-4333-8333-333333333333'
 const STORAGE_A = '44444444-4444-4444-8444-444444444444'
 const STORAGE_B = '55555555-5555-4555-8555-555555555555'
 const STORAGE_C = '66666666-6666-4666-8666-666666666666'
-const TEST_SECRET = 'service-role-test-value-never-used-outside-unit-tests'
+
+function base64UrlJson(value: Record<string, unknown>): string {
+  return btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+}
+
+function testLegacyJwt(role = 'service_role', ref = STAGING_REF): string {
+  return [
+    base64UrlJson({ alg: 'HS256', typ: 'JWT' }),
+    base64UrlJson({ iss: 'supabase', ref, role, iat: 1, exp: 4_102_444_800 }),
+    'unit-test-signature-never-used-remotely',
+  ].join('.')
+}
+
+const TEST_SECRET = testLegacyJwt()
+const TEST_NEW_SECRET = 'sb_secret_storageBackupUnitTestCredential_1234567890'
 const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z')
 
 interface PointerFixture {
@@ -204,6 +218,8 @@ class FakeSource {
   objectsForPass?: (pass: number, current: ObjectFixture[]) => ObjectFixture[]
   throwOnRequest = false
   hangDownloads = false
+  expectedApiKey = TEST_SECRET
+  expectedAuthorization: string | null = `Bearer ${TEST_SECRET}`
 
   constructor(pointers: PointerFixture[], objects: ObjectFixture[]) {
     this.pointers = structuredClone(pointers)
@@ -221,8 +237,8 @@ class FakeSource {
     }
 
     expect(url.origin).toBe(STAGING_ORIGIN)
-    expect(headers.get('apikey')).toBe(TEST_SECRET)
-    expect(headers.get('authorization')).toBe(`Bearer ${TEST_SECRET}`)
+    expect(headers.get('apikey')).toBe(this.expectedApiKey)
+    expect(headers.get('authorization')).toBe(this.expectedAuthorization)
 
     if (url.pathname === '/rest/v1/cabinets') return this.cabinetResponse(url)
     if (url.pathname === '/storage/v1/object/list/cabinets') return this.storageListResponse(init)
@@ -461,11 +477,50 @@ describe('OFF-first activation and environment isolation', () => {
     expect(r2.headCalls).toHaveLength(0)
   })
 
-  it('requires an exact supported pointer mode and secret-shaped service credential', () => {
+  it('requires an exact supported pointer mode and recognized backend credential', () => {
     const kv = new FakeKv()
     const r2 = new FakeR2()
     expect(() => resolveSourceConfig(bindings(kv, r2, { SOURCE_POINTER_MODE: 'auto' }))).toThrow('config_invalid')
     expect(() => resolveSourceConfig(bindings(kv, r2, { SUPABASE_SERVICE_ROLE_KEY: 'short' }))).toThrow('config_invalid')
+  })
+
+  it('uses apikey only for a new Supabase secret key', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    source.expectedApiKey = TEST_NEW_SECRET
+    source.expectedAuthorization = null
+
+    const { result } = await runFixture(source, {
+      bindingOverrides: { SUPABASE_SERVICE_ROLE_KEY: TEST_NEW_SECRET },
+    })
+
+    expect(result.status).toBe('completed')
+    expect(source.fetchCalls.length).toBeGreaterThan(0)
+    expect(source.fetchCalls.every((call) => call.headers.get('apikey') === TEST_NEW_SECRET)).toBe(true)
+    expect(source.fetchCalls.every((call) => call.headers.get('authorization') === null)).toBe(true)
+  })
+
+  it.each([
+    ['publishable key', 'sb_publishable_storageBackupUnitTestCredential_1234567890'],
+    ['anon JWT', testLegacyJwt('anon')],
+    ['other-project service JWT', testLegacyJwt('service_role', 'abcdefghijklmnopqrst')],
+    ['arbitrary secret-shaped string', 'arbitrary-backend-secret-value-that-is-not-a-supported-key'],
+    ['malformed JWT', 'eyJhbGciOiJIUzI1NiJ9.invalid.unit-test-signature-never-used-remotely'],
+  ])('rejects a %s before KV, Supabase, or R2 calls', async (_label, credential) => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const kv = new FakeKv()
+    const r2 = new FakeR2()
+
+    const result = await runScheduledBackup(bindings(kv, r2, {
+      SUPABASE_SERVICE_ROLE_KEY: credential,
+    }), testOverrides(source))
+
+    expect(result).toMatchObject({ status: 'failed', code: 'config_invalid' })
+    expect(kv.get).not.toHaveBeenCalled()
+    expect(source.fetchCalls).toHaveLength(0)
+    expect(r2.headCalls).toHaveLength(0)
+    expect(r2.putCalls).toHaveLength(0)
   })
 
   it('accepts only a JSON boolean true', async () => {

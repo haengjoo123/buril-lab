@@ -86,6 +86,12 @@ contract for a separate read-only Cloudflare configuration check; local tests
 verify its exact names, prefixes, and retention periods but do not claim to
 inspect live bucket settings.
 
+`storage-backup:runtime-test` additionally runs the scheduled module inside
+Cloudflare's local Workers runtime with actual local KV and R2 bindings. It
+proves that the Worker has no public `fetch` handler, exits without touching R2
+when the flag is OFF, and refuses source/R2 work when the flag is accidentally
+enabled on the committed Free profile.
+
 Read-only evidence on 2026-08-25 found both buckets private, APAC-located, and
 empty. That observation is not a permanent expected object count.
 
@@ -101,7 +107,13 @@ larger; any request or manifest naming that bucket is a failed acceptance run.
 - Keep `storage_backup_enabled=false` until Staging has a reviewed secret,
   exact bindings, synthetic files, alerting, and a restore drill.
 - Add `SUPABASE_SERVICE_ROLE_KEY` separately to each exact Worker as a secret;
-  never place it in Wrangler config, GitHub logs, or this repository.
+  never place it in Wrangler config, GitHub logs, or this repository. The
+  binding name remains for deployment compatibility, but the preferred value
+  is a dedicated `sb_secret_...` backend key. New secret keys are sent only in
+  the `apikey` header; a legacy key is accepted only when its JWT identifies
+  the exact project and `service_role`, in which case it is also sent as a
+  Bearer token. Publishable, anonymous, arbitrary, and cross-project keys are
+  rejected before KV, Supabase, or R2 calls.
 - Confirm both R2 buckets still have public access, custom domains, and public
   development URLs disabled.
 - Confirm every image pointer has a reviewed ownership scope. `lab_id` takes

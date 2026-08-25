@@ -20,6 +20,7 @@ const ENVIRONMENT_CONTRACT = Object.freeze({
 export type BackupEnvironmentName = keyof typeof ENVIRONMENT_CONTRACT
 export type SourcePointerMode = 'legacy_url' | 'private_path'
 export type WorkersUsagePlan = 'free_off_only' | 'paid'
+type SupabaseBackendCredentialKind = 'legacy_service_role' | 'secret_key'
 
 export type BackupCode =
   | 'backup_completed'
@@ -189,6 +190,7 @@ interface SourceConfig {
   projectRef: string
   pointerMode: SourcePointerMode
   serviceRoleKey: string
+  credentialKind: SupabaseBackendCredentialKind
   runtimeConfig: RuntimeConfigKv
   r2: BackupR2Bucket
   workersUsagePlan: WorkersUsagePlan
@@ -414,6 +416,52 @@ function hasSafeSecretShape(value: string | undefined): value is string {
     && !hasControlCharacters(value)
 }
 
+function parseBase64UrlJson(value: string): Record<string, unknown> {
+  if (!/^[A-Za-z0-9_-]+$/.test(value) || value.length > 2_048) fail('config_invalid')
+  const remainder = value.length % 4
+  if (remainder === 1) fail('config_invalid')
+  const padded = `${value.replace(/-/g, '+').replace(/_/g, '/')}${'='.repeat((4 - remainder) % 4)}`
+  try {
+    const decoded = atob(padded)
+    if (decoded.length > 2_048 || hasControlCharacters(decoded.replace(/[\t\r\n]/g, ''))) {
+      fail('config_invalid')
+    }
+    const parsed = JSON.parse(decoded) as unknown
+    if (!isRecord(parsed)) fail('config_invalid')
+    return parsed
+  } catch (error) {
+    if (error instanceof BackupFailure) throw error
+    fail('config_invalid')
+  }
+}
+
+function parseSupabaseBackendCredential(
+  value: string | undefined,
+  expectedProjectRef: string,
+): { kind: SupabaseBackendCredentialKind; value: string } {
+  if (!hasSafeSecretShape(value)) fail('config_invalid')
+  if (/^sb_secret_[A-Za-z0-9_-]{20,512}$/.test(value)) {
+    return { kind: 'secret_key', value }
+  }
+
+  const parts = value.split('.')
+  if (parts.length !== 3 || parts[2].length < 16 || !/^[A-Za-z0-9_-]+$/.test(parts[2])) {
+    fail('config_invalid')
+  }
+  const header = parseBase64UrlJson(parts[0])
+  const payload = parseBase64UrlJson(parts[1])
+  if (
+    header.alg !== 'HS256'
+    || header.typ !== 'JWT'
+    || payload.iss !== 'supabase'
+    || payload.role !== 'service_role'
+    || payload.ref !== expectedProjectRef
+  ) {
+    fail('config_invalid')
+  }
+  return { kind: 'legacy_service_role', value }
+}
+
 function parsePlatformSubrequestLimit(value: string | undefined): number {
   if (typeof value !== 'string' || !/^[1-9][0-9]{0,7}$/.test(value)) fail('config_invalid')
   const parsed = Number(value)
@@ -453,7 +501,10 @@ export function resolveSourceConfig(
 
   const pointerMode = bindings.SOURCE_POINTER_MODE
   if (pointerMode !== 'legacy_url' && pointerMode !== 'private_path') fail('config_invalid')
-  if (!hasSafeSecretShape(bindings.SUPABASE_SERVICE_ROLE_KEY)) fail('config_invalid')
+  const credential = parseSupabaseBackendCredential(
+    bindings.SUPABASE_SERVICE_ROLE_KEY,
+    expected.projectRef,
+  )
   if (!bindings.BURILLAB_RUNTIME_CONFIG || typeof bindings.BURILLAB_RUNTIME_CONFIG.get !== 'function') {
     fail('config_invalid')
   }
@@ -487,7 +538,8 @@ export function resolveSourceConfig(
     origin: expected.origin,
     projectRef: expected.projectRef,
     pointerMode,
-    serviceRoleKey: bindings.SUPABASE_SERVICE_ROLE_KEY,
+    serviceRoleKey: credential.value,
+    credentialKind: credential.kind,
     runtimeConfig: bindings.BURILLAB_RUNTIME_CONFIG,
     r2: bindings.CABINET_BACKUPS,
     workersUsagePlan,
@@ -733,7 +785,11 @@ async function requestJson(
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
   headers.set('apikey', config.serviceRoleKey)
-  headers.set('Authorization', `Bearer ${config.serviceRoleKey}`)
+  if (config.credentialKind === 'legacy_service_role') {
+    headers.set('Authorization', `Bearer ${config.serviceRoleKey}`)
+  } else {
+    headers.delete('Authorization')
+  }
   if (init.body !== undefined) headers.set('Content-Type', 'application/json')
 
   return requestWithRetry(url, { ...init, headers }, dependencies, async (response) => {
@@ -978,8 +1034,10 @@ async function downloadObject(
   const headers = new Headers({
     Accept: 'application/octet-stream',
     apikey: config.serviceRoleKey,
-    Authorization: `Bearer ${config.serviceRoleKey}`,
   })
+  if (config.credentialKind === 'legacy_service_role') {
+    headers.set('Authorization', `Bearer ${config.serviceRoleKey}`)
+  }
 
   return requestWithRetry(url, { method: 'GET', headers }, dependencies, async (response) => {
     const contentEncoding = response.headers.get('content-encoding')
