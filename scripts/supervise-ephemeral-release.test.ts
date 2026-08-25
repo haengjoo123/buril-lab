@@ -226,10 +226,50 @@ describe('ephemeral release lifecycle finalization', () => {
         lookups += 1
         return JSON.stringify(lookups < 13 ? [] : [delayedRun])
       },
+      runDetailsImpl: async () => delayedRun,
     })).resolves.toEqual(delayedRun)
 
     expect(lookups).toBe(13)
     expect(wait).toHaveBeenCalledTimes(12)
+  })
+
+  it('waits for complete details of an exact just-created workflow before cleaning its secrets', async () => {
+    const commitSha = 'a'.repeat(40)
+    const expectedTitle = `Deploy staging ${commitSha} (lease=${'b'.repeat(32)}, storage-backup=false)`
+    const contract = { workflow: 'deploy-staging.yml', workflowName: 'Deploy staging' }
+    const createdAt = '2026-08-25T05:00:00.000Z'
+    const completeRun = {
+      databaseId: 12345,
+      displayTitle: expectedTitle,
+      headSha: commitSha,
+      status: 'queued',
+      conclusion: '',
+      createdAt,
+      updatedAt: createdAt,
+      attempt: 1,
+      event: 'workflow_dispatch',
+      headBranch: 'main',
+      url: 'https://github.com/haengjoo123/buril-lab/actions/runs/12345',
+      workflowName: 'Deploy staging',
+    }
+    let detailsLookups = 0
+    const wait = vi.fn(async () => undefined)
+
+    await expect(findDispatchedRun(contract, expectedTitle, commitSha, {
+      dispatchOutput: completeRun.url,
+      dispatchedAfter: Date.parse(createdAt),
+      attempts: 2,
+      wait,
+      runDetailsImpl: async () => {
+        detailsLookups += 1
+        return detailsLookups === 1
+          ? { ...completeRun, workflowName: '' }
+          : completeRun
+      },
+    })).resolves.toEqual(completeRun)
+
+    expect(detailsLookups).toBe(2)
+    expect(wait).toHaveBeenCalledTimes(1)
   })
 
   it('paginates recovery history instead of treating the 101st exact run as absent', async () => {

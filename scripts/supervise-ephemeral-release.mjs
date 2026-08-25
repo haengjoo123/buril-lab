@@ -788,7 +788,12 @@ export async function findDispatchedRun(contract, expectedTitle, commitSha, {
         const details = await runDetailsImpl(exactRunId)
         return validateDispatchedRun(details, contract, expectedTitle, commitSha, exactRunId)
       } catch (error) {
-        if (attempt === attempts || /does not match/.test(String(error?.message || ''))) throw error
+        // A just-created workflow can briefly expose incomplete metadata (for
+        // example, no branch or workflow name yet).  Do not clear the
+        // environment secrets while that exact run is still being populated:
+        // retry until its complete details either prove the expected run or
+        // the bounded reconciliation window expires.
+        if (attempt === attempts) throw error
       }
     } else {
       const raw = await runGhImpl([
@@ -811,7 +816,15 @@ export async function findDispatchedRun(contract, expectedTitle, commitSha, {
       ))
       if (matches.length > 1) throw new Error('GitHub returned multiple possible runs for one supervised dispatch.')
       if (matches.length === 1) {
-        return validateDispatchedRun(matches[0], contract, expectedTitle, commitSha)
+        try {
+          // The list endpoint may return a partially populated entry while a
+          // separate run-detail request already has the authoritative fields.
+          // Trust neither response until the full exact-run validation passes.
+          const details = await runDetailsImpl(matches[0].databaseId)
+          return validateDispatchedRun(details, contract, expectedTitle, commitSha)
+        } catch (error) {
+          if (attempt === attempts) throw error
+        }
       }
     }
     if (attempt < attempts) await wait(DISPATCH_RECONCILIATION_INTERVAL_MS)
