@@ -28,6 +28,7 @@ const REQUIRED_DEPLOY_STEPS = Object.freeze([
   'Independently verify the uploaded Staging artifact archive digest',
   'Verify and activate the exact Staging release artifact',
   'Verify the signed current ephemeral lease',
+  'Verify exact ephemeral credentials reached the runner',
   'Verify the signed cumulative credential cleanup receipt',
   'Verify the exact commit passed trusted main quality',
   'Verify the current Staging Supabase Advisor state',

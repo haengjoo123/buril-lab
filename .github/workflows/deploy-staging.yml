@@ -340,6 +340,16 @@ jobs:
       - name: Verify the signed current ephemeral lease
         run: node scripts/verify-ephemeral-lease-grant.mjs
 
+      - name: Verify exact ephemeral credentials reached the runner
+        env:
+          BASH_ENV: /dev/null
+          ENV: /dev/null
+          NODE_OPTIONS: ""
+          PATH: ${{ steps.deploy-runner-boundary.outputs.trusted_path }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}
+          PAGES_EPHEMERAL_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}
+        run: node scripts/verify-ephemeral-credential-injection.mjs --mode lease
+
       - name: Verify the signed cumulative credential cleanup receipt
         env:
           BASH_ENV: /dev/null

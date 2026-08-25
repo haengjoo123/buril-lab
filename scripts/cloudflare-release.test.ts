@@ -117,6 +117,7 @@ const REQUIRED_STAGING_JOB_STEPS = [
   'Independently verify the uploaded Staging artifact archive digest',
   'Verify and activate the exact Staging release artifact',
   'Verify the signed current ephemeral lease',
+  'Verify exact ephemeral credentials reached the runner',
   'Verify the signed cumulative credential cleanup receipt',
   'Verify the exact commit passed trusted main quality',
   'Verify the current Staging Supabase Advisor state',
@@ -2390,6 +2391,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       stagingWorkflow,
       productionWorkflow,
       qualityWorkflow,
+      credentialProbeWorkflow,
       iosWorkflow,
       stagingPlaywrightConfig,
       gate0AccessRoute,
@@ -2402,6 +2404,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('.github/workflows/deploy-staging.yml', 'utf8'),
       readFile('.github/workflows/deploy-production.yml', 'utf8'),
       readFile('.github/workflows/quality.yml', 'utf8'),
+      readFile('.github/workflows/verify-staging-ephemeral-credentials.yml', 'utf8'),
       readFile('.github/workflows/ios-testflight.yml', 'utf8'),
       readFile('playwright.staging.config.ts', 'utf8'),
       readFile('scripts/gate0-access-route.mjs', 'utf8'),
@@ -2423,6 +2426,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         staging: stagingWorkflow,
         production: productionWorkflow,
         quality: qualityWorkflow,
+        'verify-staging-ephemeral-credentials.yml': credentialProbeWorkflow,
         'ios-testflight.yml': iosWorkflow,
       },
       browser: {
@@ -2433,6 +2437,27 @@ describe('Prep 0 Cloudflare release controls', () => {
       },
     }
     expect(verifyReleaseConfiguration(configuration)).toMatchObject({ projectCount: 2 })
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        'verify-staging-ephemeral-credentials.yml': credentialProbeWorkflow.replace(
+          'node scripts/verify-ephemeral-credential-injection.mjs --mode probe',
+          'npx wrangler pages deploy dist',
+        ),
+      },
+    })).toThrow(/credential-injection probe|fully reviewed command contract/)
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        'verify-staging-ephemeral-credentials.yml': credentialProbeWorkflow.replace(
+          'secrets.STAGING_PAGES_EPHEMERAL_TOKEN',
+          'secrets.STAGING_WORKER_EPHEMERAL_TOKEN',
+        ),
+      },
+    })).toThrow(/credential-injection probe|unexpected or legacy|fully reviewed command contract/)
 
     for (const [workflowName, mutatedWorkflow, expectedError] of [
       [

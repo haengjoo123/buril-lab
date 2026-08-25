@@ -8,6 +8,7 @@ import {
   assertNoRepositoryCredentialState,
   credentialGateResult,
   credentialGatesSucceeded,
+  credentialInjectionProbeResult,
   failedBeforePagesMutation,
   findDispatchedRun,
   findJournalRun,
@@ -140,6 +141,32 @@ describe('ephemeral release lifecycle finalization', () => {
       conclusion: 'success',
     })
     expect(credentialGateResult(run, contract)).toBe('indeterminate')
+  })
+
+  it('requires the exact successful credential-injection verification step', () => {
+    const contract = {
+      jobName: 'credential probe',
+      verificationStep: 'Verify exact environment-secret injection',
+    }
+    const run = {
+      status: 'completed',
+      conclusion: 'success',
+      jobs: [{
+        name: contract.jobName,
+        status: 'completed',
+        conclusion: 'success',
+        steps: [{
+          name: contract.verificationStep,
+          status: 'completed',
+          conclusion: 'success',
+        }],
+      }],
+    }
+    expect(credentialInjectionProbeResult(run, contract)).toBe('succeeded')
+    run.jobs[0].steps[0].conclusion = 'failure'
+    expect(credentialInjectionProbeResult(run, contract)).toBe('failed')
+    delete run.jobs[0].steps[0].conclusion
+    expect(credentialInjectionProbeResult(run, contract)).toBe('indeterminate')
   })
 
   it('accepts dashboard-only revocation evidence only after a failed or cancelled Pages write was skipped', () => {

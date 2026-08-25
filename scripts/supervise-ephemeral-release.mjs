@@ -16,6 +16,7 @@ import {
   advanceProviderCreationJournal,
   assertProviderCreationRunAbsenceCanAbort,
   createAbortedLeaseReceipt,
+  createCredentialInjectionProbe,
   appendClosedLeaseReceipt,
   createInitialCleanupReceipt,
   createLeaseMaterial,
@@ -26,6 +27,7 @@ import {
   verifyProviderCreationJournal,
   verifyProviderCreationLeaseGrant,
   verifyProviderCreationRecoveryEvidence,
+  STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW,
 } from './ephemeral-release-supervisor-core.mjs'
 import {
   CLEANUP_ABSENT_SECRET_NAMES,
@@ -91,6 +93,13 @@ const CONTRACTS = Object.freeze({
     pagesMutationStep: 'Deploy the exact commit to production Pages',
     projectRef: 'zafxzidbtbryiksemlwc',
   }),
+})
+
+const STAGING_CREDENTIAL_INJECTION_PROBE_CONTRACT = Object.freeze({
+  workflow: STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW,
+  workflowName: 'Verify staging ephemeral credentials',
+  jobName: 'Verify exact environment-secret injection',
+  verificationStep: 'Verify exact environment-secret injection',
 })
 
 function parseArguments(argv) {
@@ -347,6 +356,21 @@ async function listEnvironmentSecrets(environment, run = runGh) {
   return parseGithubNameList([
     'secret', 'list', '--repo', REPOSITORY, '--env', environment, '--json', 'name',
   ], 'GitHub environment secret list', run)
+}
+
+async function assertEnvironmentSecretsPresent(environment, expectedNames) {
+  if (
+    !Array.isArray(expectedNames)
+    || expectedNames.length === 0
+    || new Set(expectedNames).size !== expectedNames.length
+    || expectedNames.some((name) => typeof name !== 'string' || !/^[A-Z0-9_]+$/.test(name))
+  ) {
+    throw new Error('Expected GitHub environment-secret names are invalid.')
+  }
+  const present = await listEnvironmentSecrets(environment)
+  if (expectedNames.some((name) => !present.has(name))) {
+    throw new Error('GitHub did not report every temporary environment secret after setup.')
+  }
 }
 
 export async function removeCredentialSecrets(environment, { run = runGh } = {}) {
@@ -697,6 +721,24 @@ export function credentialGatesSucceeded(run, contract) {
   return credentialGateResult(run, contract) === 'succeeded'
 }
 
+export function credentialInjectionProbeResult(run, contract = STAGING_CREDENTIAL_INJECTION_PROBE_CONTRACT) {
+  if (!Array.isArray(run?.jobs) || run?.status !== 'completed') return 'indeterminate'
+  if (!TERMINAL_GATE_CONCLUSIONS.has(run.conclusion)) return 'indeterminate'
+  if (run.conclusion !== 'success') return 'failed'
+  const jobs = run.jobs.filter((job) => job?.name === contract.jobName)
+  if (jobs.length !== 1 || jobs[0].status !== 'completed') return 'indeterminate'
+  if (!TERMINAL_GATE_CONCLUSIONS.has(jobs[0].conclusion)) return 'indeterminate'
+  if (jobs[0].conclusion !== 'success') return 'failed'
+  const steps = Array.isArray(jobs[0].steps) ? jobs[0].steps : []
+  const verificationSteps = steps.filter((step) => step?.name === contract.verificationStep)
+  if (verificationSteps.length !== 1) return 'failed'
+  const [verificationStep] = verificationSteps
+  if (verificationStep.status !== 'completed' || !TERMINAL_GATE_CONCLUSIONS.has(verificationStep.conclusion)) {
+    return 'indeterminate'
+  }
+  return verificationStep.conclusion === 'success' ? 'succeeded' : 'failed'
+}
+
 // A dashboard-only revocation attestation is acceptable only when the exact
 // supervised run is terminal, unsuccessful, and GitHub proves that its Pages
 // write step was skipped. This lets recovery close a pre-deployment failure or
@@ -816,6 +858,96 @@ async function productionStagingEvidence(commitSha, publicKey, stagingRunId) {
   })
 }
 
+async function runStagingCredentialInjectionProbe({ commitSha, cleanupReceipt, privateKey }) {
+  const probeId = randomBytes(16).toString('hex')
+  const supabaseProbeSecret = `probe-supabase-${randomBytes(32).toString('base64url')}`
+  const pagesProbeSecret = `probe-pages-${randomBytes(32).toString('base64url')}`
+  const probeMaterial = createCredentialInjectionProbe({
+    environment: 'staging',
+    commitSha,
+    probeId,
+    cleanupReceipt,
+    supabaseProbeSecret,
+    pagesProbeSecret,
+    privateKey,
+  })
+  const expectedTitle = `Verify staging ephemeral credential injection ${commitSha} (probe=${probeId})`
+  let operationFailure = null
+  try {
+    await setSecret('staging', 'SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN', supabaseProbeSecret)
+    await setSecret('staging', 'STAGING_PAGES_EPHEMERAL_TOKEN', pagesProbeSecret)
+    await assertEnvironmentSecretsPresent('staging', [
+      'SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN',
+      'STAGING_PAGES_EPHEMERAL_TOKEN',
+    ])
+    console.log('Waiting for GitHub environment-secret propagation before the non-deploying injection probe.')
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, SECRET_DISPATCH_PROPAGATION_DELAY_MS))
+    const dispatchArguments = [
+      'workflow', 'run', STAGING_CREDENTIAL_INJECTION_PROBE_CONTRACT.workflow,
+      '--repo', REPOSITORY, '--ref', 'main',
+      '-f', `commit_sha=${commitSha}`,
+      '-f', `probe_id=${probeId}`,
+      '-f', `confirmation=VERIFY buril-lab-staging credential injection ${commitSha} PROBE ${probeId}`,
+      '-f', `probe_grant=${probeMaterial.grant}`,
+    ]
+    const dispatchedAfter = Date.now()
+    let dispatchOutput = ''
+    let dispatchFailure = null
+    try {
+      dispatchOutput = await runGh(dispatchArguments)
+    } catch (error) {
+      dispatchFailure = error
+    }
+    let probeRun
+    try {
+      probeRun = await findDispatchedRun(
+        STAGING_CREDENTIAL_INJECTION_PROBE_CONTRACT,
+        expectedTitle,
+        commitSha,
+        { dispatchOutput, dispatchedAfter },
+      )
+    } catch (reconcileError) {
+      throw new AggregateError(
+        [dispatchFailure, reconcileError].filter(Boolean),
+        'The Staging credential-injection probe could not be reconciled to one exact GitHub run.',
+      )
+    }
+    if (dispatchFailure) {
+      console.warn('The credential-injection probe dispatch response failed, but its exact created run was reconciled safely.')
+    }
+    await runGh(['run', 'watch', String(probeRun.databaseId), '--repo', REPOSITORY, '--exit-status'], {
+      timeoutMs: 15 * 60 * 1000,
+    })
+    const details = await runDetails(probeRun.databaseId)
+    validateDispatchedRun(
+      details,
+      STAGING_CREDENTIAL_INJECTION_PROBE_CONTRACT,
+      expectedTitle,
+      commitSha,
+      String(probeRun.databaseId),
+    )
+    if (credentialInjectionProbeResult(details) !== 'succeeded') {
+      throw new Error('The exact Staging credential-injection probe did not prove both secret values reached its runner.')
+    }
+  } catch (error) {
+    operationFailure = error
+  }
+  let cleanupFailure = null
+  try {
+    await clearGithubCredentialState('staging')
+  } catch (error) {
+    cleanupFailure = error
+  }
+  if (operationFailure && cleanupFailure) {
+    throw new AggregateError(
+      [operationFailure, cleanupFailure],
+      'The Staging credential-injection probe and its GitHub cleanup both failed.',
+    )
+  }
+  if (cleanupFailure) throw cleanupFailure
+  if (operationFailure) throw operationFailure
+}
+
 async function deploy(environment, commitSha, storageBackup, cloudflareAccountId, stagingRunId, inputIterator) {
   const contract = CONTRACTS[environment]
   if (!contract || !FULL_SHA_PATTERN.test(commitSha)) throw new Error('Deploy target is invalid.')
@@ -842,6 +974,9 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
   const stagingEvidence = environment === 'production'
     ? await productionStagingEvidence(commitSha, publicKey, stagingRunId)
     : null
+  if (environment === 'staging') {
+    await runStagingCredentialInjectionProbe({ commitSha, cleanupReceipt, privateKey })
+  }
 
   const leaseId = randomBytes(16).toString('hex')
   const expectedPatLabel = `burillab-${environment}-${leaseId}`
@@ -936,7 +1071,12 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
     if (storageBackup) {
       await setSecret(environment, 'STAGING_WORKER_EPHEMERAL_TOKEN', credentials.cloudflare_worker_token)
     }
-    console.log('Waiting for GitHub environment-secret propagation before the one supervised dispatch.')
+    await assertEnvironmentSecretsPresent(environment, [
+      'SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN',
+      pageSecretName,
+      ...(storageBackup ? ['STAGING_WORKER_EPHEMERAL_TOKEN'] : []),
+    ])
+    console.log('Waiting for GitHub environment-secret propagation before the supervised deployment dispatch.')
     await new Promise((resolvePromise) => setTimeout(resolvePromise, SECRET_DISPATCH_PROPAGATION_DELAY_MS))
 
     preDispatchStage = 'GitHub workflow dispatch'

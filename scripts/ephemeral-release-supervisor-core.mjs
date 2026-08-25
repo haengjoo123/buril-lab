@@ -13,8 +13,10 @@ import {
 
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const LEASE_PATTERN = /^[0-9a-f]{32}$/
+const PROBE_ID_PATTERN = /^[0-9a-f]{32}$/
 const HASH_PATTERN = /^[0-9a-f]{64}$/
 const MAX_SESSION_MS = 45 * 60 * 1000
+const MAX_CREDENTIAL_INJECTION_PROBE_MS = 15 * 60 * 1000
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 const JOURNAL_PHASES = Object.freeze([
   'provider_creation_pending',
@@ -30,6 +32,8 @@ const CONTRACTS = Object.freeze({
   staging: Object.freeze({ workflow: 'deploy-staging.yml' }),
   production: Object.freeze({ workflow: 'deploy-production.yml' }),
 })
+
+export const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW = 'verify-staging-ephemeral-credentials.yml'
 
 function iso(value) {
   const timestamp = value instanceof Date ? value.getTime() : Number(value)
@@ -177,6 +181,67 @@ export function createLeaseMaterial({
     supabasePatLabelHash,
     supabasePatSha256,
   })
+}
+
+export function createCredentialInjectionProbe({
+  environment,
+  commitSha,
+  probeId,
+  cleanupReceipt,
+  supabaseProbeSecret,
+  pagesProbeSecret,
+  privateKey,
+  now = Date.now(),
+  lifetimeMs = 10 * 60 * 1000,
+}) {
+  const contract = workflowContract(environment)
+  if (
+    environment !== 'staging'
+    || !FULL_SHA_PATTERN.test(commitSha)
+    || !PROBE_ID_PATTERN.test(probeId)
+    || typeof cleanupReceipt !== 'string'
+    || typeof supabaseProbeSecret !== 'string'
+    || typeof pagesProbeSecret !== 'string'
+    || supabaseProbeSecret.length < 20
+    || pagesProbeSecret.length < 20
+    || /[\r\n\0]/.test(supabaseProbeSecret)
+    || /[\r\n\0]/.test(pagesProbeSecret)
+    || supabaseProbeSecret === pagesProbeSecret
+  ) {
+    throw new Error('Credential-injection probe material is invalid.')
+  }
+  if (!Number.isFinite(lifetimeMs) || lifetimeMs <= 0 || lifetimeMs > MAX_CREDENTIAL_INJECTION_PROBE_MS) {
+    throw new Error('Credential-injection probe lifetime must be at most 15 minutes.')
+  }
+  const receipt = verifySignedAttestation(cleanupReceipt, privateKey, 'cleanup_receipt').payload
+  if (
+    receipt.version !== 3
+    || receipt.environment !== environment
+    || receipt.workflow !== contract.workflow
+    || !Array.isArray(receipt.leases)
+    || receipt.sequence !== receipt.leases.length
+  ) {
+    throw new Error('Credential-injection probe requires the current signed cleanup receipt.')
+  }
+  const issuedAt = now instanceof Date ? now.getTime() : Number(now)
+  if (!Number.isFinite(issuedAt)) throw new Error('Credential-injection probe issue time is invalid.')
+  const expiresAt = issuedAt + lifetimeMs
+  const grant = signAttestation({
+    version: 1,
+    kind: 'credential_injection_probe',
+    environment,
+    probe_workflow: STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW,
+    target_workflow: contract.workflow,
+    commit_sha: commitSha,
+    probe_id: probeId,
+    issued_at: iso(issuedAt),
+    expires_at: iso(expiresAt),
+    cleanup_receipt_sha256: attestationEnvelopeHash(cleanupReceipt),
+    supabase_secret_sha256: sha256(supabaseProbeSecret),
+    pages_secret_sha256: sha256(pagesProbeSecret),
+    supervisor_key_id: publicKeyFingerprint(privateKey),
+  }, privateKey)
+  return Object.freeze({ grant, expiresAt })
 }
 
 export function createProviderCreationPending({
