@@ -1,0 +1,191 @@
+name: Verify Staging rollback target
+
+run-name: Verify Staging rollback ${{ inputs.target_deployment_id }} (${{ inputs.target_commit_sha }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_commit_sha:
+        description: Lowercase full SHA expected from the selected Staging Pages deployment
+        required: true
+        type: string
+      target_deployment_id:
+        description: Exact lowercase UUID for the selected buril-lab-staging Pages deployment
+        required: true
+        type: string
+      confirmation:
+        description: Type "VERIFY ROLLBACK buril-lab-staging <deployment UUID> <full SHA>"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-staging
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify exact protected Staging rollback target
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: https://staging.burillab.com
+    env:
+      BASH_ENV: /dev/null
+      ENV: /dev/null
+      NODE_OPTIONS: ""
+      ROLLBACK_TARGET_COMMIT_SHA: ${{ inputs.target_commit_sha }}
+      ROLLBACK_TARGET_DEPLOYMENT_ID: ${{ inputs.target_deployment_id }}
+      ROLLBACK_CONFIRMATION: ${{ inputs.confirmation }}
+
+    steps:
+      - name: Validate the protected-main rollback verification request before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REPOSITORY" != "haengjoo123/buril-lab" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Staging rollback verification must be dispatched from protected main in the canonical repository" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
+            echo "Staging rollback verification retries are forbidden; dispatch a new verification" >&2
+            exit 1
+          fi
+          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ || ! "$ROLLBACK_TARGET_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Rollback verification requires lowercase full Git SHAs" >&2
+            exit 1
+          fi
+          if [[ ! "$ROLLBACK_TARGET_DEPLOYMENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+            echo "Rollback verification requires a lowercase Pages deployment UUID" >&2
+            exit 1
+          fi
+          if [[ "$ROLLBACK_CONFIRMATION" != "VERIFY ROLLBACK buril-lab-staging $ROLLBACK_TARGET_DEPLOYMENT_ID $ROLLBACK_TARGET_COMMIT_SHA" ]]; then
+            echo "Rollback confirmation does not match the exact Staging target" >&2
+            exit 1
+          fi
+
+      - name: Check out the protected-main verification code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare the exact Staging rollback verification target
+        id: target
+        shell: bash
+        run: node scripts/prepare-staging-rollback-verification.mjs
+
+      - name: Verify that the selected rollback commit is trusted main history
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ steps.target.outputs.source_sha }}"
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "${{ steps.target.outputs.source_sha }}"
+          git cat-file -e "${{ steps.target.outputs.target_commit_sha }}^{commit}"
+          git merge-base --is-ancestor "${{ steps.target.outputs.target_commit_sha }}" "${{ steps.target.outputs.source_sha }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked verification dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify custom and immutable Staging origins remain Access-protected
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-staging-access.mjs "https://staging.burillab.com/release.json?rollback=${{ steps.target.outputs.target_commit_sha }}"
+          node scripts/verify-staging-access.mjs "${{ steps.target.outputs.target_immutable_origin }}/release.json?rollback=${{ steps.target.outputs.target_commit_sha }}"
+
+      - name: Verify the custom-domain rollback release identity
+        env:
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "https://staging.burillab.com/release.json?rollback=${{ steps.target.outputs.target_commit_sha }}"
+          --commit "${{ steps.target.outputs.target_commit_sha }}"
+          --environment staging
+          --retries 6
+          --retry-delay-ms 5000
+
+      - name: Verify the immutable rollback release identity
+        env:
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: >-
+          node scripts/verify-release-manifest.mjs
+          --url "${{ steps.target.outputs.target_immutable_origin }}/release.json?rollback=${{ steps.target.outputs.target_commit_sha }}"
+          --commit "${{ steps.target.outputs.target_commit_sha }}"
+          --environment staging
+          --retries 6
+          --retry-delay-ms 5000
+
+      - name: Install the Staging browser runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Reset the exact Staging Gate 0 synthetic fixture for the custom domain
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw
+        run: node scripts/seed-gate0-e2e.mjs
+
+      - name: Run the protected custom-domain Staging Gate 0 rollback flow
+        env:
+          GATE0_BASE_URL: https://staging.burillab.com
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_EXPECTED_COMMIT_SHA: ${{ steps.target.outputs.target_commit_sha }}
+          GATE0_EXPECTED_DEPLOYMENT_ID: ${{ steps.target.outputs.target_deployment_id }}
+          GATE0_STAGING_TARGET_CONFIRMATION: ${{ steps.target.outputs.custom_gate0_confirmation }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+          VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
+        run: npm run test:e2e:gate0:staging
+
+      - name: Reset the exact Staging Gate 0 synthetic fixture for the immutable deployment
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw
+        run: node scripts/seed-gate0-e2e.mjs
+
+      - name: Run the protected immutable Staging Gate 0 rollback flow
+        env:
+          GATE0_BASE_URL: ${{ steps.target.outputs.target_immutable_origin }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          GATE0_EXPECTED_COMMIT_SHA: ${{ steps.target.outputs.target_commit_sha }}
+          GATE0_EXPECTED_DEPLOYMENT_ID: ${{ steps.target.outputs.target_deployment_id }}
+          GATE0_STAGING_TARGET_CONFIRMATION: ${{ steps.target.outputs.immutable_gate0_confirmation }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+          VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
+        run: npm run test:e2e:gate0:staging
+
+      - name: Record safe rollback-verification evidence
+        shell: bash
+        run: |
+          {
+            echo "### Staging rollback target verification"
+            echo
+            echo "- Pages project: \`buril-lab-staging\`"
+            echo "- Target deployment: \`${{ steps.target.outputs.target_deployment_id }}\`"
+            echo "- Target commit: \`${{ steps.target.outputs.target_commit_sha }}\`"
+            echo "- Immutable target: ${{ steps.target.outputs.target_immutable_origin }}"
+            echo "- Custom-domain Gate 0: passed"
+            echo "- Immutable Gate 0: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
