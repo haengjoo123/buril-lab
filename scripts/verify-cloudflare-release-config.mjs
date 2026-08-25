@@ -44,12 +44,24 @@ const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   '"storage_backup_enabled":true',
   '"storage_backup_enabled": true',
 ]
+const STAGING_RELEASE_WORKFLOW_SHA256 = [
+  'b0b263cb869c0f0b',
+  '6bbacc6308b79c89',
+  'fc6e31c244c62dc4',
+  '8f640c8d28ef667f',
+].join('')
+const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
+  '0c986e96cb6324fb',
+  '3e5a667639170280',
+  '8fc72c88d0324308',
+  '1f71f2eb2ed1f0e8',
+].join('')
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
-  staging: 'b0b263cb869c0f0b6bbacc6308b79c89fc6e31c244c62dc48f640c8d28ef667f',
+  staging: STAGING_RELEASE_WORKFLOW_SHA256,
   production: 'afd7fd6823a6b5f65b3414121607613d2f796f95f98381ca87b0503834edb91b',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
-  'verify-staging-ephemeral-credentials.yml': '0c986e96cb6324fb3e5a6676391702808fc72c88d03243081f71f2eb2ed1f0e8',
+  'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,
 })
 const PINNED_CLOUDFLARE_API_HELPER_SHA256 = '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee'
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
