@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -13,11 +14,58 @@ import {
   readHiddenTtyLine,
   removeCredentialSecrets,
   runGh,
+  verifyAbortedLeaseReceipt,
+  verifyPendingMarker,
   withSupervisorProcessLock,
 } from './supervise-ephemeral-release.mjs'
 import { CLEANUP_ABSENT_SECRET_NAMES } from './verify-ephemeral-cleanup-receipt.mjs'
+import {
+  createAbortedLeaseReceipt,
+  createInitialCleanupReceipt,
+  createProviderCreationPending,
+} from './ephemeral-release-supervisor-core.mjs'
 
 describe('ephemeral release lifecycle finalization', () => {
+  it('matches an aborted receipt against the signed journal envelope', () => {
+    const keys = generateKeyPairSync('ed25519')
+    const leaseId = 'd'.repeat(32)
+    const cloudflareAccountId = 'e'.repeat(32)
+    const cleanupReceipt = createInitialCleanupReceipt({
+      environment: 'staging',
+      legacyCredentials: [
+        { provider: 'cloudflare', credentialIdHash: 'a'.repeat(64) },
+        { provider: 'supabase', credentialIdHash: 'b'.repeat(64) },
+      ],
+      privateKey: keys.privateKey,
+    })
+    const journal = createProviderCreationPending({
+      environment: 'staging',
+      commitSha: 'c'.repeat(40),
+      leaseId,
+      storageBackup: false,
+      supabasePatLabel: `burillab-staging-${leaseId}`,
+      cloudflareAccountId,
+      cleanupReceipt,
+      privateKey: keys.privateKey,
+    })
+    const marker = verifyPendingMarker(journal, keys.publicKey, {
+      environment: 'staging',
+      leaseId,
+      cloudflareAccountId,
+    })
+    const abortedReceipt = createAbortedLeaseReceipt({
+      pendingMarker: journal,
+      publicKey: keys.publicKey,
+      privateKey: keys.privateKey,
+      providerEvidence: [
+        { provider: 'cloudflare_pages', status: 'operator_verified_not_created', credentialSha256: null },
+        { provider: 'supabase', status: 'operator_verified_not_created', credentialSha256: null },
+      ],
+    })
+
+    expect(() => verifyAbortedLeaseReceipt(abortedReceipt, keys.publicKey, marker)).not.toThrow()
+  })
+
   it('rejects repository-scoped fallback credentials and release variables', async () => {
     const secretRun = vi.fn(async (args: string[]) => (
       args[0] === 'secret'

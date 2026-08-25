@@ -1054,7 +1054,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
   })
 }
 
-function verifyPendingMarker(rawMarker, publicKey, {
+export function verifyPendingMarker(rawMarker, publicKey, {
   environment,
   leaseId,
   cloudflareAccountId,
@@ -1078,10 +1078,10 @@ function verifyPendingMarker(rawMarker, publicKey, {
   ) {
     throw new Error('Provider-creation pending marker does not match the exact aborted lease.')
   }
-  return Object.freeze({ payload, markerHash: signed.envelopeHash })
+  return Object.freeze({ payload, markerHash: signed.journalHash })
 }
 
-function verifyAbortedLeaseReceipt(rawReceipt, publicKey, pending) {
+export function verifyAbortedLeaseReceipt(rawReceipt, publicKey, pending) {
   const signed = verifySignedAttestation(rawReceipt, publicKey, 'aborted_lease_receipt')
   const payload = signed.payload
   exactKeys(payload, [
@@ -1464,7 +1464,15 @@ async function recoverPendingProviderCreation(environment, leaseId, cloudflareAc
   if (stored !== abortedReceipt) {
     throw new Error('GitHub did not preserve the exact signed aborted-lease receipt.')
   }
-  currentPending = verifyProviderCreationJournal(currentJournal, publicKey)
+  // The abort receipt binds to the signed journal envelope, not just its
+  // decoded payload. Keep the envelope hash available for the exact-match
+  // check below; verifyProviderCreationJournal intentionally returns no
+  // markerHash.
+  currentPending = verifyPendingMarker(currentJournal, publicKey, {
+    environment,
+    leaseId,
+    cloudflareAccountId,
+  })
   verifyAbortedLeaseReceipt(stored, publicKey, currentPending)
   await removeExactPendingJournal(environment, currentJournal)
   await assertNoRepositoryCredentialState()
