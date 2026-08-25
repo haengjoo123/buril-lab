@@ -24,6 +24,14 @@ function timestamp(value, label) {
   return result
 }
 
+function outputTimestamp(value, label, { started, now }) {
+  const result = timestamp(value, label)
+  if (result < started - 60_000 || result > now + 60_000) {
+    throw new Error(`${label} is outside the deployment time boundary.`)
+  }
+  return result
+}
+
 function immutableUrl(rawUrl, target, deploymentId) {
   let url
   try {
@@ -56,9 +64,9 @@ function exactArray(value, expected, label) {
   }
 }
 
-function verifyWranglerSession(session, { commitSha, environment, target }) {
+function verifyWranglerSession(session, { commitSha, environment, target, outputWindow }) {
   exactKeys(session, [
-    'type', 'version', 'wrangler_version', 'command_line_args', 'log_file_path',
+    'type', 'version', 'wrangler_version', 'command_line_args', 'log_file_path', 'timestamp',
   ], 'Wrangler session')
   if (
     session.version !== 1
@@ -86,6 +94,7 @@ function verifyWranglerSession(session, { commitSha, environment, target }) {
     '--commit-dirty=false',
     '--no-bundle',
   ], 'Wrangler session command line')
+  return outputTimestamp(session.timestamp, 'Wrangler session timestamp', outputWindow)
 }
 
 export function verifyWranglerPagesDeployOutput(raw, {
@@ -122,11 +131,12 @@ export function verifyWranglerPagesDeployOutput(raw, {
   const session = sessions[0]
   const summary = summaries[0]
   const detailed = details[0]
-  verifyWranglerSession(session, { commitSha, environment, target })
-  exactKeys(summary, ['type', 'version', 'pages_project', 'deployment_id', 'url'], 'Wrangler Pages summary')
+  const outputWindow = { started, now: nowTime }
+  const sessionTime = verifyWranglerSession(session, { commitSha, environment, target, outputWindow })
+  exactKeys(summary, ['type', 'version', 'pages_project', 'deployment_id', 'url', 'timestamp'], 'Wrangler Pages summary')
   exactKeys(detailed, [
     'type', 'version', 'pages_project', 'deployment_id', 'url', 'alias', 'environment',
-    'production_branch', 'deployment_trigger',
+    'production_branch', 'deployment_trigger', 'timestamp',
   ], 'Wrangler Pages detail')
   exactKeys(detailed.deployment_trigger, ['metadata'], 'Wrangler Pages deployment trigger')
   exactKeys(detailed.deployment_trigger.metadata, ['commit_hash'], 'Wrangler Pages deployment metadata')
@@ -143,6 +153,11 @@ export function verifyWranglerPagesDeployOutput(raw, {
     || !DEPLOYMENT_ID_PATTERN.test(summary.deployment_id || '')
   ) {
     throw new Error('Wrangler structured output does not match the exact deployment request.')
+  }
+  const summaryTime = outputTimestamp(summary.timestamp, 'Wrangler Pages summary timestamp', outputWindow)
+  const detailedTime = outputTimestamp(detailed.timestamp, 'Wrangler Pages detail timestamp', outputWindow)
+  if (summaryTime < sessionTime || detailedTime < summaryTime) {
+    throw new Error('Wrangler structured output timestamps are out of order.')
   }
   return Object.freeze({
     deploymentId: summary.deployment_id,
