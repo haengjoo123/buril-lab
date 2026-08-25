@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 const MAX_OUTPUT_BYTES = 64 * 1024
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const DEPLOYMENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const PINNED_WRANGLER_VERSION = '4.125.0'
 const TARGETS = Object.freeze({
   staging: Object.freeze({ project: 'buril-lab-staging', apex: 'buril-lab-staging.pages.dev' }),
   production: Object.freeze({ project: 'buril-lab', apex: 'buril-lab.pages.dev' }),
@@ -49,6 +50,44 @@ function immutableUrl(rawUrl, target, deploymentId) {
   return url.origin
 }
 
+function exactArray(value, expected, label) {
+  if (!Array.isArray(value) || value.length !== expected.length || value.some((item, index) => item !== expected[index])) {
+    throw new Error(`${label} differs from the pinned Wrangler command contract.`)
+  }
+}
+
+function verifyWranglerSession(session, { commitSha, environment, target }) {
+  exactKeys(session, [
+    'type', 'version', 'wrangler_version', 'command_line_args', 'log_file_path', 'timestamp',
+  ], 'Wrangler session')
+  if (
+    session.version !== 1
+    || session.wrangler_version !== PINNED_WRANGLER_VERSION
+    || typeof session.log_file_path !== 'string'
+    || session.log_file_path.length === 0
+    || session.log_file_path.length > 4096
+    || /[\u0000-\u001f\u007f]/.test(session.log_file_path)
+  ) {
+    throw new Error('Wrangler session does not match the pinned deployment contract.')
+  }
+  const messagePattern = environment === 'staging'
+    ? /^quality-approved staging run [1-9][0-9]* lease [0-9a-f]{32}$/
+    : /^approved production run [1-9][0-9]* lease [0-9a-f]{32}$/
+  const args = session.command_line_args
+  if (!Array.isArray(args) || typeof args[10] !== 'string' || !messagePattern.test(args[10])) {
+    throw new Error('Wrangler session deploy message is invalid.')
+  }
+  exactArray(args, [
+    'pages', 'deploy', 'dist',
+    '--project-name', target.project,
+    '--branch', 'main',
+    '--commit-hash', commitSha,
+    '--commit-message', args[10],
+    '--commit-dirty=false',
+    '--no-bundle',
+  ], 'Wrangler session command line')
+}
+
 export function verifyWranglerPagesDeployOutput(raw, {
   commitSha,
   environment,
@@ -72,9 +111,18 @@ export function verifyWranglerPagesDeployOutput(raw, {
   } catch {
     throw new Error('Wrangler structured output is not valid JSON Lines.')
   }
-  if (entries.length !== 2) throw new Error('Wrangler structured output must contain exactly two deployment records.')
-  const summary = entries.find((entry) => entry?.type === 'pages-deploy')
-  const detailed = entries.find((entry) => entry?.type === 'pages-deploy-detailed')
+  if (entries.length !== 3) throw new Error('Wrangler structured output must contain one session and exactly two deployment records.')
+  const byType = (type) => entries.filter((entry) => entry?.type === type)
+  const sessions = byType('wrangler-session')
+  const summaries = byType('pages-deploy')
+  const details = byType('pages-deploy-detailed')
+  if (sessions.length !== 1 || summaries.length !== 1 || details.length !== 1) {
+    throw new Error('Wrangler structured output record types differ from the pinned contract.')
+  }
+  const session = sessions[0]
+  const summary = summaries[0]
+  const detailed = details[0]
+  verifyWranglerSession(session, { commitSha, environment, target })
   exactKeys(summary, ['type', 'version', 'pages_project', 'deployment_id', 'url', 'timestamp'], 'Wrangler Pages summary')
   exactKeys(detailed, [
     'type', 'version', 'pages_project', 'deployment_id', 'url', 'alias', 'environment',
@@ -96,9 +144,15 @@ export function verifyWranglerPagesDeployOutput(raw, {
   ) {
     throw new Error('Wrangler structured output does not match the exact deployment request.')
   }
+  const sessionTime = timestamp(session.timestamp, 'Wrangler session timestamp')
   const summaryTime = timestamp(summary.timestamp, 'Wrangler Pages summary timestamp')
   const detailTime = timestamp(detailed.timestamp, 'Wrangler Pages detail timestamp')
-  if (summaryTime < started || detailTime < summaryTime || detailTime > nowTime + 60_000) {
+  if (
+    sessionTime < started
+    || summaryTime < sessionTime
+    || detailTime < summaryTime
+    || detailTime > nowTime + 60_000
+  ) {
     throw new Error('Wrangler structured output is outside the current deployment time boundary.')
   }
   return Object.freeze({

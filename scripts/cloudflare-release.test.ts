@@ -404,7 +404,26 @@ function wranglerOutputFixture(environment: 'staging' | 'production') {
   const production = environment === 'production'
   const project = production ? 'buril-lab' : 'buril-lab-staging'
   const url = `https://123e4567.${project}.pages.dev`
+  const deployMessage = production
+    ? 'approved production run 42 lease 0123456789abcdef0123456789abcdef'
+    : 'quality-approved staging run 42 lease 0123456789abcdef0123456789abcdef'
   return [
+    {
+      type: 'wrangler-session',
+      version: 1,
+      wrangler_version: '4.125.0',
+      command_line_args: [
+        'pages', 'deploy', 'dist',
+        '--project-name', project,
+        '--branch', 'main',
+        '--commit-hash', COMMIT,
+        '--commit-message', deployMessage,
+        '--commit-dirty=false',
+        '--no-bundle',
+      ],
+      log_file_path: '/tmp/wrangler-debug.log',
+      timestamp: '2026-08-25T01:00:00.500Z',
+    },
     {
       type: 'pages-deploy',
       version: 1,
@@ -919,7 +938,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       commitSha: COMMIT,
     })
     expect(() => verifyWranglerPagesDeployOutput(raw.replace(COMMIT, 'f'.repeat(40)), options))
-      .toThrow(/does not match/)
+      .toThrow(/pinned Wrangler command contract/)
     expect(() => verifyWranglerPagesDeployOutput(raw.replace(
       '"timestamp":"2026-08-25T01:00:01.000Z"',
       '"timestamp":"2026-08-25T00:59:59.000Z"',
@@ -928,6 +947,14 @@ describe('Prep 0 Cloudflare release controls', () => {
       '"pages_project":"buril-lab-staging"',
       '"pages_project":"buril-lab-staging","unexpected":true',
     ), options)).toThrow(/fields differ/)
+    expect(() => verifyWranglerPagesDeployOutput(raw.replace(
+      '"--no-bundle"',
+      '"--unsafe-extra-flag"',
+    ), options)).toThrow(/pinned Wrangler command contract/)
+    expect(() => verifyWranglerPagesDeployOutput(raw.replace(
+      '"wrangler_version":"4.125.0"',
+      '"wrangler_version":"4.125.1"',
+    ), options)).toThrow(/pinned deployment contract/)
 
     const directory = await mkdtemp(join(tmpdir(), 'burillab-wrangler-output-'))
     const file = join(directory, 'wrangler.jsonl')
@@ -2388,11 +2415,11 @@ describe('Prep 0 Cloudflare release controls', () => {
     const [
       productionRaw,
       stagingRaw,
-      stagingWorkflow,
-      productionWorkflow,
-      qualityWorkflow,
-      credentialProbeWorkflow,
-      iosWorkflow,
+      stagingWorkflowRaw,
+      productionWorkflowRaw,
+      qualityWorkflowRaw,
+      credentialProbeWorkflowRaw,
+      iosWorkflowRaw,
       stagingPlaywrightConfig,
       gate0AccessRoute,
       gate0TargetConfig,
@@ -2412,8 +2439,14 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('e2e/gate0/gate0.spec.ts', 'utf8'),
       readFile('scripts/cloudflare-api-get.mjs', 'utf8'),
     ])
+    const normalizeLineEndings = (source: string) => source.replace(/\r\n/g, '\n')
+    const stagingWorkflow = normalizeLineEndings(stagingWorkflowRaw)
+    const productionWorkflow = normalizeLineEndings(productionWorkflowRaw)
+    const qualityWorkflow = normalizeLineEndings(qualityWorkflowRaw)
+    const credentialProbeWorkflow = normalizeLineEndings(credentialProbeWorkflowRaw)
+    const iosWorkflow = normalizeLineEndings(iosWorkflowRaw)
     expect(verifyCloudflareApiHelperSource(cloudflareApiHelper)).toBe(true)
-    expect(createHash('sha256').update(cloudflareApiHelper, 'utf8').digest('hex'))
+    expect(createHash('sha256').update(cloudflareApiHelper.replace(/\r\n/g, '\n'), 'utf8').digest('hex'))
       .toBe('07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee')
     expect(() => verifyCloudflareApiHelperSource(`${cloudflareApiHelper}\n`))
       .toThrow(/token-handling contract/)

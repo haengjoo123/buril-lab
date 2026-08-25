@@ -10,6 +10,8 @@ describe('pinned ephemeral release public key', () => {
   it('accepts only the reviewed canonical Ed25519 public key', () => {
     expect(verifyEphemeralReleasePublicKey(PINNED_PEM))
       .toBe(PINNED_EPHEMERAL_RELEASE_PUBLIC_KEY_FINGERPRINT)
+    expect(verifyEphemeralReleasePublicKey(PINNED_PEM.replace(/\n/g, '\r\n')))
+      .toBe(PINNED_EPHEMERAL_RELEASE_PUBLIC_KEY_FINGERPRINT)
   })
 
   it('rejects a changed or non-canonical key', () => {
