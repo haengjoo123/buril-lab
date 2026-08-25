@@ -825,6 +825,7 @@ describe('Windows temporary directory and local tool isolation', () => {
       psqlPath,
       archivePath,
       allowedRoot,
+      platform: 'win32',
     })).rejects.toThrow('SHA-256')
   })
 

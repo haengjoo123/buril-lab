@@ -2058,7 +2058,7 @@ export async function probeRecoveryWorkDirectoryProtection({
 }) {
   if (
     (encryptionProvider === 'efs' && (
-      typeof efsProbeFile !== 'string' || !path.isAbsolute(efsProbeFile)
+      typeof efsProbeFile !== 'string' || !path.win32.isAbsolute(efsProbeFile)
     ))
     || (encryptionProvider === 'bitlocker' && efsProbeFile !== undefined)
   ) {
