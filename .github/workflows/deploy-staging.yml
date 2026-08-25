@@ -501,7 +501,7 @@ jobs:
           set -euo pipefail
           /usr/bin/git diff --quiet --exit-code
           /usr/bin/git diff --cached --quiet --exit-code
-          printf '%s  %s\n' '36dbc239fa4d1df75c9f71a68148c65d8777a00138db5e2af7ba16d3ccb1cc58' scripts/verify-wrangler-pages-deploy-output.mjs \
+          printf '%s  %s\n' 'f6f7f7f615d022fd971e0df2b39c8e6e6be2dde23efdb6e7f604c90b4041d299' scripts/verify-wrangler-pages-deploy-output.mjs \
             | /usr/bin/sha256sum --check --strict
           test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
           test -s dist/_worker.js/index.js
