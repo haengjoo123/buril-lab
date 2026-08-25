@@ -1209,7 +1209,8 @@ async function collectRecoveryProviderEvidence(pending, cloudflareAccountId, inp
   const providerEvidence = []
   for (const provider of providers) {
     const notCreatedConfirmation = `NOT_CREATED:${pending.payload.lease_id}:${provider}`
-    console.log(`Enter the revoked ${provider} credential, or exactly ${notCreatedConfirmation} after verifying its absence in the provider dashboard.`)
+    const dashboardRevokedConfirmation = `DASHBOARD_REVOKED:${pending.payload.lease_id}:${provider}`
+    console.log(`Enter the revoked ${provider} credential, exactly ${notCreatedConfirmation} when it was not created, or exactly ${dashboardRevokedConfirmation} when it was created and revoked in the provider dashboard before the supervisor captured it.`)
     const value = await nextInputLine(inputIterator, `${provider} recovery evidence`)
     if (value === notCreatedConfirmation) {
       if (pending.payload.lease_evidence) {
@@ -1218,6 +1219,17 @@ async function collectRecoveryProviderEvidence(pending, cloudflareAccountId, inp
       providerEvidence.push({
         provider,
         status: 'operator_verified_not_created',
+        credentialSha256: null,
+      })
+      continue
+    }
+    if (value === dashboardRevokedConfirmation) {
+      if (pending.payload.lease_evidence) {
+        throw new Error(`${provider} was already materialized in the signed phase journal; exact revoked credential proof is required.`)
+      }
+      providerEvidence.push({
+        provider,
+        status: 'operator_verified_dashboard_revoked',
         credentialSha256: null,
       })
       continue

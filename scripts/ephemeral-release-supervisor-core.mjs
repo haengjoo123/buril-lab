@@ -661,9 +661,16 @@ export function verifyProviderCreationRecoveryEvidence({
   const normalized = providerEvidence.map((entry) => {
     if (
       !expectedProviders.includes(entry?.provider)
-      || !['api_verified_inactive', 'operator_verified_not_created'].includes(entry?.status)
+      || ![
+        'api_verified_inactive',
+        'operator_verified_not_created',
+        'operator_verified_dashboard_revoked',
+      ].includes(entry?.status)
       || (entry.status === 'api_verified_inactive' && !HASH_PATTERN.test(entry.credentialSha256))
-      || (entry.status === 'operator_verified_not_created' && entry.credentialSha256 !== null)
+      || (
+        ['operator_verified_not_created', 'operator_verified_dashboard_revoked'].includes(entry.status)
+        && entry.credentialSha256 !== null
+      )
     ) {
       throw new Error('Aborted lease provider evidence is invalid.')
     }
