@@ -9,7 +9,36 @@ const FORBIDDEN_PREP0_WORKFLOW_TERMS = [
   'mfa',
   'paid release',
 ]
-const FORBIDDEN_PREP0_DEPLOYMENT_TERMS = ['storage-backup']
+const FORBIDDEN_PRODUCTION_STORAGE_BACKUP_TERMS = [
+  'storage backup',
+  'storage-backup',
+  'storage_backup',
+  'workers/storage-backup',
+  'buril-lab-storage-backup',
+  'staging_supabase_service_role_key',
+  'verify-storage-backup-runtime-off.mjs',
+  'verify-storage-backup-worker-deployment.mjs',
+  '/workers/',
+  '--secrets-file',
+]
+const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
+  'workers/storage-backup/wrangler.production.jsonc',
+  'buril-lab-storage-backup-production',
+  'zafxzidbtbryiksemlwc',
+  'dd6866f35f794a91b0fb5a24cbe57cf3',
+  'buril-lab-cabinet-backups-production',
+  'wrangler secret put',
+  'wrangler secret bulk',
+  'wrangler secret delete',
+  'wrangler kv key put',
+  'wrangler kv key delete',
+  'wrangler kv bulk put',
+  'wrangler kv bulk delete',
+  '--keep-vars',
+  'storage_backup_enabled=true',
+  '"storage_backup_enabled":true',
+  '"storage_backup_enabled": true',
+]
 
 function parseConfig(raw, name) {
   let parsed
@@ -104,16 +133,42 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   if (forbidden.length > 0) {
     throw new Error(`Prep 0 workflows contain deferred scope: ${forbidden.join(', ')}`)
   }
-  const deploymentWorkflowText = [workflows.staging || '', workflows.production || '']
-    .join('\n')
-    .toLowerCase()
-  const forbiddenDeployment = FORBIDDEN_PREP0_DEPLOYMENT_TERMS
-    .filter((term) => deploymentWorkflowText.includes(term))
-  if (forbiddenDeployment.length > 0) {
-    throw new Error(`Prep 0 deployment workflows contain deferred scope: ${forbiddenDeployment.join(', ')}`)
-  }
-
   const stagingWorkflow = workflows.staging || ''
+  const productionWorkflow = workflows.production || ''
+  if (/--(?:output|file)\s+\S*deployments\.json/.test(productionWorkflow)) {
+    throw new Error('Production workflow must not persist the raw Pages deployment-list response.')
+  }
+  const forbiddenProductionStorageBackup = FORBIDDEN_PRODUCTION_STORAGE_BACKUP_TERMS
+    .filter((term) => productionWorkflow.toLowerCase().includes(term))
+  if (forbiddenProductionStorageBackup.length > 0) {
+    throw new Error(`Production workflow must contain no storage-backup deployment path: ${forbiddenProductionStorageBackup.join(', ')}`)
+  }
+  const productionWranglerLines = productionWorkflow
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /wrangler/i.test(line))
+  const approvedProductionWranglerLines = [
+    '- name: Materialize the production Wrangler config',
+    'node scripts/render-wrangler-config.mjs',
+    '--input wrangler.jsonc',
+    '--output wrangler.production.generated.jsonc',
+    '--pages-deploy-redirect .wrangler/deploy/config.json',
+    'npx wrangler pages functions build functions',
+    '--config wrangler.production.generated.jsonc',
+    '--outdir "$GITHUB_WORKSPACE/.wrangler/pages-functions-production"',
+    'npx wrangler pages deploy dist',
+  ]
+  if (
+    productionWranglerLines.length !== approvedProductionWranglerLines.length
+    || productionWranglerLines.some((line, index) => line !== approvedProductionWranglerLines[index])
+  ) {
+    throw new Error('Production workflow Wrangler lines must match the exact Pages-only allow-list.')
+  }
+  const forbiddenStagingStorageBackup = FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS
+    .filter((term) => stagingWorkflow.toLowerCase().includes(term))
+  if (forbiddenStagingStorageBackup.length > 0) {
+    throw new Error(`Staging storage-backup deployment contains a forbidden mutation or Production target: ${forbiddenStagingStorageBackup.join(', ')}`)
+  }
   if (stagingWorkflow.includes('secrets.SUPABASE_SERVICE_ROLE_KEY')) {
     throw new Error('Staging must use the existing staging-prefixed Supabase service-role secret.')
   }
@@ -148,6 +203,43 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'node scripts/seed-gate0-e2e.mjs',
     'npm run test:e2e:gate0:staging',
     'node scripts/verify-staging-kosha-link-only.mjs',
+    'Recheck that Staging still targets the current main tip before backup Worker deployment',
+    'Verify Staging storage backup remains exactly OFF before Worker deployment',
+    'npx wrangler kv key get runtime_config',
+    '--config workers/storage-backup/wrangler.staging.jsonc',
+    '--namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID"',
+    '--remote',
+    '--text',
+    'node scripts/verify-storage-backup-runtime-off.mjs',
+    'Verify no unapproved Staging Worker secrets exist before deployment',
+    '/workers/scripts/$STORAGE_BACKUP_WORKER_NAME/secrets',
+    'node scripts/verify-storage-backup-worker-deployment.mjs preflight',
+    'Create isolated temporary Worker secret file',
+    'id: storage-backup-secret-file',
+    'RUNNER_TEMP: ${{ runner.temp }}',
+    'node scripts/storage-backup-secret-file.mjs create',
+    'Deploy the OFF-only Staging storage backup Worker',
+    'npx wrangler deploy',
+    '--secrets-file "${{ steps.storage-backup-secret-file.outputs.secret_file }}"',
+    '--strict',
+    '--autoconfig=false',
+    '--tag "$DEPLOY_COMMIT_SHA"',
+    '--message "quality-approved staging storage backup $DEPLOY_COMMIT_SHA"',
+    'Always remove temporary Worker secret material',
+    'if: always()',
+    'node scripts/storage-backup-secret-file.mjs cleanup',
+    'Verify the active Staging storage backup Worker deployment',
+    'STORAGE_BACKUP_WORKER_NAME: buril-lab-storage-backup-staging',
+    'npx wrangler deployments status',
+    'npx wrangler versions list',
+    'npx wrangler secret list',
+    '--name "$STORAGE_BACKUP_WORKER_NAME"',
+    '--format json',
+    'worker_verified=false',
+    'for attempt in 1 2 3 4 5 6; do',
+    'The exact Staging storage backup Worker deployment did not become verifiable.',
+    'node scripts/verify-storage-backup-worker-deployment.mjs active',
+    'Verify Staging storage backup remains exactly OFF after Worker deployment',
   ]) {
     if (!stagingWorkflow.includes(required)) {
       throw new Error(`Staging workflow lacks trusted-quality guard: ${required}`)
@@ -157,18 +249,18 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     throw new Error('Staging workflow must not persist the raw Pages deployment-list response.')
   }
   if (
-    occurrenceCount(stagingWorkflow, '--connect-timeout 10') !== 1
-    || occurrenceCount(stagingWorkflow, '--max-time 30') !== 1
+    occurrenceCount(stagingWorkflow, '--connect-timeout 10') !== 2
+    || occurrenceCount(stagingWorkflow, '--max-time 30') !== 2
   ) {
     throw new Error('Every Staging deployment lookup must have bounded curl timeouts.')
   }
   if (
     occurrenceCount(stagingWorkflow, 'GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}') < 3
     || occurrenceCount(stagingWorkflow, 'GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}') < 3
-    || occurrenceCount(stagingWorkflow, 'SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}') < 2
+    || occurrenceCount(stagingWorkflow, 'SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}') !== 4
     || occurrenceCount(stagingWorkflow, 'GATE0_STAGING_SEED_CONFIRMATION: SEED GATE0 SYNTHETIC DATA qpgnomuqdcucjmxrunnw') < 2
   ) {
-    throw new Error('Staging Gate0 secrets must be checked before deployment and scoped to fixture reset/test steps.')
+    throw new Error('Staging secrets must remain scoped to input verification, two fixture resets, and one isolated Worker secret-file step.')
   }
   if (
     occurrenceCount(stagingWorkflow, 'npm run test:e2e:gate0:staging') !== 2
@@ -180,6 +272,35 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     || occurrenceCount(stagingWorkflow, 'GATE0_BASE_URL: ${{ steps.staging-deployment.outputs.deployment_url }}') !== 1
   ) {
     throw new Error('Staging must reset and run Gate0 once on each exact custom and immutable deployment target.')
+  }
+  if (
+    occurrenceCount(stagingWorkflow, 'npx wrangler kv ') !== 2
+    || occurrenceCount(stagingWorkflow, 'npx wrangler kv key get runtime_config') !== 2
+    || occurrenceCount(stagingWorkflow, '--namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID"') !== 2
+    || occurrenceCount(stagingWorkflow, '--remote') !== 2
+    || occurrenceCount(stagingWorkflow, '--text') !== 2
+    || occurrenceCount(stagingWorkflow, '--config workers/storage-backup/wrangler.staging.jsonc') !== 6
+    || occurrenceCount(stagingWorkflow, 'node scripts/verify-storage-backup-runtime-off.mjs') !== 2
+    || occurrenceCount(stagingWorkflow, 'node scripts/verify-storage-backup-worker-deployment.mjs preflight') !== 1
+    || occurrenceCount(stagingWorkflow, 'RUNNER_TEMP: ${{ runner.temp }}') !== 2
+    || occurrenceCount(stagingWorkflow, 'node scripts/storage-backup-secret-file.mjs create') !== 1
+    || occurrenceCount(stagingWorkflow, 'node scripts/storage-backup-secret-file.mjs cleanup') !== 1
+    || occurrenceCount(stagingWorkflow, 'npx wrangler deploy \\') !== 1
+    || occurrenceCount(stagingWorkflow, '--secrets-file') !== 1
+    || occurrenceCount(stagingWorkflow, '--secrets-file "${{ steps.storage-backup-secret-file.outputs.secret_file }}"') !== 1
+    || occurrenceCount(stagingWorkflow, '--strict') !== 1
+    || occurrenceCount(stagingWorkflow, '--autoconfig=false') !== 1
+    || occurrenceCount(stagingWorkflow, '--tag "$DEPLOY_COMMIT_SHA"') !== 1
+    || occurrenceCount(stagingWorkflow, '--message "quality-approved staging storage backup $DEPLOY_COMMIT_SHA"') !== 1
+    || occurrenceCount(stagingWorkflow, 'npx wrangler deployments status') !== 1
+    || occurrenceCount(stagingWorkflow, 'npx wrangler versions list') !== 1
+    || occurrenceCount(stagingWorkflow, 'npx wrangler secret list') !== 1
+    || occurrenceCount(stagingWorkflow, '--name "$STORAGE_BACKUP_WORKER_NAME"') !== 3
+    || occurrenceCount(stagingWorkflow, 'node scripts/verify-storage-backup-worker-deployment.mjs active') !== 1
+    || occurrenceCount(stagingWorkflow, 'timeout --signal=TERM --kill-after=5s 30s npx wrangler') !== 5
+    || occurrenceCount(stagingWorkflow, 'timeout --signal=TERM --kill-after=5s 180s npx wrangler deploy') !== 1
+  ) {
+    throw new Error('Staging must verify exact-OFF twice and deploy and verify the backup Worker exactly once with isolated secret cleanup.')
   }
   const stagingGateOrder = [
     'Verify environment-scoped deployment inputs',
@@ -194,6 +315,22 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   if (stagingGateOrder.some((position) => position < 0)
       || stagingGateOrder.some((position, index) => index > 0 && position <= stagingGateOrder[index - 1])) {
     throw new Error('Staging preflight, deployment, release, KOSHA, exact-target resets, and browser gates are out of order.')
+  }
+  const stagingWorkerOrder = [
+    'Verify the applied Staging KV binding remains isolated',
+    'Recheck that Staging still targets the current main tip before backup Worker deployment',
+    'Verify Staging storage backup remains exactly OFF before Worker deployment',
+    'Verify no unapproved Staging Worker secrets exist before deployment',
+    'Create isolated temporary Worker secret file',
+    'Deploy the OFF-only Staging storage backup Worker',
+    'Always remove temporary Worker secret material',
+    'Verify the active Staging storage backup Worker deployment',
+    'Verify Staging storage backup remains exactly OFF after Worker deployment',
+    'Record deployment evidence',
+  ].map((marker) => stagingWorkflow.indexOf(marker))
+  if (stagingWorkerOrder.some((position) => position < 0)
+      || stagingWorkerOrder.some((position, index) => index > 0 && position <= stagingWorkerOrder[index - 1])) {
+    throw new Error('Staging backup Worker main-tip, exact-OFF, deploy, cleanup, active-version, and evidence gates are out of order.')
   }
 
   const stagingPlaywrightConfig = browser.stagingConfig || ''
@@ -305,7 +442,6 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     throw new Error('Quality workflow lacks the exact hosted Advisor push/manual-main guard.')
   }
 
-  const productionWorkflow = workflows.production || ''
   for (const required of [
     'workflow_dispatch:',
     "if: github.event_name == 'workflow_dispatch' && github.repository == 'haengjoo123/buril-lab' && github.ref == 'refs/heads/main'",
@@ -346,9 +482,6 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   const stagingRunVerifier = 'node scripts/verify-github-staging-run.mjs'
   if (productionWorkflow.split(stagingRunVerifier).length - 1 < 2) {
     throw new Error('Production workflow must verify the latest exact-SHA Staging run both early and immediately before deployment.')
-  }
-  if (/--(?:output|file)\s+\S*deployments\.json/.test(productionWorkflow)) {
-    throw new Error('Production workflow must not persist the raw Pages deployment-list response.')
   }
   if (
     occurrenceCount(productionWorkflow, '--connect-timeout 10') !== 2

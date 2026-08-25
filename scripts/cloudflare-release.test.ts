@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, readFile, readdir, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import { detectDatabaseQualityGate, validateDatabaseQualityContract } from './detect-database-quality-gate.mjs'
@@ -39,6 +39,16 @@ import {
 import { verifyReleaseConfiguration } from './verify-cloudflare-release-config.mjs'
 import { verifyCloudflareDeployInputs } from './verify-cloudflare-deploy-inputs.mjs'
 import {
+  cleanupStorageBackupSecretFile,
+  createStorageBackupSecretFile,
+  verifyStagingSupabaseBackendCredential,
+} from './storage-backup-secret-file.mjs'
+import { verifyStorageBackupRuntimeOff } from './verify-storage-backup-runtime-off.mjs'
+import {
+  verifyStorageBackupWorkerDeployment,
+  verifyStorageBackupWorkerSecretPreflight,
+} from './verify-storage-backup-worker-deployment.mjs'
+import {
   fetchTrustedQualityRun,
   findTrustedQualityRun,
   QUALITY_RUN_MAX_AGE_MS,
@@ -64,6 +74,8 @@ const COMMIT = '0123456789abcdef0123456789abcdef01234567'
 const STAGING_DEPLOYMENT_ID = '123e4567-e89b-42d3-a456-426614174000'
 const STAGING_IMMUTABLE_ORIGIN = 'https://123e4567.buril-lab-staging.pages.dev'
 const QUALITY_NOW = Date.parse('2026-08-24T12:00:00Z')
+const STAGING_CLOUDFLARE_ACCOUNT_ID = '692fedd5b67a5fd545bb16038bbd4c85'
+const STAGING_RUNTIME_CONFIG_KV_ID = 'dcaa52254fa6447bbe7c21f54354ad0d'
 const REQUIRED_SECRETS = [
   'FEEDBACK_ADMIN_EMAILS',
   'GEMINI_API_KEY',
@@ -1418,6 +1430,231 @@ describe('Prep 0 Cloudflare release controls', () => {
     }
   })
 
+  it('materializes the Staging Worker secret only below RUNNER_TEMP and removes it safely', async () => {
+    const runnerTemp = await mkdtemp(join(tmpdir(), 'burillab-worker-secret-test-'))
+    const githubOutput = join(runnerTemp, 'github-output.txt')
+    const serviceRoleKey = `sb_secret_${'a'.repeat(40)}`
+    try {
+      expect(verifyStagingSupabaseBackendCredential(serviceRoleKey)).toBe(serviceRoleKey)
+      expect(() => verifyStagingSupabaseBackendCredential(`sb_publishable_${'b'.repeat(40)}`))
+        .toThrow(/not a supported backend credential/)
+      const encodeJwtPart = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
+      const productionServiceRoleJwt = [
+        encodeJwtPart({ alg: 'HS256', typ: 'JWT' }),
+        encodeJwtPart({ iss: 'supabase', role: 'service_role', ref: 'zafxzidbtbryiksemlwc' }),
+        'c'.repeat(32),
+      ].join('.')
+      expect(() => verifyStagingSupabaseBackendCredential(productionServiceRoleJwt))
+        .toThrow(/not the Staging backend credential/)
+      await expect(createStorageBackupSecretFile({
+        runnerTemp,
+        serviceRoleKey,
+        githubOutput: 'relative-github-output.txt',
+      })).rejects.toThrow(/GITHUB_OUTPUT must be an absolute file path/)
+      expect(await readdir(runnerTemp)).toStrictEqual([])
+
+      const created = await createStorageBackupSecretFile({
+        runnerTemp,
+        serviceRoleKey,
+        githubOutput,
+      })
+      expect(JSON.parse(await readFile(created.secretFile, 'utf8'))).toStrictEqual({
+        SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
+      })
+      expect(await readFile(githubOutput, 'utf8')).toBe(`secret_file=${created.secretFile}\n`)
+
+      await expect(cleanupStorageBackupSecretFile({
+        runnerTemp,
+        secretFile: join(runnerTemp, 'unapproved', 'secrets.json'),
+      })).rejects.toThrow(/outside the storage-backup secret boundary/)
+      await expect(cleanupStorageBackupSecretFile({
+        runnerTemp,
+        secretFile: created.secretFile,
+      })).resolves.toStrictEqual({ removed: true })
+      await expect(readFile(created.secretFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+      await expect(cleanupStorageBackupSecretFile({
+        runnerTemp,
+        secretFile: created.secretFile,
+      })).resolves.toStrictEqual({ removed: false })
+    } finally {
+      await rm(runnerTemp, { recursive: true, force: true })
+    }
+  })
+
+  it('uses owner-only secret permissions and refuses a link swap on Linux', async () => {
+    if (process.platform === 'win32') return
+    const runnerTemp = await mkdtemp(join(tmpdir(), 'burillab-worker-secret-link-test-'))
+    const target = join(runnerTemp, 'unrelated.txt')
+    try {
+      const created = await createStorageBackupSecretFile({
+        runnerTemp,
+        serviceRoleKey: `sb_secret_${'d'.repeat(40)}`,
+      })
+      expect((await lstat(dirname(created.secretFile))).mode & 0o777).toBe(0o700)
+      expect((await lstat(created.secretFile)).mode & 0o777).toBe(0o600)
+
+      await writeFile(target, 'not secret material', 'utf8')
+      await unlink(created.secretFile)
+      await symlink(target, created.secretFile, 'file')
+      await expect(cleanupStorageBackupSecretFile({
+        runnerTemp,
+        secretFile: created.secretFile,
+      })).rejects.toThrow(/changed type before cleanup/)
+      expect(await readFile(target, 'utf8')).toBe('not secret material')
+    } finally {
+      await rm(runnerTemp, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts only the exact five-switch OFF Staging runtime config and exact Cloudflare target', () => {
+    const runtimeConfig = {
+      voice_disposal_mode: 'redirect',
+      kosha_content_mode: 'link_only',
+      account_deletion_enabled: false,
+      maintenance_worker_enabled: false,
+      storage_backup_enabled: false,
+    }
+    const target = {
+      environment: 'staging',
+      accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
+      namespaceId: STAGING_RUNTIME_CONFIG_KV_ID,
+    }
+    expect(verifyStorageBackupRuntimeOff(JSON.stringify(runtimeConfig), target)).toMatchObject({
+      environment: 'staging',
+      accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
+      namespaceId: STAGING_RUNTIME_CONFIG_KV_ID,
+      storageBackupEnabled: false,
+    })
+
+    expect(() => verifyStorageBackupRuntimeOff(JSON.stringify({
+      ...runtimeConfig,
+      unexpected_switch: false,
+    }), target)).toThrow(/exactly the five approved safety switches/)
+    const missingRuntimeConfig = { ...runtimeConfig }
+    delete missingRuntimeConfig.maintenance_worker_enabled
+    expect(() => verifyStorageBackupRuntimeOff(JSON.stringify(missingRuntimeConfig), target))
+      .toThrow(/exactly the five approved safety switches/)
+    expect(() => verifyStorageBackupRuntimeOff(JSON.stringify({
+      ...runtimeConfig,
+      storage_backup_enabled: true,
+    }), target)).toThrow(/unsafe value for storage_backup_enabled/)
+    expect(() => verifyStorageBackupRuntimeOff(JSON.stringify({
+      ...runtimeConfig,
+      kosha_content_mode: 'full',
+    }), target)).toThrow(/unsafe value for kosha_content_mode/)
+    expect(() => verifyStorageBackupRuntimeOff(JSON.stringify(runtimeConfig), {
+      ...target,
+      accountId: '00000000000000000000000000000000',
+    })).toThrow(/wrong Cloudflare account/)
+    expect(() => verifyStorageBackupRuntimeOff(JSON.stringify(runtimeConfig), {
+      ...target,
+      namespaceId: '00000000000000000000000000000000',
+    })).toThrow(/wrong Staging KV namespace/)
+    expect(() => verifyStorageBackupRuntimeOff(JSON.stringify(runtimeConfig), {
+      ...target,
+      environment: 'production',
+    })).toThrow(/restricted to Staging/)
+  })
+
+  it('verifies one 100-percent active Staging Worker version, SHA annotations, and one secret name', () => {
+    const deploymentId = '123e4567-e89b-42d3-a456-426614174010'
+    const versionId = '123e4567-e89b-42d3-a456-426614174011'
+    const message = `quality-approved staging storage backup ${COMMIT}`
+    const deployment = {
+      id: deploymentId,
+      versions: [{ version_id: versionId, percentage: 100 }],
+      annotations: { 'workers/message': message },
+    }
+    const versions = [{
+      id: versionId,
+      annotations: {
+        'workers/tag': COMMIT,
+        'workers/message': message,
+      },
+    }]
+    const verify = ({
+      deploymentValue = deployment,
+      versionsValue = versions,
+      secretsValue = [{ name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'secret_text' }],
+      environment = 'staging',
+      accountId = STAGING_CLOUDFLARE_ACCOUNT_ID,
+      workerName = 'buril-lab-storage-backup-staging',
+    } = {}) => verifyStorageBackupWorkerDeployment({
+      deploymentRaw: JSON.stringify(deploymentValue),
+      versionsRaw: JSON.stringify(versionsValue),
+      secretsRaw: JSON.stringify(secretsValue),
+      commitSha: COMMIT,
+      environment,
+      accountId,
+      workerName,
+    })
+
+    expect(verify()).toStrictEqual({
+      environment: 'staging',
+      workerName: 'buril-lab-storage-backup-staging',
+      commitSha: COMMIT,
+      deploymentId,
+      versionId,
+    })
+    expect(() => verify({
+      deploymentValue: {
+        ...deployment,
+        versions: [
+          { version_id: versionId, percentage: 50 },
+          { version_id: deploymentId, percentage: 50 },
+        ],
+      },
+    })).toThrow(/one active version only/)
+    expect(() => verify({
+      versionsValue: [{
+        ...versions[0],
+        annotations: { ...versions[0].annotations, 'workers/tag': 'f'.repeat(40) },
+      }],
+    })).toThrow(/identity does not match/)
+    expect(() => verify({
+      secretsValue: [
+        { name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'secret_text' },
+        { name: 'UNAPPROVED_SECRET', type: 'secret_text' },
+      ],
+    })).toThrow(/unapproved secret set/)
+    expect(() => verify({
+      secretsValue: [{ name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'plain_text' }],
+    })).toThrow(/malformed item/)
+    expect(() => verify({ environment: 'production' })).toThrow(/exact Staging account and Worker/)
+    expect(() => verify({ accountId: '00000000000000000000000000000000' })).toThrow(/exact Staging account and Worker/)
+    expect(() => verify({ workerName: 'buril-lab-storage-backup-production' })).toThrow(/exact Staging account and Worker/)
+  })
+
+  it('allows only an absent Worker or the approved pre-existing Staging Worker secret set', () => {
+    const verify = (response: object, httpStatus = '200') => verifyStorageBackupWorkerSecretPreflight({
+      responseRaw: JSON.stringify(response),
+      httpStatus,
+      environment: 'staging',
+      accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
+      workerName: 'buril-lab-storage-backup-staging',
+    })
+
+    expect(() => verify({ success: true, result: [] })).toThrow(/unapproved secret set/)
+    expect(verify({
+      success: true,
+      result: [{ name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'secret_text' }],
+    })).toStrictEqual({ workerExists: true, approvedSecretCount: 1 })
+    expect(verify({
+      success: false,
+      errors: [{ code: 10007, message: 'not found' }],
+    }, '404')).toStrictEqual({ workerExists: false, approvedSecretCount: 0 })
+
+    expect(() => verify({
+      success: true,
+      result: [{ name: 'UNAPPROVED_SECRET', type: 'secret_text' }],
+    })).toThrow(/unapproved secret set/)
+    expect(() => verify({
+      success: false,
+      errors: [{ code: 9109, message: 'forbidden' }],
+    }, '404')).toThrow(/did not prove.*absent/)
+    expect(() => verify({ success: false, errors: [] }, '403')).toThrow(/unexpected HTTP status/)
+  })
+
   it('keeps the committed release workflows inside Prep 0 scope', async () => {
     const [
       productionRaw,
@@ -1470,9 +1707,95 @@ describe('Prep 0 Cloudflare release controls', () => {
       ...configuration,
       workflows: {
         ...configuration.workflows,
-        production: `${productionWorkflow}\n# storage-backup`,
+        production: `${productionWorkflow}\n# workers/storage-backup/wrangler.staging.jsonc`,
       },
-    })).toThrow(/deployment workflows contain deferred scope: storage-backup/)
+    })).toThrow(/Production workflow must contain no storage-backup deployment path/)
+
+    for (const workerCommand of [
+      'npx wrangler deploy',
+      'npx wrangler secret list',
+      'npx wrangler versions list',
+      'wrangler deployments status',
+      './node_modules/.bin/wrangler deploy',
+      'timeout 30s npx wrangler deploy',
+      'env UNAPPROVED=1 npx wrangler deploy',
+      "bash -c 'npx wrangler secret list'",
+    ]) {
+      expect(() => verifyReleaseConfiguration({
+        ...configuration,
+        workflows: {
+          ...configuration.workflows,
+          production: `${productionWorkflow}\n${workerCommand}`,
+        },
+      })).toThrow(/exact Pages-only allow-list/)
+    }
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        production: `${productionWorkflow}\ncurl https://api.cloudflare.com/client/v4/accounts/example/workers/scripts/example/secrets`,
+      },
+    })).toThrow(/no storage-backup deployment path/)
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        production: `${productionWorkflow}\n--secrets-file /tmp/unapproved.json`,
+      },
+    })).toThrow(/no storage-backup deployment path/)
+
+    for (const forbiddenMutation of [
+      'npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY',
+      'npx wrangler kv key put runtime_config',
+      '--config workers/storage-backup/wrangler.production.jsonc',
+      'storage_backup_enabled=true',
+    ]) {
+      expect(() => verifyReleaseConfiguration({
+        ...configuration,
+        workflows: {
+          ...configuration.workflows,
+          staging: `${stagingWorkflow}\n${forbiddenMutation}`,
+        },
+      })).toThrow(/forbidden mutation or Production target/)
+    }
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        staging: stagingWorkflow.replace('            --strict \\', '            # removed strict'),
+      },
+    })).toThrow(/lacks trusted-quality guard: --strict/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        staging: stagingWorkflow.replace('        if: always()', '        # removed always guard'),
+      },
+    })).toThrow(/lacks trusted-quality guard: if: always\(\)/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        staging: stagingWorkflow.replace(
+          'node scripts/verify-storage-backup-runtime-off.mjs',
+          'node scripts/verify-release-manifest.mjs',
+        ),
+      },
+    })).toThrow(/verify exact-OFF twice/)
+
+    expect(() => verifyReleaseConfiguration({
+      ...configuration,
+      workflows: {
+        ...configuration.workflows,
+        staging: stagingWorkflow.replace(
+          'timeout --signal=TERM --kill-after=5s 30s npx wrangler kv key get runtime_config',
+          'npx wrangler kv key get runtime_config',
+        ),
+      },
+    })).toThrow(/deploy and verify the backup Worker exactly once/)
 
     for (const unsupported of ['keep_vars', 'secrets']) {
       const invalidProduction = JSON.parse(productionRaw)

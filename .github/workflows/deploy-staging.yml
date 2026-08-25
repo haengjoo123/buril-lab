@@ -26,7 +26,7 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     environment:
       name: staging
       url: https://staging.burillab.com
@@ -279,9 +279,147 @@ jobs:
           VERIFY_CURRENT_RUNTIME_BINDING: "true"
         run: npm run ops:verify
 
+      - name: Recheck that Staging still targets the current main tip before backup Worker deployment
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"
+          test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"
+
+      - name: Verify Staging storage backup remains exactly OFF before Worker deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_config_json="$(
+            timeout --signal=TERM --kill-after=5s 30s npx wrangler kv key get runtime_config \
+              --config workers/storage-backup/wrangler.staging.jsonc \
+              --namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID" \
+              --remote \
+              --text
+          )"
+          STORAGE_BACKUP_RUNTIME_CONFIG_JSON="$runtime_config_json" \
+            node scripts/verify-storage-backup-runtime-off.mjs
+
+      - name: Verify no unapproved Staging Worker secrets exist before deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          STORAGE_BACKUP_WORKER_NAME: buril-lab-storage-backup-staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker_secret_response="$(
+            curl --silent --show-error --proto '=https' \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              --header "Accept: application/json" \
+              --write-out '\n%{http_code}' \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$STORAGE_BACKUP_WORKER_NAME/secrets"
+          )"
+          worker_secret_status="${worker_secret_response##*$'\n'}"
+          worker_secret_body="${worker_secret_response%$'\n'*}"
+          STORAGE_BACKUP_SECRET_PREFLIGHT_JSON="$worker_secret_body" \
+            STORAGE_BACKUP_SECRET_PREFLIGHT_STATUS="$worker_secret_status" \
+            node scripts/verify-storage-backup-worker-deployment.mjs preflight
+
+      - name: Create isolated temporary Worker secret file
+        id: storage-backup-secret-file
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/storage-backup-secret-file.mjs create
+
+      - name: Deploy the OFF-only Staging storage backup Worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          timeout --signal=TERM --kill-after=5s 180s npx wrangler deploy \
+            --config workers/storage-backup/wrangler.staging.jsonc \
+            --secrets-file "${{ steps.storage-backup-secret-file.outputs.secret_file }}" \
+            --strict \
+            --autoconfig=false \
+            --tag "$DEPLOY_COMMIT_SHA" \
+            --message "quality-approved staging storage backup $DEPLOY_COMMIT_SHA"
+
+      - name: Always remove temporary Worker secret material
+        if: always()
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+          STORAGE_BACKUP_SECRET_FILE: ${{ steps.storage-backup-secret-file.outputs.secret_file }}
+        run: node scripts/storage-backup-secret-file.mjs cleanup
+
+      - name: Verify the active Staging storage backup Worker deployment
+        id: storage-backup-deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          STORAGE_BACKUP_WORKER_NAME: buril-lab-storage-backup-staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker_verified=false
+          for attempt in 1 2 3 4 5 6; do
+            if deployment_json="$(
+              timeout --signal=TERM --kill-after=5s 30s npx wrangler deployments status \
+                --config workers/storage-backup/wrangler.staging.jsonc \
+                --name "$STORAGE_BACKUP_WORKER_NAME" \
+                --json
+            )" && versions_json="$(
+              timeout --signal=TERM --kill-after=5s 30s npx wrangler versions list \
+                --config workers/storage-backup/wrangler.staging.jsonc \
+                --name "$STORAGE_BACKUP_WORKER_NAME" \
+                --json
+            )" && secrets_json="$(
+              timeout --signal=TERM --kill-after=5s 30s npx wrangler secret list \
+                --config workers/storage-backup/wrangler.staging.jsonc \
+                --name "$STORAGE_BACKUP_WORKER_NAME" \
+                --format json
+            )" && STORAGE_BACKUP_DEPLOYMENT_JSON="$deployment_json" \
+              STORAGE_BACKUP_VERSIONS_JSON="$versions_json" \
+              STORAGE_BACKUP_SECRETS_JSON="$secrets_json" \
+              node scripts/verify-storage-backup-worker-deployment.mjs active; then
+              worker_verified=true
+              break
+            fi
+            if [[ "$attempt" -lt 6 ]]; then sleep 5; fi
+          done
+          if [[ "$worker_verified" != true ]]; then
+            echo "The exact Staging storage backup Worker deployment did not become verifiable." >&2
+            exit 1
+          fi
+
+      - name: Verify Staging storage backup remains exactly OFF after Worker deployment
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_config_json="$(
+            timeout --signal=TERM --kill-after=5s 30s npx wrangler kv key get runtime_config \
+              --config workers/storage-backup/wrangler.staging.jsonc \
+              --namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID" \
+              --remote \
+              --text
+          )"
+          STORAGE_BACKUP_RUNTIME_CONFIG_JSON="$runtime_config_json" \
+            node scripts/verify-storage-backup-runtime-off.mjs
+
       - name: Record deployment evidence
         shell: bash
         run: |
           echo "- Environment: staging" >> "$GITHUB_STEP_SUMMARY"
           echo "- Pages project: $CLOUDFLARE_PAGES_PROJECT" >> "$GITHUB_STEP_SUMMARY"
           echo "- Release commit: \`$DEPLOY_COMMIT_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Storage backup Worker: ${{ steps.storage-backup-deployment.outputs.worker_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Worker deployment: \`${{ steps.storage-backup-deployment.outputs.deployment_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Worker version: \`${{ steps.storage-backup-deployment.outputs.version_id }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Storage backup switch: exact OFF" >> "$GITHUB_STEP_SUMMARY"
