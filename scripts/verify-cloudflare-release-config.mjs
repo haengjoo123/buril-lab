@@ -45,10 +45,11 @@ const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   '"storage_backup_enabled": true',
 ]
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
-  staging: 'd5352720e8d03d0b2583bede31900f55ad96448383491169831b559de8ab58f3',
+  staging: 'b0b263cb869c0f0b6bbacc6308b79c89fc6e31c244c62dc48f640c8d28ef667f',
   production: 'afd7fd6823a6b5f65b3414121607613d2f796f95f98381ca87b0503834edb91b',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
+  'verify-staging-ephemeral-credentials.yml': '0c986e96cb6324fb3e5a6676391702808fc72c88d03243081f71f2eb2ed1f0e8',
 })
 const PINNED_CLOUDFLARE_API_HELPER_SHA256 = '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee'
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
@@ -84,6 +85,10 @@ const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
     'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
     'supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1',
+  ],
+  'verify-staging-ephemeral-credentials.yml': [
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
   ],
   'ios-testflight.yml': [],
 })
@@ -378,6 +383,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   const stagingWorkflow = workflows.staging || ''
   const productionWorkflow = workflows.production || ''
   const qualityWorkflow = workflows.quality || ''
+  const credentialProbeWorkflow = workflows['verify-staging-ephemeral-credentials.yml'] || ''
   if (
     occurrenceCount(stagingWorkflow, 'npm ci --ignore-scripts') !== 3
     || occurrenceCount(productionWorkflow, 'npm ci --ignore-scripts') !== 2
@@ -410,6 +416,16 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   }
   if (JSON.stringify(jobNames(productionWorkflow)) !== JSON.stringify(['build', 'deploy'])) {
     throw new Error('Production workflow must contain only the exact build and deploy jobs.')
+  }
+  const credentialProbeJob = workflowJobBlock(credentialProbeWorkflow, 'verify')
+  if (
+    JSON.stringify(jobNames(credentialProbeWorkflow)) !== JSON.stringify(['verify'])
+    || credentialProbeJob.includes('\n    needs:')
+    || credentialProbeJob.includes('\n    if:')
+    || credentialProbeJob.includes('${{ github.token }}')
+    || !credentialProbeJob.includes('\n    environment:\n      name: staging\n')
+  ) {
+    throw new Error('The Staging credential-injection probe must contain only one unconditional Staging verification job.')
   }
   if (
     !stagingDeployJob.includes('\n    needs: build\n')
@@ -593,7 +609,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'PRODUCTION_PAGES_EPHEMERAL_TOKEN',
   ], 'Production')
   for (const [name, workflow] of Object.entries(workflows)) {
-    if (name === 'staging' || name === 'production') continue
+    if (name === 'staging' || name === 'production' || name === 'verify-staging-ephemeral-credentials.yml') continue
     if (cloudflareTokenSecretNames(workflow).length > 0) {
       throw new Error(`${name} workflow must not receive a Cloudflare deployment-token secret.`)
     }
@@ -670,6 +686,8 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'ref: ${{ inputs.commit_sha }}',
     'node scripts/verify-github-quality-run.mjs',
     'node scripts/verify-ephemeral-lease-grant.mjs',
+    'Verify exact ephemeral credentials reached the runner',
+    'node scripts/verify-ephemeral-credential-injection.mjs --mode lease',
     'node scripts/verify-ephemeral-cleanup-receipt.mjs',
     'STAGING_KOSHA_CONTENT_MODE: link_only',
     'test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"',
@@ -788,7 +806,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     throw new Error('Every Staging Cloudflare API lookup must use only the bounded token-from-environment helper.')
   }
   if (
-    occurrenceCount(stagingWorkflow, 'PAGES_EPHEMERAL_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}') !== 2
+    occurrenceCount(stagingWorkflow, 'PAGES_EPHEMERAL_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}') !== 3
     || occurrenceCount(stagingWorkflow, 'WORKER_EPHEMERAL_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}') !== 2
     || occurrenceCount(stagingWorkflow, 'CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}') !== 4
     || occurrenceCount(stagingWorkflow, 'CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}') !== 6
@@ -803,7 +821,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   ], 10, 'Staging')
   requireOnlyEnvMappings(stagingWorkflow, 'PAGES_EPHEMERAL_TOKEN', [
     'PAGES_EPHEMERAL_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}',
-  ], 2, 'Staging')
+  ], 3, 'Staging')
   requireOnlyEnvMappings(stagingWorkflow, 'WORKER_EPHEMERAL_TOKEN', [
     'WORKER_EPHEMERAL_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}',
   ], 2, 'Staging')
@@ -1001,8 +1019,19 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'Materialize the production Wrangler config after final guards',
     'Deploy the exact commit to production Pages',
   )
+  requireImmediateNextStep(
+    stagingWorkflow,
+    'Verify the signed current ephemeral lease',
+    'Verify exact ephemeral credentials reached the runner',
+  )
+  requireImmediateNextStep(
+    stagingWorkflow,
+    'Verify exact ephemeral credentials reached the runner',
+    'Verify the signed cumulative credential cleanup receipt',
+  )
   for (const stepName of [
     'Verify the signed current ephemeral lease',
+    'Verify exact ephemeral credentials reached the runner',
     'Verify the signed cumulative credential cleanup receipt',
     'Verify the exact commit passed trusted main quality',
     'Verify environment-scoped deployment inputs',
@@ -1111,6 +1140,11 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     stagingWorkflow,
     'Verify the signed current ephemeral lease',
     ['node scripts/verify-ephemeral-lease-grant.mjs'],
+  )
+  requireExactRunCommands(
+    stagingWorkflow,
+    'Verify exact ephemeral credentials reached the runner',
+    ['node scripts/verify-ephemeral-credential-injection.mjs --mode lease'],
   )
   requireExactRunCommands(
     stagingWorkflow,
@@ -1444,10 +1478,51 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     throw new Error('Generic or automatic-quality Supabase Management PAT access is forbidden.')
   }
   const ephemeralAdvisorMapping = 'SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}'
-  requireOnlyEnvMappings(stagingWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 4, 'Staging')
+  requireOnlyEnvMappings(stagingWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 5, 'Staging')
   requireOnlyEnvMappings(productionWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 2, 'Production')
+  requireOnlyEnvMappings(credentialProbeWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 1, 'Staging credential-injection probe')
   requireOnlyEnvMappings(stagingWorkflow, 'EPHEMERAL_CREDENTIAL_SESSION', [], 0, 'Staging')
   requireOnlyEnvMappings(productionWorkflow, 'EPHEMERAL_CREDENTIAL_SESSION', [], 0, 'Production')
+  requireOnlyEnvMappings(credentialProbeWorkflow, 'EPHEMERAL_CREDENTIAL_SESSION', [], 0, 'Staging credential-injection probe')
+  requireOnlyEnvMappings(credentialProbeWorkflow, 'PAGES_EPHEMERAL_TOKEN', [
+    'PAGES_EPHEMERAL_TOKEN: ${{ secrets.STAGING_PAGES_EPHEMERAL_TOKEN }}',
+  ], 1, 'Staging credential-injection probe')
+  requireOnlyEnvMappings(credentialProbeWorkflow, 'CLOUDFLARE_API_TOKEN', [], 0, 'Staging credential-injection probe')
+  requireExactCloudflareTokenSecretNames(credentialProbeWorkflow, [
+    'STAGING_PAGES_EPHEMERAL_TOKEN',
+  ], 'Staging credential-injection probe')
+  if (
+    !credentialProbeWorkflow.includes('name: Verify staging ephemeral credentials')
+    || !credentialProbeWorkflow.includes('run-name: Verify staging ephemeral credential injection ${{ inputs.commit_sha }} (probe=${{ inputs.probe_id }})')
+    || !credentialProbeWorkflow.includes('permissions:\n  contents: read')
+    || !credentialProbeWorkflow.includes('group: cloudflare-staging')
+    || !credentialProbeWorkflow.includes('cancel-in-progress: false')
+    || !credentialProbeWorkflow.includes('DEPLOY_ENVIRONMENT: staging')
+    || !credentialProbeWorkflow.includes('DEPLOY_COMMIT_SHA: ${{ inputs.commit_sha }}')
+    || !credentialProbeWorkflow.includes('DEPLOY_PROBE_ID: ${{ inputs.probe_id }}')
+    || !credentialProbeWorkflow.includes('DEPLOY_CONFIRMATION: ${{ inputs.confirmation }}')
+    || !credentialProbeWorkflow.includes('EPHEMERAL_CREDENTIAL_PROBE_GRANT: ${{ inputs.probe_grant }}')
+    || !credentialProbeWorkflow.includes('EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}')
+    || !credentialProbeWorkflow.includes('VERIFY buril-lab-staging credential injection $DEPLOY_COMMIT_SHA PROBE $DEPLOY_PROBE_ID')
+    || !credentialProbeWorkflow.includes('node scripts/verify-ephemeral-credential-injection.mjs --mode probe')
+    || !credentialProbeWorkflow.includes('PATH: ${{ steps.credential-probe-runner-boundary.outputs.trusted_path }}')
+    || /(?:\bwrangler\b|pages\s+deploy|workers\/|api\.cloudflare\.com|security:supabase-advisors:hosted|\bnpm\b|\bcurl\b|CLOUDFLARE_API_TOKEN|SUPABASE_SERVICE_ROLE_KEY)/i.test(credentialProbeWorkflow)
+  ) {
+    throw new Error('The Staging credential-injection probe must be a non-deploying exact-secret verifier.')
+  }
+  for (const stepName of [
+    'Validate the Staging credential-injection probe request',
+    'Verify the probe commit is current main',
+    'Capture the clean credential-injection probe runner boundary',
+    'Verify exact environment-secret injection',
+  ]) {
+    requireFailClosedStep(credentialProbeWorkflow, stepName)
+  }
+  requireExactRunCommands(
+    credentialProbeWorkflow,
+    'Verify exact environment-secret injection',
+    ['node scripts/verify-ephemeral-credential-injection.mjs --mode probe'],
+  )
   for (const stepName of [
     'Verify the current Staging Supabase Advisor state',
     'Recheck the current Staging Supabase Advisor state before Pages deployment',
