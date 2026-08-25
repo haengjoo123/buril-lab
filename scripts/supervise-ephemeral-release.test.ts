@@ -9,6 +9,7 @@ import {
   credentialGateResult,
   credentialGatesSucceeded,
   failedBeforePagesMutation,
+  findDispatchedRun,
   findJournalRun,
   finalizeEphemeralReleaseLifecycle,
   parseDispatchedRunId,
@@ -141,7 +142,7 @@ describe('ephemeral release lifecycle finalization', () => {
     expect(credentialGateResult(run, contract)).toBe('indeterminate')
   })
 
-  it('accepts dashboard-only revocation evidence only after a Pages write was skipped', () => {
+  it('accepts dashboard-only revocation evidence only after a failed or cancelled Pages write was skipped', () => {
     const contract = {
       jobName: 'supervised job',
       pagesMutationStep: 'Deploy the exact commit to Staging Pages',
@@ -161,8 +162,47 @@ describe('ephemeral release lifecycle finalization', () => {
     }
     expect(failedBeforePagesMutation(run, contract)).toBe(true)
 
+    run.conclusion = 'cancelled'
+    expect(failedBeforePagesMutation(run, contract)).toBe(true)
+
     run.jobs[0].steps[0].conclusion = 'success'
     expect(failedBeforePagesMutation(run, contract)).toBe(false)
+  })
+
+  it('reconciles a delayed workflow run beyond the legacy one-minute lookup window', async () => {
+    const commitSha = 'a'.repeat(40)
+    const expectedTitle = `Deploy staging ${commitSha} (lease=${'b'.repeat(32)}, storage-backup=false)`
+    const contract = { workflow: 'deploy-staging.yml', workflowName: 'Deploy staging' }
+    const createdAt = '2026-08-25T05:00:00.000Z'
+    const delayedRun = {
+      databaseId: 12345,
+      displayTitle: expectedTitle,
+      headSha: commitSha,
+      status: 'queued',
+      conclusion: '',
+      createdAt,
+      updatedAt: createdAt,
+      attempt: 1,
+      event: 'workflow_dispatch',
+      headBranch: 'main',
+      url: 'https://github.com/haengjoo123/buril-lab/actions/runs/12345',
+      workflowName: 'Deploy staging',
+    }
+    let lookups = 0
+    const wait = vi.fn(async () => undefined)
+
+    await expect(findDispatchedRun(contract, expectedTitle, commitSha, {
+      dispatchedAfter: Date.parse(createdAt),
+      attempts: 13,
+      wait,
+      runGhImpl: async () => {
+        lookups += 1
+        return JSON.stringify(lookups < 13 ? [] : [delayedRun])
+      },
+    })).resolves.toEqual(delayedRun)
+
+    expect(lookups).toBe(13)
+    expect(wait).toHaveBeenCalledTimes(12)
   })
 
   it('paginates recovery history instead of treating the 101st exact run as absent', async () => {
