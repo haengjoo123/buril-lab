@@ -864,8 +864,10 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
   let operationFailure = null
   let expectedTitle = null
   let dispatched = false
+  let preDispatchStage = 'Supabase PAT verification'
   try {
     await verifyActiveSupabasePat(credentials.supabase_pat, contract.projectRef)
+    preDispatchStage = 'Cloudflare Pages token verification'
     const pageMetadata = await verifyCloudflareTokenTtl({
       CLOUDFLARE_ACCOUNT_ID: cloudflareAccountId,
       CLOUDFLARE_EPHEMERAL_TOKEN: credentials.cloudflare_pages_token,
@@ -878,6 +880,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
       })
       hashes.push(workerMetadata.tokenIdHash)
     }
+    preDispatchStage = 'lease material creation'
     material = createLeaseMaterial({
       environment,
       commitSha,
@@ -909,6 +912,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
       },
     })
     await storePendingJournal(environment, pendingJournal)
+    preDispatchStage = 'GitHub temporary credential setup'
     await setVariable(environment, 'EPHEMERAL_LEASE_GRANT', material.grant)
     await setSecret(environment, 'SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN', credentials.supabase_pat)
     const pageSecretName = environment === 'staging'
@@ -921,6 +925,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
     console.log('Waiting for GitHub environment-secret propagation before the one supervised dispatch.')
     await new Promise((resolvePromise) => setTimeout(resolvePromise, SECRET_DISPATCH_PROPAGATION_DELAY_MS))
 
+    preDispatchStage = 'GitHub workflow dispatch'
     const confirmation = environment === 'staging'
       ? `DEPLOY buril-lab-staging ${commitSha} LEASE ${leaseId} WITH EPHEMERAL TOKENS`
       : `DEPLOY buril-lab production ${commitSha} STAGING ${stagingEvidence.runId} LEASE ${leaseId} WITH EPHEMERAL TOKENS`
@@ -984,6 +989,9 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
         timeoutMs: 45 * 60 * 1000,
     })
   } catch (error) {
+    // The original error can contain provider or transport details.  Keep the
+    // terminal diagnostic useful without ever serializing credential material.
+    console.error(`Supervised release stopped during ${preDispatchStage}; no further deployment action will be attempted.`)
     operationFailure = error
   }
 
