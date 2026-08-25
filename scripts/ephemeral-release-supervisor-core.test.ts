@@ -399,6 +399,40 @@ describe('ephemeral release supervisor core', () => {
       )),
       publicKey: keys.publicKey,
     })).toThrow(/exact signed credentials/)
+    expect(() => verifyProviderCreationRecoveryEvidence({
+      journal: gatesVerified,
+      providerEvidence: exactEvidence.map((entry) => (
+        entry.provider === 'cloudflare_worker'
+          ? { ...entry, status: 'operator_verified_dashboard_revoked', credentialSha256: null }
+          : entry
+      )),
+      publicKey: keys.publicKey,
+    })).toThrow(/exact signed credentials/)
+  })
+
+  it('records a dashboard-revoked credential only before lease materialization', () => {
+    const { keys, receipt } = setup()
+    const pending = createProviderCreationPending({
+      environment: 'staging',
+      commitSha: SHA,
+      leaseId: LEASE,
+      storageBackup: false,
+      supabasePatLabel: PAT_LABEL,
+      cloudflareAccountId: ACCOUNT_ID,
+      cleanupReceipt: receipt,
+      privateKey: keys.privateKey,
+      now: NOW,
+    })
+    expect(verifyProviderCreationRecoveryEvidence({
+      journal: pending,
+      providerEvidence: [
+        { provider: 'cloudflare_pages', status: 'operator_verified_not_created', credentialSha256: null },
+        { provider: 'supabase', status: 'operator_verified_dashboard_revoked', credentialSha256: null },
+      ],
+      publicKey: keys.publicKey,
+    }).providerEvidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'supabase', status: 'operator_verified_dashboard_revoked' }),
+    ]))
   })
 
   it('accepts only the exact successor after receipt storage and before pending deletion', () => {
