@@ -435,6 +435,26 @@ describe('ephemeral release supervisor core', () => {
     ]))
   })
 
+  it('permits dashboard revocation after materialization only with the explicit pre-deployment recovery flag', () => {
+    const { keys, gatesVerified } = setupJournal()
+    const dashboardEvidence = [
+      { provider: 'supabase', status: 'operator_verified_dashboard_revoked_pre_deployment', credentialSha256: null },
+      { provider: 'cloudflare_pages', status: 'operator_verified_dashboard_revoked_pre_deployment', credentialSha256: null },
+      { provider: 'cloudflare_worker', status: 'operator_verified_dashboard_revoked_pre_deployment', credentialSha256: null },
+    ]
+    expect(() => verifyProviderCreationRecoveryEvidence({
+      journal: gatesVerified,
+      providerEvidence: dashboardEvidence,
+      publicKey: keys.publicKey,
+    })).toThrow(/exact signed credentials/)
+    expect(verifyProviderCreationRecoveryEvidence({
+      journal: gatesVerified,
+      providerEvidence: dashboardEvidence,
+      publicKey: keys.publicKey,
+      allowMaterializedDashboardRevocation: true,
+    }).providerEvidence).toHaveLength(3)
+  })
+
   it('accepts only the exact successor after receipt storage and before pending deletion', () => {
     const {
       keys,
