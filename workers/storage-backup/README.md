@@ -105,19 +105,13 @@ The source bucket is exactly `cabinets`. `SOURCE_POINTER_MODE` must be exactly
 The current configs intentionally use `legacy_url` until the private-path app
 switch has been reviewed and deployed.
 
-The live account was verified as Workers Free on 2026-08-25. Both committed
-configs therefore use `WORKERS_USAGE_PLAN=free_off_only`, declare the Free
-50-subrequest ceiling, and intentionally omit Wrangler `limits`, which
-Cloudflare documents as a Standard Usage Model feature. Even if the KV flag is
-mistakenly changed to true, this profile fails with
-`workers_paid_plan_required` after the single KV read and performs no Supabase
-or R2 operation. This makes an OFF-first deployment compatible with the
-current Free plan; it does not make an actual backup run supported.
+The live account was upgraded to Workers Paid on 2026-08-26 after the dashboard
+showed the exact recurring base fee and usage terms. Both committed configs use
+`WORKERS_USAGE_PLAN=paid`, declare `WORKERS_SUBREQUEST_LIMIT=700`, and set
+Wrangler `limits.subrequests=700`. The runtime KV switch remains fail-closed and
+OFF by default, so the paid profile alone does not start a backup.
 
-A paid activation change must be reviewed separately after live dashboard
-evidence confirms Workers Paid: set `WORKERS_USAGE_PLAN=paid`, set
-`WORKERS_SUBREQUEST_LIMIT=700`, and add Wrangler
-`limits.subrequests=700` in both exact environment configs. The static worst
+The static worst
 case is 625, including retry attempts, KV reads, Supabase calls, every R2 write
 and verification, and two reserved lock-release calls. A run supports at most
 50 image objects, 5 database pages, and 25 recursive Storage-list pages, and
@@ -129,8 +123,7 @@ subrequests. For a Cron scheduled at intervals of one hour or longer, the
 documented CPU and wall-time boundaries are both 15 minutes; that is why this
 Worker stops normal work at 14 minutes and reserves cleanup capacity. Its
 [Wrangler configuration reference](https://developers.cloudflare.com/workers/wrangler/configuration/#limits)
-limits custom execution settings to the Standard Usage Model. The paid plan is
-a new cost and is not approved by this change.
+limits custom execution settings to the Standard Usage Model.
 
 ## Snapshot contract
 
@@ -168,8 +161,7 @@ inspect live bucket settings.
 `storage-backup:runtime-test` additionally runs the scheduled module inside
 Cloudflare's local Workers runtime with actual local KV and R2 bindings. It
 proves that the Worker has no public `fetch` handler, exits without touching R2
-when the flag is OFF, and refuses source/R2 work when the flag is accidentally
-enabled on the committed Free profile.
+when the flag is OFF, and treats a non-boolean enabled value as OFF.
 
 Read-only evidence on 2026-08-25 found both buckets private, APAC-located, and
 empty. That observation is not a permanent expected object count.

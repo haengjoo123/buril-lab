@@ -598,8 +598,8 @@ describe('OFF-first activation and environment isolation', () => {
       vars: {
         BACKUP_ENVIRONMENT: 'staging',
         SUPABASE_PROJECT_REF: STAGING_REF,
-        WORKERS_SUBREQUEST_LIMIT: '50',
-        WORKERS_USAGE_PLAN: 'free_off_only',
+        WORKERS_SUBREQUEST_LIMIT: '700',
+        WORKERS_USAGE_PLAN: 'paid',
       },
     })
     expect(production).toMatchObject({
@@ -610,12 +610,12 @@ describe('OFF-first activation and environment isolation', () => {
       vars: {
         BACKUP_ENVIRONMENT: 'production',
         SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc',
-        WORKERS_SUBREQUEST_LIMIT: '50',
-        WORKERS_USAGE_PLAN: 'free_off_only',
+        WORKERS_SUBREQUEST_LIMIT: '700',
+        WORKERS_USAGE_PLAN: 'paid',
       },
     })
-    expect(staging).not.toHaveProperty('limits')
-    expect(production).not.toHaveProperty('limits')
+    expect(staging).toMatchObject({ limits: { subrequests: 700 } })
+    expect(production).toMatchObject({ limits: { subrequests: 700 } })
     expect(staging.triggers).not.toEqual(production.triggers)
   })
 

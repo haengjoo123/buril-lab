@@ -8,6 +8,19 @@ Cloudflare Pages는 성공한 production 배포만 되돌림 대상으로 사용
 
 ## 최신 실행 증거
 
+### 2026-08-26 현재 보안 안정화 배포 재검증
+
+새 Staging 앱 배포 `4522c252-6a28-40a3-bdf9-2db1d5dde27f`
+(`51967d4acde31ea24b81a2bb40066a71c9f5ace5`) 뒤 검증된 이전 배포
+`e8ecd58d-4b06-4418-8a63-bc1f2c7fef8d`
+(`5c7e385cceb62171ce9614410f14a716eeecbc85`)로 실제 전환했습니다.
+[되돌림 검증 workflow #32928162447](https://github.com/haengjoo123/buril-lab/actions/runs/32928162447)이
+두 주소의 Access·릴리스 식별값·Gate 0 흐름을 통과했습니다. 이어 새 배포로
+복구했고 [복구 검증 workflow #32928347303](https://github.com/haengjoo123/buril-lab/actions/runs/32928347303)도
+같은 검사를 통과했습니다. 최종 Staging은 다시 `4522c252-6a28-40a3-bdf9-2db1d5dde27f`입니다.
+
+### 최초 훈련 기록
+
 2026-08-26 KST에 Cloudflare Dashboard에서 정확히 `buril-lab-staging` 프로젝트만 선택해 아래 순서로 훈련했습니다.
 
 1. 현재 Staging 배포 `e8ecd58d-4b06-4418-8a63-bc1f2c7fef8d`를 이전 정상 배포 `2f1af91b-4269-4964-b983-b6a4100dd8b2`로 전환했습니다.
