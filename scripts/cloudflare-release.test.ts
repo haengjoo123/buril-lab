@@ -273,12 +273,13 @@ function validStorageBackupSurfaceRaw() {
     bindingsRaw: cloudflareEnvelope(storageBackupBindingsFixture()),
     routesRaw: cloudflareEnvelope([]),
     domainsRaw: cloudflareEnvelope([], {
+      errors: null,
+      messages: null,
       result_info: {
         count: 0,
-        page: 0,
-        per_page: 5,
+        page: 1,
+        per_page: 0,
         total_count: 0,
-        total_pages: 0,
       },
     }),
     subdomainRaw: cloudflareEnvelope({ enabled: false, previews_enabled: false }),
@@ -2314,6 +2315,12 @@ describe('Prep 0 Cloudflare release controls', () => {
       .toThrow(/routes must be exactly empty/)
     expect(() => verify({ domainsRaw: cloudflareEnvelope([{ hostname: 'worker.example.com' }]) }))
       .toThrow(/custom domains must be exactly empty/)
+    expect(() => verify({
+      routesRaw: cloudflareEnvelope([], { errors: null, messages: null }),
+    })).toThrow(/routes did not return one successful, error-free response/)
+    expect(() => verify({
+      domainsRaw: cloudflareEnvelope([], { errors: null }),
+    })).toThrow(/custom domains did not return one successful, error-free response/)
     expect(() => verify({
       domainsRaw: cloudflareEnvelope([], {
         result_info: { count: 0, page: 0, per_page: 5, total_count: 1, total_pages: 1 },

@@ -66,7 +66,10 @@ function requireExactKeys(value, requiredKeys, optionalKeys, name) {
   return value
 }
 
-function parseCloudflareEnvelope(raw, name, { allowResultInfo = false } = {}) {
+function parseCloudflareEnvelope(raw, name, {
+  allowResultInfo = false,
+  allowNullDiagnostics = false,
+} = {}) {
   const response = parseJson(raw, name)
   requireExactKeys(
     response,
@@ -74,13 +77,18 @@ function parseCloudflareEnvelope(raw, name, { allowResultInfo = false } = {}) {
     allowResultInfo ? ['result_info'] : [],
     name,
   )
-  if (
-    response.success !== true
-    || !Array.isArray(response.errors)
-    || response.errors.length !== 0
-    || !Array.isArray(response.messages)
-    || response.messages.length !== 0
-  ) {
+  const hasEmptyArrayDiagnostics = (
+    Array.isArray(response.errors)
+    && response.errors.length === 0
+    && Array.isArray(response.messages)
+    && response.messages.length === 0
+  )
+  const hasObservedNullDiagnostics = (
+    allowNullDiagnostics
+    && response.errors === null
+    && response.messages === null
+  )
+  if (response.success !== true || (!hasEmptyArrayDiagnostics && !hasObservedNullDiagnostics)) {
     throw new Error(`${name} did not return one successful, error-free response.`)
   }
 
@@ -349,8 +357,11 @@ function verifyWorkerBindings(raw) {
   return response.result.length
 }
 
-function verifyEmptyWorkerSurface(raw, name, { allowResultInfo = false } = {}) {
-  const response = parseCloudflareEnvelope(raw, name, { allowResultInfo })
+function verifyEmptyWorkerSurface(raw, name, {
+  allowResultInfo = false,
+  allowNullDiagnostics = false,
+} = {}) {
+  const response = parseCloudflareEnvelope(raw, name, { allowResultInfo, allowNullDiagnostics })
   if (!Array.isArray(response.result) || response.result.length !== 0) {
     throw new Error(`${name} must be exactly empty.`)
   }
@@ -468,7 +479,10 @@ export function verifyStorageBackupWorkerSurface({
   requireExactStagingWorker({ environment, accountId, workerName })
   const bindingCount = verifyWorkerBindings(bindingsRaw)
   verifyEmptyWorkerSurface(routesRaw, 'Cloudflare Worker routes')
-  verifyEmptyWorkerSurface(domainsRaw, 'Cloudflare Worker custom domains', { allowResultInfo: true })
+  verifyEmptyWorkerSurface(domainsRaw, 'Cloudflare Worker custom domains', {
+    allowResultInfo: true,
+    allowNullDiagnostics: true,
+  })
   verifyWorkerSubdomain(subdomainRaw)
   verifyWorkerService(serviceRaw)
   verifyWorkerSchedules(schedulesRaw)
