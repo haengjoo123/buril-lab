@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import worker, { runStorageBackupSchedule } from './index'
+import worker from './index'
+import * as workerEntrypoint from './index'
+import { runStorageBackupSchedule } from './scheduled'
 import {
   calculateWorstCaseSubrequests,
   isStorageBackupEnabled,
@@ -693,6 +695,7 @@ describe('OFF-first activation and environment isolation', () => {
   })
 
   it('exports only the scheduled handler and no public fetch path', () => {
+    expect(Object.keys(workerEntrypoint)).toEqual(['default'])
     expect(Object.keys(worker)).toEqual(['scheduled'])
     expect(worker).not.toHaveProperty('fetch')
   })
