@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   verifyActiveSupabasePat,
+  verifyEventuallyActiveSupabasePat,
   verifyInactiveCloudflareToken,
   verifyInactiveSupabasePat,
 } from './verify-ephemeral-provider-lifecycle.mjs'
@@ -36,6 +37,42 @@ describe('ephemeral provider credential lifecycle', () => {
       .resolves.toMatchObject({ active: true, projectRef: PROJECT_REF })
     await expect(verifyActiveSupabasePat(TOKEN, 'c'.repeat(20), { fetchImpl: fetchMock }))
       .rejects.toThrow(/cannot read/)
+  })
+
+  it('allows a bounded activation delay before accepting a newly created Supabase PAT', async () => {
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length < 3) return new Response('', { status: 401 })
+      return new Response(JSON.stringify([{ id: PROJECT_REF }]), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const wait = vi.fn(async () => undefined)
+
+    await expect(verifyEventuallyActiveSupabasePat(TOKEN, PROJECT_REF, {
+      fetchImpl: fetchMock,
+      attempts: 3,
+      retryDelayMs: 0,
+      wait,
+    })).resolves.toMatchObject({ active: true, projectRef: PROJECT_REF })
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(wait).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps Supabase PAT verification fail-closed after the bounded activation wait', async () => {
+    const fetchMock = vi.fn(async () => new Response('', { status: 401 }))
+    const wait = vi.fn(async () => undefined)
+
+    await expect(verifyEventuallyActiveSupabasePat(TOKEN, PROJECT_REF, {
+      fetchImpl: fetchMock,
+      attempts: 2,
+      retryDelayMs: 0,
+      wait,
+    })).rejects.toThrow('Supabase PAT is not active for the supervised release.')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(wait).toHaveBeenCalledTimes(1)
   })
 
   it('accepts only an exact 401 as Supabase PAT revocation proof', async () => {

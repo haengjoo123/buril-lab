@@ -1,6 +1,8 @@
 const MAX_RESPONSE_BYTES = 1024 * 1024
 const PROJECT_REF_PATTERN = /^[a-z]{20}$/
 const CLOUDFLARE_ID_PATTERN = /^[0-9a-f]{32}$/
+const SUPABASE_PAT_PROPAGATION_ATTEMPTS = 7
+const SUPABASE_PAT_PROPAGATION_DELAY_MS = 10_000
 
 function hasExactKeys(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
@@ -66,6 +68,36 @@ export async function verifyActiveSupabasePat(token, projectRef, { fetchImpl = f
     throw new Error('Supabase PAT cannot read the selected release project.')
   }
   return Object.freeze({ active: true, projectRef })
+}
+
+function retryableSupabasePatPropagationError(error) {
+  return error instanceof Error && [
+    'Supabase PAT is not active for the supervised release.',
+    'Supabase PAT cannot read the selected release project.',
+  ].includes(error.message)
+}
+
+export async function verifyEventuallyActiveSupabasePat(token, projectRef, {
+  fetchImpl = fetch,
+  attempts = SUPABASE_PAT_PROPAGATION_ATTEMPTS,
+  retryDelayMs = SUPABASE_PAT_PROPAGATION_DELAY_MS,
+  wait = (milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds)),
+} = {}) {
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > SUPABASE_PAT_PROPAGATION_ATTEMPTS) {
+    throw new Error('Supabase PAT propagation attempt count is invalid.')
+  }
+  if (!Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > SUPABASE_PAT_PROPAGATION_DELAY_MS) {
+    throw new Error('Supabase PAT propagation retry delay is invalid.')
+  }
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await verifyActiveSupabasePat(token, projectRef, { fetchImpl })
+    } catch (error) {
+      if (!retryableSupabasePatPropagationError(error) || attempt === attempts) throw error
+      await wait(retryDelayMs)
+    }
+  }
+  throw new Error('Supabase PAT propagation verification did not complete.')
 }
 
 export async function verifyInactiveSupabasePat(token, { fetchImpl = fetch } = {}) {
