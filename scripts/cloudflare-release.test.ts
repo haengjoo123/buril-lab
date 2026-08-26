@@ -45,6 +45,7 @@ import {
 import {
   verifyCloudflareApiHelperSource,
   verifyReleaseConfiguration,
+  verifyStorageBackupWorkerTokenDocumentation,
 } from './verify-cloudflare-release-config.mjs'
 import { publicKeyFingerprint, signAttestation } from './ephemeral-release-attestation.mjs'
 import {
@@ -2443,6 +2444,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       gate0TargetConfig,
       gate0Spec,
       cloudflareApiHelper,
+      storageBackupReadme,
     ] = await Promise.all([
       readFile('wrangler.jsonc', 'utf8'),
       readFile('wrangler.staging.jsonc', 'utf8'),
@@ -2457,6 +2459,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('scripts/gate0-staging-target.mjs', 'utf8'),
       readFile('e2e/gate0/gate0.spec.ts', 'utf8'),
       readFile('scripts/cloudflare-api-get.mjs', 'utf8'),
+      readFile('workers/storage-backup/README.md', 'utf8'),
     ])
     const normalizeLineEndings = (source: string) => source.replace(/\r\n/g, '\n')
     const stagingWorkflow = normalizeLineEndings(stagingWorkflowRaw)
@@ -2466,6 +2469,10 @@ describe('Prep 0 Cloudflare release controls', () => {
     const rollbackVerificationWorkflow = normalizeLineEndings(rollbackVerificationWorkflowRaw)
     const iosWorkflow = normalizeLineEndings(iosWorkflowRaw)
     expect(verifyCloudflareApiHelperSource(cloudflareApiHelper)).toBe(true)
+    expect(verifyStorageBackupWorkerTokenDocumentation(storageBackupReadme)).toBe(true)
+    expect(() => verifyStorageBackupWorkerTokenDocumentation(
+      storageBackupReadme.replace('**Workers R2 Storage Read**', '**Workers R2 Storage missing**'),
+    )).toThrow(/Scripts Edit, KV Read, and R2 Read/)
     expect(createHash('sha256').update(cloudflareApiHelper.replace(/\r\n/g, '\n'), 'utf8').digest('hex'))
       .toBe('07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee')
     expect(() => verifyCloudflareApiHelperSource(`${cloudflareApiHelper}\n`))

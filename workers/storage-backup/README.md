@@ -39,8 +39,15 @@ succeeds and requires the confirmation text shown by the workflow. The
 `deploy_storage_backup` input defaults to `false`. Only when an operator
 explicitly sets it to `true` may the workflow read
 `STAGING_WORKER_EPHEMERAL_TOKEN`, which needs **Workers Scripts Edit** and
-**Workers KV Storage Read** for the OFF-only Worker deployment and its live
-verification. The Pages and Worker token values must differ. Production uses a
+**Workers KV Storage Read**, plus **Workers R2 Storage Read**, for the OFF-only
+Worker deployment and its live verification. Wrangler 4.125.0 verifies the
+configured R2 binding with `GET /accounts/{account_id}/r2/buckets/{bucket_name}`
+before upload, so omitting the R2 read permission makes deployment fail before
+the Worker is changed. Cloudflare documents the permission in its
+[API token permission list](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
+and accepts R2 read permission for bucket lookup in the
+[R2 bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/list/).
+The Pages and Worker token values must differ. Production uses a
 third temporary secret, `PRODUCTION_PAGES_EPHEMERAL_TOKEN`, with Cloudflare
 Pages Edit only; production has no Worker deployment path.
 
