@@ -19,6 +19,7 @@ import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuide
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
+import { cabinetImageUploadMessageKey } from '../../utils/cabinetImageOptimization';
 
 interface CabinetListViewProps {
     onSelectCabinet: (cabinetId: string) => void;
@@ -92,6 +93,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
 
     const [imageMenu, setImageMenu] = useState<{ isOpen: boolean, cabinetId?: string }>({ isOpen: false });
     const [cameraModal, setCameraModal] = useState<{ isOpen: boolean, cabinetId?: string }>({ isOpen: false });
+    const [isImageUploading, setIsImageUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const listRequestRef = useRef(0);
     const activityRequestRef = useRef(0);
@@ -564,11 +566,8 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         setImageMenu({ isOpen: true, cabinetId });
     };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        const cabinetId = imageMenu.cabinetId;
-        if (!file || !cabinetId) return;
-
+    const uploadCabinetPhoto = async (cabinetId: string, file: File, sourceLabel: string) => {
+        setIsImageUploading(true);
         try {
             await cabinetService.uploadCabinetImage(cabinetId, file);
             await cabinetService.logActivity(
@@ -576,13 +575,28 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 'update',
                 t('cabinet_card_change_photo'),
                 undefined,
-                t('cabinet_image_gallery')
+                sourceLabel
             );
             await loadCabinets();
             await loadCabinetActivityFeed(cabinetId);
         } catch (err) {
-            console.error('이미지 업로드 실패:', err);
-            alert(t('cabinet_image_upload_error'));
+            // The optimizer deliberately maps file failures to a short user-facing
+            // message. Do not place the file name, Storage path, or provider error
+            // in a visible alert.
+            console.error('Cabinet image upload failed');
+            alert(t(cabinetImageUploadMessageKey(err)));
+        } finally {
+            setIsImageUploading(false);
+        }
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        const cabinetId = imageMenu.cabinetId;
+        if (!file || !cabinetId) return;
+
+        try {
+            await uploadCabinetPhoto(cabinetId, file, t('cabinet_image_gallery'));
         } finally {
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
@@ -591,21 +605,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     const handleCameraCapture = async (file: File) => {
         const cabinetId = cameraModal.cabinetId;
         if (!cabinetId) return;
-        try {
-            await cabinetService.uploadCabinetImage(cabinetId, file);
-            await cabinetService.logActivity(
-                cabinetId,
-                'update',
-                t('cabinet_card_change_photo'),
-                undefined,
-                t('cabinet_image_camera')
-            );
-            await loadCabinets();
-            await loadCabinetActivityFeed(cabinetId);
-        } catch (err) {
-            console.error('카메라 이미지 업로드 실패:', err);
-            alert(t('cabinet_image_upload_error'));
-        }
+        await uploadCabinetPhoto(cabinetId, file, t('cabinet_image_camera'));
     };
 
     const handleDelete = (e: React.MouseEvent, id: string) => {
@@ -968,9 +968,21 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={isImageUploading}
                 className="hidden"
             />
+
+            {isImageUploading && (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    className="fixed bottom-5 left-1/2 z-[130] flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
+                >
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('cabinet_image_optimizing')}
+                </div>
+            )}
 
             <CameraCaptureModal
                 isOpen={cameraModal.isOpen}

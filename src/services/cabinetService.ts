@@ -5,6 +5,7 @@ import { normalizeTemplateFromDb } from '../utils/normalizeTemplateFromDb';
 import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
+import { optimizeCabinetImage } from '../utils/cabinetImageOptimization';
 
 const mapCabinetActionToAuditAction = (actionType: ActivityActionType): 'create' | 'update' | 'delete' => {
     if (actionType === 'add') return 'create';
@@ -133,13 +134,19 @@ export const cabinetService = {
     },
 
     async uploadCabinetImage(cabinetId: string, file: File): Promise<string> {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${cabinetId}-${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        // Canvas re-encoding strips EXIF/GPS metadata and makes the stored file
+        // bounded for the daily private-storage recovery copy. The source file is
+        // never uploaded to Storage.
+        const optimized = await optimizeCabinetImage(file);
+        const filePath = `${cabinetId}-${uuidv4()}.webp`;
 
         const { error: uploadError } = await supabase.storage
             .from('cabinets')
-            .upload(filePath, file, { upsert: true });
+            .upload(filePath, optimized.file, {
+                upsert: false,
+                contentType: 'image/webp',
+                cacheControl: '31536000',
+            });
 
         if (uploadError) {
             console.error('Error uploading cabinet image:', uploadError);
@@ -152,7 +159,16 @@ export const cabinetService = {
 
         const publicUrl = data.publicUrl;
 
-        await this.updateCabinet(cabinetId, { image_url: publicUrl });
+        try {
+            await this.updateCabinet(cabinetId, { image_url: publicUrl });
+        } catch (error) {
+            // This is a brand-new, unreferenced optimized file. Removing it here
+            // avoids adding a failed upload to the later orphan-cleanup queue;
+            // it does not remove the previously attached photo, which keeps the
+            // agreed retention/migration policy intact.
+            await supabase.storage.from('cabinets').remove([filePath]).catch(() => undefined);
+            throw error;
+        }
         return publicUrl;
     },
 
