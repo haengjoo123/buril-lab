@@ -1,7 +1,8 @@
 import { Buffer } from 'node:buffer'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { loadEnv, type Plugin } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -432,6 +433,12 @@ export default defineConfig(({ mode }) => {
   ) as Record<(typeof explicitClientEnvNames)[number], string>
 
   return {
+  test: {
+    // Codex and local tooling may create ignored temporary worktrees that
+    // contain third-party test fixtures. They are not application tests and
+    // must not make the repository test command depend on their packages.
+    exclude: [...configDefaults.exclude, '**/.codex-tmp/**'],
+  },
   // Vite exposes every variable matching envPrefix through import.meta.env.
   // Automatic exposure is intentionally disabled; only the explicit public
   // browser configuration below is injected.
