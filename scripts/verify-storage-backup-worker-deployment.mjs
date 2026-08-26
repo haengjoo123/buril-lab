@@ -9,6 +9,8 @@ const STAGING_BACKUP_BUCKET = 'buril-lab-cabinet-backups-staging'
 const STAGING_CRON = '15 17 * * *'
 const STAGING_COMPATIBILITY_DATE = '2026-08-20'
 const STAGING_COMPATIBILITY_FLAGS = Object.freeze(['nodejs_compat'])
+const PINNED_WRANGLER_VERSION = '4.125.0'
+const STAGING_SECRET_FILE_PATTERN = /^\/home\/runner\/work\/_temp\/burillab-storage-backup-secrets-[A-Za-z0-9]{6}\/secrets\.json$/
 const STAGING_PLAIN_TEXT_BINDINGS = Object.freeze({
   BACKUP_ENVIRONMENT: 'staging',
   SUPABASE_PROJECT_REF: 'qpgnomuqdcucjmxrunnw',
@@ -119,8 +121,72 @@ function expectedMessage(commitSha, runId, leaseId) {
   return `quality-approved staging storage backup run ${runId} lease ${leaseId} commit ${commitSha}`
 }
 
+function requireExactArray(value, expected, name) {
+  if (
+    !Array.isArray(value)
+    || value.length !== expected.length
+    || value.some((item, index) => item !== expected[index])
+  ) {
+    throw new Error(`${name} differs from the pinned Wrangler command contract.`)
+  }
+}
+
+function requireBoundedTimestamp(value, name, { start, now }) {
+  const parsed = Date.parse(value || '')
+  if (!Number.isFinite(parsed) || parsed < start || parsed > now + 60_000) {
+    throw new Error(`${name} is outside the guarded deployment time boundary.`)
+  }
+  return parsed
+}
+
+function verifyWranglerWorkerSession(entry, {
+  commitSha,
+  runId,
+  leaseId,
+  start,
+  now,
+}) {
+  requireExactKeys(entry, [
+    'type', 'version', 'wrangler_version', 'command_line_args', 'log_file_path',
+    'timestamp',
+  ], [], 'Wrangler Worker session output')
+  if (
+    entry.type !== 'wrangler-session'
+    || entry.version !== 1
+    || entry.wrangler_version !== PINNED_WRANGLER_VERSION
+    || typeof entry.log_file_path !== 'string'
+    || entry.log_file_path.length === 0
+    || entry.log_file_path.length > 4_096
+    || /[\u0000-\u001f\u007f]/.test(entry.log_file_path)
+  ) {
+    throw new Error('Wrangler Worker session does not match the pinned deployment contract.')
+  }
+
+  const secretFile = entry.command_line_args?.[4]
+  if (typeof secretFile !== 'string' || !STAGING_SECRET_FILE_PATTERN.test(secretFile)) {
+    throw new Error('Wrangler Worker session did not use the isolated GitHub runner secret file.')
+  }
+  requireExactArray(entry.command_line_args, [
+    'deploy',
+    '--config', 'workers/storage-backup/wrangler.staging.jsonc',
+    '--secrets-file', secretFile,
+    '--strict',
+    '--autoconfig=false',
+    '--tag', expectedTag(runId, leaseId),
+    '--message', expectedMessage(commitSha, runId, leaseId),
+  ], 'Wrangler Worker session command line')
+  return requireBoundedTimestamp(
+    entry.timestamp,
+    'Wrangler Worker session timestamp',
+    { start, now },
+  )
+}
+
 export function verifyWranglerWorkerDeployOutput(raw, {
   workerName,
+  commitSha,
+  runId,
+  leaseId,
   startedAt,
   now = Date.now(),
 } = {}) {
@@ -129,21 +195,45 @@ export function verifyWranglerWorkerDeployOutput(raw, {
     || Buffer.byteLength(raw, 'utf8') < 1
     || Buffer.byteLength(raw, 'utf8') > MAX_WRANGLER_OUTPUT_BYTES
   ) throw new Error('Wrangler Worker deployment output is empty or oversized.')
-  const lines = raw.trimEnd().split('\n')
-  if (lines.length !== 1) throw new Error('Wrangler Worker deployment output must contain exactly one record.')
-  let entry
+  if (!FULL_SHA_PATTERN.test(commitSha || '')) {
+    throw new Error('Wrangler Worker deployment output requires the exact lowercase commit SHA.')
+  }
+  expectedTag(runId, leaseId)
+  const lines = raw.trimEnd().split(/\r?\n/)
+  if (lines.length !== 2) {
+    throw new Error('Wrangler Worker deployment output must contain exactly one session and one deploy record.')
+  }
+  let entries
   try {
-    entry = JSON.parse(lines[0])
+    entries = lines.map((line) => JSON.parse(line))
   } catch {
     throw new Error('Wrangler Worker deployment output is not valid JSON Lines.')
   }
+  const [session, entry] = entries
+  if (session?.type !== 'wrangler-session' || entry?.type !== 'deploy') {
+    throw new Error('Wrangler Worker deployment record order differs from the pinned contract.')
+  }
+  const start = Date.parse(startedAt || '')
+  const nowTime = now instanceof Date ? now.getTime() : Number(now)
+  if (!Number.isFinite(start) || !Number.isFinite(nowTime) || start > nowTime + 60_000) {
+    throw new Error('Wrangler Worker deployment time boundary is invalid.')
+  }
+  const sessionAt = verifyWranglerWorkerSession(session, {
+    commitSha,
+    runId,
+    leaseId,
+    start,
+    now: nowTime,
+  })
   requireExactKeys(entry, [
     'type', 'version', 'worker_name', 'worker_tag', 'version_id', 'targets',
     'worker_name_overridden', 'timestamp',
   ], ['wrangler_environment'], 'Wrangler Worker deployment output')
-  const start = Date.parse(startedAt || '')
-  const outputAt = Date.parse(entry.timestamp || '')
-  const nowTime = now instanceof Date ? now.getTime() : Number(now)
+  const outputAt = requireBoundedTimestamp(
+    entry.timestamp,
+    'Wrangler Worker deployment timestamp',
+    { start, now: nowTime },
+  )
   if (
     entry.type !== 'deploy'
     || entry.version !== 1
@@ -151,15 +241,11 @@ export function verifyWranglerWorkerDeployOutput(raw, {
     || entry.worker_name_overridden !== false
     || (entry.worker_tag !== null && typeof entry.worker_tag !== 'string')
     || !UUID_PATTERN.test(entry.version_id || '')
-    || !Array.isArray(entry.targets)
-    || !Number.isFinite(start)
-    || !Number.isFinite(outputAt)
-    || !Number.isFinite(nowTime)
-    || outputAt < start
-    || outputAt > nowTime + 60_000
+    || outputAt < sessionAt
   ) {
     throw new Error('Wrangler Worker deployment output does not match the guarded mutation.')
   }
+  requireExactArray(entry.targets, [`schedule: ${STAGING_CRON}`], 'Wrangler Worker deployment targets')
   return Object.freeze({ versionId: entry.version_id, outputAt: new Date(outputAt).toISOString() })
 }
 
@@ -548,6 +634,9 @@ async function main() {
       await readFile(process.env.WRANGLER_OUTPUT_FILE_PATH, 'utf8'),
       {
         workerName: process.env.STORAGE_BACKUP_WORKER_NAME,
+        commitSha: process.env.DEPLOY_COMMIT_SHA,
+        runId: process.env.GITHUB_RUN_ID,
+        leaseId: process.env.DEPLOY_LEASE_ID,
         startedAt: process.env.WORKER_DEPLOY_STARTED_AT,
       },
     )

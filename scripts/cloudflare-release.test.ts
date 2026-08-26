@@ -2129,30 +2129,86 @@ describe('Prep 0 Cloudflare release controls', () => {
   })
 
   it('extracts only the exact newly-created Wrangler Worker version', () => {
-    const output = JSON.stringify({
+    const runId = '32935279831'
+    const leaseId = '126a07448ccfd510791515813928e881'
+    const secretFile = '/home/runner/work/_temp/burillab-storage-backup-secrets-RxNoaM/secrets.json'
+    const session = {
+      type: 'wrangler-session',
+      version: 1,
+      wrangler_version: '4.125.0',
+      command_line_args: [
+        'deploy',
+        '--config', 'workers/storage-backup/wrangler.staging.jsonc',
+        '--secrets-file', secretFile,
+        '--strict',
+        '--autoconfig=false',
+        '--tag', `r${runId}-l${leaseId}`,
+        '--message', `quality-approved staging storage backup run ${runId} lease ${leaseId} commit ${COMMIT}`,
+      ],
+      log_file_path: '/home/runner/.config/.wrangler/logs/wrangler-2026-08-25_01-00-01_000.log',
+      timestamp: '2026-08-25T01:00:01.000Z',
+    }
+    const deploy = {
       type: 'deploy',
       version: 1,
       worker_name: null,
       worker_tag: 'opaque-worker-tag',
       version_id: '123e4567-e89b-42d3-a456-426614174011',
-      targets: ['15 17 * * *'],
+      targets: ['schedule: 15 17 * * *'],
       worker_name_overridden: false,
       timestamp: '2026-08-25T01:00:02.000Z',
-    }) + '\n'
+    }
+    const outputFor = (sessionValue = session, deployValue = deploy) => (
+      `${JSON.stringify(sessionValue)}\n${JSON.stringify(deployValue)}\n`
+    )
+    const output = outputFor()
     const options = {
       workerName: 'buril-lab-storage-backup-staging',
+      commitSha: COMMIT,
+      runId,
+      leaseId,
       startedAt: '2026-08-25T01:00:00Z',
       now: Date.parse('2026-08-25T01:01:00Z'),
     }
     expect(verifyWranglerWorkerDeployOutput(output, options)).toMatchObject({
       versionId: '123e4567-e89b-42d3-a456-426614174011',
     })
-    expect(() => verifyWranglerWorkerDeployOutput(output.replace(
-      '2026-08-25T01:00:02.000Z',
-      '2026-08-25T00:59:59.000Z',
-    ), options)).toThrow(/does not match/)
+    expect(() => verifyWranglerWorkerDeployOutput(outputFor(session, {
+      ...deploy,
+      timestamp: '2026-08-25T00:59:59.000Z',
+    }), options)).toThrow(/outside the guarded deployment time boundary/)
     expect(() => verifyWranglerWorkerDeployOutput(`${output}${output}`, options))
-      .toThrow(/exactly one record/)
+      .toThrow(/exactly one session and one deploy record/)
+    expect(() => verifyWranglerWorkerDeployOutput(`${JSON.stringify(deploy)}\n`, options))
+      .toThrow(/exactly one session and one deploy record/)
+    expect(() => verifyWranglerWorkerDeployOutput(outputFor(deploy, session), options))
+      .toThrow(/record order/)
+    expect(() => verifyWranglerWorkerDeployOutput(outputFor({
+      ...session,
+      wrangler_version: '4.126.0',
+    }, deploy), options)).toThrow(/pinned deployment contract/)
+    expect(() => verifyWranglerWorkerDeployOutput(outputFor({
+      ...session,
+      command_line_args: session.command_line_args.map((value) => (
+        value === secretFile
+          ? '/home/runner/work/_temp/not-the-approved-secret-file/secrets.json'
+          : value
+      )),
+    }, deploy), options)).toThrow(/isolated GitHub runner secret file/)
+    expect(() => verifyWranglerWorkerDeployOutput(outputFor({
+      ...session,
+      command_line_args: [...session.command_line_args, '--keep-vars'],
+    }, deploy), options)).toThrow(/pinned Wrangler command contract/)
+    expect(() => verifyWranglerWorkerDeployOutput(outputFor({
+      ...session,
+      command_line_args: session.command_line_args.map((value) => (
+        value === `r${runId}-l${leaseId}` ? 'unapproved-tag' : value
+      )),
+    }, deploy), options)).toThrow(/pinned Wrangler command contract/)
+    expect(() => verifyWranglerWorkerDeployOutput(outputFor({
+      ...session,
+      timestamp: '2026-08-25T01:00:03.000Z',
+    }, deploy), options)).toThrow(/does not match the guarded mutation/)
   })
 
   it('accepts only the exact approved Staging Worker control-plane surface', () => {
