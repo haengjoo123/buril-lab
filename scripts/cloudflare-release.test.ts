@@ -2659,6 +2659,14 @@ describe('Prep 0 Cloudflare release controls', () => {
         /dependency chain/,
       ],
       [
+        'staging',
+        stagingWorkflow.replace(
+          '      EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}\n      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}\n\n    steps:\n      - name: Validate the supervised Staging Worker confirmation',
+          '      EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}\n\n    steps:\n      - name: Validate the supervised Staging Worker confirmation',
+        ),
+        /Staging Worker job.*Supabase project reference/,
+      ],
+      [
         'production',
         productionWorkflow.replace(
           'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',

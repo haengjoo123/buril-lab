@@ -755,6 +755,7 @@ jobs:
       DEPLOY_STORAGE_BACKUP: ${{ inputs.deploy_storage_backup }}
       EPHEMERAL_LEASE_GRANT: ${{ inputs.lease_grant }}
       EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
 
     steps:
       - name: Validate the supervised Staging Worker confirmation
