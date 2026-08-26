@@ -8,7 +8,7 @@ const APPROVED_ACCOUNT_SURFACES = new Set([
   'workers/scripts/buril-lab-storage-backup-staging/secrets',
   'workers/services/buril-lab-storage-backup-staging/environments/production/bindings',
   'workers/services/buril-lab-storage-backup-staging/environments/production/routes?show_zonename=true',
-  'workers/domains/records?page=0&per_page=5&service=buril-lab-storage-backup-staging&environment=production',
+  'workers/domains?service=buril-lab-storage-backup-staging&environment=production',
   'workers/services/buril-lab-storage-backup-staging/environments/production/subdomain',
   'workers/services/buril-lab-storage-backup-staging/environments/production',
   'workers/scripts/buril-lab-storage-backup-staging/schedules',

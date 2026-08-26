@@ -4,12 +4,13 @@ import { cloudflareApiGet, parseArguments } from './cloudflare-api-get.mjs'
 const ACCOUNT_ID = 'a'.repeat(32)
 const TOKEN = 'cfut_test_token_material_12345678901234567890'
 const URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects/buril-lab-staging/deployments?env=production`
+const WORKER_DOMAINS_URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/domains?service=buril-lab-storage-backup-staging&environment=production`
 
-function responseFor(body: BodyInit | null, init?: ResponseInit) {
+function responseFor(body: BodyInit | null, init?: ResponseInit, responseUrl = URL) {
   const response = new Response(body, init)
   Object.defineProperties(response, {
     redirected: { value: false, configurable: true },
-    url: { value: URL, configurable: true },
+    url: { value: responseUrl, configurable: true },
   })
   return response
 }
@@ -37,6 +38,21 @@ describe('Cloudflare API GET helper', () => {
     }, URL, { fetchImpl: fetchMock })
     expect(result.body.toString('utf8')).toBe('{"success":true}')
     expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` })
+  })
+
+  it('allows the current Worker custom-domain endpoint and rejects the removed records endpoint', async () => {
+    const environment = { CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID, CLOUDFLARE_API_TOKEN: TOKEN }
+    const fetchMock = vi.fn(async () => responseFor('{"success":true,"result":[]}', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }, WORKER_DOMAINS_URL))
+
+    await expect(cloudflareApiGet(environment, WORKER_DOMAINS_URL, { fetchImpl: fetchMock }))
+      .resolves.toMatchObject({ status: 200 })
+    await expect(cloudflareApiGet(
+      environment,
+      `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/domains/records?page=0&per_page=5&service=buril-lab-storage-backup-staging&environment=production`,
+    )).rejects.toThrow(/not an approved read-only release endpoint/)
   })
 
   it('rejects another host, non-JSON, oversized data, and HTTP errors by default', async () => {

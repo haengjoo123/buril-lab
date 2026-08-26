@@ -2530,7 +2530,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       storageBackupReadme.replace('**Workers R2 Storage Read**', '**Workers R2 Storage missing**'),
     )).toThrow(/Scripts Edit, KV Read, and R2 Read/)
     expect(createHash('sha256').update(cloudflareApiHelper.replace(/\r\n/g, '\n'), 'utf8').digest('hex'))
-      .toBe('07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee')
+      .toBe('fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317')
     expect(() => verifyCloudflareApiHelperSource(`${cloudflareApiHelper}\n`))
       .toThrow(/token-handling contract/)
     expect(() => verifyCloudflareApiHelperSource(`${cloudflareApiHelper}\nconsole.log(process.env.CLOUDFLARE_API_TOKEN)`))
@@ -2764,7 +2764,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       workflows: {
         ...configuration.workflows,
         production: productionWorkflow.replace(
-          "/usr/bin/git diff --quiet --exit-code\n          /usr/bin/git diff --cached --quiet --exit-code\n          printf '%s  %s\\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs \\\n            | /usr/bin/sha256sum --check --strict",
+          "/usr/bin/git diff --quiet --exit-code\n          /usr/bin/git diff --cached --quiet --exit-code\n          printf '%s  %s\\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \\\n            | /usr/bin/sha256sum --check --strict",
           'echo skipped-integrity-check',
         ),
       },
@@ -3017,7 +3017,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     for (const exactSurfaceEndpoint of [
       'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/bindings"',
       'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/routes?show_zonename=true"',
-      'endpoint="workers/domains/records?page=0&per_page=5&service=$STORAGE_BACKUP_WORKER_NAME&environment=production"',
+      'endpoint="workers/domains?service=$STORAGE_BACKUP_WORKER_NAME&environment=production"',
       'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/subdomain"',
       'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production"',
       'endpoint="workers/scripts/$STORAGE_BACKUP_WORKER_NAME/schedules"',

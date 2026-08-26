@@ -557,7 +557,7 @@ jobs:
           set -euo pipefail
           /usr/bin/git diff --quiet --exit-code
           /usr/bin/git diff --cached --quiet --exit-code
-          printf '%s  %s\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs \
+          printf '%s  %s\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \
             | /usr/bin/sha256sum --check --strict
           evidence_found=false
           for attempt in 1 2 3 4 5 6; do
@@ -896,7 +896,7 @@ jobs:
           set -euo pipefail
           /usr/bin/git diff --quiet --exit-code
           /usr/bin/git diff --cached --quiet --exit-code
-          printf '%s  %s\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs \
+          printf '%s  %s\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \
             | /usr/bin/sha256sum --check --strict
           worker_secret_response="$(
             node scripts/cloudflare-api-get.mjs \
@@ -1061,7 +1061,7 @@ jobs:
           set -euo pipefail
           /usr/bin/git diff --quiet --exit-code
           /usr/bin/git diff --cached --quiet --exit-code
-          printf '%s  %s\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs \
+          printf '%s  %s\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \
             | /usr/bin/sha256sum --check --strict
           cloudflare_worker_surface_get() {
             local surface="$1"
@@ -1069,7 +1069,7 @@ jobs:
             case "$surface" in
               bindings) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/bindings" ;;
               routes) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/routes?show_zonename=true" ;;
-              domains) endpoint="workers/domains/records?page=0&per_page=5&service=$STORAGE_BACKUP_WORKER_NAME&environment=production" ;;
+              domains) endpoint="workers/domains?service=$STORAGE_BACKUP_WORKER_NAME&environment=production" ;;
               subdomain) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/subdomain" ;;
               service) endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production" ;;
               schedules) endpoint="workers/scripts/$STORAGE_BACKUP_WORKER_NAME/schedules" ;;
