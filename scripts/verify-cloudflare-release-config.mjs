@@ -45,10 +45,10 @@ const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   '"storage_backup_enabled": true',
 ]
 const STAGING_RELEASE_WORKFLOW_SHA256 = [
-  '38aae0557f0d0993',
-  '836ad231c9836799',
-  '931231f296d9681f',
-  'a826d74d16fbca0e',
+  '7eb6363c4efd0109',
+  '66c2ebbe7fec52c0',
+  '0d396a539f3212ca',
+  '844eac360ba2d75c',
 ].join('')
 const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
   '0c986e96cb6324fb',
@@ -545,6 +545,15 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     || /\n    if:/.test(productionDeployJob)
   ) {
     throw new Error('Release jobs must preserve the exact unconditional build-to-deploy and optional deploy-to-Worker dependency chain.')
+  }
+  const stagingWorkerHeader = stagingWorkerJob.slice(0, stagingWorkerJob.indexOf('\n    steps:\n'))
+  if (
+    occurrenceCount(
+      stagingWorkerHeader,
+      'SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}',
+    ) !== 1
+  ) {
+    throw new Error('Staging Worker job must receive the exact environment-scoped Supabase project reference.')
   }
 
   const allowedBuildSecretMappings = new Set([
