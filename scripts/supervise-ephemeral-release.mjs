@@ -34,7 +34,7 @@ import {
   MAX_CUMULATIVE_LEASES,
 } from './verify-ephemeral-cleanup-receipt.mjs'
 import {
-  verifyActiveSupabasePat,
+  verifyEventuallyActiveSupabasePat,
   verifyInactiveCloudflareToken,
   verifyInactiveSupabasePat,
 } from './verify-ephemeral-provider-lifecycle.mjs'
@@ -1028,7 +1028,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
   let dispatched = false
   let preDispatchStage = 'Supabase PAT verification'
   try {
-    await verifyActiveSupabasePat(credentials.supabase_pat, contract.projectRef)
+    await verifyEventuallyActiveSupabasePat(credentials.supabase_pat, contract.projectRef)
     preDispatchStage = 'Cloudflare Pages token verification'
     const pageMetadata = await verifyCloudflareTokenTtl({
       CLOUDFLARE_ACCOUNT_ID: cloudflareAccountId,
