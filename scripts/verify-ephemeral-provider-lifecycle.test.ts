@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   verifyActiveSupabasePat,
   verifyEventuallyActiveSupabasePat,
+  verifyEventuallyInactiveCloudflareToken,
+  verifyEventuallyInactiveSupabasePat,
   verifyInactiveCloudflareToken,
   verifyInactiveSupabasePat,
 } from './verify-ephemeral-provider-lifecycle.mjs'
@@ -86,6 +88,24 @@ describe('ephemeral provider credential lifecycle', () => {
     }
   })
 
+  it('allows a bounded revocation delay before accepting an inactive Supabase PAT', async () => {
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length < 3) return new Response('', { status: 200 })
+      return new Response('', { status: 401 })
+    })
+    const wait = vi.fn(async () => undefined)
+
+    await expect(verifyEventuallyInactiveSupabasePat(TOKEN, {
+      fetchImpl: fetchMock,
+      attempts: 3,
+      retryDelayMs: 0,
+      wait,
+    })).resolves.toMatchObject({ inactive: true })
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(wait).toHaveBeenCalledTimes(2)
+  })
+
   it('requires both Cloudflare verify surfaces to reject or disable the token', async () => {
     const inactive = vi.fn(async () => invalidCloudflareTokenResponse())
     await expect(verifyInactiveCloudflareToken(TOKEN, ACCOUNT_ID, { fetchImpl: inactive }))
@@ -119,6 +139,33 @@ describe('ephemeral provider credential lifecycle', () => {
       await expect(verifyInactiveCloudflareToken(TOKEN, ACCOUNT_ID, { fetchImpl: inactiveStatus }))
         .resolves.toMatchObject({ inactive: true })
     }
+  })
+
+  it('allows a bounded revocation delay before accepting an inactive Cloudflare token', async () => {
+    let request = 0
+    const fetchMock = vi.fn(async () => {
+      request += 1
+      if (request <= 2) {
+        return cloudflareJson({
+          success: true,
+          errors: [],
+          messages: [],
+          result: { id: CLOUDFLARE_TOKEN_ID, status: 'active' },
+        })
+      }
+      return invalidCloudflareTokenResponse()
+    })
+    const wait = vi.fn(async () => undefined)
+
+    await expect(verifyEventuallyInactiveCloudflareToken(TOKEN, ACCOUNT_ID, {
+      fetchImpl: fetchMock,
+      attempts: 3,
+      retryDelayMs: 0,
+      wait,
+    })).resolves.toMatchObject({ inactive: true })
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(wait).toHaveBeenCalledTimes(2)
   })
 
   it('rejects every HTTP 400 response instead of treating it as token revocation proof', async () => {

@@ -3,6 +3,8 @@ const PROJECT_REF_PATTERN = /^[a-z]{20}$/
 const CLOUDFLARE_ID_PATTERN = /^[0-9a-f]{32}$/
 const SUPABASE_PAT_PROPAGATION_ATTEMPTS = 7
 const SUPABASE_PAT_PROPAGATION_DELAY_MS = 10_000
+const PROVIDER_REVOCATION_ATTEMPTS = 7
+const PROVIDER_REVOCATION_DELAY_MS = 10_000
 
 function hasExactKeys(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
@@ -114,6 +116,38 @@ export async function verifyInactiveSupabasePat(token, { fetchImpl = fetch } = {
   return Object.freeze({ inactive: true })
 }
 
+function retryableSupabasePatRevocationError(error) {
+  return error instanceof Error
+    && error.message === 'Supabase PAT revocation is not proven by an exact HTTP 401 response.'
+}
+
+function validateRevocationRetryOptions(attempts, retryDelayMs) {
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > PROVIDER_REVOCATION_ATTEMPTS) {
+    throw new Error('Provider revocation attempt count is invalid.')
+  }
+  if (!Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > PROVIDER_REVOCATION_DELAY_MS) {
+    throw new Error('Provider revocation retry delay is invalid.')
+  }
+}
+
+export async function verifyEventuallyInactiveSupabasePat(token, {
+  fetchImpl = fetch,
+  attempts = PROVIDER_REVOCATION_ATTEMPTS,
+  retryDelayMs = PROVIDER_REVOCATION_DELAY_MS,
+  wait = (milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds)),
+} = {}) {
+  validateRevocationRetryOptions(attempts, retryDelayMs)
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await verifyInactiveSupabasePat(token, { fetchImpl })
+    } catch (error) {
+      if (!retryableSupabasePatRevocationError(error) || attempt === attempts) throw error
+      await wait(retryDelayMs)
+    }
+  }
+  throw new Error('Supabase PAT revocation verification did not complete.')
+}
+
 export async function verifyInactiveCloudflareToken(token, accountId, { fetchImpl = fetch } = {}) {
   validToken(token, 'Cloudflare token')
   if (!CLOUDFLARE_ID_PATTERN.test(accountId || '')) throw new Error('Cloudflare account identifier is malformed.')
@@ -177,4 +211,29 @@ export async function verifyInactiveCloudflareToken(token, accountId, { fetchImp
   }
   if (statuses.length !== endpoints.length) throw new Error('Cloudflare token inactivity verification was incomplete.')
   return Object.freeze({ inactive: true })
+}
+
+function retryableCloudflareTokenRevocationError(error) {
+  return error instanceof Error && [
+    'Cloudflare token is still active.',
+    'Cloudflare token inactivity cannot be proven from a transient or unexpected response.',
+  ].includes(error.message)
+}
+
+export async function verifyEventuallyInactiveCloudflareToken(token, accountId, {
+  fetchImpl = fetch,
+  attempts = PROVIDER_REVOCATION_ATTEMPTS,
+  retryDelayMs = PROVIDER_REVOCATION_DELAY_MS,
+  wait = (milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds)),
+} = {}) {
+  validateRevocationRetryOptions(attempts, retryDelayMs)
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await verifyInactiveCloudflareToken(token, accountId, { fetchImpl })
+    } catch (error) {
+      if (!retryableCloudflareTokenRevocationError(error) || attempt === attempts) throw error
+      await wait(retryDelayMs)
+    }
+  }
+  throw new Error('Cloudflare token revocation verification did not complete.')
 }

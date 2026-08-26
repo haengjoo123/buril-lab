@@ -35,8 +35,8 @@ import {
 } from './verify-ephemeral-cleanup-receipt.mjs'
 import {
   verifyEventuallyActiveSupabasePat,
-  verifyInactiveCloudflareToken,
-  verifyInactiveSupabasePat,
+  verifyEventuallyInactiveCloudflareToken,
+  verifyEventuallyInactiveSupabasePat,
 } from './verify-ephemeral-provider-lifecycle.mjs'
 import { verifyCloudflareTokenTtl } from './verify-cloudflare-token-ttl.mjs'
 import { findTrustedStagingRun } from './verify-github-staging-run.mjs'
@@ -1170,11 +1170,11 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
       await nextInputLine(inputIterator, 'Provider revocation confirmation')
     },
     verifyProviderInactivity: async () => {
-      await verifyInactiveCloudflareToken(credentials.cloudflare_pages_token, cloudflareAccountId)
+      await verifyEventuallyInactiveCloudflareToken(credentials.cloudflare_pages_token, cloudflareAccountId)
       if (credentials.cloudflare_worker_token) {
-        await verifyInactiveCloudflareToken(credentials.cloudflare_worker_token, cloudflareAccountId)
+        await verifyEventuallyInactiveCloudflareToken(credentials.cloudflare_worker_token, cloudflareAccountId)
       }
-      await verifyInactiveSupabasePat(credentials.supabase_pat)
+      await verifyEventuallyInactiveSupabasePat(credentials.supabase_pat)
     },
     recordCleanup: async () => {
       if (dispatched && !run && expectedTitle) {
@@ -1457,8 +1457,8 @@ async function collectRecoveryProviderEvidence(
     if (value.length < 20 || /[\r\n\0]/.test(value)) {
       throw new Error(`${provider} recovery credential is malformed; the phase journal remains.`)
     }
-    if (provider === 'supabase') await verifyInactiveSupabasePat(value)
-    else await verifyInactiveCloudflareToken(value, cloudflareAccountId)
+    if (provider === 'supabase') await verifyEventuallyInactiveSupabasePat(value)
+    else await verifyEventuallyInactiveCloudflareToken(value, cloudflareAccountId)
     providerEvidence.push({
       provider,
       status: 'api_verified_inactive',
