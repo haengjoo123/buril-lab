@@ -45,10 +45,10 @@ const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   '"storage_backup_enabled": true',
 ]
 const STAGING_RELEASE_WORKFLOW_SHA256 = [
-  '7eb6363c4efd0109',
-  '66c2ebbe7fec52c0',
-  '0d396a539f3212ca',
-  '844eac360ba2d75c',
+  'af8649ec475e33e7',
+  '843cbfc9fb4553b0',
+  '6c1a51d0cdc092f9',
+  'f2d240cb0d983294',
 ].join('')
 const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
   '0c986e96cb6324fb',
@@ -59,13 +59,13 @@ const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
 const STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256 = 'd278ccb8f65af20551fbc065fa84b21a36953804944bf35c53f08f2885aedc89'
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
-  production: 'b0777d86852a3bd7a145c59aeb282fa72ef7df54d618ed9ae4706f72afc92ebb',
+  production: '8e1b2958ff7f607e49a3ba1cb75842154c6107fa44b11cf477ff4f5c099e3c70',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
   'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,
   'verify-staging-rollback.yml': STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256,
 })
-const PINNED_CLOUDFLARE_API_HELPER_SHA256 = '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee'
+const PINNED_CLOUDFLARE_API_HELPER_SHA256 = 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317'
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
 const PINNED_WRANGLER_OUTPUT_HELPER_SHA256 = 'f6f7f7f615d022fd971e0df2b39c8e6e6be2dde23efdb6e7f604c90b4041d299'
 const PINNED_STAGING_ROLLBACK_PREPARATION_HELPER_SHA256 = '85695732038b715b4d62c0ebacd240ff35255423de726a452effba99d03c50af'
@@ -903,7 +903,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'Refusing an unapproved Worker control-plane surface.',
     'workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/bindings',
     'workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/routes?show_zonename=true',
-    'workers/domains/records?page=0&per_page=5&service=$STORAGE_BACKUP_WORKER_NAME&environment=production',
+    'workers/domains?service=$STORAGE_BACKUP_WORKER_NAME&environment=production',
     'workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/subdomain',
     'workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production',
     'workers/scripts/$STORAGE_BACKUP_WORKER_NAME/schedules',
@@ -1028,7 +1028,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     || occurrenceCount(stagingWorkflow, 'node scripts/cloudflare-api-get.mjs') !== 3
     || occurrenceCount(stagingWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/bindings"') !== 1
     || occurrenceCount(stagingWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/routes?show_zonename=true"') !== 1
-    || occurrenceCount(stagingWorkflow, 'endpoint="workers/domains/records?page=0&per_page=5&service=$STORAGE_BACKUP_WORKER_NAME&environment=production"') !== 1
+    || occurrenceCount(stagingWorkflow, 'endpoint="workers/domains?service=$STORAGE_BACKUP_WORKER_NAME&environment=production"') !== 1
     || occurrenceCount(stagingWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/subdomain"') !== 1
     || occurrenceCount(stagingWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production"') !== 1
     || occurrenceCount(stagingWorkflow, 'endpoint="workers/scripts/$STORAGE_BACKUP_WORKER_NAME/schedules"') !== 1
@@ -1866,7 +1866,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
       }
     }
   }
-  const helperIntegrityLine = "printf '%s  %s\\n' '07c8490e9f69a689bb2fc74ffb2f5cf995fa2aaee324d7322d13dd60a31297ee' scripts/cloudflare-api-get.mjs"
+  const helperIntegrityLine = "printf '%s  %s\\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs"
   for (const [workflow, stepNames] of [
     [stagingWorkflow, [
       'Resolve the immutable Staging deployment URL',
