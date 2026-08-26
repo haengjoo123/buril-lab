@@ -156,6 +156,28 @@ export function verifyCloudflareApiHelperSource(source) {
   return true
 }
 
+export function verifyStorageBackupWorkerTokenDocumentation(source) {
+  const requiredPermissions = [
+    '**Workers Scripts Edit**',
+    '**Workers KV Storage Read**',
+    '**Workers R2 Storage Read**',
+  ]
+  const tokenSection = String(source).match(
+    /`STAGING_WORKER_EPHEMERAL_TOKEN`[\s\S]*?The Pages and Worker token values must differ\./,
+  )?.[0]
+  if (!tokenSection || requiredPermissions.some((permission) => !tokenSection.includes(permission))) {
+    throw new Error('Storage-backup Worker token documentation must require Scripts Edit, KV Read, and R2 Read.')
+  }
+  if (
+    !tokenSection.includes('GET /accounts/{account_id}/r2/buckets/{bucket_name}')
+    || !tokenSection.includes('https://developers.cloudflare.com/fundamentals/api/reference/permissions/')
+    || !tokenSection.includes('https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/list/')
+  ) {
+    throw new Error('Storage-backup Worker token documentation must pin the Wrangler R2 lookup and official permission evidence.')
+  }
+  return true
+}
+
 function cloudflareTokenSecretNames(workflow) {
   return [...workflow.matchAll(/\bsecrets\.([A-Za-z0-9_]+)/g)]
     .map((match) => match[1])
@@ -1921,6 +1943,7 @@ async function main() {
     githubArtifactDigestHelper,
     wranglerOutputHelper,
     stagingRollbackPreparationHelper,
+    storageBackupReadme,
   ] = await Promise.all([
     readFile('wrangler.jsonc', 'utf8'),
     readFile('wrangler.staging.jsonc', 'utf8'),
@@ -1935,6 +1958,7 @@ async function main() {
     readFile('scripts/verify-github-artifact-digest.mjs', 'utf8'),
     readFile('scripts/verify-wrangler-pages-deploy-output.mjs', 'utf8'),
     readFile('scripts/prepare-staging-rollback-verification.mjs', 'utf8'),
+    readFile('workers/storage-backup/README.md', 'utf8'),
   ])
   verifyCloudflareApiHelperSource(cloudflareApiHelper)
   if (rawSourceHash(githubArtifactDigestHelper) !== PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256) {
@@ -1946,6 +1970,7 @@ async function main() {
   if (rawSourceHash(stagingRollbackPreparationHelper) !== PINNED_STAGING_ROLLBACK_PREPARATION_HELPER_SHA256) {
     throw new Error('Staging rollback preparation helper differs from the fully reviewed target-binding contract.')
   }
+  verifyStorageBackupWorkerTokenDocumentation(storageBackupReadme)
   const result = verifyReleaseConfiguration({
     productionRaw,
     stagingRaw,
