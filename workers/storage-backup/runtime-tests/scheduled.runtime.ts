@@ -42,12 +42,16 @@ describe('scheduled Worker in the Cloudflare runtime', () => {
     await expectSentinelUnchanged()
   })
 
-  it('uses the real KV binding but refuses Supabase and R2 work on the Free profile', async () => {
-    await setBackupEnabled(true)
+  it('treats a non-boolean enabled value as OFF on the paid profile', async () => {
+    await env.BURILLAB_RUNTIME_CONFIG.put(RUNTIME_CONFIG_KEY, JSON.stringify({
+      voice_disposal_mode: 'redirect',
+      kosha_content_mode: 'link_only',
+      account_deletion_enabled: false,
+      maintenance_worker_enabled: false,
+      storage_backup_enabled: 'true',
+    }))
 
-    await expect(worker.scheduled({} as ScheduledController, env)).rejects.toThrow(
-      'storage_backup_failed:workers_paid_plan_required',
-    )
+    await expect(worker.scheduled({} as ScheduledController, env)).resolves.toBeUndefined()
 
     await expectSentinelUnchanged()
   })

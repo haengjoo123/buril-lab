@@ -15,8 +15,8 @@ const STAGING_PLAIN_TEXT_BINDINGS = Object.freeze({
   SUPABASE_URL: 'https://qpgnomuqdcucjmxrunnw.supabase.co',
   SOURCE_POINTER_MODE: 'legacy_url',
   SOURCE_STORAGE_BUCKET: 'cabinets',
-  WORKERS_SUBREQUEST_LIMIT: '50',
-  WORKERS_USAGE_PLAN: 'free_off_only',
+  WORKERS_SUBREQUEST_LIMIT: '700',
+  WORKERS_USAGE_PLAN: 'paid',
 })
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -316,15 +316,24 @@ function verifyWorkerService(raw) {
   if (handlers.length !== 1 || handlers[0] !== 'scheduled') {
     throw new Error('The Staging backup Worker must expose only the scheduled handler.')
   }
+  if (!isRecord(script.limits)) {
+    throw new Error('The Staging backup Worker has no verifiable execution limits.')
+  }
+  requireExactKeys(
+    script.limits,
+    ['subrequests'],
+    [],
+    'Cloudflare Worker execution limits',
+  )
+  if (script.limits.subrequests !== 700) {
+    throw new Error('The Staging backup Worker subrequest limit has drifted.')
+  }
   if (
     (script.named_handlers !== undefined
       && (!Array.isArray(script.named_handlers) || script.named_handlers.length !== 0))
     || (script.tail_consumers !== undefined
       && script.tail_consumers !== null
       && (!Array.isArray(script.tail_consumers) || script.tail_consumers.length !== 0))
-    || (script.limits !== undefined
-      && script.limits !== null
-      && (!isRecord(script.limits) || Object.keys(script.limits).length !== 0))
     || (script.placement_mode !== undefined && script.placement_mode !== null)
   ) {
     throw new Error('The Staging backup Worker service metadata contains an unapproved execution surface.')

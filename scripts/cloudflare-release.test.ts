@@ -262,8 +262,8 @@ function storageBackupBindingsFixture() {
     { name: 'SUPABASE_URL', text: 'https://qpgnomuqdcucjmxrunnw.supabase.co', type: 'plain_text' },
     { name: 'SOURCE_POINTER_MODE', text: 'legacy_url', type: 'plain_text' },
     { name: 'SOURCE_STORAGE_BUCKET', text: 'cabinets', type: 'plain_text' },
-    { name: 'WORKERS_SUBREQUEST_LIMIT', text: '50', type: 'plain_text' },
-    { name: 'WORKERS_USAGE_PLAN', text: 'free_off_only', type: 'plain_text' },
+    { name: 'WORKERS_SUBREQUEST_LIMIT', text: '700', type: 'plain_text' },
+    { name: 'WORKERS_USAGE_PLAN', text: 'paid', type: 'plain_text' },
   ]
 }
 
@@ -290,7 +290,7 @@ function validStorageBackupSurfaceRaw() {
         handlers: ['scheduled'],
         named_handlers: [],
         tail_consumers: [],
-        limits: {},
+        limits: { subrequests: 700 },
         placement_mode: null,
       },
     }),
@@ -2301,7 +2301,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         handlers: ['scheduled'],
         named_handlers: [],
         tail_consumers: [],
-        limits: {},
+        limits: { subrequests: 700 },
         placement_mode: null,
         ...scriptOverrides,
       },
@@ -2324,7 +2324,10 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verify({ handlers: ['scheduled', 'scheduled'] })).toThrow(/duplicate value/)
     expect(() => verify({ named_handlers: ['admin'] })).toThrow(/unapproved execution surface/)
     expect(() => verify({ tail_consumers: [{ service: 'collector' }] })).toThrow(/unapproved execution surface/)
-    expect(() => verify({ limits: { cpu_ms: 1000 } })).toThrow(/unapproved execution surface/)
+    expect(() => verify({ limits: {} })).toThrow(/missing or unapproved fields/)
+    expect(() => verify({ limits: { subrequests: 699 } })).toThrow(/subrequest limit has drifted/)
+    expect(() => verify({ limits: { subrequests: 700, cpu_ms: 1000 } }))
+      .toThrow(/missing or unapproved fields/)
     expect(() => verify({ placement_mode: 'smart' })).toThrow(/unapproved execution surface/)
   })
 
