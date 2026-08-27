@@ -131,13 +131,17 @@ switch has been reviewed and deployed.
 
 The live account was upgraded to Workers Paid on 2026-08-26 after the dashboard
 showed the exact recurring base fee and usage terms. Both committed configs use
-`WORKERS_USAGE_PLAN=paid`, declare `WORKERS_SUBREQUEST_LIMIT=700`, and set
-Wrangler `limits.subrequests=700`. The runtime KV switch remains fail-closed and
+`WORKERS_USAGE_PLAN=paid`, declare `WORKERS_SUBREQUEST_LIMIT=1200`, and set
+Wrangler `limits.subrequests=1200`. The runtime KV switch remains fail-closed and
 OFF by default, so the paid profile alone does not start a backup.
 
 The static worst
-case is 625, including retry attempts, KV reads, Supabase calls, every R2 write
-and verification, and two reserved lock-release calls. A run supports at most
+case is 1,030, including one same-origin HTTPS redirect per source request,
+retry attempts, KV reads, Supabase calls, every R2 write and verification, and
+two reserved lock-release calls. Redirects are handled manually: only 301/302
+for GET or HEAD and 307/308 for any existing method may stay on the exact same
+origin and the same path (apart from trailing slashes), and a second redirect is
+rejected. A run supports at most
 50 image objects, 5 database pages, and 25 recursive Storage-list pages, and
 stops starting normal work after 14 minutes so the 15-minute Cron boundary
 retains cleanup time. These are support limits, not estimates of platform
@@ -224,7 +228,7 @@ larger; any request or manifest naming that bucket is a failed acceptance run.
   introduced before automated source deletion.
 - Stop activation if current live billing evidence does not show Workers Paid.
   Do not treat the committed profile variable as billing evidence. After the
-  upgrade is separately approved and completed, make the reviewed 700-limit
+  upgrade is separately approved and completed, make the reviewed 1200-limit
   config changes described above and repeat both Wrangler dry-runs before any
   Staging flag change.
 - Confirm the live R2 settings satisfy the

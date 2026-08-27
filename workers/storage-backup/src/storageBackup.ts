@@ -5,6 +5,7 @@ const LATEST_KEY = 'control/latest.json'
 const SNAPSHOT_SCHEMA_VERSION = 1
 const CLEANUP_SUBREQUEST_RESERVE = 2
 const FREE_PLATFORM_SUBREQUEST_LIMIT = 50
+const MAX_SOURCE_REDIRECTS_PER_ATTEMPT = 1
 
 const ENVIRONMENT_CONTRACT = Object.freeze({
   staging: Object.freeze({
@@ -64,7 +65,12 @@ export type FetchDiagnosticCode =
   | 'illegal_invocation'
   | 'invalid_request'
   | 'network_error'
+  | 'redirect_cross_origin'
+  | 'redirect_invalid_location'
+  | 'redirect_limit'
+  | 'redirect_path_rejected'
   | 'redirect_rejected'
+  | 'redirect_status_rejected'
   | 'subrequest_limit'
   | 'tls_error'
   | 'unknown_exception'
@@ -170,7 +176,7 @@ export const STORAGE_BACKUP_LIMITS: Readonly<BackupLimits> = Object.freeze({
   lockTtlMs: 30 * 60_000,
   maxLockClockSkewMs: 60_000,
   maxRunDurationMs: 14 * 60_000,
-  maxSubrequests: 700,
+  maxSubrequests: 1_200,
 })
 
 interface RunGuard {
@@ -395,11 +401,12 @@ function emitRunResult(
 
 export function calculateWorstCaseSubrequests(limits: BackupLimits): number {
   const attempts = limits.retryCount + 1
-  const sourceRequests = (
+  const sourceRequestAttempts = (
     (2 * limits.maxDbPages)
     + (3 * limits.maxStoragePages)
     + limits.maxPointers
   ) * attempts
+  const sourceRequests = sourceRequestAttempts * (MAX_SOURCE_REDIRECTS_PER_ATTEMPT + 1)
   const runtimeFlagReads = limits.maxPointers + 5
   const r2Requests = (3 * limits.maxStorageObjects) + 15
   return sourceRequests + runtimeFlagReads + r2Requests
@@ -794,12 +801,27 @@ async function requestWithRetry<T>(
     }, dependencies.limits.requestTimeoutMs)
 
     try {
-      consumeSubrequest(dependencies)
-      const response = await dependencies.fetch(url, {
+      const requestInit: RequestInit = {
         ...init,
-        redirect: 'error',
+        redirect: 'manual',
         signal: controller.signal,
-      })
+      }
+      consumeSubrequest(dependencies)
+      let response = await dependencies.fetch(url, requestInit)
+      if (response.status >= 300 && response.status < 400) {
+        let redirectedUrl = ''
+        try {
+          redirectedUrl = resolveSafeSourceRedirect(url, init.method, response)
+        } finally {
+          await discardResponse(response)
+        }
+        consumeSubrequest(dependencies)
+        response = await dependencies.fetch(redirectedUrl, requestInit)
+        if (response.status >= 300 && response.status < 400) {
+          await discardResponse(response)
+          fail('source_request_failed', 'redirect_limit')
+        }
+      }
       if (response.status === 429 || response.status >= 500) {
         lastCode = 'source_retry_exhausted'
         await discardResponse(response)
@@ -1545,6 +1567,53 @@ async function executeBackup(
 
 function failureCode(error: unknown): BackupCode {
   return error instanceof BackupFailure ? error.code : 'unexpected_failure'
+}
+
+function resolveSafeSourceRedirect(
+  sourceUrl: string,
+  method: string | undefined,
+  response: Response,
+): string {
+  const normalizedMethod = (method ?? 'GET').toUpperCase()
+  const statusAllowsMethod = response.status === 307
+    || response.status === 308
+    || ((response.status === 301 || response.status === 302)
+      && (normalizedMethod === 'GET' || normalizedMethod === 'HEAD'))
+  if (!statusAllowsMethod) {
+    fail('source_request_failed', 'redirect_status_rejected')
+  }
+
+  const location = response.headers.get('location')
+  if (!location || hasControlCharacters(location)) {
+    fail('source_request_failed', 'redirect_invalid_location')
+  }
+
+  let source: URL
+  let destination: URL
+  try {
+    source = new URL(sourceUrl)
+    destination = new URL(location, source)
+  } catch {
+    fail('source_request_failed', 'redirect_invalid_location')
+  }
+
+  if (
+    source.protocol !== 'https:'
+    || destination.protocol !== 'https:'
+    || destination.origin !== source.origin
+    || destination.username !== ''
+    || destination.password !== ''
+  ) {
+    fail('source_request_failed', 'redirect_cross_origin')
+  }
+  const normalizePath = (pathname: string) => pathname.length > 1
+    ? pathname.replace(/\/+$/, '')
+    : pathname
+  if (normalizePath(destination.pathname) !== normalizePath(source.pathname)) {
+    fail('source_request_failed', 'redirect_path_rejected')
+  }
+  destination.hash = ''
+  return destination.toString()
 }
 
 function failureDiagnosticCode(error: unknown): FetchDiagnosticCode | undefined {

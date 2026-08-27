@@ -263,7 +263,7 @@ function storageBackupBindingsFixture() {
     { name: 'SUPABASE_URL', text: 'https://qpgnomuqdcucjmxrunnw.supabase.co', type: 'plain_text' },
     { name: 'SOURCE_POINTER_MODE', text: 'legacy_url', type: 'plain_text' },
     { name: 'SOURCE_STORAGE_BUCKET', text: 'cabinets', type: 'plain_text' },
-    { name: 'WORKERS_SUBREQUEST_LIMIT', text: '700', type: 'plain_text' },
+    { name: 'WORKERS_SUBREQUEST_LIMIT', text: '1200', type: 'plain_text' },
     { name: 'WORKERS_USAGE_PLAN', text: 'paid', type: 'plain_text' },
   ]
 }
@@ -292,7 +292,7 @@ function validStorageBackupSurfaceRaw() {
         handlers: ['scheduled'],
         named_handlers: [],
         tail_consumers: [],
-        limits: { subrequests: 700 },
+        limits: { subrequests: 1200 },
         placement_mode: null,
       },
     }),
@@ -2365,7 +2365,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         handlers: ['scheduled'],
         named_handlers: [],
         tail_consumers: [],
-        limits: { subrequests: 700 },
+        limits: { subrequests: 1200 },
         placement_mode: null,
         ...scriptOverrides,
       },
@@ -2389,8 +2389,8 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verify({ named_handlers: ['admin'] })).toThrow(/unapproved execution surface/)
     expect(() => verify({ tail_consumers: [{ service: 'collector' }] })).toThrow(/unapproved execution surface/)
     expect(() => verify({ limits: {} })).toThrow(/missing or unapproved fields/)
-    expect(() => verify({ limits: { subrequests: 699 } })).toThrow(/subrequest limit has drifted/)
-    expect(() => verify({ limits: { subrequests: 700, cpu_ms: 1000 } }))
+    expect(() => verify({ limits: { subrequests: 1199 } })).toThrow(/subrequest limit has drifted/)
+    expect(() => verify({ limits: { subrequests: 1200, cpu_ms: 1000 } }))
       .toThrow(/missing or unapproved fields/)
     expect(() => verify({ placement_mode: 'smart' })).toThrow(/unapproved execution surface/)
   })
