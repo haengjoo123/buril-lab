@@ -233,7 +233,7 @@ class FakeSource {
     const method = init?.method ?? 'GET'
     const headers = new Headers(init?.headers)
     this.fetchCalls.push({ url: url.toString(), method, headers, redirect: init?.redirect })
-    expect(init?.redirect).toBe('error')
+    expect(init?.redirect).toBe('manual')
     if (this.throwOnRequest) {
       throw new Error('private-user@example.invalid /private/path 77777777-7777-4777-8777-777777777777 secret-token')
     }
@@ -397,7 +397,7 @@ function bindings(
     SOURCE_POINTER_MODE: 'legacy_url',
     SOURCE_STORAGE_BUCKET: 'cabinets',
     SUPABASE_SERVICE_ROLE_KEY: TEST_SECRET,
-    WORKERS_SUBREQUEST_LIMIT: '700',
+    WORKERS_SUBREQUEST_LIMIT: '1200',
     WORKERS_USAGE_PLAN: 'paid',
     ...overrides,
   }
@@ -584,23 +584,26 @@ describe('OFF-first activation and environment isolation', () => {
       WORKERS_USAGE_PLAN: 'standard',
     }))).toThrow('config_invalid')
     expect(() => resolveSourceConfig(bindings(kv, r2, {
-      WORKERS_SUBREQUEST_LIMIT: '699',
+      WORKERS_SUBREQUEST_LIMIT: '1199',
     }))).toThrow('config_invalid')
     expect(() => resolveSourceConfig(bindings(kv, r2, {
-      WORKERS_SUBREQUEST_LIMIT: '700',
+      WORKERS_SUBREQUEST_LIMIT: '1200',
       WORKERS_USAGE_PLAN: 'free_off_only',
     }))).toThrow('config_invalid')
   })
 
-  it('blocks Supabase redirects before credentials can reach another origin', async () => {
+  it('blocks cross-origin Supabase redirects before credentials can leave the pinned origin', async () => {
     const fixtures = validFixtures()
     const source = new FakeSource(fixtures.pointers, fixtures.objects)
     const externalCalls: Array<{ url: string; headers: Headers }> = []
     const redirectingFetch: typeof fetch = async function redirectingFetch(input, init) {
       const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url)
       if (url.origin === STAGING_ORIGIN) {
-        if (init?.redirect === 'error') throw new TypeError('redirect blocked')
-        return redirectingFetch('https://credential-sink.invalid/collect', init)
+        expect(init?.redirect).toBe('manual')
+        return new Response(null, {
+          status: 307,
+          headers: { Location: 'https://credential-sink.invalid/collect?secret-token' },
+        })
       }
       externalCalls.push({ url: url.toString(), headers: new Headers(init?.headers) })
       return Response.json([])
@@ -611,8 +614,128 @@ describe('OFF-first activation and environment isolation', () => {
       fetch: redirectingFetch,
     })
 
-    expect(result).toMatchObject({ status: 'failed', code: 'source_request_failed' })
+    expect(result).toMatchObject({
+      status: 'failed',
+      code: 'source_request_failed',
+      diagnosticCode: 'redirect_cross_origin',
+    })
     expect(externalCalls).toHaveLength(0)
+    expect(JSON.stringify(result)).not.toContain('credential-sink.invalid')
+    expect(JSON.stringify(result)).not.toContain('secret-token')
+  })
+
+  it.each([
+    ['GET 302', '/rest/v1/cabinets', 302, 'GET'],
+    ['POST 307', '/storage/v1/object/list/cabinets', 307, 'POST'],
+  ] as const)('follows one exact-origin HTTPS redirect for %s without changing the method', async (
+    _label,
+    pathname,
+    status,
+    expectedMethod,
+  ) => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    let injected = false
+    let followedMethod: string | undefined
+    const sameOriginRedirectingFetch: typeof fetch = async (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url)
+      if (!injected && url.pathname === pathname) {
+        injected = true
+        const destination = new URL(url)
+        destination.searchParams.set('safe-redirect', '1')
+        return new Response(null, {
+          status,
+          headers: { Location: destination.toString() },
+        })
+      }
+      if (url.searchParams.get('safe-redirect') === '1') followedMethod = init?.method
+      return source.fetch(input, init)
+    }
+
+    const result = await runScheduledBackup(bindings(new FakeKv(), new FakeR2()), {
+      ...testOverrides(source),
+      fetch: sameOriginRedirectingFetch,
+    })
+
+    expect(result.status).toBe('completed')
+    expect(injected).toBe(true)
+    expect(followedMethod).toBe(expectedMethod)
+  })
+
+  it('rejects a second redirect and never enters a loop', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    let requests = 0
+    const loopingFetch: typeof fetch = async (input, init) => {
+      requests += 1
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url)
+      url.searchParams.set('hop', String(requests))
+      expect(init?.redirect).toBe('manual')
+      return new Response(null, { status: 307, headers: { Location: url.toString() } })
+    }
+
+    const result = await runScheduledBackup(bindings(new FakeKv(), new FakeR2()), {
+      ...testOverrides(source),
+      fetch: loopingFetch,
+    })
+
+    expect(requests).toBe(2)
+    expect(result).toMatchObject({
+      status: 'failed',
+      code: 'source_request_failed',
+      diagnosticCode: 'redirect_limit',
+    })
+  })
+
+  it('rejects a same-origin redirect to a different Supabase API path', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    let requests = 0
+    const pathChangingFetch: typeof fetch = async () => {
+      requests += 1
+      return new Response(null, {
+        status: 307,
+        headers: { Location: `${STAGING_ORIGIN}/auth/v1/admin/users` },
+      })
+    }
+
+    const result = await runScheduledBackup(bindings(new FakeKv(), new FakeR2()), {
+      ...testOverrides(source),
+      fetch: pathChangingFetch,
+    })
+
+    expect(requests).toBe(1)
+    expect(result).toMatchObject({
+      status: 'failed',
+      code: 'source_request_failed',
+      diagnosticCode: 'redirect_path_rejected',
+    })
+  })
+
+  it('rejects a method-changing 302 for a Supabase POST', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    let rejectedPostRedirects = 0
+    const methodChangingFetch: typeof fetch = async (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url)
+      if (url.pathname === '/storage/v1/object/list/cabinets') {
+        rejectedPostRedirects += 1
+        return new Response(null, { status: 302, headers: { Location: url.toString() } })
+      }
+      return source.fetch(input, init)
+    }
+
+    const result = await runScheduledBackup(bindings(new FakeKv(), new FakeR2()), {
+      ...testOverrides(source),
+      fetch: methodChangingFetch,
+    })
+
+    expect(rejectedPostRedirects).toBe(1)
+    expect(result).toMatchObject({
+      status: 'failed',
+      code: 'source_request_failed',
+      diagnosticCode: 'redirect_status_rejected',
+    })
   })
 
   it('pins distinct worker, KV, R2, ref, and cron configuration without secrets', () => {
@@ -630,7 +753,7 @@ describe('OFF-first activation and environment isolation', () => {
       vars: {
         BACKUP_ENVIRONMENT: 'staging',
         SUPABASE_PROJECT_REF: STAGING_REF,
-        WORKERS_SUBREQUEST_LIMIT: '700',
+        WORKERS_SUBREQUEST_LIMIT: '1200',
         WORKERS_USAGE_PLAN: 'paid',
       },
     })
@@ -642,12 +765,12 @@ describe('OFF-first activation and environment isolation', () => {
       vars: {
         BACKUP_ENVIRONMENT: 'production',
         SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc',
-        WORKERS_SUBREQUEST_LIMIT: '700',
+        WORKERS_SUBREQUEST_LIMIT: '1200',
         WORKERS_USAGE_PLAN: 'paid',
       },
     })
-    expect(staging).toMatchObject({ limits: { subrequests: 700 } })
-    expect(production).toMatchObject({ limits: { subrequests: 700 } })
+    expect(staging).toMatchObject({ limits: { subrequests: 1200 } })
+    expect(production).toMatchObject({ limits: { subrequests: 1200 } })
     expect(staging.triggers).not.toEqual(production.triggers)
   })
 
@@ -656,7 +779,7 @@ describe('OFF-first activation and environment isolation', () => {
 
     expect(STORAGE_BACKUP_LIMITS.maxPointers).toBe(50)
     expect(STORAGE_BACKUP_LIMITS.maxStorageObjects).toBe(50)
-    expect(worstCase).toBe(625)
+    expect(worstCase).toBe(1030)
     expect(worstCase).toBeLessThan(STORAGE_BACKUP_LIMITS.maxSubrequests)
     expect(() => resolveSourceConfig(
       bindings(new FakeKv(), new FakeR2()),
