@@ -756,6 +756,22 @@ describe('OFF-first activation and environment isolation', () => {
     }))).rejects.toThrow(/^storage_backup_failed:source_request_failed$/)
   })
 
+  it('adds only a fixed diagnostic code to scheduled failures', async () => {
+    const failure = runStorageBackupSchedule({}, async () => ({
+      status: 'failed',
+      code: 'source_request_failed',
+      diagnosticCode: 'network_error',
+      count: 0,
+      bytes: 0,
+      durationMs: 0,
+      orphanCount: 0,
+    }))
+
+    await expect(failure).rejects.toThrow(
+      /^storage_backup_failed:source_request_failed:network_error$/,
+    )
+  })
+
   it('replaces an unexpected scheduled rejection with a non-identifying code', async () => {
     await expect(runStorageBackupSchedule({}, async () => {
       throw new Error('private-user@example.invalid /private/path secret-token')
@@ -1392,6 +1408,38 @@ describe('safe logging', () => {
     expect(serialized).not.toContain('77777777-7777-4777-8777-777777777777')
     expect(serialized).not.toContain('secret-token')
     expect(serialized).not.toContain(TEST_SECRET)
+  })
+
+  it('classifies a fetch exception without exposing its raw message', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const secretMessage = 'redirect blocked https://private.invalid/path secret-token'
+    const logs: SafeLogEntry[] = []
+    const { result } = await runFixture(source, {
+      logs,
+      dependencyOverrides: {
+        fetch: async () => {
+          throw new TypeError(secretMessage)
+        },
+      },
+    })
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      code: 'source_request_failed',
+      diagnosticCode: 'redirect_rejected',
+    })
+    const serialized = JSON.stringify({ result, logs })
+    expect(serialized).not.toContain('private.invalid')
+    expect(serialized).not.toContain('/path')
+    expect(serialized).not.toContain('secret-token')
+    expect(Object.keys(logs[0]).sort()).toEqual([
+      'bytes',
+      'code',
+      'count',
+      'durationMs',
+      'orphanCount',
+    ])
   })
 })
 
