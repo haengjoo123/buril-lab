@@ -1,0 +1,94 @@
+name: Verify Staging storage backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Exact Staging storage-backup acceptance confirmation
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-storage-backup-acceptance
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: One supervised synthetic backup run
+    if: ${{ github.repository == 'haengjoo123/buril-lab' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+
+    steps:
+      - name: Check out the protected main request
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies without lifecycle scripts
+        id: install
+        run: npm ci --ignore-scripts
+
+      - name: Validate the exact protected-main acceptance request
+        env:
+          REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "haengjoo123/buril-lab"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          test "$REQUESTED_CONFIRMATION" = "RUN STAGING STORAGE BACKUP ACCEPTANCE qpgnomuqdcucjmxrunnw buril-lab-storage-backup-staging"
+          /usr/bin/git diff --quiet --exit-code
+          /usr/bin/git diff --cached --quiet --exit-code
+
+      - name: Verify remote targets are safe before any fixture write
+        env: &acceptance-environment
+          DEPLOY_ENVIRONMENT: staging
+          STAGING_STORAGE_BACKUP_CONFIRMATION: ${{ inputs.confirmation }}
+          SUPABASE_URL: https://qpgnomuqdcucjmxrunnw.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+          CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN }}
+        run: node scripts/staging-storage-backup-acceptance.mjs preflight
+
+      - name: Create only the exact synthetic cabinet fixture
+        id: prepare
+        env: *acceptance-environment
+        run: node scripts/staging-storage-backup-acceptance.mjs prepare
+
+      - name: Run and verify one complete Staging R2 snapshot
+        id: acceptance
+        env: *acceptance-environment
+        run: node scripts/staging-storage-backup-acceptance.mjs run
+
+      - name: Restore OFF state and remove the synthetic fixture
+        if: always() && steps.install.outcome == 'success'
+        env: *acceptance-environment
+        run: node scripts/staging-storage-backup-acceptance.mjs cleanup
+
+      - name: Record non-sensitive acceptance evidence
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          {
+            echo "### Staging storage backup acceptance"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Synthetic objects: 2"
+            echo "- Synthetic bytes: 3410853"
+            echo "- Source fixture cleaned: yes"
+            echo "- Runtime switch restored OFF: yes"
+            echo "- Daily schedule restored: yes"
+          } >> "$GITHUB_STEP_SUMMARY"
