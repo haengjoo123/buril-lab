@@ -60,7 +60,7 @@ hours and should use the shortest practical window. The workflow can run only
 from the first attempt of protected `main`; it verifies that the private R2
 bucket has no enabled managed or custom public domain, creates two synthetic
 PNG objects totalling 3,410,853 bytes in the empty Staging source bucket,
-enables the backup switch with a 20-minute automatic expiry, and temporarily
+enables the backup switch with a 25-minute automatic expiry, and temporarily
 uses a once-per-minute Cron. It accepts only a new complete manifest whose two
 body hashes match those exact fixtures. An always-run cleanup restores the
 five-value OFF config and the daily `17:15` UTC Cron before removing only the
