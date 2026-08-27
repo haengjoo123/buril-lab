@@ -445,6 +445,36 @@ async function runFixture(
 }
 
 describe('OFF-first activation and environment isolation', () => {
+  it('invokes the native fetch binding without the dependency object as its receiver', async () => {
+    const fixtures = validFixtures()
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const nativeLikeFetch = vi.fn(function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+      if (this !== undefined) throw new TypeError('Illegal invocation')
+      return source.fetch(input, init)
+    })
+    vi.stubGlobal('fetch', nativeLikeFetch)
+
+    try {
+      const result = await runScheduledBackup(bindings(new FakeKv(), new FakeR2()), {
+        now: () => FIXED_NOW,
+        randomBytes: (length: number) => new Uint8Array(length).fill(9),
+        sleep: async () => undefined,
+        log: () => undefined,
+        limits: {
+          dbPageSize: 2,
+          storagePageSize: 2,
+          requestTimeoutMs: 25,
+          retryDelayMs: 1,
+        },
+      })
+
+      expect(result.status).toBe('completed')
+      expect(nativeLikeFetch).toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it.each([
     ['missing', null],
     ['string true', { storage_backup_enabled: 'true' }],

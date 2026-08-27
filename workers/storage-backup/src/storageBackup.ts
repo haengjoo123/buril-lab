@@ -275,7 +275,11 @@ function isNullableUuid(value: unknown): value is string | null {
 
 function createDefaultDependencies(overrides: BackupDependencyOverrides): BackupDependencies {
   return {
-    fetch: overrides.fetch ?? fetch,
+    // Keep the platform fetch receiver out of our dependency object. Some Worker
+    // runtimes reject a native fetch function when it is later invoked as
+    // `dependencies.fetch(...)` because that supplies the dependency object as
+    // the receiver instead of making a normal global fetch call.
+    fetch: overrides.fetch ?? ((input, init) => fetch(input, init)),
     now: overrides.now ?? (() => Date.now()),
     randomBytes: overrides.randomBytes ?? ((length) => {
       const value = new Uint8Array(length)
