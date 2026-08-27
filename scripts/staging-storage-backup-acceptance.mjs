@@ -22,9 +22,12 @@ const ACCEPTANCE_CRON = '* * * * *'
 const CONFIRMATION = `RUN STAGING STORAGE BACKUP ACCEPTANCE ${STAGING_PROJECT_REF} ${WORKER_NAME}`
 const MAX_JSON_BYTES = 2 * 1024 * 1024
 const MAX_OBJECT_BYTES = 4 * 1024 * 1024
-const ENABLE_TTL_SECONDS = 20 * 60
+const ENABLE_TTL_SECONDS = 25 * 60
 const KV_PROPAGATION_WAIT_MS = 70_000
-const ACCEPTANCE_TIMEOUT_MS = 10 * 60 * 1000
+// Cloudflare documents up to 15 minutes for Cron Trigger changes to reach the
+// global network. Keep a bounded five-minute margin for the first invocation
+// and the snapshot verification, while the GitHub job remains capped at 35m.
+const ACCEPTANCE_TIMEOUT_MS = 20 * 60 * 1000
 const POLL_INTERVAL_MS = 15_000
 const RUNTIME_CONFIG_OFF = Object.freeze({
   voice_disposal_mode: 'redirect',
