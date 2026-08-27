@@ -18,6 +18,7 @@ export async function runStorageBackupSchedule(
   }
 
   if (result.status === 'failed') {
-    throw new Error(`storage_backup_failed:${result.code}`)
+    const diagnostic = result.diagnosticCode ? `:${result.diagnosticCode}` : ''
+    throw new Error(`storage_backup_failed:${result.code}${diagnostic}`)
   }
 }

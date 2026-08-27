@@ -57,6 +57,18 @@ export type BackupCode =
   | 'unexpected_failure'
   | 'workers_paid_plan_required'
 
+export type FetchDiagnosticCode =
+  | 'abort_error'
+  | 'dns_error'
+  | 'fetch_type_error'
+  | 'illegal_invocation'
+  | 'invalid_request'
+  | 'network_error'
+  | 'redirect_rejected'
+  | 'subrequest_limit'
+  | 'tls_error'
+  | 'unknown_exception'
+
 export interface SafeLogEntry {
   code: BackupCode
   count: number
@@ -67,6 +79,7 @@ export interface SafeLogEntry {
 
 export interface BackupRunResult extends SafeLogEntry {
   status: 'completed' | 'disabled' | 'failed' | 'skipped'
+  diagnosticCode?: FetchDiagnosticCode
 }
 
 export interface RuntimeConfigKv {
@@ -248,16 +261,50 @@ interface LockAcquisition {
 
 class BackupFailure extends Error {
   readonly code: BackupCode
+  readonly diagnosticCode?: FetchDiagnosticCode
 
-  constructor(code: BackupCode) {
+  constructor(code: BackupCode, diagnosticCode?: FetchDiagnosticCode) {
     super(code)
     this.name = 'BackupFailure'
     this.code = code
+    this.diagnosticCode = diagnosticCode
   }
 }
 
-function fail(code: BackupCode): never {
-  throw new BackupFailure(code)
+function fail(code: BackupCode, diagnosticCode?: FetchDiagnosticCode): never {
+  throw new BackupFailure(code, diagnosticCode)
+}
+
+function classifyFetchException(error: unknown): FetchDiagnosticCode {
+  let name = ''
+  let message = ''
+  try {
+    if (error instanceof Error) {
+      name = error.name.toLowerCase()
+      message = error.message.toLowerCase()
+    } else if (isRecord(error)) {
+      name = typeof error.name === 'string' ? error.name.toLowerCase() : ''
+      message = typeof error.message === 'string' ? error.message.toLowerCase() : ''
+    }
+  } catch {
+    return 'unknown_exception'
+  }
+
+  const fingerprint = `${name} ${message}`
+  if (name === 'aborterror' || /\babort(?:ed)?\b/.test(fingerprint)) return 'abort_error'
+  if (fingerprint.includes('illegal invocation')) return 'illegal_invocation'
+  if (/\bredirect(?:ed|ion)?\b/.test(fingerprint)) return 'redirect_rejected'
+  if (/\bsubrequest\b|too many (?:calls|requests)/.test(fingerprint)) return 'subrequest_limit'
+  if (/\bdns\b|name resolution|resolve host/.test(fingerprint)) return 'dns_error'
+  if (/\btls\b|\bssl\b|certificate/.test(fingerprint)) return 'tls_error'
+  if (/\bnetwork\b|connection (?:failed|lost|refused|reset)|fetch failed/.test(fingerprint)) {
+    return 'network_error'
+  }
+  if (/invalid (?:url|header|request)|malformed (?:url|header|request)|unsupported protocol/.test(fingerprint)) {
+    return 'invalid_request'
+  }
+  if (name === 'typeerror' || error instanceof TypeError) return 'fetch_type_error'
+  return 'unknown_exception'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -319,6 +366,7 @@ function createRunResult(
   count = 0,
   bytes = 0,
   orphanCount = 0,
+  diagnosticCode?: FetchDiagnosticCode,
 ): BackupRunResult {
   return {
     status,
@@ -327,6 +375,7 @@ function createRunResult(
     bytes,
     durationMs: Math.max(0, Math.round(dependencies.now() - startedAt)),
     orphanCount,
+    ...(diagnosticCode ? { diagnosticCode } : {}),
   } satisfies BackupRunResult
 }
 
@@ -734,6 +783,7 @@ async function requestWithRetry<T>(
 ): Promise<T> {
   const attempts = dependencies.limits.retryCount + 1
   let lastCode: BackupCode = 'source_request_failed'
+  let lastDiagnosticCode: FetchDiagnosticCode | undefined
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController()
@@ -767,17 +817,18 @@ async function requestWithRetry<T>(
     } catch (error) {
       if (error instanceof BackupFailure) throw error
       lastCode = timedOut ? 'source_timeout' : 'source_request_failed'
+      lastDiagnosticCode = timedOut ? 'abort_error' : classifyFetchException(error)
       if (attempt + 1 < attempts) {
         await dependencies.sleep(dependencies.limits.retryDelayMs * (attempt + 1))
         continue
       }
-      fail(lastCode)
+      fail(lastCode, lastDiagnosticCode)
     } finally {
       clearTimeout(timer)
     }
   }
 
-  fail(lastCode)
+  fail(lastCode, lastDiagnosticCode)
 }
 
 async function requestJson(
@@ -1496,6 +1547,10 @@ function failureCode(error: unknown): BackupCode {
   return error instanceof BackupFailure ? error.code : 'unexpected_failure'
 }
 
+function failureDiagnosticCode(error: unknown): FetchDiagnosticCode | undefined {
+  return error instanceof BackupFailure ? error.diagnosticCode : undefined
+}
+
 export async function runScheduledBackup(
   bindings: StorageBackupBindings,
   overrides: BackupDependencyOverrides = {},
@@ -1558,7 +1613,16 @@ export async function runScheduledBackup(
       completed.orphanCount,
     )
   } catch (error) {
-    result = createRunResult(dependencies, 'failed', failureCode(error), startedAt)
+    result = createRunResult(
+      dependencies,
+      'failed',
+      failureCode(error),
+      startedAt,
+      0,
+      0,
+      0,
+      failureDiagnosticCode(error),
+    )
   }
 
   if (lease) {
