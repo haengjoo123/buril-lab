@@ -51,6 +51,23 @@ The Pages and Worker token values must differ. Production uses a
 third temporary secret, `PRODUCTION_PAGES_EPHEMERAL_TOKEN`, with Cloudflare
 Pages Edit only; production has no Worker deployment path.
 
+The one-time synthetic acceptance workflow uses a fourth, separately created
+token stored only as the Staging environment secret
+`STAGING_CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN`. It needs **Workers
+Scripts Edit**, **Workers KV Storage Read**, **Workers KV Storage Edit**, and
+**Workers R2 Storage Read** for the exact account. It must expire within 26
+hours and should use the shortest practical window. The workflow can run only
+from the first attempt of protected `main`; it verifies that the private R2
+bucket has no enabled managed or custom public domain, creates two synthetic
+PNG objects totalling 3,410,853 bytes in the empty Staging source bucket,
+enables the backup switch with a 20-minute automatic expiry, and temporarily
+uses a once-per-minute Cron. It accepts only a new complete manifest whose two
+body hashes match those exact fixtures. An always-run cleanup restores the
+five-value OFF config and the daily `17:15` UTC Cron before removing only the
+hash-matched synthetic rows and files. Remove the GitHub secret and revoke the
+Cloudflare token immediately after the run, successful or not. This acceptance
+token must never be delivered to `production`.
+
 The local supervisor writes and reads back a signed phase journal before it
 tells the operator to create any provider credential. The journal advances
 sequentially through credential creation, lease materialization, dispatch

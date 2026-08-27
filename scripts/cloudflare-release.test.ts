@@ -2501,6 +2501,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       qualityWorkflowRaw,
       credentialProbeWorkflowRaw,
       rollbackVerificationWorkflowRaw,
+      storageBackupAcceptanceWorkflowRaw,
       iosWorkflowRaw,
       stagingPlaywrightConfig,
       gate0AccessRoute,
@@ -2516,6 +2517,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('.github/workflows/quality.yml', 'utf8'),
       readFile('.github/workflows/verify-staging-ephemeral-credentials.yml', 'utf8'),
       readFile('.github/workflows/verify-staging-rollback.yml', 'utf8'),
+      readFile('.github/workflows/verify-staging-storage-backup.yml', 'utf8'),
       readFile('.github/workflows/ios-testflight.yml', 'utf8'),
       readFile('playwright.staging.config.ts', 'utf8'),
       readFile('scripts/gate0-access-route.mjs', 'utf8'),
@@ -2530,6 +2532,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     const qualityWorkflow = normalizeLineEndings(qualityWorkflowRaw)
     const credentialProbeWorkflow = normalizeLineEndings(credentialProbeWorkflowRaw)
     const rollbackVerificationWorkflow = normalizeLineEndings(rollbackVerificationWorkflowRaw)
+    const storageBackupAcceptanceWorkflow = normalizeLineEndings(storageBackupAcceptanceWorkflowRaw)
     const iosWorkflow = normalizeLineEndings(iosWorkflowRaw)
     expect(verifyCloudflareApiHelperSource(cloudflareApiHelper)).toBe(true)
     expect(verifyStorageBackupWorkerTokenDocumentation(storageBackupReadme)).toBe(true)
@@ -2551,6 +2554,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         quality: qualityWorkflow,
         'verify-staging-ephemeral-credentials.yml': credentialProbeWorkflow,
         'verify-staging-rollback.yml': rollbackVerificationWorkflow,
+        'verify-staging-storage-backup.yml': storageBackupAcceptanceWorkflow,
         'ios-testflight.yml': iosWorkflow,
       },
       browser: {
