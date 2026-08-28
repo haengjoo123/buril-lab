@@ -2,17 +2,33 @@
 
 기준 시각: 2026-08-28 KST
 
+> 최신 전체 운영 순서와 현재 상태는 [운영 안전 완성 실행표](./operations-safety-rollout.md)를 우선합니다. 아래 문서는 Gate 0 준비 과정과 과거 증거를 상세히 보존합니다.
+
 이 문서는 코드 준비, 외부 통제, 실제 훈련, 운영 배포를 구분합니다. 체크되지 않은 관문은 완료로 해석하지 않습니다.
 
 ## 현재 결론
 
 - PR #8의 병합 SHA `7b661b25771e6ea84ccc4c1c4547a9caf5323d52`는 과거 Gate 0 기준선입니다. 당시 품질검사, Hosted Advisor, Staging 브라우저 흐름과 Pages 되돌림 훈련을 통과한 기록은 보존하지만 현재 보안 강화 분기의 배포 증거로 재사용하지 않습니다.
-- 현재 `codex/storage-recovery-hardening` 변경은 아직 PR 병합·새 SHA의 Staging 감독형 배포를 하지 않았습니다. 서명 공개키는 저장소에 고정했지만, 현재 후보의 Staging·운영 배포와 되돌림 훈련은 여전히 미완료입니다.
+- 최신 애플리케이션 변경은 PR #42까지 `main`에 병합됐습니다. 코드 기준 SHA는 `f47121a8c8e220c968d99baf75ff46a52df65fe9`이며, 이 SHA의 감독형 Staging 배포는 성공했습니다. 새 계획을 기록하는 문서 변경이 병합되면 새 전체 SHA를 다시 품질검사·Staging 배포해야 합니다.
 - GitHub `staging`·`production` environment의 배포 입력, 별도 Staging Redis, 합성 데이터 초기화와 Gate 0 소유 표시는 준비됐습니다.
-- 과거 기준선 SHA는 Staging Pages 배포와 되돌림 훈련을 완료했습니다. 새 서명 임대·누적 정리 영수증·숨김 토큰 입력 계약으로는 아직 실행하지 않았습니다.
+- 최신 코드 기준 SHA의 감독형 Staging 배포는 새 서명 임대·누적 정리 영수증·숨김 토큰 입력 계약으로 실행했습니다. 현재 SHA 기준 되돌림·복귀 훈련은 아직 하지 않았습니다.
 - Supabase 임시 Micro 현재 시점 논리 복구훈련은 132분 안에 끝났고, 같은 날 임시 프로젝트 삭제와 프로젝트 목록 제거까지 확인했습니다.
 - Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
-- 과거 준비 1 증거와 2026-08-28 준비 2 복구훈련 증거를 보존합니다. 현재 보안 강화 후보의 Staging 재검증과 관문 0 운영 배포·관찰은 완료로 표시하지 않습니다.
+- 과거 준비 1 증거와 2026-08-28 준비 2 복구훈련 증거를 보존합니다. 최신 코드의 Staging 배포는 완료했지만 실제 OpenAI 전체 경로, 최신 후보 되돌림·복귀, 관문 0 운영 배포·관찰은 완료로 표시하지 않습니다.
+
+## 2026-08-28 최신 main Staging 증거
+
+- 코드 SHA: `f47121a8c8e220c968d99baf75ff46a52df65fe9`
+- Quality 실행: [33157035518](https://github.com/haengjoo123/buril-lab/actions/runs/33157035518) 성공
+- 임시 자격값 전달시험: [33178916559](https://github.com/haengjoo123/buril-lab/actions/runs/33178916559) 성공
+- 감독형 Staging 배포: [33179422133](https://github.com/haengjoo123/buril-lab/actions/runs/33179422133) 성공
+- Pages deployment ID: `3cd9df44-db67-4f8f-a07e-5d31118ee852`
+- immutable URL: `https://3cd9df44.buril-lab-staging.pages.dev`
+- Access, Hosted Advisor, `release.json`, KOSHA `link_only`, custom/immutable Gate 0 브라우저 흐름 성공
+- 배포 후 임시 GitHub secret 부재와 공급자 자격값 폐기 정리 영수증 저장 확인
+- 실제 PubChem 화학정보 7건 연동시험 성공
+
+이 증거는 운영 배포나 현재 SHA의 되돌림 훈련 완료를 뜻하지 않습니다.
 
 ## 현재 보안 강화 후보의 로컬 상태
 
@@ -25,7 +41,7 @@
 - 토큰 생성 안내 전에 서명된 pending 표식을 저장합니다. 입력 중단은 공급자 비활성 또는 화면상 미생성 확인을 담은 서명 abort 영수증 없이는 해제할 수 없습니다.
 - 저장소 범위의 같은 이름 secret·variable은 environment 격리를 우회하므로 감독기가 거부합니다.
 - 누적 영수증 32회 한계는 자격값 생성 전에 중단합니다. 자동 epoch rollover는 아직 구현하지 않았고 별도 검토 관문으로 남깁니다.
-- 로컬 Cloudflare·임대 수명주기 회귀시험은 현재 143개를 통과했습니다. 깨끗한 잠금파일 설치 뒤 전체 Vitest는 856개 통과·7개 보류였고 위험한 자동 폐액 경로는 0건이었습니다. 이 수치는 실제 Staging 성공을 뜻하지 않습니다.
+- 최신 `main` 기준 로컬 Cloudflare·임대 수명주기 회귀시험은 176개를 통과했습니다. Node 22와 비밀값이 아닌 CI용 합성 Supabase 입력에서 전체 Vitest는 927개 통과·7개 보류였고 위험한 자동 폐액 경로는 0건이었습니다. 이 수치는 실제 Staging 성공을 뜻하지 않습니다.
 - 사용자의 별도 직전 확인 후 로컬 Windows 계정에만 복호화 가능한 DPAPI Ed25519 개인키를 만들고, 공개키와 SHA-256 지문 `b5fc8397c8eeb2e2a16b1ffc0feb0b0563f76302ee7b78c08b754651ae455cb2`만 저장소에 고정했습니다. DPAPI 실제 왕복·공개키 지문 검사를 통과했습니다. 이것은 토큰 생성이나 실제 배포 승인이 아닙니다.
 
 ## 2026-08-25 Cloudflare 배포 자격값 교정
