@@ -70,6 +70,29 @@ export async function writePagesDeployRedirect({ config, output }) {
     throw new Error('Refusing to activate a Wrangler config with unresolved placeholders.')
   }
 
+  let parsedConfig
+  try {
+    parsedConfig = JSON.parse(configSource)
+  } catch {
+    throw new Error('Pages deploy config must be valid JSON before redirect activation.')
+  }
+  if (!parsedConfig || typeof parsedConfig !== 'object' || Array.isArray(parsedConfig)) {
+    throw new Error('Pages deploy config must contain a top-level JSON object.')
+  }
+
+  // Wrangler's .wrangler/deploy/config.json redirect rejects every top-level
+  // environment block. Direct Pages deploys use the already-materialized root
+  // bindings, so remove preview-only environments from the generated copy.
+  const environmentsRemoved = Object.hasOwn(parsedConfig, 'env')
+  if (environmentsRemoved) {
+    delete parsedConfig.env
+    await writeFile(
+      configPath,
+      `${JSON.stringify(parsedConfig, null, 2)}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    )
+  }
+
   const relativeConfigPath = relative(dirname(outputPath), configPath).replaceAll('\\', '/')
   if (!relativeConfigPath || relativeConfigPath.startsWith('/')) {
     throw new Error('Unable to create a relative Pages deploy config redirect.')
@@ -81,7 +104,7 @@ export async function writePagesDeployRedirect({ config, output }) {
     `${JSON.stringify({ configPath: relativeConfigPath }, null, 2)}\n`,
     { encoding: 'utf8', mode: 0o600 },
   )
-  return { outputPath, configPath, relativeConfigPath }
+  return { outputPath, configPath, relativeConfigPath, environmentsRemoved }
 }
 
 async function main() {
