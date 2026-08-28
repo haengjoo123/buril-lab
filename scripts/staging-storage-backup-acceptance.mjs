@@ -22,12 +22,12 @@ const ACCEPTANCE_CRON = '* * * * *'
 const CONFIRMATION = `RUN STAGING STORAGE BACKUP ACCEPTANCE ${STAGING_PROJECT_REF} ${WORKER_NAME}`
 const MAX_JSON_BYTES = 2 * 1024 * 1024
 const MAX_OBJECT_BYTES = 4 * 1024 * 1024
-const ENABLE_TTL_SECONDS = 25 * 60
+const ENABLE_TTL_SECONDS = 35 * 60
 const KV_PROPAGATION_WAIT_MS = 70_000
 // Cloudflare documents up to 15 minutes for Cron Trigger changes to reach the
 // global network. Keep a bounded five-minute margin for the first invocation
-// and the snapshot verification, while the GitHub job remains capped at 35m.
-const ACCEPTANCE_TIMEOUT_MS = 20 * 60 * 1000
+// and six sequential snapshot checks, while the GitHub job remains capped at 45m.
+const ACCEPTANCE_TIMEOUT_MS = 32 * 60 * 1000
 const POLL_INTERVAL_MS = 15_000
 const RUNTIME_CONFIG_OFF = Object.freeze({
   voice_disposal_mode: 'redirect',
@@ -46,14 +46,12 @@ const FIXTURE = Object.freeze([
     name: 'Storage backup synthetic cabinet A',
     path: 'burillab-storage-backup-acceptance/fixture-a.png',
     bytes: 1_700_000,
-    rgba: Object.freeze([23, 91, 146, 255]),
   }),
   Object.freeze({
     id: '30000000-0000-4000-8000-000000000012',
     name: 'Storage backup synthetic cabinet B',
     path: 'burillab-storage-backup-acceptance/fixture-b.png',
     bytes: 1_710_853,
-    rgba: Object.freeze([20, 132, 92, 255]),
   }),
 ])
 const EXPECTED_TOTAL_BYTES = FIXTURE.reduce((sum, item) => sum + item.bytes, 0)
@@ -83,6 +81,8 @@ function validateEnvironment(environment, { needsCloudflare = false, needsSupaba
     environment.GITHUB_REPOSITORY !== 'haengjoo123/buril-lab'
     || environment.GITHUB_REF !== 'refs/heads/main'
     || environment.GITHUB_RUN_ATTEMPT !== '1'
+    || !/^[0-9a-f]{40}$/.test(environment.GITHUB_SHA || '')
+    || !/^\d+$/.test(environment.GITHUB_RUN_ID || '')
   ) {
     throw new Error('Storage backup acceptance must be a first-attempt protected-main run.')
   }
@@ -131,12 +131,15 @@ function pngChunk(type, data) {
   return output
 }
 
-export function createExactLengthPng(targetBytes, rgba) {
+export function createExactLengthPng(targetBytes, rgba, comment = '') {
   if (!Number.isSafeInteger(targetBytes) || targetBytes < 256) {
     throw new Error('Synthetic PNG target size is invalid.')
   }
   if (!Array.isArray(rgba) || rgba.length !== 4 || rgba.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) {
     throw new Error('Synthetic PNG pixel is invalid.')
+  }
+  if (typeof comment !== 'string' || comment.length > 256 || /[^\x20-\x7e]/.test(comment)) {
+    throw new Error('Synthetic PNG comment is invalid.')
   }
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
   const ihdr = Buffer.alloc(13)
@@ -152,14 +155,22 @@ export function createExactLengthPng(targetBytes, rgba) {
   if (textLength < keyword.length) throw new Error('Synthetic PNG target is too small.')
   const text = Buffer.alloc(textLength, 0x53)
   keyword.copy(text)
+  Buffer.from(comment, 'ascii').copy(text, keyword.length)
   const output = Buffer.concat([fixed[0], fixed[1], pngChunk('tEXt', text), fixed[2], fixed[3]])
   if (output.length !== targetBytes) throw new Error('Synthetic PNG length construction failed.')
   return output
 }
 
-function fixtureBodies() {
-  return FIXTURE.map((item) => {
-    const body = createExactLengthPng(item.bytes, item.rgba)
+function fixtureBodies(environment, variant = 'original') {
+  if (variant !== 'original' && variant !== 'changed_a') {
+    throw new Error('Synthetic fixture variant is invalid.')
+  }
+  const seed = `${environment.GITHUB_SHA}:${environment.GITHUB_RUN_ID}`
+  return FIXTURE.map((item, index) => {
+    const itemVariant = variant === 'changed_a' && index === 0 ? 'changed' : 'original'
+    const derived = createHash('sha256').update(`${seed}:${item.path}:${itemVariant}`).digest()
+    const comment = `BurilLab acceptance ${createHash('sha256').update(`${seed}:${item.path}:${itemVariant}`).digest('hex')}`
+    const body = createExactLengthPng(item.bytes, [derived[0], derived[1], derived[2], 255], comment)
     return {
       ...item,
       body,
@@ -252,7 +263,7 @@ async function listSourceObjects(environment) {
         const path = prefix ? `${prefix}/${item.name}` : item.name
         if (item.id === null) queue.push(path)
         else objects.push({ path, metadata: item.metadata })
-        if (objects.length + queue.length > 50) throw new Error('Staging Storage fixture boundary exceeded 50 objects.')
+        if (objects.length + queue.length > 250) throw new Error('Staging Storage fixture boundary exceeded 250 objects.')
       }
       if (items.length < 100) break
     }
@@ -269,14 +280,28 @@ async function assertFixtureSourceEmpty(supabase, environment) {
   if (objects.length !== 0) throw new Error('Staging acceptance requires an empty cabinets Storage bucket.')
 }
 
-async function assertPreparedFixture(supabase, environment) {
-  const expected = fixtureBodies()
+function normalizeSourceEtag(value) {
+  if (typeof value !== 'string') throw new Error('Staging Storage object has no ETag.')
+  const normalized = value.trim().replace(/^W\//, '').replace(/^"|"$/g, '')
+  if (!/^[A-Za-z0-9._:-]+$/.test(normalized)) throw new Error('Staging Storage object ETag is invalid.')
+  return normalized
+}
+
+async function readFixtureState(supabase, environment, expected) {
+  if (!Array.isArray(expected) || expected.length < 1 || expected.length > FIXTURE.length) {
+    throw new Error('Expected Staging fixture state is invalid.')
+  }
+  const expectedPaths = new Set(expected.map((item) => item.path))
+  if (expectedPaths.size !== expected.length || expected.some((item) => !FIXTURE.some((fixture) => fixture.path === item.path))) {
+    throw new Error('Expected Staging fixture paths are invalid.')
+  }
   const rows = await requireResult(
     supabase.from('cabinets').select('id,name,lab_id,user_id,image_url').in('id', FIXTURE.map((item) => item.id)).order('id'),
-    'Reading the prepared Staging cabinets',
+    'Reading the Staging cabinet fixture state',
   )
-  if (!Array.isArray(rows) || rows.length !== FIXTURE.length) {
-    throw new Error('Staging cabinet fixture is incomplete.')
+  const tableCount = await supabase.from('cabinets').select('id', { count: 'exact', head: true })
+  if (tableCount.error || tableCount.count !== expected.length || !Array.isArray(rows) || rows.length !== expected.length) {
+    throw new Error('Staging cabinet fixture has an unexpected row count.')
   }
   for (const fixture of expected) {
     const row = rows.find((item) => item.id === fixture.id)
@@ -302,11 +327,34 @@ async function assertPreparedFixture(supabase, environment) {
   }
   const objects = await listSourceObjects(environment)
   if (
-    objects.length !== FIXTURE.length
-    || objects.some((object, index) => object.path !== [...FIXTURE].sort((a, b) => a.path.localeCompare(b.path, 'en'))[index].path)
+    objects.length !== expected.length
+    || objects.some((object, index) => object.path !== [...expected].sort((a, b) => a.path.localeCompare(b.path, 'en'))[index].path)
   ) {
     throw new Error('Staging Storage contains objects outside the exact synthetic fixture.')
   }
+  return expected.map((fixture) => {
+    const sourceObject = objects.find((item) => item.path === fixture.path)
+    if (
+      !sourceObject
+      || !isRecord(sourceObject.metadata)
+      || sourceObject.metadata.size !== fixture.bytes
+    ) {
+      throw new Error('Staging Storage metadata differs from the exact synthetic fixture.')
+    }
+    return {
+      path: fixture.path,
+      bytes: fixture.bytes,
+      sha256: fixture.sha256,
+      etag: normalizeSourceEtag(sourceObject.metadata.eTag ?? sourceObject.metadata.etag),
+      classification: 'referenced',
+      ownerScope: 'lab',
+      contentType: 'image/png',
+    }
+  }).sort((left, right) => left.path.localeCompare(right.path, 'en'))
+}
+
+async function assertPreparedFixture(supabase, environment) {
+  return readFixtureState(supabase, environment, fixtureBodies(environment, 'original'))
 }
 
 async function prepareFixture(environment) {
@@ -314,7 +362,7 @@ async function prepareFixture(environment) {
   const supabase = createSupabase(environment)
   const owner = await readGate0Owner(supabase)
   await assertFixtureSourceEmpty(supabase, environment)
-  const bodies = fixtureBodies()
+  const bodies = fixtureBodies(environment, 'original')
   try {
     for (const fixture of bodies) {
       const upload = await supabase.storage.from(SOURCE_BUCKET).upload(fixture.path, fixture.body, {
@@ -353,7 +401,12 @@ async function cleanupFixture(environment) {
     supabase.from('cabinets').select('id,name,lab_id,user_id,image_url').in('id', FIXTURE.map((item) => item.id)),
     'Reading synthetic Staging cabinets for cleanup',
   )
-  const expected = fixtureBodies()
+  const original = fixtureBodies(environment, 'original')
+  const changed = fixtureBodies(environment, 'changed_a')
+  const expected = original.map((fixture, index) => ({
+    ...fixture,
+    allowedSha256: new Set([fixture.sha256, changed[index].sha256]),
+  }))
   for (const row of rows || []) {
     const fixture = expected.find((item) => item.id === row.id)
     if (
@@ -379,7 +432,7 @@ async function cleanupFixture(environment) {
     if (response.status === 404) continue
     if (!response.ok || response.redirected) throw new Error('Reading a synthetic Staging image for cleanup failed.')
     const body = Buffer.from(await readResponseBytes(response, 'Synthetic Staging cleanup image', MAX_OBJECT_BYTES))
-    if (body.length !== fixture.bytes || createHash('sha256').update(body).digest('hex') !== fixture.sha256) {
+    if (body.length !== fixture.bytes || !fixture.allowedSha256.has(createHash('sha256').update(body).digest('hex'))) {
       throw new Error('Cleanup refused an image outside the exact synthetic fixture.')
     }
     const removal = await supabase.storage.from(SOURCE_BUCKET).remove([fixture.path])
@@ -556,10 +609,14 @@ async function verifyPrivateR2(environment) {
   }
 }
 
-async function readR2Object(environment, key, { allowMissing = false, maximumBytes = MAX_OBJECT_BYTES } = {}) {
+function assertR2ObjectKey(key) {
   if (!/^[A-Za-z0-9._/-]+$/.test(key) || key.includes('..') || key.startsWith('/') || key.endsWith('/')) {
     throw new Error('R2 acceptance object key is invalid.')
   }
+}
+
+async function readR2Object(environment, key, { allowMissing = false, maximumBytes = MAX_OBJECT_BYTES } = {}) {
+  assertR2ObjectKey(key)
   return cloudflareRequest(environment, `r2/buckets/${R2_BUCKET}/objects/${key}`, {
     raw: true,
     allowMissing,
@@ -577,11 +634,60 @@ async function readR2Json(environment, key, { allowMissing = false } = {}) {
   }
 }
 
-function verifySnapshotDocuments({ latest, complete, manifest, manifestHash, startedAt, previousSnapshotId }) {
+async function deleteR2Object(environment, key) {
+  assertR2ObjectKey(key)
+  const url = cloudflareBase(`r2/buckets/${R2_BUCKET}/objects/${key}`)
+  let response
+  try {
+    response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${environment.CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN}`,
+        Accept: 'application/json',
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch {
+    throw new Error('Deleting the exact Staging R2 acceptance body could not be completed.')
+  }
+  if (!response.ok || response.redirected || response.url !== url) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new Error(`Deleting the exact Staging R2 acceptance body failed with HTTP ${response.status}.`)
+  }
+  await response.body?.cancel().catch(() => undefined)
+  if (await readR2Object(environment, key, { allowMissing: true }) !== null) {
+    throw new Error('The exact Staging R2 acceptance body still exists after deletion.')
+  }
+}
+
+function verifySnapshotDocuments({
+  latest,
+  complete,
+  manifest,
+  manifestHash,
+  startedAt,
+  previousSnapshotId,
+  expected,
+  expectedUploadedBodyCount,
+  expectedReusedBodyCount,
+}) {
+  if (
+    !Array.isArray(expected)
+    || expected.length < 1
+    || !Number.isSafeInteger(expectedUploadedBodyCount)
+    || !Number.isSafeInteger(expectedReusedBodyCount)
+    || expectedUploadedBodyCount < 0
+    || expectedReusedBodyCount < 0
+    || expectedUploadedBodyCount + expectedReusedBodyCount !== expected.length
+  ) {
+    throw new Error('Staging acceptance snapshot expectations are invalid.')
+  }
+  const expectedTotalBytes = expected.reduce((sum, item) => sum + item.bytes, 0)
   const latestKeys = ['schemaVersion', 'snapshotId', 'environment', 'completeKey', 'manifestSha256', 'completedAt', 'orphanCount']
   exactKeys(latest, latestKeys, 'Staging R2 latest pointer')
   if (
-    latest.schemaVersion !== 1
+    latest.schemaVersion !== 2
     || latest.environment !== 'staging'
     || latest.snapshotId === previousSnapshotId
     || latest.completeKey !== `snapshots/${latest.snapshotId}/complete.json`
@@ -594,18 +700,21 @@ function verifySnapshotDocuments({ latest, complete, manifest, manifestHash, sta
   exactKeys(complete, [
     'schemaVersion', 'snapshotId', 'environment', 'completedAt', 'manifestKey',
     'manifestSha256', 'objectCount', 'referencedObjectCount', 'orphanCount', 'totalBytes',
+    'uploadedBodyCount', 'reusedBodyCount',
   ], 'Staging R2 completion marker')
   if (
-    complete.schemaVersion !== 1
+    complete.schemaVersion !== 2
     || complete.snapshotId !== latest.snapshotId
     || complete.environment !== 'staging'
     || complete.completedAt !== latest.completedAt
     || complete.manifestKey !== `snapshots/${latest.snapshotId}/manifest.json`
     || complete.manifestSha256 !== latest.manifestSha256
-    || complete.objectCount !== FIXTURE.length
-    || complete.referencedObjectCount !== FIXTURE.length
+    || complete.objectCount !== expected.length
+    || complete.referencedObjectCount !== expected.length
     || complete.orphanCount !== 0
-    || complete.totalBytes !== EXPECTED_TOTAL_BYTES
+    || complete.totalBytes !== expectedTotalBytes
+    || complete.uploadedBodyCount !== expectedUploadedBodyCount
+    || complete.reusedBodyCount !== expectedReusedBodyCount
   ) {
     throw new Error('Staging R2 completion marker differs from the acceptance contract.')
   }
@@ -615,29 +724,42 @@ function verifySnapshotDocuments({ latest, complete, manifest, manifestHash, sta
   }
   exactKeys(manifest, [
     'schemaVersion', 'snapshotId', 'environment', 'createdAt', 'source',
-    'objectCount', 'referencedObjectCount', 'orphanCount', 'totalBytes', 'objects',
+    'objectCount', 'referencedObjectCount', 'orphanCount', 'totalBytes',
+    'uploadedBodyCount', 'reusedBodyCount', 'objects',
   ], 'Staging R2 manifest')
   exactKeys(manifest.source, ['supabaseProjectRef', 'storageBucket', 'pointerMode'], 'Staging R2 manifest source')
   if (
-    manifest.schemaVersion !== 1
+    manifest.schemaVersion !== 2
     || manifest.snapshotId !== latest.snapshotId
     || manifest.environment !== 'staging'
     || manifest.source.supabaseProjectRef !== STAGING_PROJECT_REF
     || manifest.source.storageBucket !== SOURCE_BUCKET
     || manifest.source.pointerMode !== 'legacy_url'
-    || manifest.objectCount !== FIXTURE.length
-    || manifest.referencedObjectCount !== FIXTURE.length
+    || manifest.objectCount !== expected.length
+    || manifest.referencedObjectCount !== expected.length
     || manifest.orphanCount !== 0
-    || manifest.totalBytes !== EXPECTED_TOTAL_BYTES
+    || manifest.totalBytes !== expectedTotalBytes
+    || manifest.uploadedBodyCount !== expectedUploadedBodyCount
+    || manifest.reusedBodyCount !== expectedReusedBodyCount
     || !Array.isArray(manifest.objects)
-    || manifest.objects.length !== FIXTURE.length
+    || manifest.objects.length !== expected.length
   ) {
     throw new Error('Staging R2 manifest differs from the acceptance contract.')
   }
   return latest.snapshotId
 }
 
-export function verifyAcceptanceManifest({ latest, complete, manifestBody, manifestShaText, startedAt, previousSnapshotId }) {
+export function verifyAcceptanceManifest({
+  latest,
+  complete,
+  manifestBody,
+  manifestShaText,
+  startedAt,
+  previousSnapshotId,
+  expected,
+  expectedUploadedBodyCount,
+  expectedReusedBodyCount,
+}) {
   if (!Buffer.isBuffer(manifestBody) || manifestBody.length < 2) throw new Error('Staging R2 manifest body is missing.')
   const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex')
   if (typeof manifestShaText !== 'string' || !/^[0-9a-f]{64}\n$/.test(manifestShaText)) {
@@ -656,17 +778,20 @@ export function verifyAcceptanceManifest({ latest, complete, manifestBody, manif
     manifestHash: { body: manifestBody, sha256: manifestShaText.trim() },
     startedAt,
     previousSnapshotId,
+    expected,
+    expectedUploadedBodyCount,
+    expectedReusedBodyCount,
   })
   if (manifestSha256 !== manifestShaText.trim()) throw new Error('Staging R2 manifest hash object does not match the body.')
-  const expected = fixtureBodies().sort((left, right) => left.path.localeCompare(right.path, 'en'))
   const actual = [...manifest.objects].sort((left, right) => String(left?.sourcePath).localeCompare(String(right?.sourcePath), 'en'))
   for (let index = 0; index < expected.length; index += 1) {
     const fixture = expected[index]
     const object = actual[index]
-    exactKeys(object, ['sourcePath', 'backupKey', 'bytes', 'sha256', 'classification', 'ownerScope', 'contentType'], 'Staging R2 manifest object')
+    exactKeys(object, ['sourcePath', 'backupKey', 'etag', 'bytes', 'sha256', 'classification', 'ownerScope', 'contentType'], 'Staging R2 manifest object')
     if (
       object.sourcePath !== fixture.path
-      || object.backupKey !== `snapshots/${snapshotId}/objects/${fixture.path}`
+      || object.backupKey !== `objects/sha256/${fixture.sha256.slice(0, 2)}/${fixture.sha256}`
+      || object.etag !== fixture.etag
       || object.bytes !== fixture.bytes
       || object.sha256 !== fixture.sha256
       || object.classification !== 'referenced'
@@ -679,7 +804,13 @@ export function verifyAcceptanceManifest({ latest, complete, manifestBody, manif
   return { snapshotId, manifest, expected }
 }
 
-async function verifyCompletedSnapshot(environment, latest, startedAt, previousSnapshotId) {
+async function verifyCompletedSnapshot(environment, latest, {
+  startedAt,
+  previousSnapshotId,
+  expected,
+  expectedUploadedBodyCount,
+  expectedReusedBodyCount,
+}) {
   if (!isRecord(latest) || typeof latest.snapshotId !== 'string') return null
   if (latest.snapshotId === previousSnapshotId || Date.parse(latest.completedAt || '') < startedAt) return null
   const complete = await readR2Json(environment, latest.completeKey)
@@ -696,14 +827,19 @@ async function verifyCompletedSnapshot(environment, latest, startedAt, previousS
     manifestShaText: manifestShaBytes.toString('utf8'),
     startedAt,
     previousSnapshotId,
+    expected,
+    expectedUploadedBodyCount,
+    expectedReusedBodyCount,
   })
   for (const fixture of verified.expected) {
-    const object = await readR2Object(environment, `snapshots/${verified.snapshotId}/objects/${fixture.path}`)
+    const manifestObject = verified.manifest.objects.find((item) => item.sourcePath === fixture.path)
+    if (!manifestObject) throw new Error('A verified Staging R2 manifest object disappeared.')
+    const object = await readR2Object(environment, manifestObject.backupKey)
     if (object.length !== fixture.bytes || createHash('sha256').update(object).digest('hex') !== fixture.sha256) {
       throw new Error('A copied Staging R2 image failed its size or SHA-256 check.')
     }
   }
-  return verified.snapshotId
+  return verified
 }
 
 async function restoreCloudflareSafety(environment) {
@@ -740,10 +876,99 @@ async function preflight(environment) {
   console.log('Staging storage backup acceptance preflight passed with all safety switches OFF.')
 }
 
+async function waitForExpectedSnapshot(environment, {
+  stage,
+  startedAt,
+  previousSnapshotId,
+  expected,
+  expectedUploadedBodyCount,
+  expectedReusedBodyCount,
+  deadline,
+}) {
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+    const latest = await readR2Json(environment, 'control/latest.json', { allowMissing: true })
+    if (!latest) continue
+    const verified = await verifyCompletedSnapshot(environment, latest, {
+      startedAt,
+      previousSnapshotId,
+      expected,
+      expectedUploadedBodyCount,
+      expectedReusedBodyCount,
+    })
+    if (verified) {
+      console.log(`Verified Staging storage backup stage: ${stage}.`)
+      return verified
+    }
+  }
+  throw new Error(`Staging storage backup stage did not complete before the deadline: ${stage}.`)
+}
+
+async function replaceFirstFixture(supabase, environment) {
+  const changed = fixtureBodies(environment, 'changed_a')
+  const first = changed[0]
+  const upload = await supabase.storage.from(SOURCE_BUCKET).upload(first.path, first.body, {
+    cacheControl: '0',
+    contentType: 'image/png',
+    upsert: true,
+  })
+  if (upload.error) throw new Error('Replacing the first synthetic Staging image failed.')
+  return readFixtureState(supabase, environment, changed)
+}
+
+async function deleteSecondFixture(supabase, environment) {
+  const changed = fixtureBodies(environment, 'changed_a')
+  const second = changed[1]
+  const deleted = await supabase.from('cabinets').delete().eq('id', second.id).select('id')
+  if (deleted.error || !Array.isArray(deleted.data) || deleted.data.length !== 1 || deleted.data[0].id !== second.id) {
+    throw new Error('Deleting the second synthetic Staging cabinet pointer failed.')
+  }
+  const removal = await supabase.storage.from(SOURCE_BUCKET).remove([second.path])
+  if (removal.error) throw new Error('Deleting the second synthetic Staging image failed.')
+  return readFixtureState(supabase, environment, [changed[0]])
+}
+
+async function restoreSecondFixtureFromBackup(supabase, environment, manifestObject) {
+  const changed = fixtureBodies(environment, 'changed_a')
+  const second = changed[1]
+  if (
+    !isRecord(manifestObject)
+    || manifestObject.sourcePath !== second.path
+    || manifestObject.sha256 !== second.sha256
+    || manifestObject.bytes !== second.bytes
+    || manifestObject.backupKey !== `objects/sha256/${second.sha256.slice(0, 2)}/${second.sha256}`
+  ) {
+    throw new Error('The second synthetic image does not have an exact approved backup body.')
+  }
+  const body = await readR2Object(environment, manifestObject.backupKey)
+  if (body.length !== second.bytes || createHash('sha256').update(body).digest('hex') !== second.sha256) {
+    throw new Error('The second synthetic backup body cannot be used for restore.')
+  }
+  const upload = await supabase.storage.from(SOURCE_BUCKET).upload(second.path, body, {
+    cacheControl: '0',
+    contentType: 'image/png',
+    upsert: false,
+  })
+  if (upload.error) throw new Error('Restoring the second synthetic Staging image failed.')
+  const inserted = await supabase.from('cabinets').insert({
+    id: second.id,
+    name: second.name,
+    width: 1,
+    height: 1,
+    depth: 1,
+    user_id: null,
+    lab_id: GATE0_RESERVED_LAB_ID,
+    location: 'Synthetic backup acceptance only',
+    image_url: second.publicUrl,
+  })
+  if (inserted.error) throw new Error('Restoring the second synthetic Staging cabinet pointer failed.')
+  return readFixtureState(supabase, environment, changed)
+}
+
 async function runAcceptance(environment) {
   validateEnvironment(environment, { needsCloudflare: true, needsSupabase: true })
   const supabase = createSupabase(environment)
-  await assertPreparedFixture(supabase, environment)
+  const initialState = await assertPreparedFixture(supabase, environment)
   await verifyCloudflareTokenTtl({
     ...environment,
     CLOUDFLARE_EPHEMERAL_TOKEN: environment.CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN,
@@ -754,30 +979,101 @@ async function runAcceptance(environment) {
     throw new Error('Staging Worker schedule changed before acceptance.')
   }
   const previousLatest = await readR2Json(environment, 'control/latest.json', { allowMissing: true })
-  const previousSnapshotId = isRecord(previousLatest) && typeof previousLatest.snapshotId === 'string'
+  const startedAt = Date.now()
+  const deadline = startedAt + ACCEPTANCE_TIMEOUT_MS
+  let previousSnapshotId = isRecord(previousLatest) && typeof previousLatest.snapshotId === 'string'
     ? previousLatest.snapshotId
     : null
-  const startedAt = Date.now()
-  let acceptedSnapshotId = null
   try {
     await writeRuntimeConfig(environment, RUNTIME_CONFIG_ON, ENABLE_TTL_SECONDS)
     await new Promise((resolve) => setTimeout(resolve, KV_PROPAGATION_WAIT_MS))
     exactRuntimeConfig(await readRuntimeConfig(environment), RUNTIME_CONFIG_ON, 'Enabled Staging runtime config')
     await writeSchedules(environment, [ACCEPTANCE_CRON])
-    const deadline = startedAt + ACCEPTANCE_TIMEOUT_MS
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
-      const latest = await readR2Json(environment, 'control/latest.json', { allowMissing: true })
-      acceptedSnapshotId = latest
-        ? await verifyCompletedSnapshot(environment, latest, startedAt, previousSnapshotId)
-        : null
-      if (acceptedSnapshotId) break
+
+    const initial = await waitForExpectedSnapshot(environment, {
+      stage: 'full initial copy',
+      startedAt,
+      previousSnapshotId,
+      expected: initialState,
+      expectedUploadedBodyCount: 2,
+      expectedReusedBodyCount: 0,
+      deadline,
+    })
+    previousSnapshotId = initial.snapshotId
+
+    const unchanged = await waitForExpectedSnapshot(environment, {
+      stage: 'unchanged full manifest with zero body uploads',
+      startedAt: Date.now(),
+      previousSnapshotId,
+      expected: initialState,
+      expectedUploadedBodyCount: 0,
+      expectedReusedBodyCount: 2,
+      deadline,
+    })
+    previousSnapshotId = unchanged.snapshotId
+
+    const changedState = await replaceFirstFixture(supabase, environment)
+    if (changedState[0].etag === initialState[0].etag || changedState[0].sha256 === initialState[0].sha256) {
+      throw new Error('The first synthetic Staging image did not produce a distinct changed state.')
     }
-    if (!acceptedSnapshotId) throw new Error('Staging storage backup did not produce a complete snapshot before the deadline.')
+    const changed = await waitForExpectedSnapshot(environment, {
+      stage: 'one changed body upload',
+      startedAt: Date.now(),
+      previousSnapshotId,
+      expected: changedState,
+      expectedUploadedBodyCount: 1,
+      expectedReusedBodyCount: 1,
+      deadline,
+    })
+    previousSnapshotId = changed.snapshotId
+
+    const deletedState = await deleteSecondFixture(supabase, environment)
+    const deleted = await waitForExpectedSnapshot(environment, {
+      stage: 'one source deletion reflected in a complete manifest',
+      startedAt: Date.now(),
+      previousSnapshotId,
+      expected: deletedState,
+      expectedUploadedBodyCount: 0,
+      expectedReusedBodyCount: 1,
+      deadline,
+    })
+    previousSnapshotId = deleted.snapshotId
+
+    const secondBackup = changed.manifest.objects.find((item) => item.sourcePath === FIXTURE[1].path)
+    const restoredState = await restoreSecondFixtureFromBackup(supabase, environment, secondBackup)
+    const restored = await waitForExpectedSnapshot(environment, {
+      stage: 'source restored from the retained content body',
+      startedAt: Date.now(),
+      previousSnapshotId,
+      expected: restoredState,
+      expectedUploadedBodyCount: 0,
+      expectedReusedBodyCount: 2,
+      deadline,
+    })
+    previousSnapshotId = restored.snapshotId
+
+    const firstBackup = restored.manifest.objects.find((item) => item.sourcePath === FIXTURE[0].path)
+    if (!firstBackup) throw new Error('The changed first fixture has no exact content body to test.')
+    await deleteR2Object(environment, firstBackup.backupKey)
+    const repaired = await waitForExpectedSnapshot(environment, {
+      stage: 'one missing content body automatically repaired',
+      startedAt: Date.now(),
+      previousSnapshotId,
+      expected: restoredState,
+      expectedUploadedBodyCount: 1,
+      expectedReusedBodyCount: 1,
+      deadline,
+    })
+    const repairedFirst = repaired.manifest.objects.find((item) => item.sourcePath === FIXTURE[0].path)
+    if (!repairedFirst) throw new Error('The repaired first fixture disappeared from its complete manifest.')
+    const repairedBody = await readR2Object(environment, repairedFirst.backupKey)
+    if (createHash('sha256').update(repairedBody).digest('hex') !== repairedFirst.sha256) {
+      throw new Error('The repaired Staging R2 content body failed SHA-256 verification.')
+    }
   } finally {
     await restoreCloudflareSafety(environment)
   }
-  console.log(`Staging storage backup acceptance passed (${FIXTURE.length} objects; ${EXPECTED_TOTAL_BYTES} bytes).`)
+  console.log(`Staging storage backup v2 acceptance passed (${FIXTURE.length} objects; ${EXPECTED_TOTAL_BYTES} bytes; six complete snapshots).`)
 }
 
 async function cleanup(environment) {
@@ -814,6 +1110,7 @@ export const STAGING_STORAGE_BACKUP_ACCEPTANCE_CONTRACT = Object.freeze({
   dailyCron: DAILY_CRON,
   confirmation: CONFIRMATION,
   objectCount: FIXTURE.length,
+  completeSnapshotCount: 6,
   totalBytes: EXPECTED_TOTAL_BYTES,
   fixturePaths: Object.freeze(FIXTURE.map((item) => item.path)),
 })

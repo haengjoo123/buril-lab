@@ -17,10 +17,10 @@ concurrency:
 
 jobs:
   acceptance:
-    name: One supervised synthetic backup run
+    name: Supervised synthetic backup v2 lifecycle
     if: ${{ github.repository == 'haengjoo123/buril-lab' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     environment: staging
 
     steps:
@@ -69,7 +69,7 @@ jobs:
         env: *acceptance-environment
         run: node scripts/staging-storage-backup-acceptance.mjs prepare
 
-      - name: Run and verify one complete Staging R2 snapshot
+      - name: Run and verify the complete Staging backup v2 lifecycle
         id: acceptance
         env: *acceptance-environment
         run: node scripts/staging-storage-backup-acceptance.mjs run
@@ -88,6 +88,8 @@ jobs:
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Synthetic objects: 2"
             echo "- Synthetic bytes: 3410853"
+            echo "- Complete snapshots verified: 6"
+            echo "- Incremental checks: unchanged, changed, deleted, restored, missing-body repaired"
             echo "- Source fixture cleaned: yes"
             echo "- Runtime switch restored OFF: yes"
             echo "- Daily schedule restored: yes"

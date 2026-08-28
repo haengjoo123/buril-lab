@@ -13,7 +13,7 @@
     "head_sampling_rate": 1
   },
   "limits": {
-    "subrequests": 1200
+    "subrequests": 4000
   },
   "secrets": {
     "required": ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -39,7 +39,7 @@
     "SUPABASE_URL": "https://qpgnomuqdcucjmxrunnw.supabase.co",
     "SOURCE_POINTER_MODE": "legacy_url",
     "SOURCE_STORAGE_BUCKET": "cabinets",
-    "WORKERS_SUBREQUEST_LIMIT": "1200",
+    "WORKERS_SUBREQUEST_LIMIT": "4000",
     "WORKERS_USAGE_PLAN": "paid"
   }
 }

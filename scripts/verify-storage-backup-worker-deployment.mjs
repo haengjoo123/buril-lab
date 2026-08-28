@@ -17,7 +17,7 @@ const STAGING_PLAIN_TEXT_BINDINGS = Object.freeze({
   SUPABASE_URL: 'https://qpgnomuqdcucjmxrunnw.supabase.co',
   SOURCE_POINTER_MODE: 'legacy_url',
   SOURCE_STORAGE_BUCKET: 'cabinets',
-  WORKERS_SUBREQUEST_LIMIT: '1200',
+  WORKERS_SUBREQUEST_LIMIT: '4000',
   WORKERS_USAGE_PLAN: 'paid',
 })
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
@@ -422,7 +422,7 @@ function verifyWorkerService(raw) {
     [],
     'Cloudflare Worker execution limits',
   )
-  if (script.limits.subrequests !== 1200) {
+  if (script.limits.subrequests !== 4000) {
     throw new Error('The Staging backup Worker subrequest limit has drifted.')
   }
   if (
