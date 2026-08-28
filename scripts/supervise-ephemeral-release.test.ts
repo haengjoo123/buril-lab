@@ -196,6 +196,26 @@ describe('ephemeral release lifecycle finalization', () => {
     expect(failedBeforePagesMutation(run, contract)).toBe(false)
   })
 
+  it('treats a wholly skipped Pages job as a failed gate with no possible mutation', () => {
+    const contract = {
+      jobName: 'supervised job',
+      pagesMutationStep: 'Deploy the exact commit to Staging Pages',
+    }
+    const run = {
+      status: 'completed',
+      conclusion: 'failure',
+      jobs: [{
+        name: contract.jobName,
+        status: 'completed',
+        conclusion: 'skipped',
+        steps: [],
+      }],
+    }
+
+    expect(failedBeforePagesMutation(run, contract)).toBe(true)
+    expect(credentialGateResult(run, contract)).toBe('failed')
+  })
+
   it('reconciles a delayed workflow run beyond the legacy one-minute lookup window', async () => {
     const commitSha = 'a'.repeat(40)
     const expectedTitle = `Deploy staging ${commitSha} (lease=${'b'.repeat(32)}, storage-backup=false)`
@@ -327,6 +347,77 @@ describe('ephemeral release lifecycle finalization', () => {
     expect(run).toHaveBeenCalledTimes(2)
   })
 
+  it('recovers a main-head race only when the entire Pages job was skipped', async () => {
+    const commitSha = 'a'.repeat(40)
+    const advancedMainSha = 'c'.repeat(40)
+    const leaseId = 'b'.repeat(32)
+    const displayTitle = `Deploy staging ${commitSha} (lease=${leaseId}, storage-backup=false)`
+    const startedAt = Date.parse('2026-08-25T05:00:00Z')
+    const listedRun = {
+      id: 778,
+      display_title: displayTitle,
+      head_sha: advancedMainSha,
+      created_at: new Date(startedAt + 1_000).toISOString(),
+    }
+    const details = {
+      databaseId: 778,
+      displayTitle,
+      headSha: advancedMainSha,
+      status: 'completed',
+      conclusion: 'failure',
+      createdAt: listedRun.created_at,
+      updatedAt: new Date(startedAt + 5_000).toISOString(),
+      attempt: 1,
+      event: 'workflow_dispatch',
+      headBranch: 'main',
+      url: 'https://github.com/haengjoo123/buril-lab/actions/runs/778',
+      workflowName: 'Deploy staging',
+      jobs: [{
+        name: 'Supervised deploy of verified commit to buril-lab-staging',
+        status: 'completed',
+        conclusion: 'skipped',
+        steps: [],
+      }],
+    }
+    const pending = {
+      payload: {
+        environment: 'staging',
+        commit_sha: commitSha,
+        lease_id: leaseId,
+        storage_backup: false,
+        started_at: new Date(startedAt).toISOString(),
+        run_evidence: null,
+      },
+    }
+    const listRun = vi.fn(async () => JSON.stringify({ workflow_runs: [listedRun] }))
+
+    await expect(findJournalRun(pending, {
+      run: listRun,
+      getRunDetails: vi.fn(async () => details),
+      wait: vi.fn(async () => undefined),
+      attempts: 1,
+    })).resolves.toEqual(details)
+
+    const mutated = {
+      ...details,
+      jobs: [{
+        ...details.jobs[0],
+        conclusion: 'success',
+        steps: [{
+          name: 'Deploy the exact commit to Staging Pages',
+          status: 'completed',
+          conclusion: 'success',
+        }],
+      }],
+    }
+    await expect(findJournalRun(pending, {
+      run: listRun,
+      getRunDetails: vi.fn(async () => mutated),
+      wait: vi.fn(async () => undefined),
+      attempts: 1,
+    })).rejects.toThrow(/does not match the exact supervised lease/)
+  })
+
   it('continues to provider revocation when GitHub cleanup fails', async () => {
     const events: string[] = []
     const recordCleanup = vi.fn()
@@ -412,6 +503,7 @@ describe('ephemeral release lifecycle finalization', () => {
       isTTY: true,
       setRawMode: vi.fn(),
       resume: vi.fn(),
+      pause: vi.fn(),
     })
     const writes: string[] = []
     const output = { write: (value: string) => writes.push(value) }
@@ -421,6 +513,8 @@ describe('ephemeral release lifecycle finalization', () => {
     await expect(pending).resolves.toBe('harmless-secret-marker')
     expect(writes.join('')).toBe('\n')
     expect(input.setRawMode.mock.calls).toEqual([[true], [false]])
+    expect(input.resume).toHaveBeenCalledOnce()
+    expect(input.pause).toHaveBeenCalledOnce()
   })
 
   it('drains and bounds GitHub CLI stderr instead of hanging', async () => {
