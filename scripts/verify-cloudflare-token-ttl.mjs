@@ -4,7 +4,12 @@ const MAX_RESPONSE_BYTES = 1024 * 1024
 const CLOUDFLARE_ID_PATTERN = /^[0-9a-f]{32}$/
 
 export const CLOUDFLARE_TOKEN_MIN_REMAINING_MS = 45 * 60 * 1000
-export const CLOUDFLARE_TOKEN_MAX_REMAINING_MS = 26 * 60 * 60 * 1000
+// Cloudflare's dashboard TTL picker is date-based and treats the selected end
+// date as inclusive.  Its shortest selectable window can therefore leave just
+// under 48 hours on the API token even though the operator selected adjacent
+// dates.  The signed lease is still capped at 45 minutes and the provider token
+// is revoked as soon as the supervised run finishes.
+export const CLOUDFLARE_TOKEN_MAX_REMAINING_MS = 48 * 60 * 60 * 1000
 export const CLOUDFLARE_TOKEN_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
 function parseTimestamp(value, label) {
@@ -35,7 +40,7 @@ export function verifyCloudflareTokenMetadata(payload, { now = Date.now() } = {}
     throw new Error('Cloudflare deployment token expires too soon for the supervised workflow.')
   }
   if (remaining > CLOUDFLARE_TOKEN_MAX_REMAINING_MS) {
-    throw new Error('Cloudflare deployment token TTL exceeds 26 hours.')
+    throw new Error('Cloudflare deployment token TTL exceeds 48 hours.')
   }
   if (result.not_before !== undefined && result.not_before !== null) {
     const notBefore = parseTimestamp(result.not_before, 'not_before')
