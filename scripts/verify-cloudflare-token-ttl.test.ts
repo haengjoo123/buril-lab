@@ -30,12 +30,17 @@ describe('Cloudflare ephemeral token TTL verification', () => {
     })
   })
 
+  it('accepts the dashboard date-picker boundary while keeping a hard upper limit', () => {
+    expect(verifyCloudflareTokenMetadata(payload(CLOUDFLARE_TOKEN_MAX_REMAINING_MS), { now: NOW }))
+      .toMatchObject({ expiresAt: NOW + CLOUDFLARE_TOKEN_MAX_REMAINING_MS })
+  })
+
   it.each([
     [{ ...payload(), success: false }, /successful result/],
     [{ ...payload(), result: { ...payload().result, status: 'disabled' } }, /not active/],
     [{ ...payload(), result: { ...payload().result, expires_on: undefined } }, /expires_on is missing/],
     [payload(30 * 60 * 1000), /expires too soon/],
-    [payload(CLOUDFLARE_TOKEN_MAX_REMAINING_MS + 1000), /exceeds 26 hours/],
+    [payload(CLOUDFLARE_TOKEN_MAX_REMAINING_MS + 1000), /exceeds 48 hours/],
   ])('rejects unsafe token metadata', (value, message) => {
     expect(() => verifyCloudflareTokenMetadata(value, { now: NOW })).toThrow(message)
   })

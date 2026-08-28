@@ -41,7 +41,7 @@
 - 토큰 생성 안내 전에 서명된 pending 표식을 저장합니다. 입력 중단은 공급자 비활성 또는 화면상 미생성 확인을 담은 서명 abort 영수증 없이는 해제할 수 없습니다.
 - 저장소 범위의 같은 이름 secret·variable은 environment 격리를 우회하므로 감독기가 거부합니다.
 - 누적 영수증 32회 한계는 자격값 생성 전에 중단합니다. 자동 epoch rollover는 아직 구현하지 않았고 별도 검토 관문으로 남깁니다.
-- 최신 `main` 기준 로컬 Cloudflare·임대 수명주기 회귀시험은 176개를 통과했습니다. Node 22와 비밀값이 아닌 CI용 합성 Supabase 입력에서 전체 Vitest는 927개 통과·7개 보류였고 위험한 자동 폐액 경로는 0건이었습니다. 이 수치는 실제 Staging 성공을 뜻하지 않습니다.
+- 현재 운영 후보 기준 로컬 Cloudflare·임대 수명주기 회귀시험은 177개를 통과했습니다. Node 22와 비밀값이 아닌 CI용 합성 Supabase 입력에서 전체 Vitest는 928개 통과·7개 보류였고 위험한 자동 폐액 경로는 0건이었습니다. 이 수치는 실제 Staging 성공을 뜻하지 않습니다.
 - 사용자의 별도 직전 확인 후 로컬 Windows 계정에만 복호화 가능한 DPAPI Ed25519 개인키를 만들고, 공개키와 SHA-256 지문 `b5fc8397c8eeb2e2a16b1ffc0feb0b0563f76302ee7b78c08b754651ae455cb2`만 저장소에 고정했습니다. DPAPI 실제 왕복·공개키 지문 검사를 통과했습니다. 이것은 토큰 생성이나 실제 배포 승인이 아닙니다.
 
 ## 2026-08-25 Cloudflare 배포 자격값 교정
@@ -49,7 +49,7 @@
 아래에 남아 있는 Staging 자동 배포 구현과 GitHub environment 배포 입력 등록 기록은 당시 완료한 사실을 보존한 과거 증거입니다. 이후 권한 범위를 다시 확인한 결과 Cloudflare Pages Edit와 Workers Scripts Edit는 특정 Pages 프로젝트나 Worker로 제한되지 않고 계정 범위에 영향을 줄 수 있으므로, 그 자동·지속 자격값 운영 방식은 앞으로 사용하지 않습니다.
 
 - 이후 Staging 배포는 `workflow_dispatch`에서 현재 `main`의 전체 SHA와 정확한 확인문구를 입력하는 감독형 실행만 허용합니다. 같은 SHA의 이름이 `Quality and security`인 workflow가 성공했는지 배포 초반과 Pages 반영 직전에 다시 확인합니다.
-- Pages 배포 직전에 짧은 유효기간의 `STAGING_PAGES_EPHEMERAL_TOKEN`과 최대 45분짜리 서명 임대를 GitHub `staging` environment에 넣고, 실행 종료 즉시 GitHub에서 제거한 뒤 Cloudflare에서 폐기합니다. Cloudflare 토큰은 실행 시점에 남은 시간이 45분 이상 26시간 이하인지 API로 확인합니다.
+- Pages 배포 직전에 짧은 유효기간의 `STAGING_PAGES_EPHEMERAL_TOKEN`과 최대 45분짜리 서명 임대를 GitHub `staging` environment에 넣고, 실행 종료 즉시 GitHub에서 제거한 뒤 Cloudflare에서 폐기합니다. Cloudflare 토큰은 실행 시점에 남은 시간이 45분 이상 48시간 이하인지 API로 확인합니다. Cloudflare 대시보드의 날짜 단위 TTL 선택기는 종료일을 포함해 계산하므로 인접한 날짜를 고른 최소 구간도 API상 26시간을 넘을 수 있습니다. 48시간은 이 UI 경계를 수용하는 상한일 뿐이며, 실제 토큰은 감독 실행 종료 직후 폐기합니다.
 - Storage 백업 Worker는 `deploy_storage_backup=true`를 명시한 실행에서만 별도의 `STAGING_WORKER_EPHEMERAL_TOKEN`을 읽습니다. 기본값은 `false`이며 Pages 토큰과 Worker 토큰은 서로 다른 값이어야 합니다.
 - Hosted Advisor의 24시간짜리 별도 실행 증거는 재사용하지 않습니다. 감독형 배포 안에서 환경별 임시 Supabase PAT로 현재 상태를 초반과 변경 직전에 직접 확인합니다.
 - 운영 수동 배포도 같은 방식으로 `PRODUCTION_PAGES_EPHEMERAL_TOKEN`과 운영 전용 임시 Supabase PAT만 잠시 사용하고 실행 종료 즉시 제거·폐기합니다. 기존 `CLOUDFLARE_API_TOKEN`, `STAGING_CLOUDFLARE_API_TOKEN`, 일반 `SUPABASE_ACCESS_TOKEN` 이름은 workflow에서 거부합니다.
