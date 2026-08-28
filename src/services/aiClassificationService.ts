@@ -12,9 +12,9 @@ export interface ClassificationResult {
 
 export async function classifyChemicalWithAI(chemical: Chemical): Promise<ClassificationResult | null> {
     try {
-        console.log('[Gemini Classification] Requesting AI classification...');
+        console.log('[AI Classification] Requesting classification...');
         const result = await postJson<{ category: DisposalCategory | 'UNKNOWN' | null }>(
-            '/api/gemini/classify',
+            '/api/ai/classify',
             { chemical }
         )
 
@@ -34,7 +34,7 @@ export async function classifyChemicalWithAI(chemical: Chemical): Promise<Classi
             label,
         }
     } catch (error) {
-        console.error('[Gemini Classification] API error/Cache error:', error)
+        console.error('[AI Classification] API error/Cache error:', error)
         return null
     }
 }

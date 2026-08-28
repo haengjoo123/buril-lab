@@ -30,7 +30,7 @@ import {
 } from '../utils/wastePolicyGuard';
 import { checkCompatibility } from '../utils/compatibilityChecker';
 import { parseCapacityMeasurement } from '../utils/capacityParser';
-import { getAIDisposalGuide, type DisposalGuideResult } from '../services/geminiDisposalGuideService';
+import { getAIDisposalGuide, type DisposalGuideResult } from '../services/aiDisposalGuideService';
 import { getActiveWastePolicyV2, type ActiveWastePolicy } from '../services/wastePolicyService';
 import { recordWasteHandlingV2, type WasteHandlingReceipt } from '../services/wasteLogService';
 import { translateGHS } from '../data/ghsCodes';

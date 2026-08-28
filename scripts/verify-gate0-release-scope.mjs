@@ -45,8 +45,33 @@ const forbiddenChangedPathPatterns = [
   /^workers\/(?!storage-backup(?:\/|$))/u,
 ]
 
+// The OpenAI cutover intentionally changes the shared AI middleware and
+// removes the unused Google Vision endpoint. Keep those reviewed artifacts
+// pinned to their exact Git blobs so later edits still require an explicit
+// release-scope review instead of silently bypassing the Gate 0 boundary.
+const approvedOpenAiCutoverArtifacts = new Map([
+  ['functions/api/_middleware.test.ts', '1b0dacd9d449850b2c17a415eb5004cb588fd4f0'],
+  ['functions/api/_middleware.ts', '559530de8fe628a76f4d84f998ffb66125771968'],
+  ['functions/api/vision/ocr.ts', null],
+])
+
+function isApprovedOpenAiCutoverArtifact(file) {
+  if (!approvedOpenAiCutoverArtifacts.has(file)) return false
+  const expectedBlob = approvedOpenAiCutoverArtifacts.get(file)
+  if (expectedBlob === null) return !existsSync(file)
+  if (!existsSync(file)) return false
+  const actualBlob = execFileSync('git', ['hash-object', '--', file], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
+  return actualBlob === expectedBlob
+}
+
 for (const file of changedFiles()) {
-  if (forbiddenChangedPathPatterns.some((pattern) => pattern.test(file))) {
+  if (
+    forbiddenChangedPathPatterns.some((pattern) => pattern.test(file))
+    && !isApprovedOpenAiCutoverArtifact(file)
+  ) {
     fail(`later-gate path is included in the Gate 0 release: ${file}`)
   }
 }

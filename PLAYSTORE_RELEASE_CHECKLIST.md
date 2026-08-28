@@ -17,7 +17,7 @@
 - 계정 정보: Supabase 인증 사용 여부 명시
 - 사진/카메라: 라벨 스캔 기능 설명
 - 앱 활동/검색 기록: 실제 수집 여부 점검 후 정확히 기입
-- 제3자 전송: Supabase, Google Vision, Gemini, KOSHA API 호출 여부 기준으로 정리
+- 제3자 전송: Supabase, OpenAI, KOSHA API 호출 여부 기준으로 정리
 - 데이터 삭제 요청 방식: 지원 이메일 또는 앱 내 절차 준비
 
 ## 앱 액세스 준비

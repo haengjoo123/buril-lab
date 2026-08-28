@@ -22,7 +22,7 @@ import { searchChemical } from '../../services/searchService';
 import { ReagentDateFields } from '../../components/ReagentDateFields';
 import { hasManufacturerDate, type ManufacturerDateType } from '../../utils/manufacturerDate';
 import { analyzeChemical } from '../../utils/chemicalAnalyzer';
-import { classifyChemicalWithAI } from '../../services/geminiClassificationService';
+import { classifyChemicalWithAI } from '../../services/aiClassificationService';
 import { ResultCard } from '../../components/ResultCard';
 import type { AnalysisResult } from '../../types';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';

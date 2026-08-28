@@ -71,11 +71,6 @@ const supabaseJwksCache = new Map<string, ReturnType<typeof jose.createRemoteJWK
  * Rate limit categories and their configurations
  */
 const LIMIT_CONFIGS = {
-  VISION: {
-    user: { count: 5, window: "1 m" },
-    ip: { count: 1, window: "1 m" },
-    pattern: /^\/api\/vision\//,
-  },
   VOICE: {
     user: { count: 30, window: "1 m" },
     ip: { count: 1, window: "1 m" },
@@ -84,7 +79,7 @@ const LIMIT_CONFIGS = {
   AI: {
     user: { count: 10, window: "1 m" },
     ip: { count: 5, window: "1 m" },
-    pattern: /^\/api\/gemini\//,
+    pattern: /^\/api\/(?:ai|gemini)\//,
   },
   KOSHA: {
     user: { count: 30, window: "1 m" },
@@ -120,15 +115,27 @@ const LIMIT_CONFIGS = {
 
 const PROTECTED_API_PATTERNS = [
   /^\/api\/account\//,
+  /^\/api\/ai\//,
   /^\/api\/gemini\//,
-  /^\/api\/vision\//,
   /^\/api\/voice\//,
   /^\/api\/reagents\//,
   /^\/api\/waste\//,
 ] as const
 
-function isProtectedApiPath(path: string): boolean {
+export function isProtectedApiPath(path: string): boolean {
   return PROTECTED_API_PATTERNS.some((pattern) => pattern.test(path))
+}
+
+export function resolveRateLimitCategory(path: string): keyof typeof LIMIT_CONFIGS | null {
+  if (LIMIT_CONFIGS.VOICE.pattern.test(path)) return 'VOICE'
+  if (LIMIT_CONFIGS.AI.pattern.test(path)) return 'AI'
+  if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) return 'KOSHA'
+  if (LIMIT_CONFIGS.CHEMICAL_SUGGEST.pattern.test(path)) return 'CHEMICAL_SUGGEST'
+  if (LIMIT_CONFIGS.CHEMICALS.pattern.test(path)) return 'CHEMICALS'
+  if (LIMIT_CONFIGS.REAGENTS.pattern.test(path)) return 'REAGENTS'
+  if (LIMIT_CONFIGS.WASTE.pattern.test(path)) return 'WASTE'
+  if (LIMIT_CONFIGS.ANALYTICS.pattern.test(path)) return 'ANALYTICS'
+  return null
 }
 
 function resolveSupabaseUrl(env: Env): string | null {
@@ -242,16 +249,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   // 2. Resolve Rate Limit Category
-  let category: keyof typeof LIMIT_CONFIGS | null = null
-  if (LIMIT_CONFIGS.VISION.pattern.test(path)) category = 'VISION'
-  else if (LIMIT_CONFIGS.VOICE.pattern.test(path)) category = 'VOICE'
-  else if (LIMIT_CONFIGS.AI.pattern.test(path)) category = 'AI'
-  else if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) category = 'KOSHA'
-  else if (LIMIT_CONFIGS.CHEMICAL_SUGGEST.pattern.test(path)) category = 'CHEMICAL_SUGGEST'
-  else if (LIMIT_CONFIGS.CHEMICALS.pattern.test(path)) category = 'CHEMICALS'
-  else if (LIMIT_CONFIGS.REAGENTS.pattern.test(path)) category = 'REAGENTS'
-  else if (LIMIT_CONFIGS.WASTE.pattern.test(path)) category = 'WASTE'
-  else if (LIMIT_CONFIGS.ANALYTICS.pattern.test(path)) category = 'ANALYTICS'
+  const category = resolveRateLimitCategory(path)
 
   // If no category matches, we still apply a global safety limit
   const limitConfig = category 

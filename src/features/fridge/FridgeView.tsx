@@ -9,7 +9,7 @@ import {
     canAutoPlaceReagentScan,
     scanReagentLabel,
     type ReagentScanResult,
-} from '../../services/geminiReagentScanService';
+} from '../../services/aiReagentScanService';
 import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
 import { inventoryService, type InventoryItem } from '../../services/inventoryService';
