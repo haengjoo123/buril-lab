@@ -57,7 +57,7 @@ const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
   '1f71f2eb2ed1f0e8',
 ].join('')
 const STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256 = 'd278ccb8f65af20551fbc065fa84b21a36953804944bf35c53f08f2885aedc89'
-const STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256 = '0efd173e6492fb77a72603e8bb4d0e0a34a085646f8c696508da08620175a938'
+const STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256 = '02acce362f0815b864274aee603dcfb7f696103928b52bfbac8b124e886acbe9'
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
   production: '8e1b2958ff7f607e49a3ba1cb75842154c6107fa44b11cf477ff4f5c099e3c70',
@@ -71,7 +71,7 @@ const PINNED_CLOUDFLARE_API_HELPER_SHA256 = 'fb55977e31c33aebcc229c1fef1febba21b
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
 const PINNED_WRANGLER_OUTPUT_HELPER_SHA256 = 'f6f7f7f615d022fd971e0df2b39c8e6e6be2dde23efdb6e7f604c90b4041d299'
 const PINNED_STAGING_ROLLBACK_PREPARATION_HELPER_SHA256 = '85695732038b715b4d62c0ebacd240ff35255423de726a452effba99d03c50af'
-const PINNED_STAGING_STORAGE_BACKUP_ACCEPTANCE_HELPER_SHA256 = '6271c727ce718613f512ce177e6a49c098ba46f44636e65a851e1c9e85d04188'
+const PINNED_STAGING_STORAGE_BACKUP_ACCEPTANCE_HELPER_SHA256 = '31e738cbd6ee307a5ca8ee8ee521847ef44546879b7be1a254a15e668d66580f'
 const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
   staging: [
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
@@ -181,6 +181,17 @@ export function verifyStorageBackupWorkerTokenDocumentation(source) {
     || !tokenSection.includes('https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/list/')
   ) {
     throw new Error('Storage-backup Worker token documentation must pin the Wrangler R2 lookup and official permission evidence.')
+  }
+  const acceptanceSection = String(source).match(
+    /`STAGING_CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN`[\s\S]*?must\s+never\s+be\s+delivered\s+to\s+`production`\./,
+  )?.[0]
+  if (
+    !acceptanceSection
+    || !acceptanceSection.includes('**Workers R2 Storage Read**')
+    || !acceptanceSection.includes('**Workers R2 Storage Write**')
+    || !acceptanceSection.includes('https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/delete/')
+  ) {
+    throw new Error('Storage-backup acceptance token documentation must require R2 Read/Write and pin the official delete API evidence.')
   }
   return true
 }

@@ -54,19 +54,25 @@ Pages Edit only; production has no Worker deployment path.
 The one-time synthetic acceptance workflow uses a fourth, separately created
 token stored only as the Staging environment secret
 `STAGING_CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN`. It needs **Workers
-Scripts Edit**, **Workers KV Storage Read**, **Workers KV Storage Edit**, and
-**Workers R2 Storage Read** for the exact account. It must expire within 26
-hours and should use the shortest practical window. The workflow can run only
-from the first attempt of protected `main`; it verifies that the private R2
-bucket has no enabled managed or custom public domain, creates two synthetic
-PNG objects totalling 3,410,853 bytes in the empty Staging source bucket,
-enables the backup switch with a 25-minute automatic expiry, and temporarily
-uses a once-per-minute Cron. It accepts only a new complete manifest whose two
-body hashes match those exact fixtures. An always-run cleanup restores the
-five-value OFF config and the daily `17:15` UTC Cron before removing only the
-hash-matched synthetic rows and files. Remove the GitHub secret and revoke the
-Cloudflare token immediately after the run, successful or not. This acceptance
-token must never be delivered to `production`.
+Scripts Edit**, **Workers KV Storage Read**, **Workers KV Storage Edit**,
+**Workers R2 Storage Read**, and **Workers R2 Storage Write** for the exact
+account. The write permission is used only to delete one exact, hash-verified
+synthetic content body so the Worker can prove automatic recovery through
+Cloudflare's [R2 Delete Object API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/delete/).
+It must
+expire within 26 hours and should use the shortest practical window. The
+workflow can run only from the first attempt of protected `main`; it verifies
+that the private R2 bucket has no enabled managed or custom public domain,
+creates two run-unique synthetic PNG objects totalling 3,410,853 bytes in the
+empty Staging source bucket, enables the backup switch with a 35-minute
+automatic expiry, and temporarily uses a once-per-minute Cron. It accepts six
+complete manifests in order: initial, unchanged, one changed body, one deleted
+source, a restore from the retained content body, and automatic repair of one
+deliberately missing content body. An always-run cleanup restores the five-value
+OFF config and the daily `17:15` UTC Cron before removing only the hash-matched
+synthetic rows and files. Remove the GitHub secret and revoke the Cloudflare
+token immediately after the run, successful or not. This acceptance token must
+never be delivered to `production`.
 
 The local supervisor writes and reads back a signed phase journal before it
 tells the operator to create any provider credential. The journal advances
@@ -131,18 +137,18 @@ switch has been reviewed and deployed.
 
 The live account was upgraded to Workers Paid on 2026-08-26 after the dashboard
 showed the exact recurring base fee and usage terms. Both committed configs use
-`WORKERS_USAGE_PLAN=paid`, declare `WORKERS_SUBREQUEST_LIMIT=1200`, and set
-Wrangler `limits.subrequests=1200`. The runtime KV switch remains fail-closed and
+`WORKERS_USAGE_PLAN=paid`, declare `WORKERS_SUBREQUEST_LIMIT=4000`, and set
+Wrangler `limits.subrequests=4000`. The runtime KV switch remains fail-closed and
 OFF by default, so the paid profile alone does not start a backup.
 
 The static worst
-case is 1,030, including one same-origin HTTPS redirect per source request,
+case is 3,283, including one same-origin HTTPS redirect per source request,
 retry attempts, KV reads, Supabase calls, every R2 write and verification, and
 two reserved lock-release calls. Redirects are handled manually: only 301/302
 for GET or HEAD and 307/308 for any existing method may stay on the exact same
 origin and the same path (apart from trailing slashes), and a second redirect is
-rejected. A run supports at most
-50 image objects, 5 database pages, and 25 recursive Storage-list pages, and
+rejected. A run supports at most 50 referenced photos per lab or personal owner,
+250 total source objects, 5 database pages, and 25 recursive Storage-list pages, and
 stops starting normal work after 14 minutes so the 15-minute Cron boundary
 retains cleanup time. These are support limits, not estimates of platform
 capacity. Cloudflare's current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
@@ -157,12 +163,11 @@ limits custom execution settings to the Standard Usage Model.
 
 Each successful run writes, in order:
 
-1. Referenced files: `snapshots/<run-id>/objects/<source-object-path>`
-2. Unreferenced files: `snapshots/<run-id>/quarantine/unreferenced/<source-object-path>`
-3. `snapshots/<run-id>/manifest.json`
-4. `snapshots/<run-id>/manifest.sha256`
-5. `snapshots/<run-id>/complete.json`
-6. `control/latest.json`
+1. Changed or missing bodies: `objects/sha256/<first-two-hex>/<full-sha256>`
+2. `snapshots/<run-id>/manifest.json`
+3. `snapshots/<run-id>/manifest.sha256`
+4. `snapshots/<run-id>/complete.json`
+5. `control/latest.json`
 
 `control/active-lock.json` is acquired and replaced with R2 conditional writes.
 An incomplete snapshot has no `complete.json` and must never be used for a
@@ -172,6 +177,11 @@ restore. Referenced manifest entries have classification `referenced` and a
 `orphanCount`. Default restore tooling may restore only referenced entries;
 quarantine recovery always requires separate approval. The manifest never
 contains emails, laboratory names, reagent names, or owner identifiers.
+Every successful run writes a full source listing. If a path, ETag, and size are
+unchanged and the prior content body still has the expected size and SHA-256,
+the body is reused without downloading or uploading it. A changed source body,
+or an unchanged source whose content body is missing or corrupt, is downloaded,
+hashed, and stored under the content-addressed key before completion.
 
 ## Local verification (no external source calls)
 
@@ -228,14 +238,19 @@ larger; any request or manifest naming that bucket is a failed acceptance run.
   introduced before automated source deletion.
 - Stop activation if current live billing evidence does not show Workers Paid.
   Do not treat the committed profile variable as billing evidence. After the
-  upgrade is separately approved and completed, make the reviewed 1200-limit
+  upgrade is separately approved and completed, make the reviewed 4000-limit
   config changes described above and repeat both Wrangler dry-runs before any
   Staging flag change.
 - Confirm the live R2 settings satisfy the
   policy contract in `r2-policy.expected.json`: required user lifecycle
   `expire-snapshots-31-days` applies only to `snapshots/`, deletes after 31
   days, and aborts incomplete multipart uploads after 1 day; Bucket Lock
-  `retain-snapshots-30-days` applies only to `snapshots/` for 30 days.
+  `retain-snapshots-30-days` applies only to `snapshots/` for 30 days and
+  `retain-content-bodies-30-days` applies only to `objects/sha256/` for 30 days.
+  Content bodies are not covered by the snapshot lifecycle. A separate
+  reference-based collector may remove a body only after it is absent from all
+  complete manifests in the last 30 days, is at least 31 days old, and is
+  confirmed by two collection runs.
   Cloudflare's managed `Default Multipart Abort Rule` is additionally allowed
   only when it is multipart-only, covers all prefixes, and aborts after 7 days.
   Any other additional rule is drift. `control/` remains outside the required

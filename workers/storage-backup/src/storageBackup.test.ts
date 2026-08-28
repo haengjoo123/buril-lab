@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import worker from './index'
@@ -124,6 +125,7 @@ async function digest(value: Uint8Array): Promise<ArrayBuffer> {
 class FakeR2 implements BackupR2Bucket {
   readonly objects = new Map<string, FakeStoredObject>()
   readonly headCalls: string[] = []
+  readonly getCalls: string[] = []
   readonly putCalls: FakePutCall[] = []
   readonly failPutKeys = new Set<string>()
   readonly conflictPutKeys = new Set<string>()
@@ -159,6 +161,18 @@ class FakeR2 implements BackupR2Bucket {
           : stored.checksum.slice(0),
       },
       customMetadata: stored.customMetadata ? { ...stored.customMetadata } : undefined,
+    }
+  }
+
+  async get(key: string): Promise<(FakeR2Head & { arrayBuffer(): Promise<ArrayBuffer> }) | null> {
+    this.getCalls.push(key)
+    const stored = this.objects.get(key)
+    if (!stored) return null
+    const head = await this.head(key)
+    if (!head) return null
+    return {
+      ...head,
+      arrayBuffer: async () => copyArrayBuffer(stored.body),
     }
   }
 
@@ -383,6 +397,33 @@ function validFixtures(mode: 'legacy_url' | 'private_path' = 'legacy_url') {
   return { pointers, objects }
 }
 
+function fixtureUuid(serial: number): string {
+  return `77777777-7777-4777-8777-${serial.toString(16).padStart(12, '0')}`
+}
+
+function scaledLabFixtures(labCount: number, photosPerLab: number) {
+  const pointers: PointerFixture[] = []
+  const objects: ObjectFixture[] = []
+  for (let labIndex = 0; labIndex < labCount; labIndex += 1) {
+    const labId = fixtureUuid(10_000 + labIndex)
+    for (let photoIndex = 0; photoIndex < photosPerLab; photoIndex += 1) {
+      const itemIndex = (labIndex * photosPerLab) + photoIndex
+      const path = `load/lab-${labIndex}/photo-${photoIndex}.webp`
+      objects.push({
+        ...object(fixtureUuid(20_000 + itemIndex), path),
+        etag: `source-load-${itemIndex}`,
+      })
+      pointers.push({
+        id: fixtureUuid(30_000 + itemIndex),
+        lab_id: labId,
+        user_id: null,
+        image_url: publicUrl(path),
+      })
+    }
+  }
+  return { pointers, objects }
+}
+
 function bindings(
   kv: RuntimeConfigKv,
   r2: BackupR2Bucket,
@@ -397,7 +438,7 @@ function bindings(
     SOURCE_POINTER_MODE: 'legacy_url',
     SOURCE_STORAGE_BUCKET: 'cabinets',
     SUPABASE_SERVICE_ROLE_KEY: TEST_SECRET,
-    WORKERS_SUBREQUEST_LIMIT: '1200',
+    WORKERS_SUBREQUEST_LIMIT: '4000',
     WORKERS_USAGE_PLAN: 'paid',
     ...overrides,
   }
@@ -421,6 +462,11 @@ function testOverrides(source: FakeSource, logs: SafeLogEntry[] = []) {
 
 function completeKeys(r2: FakeR2): string[] {
   return [...r2.objects.keys()].filter((key) => key.endsWith('/complete.json'))
+}
+
+function latestManifest(r2: FakeR2): Record<string, unknown> {
+  const latest = JSON.parse(r2.text('control/latest.json')) as { snapshotId: string }
+  return JSON.parse(r2.text(`snapshots/${latest.snapshotId}/manifest.json`)) as Record<string, unknown>
 }
 
 async function runFixture(
@@ -587,7 +633,7 @@ describe('OFF-first activation and environment isolation', () => {
       WORKERS_SUBREQUEST_LIMIT: '1199',
     }))).toThrow('config_invalid')
     expect(() => resolveSourceConfig(bindings(kv, r2, {
-      WORKERS_SUBREQUEST_LIMIT: '1200',
+      WORKERS_SUBREQUEST_LIMIT: '4000',
       WORKERS_USAGE_PLAN: 'free_off_only',
     }))).toThrow('config_invalid')
   })
@@ -753,7 +799,7 @@ describe('OFF-first activation and environment isolation', () => {
       vars: {
         BACKUP_ENVIRONMENT: 'staging',
         SUPABASE_PROJECT_REF: STAGING_REF,
-        WORKERS_SUBREQUEST_LIMIT: '1200',
+        WORKERS_SUBREQUEST_LIMIT: '4000',
         WORKERS_USAGE_PLAN: 'paid',
       },
     })
@@ -765,26 +811,66 @@ describe('OFF-first activation and environment isolation', () => {
       vars: {
         BACKUP_ENVIRONMENT: 'production',
         SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc',
-        WORKERS_SUBREQUEST_LIMIT: '1200',
+        WORKERS_SUBREQUEST_LIMIT: '4000',
         WORKERS_USAGE_PLAN: 'paid',
       },
     })
-    expect(staging).toMatchObject({ limits: { subrequests: 1200 } })
-    expect(production).toMatchObject({ limits: { subrequests: 1200 } })
+    expect(staging).toMatchObject({ limits: { subrequests: 4000 } })
+    expect(production).toMatchObject({ limits: { subrequests: 4000 } })
     expect(staging.triggers).not.toEqual(production.triggers)
   })
 
   it('keeps the supported paid-plan ceiling above the exact static worst case', () => {
     const worstCase = calculateWorstCaseSubrequests({ ...STORAGE_BACKUP_LIMITS })
 
-    expect(STORAGE_BACKUP_LIMITS.maxPointers).toBe(50)
-    expect(STORAGE_BACKUP_LIMITS.maxStorageObjects).toBe(50)
-    expect(worstCase).toBe(1030)
+    expect(STORAGE_BACKUP_LIMITS.maxPointers).toBe(250)
+    expect(STORAGE_BACKUP_LIMITS.maxPointersPerOwner).toBe(50)
+    expect(STORAGE_BACKUP_LIMITS.maxStorageObjects).toBe(250)
+    expect(worstCase).toBe(3283)
     expect(worstCase).toBeLessThan(STORAGE_BACKUP_LIMITS.maxSubrequests)
     expect(() => resolveSourceConfig(
       bindings(new FakeKv(), new FakeR2()),
       { ...STORAGE_BACKUP_LIMITS, maxSubrequests: worstCase - 1 },
     )).toThrow('config_invalid')
+  })
+
+  it('backs up the reviewed Staging load shape of five labs with fifty photos each', async () => {
+    const fixtures = scaledLabFixtures(5, 50)
+    const { result, r2 } = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), {
+      dependencyOverrides: {
+        limits: {
+          dbPageSize: 100,
+          storagePageSize: 100,
+          requestTimeoutMs: 25,
+          retryDelayMs: 1,
+        },
+      },
+    })
+
+    expect(result).toMatchObject({ status: 'completed', count: 250, orphanCount: 0 })
+    expect(latestManifest(r2)).toMatchObject({
+      objectCount: 250,
+      referencedObjectCount: 250,
+      uploadedBodyCount: 250,
+      reusedBodyCount: 0,
+    })
+  })
+
+  it('rejects the fifty-first referenced photo in one ownership scope', async () => {
+    const fixtures = scaledLabFixtures(1, 51)
+    const { result, r2 } = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), {
+      dependencyOverrides: {
+        limits: {
+          dbPageSize: 100,
+          storagePageSize: 100,
+          requestTimeoutMs: 25,
+          retryDelayMs: 1,
+        },
+      },
+    })
+
+    expect(result).toMatchObject({ status: 'failed', code: 'source_limit_exceeded' })
+    expect(completeKeys(r2)).toHaveLength(0)
   })
 
   it('stops before any subrequest at the exact 15-minute invocation boundary', async () => {
@@ -815,7 +901,7 @@ describe('OFF-first activation and environment isolation', () => {
   it('pins the reviewed private R2 retention contract without covering control keys', () => {
     const policy = JSON.parse(readFileSync(resolve('workers/storage-backup/r2-policy.expected.json'), 'utf8')) as Record<string, unknown>
     expect(policy).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       buckets: [
         'buril-lab-cabinet-backups-staging',
         'buril-lab-cabinet-backups-production',
@@ -830,11 +916,24 @@ describe('OFF-first activation and environment isolation', () => {
           deleteAfterDays: 31,
           abortMultipartUploadsAfterDays: 1,
         },
-        bucketLock: {
-          name: 'retain-snapshots-30-days',
-          prefix: 'snapshots/',
-          retainForDays: 30,
-        },
+        bucketLocks: [
+          {
+            name: 'retain-snapshots-30-days',
+            prefix: 'snapshots/',
+            retainForDays: 30,
+          },
+          {
+            name: 'retain-content-bodies-30-days',
+            prefix: 'objects/sha256/',
+            retainForDays: 30,
+          },
+        ],
+      },
+      contentGarbageCollection: {
+        prefix: 'objects/sha256/',
+        referenceWindowDays: 30,
+        minimumUnreferencedAgeDays: 31,
+        confirmationRuns: 2,
       },
       allowedCloudflareManagedRules: [{
         name: 'Default Multipart Abort Rule',
@@ -1013,13 +1112,14 @@ describe('snapshot creation and consistency barriers', () => {
     expect(source.storagePass).toBe(3)
     expect(completeKeys(r2)).toHaveLength(1)
 
-    const snapshotPuts = r2.putCalls.map((call) => call.key).filter((key) => key.startsWith('snapshots/'))
-    const bodyIndexes = snapshotPuts
-      .map((key, index) => key.includes('/objects/') ? index : -1)
+    const allPuts = r2.putCalls.map((call) => call.key)
+    const snapshotPuts = allPuts.filter((key) => key.startsWith('snapshots/'))
+    const bodyIndexes = allPuts
+      .map((key, index) => key.startsWith('objects/sha256/') ? index : -1)
       .filter((index) => index >= 0)
-    const manifestIndex = snapshotPuts.findIndex((key) => key.endsWith('/manifest.json'))
-    const hashIndex = snapshotPuts.findIndex((key) => key.endsWith('/manifest.sha256'))
-    const completeIndex = snapshotPuts.findIndex((key) => key.endsWith('/complete.json'))
+    const manifestIndex = allPuts.findIndex((key) => key.endsWith('/manifest.json'))
+    const hashIndex = allPuts.findIndex((key) => key.endsWith('/manifest.sha256'))
+    const completeIndex = allPuts.findIndex((key) => key.endsWith('/complete.json'))
     expect(Math.max(...bodyIndexes)).toBeLessThan(manifestIndex)
     expect(manifestIndex).toBeLessThan(hashIndex)
     expect(hashIndex).toBeLessThan(completeIndex)
@@ -1038,14 +1138,25 @@ describe('snapshot creation and consistency barriers', () => {
       snapshotId: string
       objectCount: number
       totalBytes: number
-      objects: Array<{ sourcePath: string; backupKey: string; bytes: number; contentType: string }>
+      uploadedBodyCount: number
+      reusedBodyCount: number
+      objects: Array<{
+        sourcePath: string
+        backupKey: string
+        etag: string
+        bytes: number
+        sha256: string
+        contentType: string
+      }>
     }
     expect(manifest.snapshotId).toMatch(/^[a-z0-9-]{8,128}$/)
+    expect(manifest).toMatchObject({ uploadedBodyCount: 3, reusedBodyCount: 0 })
     expect(manifest.objects).toHaveLength(manifest.objectCount)
     expect(manifest.objects.every((item) => (
       item.bytes > 0
+      && item.etag.length > 0
       && item.contentType.length > 0
-      && item.backupKey === `snapshots/${manifest.snapshotId}/objects/${item.sourcePath}`
+      && item.backupKey === `objects/sha256/${item.sha256.slice(0, 2)}/${item.sha256}`
     ))).toBe(true)
 
     const expectedManifestHash = Array.from(
@@ -1063,6 +1174,8 @@ describe('snapshot creation and consistency barriers', () => {
       manifestSha256: expectedManifestHash,
       objectCount: manifest.objectCount,
       totalBytes: manifest.totalBytes,
+      uploadedBodyCount: 3,
+      reusedBodyCount: 0,
     })
   })
 
@@ -1104,6 +1217,212 @@ describe('snapshot creation and consistency barriers', () => {
     expect(source.fetchCalls.every((call) => !call.url.includes('media-products'))).toBe(true)
   })
 
+  it('accepts only an exact legacy latest pointer and starts the first v2 snapshot without reuse', async () => {
+    const fixtures = validFixtures()
+    const r2 = new FakeR2()
+    await r2.seed('control/latest.json', `${JSON.stringify({
+      schemaVersion: 1,
+      snapshotId: 'legacy-snapshot',
+      environment: 'staging',
+      completeKey: 'snapshots/legacy-snapshot/complete.json',
+      manifestSha256: '1'.repeat(64),
+      completedAt: '2026-08-24T12:00:00.000Z',
+      orphanCount: 0,
+    })}\n`)
+
+    const completed = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), { r2 })
+
+    expect(completed.result.status).toBe('completed')
+    expect(latestManifest(r2)).toMatchObject({
+      schemaVersion: 2,
+      uploadedBodyCount: 3,
+      reusedBodyCount: 0,
+    })
+  })
+
+  it('rejects a malformed legacy latest pointer instead of silently bypassing it', async () => {
+    const fixtures = validFixtures()
+    const r2 = new FakeR2()
+    await r2.seed('control/latest.json', `${JSON.stringify({
+      schemaVersion: 1,
+      snapshotId: 'legacy-snapshot',
+      environment: 'another-environment',
+      completeKey: 'snapshots/legacy-snapshot/complete.json',
+      manifestSha256: '1'.repeat(64),
+      completedAt: '2026-08-24T12:00:00.000Z',
+      orphanCount: 0,
+    })}\n`)
+
+    const failed = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), { r2 })
+
+    expect(failed.result).toMatchObject({ status: 'failed', code: 'r2_verify_failed' })
+    expect(completeKeys(r2)).toHaveLength(0)
+  })
+
+  it('writes a full daily manifest without downloading or uploading unchanged bodies', async () => {
+    const fixtures = validFixtures()
+    const first = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects))
+    expect(first.result.status).toBe('completed')
+    const putsBefore = first.r2.putCalls.length
+    const secondSource = new FakeSource(fixtures.pointers, fixtures.objects)
+    const second = await runFixture(secondSource, {
+      r2: first.r2,
+      dependencyOverrides: {
+        now: () => FIXED_NOW + 60_000,
+        randomBytes: (length: number) => new Uint8Array(length).fill(10),
+      },
+    })
+
+    expect(second.result.status).toBe('completed')
+    expect(secondSource.downloadAttempts.size).toBe(0)
+    expect(first.r2.putCalls.slice(putsBefore).filter((call) => call.key.startsWith('objects/sha256/'))).toHaveLength(0)
+    expect(latestManifest(first.r2)).toMatchObject({
+      objectCount: 3,
+      uploadedBodyCount: 0,
+      reusedBodyCount: 3,
+    })
+    expect(completeKeys(first.r2)).toHaveLength(2)
+  })
+
+  it('uploads only one new body when one source object changes', async () => {
+    const fixtures = validFixtures()
+    const first = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects))
+    const changedObjects = fixtures.objects.map((item, index) => index === 0
+      ? {
+          ...item,
+          body: new TextEncoder().encode('changed-image-body'),
+          etag: 'source-changed-a',
+          updatedAt: '2026-08-25T12:01:00.000Z',
+        }
+      : item)
+    const changedSource = new FakeSource(fixtures.pointers, changedObjects)
+    const putsBefore = first.r2.putCalls.length
+    const second = await runFixture(changedSource, {
+      r2: first.r2,
+      dependencyOverrides: {
+        now: () => FIXED_NOW + 60_000,
+        randomBytes: (length: number) => new Uint8Array(length).fill(10),
+      },
+    })
+
+    expect(second.result.status).toBe('completed')
+    expect([...changedSource.downloadAttempts.keys()]).toEqual([fixtures.objects[0].path])
+    expect(first.r2.putCalls.slice(putsBefore).filter((call) => call.key.startsWith('objects/sha256/'))).toHaveLength(1)
+    expect(latestManifest(first.r2)).toMatchObject({ uploadedBodyCount: 1, reusedBodyCount: 2 })
+  })
+
+  it('removes a deleted source path from the next full manifest without deleting its retained body', async () => {
+    const fixtures = validFixtures()
+    const first = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects))
+    const deleted = fixtures.objects[2]
+    const deletedBodyKey = expectContentObjectKey(deleted.body)
+    const remainingSource = new FakeSource(fixtures.pointers.slice(0, 2), fixtures.objects.slice(0, 2))
+    const putsBefore = first.r2.putCalls.length
+    const second = await runFixture(remainingSource, {
+      r2: first.r2,
+      dependencyOverrides: {
+        now: () => FIXED_NOW + 60_000,
+        randomBytes: (length: number) => new Uint8Array(length).fill(10),
+      },
+    })
+
+    expect(second.result.status).toBe('completed')
+    expect(remainingSource.downloadAttempts.size).toBe(0)
+    expect(first.r2.putCalls.slice(putsBefore).filter((call) => call.key.startsWith('objects/sha256/'))).toHaveLength(0)
+    const manifest = latestManifest(first.r2) as { objectCount: number; objects: Array<{ sourcePath: string }> }
+    expect(manifest.objectCount).toBe(2)
+    expect(manifest.objects.some((item) => item.sourcePath === deleted.path)).toBe(false)
+    expect(first.r2.objects.has(deletedBodyKey)).toBe(true)
+  })
+
+  it('redownloads and restores exactly one missing content-addressed body', async () => {
+    const fixtures = validFixtures()
+    const first = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects))
+    const missingKey = expectContentObjectKey(fixtures.objects[1].body)
+    first.r2.objects.delete(missingKey)
+    const source = new FakeSource(fixtures.pointers, fixtures.objects)
+    const putsBefore = first.r2.putCalls.length
+    const second = await runFixture(source, {
+      r2: first.r2,
+      dependencyOverrides: {
+        now: () => FIXED_NOW + 60_000,
+        randomBytes: (length: number) => new Uint8Array(length).fill(10),
+      },
+    })
+
+    expect(second.result.status).toBe('completed')
+    expect([...source.downloadAttempts.keys()]).toEqual([fixtures.objects[1].path])
+    expect(first.r2.putCalls.slice(putsBefore).filter((call) => call.key.startsWith('objects/sha256/'))).toHaveLength(1)
+    expect(first.r2.objects.has(missingKey)).toBe(true)
+    expect(latestManifest(first.r2)).toMatchObject({ uploadedBodyCount: 1, reusedBodyCount: 2 })
+  })
+
+  it('fails on a corrupted previous manifest and succeeds after the exact manifest is restored', async () => {
+    const fixtures = validFixtures()
+    const first = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects))
+    const latest = JSON.parse(first.r2.text('control/latest.json')) as { snapshotId: string }
+    const manifestKey = `snapshots/${latest.snapshotId}/manifest.json`
+    const original = first.r2.objects.get(manifestKey)
+    expect(original).toBeTruthy()
+    const corruptBody = new TextEncoder().encode('{"schemaVersion":2,"corrupt":true}\n')
+    first.r2.objects.set(manifestKey, {
+      ...(original as FakeStoredObject),
+      body: corruptBody,
+      checksum: await digest(corruptBody),
+      etag: 'corrupt-manifest',
+    })
+
+    const failed = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), {
+      r2: first.r2,
+      dependencyOverrides: {
+        now: () => FIXED_NOW + 60_000,
+        randomBytes: (length: number) => new Uint8Array(length).fill(10),
+      },
+    })
+    expect(failed.result).toMatchObject({ status: 'failed', code: 'r2_checksum_failed' })
+
+    first.r2.objects.set(manifestKey, original as FakeStoredObject)
+    const recoveredSource = new FakeSource(fixtures.pointers, fixtures.objects)
+    const recovered = await runFixture(recoveredSource, {
+      r2: first.r2,
+      dependencyOverrides: {
+        now: () => FIXED_NOW + 120_000,
+        randomBytes: (length: number) => new Uint8Array(length).fill(11),
+      },
+    })
+    expect(recovered.result.status).toBe('completed')
+    expect(recoveredSource.downloadAttempts.size).toBe(0)
+  })
+
+  it.each(['complete', 'manifest'] as const)(
+    'fails closed when the previous latest pointer references a missing %s document',
+    async (missingDocument) => {
+      const fixtures = validFixtures()
+      const first = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects))
+      const latest = JSON.parse(first.r2.text('control/latest.json')) as {
+        snapshotId: string
+        completeKey: string
+      }
+      const missingKey = missingDocument === 'complete'
+        ? latest.completeKey
+        : `snapshots/${latest.snapshotId}/manifest.json`
+      first.r2.objects.delete(missingKey)
+
+      const next = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), {
+        r2: first.r2,
+        dependencyOverrides: {
+          now: () => FIXED_NOW + 60_000,
+          randomBytes: (length: number) => new Uint8Array(length).fill(10),
+        },
+      })
+
+      expect(next.result).toMatchObject({ status: 'failed', code: 'r2_verify_failed' })
+      expect(JSON.parse(first.r2.text('control/latest.json'))).toMatchObject({
+        snapshotId: latest.snapshotId,
+      })
+    },
+  )
+
   it('rejects a Storage snapshot that changes between the first two reads', async () => {
     const fixtures = validFixtures()
     const source = new FakeSource(fixtures.pointers, fixtures.objects)
@@ -1113,7 +1432,7 @@ describe('snapshot creation and consistency barriers', () => {
     const { result, r2 } = await runFixture(source)
     expect(result).toMatchObject({ status: 'failed', code: 'source_drift' })
     expect(completeKeys(r2)).toHaveLength(0)
-    expect([...r2.objects.keys()].some((key) => key.includes('/objects/'))).toBe(false)
+    expect([...r2.objects.keys()].some((key) => key.startsWith('objects/sha256/'))).toBe(false)
   })
 
   it('rejects pointer drift after bodies and manifests without creating complete.json', async () => {
@@ -1213,7 +1532,7 @@ describe('snapshot creation and consistency barriers', () => {
       classification: 'unreferenced',
     })
     expect(orphan).not.toHaveProperty('ownerScope')
-    expect(String(orphan?.backupKey)).toContain('/quarantine/unreferenced/')
+    expect(String(orphan?.backupKey)).toMatch(/^objects\/sha256\/[0-9a-f]{2}\/[0-9a-f]{64}$/)
     expect(manifestText).not.toMatch(/labId|userId|email|reagent|laboratory/i)
 
     const completeKey = [...r2.objects.keys()].find((key) => key.endsWith('/complete.json'))
@@ -1271,10 +1590,10 @@ describe('snapshot creation and consistency barriers', () => {
     const { result, r2 } = await runFixture(source, { kv })
 
     expect(result.code).toBe('flag_disabled_before_complete')
-    const copiedBodies = [...r2.objects.keys()].filter((key) => key.includes('/objects/'))
-    const firstPath = [...fixtures.objects]
-      .sort((left, right) => left.path.localeCompare(right.path, 'en'))[0].path
-    expect(copiedBodies).toEqual([expectSnapshotObjectKey(firstPath)])
+    const copiedBodies = [...r2.objects.keys()].filter((key) => key.startsWith('objects/sha256/'))
+    const firstObject = [...fixtures.objects]
+      .sort((left, right) => left.path.localeCompare(right.path, 'en'))[0]
+    expect(copiedBodies).toEqual([expectContentObjectKey(firstObject.body)])
     expect([...r2.objects.keys()].some((key) => key.endsWith('/manifest.json'))).toBe(false)
     expect(completeKeys(r2)).toHaveLength(0)
   })
@@ -1389,7 +1708,7 @@ describe('network, R2, checksum, and lock failures', () => {
     const fixtures = validFixtures()
     const source = new FakeSource(fixtures.pointers, fixtures.objects)
     const r2 = new FakeR2()
-    r2.failPutKeys.add(expectSnapshotObjectKey(fixtures.objects[0].path))
+    r2.failPutKeys.add(expectContentObjectKey(fixtures.objects[0].body))
     const { result } = await runFixture(source, { r2 })
     expect(result.code).toBe('r2_write_failed')
     expect(completeKeys(r2)).toHaveLength(0)
@@ -1399,7 +1718,7 @@ describe('network, R2, checksum, and lock failures', () => {
     const fixtures = validFixtures()
     const source = new FakeSource(fixtures.pointers, fixtures.objects)
     const r2 = new FakeR2()
-    r2.corruptHeadKeys.add(expectSnapshotObjectKey(fixtures.objects[0].path))
+    r2.corruptHeadKeys.add(expectContentObjectKey(fixtures.objects[0].body))
     const { result } = await runFixture(source, { r2 })
     expect(result.code).toBe('r2_checksum_failed')
     expect(completeKeys(r2)).toHaveLength(0)
@@ -1566,9 +1885,7 @@ describe('safe logging', () => {
   })
 })
 
-function expectSnapshotObjectKey(path: string): string {
-  const timestamp = new Date(FIXED_NOW).toISOString().replace(/[-:.]/g, '').toLowerCase()
-  const suffix = new Uint8Array(12).fill(9)
-  const token = Array.from(suffix, (byte) => byte.toString(16).padStart(2, '0')).join('')
-  return `snapshots/${timestamp}-${token}/objects/${path}`
+function expectContentObjectKey(body: Uint8Array): string {
+  const hash = createHash('sha256').update(body).digest('hex')
+  return `objects/sha256/${hash.slice(0, 2)}/${hash}`
 }

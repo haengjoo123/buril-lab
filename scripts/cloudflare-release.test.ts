@@ -262,7 +262,7 @@ function storageBackupBindingsFixture() {
     { name: 'SUPABASE_URL', text: 'https://qpgnomuqdcucjmxrunnw.supabase.co', type: 'plain_text' },
     { name: 'SOURCE_POINTER_MODE', text: 'legacy_url', type: 'plain_text' },
     { name: 'SOURCE_STORAGE_BUCKET', text: 'cabinets', type: 'plain_text' },
-    { name: 'WORKERS_SUBREQUEST_LIMIT', text: '1200', type: 'plain_text' },
+    { name: 'WORKERS_SUBREQUEST_LIMIT', text: '4000', type: 'plain_text' },
     { name: 'WORKERS_USAGE_PLAN', text: 'paid', type: 'plain_text' },
   ]
 }
@@ -291,7 +291,7 @@ function validStorageBackupSurfaceRaw() {
         handlers: ['scheduled'],
         named_handlers: [],
         tail_consumers: [],
-        limits: { subrequests: 1200 },
+        limits: { subrequests: 4000 },
         placement_mode: null,
       },
     }),
@@ -2446,7 +2446,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         handlers: ['scheduled'],
         named_handlers: [],
         tail_consumers: [],
-        limits: { subrequests: 1200 },
+        limits: { subrequests: 4000 },
         placement_mode: null,
         ...scriptOverrides,
       },
@@ -2470,8 +2470,8 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verify({ named_handlers: ['admin'] })).toThrow(/unapproved execution surface/)
     expect(() => verify({ tail_consumers: [{ service: 'collector' }] })).toThrow(/unapproved execution surface/)
     expect(() => verify({ limits: {} })).toThrow(/missing or unapproved fields/)
-    expect(() => verify({ limits: { subrequests: 1199 } })).toThrow(/subrequest limit has drifted/)
-    expect(() => verify({ limits: { subrequests: 1200, cpu_ms: 1000 } }))
+    expect(() => verify({ limits: { subrequests: 3999 } })).toThrow(/subrequest limit has drifted/)
+    expect(() => verify({ limits: { subrequests: 4000, cpu_ms: 1000 } }))
       .toThrow(/missing or unapproved fields/)
     expect(() => verify({ placement_mode: 'smart' })).toThrow(/unapproved execution surface/)
   })
@@ -2620,6 +2620,9 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verifyStorageBackupWorkerTokenDocumentation(
       storageBackupReadme.replace('**Workers R2 Storage Read**', '**Workers R2 Storage missing**'),
     )).toThrow(/Scripts Edit, KV Read, and R2 Read/)
+    expect(() => verifyStorageBackupWorkerTokenDocumentation(
+      storageBackupReadme.replace('**Workers R2 Storage Write**', '**Workers R2 Storage missing**'),
+    )).toThrow(/acceptance token documentation/)
     expect(createHash('sha256').update(cloudflareApiHelper.replace(/\r\n/g, '\n'), 'utf8').digest('hex'))
       .toBe('fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317')
     expect(() => verifyCloudflareApiHelperSource(`${cloudflareApiHelper}\n`))

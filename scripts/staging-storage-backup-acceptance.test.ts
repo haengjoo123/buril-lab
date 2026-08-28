@@ -25,8 +25,15 @@ function fixture() {
     const body = createExactLengthPng(item.bytes, item.rgba)
     return { ...item, sha256: createHash('sha256').update(body).digest('hex') }
   })
+  const expected = items.map((item, index) => ({
+    ...item,
+    etag: `source-etag-${index}`,
+    classification: 'referenced',
+    ownerScope: 'lab',
+    contentType: 'image/png',
+  }))
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     snapshotId: SNAPSHOT_ID,
     environment: 'staging',
     createdAt: '2026-08-27T12:00:00.000Z',
@@ -39,9 +46,12 @@ function fixture() {
     referencedObjectCount: 2,
     orphanCount: 0,
     totalBytes: 3_410_853,
-    objects: items.map((item) => ({
+    uploadedBodyCount: 2,
+    reusedBodyCount: 0,
+    objects: expected.map((item) => ({
       sourcePath: item.path,
-      backupKey: `snapshots/${SNAPSHOT_ID}/objects/${item.path}`,
+      backupKey: `objects/sha256/${item.sha256.slice(0, 2)}/${item.sha256}`,
+      etag: item.etag,
       bytes: item.bytes,
       sha256: item.sha256,
       classification: 'referenced',
@@ -52,7 +62,7 @@ function fixture() {
   const manifestBody = Buffer.from(`${JSON.stringify(manifest)}\n`)
   const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex')
   const complete = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     snapshotId: SNAPSHOT_ID,
     environment: 'staging',
     completedAt: '2026-08-27T12:00:10.000Z',
@@ -62,9 +72,11 @@ function fixture() {
     referencedObjectCount: 2,
     orphanCount: 0,
     totalBytes: 3_410_853,
+    uploadedBodyCount: 2,
+    reusedBodyCount: 0,
   }
   const latest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     snapshotId: SNAPSHOT_ID,
     environment: 'staging',
     completeKey: `snapshots/${SNAPSHOT_ID}/complete.json`,
@@ -72,7 +84,7 @@ function fixture() {
     completedAt: complete.completedAt,
     orphanCount: 0,
   }
-  return { latest, complete, manifest, manifestBody, manifestSha256 }
+  return { latest, complete, manifest, manifestBody, manifestSha256, expected }
 }
 
 describe('Staging storage backup acceptance contract', () => {
@@ -96,6 +108,7 @@ describe('Staging storage backup acceptance contract', () => {
       r2Bucket: 'buril-lab-cabinet-backups-staging',
       dailyCron: '15 17 * * *',
       objectCount: 2,
+      completeSnapshotCount: 6,
       totalBytes: 3_410_853,
     })
     expect(STAGING_STORAGE_BACKUP_ACCEPTANCE_CONTRACT.fixturePaths).toEqual([
@@ -113,6 +126,9 @@ describe('Staging storage backup acceptance contract', () => {
       manifestShaText: `${value.manifestSha256}\n`,
       startedAt: STARTED_AT,
       previousSnapshotId: 'older-snapshot',
+      expected: value.expected,
+      expectedUploadedBodyCount: 2,
+      expectedReusedBodyCount: 0,
     })).toMatchObject({ snapshotId: SNAPSHOT_ID })
   })
 
@@ -147,6 +163,9 @@ describe('Staging storage backup acceptance contract', () => {
       manifestShaText: `${value.manifestSha256}\n`,
       startedAt: STARTED_AT,
       previousSnapshotId: 'older-snapshot',
+      expected: value.expected,
+      expectedUploadedBodyCount: 2,
+      expectedReusedBodyCount: 0,
     })).toThrow()
   })
 })

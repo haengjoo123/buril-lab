@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "buckets": [
     "buril-lab-cabinet-backups-staging",
     "buril-lab-cabinet-backups-production"
@@ -14,11 +14,24 @@
       "deleteAfterDays": 31,
       "abortMultipartUploadsAfterDays": 1
     },
-    "bucketLock": {
-      "name": "retain-snapshots-30-days",
-      "prefix": "snapshots/",
-      "retainForDays": 30
-    }
+    "bucketLocks": [
+      {
+        "name": "retain-snapshots-30-days",
+        "prefix": "snapshots/",
+        "retainForDays": 30
+      },
+      {
+        "name": "retain-content-bodies-30-days",
+        "prefix": "objects/sha256/",
+        "retainForDays": 30
+      }
+    ]
+  },
+  "contentGarbageCollection": {
+    "prefix": "objects/sha256/",
+    "referenceWindowDays": 30,
+    "minimumUnreferencedAgeDays": 31,
+    "confirmationRuns": 2
   },
   "allowedCloudflareManagedRules": [
     {

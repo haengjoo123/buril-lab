@@ -2,7 +2,8 @@ const RUNTIME_CONFIG_KEY = 'runtime_config'
 const SOURCE_BUCKET = 'cabinets'
 const LOCK_KEY = 'control/active-lock.json'
 const LATEST_KEY = 'control/latest.json'
-const SNAPSHOT_SCHEMA_VERSION = 1
+const SNAPSHOT_SCHEMA_VERSION = 2
+const LEGACY_SNAPSHOT_SCHEMA_VERSION = 1
 const CLEANUP_SUBREQUEST_RESERVE = 2
 const FREE_PLATFORM_SUBREQUEST_LIMIT = 50
 const MAX_SOURCE_REDIRECTS_PER_ATTEMPT = 1
@@ -104,6 +105,10 @@ interface R2HeadLike {
   customMetadata?: Record<string, string>
 }
 
+interface R2GetLike extends R2HeadLike {
+  arrayBuffer(): Promise<ArrayBuffer>
+}
+
 interface R2PutOptionsLike {
   onlyIf?: {
     etagMatches?: string
@@ -119,6 +124,7 @@ interface R2PutOptionsLike {
 
 export interface BackupR2Bucket {
   head(key: string): Promise<R2HeadLike | null>
+  get(key: string): Promise<R2GetLike | null>
   put(
     key: string,
     value: ArrayBuffer | ArrayBufferView | string,
@@ -146,6 +152,7 @@ export interface BackupLimits {
   maxStoragePages: number
   maxStorageDepth: number
   maxPointers: number
+  maxPointersPerOwner: number
   maxStorageObjects: number
   maxJsonBytes: number
   maxObjectBytes: number
@@ -165,18 +172,19 @@ export const STORAGE_BACKUP_LIMITS: Readonly<BackupLimits> = Object.freeze({
   maxDbPages: 5,
   maxStoragePages: 25,
   maxStorageDepth: 8,
-  maxPointers: 50,
-  maxStorageObjects: 50,
+  maxPointers: 250,
+  maxPointersPerOwner: 50,
+  maxStorageObjects: 250,
   maxJsonBytes: 1_048_576,
   maxObjectBytes: 20 * 1_048_576,
-  maxTotalBytes: 2 * 1_073_741_824,
+  maxTotalBytes: 250 * 20 * 1_048_576,
   requestTimeoutMs: 5_000,
   retryCount: 2,
   retryDelayMs: 150,
   lockTtlMs: 30 * 60_000,
   maxLockClockSkewMs: 60_000,
   maxRunDurationMs: 14 * 60_000,
-  maxSubrequests: 1_200,
+  maxSubrequests: 4_000,
 })
 
 interface RunGuard {
@@ -239,6 +247,7 @@ interface BackupPlanEntry {
 interface BackedObject {
   sourcePath: string
   backupKey: string
+  etag: string
   bytes: number
   sha256: string
   classification: 'referenced' | 'unreferenced'
@@ -408,7 +417,10 @@ export function calculateWorstCaseSubrequests(limits: BackupLimits): number {
   ) * attempts
   const sourceRequests = sourceRequestAttempts * (MAX_SOURCE_REDIRECTS_PER_ATTEMPT + 1)
   const runtimeFlagReads = limits.maxPointers + 5
-  const r2Requests = (3 * limits.maxStorageObjects) + 15
+  // A worst-case v2 run reads the previous pointer/completion/manifest, checks
+  // every content-addressed body, rewrites every body, verifies every body
+  // again before completion, and still reserves the fixed lock/document calls.
+  const r2Requests = (4 * limits.maxStorageObjects) + 18
   return sourceRequests + runtimeFlagReads + r2Requests
 }
 
@@ -423,7 +435,9 @@ function isValidLimits(limits: BackupLimits): boolean {
     && limits.maxDbPages <= 10
     && limits.maxStoragePages <= 50
     && limits.maxPointers === limits.maxStorageObjects
-    && limits.maxPointers <= 100
+    && limits.maxPointers <= 500
+    && limits.maxPointersPerOwner <= 50
+    && limits.maxPointersPerOwner <= limits.maxPointers
     && limits.retryCount <= 5
     && limits.maxObjectBytes <= limits.maxTotalBytes
     && maximumPossibleBytes <= limits.maxTotalBytes
@@ -571,6 +585,7 @@ export function resolveSourceConfig(
   if (
     !bindings.CABINET_BACKUPS
     || typeof bindings.CABINET_BACKUPS.head !== 'function'
+    || typeof bindings.CABINET_BACKUPS.get !== 'function'
     || typeof bindings.CABINET_BACKUPS.put !== 'function'
     || !isValidLimits(limits)
   ) {
@@ -1072,16 +1087,22 @@ function storageFingerprint(rows: StorageObject[]): string {
 function buildBackupPlan(
   pointers: CabinetPointer[],
   objects: StorageObject[],
+  limits: BackupLimits,
 ): BackupPlanEntry[] {
   if (objects.length === 0) fail('empty_source')
   const storageByPath = new Map(objects.map((object) => [object.path, object]))
   const referenced = new Set<string>()
+  const referencedByOwner = new Map<string, number>()
   const plan: BackupPlanEntry[] = []
 
   for (const pointer of pointers) {
     const hasLab = pointer.labId !== null
     const hasUser = pointer.userId !== null
     if (!hasLab && !hasUser) fail('ownership_ambiguous')
+    const ownerKey = hasLab ? `lab:${pointer.labId}` : `user:${pointer.userId}`
+    const ownerCount = (referencedByOwner.get(ownerKey) ?? 0) + 1
+    if (ownerCount > limits.maxPointersPerOwner) fail('source_limit_exceeded')
+    referencedByOwner.set(ownerKey, ownerCount)
     const object = storageByPath.get(pointer.objectPath)
     if (!object) fail('pointer_missing_object')
     referenced.add(pointer.objectPath)
@@ -1396,6 +1417,326 @@ function jsonDocument(value: unknown): Uint8Array {
   return textBytes(`${JSON.stringify(value)}\n`)
 }
 
+function hasExactObjectKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const wanted = [...expected].sort()
+  return actual.length === wanted.length
+    && actual.every((key, index) => key === wanted[index])
+}
+
+function isCanonicalTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
+}
+
+function isSnapshotId(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length >= 8
+    && value.length <= 128
+    && /^[a-z0-9-]+$/.test(value)
+}
+
+function isSha256Hex(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value)
+}
+
+function sha256Bytes(value: string): ArrayBuffer {
+  if (!isSha256Hex(value)) fail('r2_verify_failed')
+  const bytes = new Uint8Array(32)
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(value.slice(index * 2, (index * 2) + 2), 16)
+  }
+  return bytes.buffer
+}
+
+function contentAddressKey(value: string): string {
+  if (!isSha256Hex(value)) fail('r2_verify_failed')
+  return `objects/sha256/${value.slice(0, 2)}/${value}`
+}
+
+function isStoredSourcePath(value: unknown): value is string {
+  if (
+    typeof value !== 'string'
+    || value.length < 1
+    || value.length > 1_024
+    || value !== value.trim()
+    || value.startsWith('/')
+    || value.endsWith('/')
+    || value.includes('//')
+    || hasControlCharacters(value)
+    || value.includes('\\')
+  ) {
+    return false
+  }
+  return value.split('/').every((segment) => (
+    segment.length >= 1
+    && segment.length <= 255
+    && segment !== '.'
+    && segment !== '..'
+    && !hasControlCharacters(segment)
+  ))
+}
+
+async function readR2Bytes(
+  config: SourceConfig,
+  key: string,
+  maximumBytes: number,
+  dependencies: BackupDependencies,
+): Promise<Uint8Array | null> {
+  let object: R2GetLike | null
+  try {
+    consumeSubrequest(dependencies)
+    object = await config.r2.get(key)
+  } catch {
+    fail('r2_verify_failed')
+  }
+  if (object === null) return null
+  if (
+    object.key !== key
+    || !Number.isSafeInteger(object.size)
+    || object.size < 1
+    || object.size > maximumBytes
+  ) {
+    fail('r2_verify_failed')
+  }
+
+  let raw: ArrayBuffer
+  try {
+    raw = await object.arrayBuffer()
+  } catch {
+    fail('r2_verify_failed')
+  }
+  const body = new Uint8Array(raw)
+  if (body.byteLength !== object.size) fail('r2_verify_failed')
+  const digest = await sha256(body)
+  if (!equalBytes(object.checksums.sha256, digest.bytes)) fail('r2_checksum_failed')
+  return body
+}
+
+function parseJsonObject(body: Uint8Array): Record<string, unknown> {
+  try {
+    const value = JSON.parse(new TextDecoder().decode(body)) as unknown
+    if (!isRecord(value)) fail('r2_verify_failed')
+    return value
+  } catch (error) {
+    if (error instanceof BackupFailure) throw error
+    fail('r2_verify_failed')
+  }
+}
+
+function parsePreviousManifestObject(value: unknown): BackedObject {
+  if (!isRecord(value)) fail('r2_verify_failed')
+  const classification = value.classification
+  const expectedKeys = classification === 'referenced'
+    ? ['sourcePath', 'backupKey', 'etag', 'bytes', 'sha256', 'classification', 'ownerScope', 'contentType']
+    : ['sourcePath', 'backupKey', 'etag', 'bytes', 'sha256', 'classification', 'contentType']
+  if (
+    !hasExactObjectKeys(value, expectedKeys)
+    || (classification !== 'referenced' && classification !== 'unreferenced')
+    || !isStoredSourcePath(value.sourcePath)
+    || !isSha256Hex(value.sha256)
+    || value.backupKey !== contentAddressKey(value.sha256)
+    || typeof value.etag !== 'string'
+    || normalizeEtag(value.etag) !== value.etag
+    || !Number.isSafeInteger(value.bytes)
+    || (value.bytes as number) <= 0
+    || typeof value.contentType !== 'string'
+    || value.contentType.length < 1
+    || value.contentType.length > 200
+    || hasControlCharacters(value.contentType)
+    || (classification === 'referenced' && value.ownerScope !== 'lab' && value.ownerScope !== 'user')
+  ) {
+    fail('r2_verify_failed')
+  }
+  return {
+    sourcePath: value.sourcePath,
+    backupKey: value.backupKey as string,
+    etag: value.etag,
+    bytes: value.bytes as number,
+    sha256: value.sha256,
+    classification,
+    ...(classification === 'referenced' ? { ownerScope: value.ownerScope as 'lab' | 'user' } : {}),
+    contentType: value.contentType,
+  }
+}
+
+async function readPreviousManifest(
+  config: SourceConfig,
+  dependencies: BackupDependencies,
+): Promise<Map<string, BackedObject>> {
+  const empty = new Map<string, BackedObject>()
+  const latestBody = await readR2Bytes(config, LATEST_KEY, dependencies.limits.maxJsonBytes, dependencies)
+  if (latestBody === null) return empty
+  const latest = parseJsonObject(latestBody)
+  if (
+    !hasExactObjectKeys(latest, [
+      'schemaVersion', 'snapshotId', 'environment', 'completeKey',
+      'manifestSha256', 'completedAt', 'orphanCount',
+    ])
+    || (latest.schemaVersion !== LEGACY_SNAPSHOT_SCHEMA_VERSION
+      && latest.schemaVersion !== SNAPSHOT_SCHEMA_VERSION)
+    || !isSnapshotId(latest.snapshotId)
+    || latest.environment !== config.environment
+    || latest.completeKey !== `snapshots/${latest.snapshotId}/complete.json`
+    || !isSha256Hex(latest.manifestSha256)
+    || !isCanonicalTimestamp(latest.completedAt)
+    || !Number.isSafeInteger(latest.orphanCount)
+    || (latest.orphanCount as number) < 0
+  ) {
+    fail('r2_verify_failed')
+  }
+  if (latest.schemaVersion === LEGACY_SNAPSHOT_SCHEMA_VERSION) return empty
+
+  const completeBody = await readR2Bytes(
+    config,
+    latest.completeKey as string,
+    dependencies.limits.maxJsonBytes,
+    dependencies,
+  )
+  if (completeBody === null) fail('r2_verify_failed')
+  const complete = parseJsonObject(completeBody)
+  const manifestKey = `snapshots/${latest.snapshotId}/manifest.json`
+  if (
+    !hasExactObjectKeys(complete, [
+      'schemaVersion', 'snapshotId', 'environment', 'completedAt', 'manifestKey',
+      'manifestSha256', 'objectCount', 'referencedObjectCount', 'orphanCount',
+      'totalBytes', 'uploadedBodyCount', 'reusedBodyCount',
+    ])
+    || complete.schemaVersion !== SNAPSHOT_SCHEMA_VERSION
+    || complete.snapshotId !== latest.snapshotId
+    || complete.environment !== config.environment
+    || complete.completedAt !== latest.completedAt
+    || complete.manifestKey !== manifestKey
+    || complete.manifestSha256 !== latest.manifestSha256
+    || complete.orphanCount !== latest.orphanCount
+  ) {
+    fail('r2_verify_failed')
+  }
+
+  const manifestBody = await readR2Bytes(config, manifestKey, dependencies.limits.maxJsonBytes, dependencies)
+  if (manifestBody === null) fail('r2_verify_failed')
+  const manifestDigest = await sha256(manifestBody)
+  if (manifestDigest.hex !== latest.manifestSha256) fail('r2_checksum_failed')
+  const manifest = parseJsonObject(manifestBody)
+  if (
+    !hasExactObjectKeys(manifest, [
+      'schemaVersion', 'snapshotId', 'environment', 'createdAt', 'source',
+      'objectCount', 'referencedObjectCount', 'orphanCount', 'totalBytes',
+      'uploadedBodyCount', 'reusedBodyCount', 'objects',
+    ])
+    || manifest.schemaVersion !== SNAPSHOT_SCHEMA_VERSION
+    || manifest.snapshotId !== latest.snapshotId
+    || manifest.environment !== config.environment
+    || !isCanonicalTimestamp(manifest.createdAt)
+    || !isRecord(manifest.source)
+    || !hasExactObjectKeys(manifest.source, ['supabaseProjectRef', 'storageBucket', 'pointerMode'])
+    || manifest.source.supabaseProjectRef !== config.projectRef
+    || manifest.source.storageBucket !== SOURCE_BUCKET
+    || manifest.source.pointerMode !== config.pointerMode
+    || !Array.isArray(manifest.objects)
+  ) {
+    fail('r2_verify_failed')
+  }
+
+  const parsed = manifest.objects.map(parsePreviousManifestObject)
+  if (parsed.length > dependencies.limits.maxStorageObjects) fail('r2_verify_failed')
+  const paths = new Set<string>()
+  for (const object of parsed) {
+    if (paths.has(object.sourcePath)) fail('r2_verify_failed')
+    if (object.bytes > dependencies.limits.maxObjectBytes) fail('r2_verify_failed')
+    paths.add(object.sourcePath)
+  }
+  const objectCount = parsed.length
+  const orphanCount = parsed.filter((object) => object.classification === 'unreferenced').length
+  const referencedObjectCount = objectCount - orphanCount
+  const totalBytes = parsed.reduce((sum, object) => sum + object.bytes, 0)
+  const uploadedBodyCount = manifest.uploadedBodyCount
+  const reusedBodyCount = manifest.reusedBodyCount
+  if (
+    manifest.objectCount !== objectCount
+    || manifest.referencedObjectCount !== referencedObjectCount
+    || manifest.orphanCount !== orphanCount
+    || manifest.totalBytes !== totalBytes
+    || !Number.isSafeInteger(totalBytes)
+    || totalBytes > dependencies.limits.maxTotalBytes
+    || !Number.isSafeInteger(uploadedBodyCount)
+    || (uploadedBodyCount as number) < 0
+    || !Number.isSafeInteger(reusedBodyCount)
+    || (reusedBodyCount as number) < 0
+    || (uploadedBodyCount as number) + (reusedBodyCount as number) !== objectCount
+    || complete.objectCount !== objectCount
+    || complete.referencedObjectCount !== referencedObjectCount
+    || complete.orphanCount !== orphanCount
+    || complete.totalBytes !== totalBytes
+    || complete.uploadedBodyCount !== uploadedBodyCount
+    || complete.reusedBodyCount !== reusedBodyCount
+  ) {
+    fail('r2_verify_failed')
+  }
+  return new Map(parsed.map((object) => [object.sourcePath, object]))
+}
+
+async function readR2Head(
+  config: SourceConfig,
+  key: string,
+  dependencies: BackupDependencies,
+): Promise<R2HeadLike | null> {
+  try {
+    consumeSubrequest(dependencies)
+    return await config.r2.head(key)
+  } catch {
+    fail('r2_verify_failed')
+  }
+}
+
+function contentHeadMatches(
+  head: R2HeadLike | null,
+  key: string,
+  bytes: number,
+  digestHex: string,
+): boolean {
+  return Boolean(
+    head
+    && head.key === key
+    && head.size === bytes
+    && normalizeEtag(head.etag)
+    && equalBytes(head.checksums.sha256, sha256Bytes(digestHex)),
+  )
+}
+
+async function ensureContentBody(
+  config: SourceConfig,
+  body: Uint8Array,
+  digest: { bytes: ArrayBuffer; hex: string },
+  contentType: string,
+  dependencies: BackupDependencies,
+  inspectedHead?: R2HeadLike | null,
+): Promise<{ backupKey: string; uploaded: boolean }> {
+  const backupKey = contentAddressKey(digest.hex)
+  const existing = inspectedHead === undefined
+    ? await readR2Head(config, backupKey, dependencies)
+    : inspectedHead
+  if (contentHeadMatches(existing, backupKey, body.byteLength, digest.hex)) {
+    return { backupKey, uploaded: false }
+  }
+  if (existing && !normalizeEtag(existing.etag)) fail('r2_verify_failed')
+
+  await requireStorageBackupEnabled(config, dependencies)
+  await putVerified(
+    config.r2,
+    backupKey,
+    body,
+    dependencies,
+    existing ? { etagMatches: existing.etag } : { etagDoesNotMatch: '*' },
+    {
+      customMetadata: { 'content-sha256': digest.hex },
+      httpMetadata: { contentType, cacheControl: 'no-store' },
+    },
+  )
+  return { backupKey, uploaded: true }
+}
+
 async function updateLatest(
   config: SourceConfig,
   body: Uint8Array,
@@ -1427,7 +1768,7 @@ async function executeBackup(
   const firstStorageList = await listStorageObjects(config, dependencies)
   const secondStorageList = await listStorageObjects(config, dependencies)
   if (storageFingerprint(firstStorageList) !== storageFingerprint(secondStorageList)) fail('source_drift')
-  const plan = buildBackupPlan(pointers, firstStorageList)
+  const plan = buildBackupPlan(pointers, firstStorageList, dependencies.limits)
 
   const totalListedBytes = plan.reduce((sum, entry) => sum + entry.object.size, 0)
   if (!Number.isSafeInteger(totalListedBytes) || totalListedBytes > dependencies.limits.maxTotalBytes) {
@@ -1436,42 +1777,81 @@ async function executeBackup(
 
   const runId = createRunId(dependencies)
   const prefix = `snapshots/${runId}`
+  const previousObjects = await readPreviousManifest(config, dependencies)
   const backedObjects: BackedObject[] = []
+  let uploadedBodyCount = 0
 
   for (const entry of plan) {
-    const downloaded = await downloadObject(entry.object, config, dependencies)
-    const digest = await sha256(downloaded.body)
-    const backupKey = entry.classification === 'referenced'
-      ? `${prefix}/objects/${entry.object.path}`
-      : `${prefix}/quarantine/unreferenced/${entry.object.path}`
-    const customMetadata: Record<string, string> = {
-      'source-sha256': digest.hex,
-      classification: entry.classification,
-    }
-    if (entry.ownerScope) customMetadata['owner-scope'] = entry.ownerScope
+    const previous = previousObjects.get(entry.object.path)
+    let backupKey = ''
+    let digestHex = ''
+    let contentType = ''
+    let uploaded = false
 
-    await requireStorageBackupEnabled(config, dependencies)
-    await putNewVerified(config.r2, backupKey, downloaded.body, dependencies, {
-      customMetadata,
-      httpMetadata: {
-        contentType: downloaded.contentType,
-        cacheControl: 'no-store',
-      },
-    })
+    if (
+      previous
+      && previous.etag === entry.object.etag
+      && previous.bytes === entry.object.size
+    ) {
+      const previousHead = await readR2Head(config, previous.backupKey, dependencies)
+      if (contentHeadMatches(
+        previousHead,
+        previous.backupKey,
+        previous.bytes,
+        previous.sha256,
+      )) {
+        backupKey = previous.backupKey
+        digestHex = previous.sha256
+        contentType = previous.contentType
+      } else {
+        const downloaded = await downloadObject(entry.object, config, dependencies)
+        const digest = await sha256(downloaded.body)
+        const stored = await ensureContentBody(
+          config,
+          downloaded.body,
+          digest,
+          downloaded.contentType,
+          dependencies,
+          contentAddressKey(digest.hex) === previous.backupKey ? previousHead : undefined,
+        )
+        backupKey = stored.backupKey
+        digestHex = digest.hex
+        contentType = downloaded.contentType
+        uploaded = stored.uploaded
+      }
+    } else {
+      const downloaded = await downloadObject(entry.object, config, dependencies)
+      const digest = await sha256(downloaded.body)
+      const stored = await ensureContentBody(
+        config,
+        downloaded.body,
+        digest,
+        downloaded.contentType,
+        dependencies,
+      )
+      backupKey = stored.backupKey
+      digestHex = digest.hex
+      contentType = downloaded.contentType
+      uploaded = stored.uploaded
+    }
+    if (uploaded) uploadedBodyCount += 1
+
     backedObjects.push({
       sourcePath: entry.object.path,
       backupKey,
-      bytes: downloaded.body.byteLength,
-      sha256: digest.hex,
+      etag: entry.object.etag,
+      bytes: entry.object.size,
+      sha256: digestHex,
       classification: entry.classification,
       ownerScope: entry.ownerScope,
-      contentType: downloaded.contentType,
+      contentType,
     })
   }
 
   const totalBytes = backedObjects.reduce((sum, object) => sum + object.bytes, 0)
   const orphanCount = backedObjects.filter((object) => object.classification === 'unreferenced').length
   const referencedObjectCount = backedObjects.length - orphanCount
+  const reusedBodyCount = backedObjects.length - uploadedBodyCount
   const createdAt = new Date(dependencies.now()).toISOString()
   const manifest = {
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
@@ -1487,6 +1867,8 @@ async function executeBackup(
     referencedObjectCount,
     orphanCount,
     totalBytes,
+    uploadedBodyCount,
+    reusedBodyCount,
     objects: backedObjects,
   }
   const manifestBody = jsonDocument(manifest)
@@ -1546,6 +1928,8 @@ async function executeBackup(
     referencedObjectCount,
     orphanCount,
     totalBytes,
+    uploadedBodyCount,
+    reusedBodyCount,
   }
   const completeBody = jsonDocument(completion)
   await putNewVerified(config.r2, completeKey, completeBody, dependencies, {
