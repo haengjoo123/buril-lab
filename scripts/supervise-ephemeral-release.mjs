@@ -534,6 +534,7 @@ export function readHiddenTtyLine({ input = process.stdin, output = process.stdo
       input.off('error', onError)
       input.off('end', onEnd)
       input.setRawMode(false)
+      input.pause()
       output.write('\n')
       if (error) rejectPromise(error)
       else resolvePromise(value)
@@ -696,11 +697,39 @@ function validateDispatchedRun(run, contract, expectedTitle, commitSha, expected
   return run
 }
 
+function validateRecoverableJournalRun(run, contract, expectedTitle, commitSha, expectedRunId = null) {
+  try {
+    return validateDispatchedRun(run, contract, expectedTitle, commitSha, expectedRunId)
+  } catch (error) {
+    if (
+      !run
+      || !FULL_SHA_PATTERN.test(run.headSha || '')
+      || run.headSha === commitSha
+      || !failedBeforePagesMutation(run, contract)
+    ) throw error
+
+    // A workflow_dispatch always runs from the then-current main. If main
+    // advances between the signed dispatch intent and GitHub creating the run,
+    // the workflow rejects the requested SHA before any Pages job can run. Keep
+    // every other lease identity check exact, and accept the differing head only
+    // for that terminal, pre-mutation recovery case.
+    validateDispatchedRun(
+      { ...run, headSha: commitSha },
+      contract,
+      expectedTitle,
+      commitSha,
+      expectedRunId,
+    )
+    return run
+  }
+}
+
 export function credentialGateResult(run, contract) {
   if (!Array.isArray(run?.jobs)) return 'indeterminate'
   const jobs = run.jobs.filter((job) => job?.name === contract.jobName)
   if (jobs.length !== 1 || jobs[0].status !== 'completed') return 'indeterminate'
   const steps = Array.isArray(jobs[0].steps) ? jobs[0].steps : []
+  if (jobs[0].conclusion === 'skipped' && steps.length === 0) return 'failed'
   const conclusions = [
     'Verify the signed current ephemeral lease',
     'Verify the signed cumulative credential cleanup receipt',
@@ -755,6 +784,7 @@ export function failedBeforePagesMutation(run, contract) {
   ) return false
   const jobs = run.jobs.filter((job) => job?.name === contract.jobName)
   if (jobs.length !== 1 || jobs[0].status !== 'completed' || !Array.isArray(jobs[0].steps)) return false
+  if (jobs[0].conclusion === 'skipped' && jobs[0].steps.length === 0) return true
   const mutationSteps = jobs[0].steps.filter((step) => step?.name === contract.pagesMutationStep)
   return mutationSteps.length === 1
     && mutationSteps[0].status === 'completed'
@@ -1340,7 +1370,7 @@ export async function findJournalRun(pending, {
   const expectedTitle = expectedJournalRunTitle(pending.payload)
   if (pending.payload.run_evidence) {
     const details = await getRunDetails(pending.payload.run_evidence.run_id)
-    return validateDispatchedRun(
+    return validateRecoverableJournalRun(
       details,
       contract,
       expectedTitle,
@@ -1372,7 +1402,7 @@ export async function findJournalRun(pending, {
       for (const candidate of runs) {
         if (
           candidate?.display_title === expectedTitle
-          && candidate?.head_sha === pending.payload.commit_sha
+          && FULL_SHA_PATTERN.test(candidate?.head_sha || '')
           && Number.isSafeInteger(candidate?.id)
           && candidate.id > 0
           && Number.isFinite(Date.parse(candidate?.created_at))
@@ -1402,7 +1432,7 @@ export async function findJournalRun(pending, {
     if (matchingRunIds.size === 1) {
       const [runId] = matchingRunIds
       const details = await getRunDetails(runId)
-      return validateDispatchedRun(
+      return validateRecoverableJournalRun(
         details,
         contract,
         expectedTitle,
