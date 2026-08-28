@@ -1,6 +1,7 @@
 ﻿/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
+    fetchWasteLogById,
     fetchWasteLogItemsV2,
     fetchWasteLogs,
     isLegacyWasteLog,
@@ -578,6 +579,9 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const voidDialogRef = useRef<HTMLDivElement>(null);
     const initialRecordHandledRef = useRef(false);
+    const initialRecordPresentedRef = useRef(false);
+    const initialRecordRequestRef = useRef(0);
+    const [linkedLog, setLinkedLog] = useState<WasteLogRecord | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchInput, setSearchInput] = useState('');
     const [activeTab, setActiveTab] = useState<LogViewTab>('recent');
@@ -669,6 +673,13 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         setLoadedLabId(undefined);
         setIsLoading(true);
     }, [currentLabId]);
+
+    useLayoutEffect(() => {
+        initialRecordHandledRef.current = false;
+        initialRecordPresentedRef.current = false;
+        initialRecordRequestRef.current += 1;
+        setLinkedLog(null);
+    }, [currentLabId, initialWasteLogId]);
 
     const loadV2Items = useCallback(async (wasteLogId: string, force = false) => {
         if (!force && Object.prototype.hasOwnProperty.call(v2ItemsCacheRef.current, wasteLogId)) return;
@@ -862,8 +873,12 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     };
 
     // 시약명 포함 클라이언트 필터 (서버는 분류/처리자/메모만 검색)
+    const visibleLogs = linkedLog && !logs.some(log => log.id === linkedLog.id)
+        ? [linkedLog, ...logs]
+        : logs;
+
     const filteredLogs = searchQuery
-        ? logs.filter(log => {
+        ? visibleLogs.filter(log => {
             const q = searchQuery.toLowerCase();
             const matchText =
                 log.disposal_category?.toLowerCase().includes(q) ||
@@ -879,7 +894,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             );
             return matchText || matchChemical;
         })
-        : logs;
+        : visibleLogs;
 
     const groupedSections = useMemo(
         () => sortBy === 'created_at'
@@ -945,15 +960,54 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     }, [canVoidLog]);
 
     useEffect(() => {
-        if (initialRecordHandledRef.current || !initialWasteLogId || logs.length === 0) return;
-        const target = logs.find((log) => log.id === initialWasteLogId);
-        if (!target) return;
+        if (
+            initialRecordHandledRef.current
+            || !initialWasteLogId
+            || loadedLabId !== currentLabId
+        ) return;
+
+        if (logs.some((log) => log.id === initialWasteLogId)) {
+            initialRecordHandledRef.current = true;
+            return;
+        }
 
         initialRecordHandledRef.current = true;
+        const requestId = ++initialRecordRequestRef.current;
+        const requestLabId = currentLabId;
+        void fetchWasteLogById(initialWasteLogId)
+            .then((target) => {
+                if (
+                    requestId !== initialRecordRequestRef.current
+                    || requestLabId !== useLabStore.getState().currentLabId
+                ) return;
+                setLinkedLog(target);
+            })
+            .catch(() => {
+                if (
+                    requestId === initialRecordRequestRef.current
+                    && requestLabId === useLabStore.getState().currentLabId
+                ) setError(t('log_fetch_error'));
+            });
+    }, [currentLabId, initialWasteLogId, loadedLabId, logs, t]);
+
+    useEffect(() => {
+        if (initialRecordPresentedRef.current || !initialWasteLogId) return;
+        const target = filteredLogs.find((log) => log.id === initialWasteLogId);
+        if (!target) return;
+
+        initialRecordPresentedRef.current = true;
         setSelectedDesktopLogId(target.id);
         setExpandedId(target.id);
+        const targetSection = groupedSections.find((section) => (
+            section.logs.some((log) => log.id === target.id)
+        ));
+        if (targetSection) {
+            setExpandedSections((current) => current[targetSection.key]
+                ? current
+                : { ...current, [targetSection.key]: true });
+        }
         if (openCorrection) openVoidDialog(target);
-    }, [initialWasteLogId, logs, openCorrection, openVoidDialog]);
+    }, [filteredLogs, groupedSections, initialWasteLogId, openCorrection, openVoidDialog]);
 
     const closeVoidDialog = useCallback(() => {
         if (isVoiding) return;

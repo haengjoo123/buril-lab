@@ -1050,6 +1050,32 @@ export async function fetchWasteLogs(
     };
 }
 
+/** Fetch one waste log by its stable link id without widening the active lab scope. */
+export async function fetchWasteLogById(id: string): Promise<WasteLogRecord | null> {
+    assertUuid(id, 'wasteLogId');
+    const { currentLabId } = useLabStore.getState();
+
+    let query = supabase
+        .from('waste_logs')
+        .select('*')
+        .eq('id', id);
+
+    if (currentLabId) {
+        query = query.eq('lab_id', currentLabId);
+    } else {
+        query = query.is('lab_id', null);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+        console.error('Failed to fetch waste log by id:', error);
+        throw error;
+    }
+
+    return data ? normalizeWasteLogRow(data) : null;
+}
+
 /**
  * Read the canonical component rows for one V2 waste log.
  *
