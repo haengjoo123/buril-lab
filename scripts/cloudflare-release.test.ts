@@ -840,7 +840,14 @@ describe('Prep 0 Cloudflare release controls', () => {
     const generated = join(directory, 'wrangler.generated.jsonc')
     const redirect = join(directory, '.wrangler', 'deploy', 'config.json')
     try {
-      await writeFile(template, source, 'utf8')
+      await writeFile(template, `{
+        "id": "__BURILLAB_STAGING_RUNTIME_CONFIG_KV_ID__",
+        "env": {
+          "preview": {
+            "vars": { "APP_ENVIRONMENT": "preview-disabled" }
+          }
+        }
+      }`, 'utf8')
       await expect(renderWranglerConfig({ input: template, output: template })).rejects.toThrow(/overwrite/)
       await renderWranglerConfig({
         input: template,
@@ -849,6 +856,8 @@ describe('Prep 0 Cloudflare release controls', () => {
       })
       const result = await writePagesDeployRedirect({ config: generated, output: redirect })
       expect(result.relativeConfigPath).toBe('../../wrangler.generated.jsonc')
+      expect(result.environmentsRemoved).toBe(true)
+      expect(JSON.parse(await readFile(generated, 'utf8'))).toEqual({ id: 'a'.repeat(32) })
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
