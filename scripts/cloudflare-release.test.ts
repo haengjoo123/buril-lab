@@ -1758,6 +1758,34 @@ describe('Prep 0 Cloudflare release controls', () => {
       now: QUALITY_NOW,
     })).toBe(olderSuccess)
 
+    const currentGithubApiShape = {
+      ...olderSuccess,
+      name: olderSuccess.display_title,
+    }
+    expect(findTrustedStagingRun([currentGithubApiShape], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toBe(currentGithubApiShape)
+
+    expect(() => findTrustedStagingRun([{
+      ...currentGithubApiShape,
+      name: 'Unrelated workflow title',
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/No trusted Deploy staging run/)
+    expect(() => findTrustedStagingRun([{
+      ...currentGithubApiShape,
+      display_title: `Deploy staging ${'f'.repeat(40)} (lease=${'a'.repeat(32)}, storage-backup=false)`,
+      name: `Deploy staging ${'f'.repeat(40)} (lease=${'a'.repeat(32)}, storage-backup=false)`,
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      now: QUALITY_NOW,
+    })).toThrow(/No trusted Deploy staging run/)
+
     const newerPending = {
       ...olderSuccess,
       id: 32,
