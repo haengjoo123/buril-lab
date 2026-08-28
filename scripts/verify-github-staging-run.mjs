@@ -6,6 +6,7 @@ const MAX_RESPONSE_BYTES = 1024 * 1024
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const TRUSTED_WORKFLOW_NAME = 'Deploy staging'
 const TRUSTED_WORKFLOW_PATH = '.github/workflows/deploy-staging.yml'
+const TRUSTED_RUN_TITLE = /^Deploy staging ([0-9a-f]{40}) \(lease=([0-9a-f]{32}), storage-backup=(true|false)\)$/
 const TRUSTED_BUILD_JOB_NAME = 'Build exact Staging artifact without deployment credentials'
 const TRUSTED_DEPLOY_JOB_NAME = 'Supervised deploy of verified commit to buril-lab-staging'
 const TRUSTED_WORKER_JOB_NAME = 'Supervised fresh-runner deploy of the OFF-only Staging backup Worker'
@@ -61,8 +62,14 @@ function parseNow(now) {
 }
 
 function isTrustedStagingRun(candidate, repository, commitSha) {
+  const titleMatch = typeof candidate?.display_title === 'string'
+    ? candidate.display_title.match(TRUSTED_RUN_TITLE)
+    : null
+  const apiNameMatches = candidate?.name === TRUSTED_WORKFLOW_NAME
+    || candidate?.name === candidate?.display_title
   return (
-    candidate?.name === TRUSTED_WORKFLOW_NAME
+    apiNameMatches
+    && titleMatch?.[1] === commitSha
     && candidate?.path === TRUSTED_WORKFLOW_PATH
     && candidate?.event === 'workflow_dispatch'
     && candidate?.head_branch === 'main'
