@@ -45,6 +45,7 @@ import {
 const NOW = Date.parse('2026-08-25T04:30:00.000Z')
 const TARGET_REF = 'b'.repeat(20)
 const CONFIRMATION_ID = 'approval-20260825-0001'
+const BASE64_CONFIRMATION_ID = `${'A'.repeat(20)}+${'B'.repeat(22)}=`
 const BODY = Buffer.from('body-content', 'utf8')
 const BODY_SHA256 = createHash('sha256').update(BODY).digest('hex')
 const ORPHAN_BODY = Buffer.from('unreferenced-body', 'utf8')
@@ -364,6 +365,19 @@ describe('fixed and live Supabase recovery identity', () => {
     })
   })
 
+  it('normalizes the live hourly Micro usage price to the reviewed monthly display', () => {
+    const probe = validLiveProbe()
+    probe.targetAddons.selected_addons[0].variant.price = {
+      interval: 'hourly',
+      type: 'usage',
+      amount: 0.01344,
+    }
+    expect(verifySupabaseLiveRecoveryProbe({
+      ...probe,
+      targetProjectRef: TARGET_REF,
+    })).toMatchObject({ displayedMonthlyUsd: 10 })
+  })
+
   it.each([
     ['arbitrary production ref', (probe: ReturnType<typeof validLiveProbe>) => { probe.sourceProject.ref = 'x'.repeat(20) }],
     ['wrong live target ref', (probe: ReturnType<typeof validLiveProbe>) => { probe.targetProject.ref = 'y'.repeat(20) }],
@@ -440,6 +454,19 @@ describe('external cost confirmation and evidence', () => {
     ).toFixed(2))).toBe(RECOVERY_EXPECTATIONS.displayedMonthlyUsd)
     expect(verifyExternalCostConfirmation({
       externalConfirmation: validExternalConfirmation(),
+      capturedAt: Date.parse(validEvidence().capturedAt),
+      liveDisplayedMonthlyUsd: 10,
+    })).toMatchObject({ expectedComputeCostUsd: 0.32256 })
+  })
+
+  it('accepts the standard Base64 confirmation ID format issued by the cost tool', () => {
+    const externalConfirmation = {
+      ...validExternalConfirmation(),
+      confirmationId: BASE64_CONFIRMATION_ID,
+      marker: expectedCostConfirmation(BASE64_CONFIRMATION_ID),
+    }
+    expect(verifyExternalCostConfirmation({
+      externalConfirmation,
       capturedAt: Date.parse(validEvidence().capturedAt),
       liveDisplayedMonthlyUsd: 10,
     })).toMatchObject({ expectedComputeCostUsd: 0.32256 })

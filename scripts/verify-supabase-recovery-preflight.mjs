@@ -133,7 +133,7 @@ const ZIP_LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50
 const PROJECT_REF_PATTERN = /^[a-z0-9]{20}$/
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
 const SNAPSHOT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{7,127}$/
-const CONFIRMATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/
+const CONFIRMATION_ID_PATTERN = /^(?:[A-Za-z0-9][A-Za-z0-9._:-]{7,127}|(?=.{8,128}$)(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/
 const SENSITIVE_KEY_PATTERN = /(?:password|secret|token|credential|service.?role|api.?key|connection.?string|database.?url)/i
 const ISO_UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 const LOCAL_PROBE_PASSTHROUGH_ENVIRONMENT_NAMES = new Set([
@@ -360,18 +360,33 @@ export function verifySupabaseLiveRecoveryProbe({
   if (computeVariant.id !== RECOVERY_EXPECTATIONS.targetComputeVariant) {
     throw new Error('Live recovery target compute variant is not Micro.')
   }
-  if (
-    !isRecord(computeVariant.price)
-    || computeVariant.price.interval !== 'monthly'
-    || computeVariant.price.amount !== RECOVERY_EXPECTATIONS.displayedMonthlyUsd
-  ) {
+  if (!isRecord(computeVariant.price)) {
+    throw new Error('Live Micro monthly display cost does not match the reviewed USD 10 expectation.')
+  }
+  const usesReviewedMonthlyDisplay = (
+    computeVariant.price.interval === 'monthly'
+    && computeVariant.price.amount === RECOVERY_EXPECTATIONS.displayedMonthlyUsd
+  )
+  const usesReviewedHourlyUsage = (
+    computeVariant.price.interval === 'hourly'
+    && computeVariant.price.amount === RECOVERY_EXPECTATIONS.microComputeHourlyUsd
+  )
+  if (!usesReviewedMonthlyDisplay && !usesReviewedHourlyUsage) {
+    throw new Error('Live Micro monthly display cost does not match the reviewed USD 10 expectation.')
+  }
+  const displayedMonthlyUsd = usesReviewedMonthlyDisplay
+    ? computeVariant.price.amount
+    : Number((
+      computeVariant.price.amount * RECOVERY_EXPECTATIONS.monthlyBillingHours
+    ).toFixed(2))
+  if (displayedMonthlyUsd !== RECOVERY_EXPECTATIONS.displayedMonthlyUsd) {
     throw new Error('Live Micro monthly display cost does not match the reviewed USD 10 expectation.')
   }
 
   return {
     sourcePostgresMajor,
     targetPostgresMajor,
-    displayedMonthlyUsd: computeVariant.price.amount,
+    displayedMonthlyUsd,
   }
 }
 
