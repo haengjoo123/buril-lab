@@ -18,7 +18,7 @@ import {
     type ReagentScanIdentityField,
     type ReagentScanResult,
     type ReagentScanValidation,
-} from '../services/geminiReagentScanService';
+} from '../services/aiReagentScanService';
 import type { ManufacturerDateType } from '../utils/manufacturerDate';
 import { useTranslation } from 'react-i18next';
 

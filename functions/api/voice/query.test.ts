@@ -11,6 +11,26 @@ import type { VoiceMatch } from '../../../src/utils/voiceAgent'
 
 const LAB_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_LAB_ID = '22222222-2222-4222-8222-222222222222'
+const openAIEnv = {
+  OPENAI_API_KEY: 'openai-key',
+  OPENAI_SAFETY_HMAC_SECRET: 'test-safety-secret-at-least-32-bytes',
+}
+
+function openAIResponse(data: Record<string, unknown>) {
+  return new Response(JSON.stringify({
+    id: 'resp_voice',
+    object: 'response',
+    status: 'completed',
+    model: 'gpt-5.6-luna',
+    output: [{
+      id: 'msg_voice',
+      type: 'message',
+      status: 'completed',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: JSON.stringify(data), annotations: [] }],
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
 
 class QueryBuilder {
   readonly eqCalls: Array<[string, string]> = []
@@ -116,7 +136,7 @@ describe('voice query lab scope', () => {
   it('requires a current lab before querying any inventory', async () => {
     const response = await onRequestPost({
       request: createRequest({ text: 'Where is acetone?', source: 'typed' }),
-      env: { GEMINI_API_KEY: 'gemini-key' },
+      env: openAIEnv,
     })
 
     expect(response.status).toBe(400)
@@ -144,24 +164,14 @@ describe('voice query lab scope', () => {
       from,
     })
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({
-        candidates: [{
-          content: {
-            parts: [{
-              text: JSON.stringify({
-                intent: 'location',
-                reagentQuery: 'acetone',
-                queryAliases: [],
-                language: 'en',
-                confidence: 0.95,
-              }),
-            }],
-          },
-        }],
-      }),
-    }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(openAIResponse({
+      intent: 'location',
+      reagentQuery: 'acetone',
+      queryAliases: [],
+      casNumber: '',
+      language: 'en',
+      confidence: 0.95,
+    })))
 
     const response = await onRequestPost({
       request: createRequest({
@@ -170,7 +180,7 @@ describe('voice query lab scope', () => {
         context: { labId: LAB_ID, language: 'en' },
       }),
       env: {
-        GEMINI_API_KEY: 'gemini-key',
+        ...openAIEnv,
         SUPABASE_URL: 'https://example.supabase.co',
         SUPABASE_ANON_KEY: 'anon-key',
       },
@@ -200,18 +210,14 @@ describe('voice query lab scope', () => {
       },
       from,
     })
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({
-        candidates: [{ content: { parts: [{ text: JSON.stringify({
-          intent: 'disposal',
-          reagentQuery: 'acetone',
-          queryAliases: [],
-          language: 'en',
-          confidence: 0.9,
-        }) }] } }],
-      }),
-    })
+    const fetchMock = vi.fn().mockResolvedValue(openAIResponse({
+      intent: 'disposal',
+      reagentQuery: 'acetone',
+      queryAliases: [],
+      casNumber: '',
+      language: 'en',
+      confidence: 0.9,
+    }))
     vi.stubGlobal('fetch', fetchMock)
 
     const response = await onRequestPost({
@@ -221,7 +227,7 @@ describe('voice query lab scope', () => {
         context: { labId: LAB_ID, language: 'en' },
       }),
       env: {
-        GEMINI_API_KEY: 'gemini-key',
+        ...openAIEnv,
         SUPABASE_URL: 'https://example.supabase.co',
         SUPABASE_ANON_KEY: 'anon-key',
       },

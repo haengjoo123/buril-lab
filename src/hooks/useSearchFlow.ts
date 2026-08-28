@@ -8,7 +8,7 @@ import { fetchChemicalSuggestions } from '../services/chemicalSuggestionService'
 import { cabinetService, type CabinetSearchResult } from '../services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from '../services/mediaProductService';
 import { analyzeChemical } from '../utils/chemicalAnalyzer';
-import { classifyChemicalWithAI } from '../services/geminiClassificationService';
+import { classifyChemicalWithAI } from '../services/aiClassificationService';
 import type { AnalysisResult } from '../types';
 import { getLabAppScopedPath, labAppRoute } from '../utils/appRoutes';
 import { hasCasNumberFormat, normalizeCasNumber } from '../utils/casNumber';

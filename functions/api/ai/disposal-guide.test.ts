@@ -46,14 +46,36 @@ const readyInput: DisposalGuideRequestInput = {
 }
 
 function createRequest(body: unknown) {
-  return new Request('https://example.com/api/gemini/disposal-guide', {
+  return new Request('https://example.com/api/ai/disposal-guide', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 }
 
-describe('disposal guide V3 parser and safety boundary', () => {
+const openAIEnv = {
+  OPENAI_API_KEY: 'test-key',
+  OPENAI_SAFETY_HMAC_SECRET: 'test-safety-secret-at-least-32-bytes',
+}
+const requestData = { userId: 'user-123' }
+
+function openAIResponse(text: string) {
+  return new Response(JSON.stringify({
+    id: 'resp_test',
+    object: 'response',
+    status: 'completed',
+    model: 'gpt-5.6-luna',
+    output: [{
+      id: 'msg_test',
+      type: 'message',
+      status: 'completed',
+      role: 'assistant',
+      content: [{ type: 'output_text', text, annotations: [] }],
+    }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
+
+describe('disposal guide V3 response and safety boundary', () => {
   it('extracts structured JSON from a fenced model response', () => {
     const parsed = parseDisposalGuideJson(`\n\`\`\`json\n{
       "summary": "안내",
@@ -139,7 +161,7 @@ describe('disposal guide V3 parser and safety boundary', () => {
     expect(result.guide).toContain('일반 폐액통에 바로 입고할 수 없습니다')
   })
 
-  it('returns a useful non-error fallback when Gemini is not configured', async () => {
+  it('returns a useful non-error fallback when OpenAI is not configured', async () => {
     const response = await onRequestPost({
       request: createRequest(readyInput),
       env: {},
@@ -155,14 +177,13 @@ describe('disposal guide V3 parser and safety boundary', () => {
     expect(payload).not.toHaveProperty('error')
   })
 
-  it('returns the deterministic guide when Gemini returns invalid JSON', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      candidates: [{ content: { parts: [{ text: 'not-json' }] } }],
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch
+  it('returns the deterministic guide when OpenAI returns invalid JSON', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(openAIResponse('not-json')) as typeof fetch
 
     const response = await onRequestPost({
       request: createRequest(readyInput),
-      env: { GEMINI_API_KEY: 'test-key' },
+      env: openAIEnv,
+      data: requestData,
     })
     const payload = await response.json() as Record<string, unknown>
 
@@ -173,12 +194,16 @@ describe('disposal guide V3 parser and safety boundary', () => {
     expect(payload).not.toHaveProperty('error')
   })
 
-  it('returns the deterministic guide when the Gemini request fails', async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network timeout')) as typeof fetch
+  it('returns the deterministic guide when the OpenAI request fails after retries', async () => {
+    globalThis.fetch = vi.fn().mockImplementation(() => new Response('upstream unavailable', {
+      status: 503,
+      headers: { 'retry-after-ms': '0' },
+    })) as typeof fetch
 
     const response = await onRequestPost({
       request: createRequest(readyInput),
-      env: { GEMINI_API_KEY: 'test-key' },
+      env: openAIEnv,
+      data: requestData,
     })
     const payload = await response.json() as Record<string, unknown>
 
@@ -190,6 +215,7 @@ describe('disposal guide V3 parser and safety boundary', () => {
 
   it('includes batch, policy and rule context in the cache key', () => {
     const baseKey = generateDisposalGuideCacheKey(readyInput)
+    expect(baseKey).toMatch(/^disposal_guide:v4:/)
     const reorderedKey = generateDisposalGuideCacheKey({
       ...readyInput,
       chemicals: [...(readyInput.chemicals || [])].reverse(),

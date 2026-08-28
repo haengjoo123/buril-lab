@@ -51,7 +51,7 @@ import {
     classifyInventoryHazard,
     type InventoryHazardFilterCategory,
 } from '../../utils/inventoryHazardClassifier';
-import { scanReagentLabel, type ReagentScanResult } from '../../services/geminiReagentScanService';
+import { scanReagentLabel, type ReagentScanResult } from '../../services/aiReagentScanService';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import { enrichChemicals } from '../../services/chemicalEnrichmentService';
 import {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ReagentScanResult } from '../services/geminiReagentScanService';
+import type { ReagentScanResult } from '../services/aiReagentScanService';
 import { scanIdentityMatchesChemical } from './scanIdentity';
 
 const field = (

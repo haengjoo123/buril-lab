@@ -33,7 +33,7 @@
 검색어/사진/음성
   -> KOSHA · PubChem · 로컬 데이터
   -> chemicalAnalyzer 규칙 분류
-  -> UNKNOWN일 때만 Gemini 보조 분류
+  -> UNKNOWN일 때만 OpenAI 보조 분류
   -> 결과 카드에서 용매/상태 입력
   -> 카트의 mixtureLogic + compatibilityChecker
   -> AI 폐기 가이드(선택)
@@ -46,7 +46,7 @@
 
 ### 1. 중화·희석·수계 처리 권고가 데이터 부족 상태에서도 나올 수 있음
 
-- 관련 코드: `src/utils/wasteDisposal.ts`, `src/utils/mixtureLogic.ts`, `functions/api/gemini/disposal-guide.ts`
+- 관련 코드: `src/utils/wasteDisposal.ts`, `src/utils/mixtureLogic.ts`, `functions/api/ai/disposal-guide.ts`
 - 현재 로직은 일부 유기물이 수용성이고 중화 가능하다고 추정되면 `희석 후 중화(pH 6-8)하여 수계 폐액으로 배출`을 안내합니다.
 - 용해도는 이름에 `OL`, `AMINE`, `KETONE`이 포함되는지와 logKow 등 넓은 휴리스틱으로 추정하며, 중화 가능 여부는 정보가 부족해도 최종적으로 허용될 수 있습니다.
 - NaOH + ethanol/methanol 같은 조합에서 인화성·독성·농도·반응열·투입 순서·기관 SOP가 충분히 고려되지 않은 채 안전한 혼합처럼 표시될 수 있습니다.
@@ -67,7 +67,7 @@
 - 관련 코드: `src/store/fridgeStore.ts`, `src/features/inventory/InventoryFormModal.tsx`, `src/features/fridge/FridgeView.tsx`
 - 일반 `autoPlaceReagent` 흐름은 빈 공간 충돌 중심으로 배치하며, 위험 그룹·높이·SDS·저장 호환성이 보장되지 않습니다.
 - 수동 등록, CSV, 시약장 스캔, 일괄 이동이 이 흐름을 공유합니다.
-- 시약장 스캔은 Gemini 결과를 `hCodes: []`, 산/염기 false로 저장·배치할 수 있습니다.
+- 시약장 스캔은 AI 결과를 `hCodes: []`, 산/염기 false로 저장·배치할 수 있습니다.
 
 실험실 보관은 SDS·위험군·실제 승인 캐비닛 조건을 따라야 합니다. OSHA도 위험군별 분리와 SDS 기반 보관을 권고합니다. [OSHA Laboratory Chemical Storage Guidance](https://www.osha.gov/laws-regs/regulations/standardnumber/1910/1910.1450AppA)
 
@@ -166,7 +166,7 @@
 - `solventClassifier`
 - KOSHA MSDS 부분 실패
 - PubChem GHS cache 실패
-- Gemini/OCR/음성의 비정상 응답과 토큰 미설정 경로
+- AI 라벨 분석/OCR/음성의 비정상 응답과 토큰 미설정 경로
 - 재고 삭제·폐기 기록·시약장 저장의 원자성
 - Safety Center 점수
 - 만료일·용량·CSV 수량 파서

@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
+import { z } from 'zod'
 import {
   buildSeedAliasTerms,
   dedupeAliasTerms,
@@ -10,9 +11,13 @@ import {
   type VoiceMatch,
   type VoiceMatchSource,
 } from '../../../src/utils/voiceAgent'
+import {
+  parseOpenAIResponse,
+  summarizeOpenAIError,
+  type OpenAIResponsesEnv,
+} from '../ai/_openai'
 
-export interface ReagentAliasEnv {
-  GEMINI_API_KEY?: string
+export interface ReagentAliasEnv extends OpenAIResponsesEnv {
   KOSHA_API_KEY?: string
 }
 
@@ -31,13 +36,13 @@ export interface CandidateAliasResolution {
   queryAliases: string[]
 }
 
-const GEMINI_PRIMARY_MODEL = 'gemini-3-flash-preview'
-const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
 const PUBCHEM_BASE_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug'
 const KOSHA_BASE_URL = 'https://msds.kosha.or.kr/openapi/service/msdschem'
 const KOSHA_CAS_SEARCH_CONDITION = 1
 const MAX_MATCH_CANDIDATES = 120
 const MAX_GENERATED_ALIASES = 10
+export const VOICE_ALIAS_MAX_OUTPUT_TOKENS = 500
+export const VOICE_CANDIDATE_MAX_OUTPUT_TOKENS = 500
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -54,60 +59,14 @@ interface KoshaSearchItem {
   casNo?: string
 }
 
-function getJsonMimeRequestBody(prompt: string) {
-  return {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json',
-    },
-  }
-}
-
-async function generateGeminiJson<T>(
-  apiKey: string,
-  prompt: string,
-  allowFallback = true,
-): Promise<T> {
-  const model = allowFallback ? GEMINI_PRIMARY_MODEL : GEMINI_FALLBACK_MODEL
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(getJsonMimeRequestBody(prompt)),
-    },
-  )
-
-  if (!response.ok) {
-    if (allowFallback && response.status === 503) {
-      return generateGeminiJson<T>(apiKey, prompt, false)
-    }
-
-    throw new Error(`Gemini request failed with status ${response.status}.`)
-  }
-
-  const data = await response.json() as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string }>
-      }
-    }>
-  }
-
-  const rawText = (data.candidates?.[0]?.content?.parts || [])
-    .map((part) => part.text || '')
-    .join('')
-    .trim()
-
-  if (!rawText) {
-    throw new Error('Gemini returned an empty response.')
-  }
-
-  return JSON.parse(rawText) as T
-}
+const reagentAliasesSchema = z.object({
+  aliases: z.array(z.string().min(1).max(120)).max(MAX_GENERATED_ALIASES),
+})
+const candidateResolutionSchema = z.object({
+  candidateId: z.string().max(200),
+  confidence: z.number().min(0).max(1),
+  queryAliases: z.array(z.string().min(1).max(120)).max(MAX_GENERATED_ALIASES),
+})
 
 function isUsefulAlias(value: string): boolean {
   const trimmed = value.trim()
@@ -235,12 +194,13 @@ async function fetchPubChemAliases(query: string): Promise<PubChemResolution | n
   }
 }
 
-async function generateGeminiAliasesForMatch(
+async function generateOpenAIAliasesForMatch(
   env: ReagentAliasEnv,
   match: VoiceMatch,
   knownAliases: string[],
+  safetyIdentifier: string,
 ): Promise<string[]> {
-  if (!env.GEMINI_API_KEY?.trim()) {
+  if (!env.OPENAI_API_KEY?.trim()) {
     return []
   }
 
@@ -259,10 +219,16 @@ async function generateGeminiAliasesForMatch(
   ].join('\n')
 
   try {
-    const response = await generateGeminiJson<{ aliases?: string[] }>(env.GEMINI_API_KEY, prompt)
-    return filterUsefulAliases(response.aliases || [])
+    const response = await parseOpenAIResponse(env, {
+      input: prompt,
+      maxOutputTokens: VOICE_ALIAS_MAX_OUTPUT_TOKENS,
+      safetyIdentifier,
+      schema: reagentAliasesSchema,
+      schemaName: 'reagent_aliases',
+    })
+    return filterUsefulAliases(response.data.aliases)
   } catch (error) {
-    console.warn('[voice/aliases] Gemini alias generation failed:', error)
+    console.warn('[voice/aliases] OpenAI alias generation failed:', summarizeOpenAIError(error))
     return []
   }
 }
@@ -270,6 +236,7 @@ async function generateGeminiAliasesForMatch(
 export async function generateAliasesForMatch(
   env: ReagentAliasEnv,
   match: VoiceMatch,
+  safetyIdentifier: string,
 ): Promise<string[]> {
   const seeds = buildSeedAliasTerms({
     name: match.name,
@@ -281,13 +248,13 @@ export async function generateAliasesForMatch(
   const pubchem = await fetchPubChemAliases(match.casNumber || match.name)
   const koshaName = await fetchKoshaKoreanNameByCas(env, match.casNumber || pubchem?.casNumber)
 
-  const geminiAliases = await generateGeminiAliasesForMatch(env, match, [
+  const openAIAliases = await generateOpenAIAliasesForMatch(env, match, [
     ...seeds,
     pubchem?.canonicalName,
     ...(pubchem?.synonyms || []),
     pubchem?.casNumber,
     koshaName,
-  ].filter((value): value is string => Boolean(value)))
+  ].filter((value): value is string => Boolean(value)), safetyIdentifier)
 
   return filterUsefulAliases([
     ...seeds,
@@ -295,17 +262,18 @@ export async function generateAliasesForMatch(
     ...(pubchem?.synonyms || []),
     pubchem?.casNumber,
     koshaName,
-    ...geminiAliases,
+    ...openAIAliases,
   ])
 }
 
-export async function resolveCandidateWithGemini(
+export async function resolveCandidateWithOpenAI(
   env: ReagentAliasEnv,
   rawInput: string,
   language: VoiceLanguage,
   matches: VoiceMatch[],
+  safetyIdentifier: string,
 ): Promise<CandidateAliasResolution | null> {
-  if (!env.GEMINI_API_KEY?.trim() || matches.length === 0) {
+  if (!env.OPENAI_API_KEY?.trim() || matches.length === 0) {
     return null
   }
 
@@ -333,15 +301,17 @@ export async function resolveCandidateWithGemini(
   ].join('\n')
 
   try {
-    const response = await generateGeminiJson<{
-      candidateId?: string
-      confidence?: number
-      queryAliases?: string[]
-    }>(env.GEMINI_API_KEY, prompt)
+    const response = await parseOpenAIResponse(env, {
+      input: prompt,
+      maxOutputTokens: VOICE_CANDIDATE_MAX_OUTPUT_TOKENS,
+      safetyIdentifier,
+      schema: candidateResolutionSchema,
+      schemaName: 'voice_candidate_resolution',
+    })
 
-    const candidateId = response.candidateId?.trim() || null
-    const confidence = typeof response.confidence === 'number'
-      ? Math.max(0, Math.min(1, response.confidence))
+    const candidateId = response.data.candidateId.trim() || null
+    const confidence = typeof response.data.confidence === 'number'
+      ? Math.max(0, Math.min(1, response.data.confidence))
       : 0
 
     if (!candidateId) {
@@ -356,10 +326,10 @@ export async function resolveCandidateWithGemini(
     return {
       candidateId,
       confidence,
-      queryAliases: filterUsefulAliases(response.queryAliases || []),
+      queryAliases: filterUsefulAliases(response.data.queryAliases),
     }
   } catch (error) {
-    console.warn('[voice/aliases] Gemini candidate resolution failed:', error)
+    console.warn('[voice/aliases] OpenAI candidate resolution failed:', summarizeOpenAIError(error))
     return null
   }
 }

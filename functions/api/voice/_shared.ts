@@ -1,4 +1,7 @@
 import OpenAI from 'openai'
+import { json } from '../_shared/json'
+
+export { json } from '../_shared/json'
 
 export interface VoiceEnv {
   OPENAI_API_KEY?: string
@@ -10,20 +13,10 @@ export interface VoiceEnv {
 
 export type SpeechAudioFormat = 'mp3' | 'wav' | 'aac' | 'opus'
 
-const DEFAULT_STT_MODEL = 'whisper-1'
+const DEFAULT_STT_MODEL = 'gpt-transcribe'
 const DEFAULT_TTS_MODEL = 'gpt-4o-mini-tts'
 const DEFAULT_TTS_VOICE = 'alloy'
 const SUPPORTED_SPEECH_FORMATS = new Set<SpeechAudioFormat>(['mp3', 'wav', 'aac', 'opus'])
-
-export function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      ...(init?.headers || {}),
-    },
-  })
-}
 
 export function isOpenAIAudioEnabled(env: VoiceEnv): boolean {
   return env.OPENAI_AUDIO_ENABLED?.trim().toLowerCase() === 'true' && Boolean(env.OPENAI_API_KEY?.trim())
