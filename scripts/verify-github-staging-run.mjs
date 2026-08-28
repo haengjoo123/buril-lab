@@ -6,6 +6,7 @@ const MAX_RESPONSE_BYTES = 1024 * 1024
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const TRUSTED_WORKFLOW_NAME = 'Deploy staging'
 const TRUSTED_WORKFLOW_PATH = '.github/workflows/deploy-staging.yml'
+const TRUSTED_RUN_TITLE = /^Deploy staging ([0-9a-f]{40}) \(lease=([0-9a-f]{32}), storage-backup=(true|false)\)$/
 const TRUSTED_BUILD_JOB_NAME = 'Build exact Staging artifact without deployment credentials'
 const TRUSTED_DEPLOY_JOB_NAME = 'Supervised deploy of verified commit to buril-lab-staging'
 const TRUSTED_WORKER_JOB_NAME = 'Supervised fresh-runner deploy of the OFF-only Staging backup Worker'
@@ -60,9 +61,21 @@ function parseNow(now) {
   return timestamp
 }
 
+function hasTrustedWorkflowIdentity(candidate, commitSha) {
+  if (candidate?.name === TRUSTED_WORKFLOW_NAME) return true
+
+  // GitHub may expose the evaluated `run-name` in both `name` and
+  // `display_title` for workflow_dispatch runs. The workflow path remains the
+  // immutable workflow identity, while this exact title binds the fallback to
+  // the requested commit and supervised lease shape.
+  if (candidate?.name !== candidate?.display_title) return false
+  const titleMatch = candidate?.display_title?.match(TRUSTED_RUN_TITLE)
+  return titleMatch?.[1] === commitSha
+}
+
 function isTrustedStagingRun(candidate, repository, commitSha) {
   return (
-    candidate?.name === TRUSTED_WORKFLOW_NAME
+    hasTrustedWorkflowIdentity(candidate, commitSha)
     && candidate?.path === TRUSTED_WORKFLOW_PATH
     && candidate?.event === 'workflow_dispatch'
     && candidate?.head_branch === 'main'

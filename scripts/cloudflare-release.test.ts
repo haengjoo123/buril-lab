@@ -1798,6 +1798,54 @@ describe('Prep 0 Cloudflare release controls', () => {
     })).toThrow(/No trusted Deploy staging run/)
   })
 
+  it('accepts GitHub run-name in the name field only when its exact trusted title binds the commit', () => {
+    const displayTitle = `Deploy staging ${COMMIT} (lease=${'a'.repeat(32)}, storage-backup=false)`
+    const trusted = {
+      id: 33,
+      run_attempt: 1,
+      name: displayTitle,
+      path: '.github/workflows/deploy-staging.yml',
+      display_title: displayTitle,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'workflow_dispatch',
+      head_branch: 'main',
+      head_sha: COMMIT,
+      repository: { full_name: 'owner/buril-lab' },
+      head_repository: { full_name: 'owner/buril-lab' },
+      created_at: '2026-08-24T10:00:00Z',
+      run_started_at: '2026-08-24T10:05:00Z',
+      updated_at: '2026-08-24T11:00:00Z',
+    }
+
+    expect(findTrustedStagingRun([trusted], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      runId: '33',
+      now: QUALITY_NOW,
+    })).toBe(trusted)
+    expect(() => findTrustedStagingRun([{
+      ...trusted,
+      name: 'Deploy staging arbitrary title',
+      display_title: 'Deploy staging arbitrary title',
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      runId: '33',
+      now: QUALITY_NOW,
+    })).toThrow(/No trusted Deploy staging run/)
+    expect(() => findTrustedStagingRun([{
+      ...trusted,
+      name: `Deploy staging ${'f'.repeat(40)} (lease=${'a'.repeat(32)}, storage-backup=false)`,
+      display_title: `Deploy staging ${'f'.repeat(40)} (lease=${'a'.repeat(32)}, storage-backup=false)`,
+    }], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      runId: '33',
+      now: QUALITY_NOW,
+    })).toThrow(/No trusted Deploy staging run/)
+  })
+
   it('queries the exact approved deploy-staging run ID directly', async () => {
     const trusted = {
       id: 31,
