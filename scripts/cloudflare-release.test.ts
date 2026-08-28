@@ -76,7 +76,11 @@ import {
 } from './verify-github-staging-run.mjs'
 import { CLEANUP_ABSENT_SECRET_NAMES } from './verify-ephemeral-cleanup-receipt.mjs'
 import { verifyPagesProjectPair } from './verify-pages-project-config.mjs'
-import { loadAndVerifyReleaseManifest, verifyReleaseManifest } from './verify-release-manifest.mjs'
+import {
+  isApprovedProductionHostname,
+  loadAndVerifyReleaseManifest,
+  verifyReleaseManifest,
+} from './verify-release-manifest.mjs'
 import {
   verifyStagingKoshaLinkOnly,
   verifyStagingKoshaLinkOnlyPayload,
@@ -663,6 +667,67 @@ describe('Prep 0 Cloudflare release controls', () => {
         STAGING_ACCESS_CLIENT_SECRET: 'staging-client-secret',
       },
     })).rejects.toThrow(/only be sent to staging/)
+  })
+
+  it('accepts only exact Production custom, Pages apex, and immutable deployment hosts', async () => {
+    const manifest = createReleaseManifest({
+      commitSha: COMMIT,
+      environment: 'production',
+      builtAt: '2026-08-24T00:00:00Z',
+    })
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(manifest), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      for (const hostname of [
+        'burillab.com',
+        'buril-lab.pages.dev',
+        '61dab7a6.buril-lab.pages.dev',
+        'ABCDEF01.buril-lab.pages.dev',
+      ]) {
+        expect(isApprovedProductionHostname(hostname)).toBe(true)
+        await expect(loadAndVerifyReleaseManifest({
+          url: `https://${hostname}/release.json?commit=${COMMIT}`,
+          commitSha: COMMIT,
+          environment: 'production',
+        })).resolves.toEqual(manifest)
+      }
+
+      for (const hostname of [
+        'www.burillab.com',
+        'main.buril-lab.pages.dev',
+        '61dab7a.buril-lab.pages.dev',
+        '61dab7a60.buril-lab.pages.dev',
+        'nested.61dab7a6.buril-lab.pages.dev',
+        '61dab7a6.buril-lab-staging.pages.dev',
+        '61dab7a6.buril-lab.pages.dev.evil.test',
+      ]) {
+        expect(isApprovedProductionHostname(hostname)).toBe(false)
+        await expect(loadAndVerifyReleaseManifest({
+          url: `https://${hostname}/release.json`,
+          commitSha: COMMIT,
+          environment: 'production',
+        })).rejects.toThrow(/does not match the selected environment/)
+      }
+
+      for (const url of [
+        'http://burillab.com/release.json',
+        'https://user:password@burillab.com/release.json',
+        'https://burillab.com:444/release.json',
+        'https://burillab.com/release.json#fragment',
+        'https://61dab7a6.buril-lab.pages.dev/not-release.json',
+      ]) {
+        await expect(loadAndVerifyReleaseManifest({
+          url,
+          commitSha: COMMIT,
+          environment: 'production',
+        })).rejects.toThrow(/does not match the selected environment/)
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('requires an unauthenticated Cloudflare Access challenge on Staging', () => {
