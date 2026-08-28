@@ -268,7 +268,7 @@ export interface AnalysisResult {
     reason: string; // Explanation key for translation
     reasonParams?: Record<string, string | number>; // Dynamic params for translation
     isSafe: boolean; // False if requires manual verification
-    isAiEstimated?: boolean; // True if the category was inferred by the Gemini API fallback
+    isAiEstimated?: boolean; // True if the category was inferred by the AI API fallback
     hazardWarnings?: AnalysisHazardWarning[];
     /** Missing only on legacy/persisted results; consumers must re-derive it from `chemical`. */
     hazardProfile?: ChemicalHazardProfile;

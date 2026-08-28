@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
-import { json } from '../gemini/_utils'
+import { json } from '../_shared/json'
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
 
 interface Env {

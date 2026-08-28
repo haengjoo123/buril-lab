@@ -196,7 +196,7 @@ export function generateDisposalGuideClientCacheKey(
     })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
 
     return JSON.stringify(sortForStableStringify({
-        schemaVersion: 3,
+        cacheVersion: 4,
         chemicals: normalizedChemicals,
         batch: options.batch || null,
         decision: options.decision || null,
@@ -211,8 +211,8 @@ export async function getAIDisposalGuide(
 ): Promise<DisposalGuideResult> {
     const cacheKey = generateDisposalGuideClientCacheKey(chemicals, options)
 
-    console.log('[Gemini Disposal Guide] Requesting disposal guide...')
-    const result = await postJson<DisposalGuideResult>('/api/gemini/disposal-guide', {
+    console.log('[AI Disposal Guide] Requesting disposal guide...')
+    const result = await postJson<DisposalGuideResult>('/api/ai/disposal-guide', {
         chemicals,
         batch: options.batch,
         decision: options.decision,

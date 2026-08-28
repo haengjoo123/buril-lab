@@ -24,8 +24,8 @@
 Cloudflare Pages Functions에는 아래 서버 비밀값이 필요합니다.
 
 - `KOSHA_API_KEY`
-- `GEMINI_API_KEY`
-- `GOOGLE_VISION_API_KEY`
+- `OPENAI_API_KEY`
+- `OPENAI_SAFETY_HMAC_SECRET`
 
 ## 3. Android 프로젝트 준비
 
@@ -69,7 +69,8 @@ cd android
 ## 6. 점검 항목
 
 - Capacitor 앱에서 로그인과 세션 유지가 되는지 확인
-- `/api/gemini/*`, `/api/vision/*`, `/api/kosha/*` 호출이 절대 URL 기준으로 정상 동작하는지 확인
+- `/api/ai/*`, `/api/voice/*`, `/api/kosha/*` 호출이 절대 URL 기준으로 정상 동작하는지 확인
+- Android 1.0.4 호환용 `/api/gemini/*` 별칭이 신규 `/api/ai/*`와 같은 응답 계약을 유지하는지 확인
 - 카메라 스캔 기능이 Android 권한 요청 후 정상 동작하는지 확인
 - PWA 아이콘과 Android 런처 아이콘이 동일 브랜드로 보이는지 확인
 - 개인정보처리방침 URL, 앱 설명, 스크린샷, 테스트 계정 준비

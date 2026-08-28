@@ -16,7 +16,7 @@ import {
     scanReagentLabel,
     type ReagentScanFieldSnapshots,
     type ReagentScanResult,
-} from './geminiReagentScanService'
+} from './aiReagentScanService'
 
 function createSnapshots(
     overrides: Partial<ReagentScanFieldSnapshots> = {},
@@ -120,14 +120,14 @@ describe('reagent scan automatic placement gate', () => {
         expect(reviewed.reviewRequired).toBe(true)
         expect(reviewed.reviewReasons).toContain('name_low_confidence')
 
-        mocks.postJson.mockRejectedValueOnce(new Error('Gemini API key is not configured.'))
+        mocks.postJson.mockRejectedValueOnce(new Error('OpenAI Responses is not configured.'))
         const failed = await scanReagentLabel('data:image/jpeg;base64,AA==')
 
         expect(failed).toMatchObject({
             name: '',
             suggestedContainerType: null,
             success: false,
-            error: 'Gemini API key is not configured.',
+            error: 'OpenAI Responses is not configured.',
         })
     })
 })

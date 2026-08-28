@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
     generateDisposalGuideClientCacheKey,
     type DisposalGuideChemicalInput,
-} from './geminiDisposalGuideService'
+} from './aiDisposalGuideService'
 
 const chemicals: DisposalGuideChemicalInput[] = [
     { name: 'Acetone', category: 'ORGANIC_NON_HALOGEN', hazardFlags: ['FLAMMABLE'] },
     { name: 'Water', category: 'NEUTRAL' },
 ]
 
-describe('gemini disposal guide service cache context', () => {
+describe('AI disposal guide service cache context', () => {
     it('is stable across component order', () => {
         const options = {
             batch: { matrix: 'organic_non_halogenated', amount: { value: 500, unit: 'mL' as const } },

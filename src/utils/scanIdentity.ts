@@ -1,7 +1,7 @@
 import type {
     ReagentScanIdentityField,
     ReagentScanResult,
-} from '../services/geminiReagentScanService';
+} from '../services/aiReagentScanService';
 import { isValidCasNumber, normalizeCasNumber } from './casNumber';
 
 const normalizeIdentityName = (value?: string | null): string => (value ?? '')

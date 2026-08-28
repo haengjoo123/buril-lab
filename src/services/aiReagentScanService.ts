@@ -206,12 +206,12 @@ export function canAutoPlaceReagentScan(result: ReagentScanResult): boolean {
 }
 
 /**
- * Analyze a reagent label image using Gemini Vision API.
+ * Analyze a reagent label image using the server-side AI vision API.
  * Returns structured info about the reagent (name, CAS, container type, capacity, expiry).
  */
 export async function scanReagentLabel(imageSrc: string): Promise<ReagentScanResult> {
     try {
-        const result = await postJson<ReagentScanResult>('/api/gemini/scan-label', { imageSrc })
+        const result = await postJson<ReagentScanResult>('/api/ai/scan-label', { imageSrc })
         if (!result.success) return result
 
         const reviewReasons = getReagentScanReviewReasons(result)

@@ -181,8 +181,7 @@ const KoreanPolicy: React.FC = () => (
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>Supabase: 인증, 데이터베이스, 파일 저장소</li>
                 <li>Cloudflare Pages Functions: 서버 API 실행과 요청 처리</li>
-                <li>Google Gemini 및 Google Vision API: 이미지 분석, OCR, AI 응답 생성</li>
-                <li>OpenAI API: 음성 전사와 음성 응답 생성 기능이 활성화된 경우</li>
+                <li>OpenAI API: 라벨 이미지 분석, 구조화된 분류·폐기 안내, 음성 전사 및 음성 응답 생성. 구조화된 Responses 요청은 응답 저장을 비활성화하며, 안전 식별자는 서버에서 HMAC으로 가명 처리합니다.</li>
                 <li>Upstash Redis: API 요청 제한과 남용 방지</li>
             </ul>
         </Section>
@@ -294,8 +293,7 @@ const EnglishPolicy: React.FC = () => (
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>Supabase: authentication, database, and file storage</li>
                 <li>Cloudflare Pages Functions: server API execution and request handling</li>
-                <li>Google Gemini and Google Vision API: image analysis, OCR, and AI response generation</li>
-                <li>OpenAI API: speech transcription and spoken responses when voice features are enabled</li>
+                <li>OpenAI API: label-image analysis, structured classification and disposal guidance, speech transcription, and spoken responses. Structured Responses requests disable response storage and pseudonymize safety identifiers server-side with HMAC.</li>
                 <li>Upstash Redis: API rate limiting and abuse prevention</li>
             </ul>
         </Section>

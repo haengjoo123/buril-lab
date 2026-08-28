@@ -218,7 +218,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     </p>
                 )}
 
-                {/* AI Badge if inferred by Gemini */}
+                {/* AI badge for model-assisted classification */}
                 {result.isAiEstimated && (
                     <div className="flex items-center gap-1.5 justify-center w-full mb-4 animate-in fade-in duration-300 delay-200">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-200 dark:border-purple-800/50">

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import {
   buildVoiceUiAction,
   buildClarificationMessage,
@@ -30,12 +31,18 @@ import {
   buildAliasUpsertRows,
   generateAliasesForMatch,
   getMatchKeyForAlias,
-  resolveCandidateWithGemini,
+  resolveCandidateWithOpenAI,
   type ReagentAliasRow,
 } from './_reagentAliases'
+import {
+  createSafetyIdentifier,
+  isOpenAIResponsesConfigured,
+  parseOpenAIResponse,
+  summarizeOpenAIError,
+  type OpenAIResponsesEnv,
+} from '../ai/_openai'
 
-interface VoiceQueryEnv {
-  GEMINI_API_KEY?: string
+interface VoiceQueryEnv extends OpenAIResponsesEnv {
   KOSHA_API_KEY?: string
   SUPABASE_URL?: string
   SUPABASE_ANON_KEY?: string
@@ -97,9 +104,8 @@ interface ScoredMatch {
   score: number
 }
 
-const GEMINI_PRIMARY_MODEL = 'gemini-3-flash-preview'
-const GEMINI_FALLBACK_MODEL = 'gemini-2.5-flash'
 const MAX_QUERY_LENGTH = 200
+export const VOICE_INTENT_MAX_OUTPUT_TOKENS = 600
 const MATCH_LIMIT = 200
 const AMBIGUITY_SCORE_WINDOW = 15
 const VALID_INTENTS: VoiceAgentIntent[] = ['location', 'expiration', 'remaining', 'disposal']
@@ -154,6 +160,15 @@ const MANUAL_QUERY_ALIASES: Record<string, string[]> = {
   '글루코스': ['glucose', 'd-glucose', 'dextrose', '포도당', 'glucos'],
   '포도당': ['glucose', 'd-glucose', 'dextrose', '글루코즈', '글루코스'],
 }
+
+const intentExtractionSchema = z.object({
+  intent: z.enum(['location', 'expiration', 'remaining', 'disposal']),
+  reagentQuery: z.string().max(MAX_QUERY_LENGTH),
+  queryAliases: z.array(z.string().max(MAX_QUERY_LENGTH)).max(MAX_QUERY_ALIASES),
+  casNumber: z.string().max(64),
+  language: z.enum(['ko', 'en']),
+  confidence: z.number().min(0).max(1),
+})
 
 function getRelationRow<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null
@@ -212,57 +227,6 @@ function createSupabaseUserClient(env: VoiceQueryEnv, authHeader: string) {
   })
 }
 
-async function generateGeminiJson<T>(
-  apiKey: string,
-  prompt: string,
-  allowFallback = true,
-): Promise<T> {
-  const model = allowFallback ? GEMINI_PRIMARY_MODEL : GEMINI_FALLBACK_MODEL
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-      }),
-    },
-  )
-
-  if (!response.ok) {
-    if (allowFallback && response.status === 503) {
-      return generateGeminiJson<T>(apiKey, prompt, false)
-    }
-
-    throw new Error(`Gemini request failed with status ${response.status}.`)
-  }
-
-  const data = await response.json() as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: string }>
-      }
-    }>
-  }
-
-  const rawText = (data.candidates?.[0]?.content?.parts || [])
-    .map((part) => part.text || '')
-    .join('')
-    .trim()
-
-  if (!rawText) {
-    throw new Error('Gemini returned an empty response.')
-  }
-
-  return JSON.parse(rawText) as T
-}
-
 export function isDisposalSafetyQuery(input: string): boolean {
   const normalized = input.normalize('NFKC').toLowerCase()
   return DISPOSAL_SAFETY_PATTERNS.some((pattern) => pattern.test(normalized))
@@ -316,7 +280,8 @@ function refineExtractedIntent(input: string, intent: VoiceAgentIntent): VoiceAg
 }
 
 async function extractIntent(
-  apiKey: string,
+  env: VoiceQueryEnv,
+  safetyIdentifier: string,
   input: string,
   contextLanguage?: VoiceLanguage,
 ): Promise<IntentExtraction> {
@@ -342,7 +307,14 @@ async function extractIntent(
   ].filter(Boolean).join('\n')
 
   try {
-    const extracted = await generateGeminiJson<Partial<IntentExtraction>>(apiKey, prompt)
+    const response = await parseOpenAIResponse(env, {
+      input: prompt,
+      maxOutputTokens: VOICE_INTENT_MAX_OUTPUT_TOKENS,
+      safetyIdentifier,
+      schema: intentExtractionSchema,
+      schemaName: 'voice_intent',
+    })
+    const extracted = response.data
     const initialIntent = VALID_INTENTS.includes(extracted.intent as VoiceAgentIntent)
       ? (extracted.intent as VoiceAgentIntent)
       : 'location'
@@ -368,7 +340,7 @@ async function extractIntent(
       confidence,
     }
   } catch (error) {
-    console.warn('[voice/query] intent extraction fallback:', error)
+    console.warn('[voice/query] intent extraction fallback:', summarizeOpenAIError(error))
     return fallbackIntentExtraction(input, contextLanguage)
   }
 }
@@ -668,6 +640,7 @@ async function buildAnswerText(
 export const onRequestPost = async (context: {
   request: Request
   env: VoiceQueryEnv
+  data?: Record<string, unknown>
 }) => {
   const authHeader = context.request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -703,8 +676,8 @@ export const onRequestPost = async (context: {
     return json(buildDisposalRedirectResponse(rawText, language))
   }
 
-  if (!context.env.GEMINI_API_KEY?.trim()) {
-    return json({ error: 'Gemini API key is not configured.' }, { status: 500 })
+  if (!isOpenAIResponsesConfigured(context.env)) {
+    return json({ error: 'OpenAI Responses is not configured.' }, { status: 500 })
   }
 
   try {
@@ -729,8 +702,11 @@ export const onRequestPost = async (context: {
       return json({ error: 'You do not have access to the selected lab.' }, { status: 403 })
     }
 
+    const safetyIdentifier = await createSafetyIdentifier(context.env, userData.user.id)
+
     const extracted = await extractIntent(
-      context.env.GEMINI_API_KEY,
+      context.env,
+      safetyIdentifier,
       rawText,
       body.context?.language,
     )
@@ -835,11 +811,12 @@ export const onRequestPost = async (context: {
     let learnedQueryAliases: string[] = []
 
     if ((!topMatch || closeMatches.length > 1) && allMatches.length > 0) {
-      const candidateResolution = await resolveCandidateWithGemini(
+      const candidateResolution = await resolveCandidateWithOpenAI(
         context.env,
         rawText,
         language,
         topMatch ? closeMatches.map(({ match }) => match) : allMatches,
+        safetyIdentifier,
       )
 
       if (
@@ -960,7 +937,7 @@ export const onRequestPost = async (context: {
     const existingAliases = aliasMap.get(getMatchKeyForAlias(chosenMatch)) || []
     const generatedAliases = existingAliases.length >= 4
       ? []
-      : await generateAliasesForMatch(context.env, chosenMatch)
+      : await generateAliasesForMatch(context.env, chosenMatch, safetyIdentifier)
     const aliasesToPersist = dedupeAliasTerms([
       extracted.reagentQuery,
       ...learnedQueryAliases,

@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildReagentLabelScanResponse, onRequestPost } from './scan-label'
+
+const originalFetch = globalThis.fetch
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+  vi.restoreAllMocks()
+})
 
 function createConfidentFields(overrides: Record<string, unknown> = {}) {
   return {
@@ -16,6 +23,19 @@ function createConfidentFields(overrides: Record<string, unknown> = {}) {
 }
 
 describe('reagent label scan validation', () => {
+  it('preserves Korean and English label names with CAS, capacity, and dates', () => {
+    const korean = buildReagentLabelScanResponse({
+      fields: createConfidentFields({ name: { value: '아세톤 (Acetone)', confidence: 0.98 } }),
+    })
+
+    expect(korean).toMatchObject({
+      name: '아세톤 (Acetone)',
+      casNumber: '67-64-1',
+      capacity: '500 mL',
+      expiryDate: '2028-02-29',
+    })
+  })
+
   it('returns a per-field snapshot and permits only a clear, valid scan', () => {
     const result = buildReagentLabelScanResponse({
       fields: createConfidentFields(),
@@ -126,7 +146,7 @@ describe('reagent label scan validation', () => {
 
   it('keeps the existing API-key-missing error response', async () => {
     const response = await onRequestPost({
-      request: new Request('https://example.com/api/gemini/scan-label', {
+      request: new Request('https://example.com/api/ai/scan-label', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageSrc: 'data:image/jpeg;base64,AA==' }),
@@ -136,6 +156,52 @@ describe('reagent label scan validation', () => {
     const payload = await response.json() as Record<string, unknown>
 
     expect(response.status).toBe(500)
-    expect(payload.error).toBe('Gemini API key is not configured.')
+    expect(payload.error).toBe('OpenAI Responses is not configured.')
+  })
+
+  it('uses original image detail and the label token budget with Structured Outputs', async () => {
+    const modelOutput = JSON.stringify({ fields: createConfidentFields() })
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'resp_scan',
+      object: 'response',
+      status: 'completed',
+      model: 'gpt-5.6-luna',
+      output: [{
+        id: 'msg_scan',
+        type: 'message',
+        status: 'completed',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: modelOutput, annotations: [] }],
+      }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await onRequestPost({
+      request: new Request('https://example.com/api/ai/scan-label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageSrc: 'data:image/jpeg;base64,AA==' }),
+      }),
+      env: {
+        OPENAI_API_KEY: 'test-key',
+        OPENAI_SAFETY_HMAC_SECRET: 'test-safety-secret-at-least-32-bytes',
+      },
+      data: { userId: 'user-123' },
+    })
+
+    expect(response.status).toBe(200)
+    const [, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit]
+    const body = JSON.parse(String(init.body)) as {
+      max_output_tokens: number
+      input: Array<{ content: Array<Record<string, unknown>> }>
+      text: { format: { type: string } }
+    }
+    expect(body.max_output_tokens).toBe(1_200)
+    expect(body.input[0].content[1]).toMatchObject({
+      type: 'input_image',
+      detail: 'original',
+      image_url: 'data:image/jpeg;base64,AA==',
+    })
+    expect(body.text.format.type).toBe('json_schema')
   })
 })

@@ -29,6 +29,7 @@ const envFiles = readdirSync(root)
 
 const serverOnlyNamePatterns = [
   /^(?:VITE_)?(?:GEMINI|GOOGLE_VISION|KOSHA|OPENAI|ANTHROPIC)_API_KEY$/i,
+  /^(?:VITE_)?OPENAI_SAFETY_HMAC_SECRET$/i,
   /^(?:VITE_)?SUPABASE_SERVICE_ROLE_KEY$/i,
   /^(?:VITE_)?SUPABASE_JWT_SECRET$/i,
   /^(?:VITE_)?UPSTASH_[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)$/i,
@@ -39,6 +40,7 @@ const knownServerOnlyNames = [
   'GOOGLE_VISION_API_KEY',
   'KOSHA_API_KEY',
   'OPENAI_API_KEY',
+  'OPENAI_SAFETY_HMAC_SECRET',
   'ANTHROPIC_API_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_JWT_SECRET',
