@@ -23,6 +23,7 @@ vi.mock('../store/useLabStore', () => ({
 import {
     buildWastePhPredictionAuthorizationContext,
     buildWasteHandlingRpcPayload,
+    fetchWasteLogById,
     fetchWasteLogItemsV2,
     isLegacyWasteLog,
     normalizeWasteLogItemRow,
@@ -771,6 +772,38 @@ describe('wasteLogService V2 mutations', () => {
                 capturedAt: '2026-08-02T00:00:00.000Z',
             }],
         })]);
+    });
+
+    it('fetches an old direct-link record by id inside the active lab scope', async () => {
+        const maybeSingle = vi.fn().mockResolvedValue({
+            data: {
+                id: LOG_ID,
+                lab_id: mocks.labState.currentLabId,
+                user_id: '77777777-7777-4777-8777-777777777777',
+                chemicals: [],
+                disposal_category: 'SPECIAL_HAZARD',
+                handler_name: 'Recovery verifier',
+                created_at: '2025-01-01T00:00:00.000Z',
+            },
+            error: null,
+        });
+        const labEq = vi.fn().mockReturnValue({ maybeSingle });
+        const idEq = vi.fn().mockReturnValue({ eq: labEq });
+        const select = vi.fn().mockReturnValue({ eq: idEq });
+        mocks.from.mockReturnValue({ select });
+
+        const row = await fetchWasteLogById(LOG_ID);
+
+        expect(mocks.from).toHaveBeenCalledWith('waste_logs');
+        expect(idEq).toHaveBeenCalledWith('id', LOG_ID);
+        expect(labEq).toHaveBeenCalledWith('lab_id', mocks.labState.currentLabId);
+        expect(maybeSingle).toHaveBeenCalledOnce();
+        expect(row).toMatchObject({ id: LOG_ID, disposal_category: 'SPECIAL_HAZARD' });
+    });
+
+    it('rejects an invalid direct-link id before issuing a table query', async () => {
+        await expect(fetchWasteLogById('not-a-uuid')).rejects.toThrow('valid UUID');
+        expect(mocks.from).not.toHaveBeenCalled();
     });
 
     it('rejects an invalid V2 log id before issuing a table query', async () => {
