@@ -13,8 +13,8 @@
 - GitHub `staging`·`production` environment의 배포 입력, 별도 Staging Redis, 합성 데이터 초기화와 Gate 0 소유 표시는 준비됐습니다.
 - 최신 런타임 SHA의 감독형 Staging 배포는 새 서명 임대·누적 정리 영수증·숨김 토큰 입력 계약으로 실행했고, 직전 성공 배포로 되돌린 뒤 같은 후보로 복귀하는 훈련도 완료했습니다.
 - Supabase 임시 Micro 현재 시점 논리 복구훈련은 132분 안에 끝났고, 같은 날 임시 프로젝트 삭제와 프로젝트 목록 제거까지 확인했습니다.
-- Gate 0 운영 배포와 30분 확인은 완료했습니다. 인증된 운영 OpenAI smoke, 과거 Google 런타임 키 폐기, 24시간·7일 관찰은 아직 완료하지 않았습니다.
-- 과거 준비 1 증거와 2026-08-28 준비 2 복구훈련 증거를 보존합니다. Staging 실제 OpenAI 전체 경로와 되돌림·복귀, 관문 0 운영 배포·30분 확인은 완료했지만 인증된 운영 OpenAI smoke와 24시간·7일 관찰은 완료로 표시하지 않습니다.
+- Gate 0 운영 배포, 30분 확인, 인증된 운영 OpenAI smoke, 과거 Google 런타임 비밀값 제거와 공개 키 폐기는 완료했습니다. 24시간·7일 관찰은 아직 완료하지 않았습니다.
+- 과거 준비 1 증거와 2026-08-28 준비 2 복구훈련 증거를 보존합니다. Staging 실제 OpenAI 전체 경로와 되돌림·복귀, 관문 0 운영 배포·30분 확인·인증된 운영 smoke는 완료했지만 24시간·7일 관찰은 완료로 표시하지 않습니다.
 
 ## 2026-08-29 운영 배포 증거
 
@@ -25,8 +25,11 @@
 - GitHub deployment: `6146115369`, 수정된 검증기 재검증 뒤 최신 상태 성공
 - 고정 주소와 운영 주소의 `release.json`이 같은 런타임 SHA를 반환
 - 30분 시점 Pages 최근 24시간 집계 성공 32건·오류 0건, 내부·스크립트·CPU·메모리 오류 0건
-- 운영 KV는 `redirect`, `link_only`, 삭제·유지보수·사진백업 OFF 유지
+- 운영 KV는 30분 확인 때 `redirect`, `link_only`, 삭제·유지보수·사진백업 OFF였고, 인증된 smoke 뒤 KOSHA만 `full`로 전환
 - Staging·운영 임시 공급자 자격값 폐기, GitHub 임시 secret 제거, 서명 정리 영수증 확인
+- 신규·레거시 OpenAI 라벨·분류·폐기 안내, 음성 질의, TTS, STT 실제 운영 호출 성공
+- 운영·Staging의 과거 Google 런타임 비밀값 제거 뒤 OpenAI 재시험 성공
+- 과거 공개 Vision 키를 Google에서 삭제하고 공급자 거부 확인, GitHub secret-scanning 공개 경고 0건
 
 상세 증거와 아직 닫지 않은 항목은 [2026-08-29 Gate 0 운영 배포 증거](./gate0-production-evidence-2026-08-29.md)에 기록합니다.
 
@@ -135,9 +138,9 @@ PR #8 병합 SHA의 GitHub Actions에서 Application, Cloudflare release contrac
 - [x] GitHub `staging`, `production` environment 생성 및 `main` 배포 브랜치 제한
 - [x] GitHub 양쪽 environment에 Cloudflare 계정·Pages 배포·KV·Access·Supabase 입력 이름과 Gate 0 Staging 입력 이름 등록
 - [x] 운영과 다른 Staging Upstash 생성, 분리된 자격값의 연결 시험 성공; 활성 값은 기록하지 않음
-- [x] `buril-lab` Google Cloud 프로젝트에 Vision 전용 키와 서비스 계정에 바인드된 Gemini 전용 키를 발급하고 실제 API 인증 성공; Cloudflare 운영 설정에는 다음 배포용 암호값으로 등록
+- [x] `buril-lab` Google Cloud 프로젝트에 Vision 전용 키와 서비스 계정에 바인드된 Gemini 전용 키를 발급하고 당시 실제 API 인증 성공; OpenAI 운영 확인 뒤 Cloudflare 운영·Staging 런타임에서는 두 Google 비밀값을 제거
 - [x] 과거 공개 Gemini 키가 Google에서 `API_KEY_INVALID`임을 확인하고 GitHub secret-scanning 경고를 `revoked`로 해결
-- [ ] 아직 유효한 과거 공개 Vision 키는 새 운영 비밀값이 실제 배포에 반영된 직후 폐기하고 남은 GitHub 경고를 해결
+- [x] 과거 공개 Vision 키를 Google에서 삭제하고 실제 API 거부와 삭제 시각을 확인한 뒤 남은 GitHub 경고를 `revoked`로 해결; 공개 경고 0건
 - [x] 운영·Staging Supabase 프로젝트가 다른 프로젝트인지 확인
 
 GitHub environment 등록은 값이 존재한다는 증거일 뿐 Cloudflare Pages Functions의 암호값이나 외부 공급자 프로젝트가 올바른 Staging 대상을 가리킨다는 증거는 아닙니다. `ops:verify`, Access 인증 요청, 실제 Staging API smoke test가 모두 통과하기 전 배포 workflow를 실행하지 않습니다.
@@ -172,13 +175,14 @@ Security Advisor는 2026-08-25에 운영과 Staging 각각 53건(정보 6, 경�
 - [x] Cloudflare Pages Staging의 필수 Functions 암호값 12개를 모두 암호 형식으로 등록하고 `ops:verify` 통과; KOSHA 키는 `link_only` 계약에 따라 의도적으로 미등록
 - [x] 회전한 Access service token으로 보호된 custom domain과 project `pages.dev` 경계 통과
 - [x] Staging용 OpenAI·Google AI 키를 별도 프로젝트와 사용량 제한으로 분리하고 실제 인증 요청 성공
-- [ ] 운영 사용자 세션의 OpenAI 실제 smoke 성공 직후 과거 Google 런타임 키를 폐기하고 남은 경고 해결
+- [x] 인증된 임시 운영 세션으로 신규·레거시 OpenAI 라벨·분류·폐기 안내, 음성 질의·TTS·STT 실제 smoke 성공; 임시 데이터 완전 삭제와 JWT 403 확인
+- [x] 운영·Staging Cloudflare의 과거 Google 런타임 비밀값 제거와 재시험, 공개 Google 키 공급자 폐기와 GitHub 경고 해결
 - [x] Staging의 익명 집계 증거 보존 후 Gate 0 합성 데이터로 초기화하고 신뢰된 합성 소유 표시 확인
 - [x] Staging KV의 KOSHA 모드를 실제 `link_only`로 확인
 - [x] 배포 뒤 API가 공식 링크만 반환하는지 검증
 - [x] 같은 커밋 SHA의 Staging 배포 및 고유 URL `release.json` 검증
-- [ ] Staging에서 실제 외부 화학정보 연동시험
-- [ ] 현재 보안 강화 SHA의 공개키 고정, PR 품질검사, 감독형 Staging 배포와 되돌림 재훈련
+- [x] Staging에서 실제 외부 화학정보 연동시험
+- [x] 현재 보안 강화 SHA의 공개키 고정, PR 품질검사, 감독형 Staging 배포와 되돌림 재훈련
 - [ ] 누적 32회 이전에 과거 영수증 해시와 run 경계를 보존하는 epoch rollover 설계
 - [x] 직전 Pages deployment 실제 되돌림과 원래 후보 복귀 훈련
 - [x] 운영 쓰기와 일관된 복구 시점을 만들 수 있는 비공개 R2 사진 본문·완전한 manifest·해시 준비
