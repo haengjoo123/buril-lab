@@ -1,6 +1,6 @@
 # Gate 0 운영 배포 상태
 
-기준 시각: 2026-08-28 KST
+기준 시각: 2026-08-29 KST
 
 > 최신 전체 운영 순서와 현재 상태는 [운영 안전 완성 실행표](./operations-safety-rollout.md)를 우선합니다. 아래 문서는 Gate 0 준비 과정과 과거 증거를 상세히 보존합니다.
 
@@ -9,14 +9,28 @@
 ## 현재 결론
 
 - PR #8의 병합 SHA `7b661b25771e6ea84ccc4c1c4547a9caf5323d52`는 과거 Gate 0 기준선입니다. 당시 품질검사, Hosted Advisor, Staging 브라우저 흐름과 Pages 되돌림 훈련을 통과한 기록은 보존하지만 현재 보안 강화 분기의 배포 증거로 재사용하지 않습니다.
-- 최신 애플리케이션 변경은 PR #42까지 `main`에 병합됐습니다. 코드 기준 SHA는 `f47121a8c8e220c968d99baf75ff46a52df65fe9`이며, 이 SHA의 감독형 Staging 배포는 성공했습니다. 새 계획을 기록하는 문서 변경이 병합되면 새 전체 SHA를 다시 품질검사·Staging 배포해야 합니다.
+- 운영과 Staging에 배포된 애플리케이션 런타임 SHA는 `94076357fa5f073a7e641730e20c2c24d2a8a43b`입니다. 검증기 교정 병합 SHA `bbe9faa9c5f67834b0cd47b57d106a6b97762bf3`은 운영 고정 주소 검증기와 그 회귀시험만 바꾸며 런타임 재배포가 필요한 차이는 없습니다.
 - GitHub `staging`·`production` environment의 배포 입력, 별도 Staging Redis, 합성 데이터 초기화와 Gate 0 소유 표시는 준비됐습니다.
-- 최신 코드 기준 SHA의 감독형 Staging 배포는 새 서명 임대·누적 정리 영수증·숨김 토큰 입력 계약으로 실행했습니다. 현재 SHA 기준 되돌림·복귀 훈련은 아직 하지 않았습니다.
+- 최신 런타임 SHA의 감독형 Staging 배포는 새 서명 임대·누적 정리 영수증·숨김 토큰 입력 계약으로 실행했고, 직전 성공 배포로 되돌린 뒤 같은 후보로 복귀하는 훈련도 완료했습니다.
 - Supabase 임시 Micro 현재 시점 논리 복구훈련은 132분 안에 끝났고, 같은 날 임시 프로젝트 삭제와 프로젝트 목록 제거까지 확인했습니다.
-- Gate 0 운영 배포와 30분·24시간·7일 관찰은 아직 시작하지 않았습니다.
-- 과거 준비 1 증거와 2026-08-28 준비 2 복구훈련 증거를 보존합니다. 최신 코드의 Staging 배포는 완료했지만 실제 OpenAI 전체 경로, 최신 후보 되돌림·복귀, 관문 0 운영 배포·관찰은 완료로 표시하지 않습니다.
+- Gate 0 운영 배포와 30분 확인은 완료했습니다. 인증된 운영 OpenAI smoke, 과거 Google 런타임 키 폐기, 24시간·7일 관찰은 아직 완료하지 않았습니다.
+- 과거 준비 1 증거와 2026-08-28 준비 2 복구훈련 증거를 보존합니다. Staging 실제 OpenAI 전체 경로와 되돌림·복귀, 관문 0 운영 배포·30분 확인은 완료했지만 인증된 운영 OpenAI smoke와 24시간·7일 관찰은 완료로 표시하지 않습니다.
 
-## 2026-08-28 최신 main Staging 증거
+## 2026-08-29 운영 배포 증거
+
+- 운영 런타임 SHA: `94076357fa5f073a7e641730e20c2c24d2a8a43b`
+- 같은 SHA Staging workflow: [33196131576](https://github.com/haengjoo123/buril-lab/actions/runs/33196131576) 성공
+- 운영 workflow: [33197347433](https://github.com/haengjoo123/buril-lab/actions/runs/33197347433)
+- Cloudflare deployment: `61dab7a6-4af1-43cb-8415-59d6a337eafd`
+- GitHub deployment: `6146115369`, 수정된 검증기 재검증 뒤 최신 상태 성공
+- 고정 주소와 운영 주소의 `release.json`이 같은 런타임 SHA를 반환
+- 30분 시점 Pages 최근 24시간 집계 성공 32건·오류 0건, 내부·스크립트·CPU·메모리 오류 0건
+- 운영 KV는 `redirect`, `link_only`, 삭제·유지보수·사진백업 OFF 유지
+- Staging·운영 임시 공급자 자격값 폐기, GitHub 임시 secret 제거, 서명 정리 영수증 확인
+
+상세 증거와 아직 닫지 않은 항목은 [2026-08-29 Gate 0 운영 배포 증거](./gate0-production-evidence-2026-08-29.md)에 기록합니다.
+
+## 2026-08-28 이전 Staging 증거
 
 - 코드 SHA: `f47121a8c8e220c968d99baf75ff46a52df65fe9`
 - Quality 실행: [33157035518](https://github.com/haengjoo123/buril-lab/actions/runs/33157035518) 성공
@@ -158,7 +172,7 @@ Security Advisor는 2026-08-25에 운영과 Staging 각각 53건(정보 6, 경�
 - [x] Cloudflare Pages Staging의 필수 Functions 암호값 12개를 모두 암호 형식으로 등록하고 `ops:verify` 통과; KOSHA 키는 `link_only` 계약에 따라 의도적으로 미등록
 - [x] 회전한 Access service token으로 보호된 custom domain과 project `pages.dev` 경계 통과
 - [x] Staging용 OpenAI·Google AI 키를 별도 프로젝트와 사용량 제한으로 분리하고 실제 인증 요청 성공
-- [ ] 새 운영 Google 키가 적용되는 다음 운영 배포 직후 과거 공개 유출 키를 폐기하고 GitHub 경고 해결
+- [ ] 운영 사용자 세션의 OpenAI 실제 smoke 성공 직후 과거 Google 런타임 키를 폐기하고 남은 경고 해결
 - [x] Staging의 익명 집계 증거 보존 후 Gate 0 합성 데이터로 초기화하고 신뢰된 합성 소유 표시 확인
 - [x] Staging KV의 KOSHA 모드를 실제 `link_only`로 확인
 - [x] 배포 뒤 API가 공식 링크만 반환하는지 검증
@@ -171,8 +185,9 @@ Security Advisor는 2026-08-25에 운영과 Staging 각각 53건(정보 6, 경�
 - [x] Supabase 조직 접근자 확인 — 2026-08-24 23:32 KST: 현재 구성원 1명, 역할 `Owner`, 권한 범위 `organization-scoped`를 읽기 전용으로 확인했고 사용자가 해당 구성원의 BurilLab 운영 데이터 열람 권한을 명시 확인함; 공개 증거에는 이메일·조직 ID를 기록하지 않음
 - [x] Supabase 플러그인이 반환한 새 프로젝트 비용 `월 10달러`를 사용자에게 알리고 명시적 비용 확인
 - [x] 임시 Micro 프로젝트에서 132분 안에 현재 시점 논리 복구훈련 후 같은 날 삭제 및 목록 제거 확인
-- [ ] Gate 0 운영 수동 배포
-- [ ] 운영 배포 뒤 30분·24시간·7일 관찰
+- [x] Gate 0 운영 수동 배포
+- [x] 운영 배포 뒤 30분 관찰
+- [ ] 운영 배포 뒤 24시간·7일 관찰
 
 [Pages 되돌림 훈련](./pages-rollback-drill.md)은 Staging 실제 실행 증거를 포함합니다. [Supabase 복구훈련](./supabase-recovery-drill.md)과 [2026-08-28 공개 증거](./supabase-recovery-drill-evidence-2026-08-28.md)는 현재 시점 논리 복구 실행 결과를 포함합니다. 일일 백업의 과거 시점 복원과 RPO 1시간 관문은 여전히 열려 있습니다.
 
@@ -180,7 +195,7 @@ Security Advisor는 2026-08-25에 운영과 Staging 각각 53건(정보 6, 경�
 
 ## 현재 금지 상태
 
-- 운영 Pages 코드 배포 금지
+- 새 운영 Pages 코드 배포 금지 — 운영 1의 7일 관찰 전에는 다음 운영 묶음을 반영하지 않음
 - 운영 Supabase migration 또는 기준선 SQL 실행 금지
 - 새 실행 코드 SHA의 필수 검사가 모두 성공하기 전 Staging 배포 금지
 - 음성 `guided` 운영 전환 금지

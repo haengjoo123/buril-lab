@@ -1,6 +1,6 @@
 # BurilLab 운영 안전 완성 실행표
 
-기준 시각: 2026-08-28 KST
+기준 시각: 2026-08-29 KST
 
 이 문서는 운영 안전 완성 계획의 실제 진행 상태를 기록합니다. 코드가 준비됐다는 사실과 Staging 검증, 운영 배포, 30분·24시간·7일 관찰은 서로 다른 관문입니다. 체크되지 않은 단계는 완료로 해석하지 않습니다.
 
@@ -17,27 +17,28 @@
 
 | 항목 | 확인된 상태 |
 |---|---|
-| 애플리케이션 코드 기준 | `main` SHA `f47121a8c8e220c968d99baf75ff46a52df65fe9` |
-| 품질검사 | GitHub Actions `33157035518` 성공, Node 22 전체 검사 성공 |
-| 임시 자격값 전달시험 | GitHub Actions `33178916559` 성공 |
-| 최신 Staging 배포 | GitHub Actions `33179422133` 성공 |
-| Staging Pages 배포 | `3cd9df44-db67-4f8f-a07e-5d31118ee852`, immutable URL `https://3cd9df44.buril-lab-staging.pages.dev` |
-| Staging 경계 | Access, Hosted Advisor, `release.json`, custom/immutable Gate 0 브라우저 흐름 성공 |
-| 임시 배포 자격값 | GitHub 임시 secret 부재와 공급자 폐기 정리 영수증 저장 확인 |
+| 배포된 애플리케이션 | 운영·Staging 런타임 SHA `94076357fa5f073a7e641730e20c2c24d2a8a43b` |
+| 검증기 교정 기준 | 병합 SHA `bbe9faa9c5f67834b0cd47b57d106a6b97762bf3` |
+| 최신 품질검사 | GitHub Actions `33198771645`의 네 필수 job 성공 |
+| 최신 Staging 배포 | GitHub Actions `33196131576` 성공, 같은 런타임 SHA 검증 |
+| 운영 배포 | GitHub Actions `33197347433`, Cloudflare deployment `61dab7a6-4af1-43cb-8415-59d6a337eafd` |
+| 운영 release 증거 | 고정 주소와 `burillab.com` 모두 런타임 SHA 일치, GitHub deployment `6146115369` 최신 상태 성공 |
+| 임시 배포 자격값 | Staging·운영 모두 공급자 폐기, GitHub 임시 secret 제거, 서명 정리 영수증 확인 |
+| 운영 30분 관찰 | 2026-08-29 03:32 KST 확인. Pages 최근 24시간 집계 성공 32·오류 0, 런타임 오류 종류별 0 |
 | 외부 화학정보 | 2026-08-28 PubChem 실제 연동 7건 성공 |
 | 복구훈련 | Supabase 임시 Micro 현재시점 논리 복구 132분, 임시 프로젝트 삭제 완료 |
-| 운영 배포 | 아직 시작하지 않음 |
+| 남은 운영 1 증거 | 인증된 OpenAI 운영 smoke, 과거 Google 런타임 키 폐기, 24시간·7일 관찰 |
 
-Staging 배포 `f47121a8...`은 현재 코드 기능의 검증 증거입니다. 이 문서 변경이 `main`에 병합되면 새 전체 SHA를 다시 품질검사하고, 그 SHA를 Staging과 운영의 유일한 배포 후보로 사용합니다.
+검증기 교정 `bbe9faa...`은 릴리스 manifest 검증기와 회귀시험만 바꾸며 배포된 런타임을 바꾸지 않습니다. 수정된 검증기로 기존 운영 고정 주소와 공개 주소를 재검증했으므로 교정만을 위한 런타임 재배포는 하지 않았습니다. 자세한 운영 증거는 [2026-08-29 Gate 0 운영 배포 증거](./gate0-production-evidence-2026-08-29.md)에 기록합니다.
 
 ## 순차 관문
 
 | 단계 | 상태 | 닫기 위한 증거 |
 |---|---|---|
-| 준비 A: 상태·후보 확정 | 진행 중 | 이 문서 병합 뒤 새 `main` SHA의 전체 품질검사 |
-| 준비 B: Staging 동일 SHA | 대기 | Access, `release.json`, 브라우저 전체 흐름, 실제 OpenAI·화학정보 시험 |
-| 준비 C: Staging 되돌림 | 대기 | 직전 성공 배포로 전환·검증 후 후보 SHA로 복귀·재검증 |
-| 운영 1: 첫 웹 묶음 | 금지 | 안전 KV 확인 뒤 수동 배포, 30분·24시간·7일 관찰 |
+| 준비 A: 상태·후보 확정 | 완료 | 검증기 교정 병합 SHA의 네 필수 품질검사 성공 |
+| 준비 B: Staging 동일 SHA | 완료 | 같은 런타임 SHA 배포, Access·`release.json`·실제 OpenAI·화학정보 시험 성공 |
+| 준비 C: Staging 되돌림 | 완료 | 직전 성공 배포로 되돌림 뒤 후보 SHA 복귀·재검증 |
+| 운영 1: 첫 웹 묶음 | 관찰 중 | 수동 배포와 30분 확인 완료. 인증 smoke·Google 키 폐기·24시간·7일 관찰 필요 |
 | 운영 2: 변경분 사진 백업 v2 | 금지 | 운영 1의 실제 7일 통과와 Staging 전체/무변경/변경/삭제/복구 시험 |
 | 운영 3: API 경계 강화 | 금지 | 운영 2의 실제 7일 통과 |
 | 운영 4: 마이그레이션 이력 정리 | 금지 | 운영 3의 실제 7일 통과와 89개 이력 exact 증거 |
