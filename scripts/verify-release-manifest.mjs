@@ -10,6 +10,8 @@ import { isApprovedStagingHostname } from './verify-staging-access.mjs'
 
 const MAX_MANIFEST_BYTES = 8 * 1024
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
+const PAGES_DEPLOYMENT_LABEL_PATTERN = /^[0-9a-f]{8}$/
+const PRODUCTION_PAGES_APEX = 'buril-lab.pages.dev'
 const EXPECTED_KEYS = ['built_at', 'commit_sha', 'environment', 'project', 'schema_version']
 
 function parseArgs(argv) {
@@ -77,6 +79,17 @@ function accessHeaders(environment, hostname) {
   return {}
 }
 
+function isApprovedProductionPagesHostname(hostname) {
+  if (hostname === PRODUCTION_PAGES_APEX) return true
+  const labels = hostname.split('.')
+  const apexLabels = PRODUCTION_PAGES_APEX.split('.')
+  return (
+    labels.length === apexLabels.length + 1
+    && labels.slice(1).join('.') === PRODUCTION_PAGES_APEX
+    && PAGES_DEPLOYMENT_LABEL_PATTERN.test(labels[0])
+  )
+}
+
 async function fetchManifest(url, environmentName, processEnvironment) {
   if (!Object.hasOwn(RELEASE_ENVIRONMENTS, environmentName)) {
     throw new Error('Expected environment must be staging or production.')
@@ -86,7 +99,10 @@ async function fetchManifest(url, environmentName, processEnvironment) {
   const parsed = new URL(url)
   const allowedOrigin = environmentName === 'staging'
     ? isApprovedStagingHostname(parsed.hostname)
-    : parsed.origin === expected.origin
+    : (
+        parsed.origin === expected.origin
+        || (parsed.port === '' && isApprovedProductionPagesHostname(parsed.hostname))
+      )
   if (parsed.protocol !== 'https:' || !allowedOrigin || parsed.pathname !== '/release.json') {
     throw new Error('Remote release manifest URL does not match the selected environment.')
   }
