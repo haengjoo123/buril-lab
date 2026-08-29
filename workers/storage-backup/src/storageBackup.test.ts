@@ -47,6 +47,7 @@ function testLegacyJwt(role = 'service_role', ref = STAGING_REF): string {
 const TEST_SECRET = testLegacyJwt()
 const TEST_NEW_SECRET = 'sb_secret_storageBackupUnitTestCredential_1234567890'
 const FIXED_NOW = Date.parse('2026-08-25T12:00:00.000Z')
+const TEST_DAY_MS = 24 * 60 * 60_000
 
 interface PointerFixture {
   id: string
@@ -69,6 +70,7 @@ interface FakeStoredObject {
   body: Uint8Array
   etag: string
   checksum: ArrayBuffer
+  uploadedAt: number
   customMetadata?: Record<string, string>
 }
 
@@ -77,6 +79,7 @@ interface FakeR2Head {
   size: number
   etag: string
   checksums: { sha256?: ArrayBuffer }
+  uploaded: Date
   customMetadata?: Record<string, string>
 }
 
@@ -127,15 +130,22 @@ class FakeR2 implements BackupR2Bucket {
   readonly headCalls: string[] = []
   readonly getCalls: string[] = []
   readonly putCalls: FakePutCall[] = []
+  readonly deleteCalls: string[] = []
+  readonly listCalls: Array<{ prefix: string; cursor?: string; limit?: number }> = []
   readonly failPutKeys = new Set<string>()
+  readonly failDeleteKeys = new Set<string>()
   readonly conflictPutKeys = new Set<string>()
   readonly corruptHeadKeys = new Set<string>()
+  now = FIXED_NOW
+  listObjectsForPass?: (pass: number, prefix: string, current: FakeR2Head[]) => FakeR2Head[]
   private etagCounter = 0
+  private listPass = 0
 
   async seed(
     key: string,
     body: string,
     customMetadata?: Record<string, string>,
+    uploadedAt = this.now,
   ): Promise<void> {
     const bytes = new TextEncoder().encode(body)
     this.etagCounter += 1
@@ -143,6 +153,7 @@ class FakeR2 implements BackupR2Bucket {
       body: bytes,
       etag: `etag-${this.etagCounter}`,
       checksum: await digest(bytes),
+      uploadedAt,
       customMetadata,
     })
   }
@@ -160,6 +171,7 @@ class FakeR2 implements BackupR2Bucket {
           ? new Uint8Array(32).fill(7).buffer
           : stored.checksum.slice(0),
       },
+      uploaded: new Date(stored.uploadedAt),
       customMetadata: stored.customMetadata ? { ...stored.customMetadata } : undefined,
     }
   }
@@ -203,10 +215,64 @@ class FakeR2 implements BackupR2Bucket {
       body,
       etag: `etag-${this.etagCounter}`,
       checksum: actualDigest,
+      uploadedAt: this.now,
       customMetadata: options?.customMetadata ? { ...options.customMetadata } : undefined,
     }
     this.objects.set(key, stored)
     return this.head(key)
+  }
+
+  async delete(keys: string | string[]): Promise<void> {
+    const selected = Array.isArray(keys) ? keys : [keys]
+    for (const key of selected) {
+      this.deleteCalls.push(key)
+      if (this.failDeleteKeys.has(key)) throw new Error('bucket lock retained object')
+      this.objects.delete(key)
+    }
+  }
+
+  async list(options: {
+    limit?: number
+    prefix?: string
+    cursor?: string
+    include?: Array<'customMetadata'>
+  } = {}): Promise<{
+    objects: FakeR2Head[]
+    delimitedPrefixes: string[]
+    truncated: boolean
+    cursor?: string
+  }> {
+    const prefix = options.prefix ?? ''
+    const limit = options.limit ?? 1_000
+    const offset = options.cursor ? Number(options.cursor) : 0
+    this.listCalls.push({ prefix, ...(options.cursor ? { cursor: options.cursor } : {}), limit })
+    this.listPass += 1
+    let heads: FakeR2Head[] = [...this.objects.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .sort((left, right) => left.localeCompare(right, 'en'))
+      .map((key) => {
+        const stored = this.objects.get(key) as FakeStoredObject
+        return {
+          key,
+          size: stored.body.byteLength,
+          etag: stored.etag,
+          checksums: {
+            sha256: this.corruptHeadKeys.has(key)
+              ? new Uint8Array(32).fill(7).buffer
+              : stored.checksum.slice(0),
+          },
+          uploaded: new Date(stored.uploadedAt),
+          customMetadata: stored.customMetadata ? { ...stored.customMetadata } : undefined,
+        }
+      })
+    if (this.listObjectsForPass) {
+      heads = this.listObjectsForPass(this.listPass, prefix, heads.map((head) => ({ ...head })))
+    }
+    const selected = heads.slice(offset, offset + limit)
+    const nextOffset = offset + selected.length
+    return nextOffset < heads.length
+      ? { objects: selected, delimitedPrefixes: [], truncated: true, cursor: String(nextOffset) }
+      : { objects: selected, delimitedPrefixes: [], truncated: false }
   }
 
   text(key: string): string {
@@ -469,6 +535,18 @@ function latestManifest(r2: FakeR2): Record<string, unknown> {
   return JSON.parse(r2.text(`snapshots/${latest.snapshotId}/manifest.json`)) as Record<string, unknown>
 }
 
+function contentGcState(r2: FakeR2): {
+  updatedAt: string
+  lastSnapshotId: string
+  scannedBodyCount: number
+  protectedBodyCount: number
+  candidateCount: number
+  deletedBodyCount: number
+  candidates: Array<{ backupKey: string; firstConfirmedAt: string; lastConfirmedAt: string }>
+} {
+  return JSON.parse(r2.text('control/content-gc-state.json')) as ReturnType<typeof contentGcState>
+}
+
 async function runFixture(
   source: FakeSource,
   options: {
@@ -477,13 +555,16 @@ async function runFixture(
     bindingOverrides?: Partial<StorageBackupBindings>
     logs?: SafeLogEntry[]
     dependencyOverrides?: Record<string, unknown>
+    now?: number
   } = {},
 ): Promise<{ result: BackupRunResult; kv: FakeKv; r2: FakeR2; logs: SafeLogEntry[] }> {
   const kv = options.kv ?? new FakeKv()
   const r2 = options.r2 ?? new FakeR2()
+  r2.now = options.now ?? FIXED_NOW
   const logs = options.logs ?? []
   const overrides = {
     ...testOverrides(source, logs),
+    ...(options.now === undefined ? {} : { now: () => options.now as number }),
     ...options.dependencyOverrides,
   }
   const result = await runScheduledBackup(bindings(kv, r2, options.bindingOverrides), overrides)
@@ -826,7 +907,7 @@ describe('OFF-first activation and environment isolation', () => {
     expect(STORAGE_BACKUP_LIMITS.maxPointers).toBe(250)
     expect(STORAGE_BACKUP_LIMITS.maxPointersPerOwner).toBe(50)
     expect(STORAGE_BACKUP_LIMITS.maxStorageObjects).toBe(250)
-    expect(worstCase).toBe(3283)
+    expect(worstCase).toBe(3751)
     expect(worstCase).toBeLessThan(STORAGE_BACKUP_LIMITS.maxSubrequests)
     expect(() => resolveSourceConfig(
       bindings(new FakeKv(), new FakeR2()),
@@ -934,6 +1015,10 @@ describe('OFF-first activation and environment isolation', () => {
         referenceWindowDays: 30,
         minimumUnreferencedAgeDays: 31,
         confirmationRuns: 2,
+        confirmationMaxGapDays: 3,
+        maxCandidates: 100,
+        maxDeletesPerRun: 10,
+        maxContentBodies: 10_000,
       },
       allowedCloudflareManagedRules: [{
         name: 'Default Multipart Abort Rule',
@@ -1596,6 +1681,327 @@ describe('snapshot creation and consistency barriers', () => {
     expect(copiedBodies).toEqual([expectContentObjectKey(firstObject.body)])
     expect([...r2.objects.keys()].some((key) => key.endsWith('/manifest.json'))).toBe(false)
     expect(completeKeys(r2)).toHaveLength(0)
+  })
+})
+
+describe('reference-based content garbage collection', () => {
+  async function prepareOldContent(): Promise<{
+    fixtures: ReturnType<typeof validFixtures>
+    r2: FakeR2
+    removedBodyKey: string
+  }> {
+    const fixtures = validFixtures()
+    const first = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), {
+      now: FIXED_NOW - (32 * TEST_DAY_MS),
+    })
+    expect(first.result.status).toBe('completed')
+    return {
+      fixtures,
+      r2: first.r2,
+      removedBodyKey: expectContentObjectKey(fixtures.objects[2].body),
+    }
+  }
+
+  function withoutLastPhoto(fixtures: ReturnType<typeof validFixtures>): FakeSource {
+    return new FakeSource(fixtures.pointers.slice(0, 2), fixtures.objects.slice(0, 2))
+  }
+
+  it('keeps an old body protected when a complete manifest references it at the exact 30-day boundary', async () => {
+    const prepared = await prepareOldContent()
+    const boundary = await runFixture(
+      new FakeSource(prepared.fixtures.pointers, prepared.fixtures.objects),
+      { r2: prepared.r2, now: FIXED_NOW - (30 * TEST_DAY_MS) },
+    )
+    expect(boundary.result.status).toBe('completed')
+
+    const current = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+
+    expect(current.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+    expect(prepared.r2.deleteCalls).not.toContain(prepared.removedBodyKey)
+    expect(contentGcState(prepared.r2).candidates).not.toContainEqual(
+      expect.objectContaining({ backupKey: prepared.removedBodyKey }),
+    )
+  })
+
+  it('marks an eligible body on one completed run and deletes it only on a second distinct run', async () => {
+    const prepared = await prepareOldContent()
+    const firstConfirmation = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+
+    expect(firstConfirmation.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+    expect(contentGcState(prepared.r2)).toMatchObject({
+      candidateCount: 1,
+      deletedBodyCount: 0,
+      candidates: [{
+        backupKey: prepared.removedBodyKey,
+        firstConfirmedAt: new Date(FIXED_NOW).toISOString(),
+        lastConfirmedAt: new Date(FIXED_NOW).toISOString(),
+      }],
+    })
+
+    const secondConfirmation = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+
+    expect(secondConfirmation.result.status).toBe('completed')
+    expect(prepared.r2.deleteCalls.filter((key) => key === prepared.removedBodyKey)).toHaveLength(1)
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(false)
+    expect(contentGcState(prepared.r2)).toMatchObject({
+      candidateCount: 0,
+      deletedBodyCount: 1,
+      candidates: [],
+    })
+  })
+
+  it('does not create a candidate before the full 31-day age boundary', async () => {
+    const fixtures = validFixtures()
+    const almostOldEnough = FIXED_NOW - (31 * TEST_DAY_MS) + 1
+    const seeded = await runFixture(new FakeSource(fixtures.pointers, fixtures.objects), {
+      now: almostOldEnough,
+    })
+    expect(seeded.result.status).toBe('completed')
+    const removedBodyKey = expectContentObjectKey(fixtures.objects[2].body)
+
+    const early = await runFixture(withoutLastPhoto(fixtures), {
+      r2: seeded.r2,
+      now: FIXED_NOW,
+    })
+    expect(early.result.status).toBe('completed')
+    expect(contentGcState(seeded.r2).candidateCount).toBe(0)
+    expect(seeded.r2.objects.has(removedBodyKey)).toBe(true)
+
+    const boundary = await runFixture(withoutLastPhoto(fixtures), {
+      r2: seeded.r2,
+      now: FIXED_NOW + 1,
+    })
+    expect(boundary.result.status).toBe('completed')
+    expect(contentGcState(seeded.r2)).toMatchObject({
+      candidateCount: 1,
+      deletedBodyCount: 0,
+      candidates: [{ backupKey: removedBodyKey }],
+    })
+    expect(seeded.r2.objects.has(removedBodyKey)).toBe(true)
+  })
+
+  it('clears first-pass evidence when the body becomes referenced again', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(first.result.status).toBe('completed')
+    expect(contentGcState(prepared.r2).candidateCount).toBe(1)
+
+    const referencedAgain = await runFixture(
+      new FakeSource(prepared.fixtures.pointers, prepared.fixtures.objects),
+      { r2: prepared.r2, now: FIXED_NOW + TEST_DAY_MS },
+    )
+
+    expect(referencedAgain.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+    expect(prepared.r2.deleteCalls).not.toContain(prepared.removedBodyKey)
+    expect(contentGcState(prepared.r2).candidateCount).toBe(0)
+  })
+
+  it('restarts the two-run confirmation after the collector has not completed for more than three days', async () => {
+    const prepared = await prepareOldContent()
+    const oldConfirmationTime = FIXED_NOW - (4 * TEST_DAY_MS)
+    const oldConfirmation = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: oldConfirmationTime,
+    })
+    expect(oldConfirmation.result.status).toBe('completed')
+
+    const restarted = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(restarted.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+    expect(contentGcState(prepared.r2)).toMatchObject({
+      candidateCount: 1,
+      deletedBodyCount: 0,
+      candidates: [{
+        backupKey: prepared.removedBodyKey,
+        firstConfirmedAt: new Date(FIXED_NOW).toISOString(),
+      }],
+    })
+
+    const completed = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+    expect(completed.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(false)
+  })
+
+  it('never makes a currently referenced old body a candidate or deletion target', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(
+      new FakeSource(prepared.fixtures.pointers, prepared.fixtures.objects),
+      { r2: prepared.r2, now: FIXED_NOW },
+    )
+    const second = await runFixture(
+      new FakeSource(prepared.fixtures.pointers, prepared.fixtures.objects),
+      { r2: prepared.r2, now: FIXED_NOW + TEST_DAY_MS },
+    )
+
+    expect(first.result.status).toBe('completed')
+    expect(second.result.status).toBe('completed')
+    expect(prepared.r2.deleteCalls.filter((key) => key.startsWith('objects/sha256/'))).toHaveLength(0)
+    expect(contentGcState(prepared.r2).candidateCount).toBe(0)
+  })
+
+  it('ignores an incomplete snapshot as a restore reference', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(first.result.status).toBe('completed')
+    prepared.r2.now = FIXED_NOW + TEST_DAY_MS
+    await prepared.r2.seed('snapshots/incomplete-run/manifest.json', '{"incomplete":true}\n')
+    await prepared.r2.seed('snapshots/incomplete-run/manifest.sha256', `${'0'.repeat(64)}\n`)
+
+    const second = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+
+    expect(second.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(false)
+  })
+
+  it('fails closed before deletion when a recent completion is missing its manifest documents', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(first.result.status).toBe('completed')
+    prepared.r2.now = FIXED_NOW + TEST_DAY_MS
+    await prepared.r2.seed('snapshots/missing-documents/complete.json', '{"schemaVersion":2}\n')
+    const deleteCount = prepared.r2.deleteCalls.length
+
+    const second = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+
+    expect(second.result).toMatchObject({ status: 'failed', code: 'r2_verify_failed' })
+    expect(prepared.r2.deleteCalls).toHaveLength(deleteCount)
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+  })
+
+  it('fails closed when the two bounded R2 listings do not have the same fingerprint', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(first.result.status).toBe('completed')
+    const firstListCall = prepared.r2.listCalls.length
+    prepared.r2.listObjectsForPass = (pass, prefix, current) => (
+      prefix === 'snapshots/' && pass === firstListCall + 2 && current.length > 0
+        ? current.map((object, index) => index === 0 ? { ...object, etag: 'drifted-etag' } : object)
+        : current
+    )
+    const deleteCount = prepared.r2.deleteCalls.length
+
+    const second = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+
+    expect(second.result).toMatchObject({ status: 'failed', code: 'r2_verify_failed' })
+    expect(prepared.r2.deleteCalls).toHaveLength(deleteCount)
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+  })
+
+  it('fails closed when a content-addressed body has malformed metadata', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(first.result.status).toBe('completed')
+    const stored = prepared.r2.objects.get(prepared.removedBodyKey)
+    expect(stored).toBeTruthy()
+    prepared.r2.objects.set(prepared.removedBodyKey, {
+      ...(stored as FakeStoredObject),
+      customMetadata: { 'content-sha256': 'f'.repeat(64) },
+    })
+    const deleteCount = prepared.r2.deleteCalls.length
+
+    const second = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+
+    expect(second.result).toMatchObject({ status: 'failed', code: 'r2_verify_failed' })
+    expect(prepared.r2.deleteCalls).toHaveLength(deleteCount)
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+  })
+
+  it('keeps the body and the first-pass evidence when Bucket Lock rejects deletion', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(first.result.status).toBe('completed')
+    const firstState = prepared.r2.text('control/content-gc-state.json')
+    prepared.r2.failDeleteKeys.add(prepared.removedBodyKey)
+
+    const blocked = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+
+    expect(blocked.result).toMatchObject({ status: 'failed', code: 'content_gc_delete_failed' })
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
+    expect(prepared.r2.text('control/content-gc-state.json')).toBe(firstState)
+
+    prepared.r2.failDeleteKeys.delete(prepared.removedBodyKey)
+    const recovered = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + (2 * TEST_DAY_MS),
+    })
+    expect(recovered.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(false)
+  })
+
+  it('rejects a corrupted aggregate confirmation document before deleting content', async () => {
+    const prepared = await prepareOldContent()
+    const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+    expect(first.result.status).toBe('completed')
+    prepared.r2.now = FIXED_NOW + TEST_DAY_MS
+    await prepared.r2.seed(
+      'control/content-gc-state.json',
+      '{}\n',
+      { 'gc-state': 'content-reference-v1' },
+    )
+    const deleteCount = prepared.r2.deleteCalls.length
+
+    const second = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+
+    expect(second.result).toMatchObject({ status: 'failed', code: 'r2_verify_failed' })
+    expect(prepared.r2.deleteCalls).toHaveLength(deleteCount)
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
   })
 })
 

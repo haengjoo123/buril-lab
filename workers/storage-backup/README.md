@@ -142,14 +142,18 @@ Wrangler `limits.subrequests=4000`. The runtime KV switch remains fail-closed an
 OFF by default, so the paid profile alone does not start a backup.
 
 The static worst
-case is 3,283, including one same-origin HTTPS redirect per source request,
+case is 3,751, including one same-origin HTTPS redirect per source request,
 retry attempts, KV reads, Supabase calls, every R2 write and verification, and
-two reserved lock-release calls. Redirects are handled manually: only 301/302
+the bounded reference-based content collector, plus two reserved lock-release
+calls. Redirects are handled manually: only 301/302
 for GET or HEAD and 307/308 for any existing method may stay on the exact same
 origin and the same path (apart from trailing slashes), and a second redirect is
 rejected. A run supports at most 50 referenced photos per lab or personal owner,
-250 total source objects, 5 database pages, and 25 recursive Storage-list pages, and
-stops starting normal work after 14 minutes so the 15-minute Cron boundary
+250 total source objects, 5 database pages, and 25 recursive Storage-list pages.
+The collector accepts at most 512 snapshot documents, 128 complete snapshots in
+the 30-day reference window, and 10,000 content bodies. It retains at most 100
+pending candidates and deletes at most 10 confirmed bodies in one run. The
+Worker stops starting normal work after 14 minutes so the 15-minute Cron boundary
 retains cleanup time. These are support limits, not estimates of platform
 capacity. Cloudflare's current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
 document Free as 10 ms CPU/50 subrequests and Paid as 10,000 default
@@ -167,7 +171,9 @@ Each successful run writes, in order:
 2. `snapshots/<run-id>/manifest.json`
 3. `snapshots/<run-id>/manifest.sha256`
 4. `snapshots/<run-id>/complete.json`
-5. `control/latest.json`
+5. a fail-closed reference scan and conditional update of
+   `control/content-gc-state.json`
+6. `control/latest.json`
 
 `control/active-lock.json` is acquired and replaced with R2 conditional writes.
 An incomplete snapshot has no `complete.json` and must never be used for a
@@ -182,6 +188,28 @@ unchanged and the prior content body still has the expected size and SHA-256,
 the body is reused without downloading or uploading it. A changed source body,
 or an unchanged source whose content body is missing or corrupt, is downloaded,
 hashed, and stored under the content-addressed key before completion.
+
+After `complete.json` exists and before `control/latest.json` advances, the
+Worker lists the snapshot and content prefixes twice and requires identical,
+bounded fingerprints. Only complete v2 snapshots uploaded within the inclusive
+30-day window are references; an incomplete snapshot never qualifies for
+restore or retention. Every recent completion, manifest digest document, and
+manifest is read and verified, and every referenced content body must still be
+present. Malformed keys, metadata, pagination, checksums, or aggregate GC state
+stop the run before any content deletion. Pagination follows the `truncated`
+cursor contract rather than assuming that a requested page is full, as required
+by Cloudflare's [R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/).
+
+An unreferenced content body must be at least 31 full days old before it can be
+written to the bounded aggregate candidate state. A later completed backup must
+independently find the same key, ETag, size, upload time, and lack of references
+before deletion. If the collector has not completed for more than three days,
+all pending confirmations are discarded and begin again. Immediately before
+each delete it revalidates the object, active lease, and runtime switch, then
+confirms the key is absent. Bucket Lock or any delete/verification failure keeps
+the previous candidate evidence and prevents `control/latest.json` from
+advancing. The state document contains only hashes, R2 identity fields,
+timestamps, snapshot IDs, and aggregate counts.
 
 ## Local verification (no external source calls)
 
@@ -247,10 +275,11 @@ larger; any request or manifest naming that bucket is a failed acceptance run.
   days, and aborts incomplete multipart uploads after 1 day; Bucket Lock
   `retain-snapshots-30-days` applies only to `snapshots/` for 30 days and
   `retain-content-bodies-30-days` applies only to `objects/sha256/` for 30 days.
-  Content bodies are not covered by the snapshot lifecycle. A separate
-  reference-based collector may remove a body only after it is absent from all
+  Content bodies are not covered by the snapshot lifecycle. The Worker's
+  reference-based collector removes a body only after it is absent from all
   complete manifests in the last 30 days, is at least 31 days old, and is
-  confirmed by two collection runs.
+  confirmed by two distinct completed collection runs. A gap longer than three
+  days resets the confirmation instead of reusing stale evidence.
   Cloudflare's managed `Default Multipart Abort Rule` is additionally allowed
   only when it is multipart-only, covers all prefixes, and aborts after 7 days.
   Any other additional rule is drift. `control/` remains outside the required

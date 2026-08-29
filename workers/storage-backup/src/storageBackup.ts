@@ -2,11 +2,16 @@ const RUNTIME_CONFIG_KEY = 'runtime_config'
 const SOURCE_BUCKET = 'cabinets'
 const LOCK_KEY = 'control/active-lock.json'
 const LATEST_KEY = 'control/latest.json'
+const CONTENT_GC_STATE_KEY = 'control/content-gc-state.json'
+const SNAPSHOT_PREFIX = 'snapshots/'
+const CONTENT_PREFIX = 'objects/sha256/'
 const SNAPSHOT_SCHEMA_VERSION = 2
 const LEGACY_SNAPSHOT_SCHEMA_VERSION = 1
+const CONTENT_GC_SCHEMA_VERSION = 1
 const CLEANUP_SUBREQUEST_RESERVE = 2
 const FREE_PLATFORM_SUBREQUEST_LIMIT = 50
 const MAX_SOURCE_REDIRECTS_PER_ATTEMPT = 1
+const DAY_MS = 24 * 60 * 60_000
 
 const ENVIRONMENT_CONTRACT = Object.freeze({
   staging: Object.freeze({
@@ -31,6 +36,7 @@ export type BackupCode =
   | 'backup_locked'
   | 'backup_locked_extended'
   | 'config_invalid'
+  | 'content_gc_delete_failed'
   | 'empty_source'
   | 'execution_deadline_exceeded'
   | 'flag_disabled_before_complete'
@@ -102,6 +108,7 @@ interface R2HeadLike {
   size: number
   etag: string
   checksums: R2ChecksumsLike
+  uploaded: Date
   customMetadata?: Record<string, string>
 }
 
@@ -122,6 +129,20 @@ interface R2PutOptionsLike {
   sha256?: ArrayBuffer | ArrayBufferView
 }
 
+interface R2ListOptionsLike {
+  limit?: number
+  prefix?: string
+  cursor?: string
+  include?: Array<'customMetadata'>
+}
+
+interface R2ListResultLike {
+  objects: R2HeadLike[]
+  delimitedPrefixes: string[]
+  truncated: boolean
+  cursor?: string
+}
+
 export interface BackupR2Bucket {
   head(key: string): Promise<R2HeadLike | null>
   get(key: string): Promise<R2GetLike | null>
@@ -130,6 +151,8 @@ export interface BackupR2Bucket {
     value: ArrayBuffer | ArrayBufferView | string,
     options?: R2PutOptionsLike,
   ): Promise<R2HeadLike | null>
+  delete(keys: string | string[]): Promise<void>
+  list(options?: R2ListOptionsLike): Promise<R2ListResultLike>
 }
 
 export interface StorageBackupBindings {
@@ -164,6 +187,17 @@ export interface BackupLimits {
   maxLockClockSkewMs: number
   maxRunDurationMs: number
   maxSubrequests: number
+  r2ListPageSize: number
+  maxSnapshotListPages: number
+  maxSnapshotDocuments: number
+  maxRecentSnapshots: number
+  maxContentListPages: number
+  maxContentBodies: number
+  gcReferenceWindowDays: number
+  gcMinimumUnreferencedAgeDays: number
+  gcConfirmationMaxGapDays: number
+  maxGcCandidates: number
+  maxGcDeletesPerRun: number
 }
 
 export const STORAGE_BACKUP_LIMITS: Readonly<BackupLimits> = Object.freeze({
@@ -185,6 +219,17 @@ export const STORAGE_BACKUP_LIMITS: Readonly<BackupLimits> = Object.freeze({
   maxLockClockSkewMs: 60_000,
   maxRunDurationMs: 14 * 60_000,
   maxSubrequests: 4_000,
+  r2ListPageSize: 1_000,
+  maxSnapshotListPages: 4,
+  maxSnapshotDocuments: 512,
+  maxRecentSnapshots: 128,
+  maxContentListPages: 10,
+  maxContentBodies: 10_000,
+  gcReferenceWindowDays: 30,
+  gcMinimumUnreferencedAgeDays: 31,
+  gcConfirmationMaxGapDays: 3,
+  maxGcCandidates: 100,
+  maxGcDeletesPerRun: 10,
 })
 
 interface RunGuard {
@@ -265,6 +310,29 @@ interface LockLease {
   token: string
   acquiredAt: string
   expiresAt: string
+}
+
+interface ContentGcCandidate {
+  backupKey: string
+  etag: string
+  bytes: number
+  uploadedAt: string
+  firstConfirmedAt: string
+  lastConfirmedAt: string
+  firstSnapshotId: string
+  lastSnapshotId: string
+}
+
+interface ContentGcState {
+  schemaVersion: number
+  environment: BackupEnvironmentName
+  updatedAt: string
+  lastSnapshotId: string
+  scannedBodyCount: number
+  protectedBodyCount: number
+  candidateCount: number
+  deletedBodyCount: number
+  candidates: ContentGcCandidate[]
 }
 
 type LockSkipCode = 'backup_locked' | 'backup_locked_extended'
@@ -420,8 +488,23 @@ export function calculateWorstCaseSubrequests(limits: BackupLimits): number {
   // A worst-case v2 run reads the previous pointer/completion/manifest, checks
   // every content-addressed body, rewrites every body, verifies every body
   // again before completion, and still reserves the fixed lock/document calls.
-  const r2Requests = (4 * limits.maxStorageObjects) + 18
-  return sourceRequests + runtimeFlagReads + r2Requests
+  const r2Requests = (4 * limits.maxStorageObjects) + 19
+  const snapshotListRequests = 2 * limits.maxSnapshotListPages
+  const contentListRequests = 2 * limits.maxContentListPages
+  const snapshotVerificationRequests = 3 * limits.maxRecentSnapshots
+  // GC reads and conditionally rewrites one aggregate state document. Each
+  // bounded deletion rechecks the content object, lease, and runtime flag,
+  // performs the delete, and confirms that the object is gone.
+  const gcFixedRequests = snapshotListRequests
+    + contentListRequests
+    + snapshotVerificationRequests
+    + 5
+  const gcDeletionRequests = 5 * limits.maxGcDeletesPerRun
+  return sourceRequests
+    + runtimeFlagReads
+    + r2Requests
+    + gcFixedRequests
+    + gcDeletionRequests
 }
 
 function isValidLimits(limits: BackupLimits): boolean {
@@ -438,6 +521,14 @@ function isValidLimits(limits: BackupLimits): boolean {
     && limits.maxPointers <= 500
     && limits.maxPointersPerOwner <= 50
     && limits.maxPointersPerOwner <= limits.maxPointers
+    && limits.r2ListPageSize <= 1_000
+    && limits.maxSnapshotDocuments <= limits.r2ListPageSize * limits.maxSnapshotListPages
+    && limits.maxRecentSnapshots * 3 <= limits.maxSnapshotDocuments
+    && limits.maxContentBodies <= limits.r2ListPageSize * limits.maxContentListPages
+    && limits.gcReferenceWindowDays === 30
+    && limits.gcMinimumUnreferencedAgeDays >= limits.gcReferenceWindowDays + 1
+    && limits.gcConfirmationMaxGapDays <= limits.gcReferenceWindowDays
+    && limits.maxGcDeletesPerRun <= limits.maxGcCandidates
     && limits.retryCount <= 5
     && limits.maxObjectBytes <= limits.maxTotalBytes
     && maximumPossibleBytes <= limits.maxTotalBytes
@@ -587,6 +678,8 @@ export function resolveSourceConfig(
     || typeof bindings.CABINET_BACKUPS.head !== 'function'
     || typeof bindings.CABINET_BACKUPS.get !== 'function'
     || typeof bindings.CABINET_BACKUPS.put !== 'function'
+    || typeof bindings.CABINET_BACKUPS.delete !== 'function'
+    || typeof bindings.CABINET_BACKUPS.list !== 'function'
     || !isValidLimits(limits)
   ) {
     fail('config_invalid')
@@ -1478,12 +1571,12 @@ function isStoredSourcePath(value: unknown): value is string {
   ))
 }
 
-async function readR2Bytes(
+async function readR2Document(
   config: SourceConfig,
   key: string,
   maximumBytes: number,
   dependencies: BackupDependencies,
-): Promise<Uint8Array | null> {
+): Promise<{ body: Uint8Array; object: R2GetLike } | null> {
   let object: R2GetLike | null
   try {
     consumeSubrequest(dependencies)
@@ -1511,7 +1604,17 @@ async function readR2Bytes(
   if (body.byteLength !== object.size) fail('r2_verify_failed')
   const digest = await sha256(body)
   if (!equalBytes(object.checksums.sha256, digest.bytes)) fail('r2_checksum_failed')
-  return body
+  return { body, object }
+}
+
+async function readR2Bytes(
+  config: SourceConfig,
+  key: string,
+  maximumBytes: number,
+  dependencies: BackupDependencies,
+): Promise<Uint8Array | null> {
+  const document = await readR2Document(config, key, maximumBytes, dependencies)
+  return document?.body ?? null
 }
 
 function parseJsonObject(body: Uint8Array): Record<string, unknown> {
@@ -1561,42 +1664,31 @@ function parsePreviousManifestObject(value: unknown): BackedObject {
   }
 }
 
-async function readPreviousManifest(
-  config: SourceConfig,
-  dependencies: BackupDependencies,
-): Promise<Map<string, BackedObject>> {
-  const empty = new Map<string, BackedObject>()
-  const latestBody = await readR2Bytes(config, LATEST_KEY, dependencies.limits.maxJsonBytes, dependencies)
-  if (latestBody === null) return empty
-  const latest = parseJsonObject(latestBody)
-  if (
-    !hasExactObjectKeys(latest, [
-      'schemaVersion', 'snapshotId', 'environment', 'completeKey',
-      'manifestSha256', 'completedAt', 'orphanCount',
-    ])
-    || (latest.schemaVersion !== LEGACY_SNAPSHOT_SCHEMA_VERSION
-      && latest.schemaVersion !== SNAPSHOT_SCHEMA_VERSION)
-    || !isSnapshotId(latest.snapshotId)
-    || latest.environment !== config.environment
-    || latest.completeKey !== `snapshots/${latest.snapshotId}/complete.json`
-    || !isSha256Hex(latest.manifestSha256)
-    || !isCanonicalTimestamp(latest.completedAt)
-    || !Number.isSafeInteger(latest.orphanCount)
-    || (latest.orphanCount as number) < 0
-  ) {
-    fail('r2_verify_failed')
-  }
-  if (latest.schemaVersion === LEGACY_SNAPSHOT_SCHEMA_VERSION) return empty
+interface VerifiedSnapshot {
+  snapshotId: string
+  completedAt: string
+  manifestSha256: string
+  orphanCount: number
+  objects: BackedObject[]
+}
 
+async function readVerifiedSnapshot(
+  config: SourceConfig,
+  snapshotId: string,
+  dependencies: BackupDependencies,
+): Promise<VerifiedSnapshot> {
+  if (!isSnapshotId(snapshotId)) fail('r2_verify_failed')
+  const completeKey = `${SNAPSHOT_PREFIX}${snapshotId}/complete.json`
+  const manifestKey = `${SNAPSHOT_PREFIX}${snapshotId}/manifest.json`
+  const manifestHashKey = `${SNAPSHOT_PREFIX}${snapshotId}/manifest.sha256`
   const completeBody = await readR2Bytes(
     config,
-    latest.completeKey as string,
+    completeKey,
     dependencies.limits.maxJsonBytes,
     dependencies,
   )
   if (completeBody === null) fail('r2_verify_failed')
   const complete = parseJsonObject(completeBody)
-  const manifestKey = `snapshots/${latest.snapshotId}/manifest.json`
   if (
     !hasExactObjectKeys(complete, [
       'schemaVersion', 'snapshotId', 'environment', 'completedAt', 'manifestKey',
@@ -1604,20 +1696,26 @@ async function readPreviousManifest(
       'totalBytes', 'uploadedBodyCount', 'reusedBodyCount',
     ])
     || complete.schemaVersion !== SNAPSHOT_SCHEMA_VERSION
-    || complete.snapshotId !== latest.snapshotId
+    || complete.snapshotId !== snapshotId
     || complete.environment !== config.environment
-    || complete.completedAt !== latest.completedAt
+    || !isCanonicalTimestamp(complete.completedAt)
     || complete.manifestKey !== manifestKey
-    || complete.manifestSha256 !== latest.manifestSha256
-    || complete.orphanCount !== latest.orphanCount
+    || !isSha256Hex(complete.manifestSha256)
   ) {
     fail('r2_verify_failed')
   }
 
+  const manifestHashBody = await readR2Bytes(config, manifestHashKey, 128, dependencies)
+  if (
+    manifestHashBody === null
+    || new TextDecoder().decode(manifestHashBody) !== `${complete.manifestSha256}\n`
+  ) {
+    fail('r2_checksum_failed')
+  }
   const manifestBody = await readR2Bytes(config, manifestKey, dependencies.limits.maxJsonBytes, dependencies)
   if (manifestBody === null) fail('r2_verify_failed')
   const manifestDigest = await sha256(manifestBody)
-  if (manifestDigest.hex !== latest.manifestSha256) fail('r2_checksum_failed')
+  if (manifestDigest.hex !== complete.manifestSha256) fail('r2_checksum_failed')
   const manifest = parseJsonObject(manifestBody)
   if (
     !hasExactObjectKeys(manifest, [
@@ -1626,9 +1724,12 @@ async function readPreviousManifest(
       'uploadedBodyCount', 'reusedBodyCount', 'objects',
     ])
     || manifest.schemaVersion !== SNAPSHOT_SCHEMA_VERSION
-    || manifest.snapshotId !== latest.snapshotId
+    || manifest.snapshotId !== snapshotId
     || manifest.environment !== config.environment
     || !isCanonicalTimestamp(manifest.createdAt)
+    || Date.parse(manifest.createdAt) > Date.parse(complete.completedAt as string)
+    || Date.parse(complete.completedAt as string) - Date.parse(manifest.createdAt) > dependencies.limits.maxRunDurationMs
+    || Date.parse(complete.completedAt as string) > dependencies.now() + dependencies.limits.maxLockClockSkewMs
     || !isRecord(manifest.source)
     || !hasExactObjectKeys(manifest.source, ['supabaseProjectRef', 'storageBucket', 'pointerMode'])
     || manifest.source.supabaseProjectRef !== config.projectRef
@@ -1643,8 +1744,9 @@ async function readPreviousManifest(
   if (parsed.length > dependencies.limits.maxStorageObjects) fail('r2_verify_failed')
   const paths = new Set<string>()
   for (const object of parsed) {
-    if (paths.has(object.sourcePath)) fail('r2_verify_failed')
-    if (object.bytes > dependencies.limits.maxObjectBytes) fail('r2_verify_failed')
+    if (paths.has(object.sourcePath) || object.bytes > dependencies.limits.maxObjectBytes) {
+      fail('r2_verify_failed')
+    }
     paths.add(object.sourcePath)
   }
   const objectCount = parsed.length
@@ -1674,7 +1776,50 @@ async function readPreviousManifest(
   ) {
     fail('r2_verify_failed')
   }
-  return new Map(parsed.map((object) => [object.sourcePath, object]))
+  return {
+    snapshotId,
+    completedAt: complete.completedAt as string,
+    manifestSha256: complete.manifestSha256,
+    orphanCount,
+    objects: parsed,
+  }
+}
+
+async function readPreviousManifest(
+  config: SourceConfig,
+  dependencies: BackupDependencies,
+): Promise<Map<string, BackedObject>> {
+  const latestBody = await readR2Bytes(config, LATEST_KEY, dependencies.limits.maxJsonBytes, dependencies)
+  if (latestBody === null) return new Map<string, BackedObject>()
+  const latest = parseJsonObject(latestBody)
+  if (
+    !hasExactObjectKeys(latest, [
+      'schemaVersion', 'snapshotId', 'environment', 'completeKey',
+      'manifestSha256', 'completedAt', 'orphanCount',
+    ])
+    || (latest.schemaVersion !== LEGACY_SNAPSHOT_SCHEMA_VERSION
+      && latest.schemaVersion !== SNAPSHOT_SCHEMA_VERSION)
+    || !isSnapshotId(latest.snapshotId)
+    || latest.environment !== config.environment
+    || latest.completeKey !== `${SNAPSHOT_PREFIX}${latest.snapshotId}/complete.json`
+    || !isSha256Hex(latest.manifestSha256)
+    || !isCanonicalTimestamp(latest.completedAt)
+    || !Number.isSafeInteger(latest.orphanCount)
+    || (latest.orphanCount as number) < 0
+  ) {
+    fail('r2_verify_failed')
+  }
+  if (latest.schemaVersion === LEGACY_SNAPSHOT_SCHEMA_VERSION) return new Map<string, BackedObject>()
+
+  const snapshot = await readVerifiedSnapshot(config, latest.snapshotId as string, dependencies)
+  if (
+    snapshot.completedAt !== latest.completedAt
+    || snapshot.manifestSha256 !== latest.manifestSha256
+    || snapshot.orphanCount !== latest.orphanCount
+  ) {
+    fail('r2_verify_failed')
+  }
+  return new Map(snapshot.objects.map((object) => [object.sourcePath, object]))
 }
 
 async function readR2Head(
@@ -1702,6 +1847,530 @@ function contentHeadMatches(
     && head.size === bytes
     && normalizeEtag(head.etag)
     && equalBytes(head.checksums.sha256, sha256Bytes(digestHex)),
+  )
+}
+
+function uploadedTime(value: unknown): number {
+  if (!(value instanceof Date)) fail('r2_verify_failed')
+  const time = value.getTime()
+  if (!Number.isFinite(time) || new Date(time).toISOString() !== value.toISOString()) {
+    fail('r2_verify_failed')
+  }
+  return time
+}
+
+function r2ObjectFingerprint(objects: R2HeadLike[]): string {
+  return JSON.stringify(objects.map((object) => ({
+    key: object.key,
+    size: object.size,
+    etag: object.etag,
+    uploadedAt: uploadedTime(object.uploaded),
+    sha256: object.checksums.sha256
+      ? bytesToHex(new Uint8Array(object.checksums.sha256))
+      : null,
+    customMetadata: object.customMetadata
+      ? Object.fromEntries(Object.entries(object.customMetadata).sort(([left], [right]) => (
+          left.localeCompare(right, 'en')
+        )))
+      : null,
+  })))
+}
+
+async function listR2ObjectsOnce(
+  config: SourceConfig,
+  prefix: string,
+  maximumPages: number,
+  maximumObjects: number,
+  includeCustomMetadata: boolean,
+  dependencies: BackupDependencies,
+): Promise<R2HeadLike[]> {
+  const objects: R2HeadLike[] = []
+  const cursors = new Set<string>()
+  let cursor: string | undefined
+  let previousKey = ''
+
+  for (let page = 0; page < maximumPages; page += 1) {
+    let result: R2ListResultLike
+    try {
+      consumeSubrequest(dependencies)
+      result = await config.r2.list({
+        prefix,
+        limit: dependencies.limits.r2ListPageSize,
+        ...(cursor ? { cursor } : {}),
+        ...(includeCustomMetadata ? { include: ['customMetadata'] } : {}),
+      })
+    } catch {
+      fail('r2_verify_failed')
+    }
+    if (
+      !isRecord(result)
+      || !Array.isArray(result.objects)
+      || result.objects.length > dependencies.limits.r2ListPageSize
+      || !Array.isArray(result.delimitedPrefixes)
+      || result.delimitedPrefixes.length !== 0
+      || typeof result.truncated !== 'boolean'
+    ) {
+      fail('r2_verify_failed')
+    }
+
+    for (const object of result.objects) {
+      if (
+        !isRecord(object)
+        || typeof object.key !== 'string'
+        || !object.key.startsWith(prefix)
+        || object.key.length <= prefix.length
+        || object.key.length > 1_024
+        || hasControlCharacters(object.key)
+        || !Number.isSafeInteger(object.size)
+        || object.size < 0
+        || normalizeEtag(object.etag) !== object.etag
+        || !isRecord(object.checksums)
+        || (object.checksums.sha256 !== undefined && !(object.checksums.sha256 instanceof ArrayBuffer))
+        || (includeCustomMetadata && !isRecord(object.customMetadata))
+        || (previousKey !== '' && object.key.localeCompare(previousKey, 'en') <= 0)
+      ) {
+        fail('r2_verify_failed')
+      }
+      uploadedTime(object.uploaded)
+      previousKey = object.key
+      objects.push(object)
+      if (objects.length > maximumObjects) fail('r2_verify_failed')
+    }
+
+    if (!result.truncated) return objects
+    if (
+      result.objects.length === 0
+      || typeof result.cursor !== 'string'
+      || result.cursor.length < 1
+      || result.cursor.length > 2_048
+      || hasControlCharacters(result.cursor)
+      || cursors.has(result.cursor)
+    ) {
+      fail('r2_verify_failed')
+    }
+    cursors.add(result.cursor)
+    cursor = result.cursor
+  }
+  fail('r2_verify_failed')
+}
+
+async function listStableR2Objects(
+  config: SourceConfig,
+  prefix: string,
+  maximumPages: number,
+  maximumObjects: number,
+  includeCustomMetadata: boolean,
+  dependencies: BackupDependencies,
+): Promise<R2HeadLike[]> {
+  const first = await listR2ObjectsOnce(
+    config,
+    prefix,
+    maximumPages,
+    maximumObjects,
+    includeCustomMetadata,
+    dependencies,
+  )
+  const second = await listR2ObjectsOnce(
+    config,
+    prefix,
+    maximumPages,
+    maximumObjects,
+    includeCustomMetadata,
+    dependencies,
+  )
+  if (r2ObjectFingerprint(first) !== r2ObjectFingerprint(second)) fail('r2_verify_failed')
+  return first
+}
+
+interface SnapshotDocuments {
+  manifest?: R2HeadLike
+  manifestHash?: R2HeadLike
+  complete?: R2HeadLike
+}
+
+function snapshotDocumentGroups(objects: R2HeadLike[]): Map<string, SnapshotDocuments> {
+  const groups = new Map<string, SnapshotDocuments>()
+  for (const object of objects) {
+    const match = /^snapshots\/([a-z0-9-]{8,128})\/(manifest\.json|manifest\.sha256|complete\.json)$/.exec(object.key)
+    if (!match || !isSnapshotId(match[1]) || object.size <= 0) fail('r2_verify_failed')
+    const snapshotId = match[1]
+    const document = match[2]
+    const group = groups.get(snapshotId) ?? {}
+    const field = document === 'manifest.json'
+      ? 'manifest'
+      : document === 'manifest.sha256'
+        ? 'manifestHash'
+        : 'complete'
+    if (group[field]) fail('r2_verify_failed')
+    group[field] = object
+    groups.set(snapshotId, group)
+  }
+  return groups
+}
+
+async function collectRecentSnapshotReferences(
+  config: SourceConfig,
+  currentSnapshotId: string,
+  dependencies: BackupDependencies,
+): Promise<{ referencedKeys: Set<string>; recentSnapshotIds: Set<string> }> {
+  const listed = await listStableR2Objects(
+    config,
+    SNAPSHOT_PREFIX,
+    dependencies.limits.maxSnapshotListPages,
+    dependencies.limits.maxSnapshotDocuments,
+    false,
+    dependencies,
+  )
+  const groups = snapshotDocumentGroups(listed)
+  const now = dependencies.now()
+  const referenceCutoff = now - (dependencies.limits.gcReferenceWindowDays * DAY_MS)
+  const referencedKeys = new Set<string>()
+  const recentSnapshotIds = new Set<string>()
+  const recentGroups = [...groups.entries()]
+    .filter(([, group]) => {
+      if (!group.complete) return false
+      const completeUploadedAt = uploadedTime(group.complete.uploaded)
+      if (completeUploadedAt > now + dependencies.limits.maxLockClockSkewMs) fail('r2_verify_failed')
+      return completeUploadedAt >= referenceCutoff
+    })
+    .sort(([left], [right]) => left.localeCompare(right, 'en'))
+  if (
+    recentGroups.length < 1
+    || recentGroups.length > dependencies.limits.maxRecentSnapshots
+    || !recentGroups.some(([snapshotId]) => snapshotId === currentSnapshotId)
+  ) {
+    fail('r2_verify_failed')
+  }
+
+  for (const [snapshotId, group] of recentGroups) {
+    if (!group.manifest || !group.manifestHash || !group.complete) fail('r2_verify_failed')
+    const manifestUploadedAt = uploadedTime(group.manifest.uploaded)
+    const hashUploadedAt = uploadedTime(group.manifestHash.uploaded)
+    const completeUploadedAt = uploadedTime(group.complete.uploaded)
+    if (manifestUploadedAt > hashUploadedAt || hashUploadedAt > completeUploadedAt) {
+      fail('r2_verify_failed')
+    }
+    const snapshot = await readVerifiedSnapshot(config, snapshotId, dependencies)
+    if (
+      Math.abs(Date.parse(snapshot.completedAt) - completeUploadedAt)
+        > dependencies.limits.maxRunDurationMs + dependencies.limits.maxLockClockSkewMs
+    ) {
+      fail('r2_verify_failed')
+    }
+    recentSnapshotIds.add(snapshotId)
+    for (const object of snapshot.objects) referencedKeys.add(object.backupKey)
+  }
+  return { referencedKeys, recentSnapshotIds }
+}
+
+function contentDigestFromKey(key: string): string {
+  const match = /^objects\/sha256\/([0-9a-f]{2})\/([0-9a-f]{64})$/.exec(key)
+  if (!match || match[1] !== match[2].slice(0, 2)) fail('r2_verify_failed')
+  return match[2]
+}
+
+function validateContentObject(
+  object: R2HeadLike,
+  now: number,
+  dependencies: BackupDependencies,
+): void {
+  const digestHex = contentDigestFromKey(object.key)
+  if (
+    object.size <= 0
+    || object.size > dependencies.limits.maxObjectBytes
+    || uploadedTime(object.uploaded) > now + dependencies.limits.maxLockClockSkewMs
+    || !equalBytes(object.checksums.sha256, sha256Bytes(digestHex))
+    || !isRecord(object.customMetadata)
+    || !hasExactObjectKeys(object.customMetadata, ['content-sha256'])
+    || object.customMetadata['content-sha256'] !== digestHex
+  ) {
+    fail('r2_verify_failed')
+  }
+}
+
+function contentIdentityMatches(left: R2HeadLike, right: R2HeadLike): boolean {
+  const digestHex = contentDigestFromKey(left.key)
+  return left.key === right.key
+    && left.size === right.size
+    && left.etag === right.etag
+    && uploadedTime(left.uploaded) === uploadedTime(right.uploaded)
+    && equalBytes(right.checksums.sha256, sha256Bytes(digestHex))
+    && isRecord(right.customMetadata)
+    && hasExactObjectKeys(right.customMetadata, ['content-sha256'])
+    && right.customMetadata['content-sha256'] === digestHex
+}
+
+function parseContentGcCandidate(
+  value: unknown,
+  state: Pick<ContentGcState, 'updatedAt' | 'lastSnapshotId'>,
+  dependencies: BackupDependencies,
+): ContentGcCandidate {
+  if (!isRecord(value) || !hasExactObjectKeys(value, [
+    'backupKey', 'etag', 'bytes', 'uploadedAt', 'firstConfirmedAt', 'lastConfirmedAt',
+    'firstSnapshotId', 'lastSnapshotId',
+  ])) {
+    fail('r2_verify_failed')
+  }
+  const backupKey = typeof value.backupKey === 'string' ? value.backupKey : ''
+  contentDigestFromKey(backupKey)
+  if (
+    typeof value.etag !== 'string'
+    || normalizeEtag(value.etag) !== value.etag
+    || !Number.isSafeInteger(value.bytes)
+    || (value.bytes as number) <= 0
+    || (value.bytes as number) > dependencies.limits.maxObjectBytes
+    || !isCanonicalTimestamp(value.uploadedAt)
+    || !isCanonicalTimestamp(value.firstConfirmedAt)
+    || !isCanonicalTimestamp(value.lastConfirmedAt)
+    || !isSnapshotId(value.firstSnapshotId)
+    || value.lastSnapshotId !== state.lastSnapshotId
+    || value.lastConfirmedAt !== state.updatedAt
+    || Date.parse(value.firstConfirmedAt) > Date.parse(value.lastConfirmedAt)
+    || Date.parse(value.firstConfirmedAt) - Date.parse(value.uploadedAt)
+      < dependencies.limits.gcMinimumUnreferencedAgeDays * DAY_MS
+  ) {
+    fail('r2_verify_failed')
+  }
+  return {
+    backupKey,
+    etag: value.etag,
+    bytes: value.bytes as number,
+    uploadedAt: value.uploadedAt,
+    firstConfirmedAt: value.firstConfirmedAt,
+    lastConfirmedAt: value.lastConfirmedAt,
+    firstSnapshotId: value.firstSnapshotId,
+    lastSnapshotId: value.lastSnapshotId as string,
+  }
+}
+
+function parseContentGcState(
+  body: Uint8Array,
+  object: R2GetLike,
+  config: SourceConfig,
+  dependencies: BackupDependencies,
+): ContentGcState {
+  const value = parseJsonObject(body)
+  if (
+    !hasExactObjectKeys(value, [
+      'schemaVersion', 'environment', 'updatedAt', 'lastSnapshotId',
+      'scannedBodyCount', 'protectedBodyCount', 'candidateCount',
+      'deletedBodyCount', 'candidates',
+    ])
+    || value.schemaVersion !== CONTENT_GC_SCHEMA_VERSION
+    || value.environment !== config.environment
+    || !isCanonicalTimestamp(value.updatedAt)
+    || !isSnapshotId(value.lastSnapshotId)
+    || !Number.isSafeInteger(value.scannedBodyCount)
+    || (value.scannedBodyCount as number) < 0
+    || (value.scannedBodyCount as number) > dependencies.limits.maxContentBodies
+    || !Number.isSafeInteger(value.protectedBodyCount)
+    || (value.protectedBodyCount as number) < 0
+    || (value.protectedBodyCount as number) > (value.scannedBodyCount as number)
+    || !Number.isSafeInteger(value.candidateCount)
+    || (value.candidateCount as number) < 0
+    || (value.candidateCount as number) > dependencies.limits.maxGcCandidates
+    || !Number.isSafeInteger(value.deletedBodyCount)
+    || (value.deletedBodyCount as number) < 0
+    || (value.deletedBodyCount as number) > dependencies.limits.maxGcDeletesPerRun
+    || !Array.isArray(value.candidates)
+    || value.candidates.length !== value.candidateCount
+    || value.candidates.length > dependencies.limits.maxGcCandidates
+    || uploadedTime(object.uploaded) > dependencies.now() + dependencies.limits.maxLockClockSkewMs
+    || Math.abs(uploadedTime(object.uploaded) - Date.parse(value.updatedAt))
+      > dependencies.limits.maxRunDurationMs + dependencies.limits.maxLockClockSkewMs
+    || !isRecord(object.customMetadata)
+    || !hasExactObjectKeys(object.customMetadata, ['gc-state'])
+    || object.customMetadata['gc-state'] !== 'content-reference-v1'
+  ) {
+    fail('r2_verify_failed')
+  }
+  const state = {
+    schemaVersion: CONTENT_GC_SCHEMA_VERSION,
+    environment: config.environment,
+    updatedAt: value.updatedAt,
+    lastSnapshotId: value.lastSnapshotId,
+    scannedBodyCount: value.scannedBodyCount as number,
+    protectedBodyCount: value.protectedBodyCount as number,
+    candidateCount: value.candidateCount as number,
+    deletedBodyCount: value.deletedBodyCount as number,
+    candidates: [] as ContentGcCandidate[],
+  } satisfies ContentGcState
+  const keys = new Set<string>()
+  for (const candidate of value.candidates) {
+    const parsed = parseContentGcCandidate(candidate, state, dependencies)
+    if (keys.has(parsed.backupKey)) fail('r2_verify_failed')
+    keys.add(parsed.backupKey)
+    state.candidates.push(parsed)
+  }
+  return state
+}
+
+function candidateFromObject(
+  object: R2HeadLike,
+  snapshotId: string,
+  confirmedAt: string,
+): ContentGcCandidate {
+  return {
+    backupKey: object.key,
+    etag: object.etag,
+    bytes: object.size,
+    uploadedAt: object.uploaded.toISOString(),
+    firstConfirmedAt: confirmedAt,
+    lastConfirmedAt: confirmedAt,
+    firstSnapshotId: snapshotId,
+    lastSnapshotId: snapshotId,
+  }
+}
+
+function candidateMatchesObject(candidate: ContentGcCandidate, object: R2HeadLike): boolean {
+  return candidate.backupKey === object.key
+    && candidate.etag === object.etag
+    && candidate.bytes === object.size
+    && candidate.uploadedAt === object.uploaded.toISOString()
+}
+
+async function deleteConfirmedContentBody(
+  config: SourceConfig,
+  lease: LockLease,
+  listed: R2HeadLike,
+  dependencies: BackupDependencies,
+): Promise<void> {
+  const current = await readR2Head(config, listed.key, dependencies)
+  if (!current || !contentIdentityMatches(listed, current)) fail('r2_verify_failed')
+  await verifyLock(config, lease, dependencies)
+  await requireStorageBackupEnabled(config, dependencies)
+  try {
+    consumeSubrequest(dependencies)
+    await config.r2.delete(listed.key)
+    consumeSubrequest(dependencies)
+    if (await config.r2.head(listed.key)) fail('content_gc_delete_failed')
+  } catch (error) {
+    if (error instanceof BackupFailure) throw error
+    fail('content_gc_delete_failed')
+  }
+}
+
+async function collectContentGarbage(
+  config: SourceConfig,
+  lease: LockLease,
+  currentSnapshotId: string,
+  dependencies: BackupDependencies,
+): Promise<void> {
+  const now = dependencies.now()
+  const confirmedAt = new Date(now).toISOString()
+  const { referencedKeys, recentSnapshotIds } = await collectRecentSnapshotReferences(
+    config,
+    currentSnapshotId,
+    dependencies,
+  )
+  const contentObjects = await listStableR2Objects(
+    config,
+    CONTENT_PREFIX,
+    dependencies.limits.maxContentListPages,
+    dependencies.limits.maxContentBodies,
+    true,
+    dependencies,
+  )
+  const contentByKey = new Map<string, R2HeadLike>()
+  for (const object of contentObjects) {
+    validateContentObject(object, now, dependencies)
+    contentByKey.set(object.key, object)
+  }
+  for (const referencedKey of referencedKeys) {
+    if (!contentByKey.has(referencedKey)) fail('r2_verify_failed')
+  }
+
+  const stateDocument = await readR2Document(
+    config,
+    CONTENT_GC_STATE_KEY,
+    dependencies.limits.maxJsonBytes,
+    dependencies,
+  )
+  const previousState = stateDocument
+    ? parseContentGcState(stateDocument.body, stateDocument.object, config, dependencies)
+    : null
+  const stateIsFresh = previousState !== null
+    && now >= Date.parse(previousState.updatedAt) - dependencies.limits.maxLockClockSkewMs
+    && now - Date.parse(previousState.updatedAt)
+      <= dependencies.limits.gcConfirmationMaxGapDays * DAY_MS
+  if (stateIsFresh && !recentSnapshotIds.has(previousState.lastSnapshotId)) {
+    fail('r2_verify_failed')
+  }
+
+  const carried = new Map<string, ContentGcCandidate>()
+  if (stateIsFresh && previousState) {
+    for (const candidate of previousState.candidates) {
+      const content = contentByKey.get(candidate.backupKey)
+      if (
+        !content
+        || referencedKeys.has(candidate.backupKey)
+        || !candidateMatchesObject(candidate, content)
+      ) {
+        continue
+      }
+      carried.set(candidate.backupKey, {
+        ...candidate,
+        lastConfirmedAt: confirmedAt,
+        lastSnapshotId: currentSnapshotId,
+      })
+    }
+  }
+
+  const deletionCandidates = [...carried.values()]
+    .sort((left, right) => (
+      left.firstConfirmedAt.localeCompare(right.firstConfirmedAt, 'en')
+      || left.backupKey.localeCompare(right.backupKey, 'en')
+    ))
+    .slice(0, dependencies.limits.maxGcDeletesPerRun)
+  const deleted = new Set<string>()
+  for (const candidate of deletionCandidates) {
+    const content = contentByKey.get(candidate.backupKey)
+    if (!content) fail('r2_verify_failed')
+    await deleteConfirmedContentBody(config, lease, content, dependencies)
+    deleted.add(candidate.backupKey)
+    carried.delete(candidate.backupKey)
+  }
+
+  const minimumAgeMs = dependencies.limits.gcMinimumUnreferencedAgeDays * DAY_MS
+  for (const content of contentObjects) {
+    if (carried.size >= dependencies.limits.maxGcCandidates) break
+    if (
+      deleted.has(content.key)
+      || referencedKeys.has(content.key)
+      || carried.has(content.key)
+      || now - uploadedTime(content.uploaded) < minimumAgeMs
+    ) {
+      continue
+    }
+    carried.set(content.key, candidateFromObject(content, currentSnapshotId, confirmedAt))
+  }
+
+  const candidates = [...carried.values()].sort((left, right) => (
+    left.backupKey.localeCompare(right.backupKey, 'en')
+  ))
+  const state = {
+    schemaVersion: CONTENT_GC_SCHEMA_VERSION,
+    environment: config.environment,
+    updatedAt: confirmedAt,
+    lastSnapshotId: currentSnapshotId,
+    scannedBodyCount: contentObjects.length,
+    protectedBodyCount: contentObjects.filter((object) => referencedKeys.has(object.key)).length,
+    candidateCount: candidates.length,
+    deletedBodyCount: deleted.size,
+    candidates,
+  } satisfies ContentGcState
+  await verifyLock(config, lease, dependencies)
+  await requireStorageBackupEnabled(config, dependencies)
+  await putVerified(
+    config.r2,
+    CONTENT_GC_STATE_KEY,
+    jsonDocument(state),
+    dependencies,
+    stateDocument ? { etagMatches: stateDocument.object.etag } : { etagDoesNotMatch: '*' },
+    {
+      customMetadata: { 'gc-state': 'content-reference-v1' },
+      httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' },
+    },
   )
 }
 
@@ -1935,6 +2604,7 @@ async function executeBackup(
   await putNewVerified(config.r2, completeKey, completeBody, dependencies, {
     httpMetadata: { contentType: 'application/json', cacheControl: 'no-store' },
   })
+  await collectContentGarbage(config, lease, runId, dependencies)
   await requireStorageBackupEnabled(config, dependencies)
   await updateLatest(config, jsonDocument({
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
