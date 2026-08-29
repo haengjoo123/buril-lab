@@ -31,7 +31,11 @@
     "prefix": "objects/sha256/",
     "referenceWindowDays": 30,
     "minimumUnreferencedAgeDays": 31,
-    "confirmationRuns": 2
+    "confirmationRuns": 2,
+    "confirmationMaxGapDays": 3,
+    "maxCandidates": 100,
+    "maxDeletesPerRun": 10,
+    "maxContentBodies": 10000
   },
   "allowedCloudflareManagedRules": [
     {
