@@ -1880,6 +1880,22 @@ describe('reference-based content garbage collection', () => {
     expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(false)
   })
 
+  it('preserves legacy snapshot payload bodies without treating them as v2 restore documents', async () => {
+    const prepared = await prepareOldContent()
+    prepared.r2.now = FIXED_NOW
+    const legacyBodyKey = 'snapshots/legacy-snapshot/objects/legacy-lab/cabinet-photo.png'
+    await prepared.r2.seed(legacyBodyKey, 'legacy-photo-body')
+
+    const current = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+
+    expect(current.result.status).toBe('completed')
+    expect(prepared.r2.objects.has(legacyBodyKey)).toBe(true)
+    expect(prepared.r2.deleteCalls).not.toContain(legacyBodyKey)
+  })
+
   it('fails closed before deletion when a recent completion is missing its manifest documents', async () => {
     const prepared = await prepareOldContent()
     const first = await runFixture(withoutLastPhoto(prepared.fixtures), {
