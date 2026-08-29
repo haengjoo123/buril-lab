@@ -1988,11 +1988,25 @@ interface SnapshotDocuments {
   complete?: R2HeadLike
 }
 
+function isLegacySnapshotPayloadObject(object: R2HeadLike): boolean {
+  const match = /^snapshots\/([a-z0-9-]{8,128})\/objects\/(.+)$/.exec(object.key)
+  if (!match) return false
+  if (!isSnapshotId(match[1]) || object.size <= 0) fail('r2_verify_failed')
+  return true
+}
+
 function snapshotDocumentGroups(objects: R2HeadLike[]): Map<string, SnapshotDocuments> {
   const groups = new Map<string, SnapshotDocuments>()
   for (const object of objects) {
     const match = /^snapshots\/([a-z0-9-]{8,128})\/(manifest\.json|manifest\.sha256|complete\.json)$/.exec(object.key)
-    if (!match || !isSnapshotId(match[1]) || object.size <= 0) fail('r2_verify_failed')
+    if (!match) {
+      // The first backup format stored copied photo bodies below each snapshot.
+      // They are retained for rollback, but they are not v2 restore documents and
+      // must never become content-GC references or deletion candidates.
+      if (isLegacySnapshotPayloadObject(object)) continue
+      fail('r2_verify_failed')
+    }
+    if (!isSnapshotId(match[1]) || object.size <= 0) fail('r2_verify_failed')
     const snapshotId = match[1]
     const document = match[2]
     const group = groups.get(snapshotId) ?? {}
