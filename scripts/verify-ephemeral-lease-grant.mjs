@@ -91,9 +91,6 @@ export function verifyEphemeralLeaseGrant(environment, publicKey, {
   ) {
     throw new Error('Ephemeral lease grant does not match the exact deployment request.')
   }
-  if (deployEnvironment === 'production' && payload.storage_backup !== false) {
-    throw new Error('Production lease grants must not authorize the storage backup Worker.')
-  }
   if (!rawReceipt || payload.cleanup_receipt_sha256 !== attestationEnvelopeHash(rawReceipt)) {
     throw new Error('Ephemeral lease grant is not bound to the current cleanup receipt.')
   }
@@ -135,7 +132,7 @@ export function verifyEphemeralLeaseGrant(environment, publicKey, {
     throw new Error(`Ephemeral lease grant has less than the required ${minimumRemaining}-second mutation window.`)
   }
 
-  const expectedCloudflareHashes = deployEnvironment === 'staging' && storageBackup ? 2 : 1
+  const expectedCloudflareHashes = storageBackup ? 2 : 1
   if (
     !Array.isArray(payload.cloudflare_token_id_hashes)
     || payload.cloudflare_token_id_hashes.length !== expectedCloudflareHashes

@@ -96,6 +96,8 @@ const QUALITY_NOW = Date.parse('2026-08-24T12:00:00Z')
 const STAGING_CLOUDFLARE_ACCOUNT_ID = '692fedd5b67a5fd545bb16038bbd4c85'
 const STAGING_RUNTIME_CONFIG_KV_ID = 'dcaa52254fa6447bbe7c21f54354ad0d'
 const STAGING_BACKUP_BUCKET = 'buril-lab-cabinet-backups-staging'
+const PRODUCTION_RUNTIME_CONFIG_KV_ID = 'dd6866f35f794a91b0fb5a24cbe57cf3'
+const PRODUCTION_BACKUP_BUCKET = 'buril-lab-cabinet-backups-production'
 const REQUIRED_SECRETS = [
   'FEEDBACK_ADMIN_EMAILS',
   'KOSHA_API_KEY',
@@ -148,6 +150,25 @@ const REQUIRED_STAGING_BUILD_JOB_STEPS = [
   'Upload the exact Staging release artifact',
 ]
 
+const REQUIRED_STAGING_WORKER_JOB_STEPS = [
+  'Validate the supervised Staging Worker confirmation',
+  'Verify the signed Worker lease',
+  'Verify the signed Worker cleanup receipt',
+  'Verify trusted main quality for the Worker',
+  'Verify the current Staging Supabase Advisor state for the Worker',
+  'Verify the explicitly requested Worker ephemeral token',
+  'Verify Staging storage backup remains exactly OFF before Worker deployment',
+  'Verify no unapproved Staging Worker secrets exist before deployment',
+  'Recheck the active Worker token set at the mutation boundary',
+  'Recheck Staging storage backup is exactly OFF at the mutation boundary',
+  'Recheck the signed Worker cleanup receipt at the mutation boundary',
+  'Recheck the signed Worker lease with ten minutes remaining for mutation',
+  'Deploy the OFF-only Staging storage backup Worker',
+  'Always remove temporary Worker secret material',
+  'Verify the active Staging storage backup Worker deployment',
+  'Verify Staging storage backup remains exactly OFF after Worker deployment',
+]
+
 function trustedStagingJob(runId = 31) {
   return {
     id: 301,
@@ -180,14 +201,21 @@ function trustedStagingBuildJob(runId = 31) {
   }
 }
 
-function trustedStagingWorkerJob(runId = 31) {
+function trustedStagingWorkerJob(runId = 31, conclusion: 'success' | 'skipped' = 'skipped') {
   return {
     id: 302,
     run_id: runId,
     name: 'Supervised fresh-runner deploy of the OFF-only Staging backup Worker',
     status: 'completed',
-    conclusion: 'skipped',
-    steps: [],
+    conclusion,
+    steps: conclusion === 'success'
+      ? REQUIRED_STAGING_WORKER_JOB_STEPS.map((name, index) => ({
+        number: index + 1,
+        name,
+        status: 'completed',
+        conclusion: 'success',
+      }))
+      : [],
   }
 }
 
@@ -245,22 +273,23 @@ function cloudflareEnvelope(result: unknown, extras: Record<string, unknown> = {
   })
 }
 
-function storageBackupBindingsFixture() {
+function storageBackupBindingsFixture(environment: 'staging' | 'production' = 'staging') {
+  const production = environment === 'production'
   return [
     {
       name: 'BURILLAB_RUNTIME_CONFIG',
-      namespace_id: STAGING_RUNTIME_CONFIG_KV_ID,
+      namespace_id: production ? PRODUCTION_RUNTIME_CONFIG_KV_ID : STAGING_RUNTIME_CONFIG_KV_ID,
       type: 'kv_namespace',
     },
     {
-      bucket_name: STAGING_BACKUP_BUCKET,
+      bucket_name: production ? PRODUCTION_BACKUP_BUCKET : STAGING_BACKUP_BUCKET,
       name: 'CABINET_BACKUPS',
       type: 'r2_bucket',
     },
     { name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'secret_text' },
-    { name: 'BACKUP_ENVIRONMENT', text: 'staging', type: 'plain_text' },
-    { name: 'SUPABASE_PROJECT_REF', text: 'qpgnomuqdcucjmxrunnw', type: 'plain_text' },
-    { name: 'SUPABASE_URL', text: 'https://qpgnomuqdcucjmxrunnw.supabase.co', type: 'plain_text' },
+    { name: 'BACKUP_ENVIRONMENT', text: environment, type: 'plain_text' },
+    { name: 'SUPABASE_PROJECT_REF', text: production ? 'zafxzidbtbryiksemlwc' : 'qpgnomuqdcucjmxrunnw', type: 'plain_text' },
+    { name: 'SUPABASE_URL', text: production ? 'https://zafxzidbtbryiksemlwc.supabase.co' : 'https://qpgnomuqdcucjmxrunnw.supabase.co', type: 'plain_text' },
     { name: 'SOURCE_POINTER_MODE', text: 'legacy_url', type: 'plain_text' },
     { name: 'SOURCE_STORAGE_BUCKET', text: 'cabinets', type: 'plain_text' },
     { name: 'WORKERS_SUBREQUEST_LIMIT', text: '4000', type: 'plain_text' },
@@ -268,9 +297,10 @@ function storageBackupBindingsFixture() {
   ]
 }
 
-function validStorageBackupSurfaceRaw() {
+function validStorageBackupSurfaceRaw(environment: 'staging' | 'production' = 'staging') {
+  const production = environment === 'production'
   return {
-    bindingsRaw: cloudflareEnvelope(storageBackupBindingsFixture()),
+    bindingsRaw: cloudflareEnvelope(storageBackupBindingsFixture(environment)),
     routesRaw: cloudflareEnvelope([]),
     domainsRaw: cloudflareEnvelope([], {
       errors: null,
@@ -286,7 +316,7 @@ function validStorageBackupSurfaceRaw() {
     serviceRaw: cloudflareEnvelope({
       environment: 'production',
       script: {
-        id: 'buril-lab-storage-backup-staging',
+        id: production ? 'buril-lab-storage-backup-production' : 'buril-lab-storage-backup-staging',
         compatibility_date: '2026-08-20',
         compatibility_flags: ['nodejs_compat'],
         handlers: ['scheduled'],
@@ -298,7 +328,7 @@ function validStorageBackupSurfaceRaw() {
     }),
     schedulesRaw: cloudflareEnvelope({
       schedules: [{
-        cron: '15 17 * * *',
+        cron: production ? '45 17 * * *' : '15 17 * * *',
         created_on: '2026-08-25T01:02:03.000Z',
         modified_on: '2026-08-25T01:02:03.000Z',
       }],
@@ -1055,7 +1085,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     })).toThrow(/must not be exposed/)
   })
 
-  it('exposes a distinct Worker token only for an explicit Staging backup request', () => {
+  it('exposes a distinct Worker token only for an explicit approved backup request', () => {
     const workerBaseEnvironment = validDeployEnvironment('staging')
     delete workerBaseEnvironment.PAGES_EPHEMERAL_TOKEN
     const workerEnvironment = {
@@ -1078,7 +1108,18 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verifyCloudflareWorkerDeployInputs({
       ...workerEnvironment,
       DEPLOY_ENVIRONMENT: 'production',
-    })).toThrow(/exactly staging/)
+    })).toThrow(/approved namespace/)
+
+    const productionWorkerBaseEnvironment = validDeployEnvironment('production')
+    delete productionWorkerBaseEnvironment.PAGES_EPHEMERAL_TOKEN
+    expect(verifyCloudflareWorkerDeployInputs({
+      ...productionWorkerBaseEnvironment,
+      DEPLOY_STORAGE_BACKUP: 'true',
+      WORKER_EPHEMERAL_TOKEN: 'production-worker-token-value-that-is-long-enough',
+    })).toMatchObject({
+      environment: 'production',
+      tokenScope: 'worker',
+    })
   })
 
   it('requires every client feature flag to be an explicit lowercase boolean', () => {
@@ -1823,6 +1864,13 @@ describe('Prep 0 Cloudflare release controls', () => {
       now: QUALITY_NOW,
     })).toBe(currentGithubApiShape)
 
+    expect(() => findTrustedStagingRun([olderSuccess], {
+      repository: 'owner/buril-lab',
+      commitSha: COMMIT,
+      storageBackup: true,
+      now: QUALITY_NOW,
+    })).toThrow(/No trusted Deploy staging run/)
+
     expect(() => findTrustedStagingRun([{
       ...currentGithubApiShape,
       name: 'Unrelated workflow title',
@@ -1926,6 +1974,61 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(jobsEndpoint.searchParams.get('filter')).toBe('latest')
   })
 
+  it('requires a successful same-SHA Staging Worker run before Production Worker promotion', async () => {
+    const trusted = {
+      id: 31,
+      run_attempt: 1,
+      name: 'Deploy staging',
+      path: '.github/workflows/deploy-staging.yml',
+      display_title: `Deploy staging ${COMMIT} (lease=${'a'.repeat(32)}, storage-backup=true)`,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'workflow_dispatch',
+      head_branch: 'main',
+      head_sha: COMMIT,
+      repository: { full_name: 'haengjoo123/buril-lab' },
+      head_repository: { full_name: 'haengjoo123/buril-lab' },
+      created_at: '2026-08-24T10:00:00Z',
+      run_started_at: '2026-08-24T10:05:00Z',
+      updated_at: '2026-08-24T11:00:00Z',
+    }
+    const keys = generateKeyPairSync('ed25519')
+    const cleanupReceipt = signedStagingCleanupReceipt(trusted, keys)
+    const fetchForWorkerConclusion = (conclusion: 'success' | 'skipped') => vi.fn(async (input: string | URL | Request) => {
+      const isJobsRequest = new URL(String(input)).pathname.endsWith('/actions/runs/31/jobs')
+      return new Response(JSON.stringify(isJobsRequest
+        ? {
+          jobs: [
+            trustedStagingBuildJob(),
+            trustedStagingJob(),
+            trustedStagingWorkerJob(31, conclusion),
+          ],
+        }
+        : trusted), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const environment = {
+      GITHUB_TOKEN: 'not-a-real-token',
+      GITHUB_REPOSITORY: 'haengjoo123/buril-lab',
+      DEPLOY_COMMIT_SHA: COMMIT,
+      DEPLOY_STAGING_RUN_ID: '31',
+      DEPLOY_STORAGE_BACKUP: 'true',
+      STAGING_EPHEMERAL_CLEANUP_RECEIPT: cleanupReceipt,
+    }
+    await expect(fetchTrustedStagingRun(environment, {
+      now: QUALITY_NOW,
+      publicKey: keys.publicKey,
+      fetchImpl: fetchForWorkerConclusion('success'),
+    })).resolves.toStrictEqual(trusted)
+    await expect(fetchTrustedStagingRun(environment, {
+      now: QUALITY_NOW,
+      publicKey: keys.publicKey,
+      fetchImpl: fetchForWorkerConclusion('skipped'),
+    })).rejects.toThrow(/optional Worker job has invalid evidence/)
+  })
+
   it('requires the supervised Staging job and every deployment evidence step to succeed', () => {
     expect(verifyTrustedStagingJobs(trustedStagingJobs(), 31)).toMatchObject({
       buildJob: { id: 300 },
@@ -1953,6 +2056,26 @@ describe('Prep 0 Cloudflare release controls', () => {
       trustedStagingJob(),
       trustedStagingWorkerJob(),
     ], 31)).toThrow(/Upload the exact Staging release artifact/)
+    expect(() => verifyTrustedStagingJobs(trustedStagingJobs(), 31, {
+      requireStorageBackup: true,
+    })).toThrow(/optional Worker job has invalid evidence/)
+    expect(verifyTrustedStagingJobs([
+      trustedStagingBuildJob(),
+      trustedStagingJob(),
+      trustedStagingWorkerJob(31, 'success'),
+    ], 31, { requireStorageBackup: true })).toMatchObject({
+      workerJob: { conclusion: 'success' },
+    })
+    expect(() => verifyTrustedStagingJobs([
+      trustedStagingBuildJob(),
+      trustedStagingJob(),
+      {
+        ...trustedStagingWorkerJob(31, 'success'),
+        steps: trustedStagingWorkerJob(31, 'success').steps.filter(
+          (step) => step.name !== 'Verify the active Staging storage backup Worker deployment',
+        ),
+      },
+    ], 31, { requireStorageBackup: true })).toThrow(/active Staging storage backup Worker/)
   })
 
   it('keeps the database reset job off until Prep 1 supplies the exact contract', async () => {
@@ -2117,11 +2240,24 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verifyStorageBackupRuntimeOff(JSON.stringify(runtimeConfig), {
       ...target,
       namespaceId: '00000000000000000000000000000000',
-    })).toThrow(/wrong Staging KV namespace/)
+    })).toThrow(/wrong staging KV namespace/)
     expect(() => verifyStorageBackupRuntimeOff(JSON.stringify(runtimeConfig), {
       ...target,
       environment: 'production',
-    })).toThrow(/restricted to Staging/)
+    })).toThrow(/wrong production KV namespace/)
+
+    expect(verifyStorageBackupRuntimeOff(JSON.stringify({
+      ...runtimeConfig,
+      kosha_content_mode: 'full',
+    }), {
+      environment: 'production',
+      accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
+      namespaceId: PRODUCTION_RUNTIME_CONFIG_KV_ID,
+    })).toMatchObject({
+      environment: 'production',
+      namespaceId: PRODUCTION_RUNTIME_CONFIG_KV_ID,
+      storageBackupEnabled: false,
+    })
   })
 
   it('verifies one 100-percent active Staging Worker version, SHA annotations, and one secret name', () => {
@@ -2198,9 +2334,9 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verify({
       secretsValue: [{ name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'plain_text' }],
     })).toThrow(/malformed item/)
-    expect(() => verify({ environment: 'production' })).toThrow(/exact Staging account and Worker/)
-    expect(() => verify({ accountId: '00000000000000000000000000000000' })).toThrow(/exact Staging account and Worker/)
-    expect(() => verify({ workerName: 'buril-lab-storage-backup-production' })).toThrow(/exact Staging account and Worker/)
+    expect(() => verify({ environment: 'production' })).toThrow(/exact approved account and Worker/)
+    expect(() => verify({ accountId: '00000000000000000000000000000000' })).toThrow(/exact approved account and Worker/)
+    expect(() => verify({ workerName: 'buril-lab-storage-backup-production' })).toThrow(/exact approved account and Worker/)
     expect(() => verify({ versionsValue: [versions[0], versions[0]] }))
       .toThrow(/malformed or duplicate version ID/)
     expect(() => verify({
@@ -2209,6 +2345,46 @@ describe('Prep 0 Cloudflare release controls', () => {
         versions: [{ version_id: deploymentId, percentage: 100 }],
       },
     })).toThrow(/absent from the bounded version list|exact Wrangler-created/)
+  })
+
+  it('verifies the exact Production Worker target while preserving its existing secret', () => {
+    const deploymentId = '123e4567-e89b-42d3-a456-426614174020'
+    const versionId = '123e4567-e89b-42d3-a456-426614174021'
+    const runId = '84'
+    const leaseId = 'b'.repeat(32)
+    const message = `quality-approved production storage backup run ${runId} lease ${leaseId} commit ${COMMIT}`
+    const result = verifyStorageBackupWorkerDeployment({
+      deploymentRaw: JSON.stringify({
+        id: deploymentId,
+        versions: [{ version_id: versionId, percentage: 100 }],
+        annotations: { 'workers/message': message },
+      }),
+      versionsRaw: JSON.stringify([{
+        id: versionId,
+        annotations: {
+          'workers/tag': `r${runId}-l${leaseId}`,
+          'workers/message': message,
+        },
+      }]),
+      secretsRaw: JSON.stringify([{ name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'secret_text' }]),
+      ...validStorageBackupSurfaceRaw('production'),
+      commitSha: COMMIT,
+      runId,
+      leaseId,
+      expectedVersionId: versionId,
+      environment: 'production',
+      accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
+      workerName: 'buril-lab-storage-backup-production',
+    })
+    expect(result).toStrictEqual({
+      environment: 'production',
+      workerName: 'buril-lab-storage-backup-production',
+      commitSha: COMMIT,
+      runId,
+      leaseId,
+      deploymentId,
+      versionId,
+    })
   })
 
   it('extracts only the exact newly-created Wrangler Worker version', () => {
@@ -2246,6 +2422,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     )
     const output = outputFor()
     const options = {
+      environment: 'staging',
       workerName: 'buril-lab-storage-backup-staging',
       commitSha: COMMIT,
       runId,
@@ -2292,6 +2469,26 @@ describe('Prep 0 Cloudflare release controls', () => {
       ...session,
       timestamp: '2026-08-25T01:00:03.000Z',
     }, deploy), options)).toThrow(/does not match the guarded mutation/)
+
+    const productionSession = {
+      ...session,
+      command_line_args: [
+        'deploy',
+        '--config', 'workers/storage-backup/wrangler.production.jsonc',
+        '--strict',
+        '--autoconfig=false',
+        '--tag', `r${runId}-l${leaseId}`,
+        '--message', `quality-approved production storage backup run ${runId} lease ${leaseId} commit ${COMMIT}`,
+      ],
+    }
+    expect(verifyWranglerWorkerDeployOutput(outputFor(productionSession, {
+      ...deploy,
+      targets: ['schedule: 45 17 * * *'],
+    }), {
+      ...options,
+      environment: 'production',
+      workerName: 'buril-lab-storage-backup-production',
+    })).toMatchObject({ versionId: deploy.version_id })
   })
 
   it('accepts only the exact approved Staging Worker control-plane surface', () => {
@@ -2314,17 +2511,17 @@ describe('Prep 0 Cloudflare release controls', () => {
       environment: 'production',
       accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
       workerName: 'buril-lab-storage-backup-staging',
-    })).toThrow(/exact Staging account and Worker/)
+    })).toThrow(/exact approved account and Worker/)
     expect(() => verify(validStorageBackupSurfaceRaw(), {
       environment: 'staging',
       accountId: '00000000000000000000000000000000',
       workerName: 'buril-lab-storage-backup-staging',
-    })).toThrow(/exact Staging account and Worker/)
+    })).toThrow(/exact approved account and Worker/)
     expect(() => verify(validStorageBackupSurfaceRaw(), {
       environment: 'staging',
       accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
       workerName: 'buril-lab-storage-backup-production',
-    })).toThrow(/exact Staging account and Worker/)
+    })).toThrow(/exact approved account and Worker/)
 
     const wrongServiceEnvironment = JSON.parse(
       validStorageBackupSurfaceRaw().serviceRaw,
@@ -2572,6 +2769,22 @@ describe('Prep 0 Cloudflare release controls', () => {
       errors: [{ code: 9109, message: 'forbidden' }],
     }, '404')).toThrow(/did not prove.*absent/)
     expect(() => verify({ success: false, errors: [] }, '403')).toThrow(/unexpected HTTP status/)
+
+    const verifyProduction = (response: object, httpStatus = '200') => verifyStorageBackupWorkerSecretPreflight({
+      responseRaw: JSON.stringify(response),
+      httpStatus,
+      environment: 'production',
+      accountId: STAGING_CLOUDFLARE_ACCOUNT_ID,
+      workerName: 'buril-lab-storage-backup-production',
+    })
+    expect(verifyProduction({
+      success: true,
+      result: [{ name: 'SUPABASE_SERVICE_ROLE_KEY', type: 'secret_text' }],
+    })).toStrictEqual({ workerExists: true, approvedSecretCount: 1 })
+    expect(() => verifyProduction({
+      success: false,
+      errors: [{ code: 10007, message: 'not found' }],
+    }, '404')).toThrow(/must exist before a code-only deployment/)
   })
 
   it('keeps the committed release workflows inside Prep 0 scope', async () => {
@@ -2636,8 +2849,14 @@ describe('Prep 0 Cloudflare release controls', () => {
     expect(() => verifyStorageBackupWorkerTokenDocumentation(
       storageBackupReadme.replace('**Workers R2 Storage Write**', '**Workers R2 Storage missing**'),
     )).toThrow(/acceptance token documentation/)
+    expect(() => verifyStorageBackupWorkerTokenDocumentation(
+      storageBackupReadme.replace('`PRODUCTION_WORKER_EPHEMERAL_TOKEN`', '`PRODUCTION_WORKER_TOKEN_MISSING`'),
+    )).toThrow(/Production Worker token documentation/)
+    expect(() => verifyStorageBackupWorkerTokenDocumentation(
+      storageBackupReadme.replace('never uses\n`--secrets-file`', 'may use\n`--secrets-file`'),
+    )).toThrow(/Production Worker token documentation/)
     expect(createHash('sha256').update(cloudflareApiHelper.replace(/\r\n/g, '\n'), 'utf8').digest('hex'))
-      .toBe('fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317')
+      .toBe('50353a0f5b6fa7702d5e1fa01c77a31bd48368d009fbf7a734e73f451c80086b')
     expect(() => verifyCloudflareApiHelperSource(`${cloudflareApiHelper}\n`))
       .toThrow(/token-handling contract/)
     expect(() => verifyCloudflareApiHelperSource(`${cloudflareApiHelper}\nconsole.log(process.env.CLOUDFLARE_API_TOKEN)`))
@@ -2872,11 +3091,11 @@ describe('Prep 0 Cloudflare release controls', () => {
       workflows: {
         ...configuration.workflows,
         production: productionWorkflow.replace(
-          "/usr/bin/git diff --quiet --exit-code\n          /usr/bin/git diff --cached --quiet --exit-code\n          printf '%s  %s\\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \\\n            | /usr/bin/sha256sum --check --strict",
+          "/usr/bin/git diff --quiet --exit-code\n          /usr/bin/git diff --cached --quiet --exit-code\n          printf '%s  %s\\n' '50353a0f5b6fa7702d5e1fa01c77a31bd48368d009fbf7a734e73f451c80086b' scripts/cloudflare-api-get.mjs \\\n            | /usr/bin/sha256sum --check --strict",
           'echo skipped-integrity-check',
         ),
       },
-    })).toThrow(/pristine worktree and pinned helper/)
+    })).toThrow(/pristine worktree and pinned helper|code-only backup Worker/)
 
     expect(() => verifyReleaseConfiguration({
       ...configuration,
@@ -2952,7 +3171,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         ...configuration.workflows,
         production: `${productionWorkflow}\n# workers/storage-backup/wrangler.staging.jsonc`,
       },
-    })).toThrow(/Production workflow must contain no storage-backup deployment path/)
+    })).toThrow(/forbidden credential or mutation/)
 
     for (const workerCommand of [
       'npx wrangler deploy',
@@ -2970,7 +3189,7 @@ describe('Prep 0 Cloudflare release controls', () => {
           ...configuration.workflows,
           production: `${productionWorkflow}\n${workerCommand}`,
         },
-      })).toThrow(/exact Pages-only allow-list|locked local Wrangler binary/)
+      })).toThrow(/locked local Wrangler binary|forbidden credential or mutation|fully reviewed command contract/)
     }
     expect(() => verifyReleaseConfiguration({
       ...configuration,
@@ -2978,14 +3197,14 @@ describe('Prep 0 Cloudflare release controls', () => {
         ...configuration.workflows,
         production: `${productionWorkflow}\ncurl https://api.cloudflare.com/client/v4/accounts/example/workers/scripts/example/secrets`,
       },
-    })).toThrow(/no storage-backup deployment path/)
+    })).toThrow(/never invoke curl directly/)
     expect(() => verifyReleaseConfiguration({
       ...configuration,
       workflows: {
         ...configuration.workflows,
         production: `${productionWorkflow}\n--secrets-file /tmp/unapproved.json`,
       },
-    })).toThrow(/no storage-backup deployment path/)
+    })).toThrow(/forbidden credential or mutation/)
     expect(() => verifyReleaseConfiguration({
       ...configuration,
       workflows: {
@@ -2995,14 +3214,50 @@ describe('Prep 0 Cloudflare release controls', () => {
           'secrets.STAGING_WORKER_EPHEMERAL_TOKEN',
         ),
       },
-    })).toThrow(/unexpected or legacy|no storage-backup deployment path/)
+    })).toThrow(/unexpected or legacy|forbidden credential or mutation/)
     expect(() => verifyReleaseConfiguration({
       ...configuration,
       workflows: {
         ...configuration.workflows,
         production: `${productionWorkflow}\ncurl https://api.cloudflare.com/client/v4/accounts/example/workers%2Fscripts/example`,
       },
-    })).toThrow(/no storage-backup deployment path/)
+    })).toThrow(/never invoke curl directly/)
+    for (const [needle, replacement, expectedError] of [
+      [
+        '    needs: deploy\n    if: ${{ inputs.deploy_storage_backup }}',
+        '    needs: build\n    if: ${{ inputs.deploy_storage_backup }}',
+        /dependency chain/,
+      ],
+      [
+        '    if: ${{ inputs.deploy_storage_backup }}',
+        '    if: ${{ false }}',
+        /explicit backup-request condition|dependency chain/,
+      ],
+      [
+        '--config workers/storage-backup/wrangler.production.jsonc \\\n              --strict',
+        '--config workers/storage-backup/wrangler.production.jsonc \\\n              --secrets-file /tmp/unapproved.json \\\n              --strict',
+        /forbidden credential or mutation|code-only backup Worker/,
+      ],
+      [
+        '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" secret list',
+        '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" secret delete SUPABASE_SERVICE_ROLE_KEY',
+        /forbidden credential or mutation|code-only backup Worker/,
+      ],
+      [
+        'EXPECTED_WORKER_VERSION_ID: ${{ steps.worker-deploy-command.outputs.worker_version_id }}',
+        'EXPECTED_WORKER_VERSION_ID: unbound-version',
+        /newly created version|fully reviewed command contract/,
+      ],
+    ] as const) {
+      expect(productionWorkflow).toContain(needle)
+      expect(() => verifyReleaseConfiguration({
+        ...configuration,
+        workflows: {
+          ...configuration.workflows,
+          production: productionWorkflow.replace(needle, replacement),
+        },
+      })).toThrow(expectedError)
+    }
     expect(() => verifyReleaseConfiguration({
       ...configuration,
       workflows: {
@@ -3154,7 +3409,7 @@ describe('Prep 0 Cloudflare release controls', () => {
           'curl --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"',
         ),
       },
-    })).toThrow(/token-from-environment helper/)
+    })).toThrow(/token-from-environment helper|never invoke curl directly/)
 
     for (const unsupported of ['keep_vars', 'secrets']) {
       const invalidProduction = JSON.parse(productionRaw)
@@ -3439,7 +3694,7 @@ describe('Prep 0 Cloudflare release controls', () => {
           'curl --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"',
         ),
       },
-    })).toThrow(/token-from-environment helper/)
+    })).toThrow(/token-from-environment helper|never invoke curl directly/)
 
     const outOfOrderStagingFixture = stagingWorkflow
       .replace('Reset the exact Staging Gate 0 synthetic fixture for the custom domain', '__FIXTURE__')

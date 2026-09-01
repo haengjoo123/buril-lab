@@ -557,7 +557,7 @@ jobs:
           set -euo pipefail
           /usr/bin/git diff --quiet --exit-code
           /usr/bin/git diff --cached --quiet --exit-code
-          printf '%s  %s\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \
+          printf '%s  %s\n' '50353a0f5b6fa7702d5e1fa01c77a31bd48368d009fbf7a734e73f451c80086b' scripts/cloudflare-api-get.mjs \
             | /usr/bin/sha256sum --check --strict
           evidence_found=false
           for attempt in 1 2 3 4 5 6; do
@@ -896,7 +896,7 @@ jobs:
           set -euo pipefail
           /usr/bin/git diff --quiet --exit-code
           /usr/bin/git diff --cached --quiet --exit-code
-          printf '%s  %s\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \
+          printf '%s  %s\n' '50353a0f5b6fa7702d5e1fa01c77a31bd48368d009fbf7a734e73f451c80086b' scripts/cloudflare-api-get.mjs \
             | /usr/bin/sha256sum --check --strict
           worker_secret_response="$(
             node scripts/cloudflare-api-get.mjs \
@@ -1061,7 +1061,7 @@ jobs:
           set -euo pipefail
           /usr/bin/git diff --quiet --exit-code
           /usr/bin/git diff --cached --quiet --exit-code
-          printf '%s  %s\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs \
+          printf '%s  %s\n' '50353a0f5b6fa7702d5e1fa01c77a31bd48368d009fbf7a734e73f451c80086b' scripts/cloudflare-api-get.mjs \
             | /usr/bin/sha256sum --check --strict
           cloudflare_worker_surface_get() {
             local surface="$1"

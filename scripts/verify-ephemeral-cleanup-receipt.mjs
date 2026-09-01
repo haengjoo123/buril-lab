@@ -29,6 +29,7 @@ export const CLEANUP_ABSENT_SECRET_NAMES = Object.freeze([
   'EPHEMERAL_CREDENTIAL_SESSION',
   'PRODUCTION_CLOUDFLARE_API_TOKEN',
   'PRODUCTION_PAGES_EPHEMERAL_TOKEN',
+  'PRODUCTION_WORKER_EPHEMERAL_TOKEN',
   'STAGING_CLOUDFLARE_API_TOKEN',
   'STAGING_PAGES_EPHEMERAL_TOKEN',
   'STAGING_WORKER_EPHEMERAL_TOKEN',
@@ -48,7 +49,7 @@ const WORKFLOW_CONTRACTS = Object.freeze({
     path: '.github/workflows/deploy-production.yml',
     filename: 'deploy-production.yml',
     job: 'Manually deploy verified commit to buril-lab',
-    title: /^Deploy production ([0-9a-f]{40}) \(lease=([0-9a-f]{32})\)$/,
+    title: /^Deploy production ([0-9a-f]{40}) \(lease=([0-9a-f]{32})(?:, storage-backup=(true|false))?\)$/,
   }),
 })
 

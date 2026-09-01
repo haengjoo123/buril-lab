@@ -2,23 +2,52 @@ import { appendFile, readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const STAGING_CLOUDFLARE_ACCOUNT_ID = '692fedd5b67a5fd545bb16038bbd4c85'
-const STAGING_WORKER_NAME = 'buril-lab-storage-backup-staging'
-const STAGING_RUNTIME_CONFIG_KV_ID = 'dcaa52254fa6447bbe7c21f54354ad0d'
-const STAGING_BACKUP_BUCKET = 'buril-lab-cabinet-backups-staging'
-const STAGING_CRON = '15 17 * * *'
-const STAGING_COMPATIBILITY_DATE = '2026-08-20'
-const STAGING_COMPATIBILITY_FLAGS = Object.freeze(['nodejs_compat'])
+const CLOUDFLARE_ACCOUNT_ID = '692fedd5b67a5fd545bb16038bbd4c85'
 const PINNED_WRANGLER_VERSION = '4.125.0'
-const STAGING_SECRET_FILE_PATTERN = /^\/home\/runner\/work\/_temp\/burillab-storage-backup-secrets-[A-Za-z0-9]{6}\/secrets\.json$/
-const STAGING_PLAIN_TEXT_BINDINGS = Object.freeze({
-  BACKUP_ENVIRONMENT: 'staging',
-  SUPABASE_PROJECT_REF: 'qpgnomuqdcucjmxrunnw',
-  SUPABASE_URL: 'https://qpgnomuqdcucjmxrunnw.supabase.co',
+const SECRET_FILE_PATTERN = /^\/home\/runner\/work\/_temp\/burillab-storage-backup-secrets-[A-Za-z0-9]{6}\/secrets\.json$/
+const COMPATIBILITY_DATE = '2026-08-20'
+const COMPATIBILITY_FLAGS = Object.freeze(['nodejs_compat'])
+const COMMON_PLAIN_TEXT_BINDINGS = Object.freeze({
   SOURCE_POINTER_MODE: 'legacy_url',
   SOURCE_STORAGE_BUCKET: 'cabinets',
   WORKERS_SUBREQUEST_LIMIT: '4000',
   WORKERS_USAGE_PLAN: 'paid',
+})
+const TARGETS = Object.freeze({
+  staging: Object.freeze({
+    environment: 'staging',
+    accountId: CLOUDFLARE_ACCOUNT_ID,
+    workerName: 'buril-lab-storage-backup-staging',
+    runtimeConfigKvId: 'dcaa52254fa6447bbe7c21f54354ad0d',
+    backupBucket: 'buril-lab-cabinet-backups-staging',
+    cron: '15 17 * * *',
+    configPath: 'workers/storage-backup/wrangler.staging.jsonc',
+    usesSecretFile: true,
+    requireExistingWorker: false,
+    plainTextBindings: Object.freeze({
+      BACKUP_ENVIRONMENT: 'staging',
+      SUPABASE_PROJECT_REF: 'qpgnomuqdcucjmxrunnw',
+      SUPABASE_URL: 'https://qpgnomuqdcucjmxrunnw.supabase.co',
+      ...COMMON_PLAIN_TEXT_BINDINGS,
+    }),
+  }),
+  production: Object.freeze({
+    environment: 'production',
+    accountId: CLOUDFLARE_ACCOUNT_ID,
+    workerName: 'buril-lab-storage-backup-production',
+    runtimeConfigKvId: 'dd6866f35f794a91b0fb5a24cbe57cf3',
+    backupBucket: 'buril-lab-cabinet-backups-production',
+    cron: '45 17 * * *',
+    configPath: 'workers/storage-backup/wrangler.production.jsonc',
+    usesSecretFile: false,
+    requireExistingWorker: true,
+    plainTextBindings: Object.freeze({
+      BACKUP_ENVIRONMENT: 'production',
+      SUPABASE_PROJECT_REF: 'zafxzidbtbryiksemlwc',
+      SUPABASE_URL: 'https://zafxzidbtbryiksemlwc.supabase.co',
+      ...COMMON_PLAIN_TEXT_BINDINGS,
+    }),
+  }),
 })
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -125,8 +154,8 @@ function expectedTag(runId, leaseId) {
   return `r${runId}-l${leaseId}`
 }
 
-function expectedMessage(commitSha, runId, leaseId) {
-  return `quality-approved staging storage backup run ${runId} lease ${leaseId} commit ${commitSha}`
+function expectedMessage(environment, commitSha, runId, leaseId) {
+  return `quality-approved ${environment} storage backup run ${runId} lease ${leaseId} commit ${commitSha}`
 }
 
 function requireExactArray(value, expected, name) {
@@ -148,6 +177,7 @@ function requireBoundedTimestamp(value, name, { start, now }) {
 }
 
 function verifyWranglerWorkerSession(entry, {
+  target,
   commitSha,
   runId,
   leaseId,
@@ -170,18 +200,23 @@ function verifyWranglerWorkerSession(entry, {
     throw new Error('Wrangler Worker session does not match the pinned deployment contract.')
   }
 
-  const secretFile = entry.command_line_args?.[4]
-  if (typeof secretFile !== 'string' || !STAGING_SECRET_FILE_PATTERN.test(secretFile)) {
-    throw new Error('Wrangler Worker session did not use the isolated GitHub runner secret file.')
+  const baseArgs = [
+    'deploy',
+    '--config', target.configPath,
+  ]
+  if (target.usesSecretFile) {
+    const secretFile = entry.command_line_args?.[4]
+    if (typeof secretFile !== 'string' || !SECRET_FILE_PATTERN.test(secretFile)) {
+      throw new Error('Wrangler Worker session did not use the isolated GitHub runner secret file.')
+    }
+    baseArgs.push('--secrets-file', secretFile)
   }
   requireExactArray(entry.command_line_args, [
-    'deploy',
-    '--config', 'workers/storage-backup/wrangler.staging.jsonc',
-    '--secrets-file', secretFile,
+    ...baseArgs,
     '--strict',
     '--autoconfig=false',
     '--tag', expectedTag(runId, leaseId),
-    '--message', expectedMessage(commitSha, runId, leaseId),
+    '--message', expectedMessage(target.environment, commitSha, runId, leaseId),
   ], 'Wrangler Worker session command line')
   return requireBoundedTimestamp(
     entry.timestamp,
@@ -191,6 +226,7 @@ function verifyWranglerWorkerSession(entry, {
 }
 
 export function verifyWranglerWorkerDeployOutput(raw, {
+  environment,
   workerName,
   commitSha,
   runId,
@@ -206,6 +242,7 @@ export function verifyWranglerWorkerDeployOutput(raw, {
   if (!FULL_SHA_PATTERN.test(commitSha || '')) {
     throw new Error('Wrangler Worker deployment output requires the exact lowercase commit SHA.')
   }
+  const target = requireExactWorker({ environment, accountId: CLOUDFLARE_ACCOUNT_ID, workerName })
   expectedTag(runId, leaseId)
   const lines = raw.trimEnd().split(/\r?\n/)
   if (lines.length !== 2) {
@@ -227,6 +264,7 @@ export function verifyWranglerWorkerDeployOutput(raw, {
     throw new Error('Wrangler Worker deployment time boundary is invalid.')
   }
   const sessionAt = verifyWranglerWorkerSession(session, {
+    target,
     commitSha,
     runId,
     leaseId,
@@ -253,18 +291,20 @@ export function verifyWranglerWorkerDeployOutput(raw, {
   ) {
     throw new Error('Wrangler Worker deployment output does not match the guarded mutation.')
   }
-  requireExactArray(entry.targets, [`schedule: ${STAGING_CRON}`], 'Wrangler Worker deployment targets')
+  requireExactArray(entry.targets, [`schedule: ${target.cron}`], 'Wrangler Worker deployment targets')
   return Object.freeze({ versionId: entry.version_id, outputAt: new Date(outputAt).toISOString() })
 }
 
-function requireExactStagingWorker({ environment, accountId, workerName }) {
+function requireExactWorker({ environment, accountId, workerName }) {
+  const target = TARGETS[environment]
   if (
-    environment !== 'staging'
-    || accountId !== STAGING_CLOUDFLARE_ACCOUNT_ID
-    || workerName !== STAGING_WORKER_NAME
+    !target
+    || accountId !== target.accountId
+    || workerName !== target.workerName
   ) {
-    throw new Error('Storage-backup verification is restricted to the exact Staging account and Worker.')
+    throw new Error('Storage-backup verification is restricted to an exact approved account and Worker.')
   }
+  return target
 }
 
 function readApprovedSecretNames(secrets, { allowEmpty }) {
@@ -284,12 +324,12 @@ function readApprovedSecretNames(secrets, { allowEmpty }) {
     || (!allowEmpty && secretNames.length !== 1)
     || (secretNames.length === 1 && secretNames[0] !== 'SUPABASE_SERVICE_ROLE_KEY')
   ) {
-    throw new Error('The Staging backup Worker has an unapproved secret set.')
+    throw new Error('The backup Worker has an unapproved secret set.')
   }
   return secretNames
 }
 
-function verifyWorkerBindings(raw) {
+function verifyWorkerBindings(raw, target) {
   const response = parseCloudflareEnvelope(raw, 'Cloudflare Worker bindings')
   if (!Array.isArray(response.result)) {
     throw new Error('Cloudflare Worker bindings result must be an array.')
@@ -299,10 +339,10 @@ function verifyWorkerBindings(raw) {
     'BURILLAB_RUNTIME_CONFIG',
     'CABINET_BACKUPS',
     'SUPABASE_SERVICE_ROLE_KEY',
-    ...Object.keys(STAGING_PLAIN_TEXT_BINDINGS),
+    ...Object.keys(target.plainTextBindings),
   ])
   if (response.result.length !== expectedNames.size) {
-    throw new Error('The Staging backup Worker must have exactly the approved ten bindings.')
+    throw new Error('The backup Worker must have exactly the approved ten bindings.')
   }
 
   const seen = new Set()
@@ -322,22 +362,22 @@ function verifyWorkerBindings(raw) {
         [],
         'Staging runtime-config KV binding',
       )
-      if (item.type !== 'kv_namespace' || item.namespace_id !== STAGING_RUNTIME_CONFIG_KV_ID) {
-        throw new Error('The Staging backup Worker has the wrong runtime-config KV binding.')
+      if (item.type !== 'kv_namespace' || item.namespace_id !== target.runtimeConfigKvId) {
+        throw new Error('The backup Worker has the wrong runtime-config KV binding.')
       }
       continue
     }
     if (item.name === 'CABINET_BACKUPS') {
       requireExactKeys(item, ['bucket_name', 'name', 'type'], [], 'Staging R2 binding')
-      if (item.type !== 'r2_bucket' || item.bucket_name !== STAGING_BACKUP_BUCKET) {
-        throw new Error('The Staging backup Worker has the wrong private R2 binding.')
+      if (item.type !== 'r2_bucket' || item.bucket_name !== target.backupBucket) {
+        throw new Error('The backup Worker has the wrong private R2 binding.')
       }
       continue
     }
     if (item.name === 'SUPABASE_SERVICE_ROLE_KEY') {
       requireExactKeys(item, ['name', 'type'], [], 'Staging Supabase secret binding')
       if (item.type !== 'secret_text') {
-        throw new Error('The Staging backup Worker Supabase binding is not secret text.')
+        throw new Error('The backup Worker Supabase binding is not secret text.')
       }
       continue
     }
@@ -345,14 +385,14 @@ function verifyWorkerBindings(raw) {
     requireExactKeys(item, ['name', 'text', 'type'], [], `Staging plain-text binding ${item.name}`)
     if (
       item.type !== 'plain_text'
-      || item.text !== STAGING_PLAIN_TEXT_BINDINGS[item.name]
+      || item.text !== target.plainTextBindings[item.name]
     ) {
-      throw new Error(`The Staging backup Worker has an unsafe value for ${item.name}.`)
+      throw new Error(`The backup Worker has an unsafe value for ${item.name}.`)
     }
   }
 
   if (seen.size !== expectedNames.size || [...expectedNames].some((name) => !seen.has(name))) {
-    throw new Error('The Staging backup Worker binding set is incomplete.')
+    throw new Error('The backup Worker binding set is incomplete.')
   }
   return response.result.length
 }
@@ -383,38 +423,38 @@ function verifyWorkerSubdomain(raw) {
     'Cloudflare Worker subdomain result',
   )
   if (response.result.enabled !== false || response.result.previews_enabled !== false) {
-    throw new Error('The Staging backup Worker workers.dev or preview URL is enabled.')
+    throw new Error('The backup Worker workers.dev or preview URL is enabled.')
   }
 }
 
-function verifyWorkerService(raw) {
+function verifyWorkerService(raw, target) {
   const response = parseCloudflareEnvelope(raw, 'Cloudflare Worker service metadata')
   if (!isRecord(response.result) || !isRecord(response.result.script)) {
     throw new Error('Cloudflare Worker service metadata has no script object.')
   }
   const script = response.result.script
-  if (response.result.environment !== 'production' || script.id !== STAGING_WORKER_NAME) {
+  if (response.result.environment !== 'production' || script.id !== target.workerName) {
     throw new Error('Cloudflare Worker service metadata identifies the wrong environment or Worker.')
   }
-  if (script.compatibility_date !== STAGING_COMPATIBILITY_DATE) {
-    throw new Error('The Staging backup Worker compatibility date has drifted.')
+  if (script.compatibility_date !== COMPATIBILITY_DATE) {
+    throw new Error('The backup Worker compatibility date has drifted.')
   }
   const flags = requireUniqueStrings(
     script.compatibility_flags,
     'Cloudflare Worker compatibility flags',
   )
   if (
-    flags.length !== STAGING_COMPATIBILITY_FLAGS.length
-    || flags.some((flag, index) => flag !== STAGING_COMPATIBILITY_FLAGS[index])
+    flags.length !== COMPATIBILITY_FLAGS.length
+    || flags.some((flag, index) => flag !== COMPATIBILITY_FLAGS[index])
   ) {
-    throw new Error('The Staging backup Worker compatibility flags have drifted.')
+    throw new Error('The backup Worker compatibility flags have drifted.')
   }
   const handlers = requireUniqueStrings(script.handlers, 'Cloudflare Worker default handlers')
   if (handlers.length !== 1 || handlers[0] !== 'scheduled') {
-    throw new Error('The Staging backup Worker must expose only the scheduled handler.')
+    throw new Error('The backup Worker must expose only the scheduled handler.')
   }
   if (!isRecord(script.limits)) {
-    throw new Error('The Staging backup Worker has no verifiable execution limits.')
+    throw new Error('The backup Worker has no verifiable execution limits.')
   }
   requireExactKeys(
     script.limits,
@@ -423,7 +463,7 @@ function verifyWorkerService(raw) {
     'Cloudflare Worker execution limits',
   )
   if (script.limits.subrequests !== 4000) {
-    throw new Error('The Staging backup Worker subrequest limit has drifted.')
+    throw new Error('The backup Worker subrequest limit has drifted.')
   }
   if (
     (script.named_handlers !== undefined
@@ -433,15 +473,15 @@ function verifyWorkerService(raw) {
       && (!Array.isArray(script.tail_consumers) || script.tail_consumers.length !== 0))
     || (script.placement_mode !== undefined && script.placement_mode !== null)
   ) {
-    throw new Error('The Staging backup Worker service metadata contains an unapproved execution surface.')
+    throw new Error('The backup Worker service metadata contains an unapproved execution surface.')
   }
 }
 
-function verifyWorkerSchedules(raw) {
+function verifyWorkerSchedules(raw, target) {
   const response = parseCloudflareEnvelope(raw, 'Cloudflare Worker schedules')
   requireExactKeys(response.result, ['schedules'], [], 'Cloudflare Worker schedules result')
   if (!Array.isArray(response.result.schedules) || response.result.schedules.length !== 1) {
-    throw new Error('The Staging backup Worker must have exactly one Cron schedule.')
+    throw new Error('The backup Worker must have exactly one Cron schedule.')
   }
   const schedule = requireExactKeys(
     response.result.schedules[0],
@@ -449,8 +489,8 @@ function verifyWorkerSchedules(raw) {
     ['created_on', 'modified_on'],
     'Cloudflare Worker Cron schedule',
   )
-  if (schedule.cron !== STAGING_CRON) {
-    throw new Error('The Staging backup Worker Cron schedule has drifted.')
+  if (schedule.cron !== target.cron) {
+    throw new Error('The backup Worker Cron schedule has drifted.')
   }
   for (const key of ['created_on', 'modified_on']) {
     if (
@@ -476,21 +516,21 @@ export function verifyStorageBackupWorkerSurface({
   accountId,
   workerName,
 }) {
-  requireExactStagingWorker({ environment, accountId, workerName })
-  const bindingCount = verifyWorkerBindings(bindingsRaw)
+  const target = requireExactWorker({ environment, accountId, workerName })
+  const bindingCount = verifyWorkerBindings(bindingsRaw, target)
   verifyEmptyWorkerSurface(routesRaw, 'Cloudflare Worker routes')
   verifyEmptyWorkerSurface(domainsRaw, 'Cloudflare Worker custom domains', {
     allowResultInfo: true,
     allowNullDiagnostics: true,
   })
   verifyWorkerSubdomain(subdomainRaw)
-  verifyWorkerService(serviceRaw)
-  verifyWorkerSchedules(schedulesRaw)
+  verifyWorkerService(serviceRaw, target)
+  verifyWorkerSchedules(schedulesRaw, target)
   return {
     bindingCount,
     routeCount: 0,
     customDomainCount: 0,
-    cron: STAGING_CRON,
+    cron: target.cron,
   }
 }
 
@@ -501,9 +541,9 @@ export function verifyStorageBackupWorkerSecretPreflight({
   accountId,
   workerName,
 }) {
-  requireExactStagingWorker({ environment, accountId, workerName })
+  const target = requireExactWorker({ environment, accountId, workerName })
   if (httpStatus !== '200' && httpStatus !== '404') {
-    throw new Error('The Staging backup Worker secret preflight returned an unexpected HTTP status.')
+    throw new Error('The backup Worker secret preflight returned an unexpected HTTP status.')
   }
   const response = parseJson(responseRaw, 'Cloudflare Worker secret preflight')
   if (!isRecord(response)) {
@@ -518,13 +558,16 @@ export function verifyStorageBackupWorkerSecretPreflight({
     return { workerExists: true, approvedSecretCount: secretNames.length }
   }
 
+  if (target.requireExistingWorker) {
+    throw new Error('The Production backup Worker and its approved secret must exist before a code-only deployment.')
+  }
   const errors = Array.isArray(response.errors) ? response.errors : []
   if (
     response.success !== false
     || errors.length === 0
     || errors.some((error) => !isRecord(error) || ![10007, 10090].includes(error.code))
   ) {
-    throw new Error('Cloudflare did not prove that the Staging backup Worker is absent.')
+    throw new Error('Cloudflare did not prove that the backup Worker is absent.')
   }
   return { workerExists: false, approvedSecretCount: 0 }
 }
@@ -547,7 +590,7 @@ export function verifyStorageBackupWorkerDeployment({
   accountId,
   workerName,
 }) {
-  requireExactStagingWorker({ environment, accountId, workerName })
+  const target = requireExactWorker({ environment, accountId, workerName })
   if (typeof commitSha !== 'string' || !FULL_SHA_PATTERN.test(commitSha)) {
     throw new Error('Storage-backup deployment verification requires a lowercase full Git SHA.')
   }
@@ -563,7 +606,7 @@ export function verifyStorageBackupWorkerDeployment({
     throw new Error('Wrangler deployment status has no valid deployment ID.')
   }
   if (!Array.isArray(deployment.versions) || deployment.versions.length !== 1) {
-    throw new Error('The Staging backup Worker must have one active version only.')
+    throw new Error('The backup Worker must have one active version only.')
   }
   const active = deployment.versions[0]
   if (
@@ -571,9 +614,9 @@ export function verifyStorageBackupWorkerDeployment({
     || !UUID_PATTERN.test(active.version_id)
     || active.percentage !== 100
   ) {
-    throw new Error('The Staging backup Worker active version must receive exactly 100 percent.')
+    throw new Error('The backup Worker active version must receive exactly 100 percent.')
   }
-  const message = expectedMessage(commitSha, runId, leaseId)
+  const message = expectedMessage(target.environment, commitSha, runId, leaseId)
   if (!isRecord(deployment.annotations) || deployment.annotations['workers/message'] !== message) {
     throw new Error('The active Worker deployment message does not match the approved commit.')
   }
@@ -613,8 +656,8 @@ export function verifyStorageBackupWorkerDeployment({
   })
 
   return {
-    environment: 'staging',
-    workerName: STAGING_WORKER_NAME,
+    environment: target.environment,
+    workerName: target.workerName,
     commitSha,
     runId,
     leaseId,
@@ -647,6 +690,7 @@ async function main() {
     const result = verifyWranglerWorkerDeployOutput(
       await readFile(process.env.WRANGLER_OUTPUT_FILE_PATH, 'utf8'),
       {
+        environment: process.env.DEPLOY_ENVIRONMENT,
         workerName: process.env.STORAGE_BACKUP_WORKER_NAME,
         commitSha: process.env.DEPLOY_COMMIT_SHA,
         runId: process.env.GITHUB_RUN_ID,
@@ -674,8 +718,8 @@ async function main() {
     })
     console.log(
       result.workerExists
-        ? `Verified the existing Staging Worker secret allow-list (${result.approvedSecretCount}).`
-        : 'Verified that the Staging backup Worker does not exist yet.',
+        ? `Verified the existing ${process.env.DEPLOY_ENVIRONMENT} Worker secret allow-list (${result.approvedSecretCount}).`
+        : `Verified that the ${process.env.DEPLOY_ENVIRONMENT} backup Worker does not exist yet.`,
     )
     return
   }

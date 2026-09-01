@@ -5,6 +5,8 @@ const ACCOUNT_ID = 'a'.repeat(32)
 const TOKEN = 'cfut_test_token_material_12345678901234567890'
 const URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects/buril-lab-staging/deployments?env=production`
 const WORKER_DOMAINS_URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/domains?service=buril-lab-storage-backup-staging&environment=production`
+const PRODUCTION_WORKER_DOMAINS_URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/domains?service=buril-lab-storage-backup-production&environment=production`
+const PRODUCTION_WORKER_SECRETS_URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/buril-lab-storage-backup-production/secrets`
 
 function responseFor(body: BodyInit | null, init?: ResponseInit, responseUrl = URL) {
   const response = new Response(body, init)
@@ -52,6 +54,22 @@ describe('Cloudflare API GET helper', () => {
     await expect(cloudflareApiGet(
       environment,
       `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/domains/records?page=0&per_page=5&service=buril-lab-storage-backup-staging&environment=production`,
+    )).rejects.toThrow(/not an approved read-only release endpoint/)
+  })
+
+  it('allows only the exact Production Worker read surfaces added for code-only deployment', async () => {
+    const environment = { CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID, CLOUDFLARE_API_TOKEN: TOKEN }
+    for (const target of [PRODUCTION_WORKER_DOMAINS_URL, PRODUCTION_WORKER_SECRETS_URL]) {
+      const fetchMock = vi.fn(async () => responseFor('{"success":true,"result":[]}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }, target))
+      await expect(cloudflareApiGet(environment, target, { fetchImpl: fetchMock }))
+        .resolves.toMatchObject({ status: 200 })
+    }
+    await expect(cloudflareApiGet(
+      environment,
+      `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/buril-lab-storage-backup-production/settings`,
     )).rejects.toThrow(/not an approved read-only release endpoint/)
   })
 
