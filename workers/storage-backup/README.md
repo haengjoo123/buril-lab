@@ -65,14 +65,18 @@ workflow can run only from the first attempt of protected `main`; it verifies
 that the private R2 bucket has no enabled managed or custom public domain,
 creates two run-unique synthetic PNG objects totalling 3,410,853 bytes in the
 empty Staging source bucket, enables the backup switch with a 35-minute
-automatic expiry, and temporarily uses a once-per-minute Cron. It accepts six
-complete manifests in order: initial, unchanged, one changed body, one deleted
-source, a restore from the retained content body, and automatic repair of one
-deliberately missing content body. An always-run cleanup restores the five-value
-OFF config and the daily `17:15` UTC Cron before removing only the hash-matched
-synthetic rows and files. Remove the GitHub secret and revoke the Cloudflare
-token immediately after the run, successful or not. This acceptance token must
-never be delivered to `production`.
+automatic expiry, and starts a loopback-only local Wrangler runtime whose KV
+and R2 bindings point to the exact remote Staging resources. Wrangler's
+`--test-scheduled` route invokes the same scheduled handler immediately; it
+creates no public URL and does not replace the deployed Worker's daily Cron.
+The workflow accepts six complete manifests in order: initial, unchanged, one
+changed body, one deleted source, a restore from the retained content body, and
+automatic repair of one deliberately missing content body. An always-run
+cleanup restores the five-value OFF config, verifies the daily `17:15` UTC Cron,
+stops the loopback runtime, and removes only the hash-matched synthetic rows and
+files. Remove the GitHub secret and revoke the Cloudflare token immediately
+after the run, successful or not. This acceptance token must never be delivered
+to `production`.
 
 The local supervisor writes and reads back a signed phase journal before it
 tells the operator to create any provider credential. The journal advances

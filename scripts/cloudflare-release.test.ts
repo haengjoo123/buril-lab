@@ -45,6 +45,7 @@ import {
 import {
   verifyCloudflareApiHelperSource,
   verifyReleaseConfiguration,
+  verifyStagingStorageBackupAcceptanceConfig,
   verifyStorageBackupWorkerTokenDocumentation,
 } from './verify-cloudflare-release-config.mjs'
 import { publicKeyFingerprint, signAttestation } from './ephemeral-release-attestation.mjs'
@@ -2589,6 +2590,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       gate0TargetConfig,
       gate0Spec,
       cloudflareApiHelper,
+      storageBackupAcceptanceConfig,
       storageBackupReadme,
     ] = await Promise.all([
       readFile('wrangler.jsonc', 'utf8'),
@@ -2605,6 +2607,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('scripts/gate0-staging-target.mjs', 'utf8'),
       readFile('e2e/gate0/gate0.spec.ts', 'utf8'),
       readFile('scripts/cloudflare-api-get.mjs', 'utf8'),
+      readFile('workers/storage-backup/wrangler.acceptance.jsonc', 'utf8'),
       readFile('workers/storage-backup/README.md', 'utf8'),
     ])
     const normalizeLineEndings = (source: string) => source.replace(/\r\n/g, '\n')
@@ -2616,6 +2619,16 @@ describe('Prep 0 Cloudflare release controls', () => {
     const storageBackupAcceptanceWorkflow = normalizeLineEndings(storageBackupAcceptanceWorkflowRaw)
     const iosWorkflow = normalizeLineEndings(iosWorkflowRaw)
     expect(verifyCloudflareApiHelperSource(cloudflareApiHelper)).toBe(true)
+    expect(verifyStagingStorageBackupAcceptanceConfig(storageBackupAcceptanceConfig)).toBe(true)
+    expect(() => verifyStagingStorageBackupAcceptanceConfig(
+      storageBackupAcceptanceConfig.replace('dcaa52254fa6447bbe7c21f54354ad0d', 'dd6866f35f794a91b0fb5a24cbe57cf3'),
+    )).toThrow(/not exact remote Staging/)
+    expect(() => verifyStagingStorageBackupAcceptanceConfig(
+      storageBackupAcceptanceConfig.replace('"remote": true', '"remote": false'),
+    )).toThrow(/not exact remote Staging/)
+    expect(() => verifyStagingStorageBackupAcceptanceConfig(
+      storageBackupAcceptanceConfig.replace('"workers_dev": false,', '"workers_dev": false,\n  "routes": ["example.invalid/*"],'),
+    )).toThrow(/missing or unapproved fields/)
     expect(verifyStorageBackupWorkerTokenDocumentation(storageBackupReadme)).toBe(true)
     expect(() => verifyStorageBackupWorkerTokenDocumentation(
       storageBackupReadme.replace('**Workers R2 Storage Read**', '**Workers R2 Storage missing**'),

@@ -57,7 +57,7 @@ const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
   '1f71f2eb2ed1f0e8',
 ].join('')
 const STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256 = 'd278ccb8f65af20551fbc065fa84b21a36953804944bf35c53f08f2885aedc89'
-const STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256 = '02acce362f0815b864274aee603dcfb7f696103928b52bfbac8b124e886acbe9'
+const STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256 = '58ea5564b22243d89b753913331378471369c2941bbe043c5c708da1ce4cad69'
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
   production: '8e1b2958ff7f607e49a3ba1cb75842154c6107fa44b11cf477ff4f5c099e3c70',
@@ -71,7 +71,7 @@ const PINNED_CLOUDFLARE_API_HELPER_SHA256 = 'fb55977e31c33aebcc229c1fef1febba21b
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
 const PINNED_WRANGLER_OUTPUT_HELPER_SHA256 = 'f6f7f7f615d022fd971e0df2b39c8e6e6be2dde23efdb6e7f604c90b4041d299'
 const PINNED_STAGING_ROLLBACK_PREPARATION_HELPER_SHA256 = '85695732038b715b4d62c0ebacd240ff35255423de726a452effba99d03c50af'
-const PINNED_STAGING_STORAGE_BACKUP_ACCEPTANCE_HELPER_SHA256 = '31e738cbd6ee307a5ca8ee8ee521847ef44546879b7be1a254a15e668d66580f'
+const PINNED_STAGING_STORAGE_BACKUP_ACCEPTANCE_HELPER_SHA256 = '2340f0fc61bb0f6d744c9723548a14241a0414775df50259bbf54e752810eccf'
 const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
   staging: [
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
@@ -127,6 +127,17 @@ function parseConfig(raw, name) {
     throw new Error(`${name} must remain strict JSON inside its .jsonc file.`)
   }
   return parsed
+}
+
+function requireExactObjectKeys(value, expected, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} has an invalid shape.`)
+  }
+  const actual = Object.keys(value).sort()
+  const wanted = [...expected].sort()
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new Error(`${label} contains missing or unapproved fields.`)
+  }
 }
 
 function occurrenceCount(text, needle) {
@@ -458,6 +469,94 @@ function verifyWranglerConfig(config, {
       throw new Error('Production preview must not inherit the production runtime-config KV binding.')
     }
   }
+}
+
+export function verifyStagingStorageBackupAcceptanceConfig(raw) {
+  const config = parseConfig(
+    normalizeLineEndings(raw),
+    'Staging storage-backup acceptance Wrangler config',
+  )
+  requireExactObjectKeys(config, [
+    '$schema',
+    'name',
+    'main',
+    'compatibility_date',
+    'compatibility_flags',
+    'workers_dev',
+    'preview_urls',
+    'send_metrics',
+    'upload_source_maps',
+    'limits',
+    'secrets',
+    'kv_namespaces',
+    'r2_buckets',
+    'vars',
+  ], 'Staging storage-backup acceptance Wrangler config')
+  if (
+    config.$schema !== '../../node_modules/wrangler/config-schema.json'
+    || config.name !== 'buril-lab-storage-backup-staging-acceptance-local'
+    || config.main !== 'src/index.ts'
+    || config.compatibility_date !== '2026-08-20'
+    || JSON.stringify(config.compatibility_flags) !== JSON.stringify(['nodejs_compat'])
+    || config.workers_dev !== false
+    || config.preview_urls !== false
+    || config.send_metrics !== false
+    || config.upload_source_maps !== false
+  ) {
+    throw new Error('Staging storage-backup acceptance runtime identity is invalid.')
+  }
+  requireExactObjectKeys(config.limits, ['subrequests'], 'Staging acceptance limits')
+  requireExactObjectKeys(config.secrets, ['required'], 'Staging acceptance required secrets')
+  if (
+    config.limits.subrequests !== 4000
+    || JSON.stringify(config.secrets.required) !== JSON.stringify(['SUPABASE_SERVICE_ROLE_KEY'])
+  ) {
+    throw new Error('Staging storage-backup acceptance runtime limits or secret contract is invalid.')
+  }
+  if (!Array.isArray(config.kv_namespaces) || config.kv_namespaces.length !== 1) {
+    throw new Error('Staging storage-backup acceptance must have exactly one KV binding.')
+  }
+  requireExactObjectKeys(
+    config.kv_namespaces[0],
+    ['binding', 'id', 'remote'],
+    'Staging acceptance KV binding',
+  )
+  if (
+    config.kv_namespaces[0].binding !== 'BURILLAB_RUNTIME_CONFIG'
+    || config.kv_namespaces[0].id !== 'dcaa52254fa6447bbe7c21f54354ad0d'
+    || config.kv_namespaces[0].remote !== true
+  ) {
+    throw new Error('Staging storage-backup acceptance KV binding is not exact remote Staging.')
+  }
+  if (!Array.isArray(config.r2_buckets) || config.r2_buckets.length !== 1) {
+    throw new Error('Staging storage-backup acceptance must have exactly one R2 binding.')
+  }
+  requireExactObjectKeys(
+    config.r2_buckets[0],
+    ['binding', 'bucket_name', 'remote'],
+    'Staging acceptance R2 binding',
+  )
+  if (
+    config.r2_buckets[0].binding !== 'CABINET_BACKUPS'
+    || config.r2_buckets[0].bucket_name !== 'buril-lab-cabinet-backups-staging'
+    || config.r2_buckets[0].remote !== true
+  ) {
+    throw new Error('Staging storage-backup acceptance R2 binding is not exact remote Staging.')
+  }
+  const expectedVars = {
+    BACKUP_ENVIRONMENT: 'staging',
+    SUPABASE_PROJECT_REF: 'qpgnomuqdcucjmxrunnw',
+    SUPABASE_URL: 'https://qpgnomuqdcucjmxrunnw.supabase.co',
+    SOURCE_POINTER_MODE: 'legacy_url',
+    SOURCE_STORAGE_BUCKET: 'cabinets',
+    WORKERS_SUBREQUEST_LIMIT: '4000',
+    WORKERS_USAGE_PLAN: 'paid',
+  }
+  requireExactObjectKeys(config.vars, Object.keys(expectedVars), 'Staging acceptance vars')
+  if (Object.entries(expectedVars).some(([key, value]) => config.vars[key] !== value)) {
+    throw new Error('Staging storage-backup acceptance vars are not exact Staging.')
+  }
+  return true
 }
 
 export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflows, browser = {} }) {
@@ -1975,6 +2074,7 @@ async function main() {
     wranglerOutputHelper,
     stagingRollbackPreparationHelper,
     stagingStorageBackupAcceptanceHelper,
+    stagingStorageBackupAcceptanceConfig,
     storageBackupReadme,
   ] = await Promise.all([
     readFile('wrangler.jsonc', 'utf8'),
@@ -1991,6 +2091,7 @@ async function main() {
     readFile('scripts/verify-wrangler-pages-deploy-output.mjs', 'utf8'),
     readFile('scripts/prepare-staging-rollback-verification.mjs', 'utf8'),
     readFile('scripts/staging-storage-backup-acceptance.mjs', 'utf8'),
+    readFile('workers/storage-backup/wrangler.acceptance.jsonc', 'utf8'),
     readFile('workers/storage-backup/README.md', 'utf8'),
   ])
   verifyCloudflareApiHelperSource(cloudflareApiHelper)
@@ -2006,6 +2107,7 @@ async function main() {
   if (rawSourceHash(stagingStorageBackupAcceptanceHelper) !== PINNED_STAGING_STORAGE_BACKUP_ACCEPTANCE_HELPER_SHA256) {
     throw new Error('Staging storage-backup acceptance helper differs from the fully reviewed mutation contract.')
   }
+  verifyStagingStorageBackupAcceptanceConfig(stagingStorageBackupAcceptanceConfig)
   verifyStorageBackupWorkerTokenDocumentation(storageBackupReadme)
   const result = verifyReleaseConfiguration({
     productionRaw,
