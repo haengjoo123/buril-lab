@@ -1883,8 +1883,70 @@ describe('reference-based content garbage collection', () => {
   it('preserves legacy snapshot payload bodies without treating them as v2 restore documents', async () => {
     const prepared = await prepareOldContent()
     prepared.r2.now = FIXED_NOW
-    const legacyBodyKey = 'snapshots/legacy-snapshot/objects/legacy-lab/cabinet-photo.png'
-    await prepared.r2.seed(legacyBodyKey, 'legacy-photo-body')
+    const snapshotId = 'legacy-snapshot'
+    const sourcePath = 'legacy-lab/cabinet-photo.png'
+    const legacyBodyKey = `snapshots/${snapshotId}/objects/${sourcePath}`
+    const legacyPhoto = 'legacy-photo-body'
+    const legacyPhotoSha256 = createHash('sha256').update(legacyPhoto).digest('hex')
+    const createdAt = new Date(FIXED_NOW - 5_000).toISOString()
+    const completedAt = new Date(FIXED_NOW - 1_000).toISOString()
+    const manifest = {
+      schemaVersion: 1,
+      snapshotId,
+      environment: 'staging',
+      createdAt,
+      source: {
+        supabaseProjectRef: STAGING_REF,
+        storageBucket: 'cabinets',
+        pointerMode: 'legacy_url',
+      },
+      objectCount: 1,
+      referencedObjectCount: 1,
+      orphanCount: 0,
+      totalBytes: new TextEncoder().encode(legacyPhoto).byteLength,
+      objects: [{
+        sourcePath,
+        backupKey: legacyBodyKey,
+        bytes: new TextEncoder().encode(legacyPhoto).byteLength,
+        sha256: legacyPhotoSha256,
+        classification: 'referenced',
+        ownerScope: 'lab',
+        contentType: 'image/png',
+      }],
+    }
+    const manifestBody = `${JSON.stringify(manifest)}\n`
+    const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex')
+    const complete = {
+      schemaVersion: 1,
+      snapshotId,
+      environment: 'staging',
+      completedAt,
+      manifestKey: `snapshots/${snapshotId}/manifest.json`,
+      manifestSha256,
+      objectCount: 1,
+      referencedObjectCount: 1,
+      orphanCount: 0,
+      totalBytes: manifest.totalBytes,
+    }
+    await prepared.r2.seed(legacyBodyKey, legacyPhoto, undefined, FIXED_NOW - 6_000)
+    await prepared.r2.seed(
+      `snapshots/${snapshotId}/manifest.json`,
+      manifestBody,
+      undefined,
+      FIXED_NOW - 4_000,
+    )
+    await prepared.r2.seed(
+      `snapshots/${snapshotId}/manifest.sha256`,
+      `${manifestSha256}\n`,
+      undefined,
+      FIXED_NOW - 3_000,
+    )
+    await prepared.r2.seed(
+      `snapshots/${snapshotId}/complete.json`,
+      `${JSON.stringify(complete)}\n`,
+      undefined,
+      FIXED_NOW - 2_000,
+    )
 
     const current = await runFixture(withoutLastPhoto(prepared.fixtures), {
       r2: prepared.r2,
@@ -1894,6 +1956,82 @@ describe('reference-based content garbage collection', () => {
     expect(current.result.status).toBe('completed')
     expect(prepared.r2.objects.has(legacyBodyKey)).toBe(true)
     expect(prepared.r2.deleteCalls).not.toContain(legacyBodyKey)
+  })
+
+  it('fails closed when a legacy snapshot hash chain is malformed', async () => {
+    const prepared = await prepareOldContent()
+    prepared.r2.now = FIXED_NOW
+    const snapshotId = 'legacy-corrupt-snapshot'
+    const sourcePath = 'legacy-lab/cabinet-photo.png'
+    const legacyBodyKey = `snapshots/${snapshotId}/objects/${sourcePath}`
+    const legacyPhoto = 'legacy-photo-body'
+    const manifest = {
+      schemaVersion: 1,
+      snapshotId,
+      environment: 'staging',
+      createdAt: new Date(FIXED_NOW - 5_000).toISOString(),
+      source: {
+        supabaseProjectRef: STAGING_REF,
+        storageBucket: 'cabinets',
+        pointerMode: 'legacy_url',
+      },
+      objectCount: 1,
+      referencedObjectCount: 1,
+      orphanCount: 0,
+      totalBytes: new TextEncoder().encode(legacyPhoto).byteLength,
+      objects: [{
+        sourcePath,
+        backupKey: legacyBodyKey,
+        bytes: new TextEncoder().encode(legacyPhoto).byteLength,
+        sha256: createHash('sha256').update(legacyPhoto).digest('hex'),
+        classification: 'referenced',
+        ownerScope: 'lab',
+        contentType: 'image/png',
+      }],
+    }
+    const manifestBody = `${JSON.stringify(manifest)}\n`
+    const complete = {
+      schemaVersion: 1,
+      snapshotId,
+      environment: 'staging',
+      completedAt: new Date(FIXED_NOW - 1_000).toISOString(),
+      manifestKey: `snapshots/${snapshotId}/manifest.json`,
+      manifestSha256: '0'.repeat(64),
+      objectCount: 1,
+      referencedObjectCount: 1,
+      orphanCount: 0,
+      totalBytes: manifest.totalBytes,
+    }
+    await prepared.r2.seed(legacyBodyKey, legacyPhoto, undefined, FIXED_NOW - 6_000)
+    await prepared.r2.seed(
+      `snapshots/${snapshotId}/manifest.json`,
+      manifestBody,
+      undefined,
+      FIXED_NOW - 4_000,
+    )
+    await prepared.r2.seed(
+      `snapshots/${snapshotId}/manifest.sha256`,
+      `${'0'.repeat(64)}\n`,
+      undefined,
+      FIXED_NOW - 3_000,
+    )
+    await prepared.r2.seed(
+      `snapshots/${snapshotId}/complete.json`,
+      `${JSON.stringify(complete)}\n`,
+      undefined,
+      FIXED_NOW - 2_000,
+    )
+    const deleteCount = prepared.r2.deleteCalls.length
+
+    const current = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW,
+    })
+
+    expect(current.result).toMatchObject({ status: 'failed', code: 'r2_verify_failed' })
+    expect(prepared.r2.deleteCalls).toHaveLength(deleteCount)
+    expect(prepared.r2.objects.has(legacyBodyKey)).toBe(true)
+    expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(true)
   })
 
   it('fails closed before deletion when a recent completion is missing its manifest documents', async () => {

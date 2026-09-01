@@ -1986,13 +1986,14 @@ interface SnapshotDocuments {
   manifest?: R2HeadLike
   manifestHash?: R2HeadLike
   complete?: R2HeadLike
+  legacyPayloads?: R2HeadLike[]
 }
 
-function isLegacySnapshotPayloadObject(object: R2HeadLike): boolean {
+function legacySnapshotPayloadId(object: R2HeadLike): string | null {
   const match = /^snapshots\/([a-z0-9-]{8,128})\/objects\/(.+)$/.exec(object.key)
-  if (!match) return false
+  if (!match) return null
   if (!isSnapshotId(match[1]) || object.size <= 0) fail('r2_verify_failed')
-  return true
+  return match[1]
 }
 
 function snapshotDocumentGroups(objects: R2HeadLike[]): Map<string, SnapshotDocuments> {
@@ -2003,7 +2004,13 @@ function snapshotDocumentGroups(objects: R2HeadLike[]): Map<string, SnapshotDocu
       // The first backup format stored copied photo bodies below each snapshot.
       // They are retained for rollback, but they are not v2 restore documents and
       // must never become content-GC references or deletion candidates.
-      if (isLegacySnapshotPayloadObject(object)) continue
+      const legacySnapshotId = legacySnapshotPayloadId(object)
+      if (legacySnapshotId) {
+        const group = groups.get(legacySnapshotId) ?? {}
+        group.legacyPayloads = [...(group.legacyPayloads ?? []), object]
+        groups.set(legacySnapshotId, group)
+        continue
+      }
       fail('r2_verify_failed')
     }
     if (!isSnapshotId(match[1]) || object.size <= 0) fail('r2_verify_failed')
@@ -2020,6 +2027,158 @@ function snapshotDocumentGroups(objects: R2HeadLike[]): Map<string, SnapshotDocu
     groups.set(snapshotId, group)
   }
   return groups
+}
+
+async function verifyLegacySnapshotForContentGc(
+  config: SourceConfig,
+  snapshotId: string,
+  group: SnapshotDocuments,
+  dependencies: BackupDependencies,
+): Promise<string> {
+  if (!group.manifest || !group.manifestHash || !group.complete || !group.legacyPayloads?.length) {
+    fail('r2_verify_failed')
+  }
+
+  const completeKey = `${SNAPSHOT_PREFIX}${snapshotId}/complete.json`
+  const manifestKey = `${SNAPSHOT_PREFIX}${snapshotId}/manifest.json`
+  const manifestHashKey = `${SNAPSHOT_PREFIX}${snapshotId}/manifest.sha256`
+  const completeBody = await readR2Bytes(
+    config,
+    completeKey,
+    dependencies.limits.maxJsonBytes,
+    dependencies,
+  )
+  const manifestBody = await readR2Bytes(
+    config,
+    manifestKey,
+    dependencies.limits.maxJsonBytes,
+    dependencies,
+  )
+  const manifestHashBody = await readR2Bytes(config, manifestHashKey, 128, dependencies)
+  if (completeBody === null || manifestBody === null || manifestHashBody === null) {
+    fail('r2_verify_failed')
+  }
+
+  const complete = parseJsonObject(completeBody)
+  const manifest = parseJsonObject(manifestBody)
+  const manifestDigest = await sha256(manifestBody)
+  if (
+    !hasExactObjectKeys(complete, [
+      'schemaVersion', 'snapshotId', 'environment', 'completedAt', 'manifestKey',
+      'manifestSha256', 'objectCount', 'referencedObjectCount', 'orphanCount', 'totalBytes',
+    ])
+    || complete.schemaVersion !== LEGACY_SNAPSHOT_SCHEMA_VERSION
+    || complete.snapshotId !== snapshotId
+    || complete.environment !== config.environment
+    || !isCanonicalTimestamp(complete.completedAt)
+    || complete.manifestKey !== manifestKey
+    || !isSha256Hex(complete.manifestSha256)
+    || manifestDigest.hex !== complete.manifestSha256
+    || new TextDecoder().decode(manifestHashBody) !== `${complete.manifestSha256}\n`
+  ) {
+    fail('r2_verify_failed')
+  }
+
+  if (
+    !hasExactObjectKeys(manifest, [
+      'schemaVersion', 'snapshotId', 'environment', 'createdAt', 'source',
+      'objectCount', 'referencedObjectCount', 'orphanCount', 'totalBytes', 'objects',
+    ])
+    || manifest.schemaVersion !== LEGACY_SNAPSHOT_SCHEMA_VERSION
+    || manifest.snapshotId !== snapshotId
+    || manifest.environment !== config.environment
+    || !isCanonicalTimestamp(manifest.createdAt)
+    || Date.parse(manifest.createdAt) > Date.parse(complete.completedAt as string)
+    || Date.parse(complete.completedAt as string) - Date.parse(manifest.createdAt)
+      > dependencies.limits.maxRunDurationMs
+    || Date.parse(complete.completedAt as string)
+      > dependencies.now() + dependencies.limits.maxLockClockSkewMs
+    || !isRecord(manifest.source)
+    || !hasExactObjectKeys(manifest.source, ['supabaseProjectRef', 'storageBucket', 'pointerMode'])
+    || manifest.source.supabaseProjectRef !== config.projectRef
+    || manifest.source.storageBucket !== SOURCE_BUCKET
+    || manifest.source.pointerMode !== config.pointerMode
+    || !Array.isArray(manifest.objects)
+    || manifest.objects.length > dependencies.limits.maxStorageObjects
+  ) {
+    fail('r2_verify_failed')
+  }
+
+  const payloads = new Map<string, R2HeadLike>()
+  for (const payload of group.legacyPayloads) {
+    if (payloads.has(payload.key)) fail('r2_verify_failed')
+    payloads.set(payload.key, payload)
+  }
+  const sourcePaths = new Set<string>()
+  const backupKeys = new Set<string>()
+  let referencedObjectCount = 0
+  let orphanCount = 0
+  let totalBytes = 0
+  for (const value of manifest.objects) {
+    if (!isRecord(value)) fail('r2_verify_failed')
+    const classification = value.classification
+    const referenced = classification === 'referenced'
+    const expectedKeys = referenced
+      ? ['sourcePath', 'backupKey', 'bytes', 'sha256', 'classification', 'ownerScope', 'contentType']
+      : ['sourcePath', 'backupKey', 'bytes', 'sha256', 'classification', 'contentType']
+    if (
+      !hasExactObjectKeys(value, expectedKeys)
+      || (classification !== 'referenced' && classification !== 'unreferenced')
+      || !isStoredSourcePath(value.sourcePath)
+      || !isStoredSourcePath(value.backupKey)
+      || !isSha256Hex(value.sha256)
+      || !Number.isSafeInteger(value.bytes)
+      || (value.bytes as number) <= 0
+      || (value.bytes as number) > dependencies.limits.maxObjectBytes
+      || typeof value.contentType !== 'string'
+      || value.contentType.length < 1
+      || value.contentType.length > 255
+      || hasControlCharacters(value.contentType)
+      || (referenced && value.ownerScope !== 'lab' && value.ownerScope !== 'user')
+    ) {
+      fail('r2_verify_failed')
+    }
+    const expectedPrefix = referenced ? 'objects' : 'quarantine/unreferenced'
+    const expectedBackupKey = `${SNAPSHOT_PREFIX}${snapshotId}/${expectedPrefix}/${value.sourcePath}`
+    if (
+      value.backupKey !== expectedBackupKey
+      || sourcePaths.has(value.sourcePath)
+      || backupKeys.has(value.backupKey)
+    ) {
+      fail('r2_verify_failed')
+    }
+    const payload = payloads.get(value.backupKey)
+    if (
+      !payload
+      || payload.size !== value.bytes
+      || !equalBytes(payload.checksums.sha256, sha256Bytes(value.sha256))
+    ) {
+      fail('r2_checksum_failed')
+    }
+    sourcePaths.add(value.sourcePath)
+    backupKeys.add(value.backupKey)
+    totalBytes += value.bytes as number
+    if (!Number.isSafeInteger(totalBytes) || totalBytes > dependencies.limits.maxTotalBytes) {
+      fail('r2_verify_failed')
+    }
+    if (referenced) referencedObjectCount += 1
+    else orphanCount += 1
+  }
+
+  if (
+    payloads.size !== manifest.objects.length
+    || manifest.objectCount !== manifest.objects.length
+    || manifest.referencedObjectCount !== referencedObjectCount
+    || manifest.orphanCount !== orphanCount
+    || manifest.totalBytes !== totalBytes
+    || complete.objectCount !== manifest.objectCount
+    || complete.referencedObjectCount !== referencedObjectCount
+    || complete.orphanCount !== orphanCount
+    || complete.totalBytes !== totalBytes
+  ) {
+    fail('r2_verify_failed')
+  }
+  return complete.completedAt as string
 }
 
 async function collectRecentSnapshotReferences(
@@ -2063,6 +2222,21 @@ async function collectRecentSnapshotReferences(
     const completeUploadedAt = uploadedTime(group.complete.uploaded)
     if (manifestUploadedAt > hashUploadedAt || hashUploadedAt > completeUploadedAt) {
       fail('r2_verify_failed')
+    }
+    if (group.legacyPayloads?.length) {
+      const completedAt = await verifyLegacySnapshotForContentGc(
+        config,
+        snapshotId,
+        group,
+        dependencies,
+      )
+      if (
+        Math.abs(Date.parse(completedAt) - completeUploadedAt)
+          > dependencies.limits.maxRunDurationMs + dependencies.limits.maxLockClockSkewMs
+      ) {
+        fail('r2_verify_failed')
+      }
+      continue
     }
     const snapshot = await readVerifiedSnapshot(config, snapshotId, dependencies)
     if (
