@@ -122,7 +122,13 @@ jobs:
             echo "The loopback acceptance Worker did not become ready." >&2
             exit 1
           fi
-          node scripts/staging-storage-backup-acceptance.mjs run
+          if node scripts/staging-storage-backup-acceptance.mjs run; then
+            :
+          else
+            acceptance_status=$?
+            node scripts/staging-storage-backup-acceptance.mjs diagnose-worker-log "$dev_log"
+            exit "$acceptance_status"
+          fi
 
       - name: Restore OFF state and remove the synthetic fixture
         if: always() && steps.install.outcome == 'success'
