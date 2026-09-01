@@ -111,10 +111,10 @@ export function createLeaseMaterial({
   if (!FULL_SHA_PATTERN.test(commitSha) || !LEASE_PATTERN.test(leaseId)) {
     throw new Error('Lease material commit or lease identifier is malformed.')
   }
-  if (typeof storageBackup !== 'boolean' || (environment === 'production' && storageBackup)) {
+  if (typeof storageBackup !== 'boolean') {
     throw new Error('Lease material storage-backup scope is invalid.')
   }
-  const expectedTokens = environment === 'staging' && storageBackup ? 2 : 1
+  const expectedTokens = storageBackup ? 2 : 1
   if (
     !Array.isArray(cloudflareTokenIdHashes)
     || cloudflareTokenIdHashes.length !== expectedTokens
@@ -260,7 +260,6 @@ export function createProviderCreationPending({
     !FULL_SHA_PATTERN.test(commitSha)
     || !LEASE_PATTERN.test(leaseId)
     || typeof storageBackup !== 'boolean'
-    || (environment === 'production' && storageBackup)
     || typeof supabasePatLabel !== 'string'
     || supabasePatLabel.length < 8
     || !/^[0-9a-f]{32}$/.test(cloudflareAccountId || '')
@@ -312,7 +311,7 @@ function verifyJournalLeaseEvidence(value, environment, storageBackup) {
     'supabase_pat_label_hash',
     'supabase_pat_sha256',
   ], 'Provider-creation journal lease evidence')
-  const expectedCloudflareTokens = environment === 'staging' && storageBackup ? 2 : 1
+  const expectedCloudflareTokens = storageBackup ? 2 : 1
   if (
     !HASH_PATTERN.test(value.grant_sha256)
     || !Array.isArray(value.cloudflare_token_id_hashes)
@@ -334,7 +333,7 @@ function verifyJournalRunEvidence(value, payload) {
   exactKeys(value, ['run_id', 'run_attempt', 'display_title', 'updated_at'], 'Provider-creation journal run evidence')
   const expectedTitle = payload.environment === 'staging'
     ? `Deploy staging ${payload.commit_sha} (lease=${payload.lease_id}, storage-backup=${payload.storage_backup})`
-    : `Deploy production ${payload.commit_sha} (lease=${payload.lease_id})`
+    : `Deploy production ${payload.commit_sha} (lease=${payload.lease_id}, storage-backup=${payload.storage_backup})`
   if (
     !/^[1-9][0-9]*$/.test(value.run_id)
     || value.run_attempt !== 1
@@ -381,7 +380,6 @@ export function verifyProviderCreationJournal(rawJournal, publicKey) {
     || !FULL_SHA_PATTERN.test(payload.commit_sha)
     || !LEASE_PATTERN.test(payload.lease_id)
     || typeof payload.storage_backup !== 'boolean'
-    || (payload.environment === 'production' && payload.storage_backup)
     || payload.supabase_pat_label !== `burillab-${payload.environment}-${payload.lease_id}`
     || !/^[0-9a-f]{32}$/.test(payload.cloudflare_account_id || '')
     || !HASH_PATTERN.test(payload.base_cleanup_receipt_sha256)
@@ -433,7 +431,7 @@ export function verifyProviderCreationLeaseGrant({ journal, leaseGrant, publicKe
   ], 'Provider-creation lease grant')
   const issuedAt = Date.parse(grant.issued_at)
   const expiresAt = Date.parse(grant.expires_at)
-  const expectedCloudflareTokens = pending.environment === 'staging' && pending.storage_backup ? 2 : 1
+  const expectedCloudflareTokens = pending.storage_backup ? 2 : 1
   if (
     grant.version !== 1
     || grant.environment !== pending.environment

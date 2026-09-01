@@ -191,11 +191,15 @@ export function verifyCloudflareDeployInputs(environment) {
 }
 
 export function verifyCloudflareWorkerDeployInputs(environment) {
+  const selectedEnvironment = requireValue(environment, 'DEPLOY_ENVIRONMENT')
+  if (selectedEnvironment !== 'staging' && selectedEnvironment !== 'production') {
+    throw new Error('The Worker deployment environment must be staging or production.')
+  }
   const {
     accountId,
     runtimeConfigKvId,
     commitSha,
-  } = verifyCommonCloudflareTarget(environment, 'staging')
+  } = verifyCommonCloudflareTarget(environment, selectedEnvironment)
   if (requireBooleanLiteral(environment, 'DEPLOY_STORAGE_BACKUP') !== 'true') {
     throw new Error('The Worker token may be exposed only for an explicit storage-backup deployment request.')
   }
@@ -204,7 +208,7 @@ export function verifyCloudflareWorkerDeployInputs(environment) {
   }
   requireValue(environment, 'WORKER_EPHEMERAL_TOKEN', 20)
   return {
-    environment: 'staging',
+    environment: selectedEnvironment,
     accountId,
     runtimeConfigKvId,
     commitSha,

@@ -47,9 +47,15 @@ the Worker is changed. Cloudflare documents the permission in its
 [API token permission list](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)
 and accepts R2 read permission for bucket lookup in the
 [R2 bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/list/).
-The Pages and Worker token values must differ. Production uses a
-third temporary secret, `PRODUCTION_PAGES_EPHEMERAL_TOKEN`, with Cloudflare
-Pages Edit only; production has no Worker deployment path.
+The Pages and Worker token values must differ. Production uses
+`PRODUCTION_PAGES_EPHEMERAL_TOKEN` with Cloudflare Pages Edit only. An explicit
+production `deploy_storage_backup=true` request additionally uses a separate
+`PRODUCTION_WORKER_EPHEMERAL_TOKEN` with **Workers Scripts Edit**,
+**Workers KV Storage Read**, and **Workers R2 Storage Read**. That production deployment is
+code-only: it refuses to run unless the exact existing Worker has only the
+`SUPABASE_SERVICE_ROLE_KEY` secret, never receives the secret value, never uses
+`--secrets-file`, and verifies after deployment that the existing provider
+secret remains intact. The Staging and Production token values must all differ.
 
 The one-time synthetic acceptance workflow uses a fourth, separately created
 token stored only as the Staging environment secret
@@ -92,7 +98,8 @@ temporary values.
 
 Cloudflare control-plane GETs use `scripts/cloudflare-api-get.mjs`. The token
 is read from the process environment and is never placed in a command-line
-argument. The helper permits only the exact Pages and Staging Worker read
+argument. The helper permits only the exact Pages, Staging Worker, and
+Production Worker read
 surfaces used by the reviewed workflows, rejects redirects and unexpected
 response URLs, accepts only JSON, caps responses at 1 MiB and requests at 30
 seconds, and cancels oversized streams. Downstream parsers explicitly remove
@@ -124,7 +131,8 @@ separate Cloudflare account for Staging remains the open long-term boundary.
 When `deploy_storage_backup=true`, the workflow retains the exact post-deploy
 checks over six bounded Cloudflare control-plane requests and fails closed
 unless the approved state is visible: ten bindings, zero routes, zero custom
-domains, `workers.dev=false`, preview URLs disabled, only cron `15 17 * * *`,
+domains, `workers.dev=false`, preview URLs disabled, only the environment's
+approved cron (`15 17 * * *` for Staging or `45 17 * * *` for Production),
 only the scheduled handler, and the pinned compatibility date and flag. It
 also checks the account, Worker name, environment endpoint, active version,
 commit SHA, deployment annotation, and secret-name allow-list. Some of these
@@ -289,5 +297,7 @@ larger; any request or manifest naming that bucket is a failed acceptance run.
   Any other additional rule is drift. `control/` remains outside the required
   user rules so lock and latest-marker replacement continue to work.
 - Deploy Staging first, leave the flag OFF, verify the Worker has no public
-  route, then enable only Staging for one supervised run. Production deployment
-  and enabling require a separate exact-SHA/manual approval.
+  route, then complete the supervised synthetic acceptance. Production Worker
+  deployment requires the same exact SHA, a cleaned successful Staging Worker
+  run, and a separate supervised lease. Production enabling remains a later,
+  separate operation after the production source and R2 prerequisites pass.

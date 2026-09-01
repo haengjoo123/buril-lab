@@ -45,6 +45,24 @@ const REQUIRED_DEPLOY_STEPS = Object.freeze([
   'Run the protected immutable-deployment Staging Gate 0 browser flow',
   'Record Pages deployment evidence',
 ])
+const REQUIRED_WORKER_STEPS = Object.freeze([
+  'Validate the supervised Staging Worker confirmation',
+  'Verify the signed Worker lease',
+  'Verify the signed Worker cleanup receipt',
+  'Verify trusted main quality for the Worker',
+  'Verify the current Staging Supabase Advisor state for the Worker',
+  'Verify the explicitly requested Worker ephemeral token',
+  'Verify Staging storage backup remains exactly OFF before Worker deployment',
+  'Verify no unapproved Staging Worker secrets exist before deployment',
+  'Recheck the active Worker token set at the mutation boundary',
+  'Recheck Staging storage backup is exactly OFF at the mutation boundary',
+  'Recheck the signed Worker cleanup receipt at the mutation boundary',
+  'Recheck the signed Worker lease with ten minutes remaining for mutation',
+  'Deploy the OFF-only Staging storage backup Worker',
+  'Always remove temporary Worker secret material',
+  'Verify the active Staging storage backup Worker deployment',
+  'Verify Staging storage backup remains exactly OFF after Worker deployment',
+])
 export const STAGING_RUN_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1000
 export const STAGING_RUN_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
@@ -61,7 +79,7 @@ function parseNow(now) {
   return timestamp
 }
 
-function isTrustedStagingRun(candidate, repository, commitSha) {
+function isTrustedStagingRun(candidate, repository, commitSha, requiredStorageBackup) {
   const titleMatch = typeof candidate?.display_title === 'string'
     ? candidate.display_title.match(TRUSTED_RUN_TITLE)
     : null
@@ -70,6 +88,7 @@ function isTrustedStagingRun(candidate, repository, commitSha) {
   return (
     apiNameMatches
     && titleMatch?.[1] === commitSha
+    && (typeof requiredStorageBackup !== 'boolean' || titleMatch?.[3] === String(requiredStorageBackup))
     && candidate?.path === TRUSTED_WORKFLOW_PATH
     && candidate?.event === 'workflow_dispatch'
     && candidate?.head_branch === 'main'
@@ -79,7 +98,7 @@ function isTrustedStagingRun(candidate, repository, commitSha) {
   )
 }
 
-export function verifyTrustedStagingJobs(jobs, runId) {
+export function verifyTrustedStagingJobs(jobs, runId, { requireStorageBackup = false } = {}) {
   if (!Array.isArray(jobs)) throw new Error('GitHub Staging job response is malformed.')
   const allowedNames = new Set([TRUSTED_BUILD_JOB_NAME, TRUSTED_DEPLOY_JOB_NAME, TRUSTED_WORKER_JOB_NAME])
   if (jobs.some((job) => !allowedNames.has(job?.name))) {
@@ -106,7 +125,7 @@ export function verifyTrustedStagingJobs(jobs, runId) {
     !Number.isSafeInteger(workerJob.id)
     || workerJob.id <= 0
     || workerJob.status !== 'completed'
-    || !['success', 'skipped'].includes(workerJob.conclusion)
+    || !(requireStorageBackup ? workerJob.conclusion === 'success' : ['success', 'skipped'].includes(workerJob.conclusion))
     || (workerJob.run_id !== undefined && workerJob.run_id !== runId)
   ) {
     throw new Error('Trusted Deploy staging optional Worker job has invalid evidence.')
@@ -114,6 +133,7 @@ export function verifyTrustedStagingJobs(jobs, runId) {
   for (const [label, job, requiredSteps] of [
     ['build', buildJob, REQUIRED_BUILD_STEPS],
     ['deployment', deployJob, REQUIRED_DEPLOY_STEPS],
+    ...(workerJob.conclusion === 'success' ? [['Worker', workerJob, REQUIRED_WORKER_STEPS]] : []),
   ]) {
     if (!Array.isArray(job.steps)) throw new Error(`Trusted Deploy staging ${label} job lacks step evidence.`)
     for (const requiredName of requiredSteps) {
@@ -130,13 +150,14 @@ export function findTrustedStagingRun(runs, {
   repository,
   commitSha,
   runId,
+  storageBackup,
   now = Date.now(),
 }) {
   if (!Array.isArray(runs)) throw new Error('GitHub Staging-run response is malformed.')
   const nowTimestamp = parseNow(now)
   const trustedRuns = runs
     .filter((candidate) => (
-      isTrustedStagingRun(candidate, repository, commitSha)
+      isTrustedStagingRun(candidate, repository, commitSha, storageBackup)
       && (runId === undefined || String(candidate?.id) === String(runId))
     ))
     .map((candidate) => {
@@ -230,6 +251,11 @@ export async function fetchTrustedStagingRun(environment = process.env, {
   const repository = environment.GITHUB_REPOSITORY?.trim()
   const commitSha = environment.DEPLOY_COMMIT_SHA?.trim()
   const runId = environment.DEPLOY_STAGING_RUN_ID?.trim()
+  const storageBackupInput = environment.DEPLOY_STORAGE_BACKUP?.trim()
+  if (storageBackupInput && storageBackupInput !== 'true' && storageBackupInput !== 'false') {
+    throw new Error('DEPLOY_STORAGE_BACKUP must be exactly true or false for Staging evidence verification.')
+  }
+  const requireStorageBackup = storageBackupInput === 'true'
   if (!token || !repository || !commitSha || !/^\d+$/.test(runId || '')) {
     throw new Error('GitHub exact Staging verification inputs are missing.')
   }
@@ -256,7 +282,13 @@ export async function fetchTrustedStagingRun(environment = process.env, {
   })
   if (!response.ok) throw new Error(`GitHub Staging-run lookup failed with HTTP ${response.status}.`)
   const payload = await readBoundedJson(response)
-  const run = findTrustedStagingRun([payload], { repository, commitSha, runId, now })
+  const run = findTrustedStagingRun([payload], {
+    repository,
+    commitSha,
+    runId,
+    storageBackup: requireStorageBackup ? true : undefined,
+    now,
+  })
 
   const jobsEndpoint = new URL(
     `/repos/${repository}/actions/runs/${run.id}/jobs`,
@@ -276,7 +308,7 @@ export async function fetchTrustedStagingRun(environment = process.env, {
   })
   if (!jobsResponse.ok) throw new Error(`GitHub Staging-job lookup failed with HTTP ${jobsResponse.status}.`)
   const jobsPayload = await readBoundedJson(jobsResponse)
-  verifyTrustedStagingJobs(jobsPayload.jobs, run.id)
+  verifyTrustedStagingJobs(jobsPayload.jobs, run.id, { requireStorageBackup })
   if (!publicKey) throw new Error('Pinned ephemeral release public key is missing for Staging cleanup verification.')
   verifyCleanupReceiptCoversRun(
     environment.STAGING_EPHEMERAL_CLEANUP_RECEIPT?.trim() || '',

@@ -162,5 +162,22 @@ describe('signed ephemeral lease grants', () => {
       ...environment,
       DEPLOY_STAGING_RUN_ID: '32',
     }, value.keys.publicKey, { now: NOW })).toThrow(/exact cleaned Staging run/)
+
+    const productionWorkerGrant = signAttestation({
+      ...payload,
+      storage_backup: true,
+      cloudflare_token_id_hashes: [HASH, 'd'.repeat(64)],
+      cloudflare_token_sha256: ['1'.repeat(64), '2'.repeat(64)],
+      staging_cleanup_receipt_sha256: attestationEnvelopeHash(value.receipt),
+    }, value.keys.privateKey)
+    expect(verifyEphemeralLeaseGrant({
+      ...environment,
+      DEPLOY_STORAGE_BACKUP: 'true',
+      EPHEMERAL_LEASE_GRANT: productionWorkerGrant,
+    }, value.keys.publicKey, { now: NOW })).toMatchObject({
+      environment: 'production',
+      storageBackup: true,
+      cloudflareTokenIdHashes: [HASH, 'd'.repeat(64)],
+    })
   })
 })

@@ -12,6 +12,13 @@ const APPROVED_ACCOUNT_SURFACES = new Set([
   'workers/services/buril-lab-storage-backup-staging/environments/production/subdomain',
   'workers/services/buril-lab-storage-backup-staging/environments/production',
   'workers/scripts/buril-lab-storage-backup-staging/schedules',
+  'workers/scripts/buril-lab-storage-backup-production/secrets',
+  'workers/services/buril-lab-storage-backup-production/environments/production/bindings',
+  'workers/services/buril-lab-storage-backup-production/environments/production/routes?show_zonename=true',
+  'workers/domains?service=buril-lab-storage-backup-production&environment=production',
+  'workers/services/buril-lab-storage-backup-production/environments/production/subdomain',
+  'workers/services/buril-lab-storage-backup-production/environments/production',
+  'workers/scripts/buril-lab-storage-backup-production/schedules',
 ])
 
 export function parseArguments(argv) {

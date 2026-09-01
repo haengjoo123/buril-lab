@@ -11,20 +11,26 @@ const FORBIDDEN_PREP0_WORKFLOW_TERMS = [
   'paid release',
 ]
 const FORBIDDEN_PRODUCTION_STORAGE_BACKUP_TERMS = [
-  'storage backup',
-  'storage-backup',
-  'storage_backup_enabled',
-  'workers/storage-backup',
-  'buril-lab-storage-backup',
+  'workers/storage-backup/wrangler.staging.jsonc',
+  'buril-lab-storage-backup-staging',
+  'qpgnomuqdcucjmxrunnw',
+  'dcaa52254fa6447bbe7c21f54354ad0d',
+  'buril-lab-cabinet-backups-staging',
   'staging_supabase_service_role_key',
   'staging_cloudflare_api_token',
   'staging_worker_ephemeral_token',
-  'verify-storage-backup-runtime-off.mjs',
-  'verify-storage-backup-worker-deployment.mjs',
-  '/workers/',
-  'workers%2f',
-  'workers\\/',
   '--secrets-file',
+  'wrangler secret put',
+  'wrangler secret bulk',
+  'wrangler secret delete',
+  'wrangler kv key put',
+  'wrangler kv key delete',
+  'wrangler kv bulk put',
+  'wrangler kv bulk delete',
+  '--keep-vars',
+  'storage_backup_enabled=true',
+  '"storage_backup_enabled":true',
+  '"storage_backup_enabled": true',
 ]
 const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   'workers/storage-backup/wrangler.production.jsonc',
@@ -45,10 +51,10 @@ const FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS = [
   '"storage_backup_enabled": true',
 ]
 const STAGING_RELEASE_WORKFLOW_SHA256 = [
-  'af8649ec475e33e7',
-  '843cbfc9fb4553b0',
-  '6c1a51d0cdc092f9',
-  'f2d240cb0d983294',
+  'edcaeb0f2ccbcce5',
+  '133cd415602e4de0',
+  '415230b07427ef11',
+  '98d58e398f8e8936',
 ].join('')
 const STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256 = [
   '0c986e96cb6324fb',
@@ -60,14 +66,14 @@ const STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256 = 'd278ccb8f65af20551fbc065f
 const STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256 = '98ed65a9c1934a4c0583dae60030d765465dab797badafb76d1553cb7ee077c5'
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
-  production: '8e1b2958ff7f607e49a3ba1cb75842154c6107fa44b11cf477ff4f5c099e3c70',
+  production: '82925ca58ecc3f1c5048dee5763e5e2a98a3b04862b009e2220f0d5adcd7d65d',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
   'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,
   'verify-staging-rollback.yml': STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256,
   'verify-staging-storage-backup.yml': STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256,
 })
-const PINNED_CLOUDFLARE_API_HELPER_SHA256 = 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317'
+const PINNED_CLOUDFLARE_HELPER_DIGEST = '50353a0f5b6fa7702d5e1fa01c77a31bd48368d009fbf7a734e73f451c80086b'
 const PINNED_GITHUB_ARTIFACT_DIGEST_HELPER_SHA256 = 'e9a649faa2f59ef515b62260abe29f7b0c73393c138223c838ee444a11dd8bbe'
 const PINNED_WRANGLER_OUTPUT_HELPER_SHA256 = 'f6f7f7f615d022fd971e0df2b39c8e6e6be2dde23efdb6e7f604c90b4041d299'
 const PINNED_STAGING_ROLLBACK_PREPARATION_HELPER_SHA256 = '85695732038b715b4d62c0ebacd240ff35255423de726a452effba99d03c50af'
@@ -90,6 +96,8 @@ const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
     'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
     'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
   ],
   quality: [
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
@@ -168,7 +176,7 @@ function externalActionReferences(workflow) {
 }
 
 export function verifyCloudflareApiHelperSource(source) {
-  if (rawSourceHash(source) !== PINNED_CLOUDFLARE_API_HELPER_SHA256) {
+  if (rawSourceHash(source) !== PINNED_CLOUDFLARE_HELPER_DIGEST) {
     throw new Error('Cloudflare API helper differs from the fully reviewed token-handling contract.')
   }
   return true
@@ -192,6 +200,17 @@ export function verifyStorageBackupWorkerTokenDocumentation(source) {
     || !tokenSection.includes('https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/list/')
   ) {
     throw new Error('Storage-backup Worker token documentation must pin the Wrangler R2 lookup and official permission evidence.')
+  }
+  const productionTokenSection = String(source).match(
+    /`PRODUCTION_WORKER_EPHEMERAL_TOKEN`[\s\S]*?existing provider\s+secret remains intact\./,
+  )?.[0]
+  if (
+    !productionTokenSection
+    || requiredPermissions.some((permission) => !productionTokenSection.includes(permission))
+    || !/never uses\s+`--secrets-file`/.test(productionTokenSection)
+    || !productionTokenSection.includes('`SUPABASE_SERVICE_ROLE_KEY`')
+  ) {
+    throw new Error('Production Worker token documentation must require the exact read-only code-deploy contract.')
   }
   const acceptanceSection = String(source).match(
     /`STAGING_CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN`[\s\S]*?must\s+never\s+be\s+delivered\s+to\s+`production`\./,
@@ -632,7 +651,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   verifyStagingRollbackVerificationWorkflow(rollbackVerificationWorkflow)
   if (
     occurrenceCount(stagingWorkflow, 'npm ci --ignore-scripts') !== 3
-    || occurrenceCount(productionWorkflow, 'npm ci --ignore-scripts') !== 2
+    || occurrenceCount(productionWorkflow, 'npm ci --ignore-scripts') !== 3
     || occurrenceCount(qualityWorkflow, 'npm ci --ignore-scripts') !== 3
     || /\bnpm\s+(?:ci|install)(?![^\r\n]*--ignore-scripts)/.test(
       `${stagingWorkflow}\n${productionWorkflow}\n${qualityWorkflow}`,
@@ -651,6 +670,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   const stagingWorkerJob = workflowJobBlock(stagingWorkflow, 'worker')
   const productionBuildJob = workflowJobBlock(productionWorkflow, 'build')
   const productionDeployJob = workflowJobBlock(productionWorkflow, 'deploy')
+  const productionWorkerJob = workflowJobBlock(productionWorkflow, 'worker')
   const jobNames = (workflow) => {
     const jobsStart = workflow.indexOf('\njobs:\n')
     if (jobsStart < 0) return []
@@ -660,8 +680,8 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   if (JSON.stringify(jobNames(stagingWorkflow)) !== JSON.stringify(['build', 'deploy', 'worker'])) {
     throw new Error('Staging workflow must contain only the exact build, deploy, and optional fresh Worker jobs.')
   }
-  if (JSON.stringify(jobNames(productionWorkflow)) !== JSON.stringify(['build', 'deploy'])) {
-    throw new Error('Production workflow must contain only the exact build and deploy jobs.')
+  if (JSON.stringify(jobNames(productionWorkflow)) !== JSON.stringify(['build', 'deploy', 'worker'])) {
+    throw new Error('Production workflow must contain only the exact build, deploy, and optional Worker jobs.')
   }
   const credentialProbeJob = workflowJobBlock(credentialProbeWorkflow, 'verify')
   if (
@@ -678,6 +698,8 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     || !productionDeployJob.includes('\n    needs: build\n')
     || !stagingWorkerJob.includes('\n    needs: deploy\n')
     || !stagingWorkerJob.includes('\n    if: ${{ inputs.deploy_storage_backup }}\n')
+    || !productionWorkerJob.includes('\n    needs: deploy\n')
+    || !productionWorkerJob.includes('\n    if: ${{ inputs.deploy_storage_backup }}\n')
     || /\n    if:/.test(stagingBuildJob)
     || /\n    if:/.test(stagingDeployJob)
     || /\n    if:/.test(productionBuildJob)
@@ -686,6 +708,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     throw new Error('Release jobs must preserve the exact unconditional build-to-deploy and optional deploy-to-Worker dependency chain.')
   }
   const stagingWorkerHeader = stagingWorkerJob.slice(0, stagingWorkerJob.indexOf('\n    steps:\n'))
+  const productionWorkerHeader = productionWorkerJob.slice(0, productionWorkerJob.indexOf('\n    steps:\n'))
   if (
     occurrenceCount(
       stagingWorkerHeader,
@@ -693,6 +716,14 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     ) !== 1
   ) {
     throw new Error('Staging Worker job must receive the exact environment-scoped Supabase project reference.')
+  }
+  if (
+    occurrenceCount(
+      productionWorkerHeader,
+      'SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}',
+    ) !== 1
+  ) {
+    throw new Error('Production Worker job must receive the exact environment-scoped Supabase project reference.')
   }
 
   const allowedBuildSecretMappings = new Set([
@@ -798,6 +829,9 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   ) {
     throw new Error('Release workflows must invoke only the locked local Wrangler binary without package-execution fallback.')
   }
+  if (/\bcurl\b/.test(`${stagingWorkflow}\n${productionWorkflow}`)) {
+    throw new Error('Release workflows must use only the bounded provider API helpers and never invoke curl directly.')
+  }
 
   const verifySecretShellBoundary = (job, boundaryId, label) => {
     const stepBlocks = job.split(/\n(?=      - name: )/).filter((block) => block.startsWith('      - name: '))
@@ -820,6 +854,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   verifySecretShellBoundary(stagingDeployJob, 'deploy-runner-boundary', 'Staging')
   verifySecretShellBoundary(stagingWorkerJob, 'worker-runner-boundary', 'Staging Worker')
   verifySecretShellBoundary(productionDeployJob, 'deploy-runner-boundary', 'Production')
+  verifySecretShellBoundary(productionWorkerJob, 'worker-runner-boundary', 'Production Worker')
 
   for (const [label, workflow, stepName] of [
     ['Staging', stagingWorkflow, 'Validate the credential-free Staging build request'],
@@ -845,14 +880,14 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   }
   if (
     occurrenceCount(stagingWorkflow, 'node scripts/verify-ephemeral-lease-grant.mjs') !== 6
-    || occurrenceCount(productionWorkflow, 'node scripts/verify-ephemeral-lease-grant.mjs') !== 3
+    || occurrenceCount(productionWorkflow, 'node scripts/verify-ephemeral-lease-grant.mjs') !== 6
     || occurrenceCount(stagingWorkflow, 'EPHEMERAL_LEASE_MIN_REMAINING_SECONDS: "600"') !== 4
-    || occurrenceCount(productionWorkflow, 'EPHEMERAL_LEASE_MIN_REMAINING_SECONDS: "600"') !== 2
+    || occurrenceCount(productionWorkflow, 'EPHEMERAL_LEASE_MIN_REMAINING_SECONDS: "600"') !== 4
     || occurrenceCount(stagingWorkflow, 'node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600') !== 4
-    || occurrenceCount(productionWorkflow, 'node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600') !== 2
+    || occurrenceCount(productionWorkflow, 'node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600') !== 4
     || occurrenceCount(stagingWorkflow, 'node scripts/verify-ephemeral-cleanup-receipt.mjs') !== 4
-    || occurrenceCount(productionWorkflow, 'node scripts/verify-ephemeral-cleanup-receipt.mjs') !== 2
-    || occurrenceCount(productionWorkflow, 'STAGING_EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.STAGING_EPHEMERAL_CLEANUP_RECEIPT }}') !== 1
+    || occurrenceCount(productionWorkflow, 'node scripts/verify-ephemeral-cleanup-receipt.mjs') !== 4
+    || occurrenceCount(productionWorkflow, 'STAGING_EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.STAGING_EPHEMERAL_CLEANUP_RECEIPT }}') !== 2
   ) {
     throw new Error('Signed lease, cumulative cleanup, and cross-environment cleanup gates are incomplete.')
   }
@@ -862,6 +897,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   ], 'Staging')
   requireExactCloudflareTokenSecretNames(productionWorkflow, [
     'PRODUCTION_PAGES_EPHEMERAL_TOKEN',
+    'PRODUCTION_WORKER_EPHEMERAL_TOKEN',
   ], 'Production')
   for (const [name, workflow] of Object.entries(workflows)) {
     if (name === 'staging' || name === 'production' || name === 'verify-staging-ephemeral-credentials.yml') continue
@@ -895,33 +931,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   const forbiddenProductionStorageBackup = FORBIDDEN_PRODUCTION_STORAGE_BACKUP_TERMS
     .filter((term) => productionWorkflow.toLowerCase().includes(term))
   if (forbiddenProductionStorageBackup.length > 0) {
-    throw new Error(`Production workflow must contain no storage-backup deployment path: ${forbiddenProductionStorageBackup.join(', ')}`)
-  }
-  const productionWranglerLines = productionWorkflow
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /wrangler/i.test(line))
-  const approvedProductionWranglerLines = [
-    'test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"',
-    '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" pages functions build functions \\',
-    '- name: Materialize the production Wrangler config after final guards',
-    'node scripts/render-wrangler-config.mjs',
-    '--input wrangler.jsonc',
-    '--output wrangler.production.generated.jsonc',
-    '--pages-deploy-redirect .wrangler/deploy/config.json',
-    'WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/burillab-production-pages-deploy.jsonl',
-    `printf '%s  %s\\n' '${PINNED_WRANGLER_OUTPUT_HELPER_SHA256}' scripts/verify-wrangler-pages-deploy-output.mjs \\`,
-    'test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"',
-    'test ! -e "$WRANGLER_OUTPUT_FILE_PATH"',
-    '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" pages deploy dist \\',
-    'env -u CLOUDFLARE_API_TOKEN node scripts/verify-wrangler-pages-deploy-output.mjs \\',
-    '--file "$WRANGLER_OUTPUT_FILE_PATH" \\',
-  ]
-  if (
-    productionWranglerLines.length !== approvedProductionWranglerLines.length
-    || productionWranglerLines.some((line, index) => line !== approvedProductionWranglerLines[index])
-  ) {
-    throw new Error('Production workflow Wrangler lines must match the exact Pages-only allow-list.')
+    throw new Error(`Production storage-backup deployment contains a forbidden credential or mutation: ${forbiddenProductionStorageBackup.join(', ')}`)
   }
   const forbiddenStagingStorageBackup = FORBIDDEN_STAGING_STORAGE_BACKUP_TERMS
     .filter((term) => stagingWorkflow.toLowerCase().includes(term))
@@ -1080,6 +1090,8 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     || occurrenceCount(stagingWorkflow, 'CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_WORKER_EPHEMERAL_TOKEN }}') !== 6
     || occurrenceCount(productionWorkflow, 'PAGES_EPHEMERAL_TOKEN: ${{ secrets.PRODUCTION_PAGES_EPHEMERAL_TOKEN }}') !== 2
     || occurrenceCount(productionWorkflow, 'CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCTION_PAGES_EPHEMERAL_TOKEN }}') !== 5
+    || occurrenceCount(productionWorkflow, 'WORKER_EPHEMERAL_TOKEN: ${{ secrets.PRODUCTION_WORKER_EPHEMERAL_TOKEN }}') !== 2
+    || occurrenceCount(productionWorkflow, 'CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCTION_WORKER_EPHEMERAL_TOKEN }}') !== 6
   ) {
     throw new Error('Cloudflare deployment steps must use only the exact supervised ephemeral-token mappings.')
   }
@@ -1095,11 +1107,14 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   ], 2, 'Staging')
   requireOnlyEnvMappings(productionWorkflow, 'CLOUDFLARE_API_TOKEN', [
     'CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCTION_PAGES_EPHEMERAL_TOKEN }}',
-  ], 5, 'Production')
+    'CLOUDFLARE_API_TOKEN: ${{ secrets.PRODUCTION_WORKER_EPHEMERAL_TOKEN }}',
+  ], 11, 'Production')
   requireOnlyEnvMappings(productionWorkflow, 'PAGES_EPHEMERAL_TOKEN', [
     'PAGES_EPHEMERAL_TOKEN: ${{ secrets.PRODUCTION_PAGES_EPHEMERAL_TOKEN }}',
   ], 2, 'Production')
-  requireOnlyEnvMappings(productionWorkflow, 'WORKER_EPHEMERAL_TOKEN', [], 0, 'Production')
+  requireOnlyEnvMappings(productionWorkflow, 'WORKER_EPHEMERAL_TOKEN', [
+    'WORKER_EPHEMERAL_TOKEN: ${{ secrets.PRODUCTION_WORKER_EPHEMERAL_TOKEN }}',
+  ], 2, 'Production')
   if (
     occurrenceCount(stagingWorkflow, 'node scripts/verify-github-quality-run.mjs') !== 4
     || stagingWorkflow.includes('workflow_run:')
@@ -1747,7 +1762,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   }
   const ephemeralAdvisorMapping = 'SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN }}'
   requireOnlyEnvMappings(stagingWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 5, 'Staging')
-  requireOnlyEnvMappings(productionWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 2, 'Production')
+  requireOnlyEnvMappings(productionWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 4, 'Production')
   requireOnlyEnvMappings(credentialProbeWorkflow, 'SUPABASE_ACCESS_TOKEN', [ephemeralAdvisorMapping], 1, 'Staging credential-injection probe')
   requireOnlyEnvMappings(stagingWorkflow, 'EPHEMERAL_CREDENTIAL_SESSION', [], 0, 'Staging')
   requireOnlyEnvMappings(productionWorkflow, 'EPHEMERAL_CREDENTIAL_SESSION', [], 0, 'Production')
@@ -1836,6 +1851,9 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'workflow_dispatch:',
     'lease_id:',
     'staging_run_id:',
+    'deploy_storage_backup:',
+    'type: boolean',
+    'default: false',
     'if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REPOSITORY" != "haengjoo123/buril-lab" || "$GITHUB_REF" != "refs/heads/main" ]]',
     'if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]',
     'DEPLOY_LEASE_ID: ${{ inputs.lease_id }}',
@@ -1844,8 +1862,9 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}',
     'STAGING_EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.STAGING_EPHEMERAL_CLEANUP_RECEIPT }}',
     'DEPLOY buril-lab production $DEPLOY_COMMIT_SHA STAGING $DEPLOY_STAGING_RUN_ID LEASE $DEPLOY_LEASE_ID WITH EPHEMERAL TOKENS',
-    'DEPLOY_STORAGE_BACKUP: "false"',
+    'DEPLOY_STORAGE_BACKUP: ${{ inputs.deploy_storage_backup }}',
     'PAGES_EPHEMERAL_TOKEN: ${{ secrets.PRODUCTION_PAGES_EPHEMERAL_TOKEN }}',
+    'WORKER_EPHEMERAL_TOKEN: ${{ secrets.PRODUCTION_WORKER_EPHEMERAL_TOKEN }}',
     'STAGING_KOSHA_CONTENT_MODE: link_only',
     'if [[ "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]',
     'test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"',
@@ -1909,8 +1928,14 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     'if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REPOSITORY" != "haengjoo123/buril-lab" || "$GITHUB_REF" != "refs/heads/main" ]]; then',
     'Production canonical dispatch guard',
   )
-  if (/\n\s{4}if:/.test(productionWorkflow)) {
-    throw new Error('Production workflow re-runs must execute the validation job and fail visibly on the first step.')
+  const productionJobConditions = productionWorkflow
+    .split(/\r?\n/)
+    .filter((line) => /^    if:/.test(line))
+  if (
+    productionJobConditions.length !== 1
+    || productionJobConditions[0] !== '    if: ${{ inputs.deploy_storage_backup }}'
+  ) {
+    throw new Error('Only the isolated Production Worker job may use the exact explicit backup-request condition.')
   }
   const productionInitialOrder = [
     'Validate the manual confirmation',
@@ -1941,6 +1966,252 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   }
   requireStepCondition(productionWorkflow, 'Record cleanup pending before the next lease', 'always()')
 
+  if (
+    !productionWorkerJob.includes('\n    environment:\n      name: production\n')
+    || !productionWorkerJob.includes('name: Supervised fresh-runner deploy of the OFF-only Production backup Worker')
+    || productionWorkerJob.includes('PRODUCTION_PAGES_EPHEMERAL_TOKEN')
+    || productionBuildJob.includes('PRODUCTION_WORKER_EPHEMERAL_TOKEN')
+    || productionDeployJob.includes('PRODUCTION_WORKER_EPHEMERAL_TOKEN')
+    || productionWorkflow.includes('secrets.SUPABASE_SERVICE_ROLE_KEY')
+    || productionWorkflow.includes('storage-backup-secret-file')
+  ) {
+    throw new Error('Production Worker deployment must remain isolated, code-only, and must never receive Pages or service-role secret material.')
+  }
+  const productionWorkerValidationBlock = requireFailClosedStep(
+    productionWorkflow,
+    'Validate the supervised Production Worker confirmation',
+  )
+  for (const condition of [
+    'if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REPOSITORY" != "haengjoo123/buril-lab" || "$GITHUB_REF" != "refs/heads/main" ]]; then',
+    'if [[ "$GITHUB_RUN_ATTEMPT" != "1" || "$DEPLOY_STORAGE_BACKUP" != "true" ]]; then',
+    'if [[ ! "$DEPLOY_COMMIT_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_COMMIT_SHA" != "$GITHUB_SHA" ]]; then',
+    'if [[ ! "$DEPLOY_LEASE_ID" =~ ^[0-9a-f]{32}$ || ! "$DEPLOY_STAGING_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then',
+    'if [[ "$DEPLOY_CONFIRMATION" != "DEPLOY buril-lab production $DEPLOY_COMMIT_SHA STAGING $DEPLOY_STAGING_RUN_ID LEASE $DEPLOY_LEASE_ID WITH EPHEMERAL TOKENS" ]]; then',
+  ]) {
+    requireExecutableShellLine(productionWorkerValidationBlock, condition, 'Production Worker request boundary')
+    requireExecutableFailureBranch(productionWorkerValidationBlock, condition, 'Production Worker request boundary')
+  }
+  for (const stepName of [
+    'Verify the Production Worker commit is current main',
+    'Verify the signed Production Worker lease',
+    'Verify the signed Production Worker cleanup receipt',
+    'Verify trusted main quality for the Production Worker',
+    'Verify the exact cleaned Staging run for the Production Worker',
+    'Verify the current production Supabase Advisor state for the Worker',
+    'Verify the explicitly requested Production Worker token',
+    'Verify Production storage backup remains exactly OFF before Worker deployment',
+    'Verify the existing Production Worker secret allow-list before deployment',
+    'Recheck Production Worker current main, quality, Staging, and Advisor gates',
+    'Recheck the active Production Worker token and OFF switch at the mutation boundary',
+    'Recheck the signed Production Worker cleanup and lease at mutation',
+    'Deploy the OFF-only Production storage backup Worker',
+    'Verify the active Production storage backup Worker deployment',
+    'Verify Production storage backup remains exactly OFF after Worker deployment',
+    'Record Production storage backup Worker evidence',
+  ]) {
+    requireFailClosedStep(productionWorkflow, stepName)
+  }
+  requireStepCondition(
+    productionWorkflow,
+    'Record Production Worker cleanup pending before the next lease',
+    'always()',
+  )
+  requireExactRunCommands(
+    productionWorkflow,
+    'Verify the Production Worker commit is current main',
+    [
+      'test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"',
+      'git fetch --no-tags origin main',
+      'test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"',
+    ],
+  )
+  requireExactRunCommands(
+    productionWorkflow,
+    'Verify the signed Production Worker lease',
+    ['node scripts/verify-ephemeral-lease-grant.mjs'],
+  )
+  requireExactRunCommands(
+    productionWorkflow,
+    'Verify the signed Production Worker cleanup receipt',
+    ['node scripts/verify-ephemeral-cleanup-receipt.mjs'],
+  )
+  requireExactRunCommands(
+    productionWorkflow,
+    'Verify trusted main quality for the Production Worker',
+    ['node scripts/verify-github-quality-run.mjs'],
+  )
+  requireExactRunCommands(
+    productionWorkflow,
+    'Verify the exact cleaned Staging run for the Production Worker',
+    ['node scripts/verify-github-staging-run.mjs'],
+  )
+  const productionWorkerAdvisorBlock = requireExactRunCommands(
+    productionWorkflow,
+    'Verify the current production Supabase Advisor state for the Worker',
+    [
+      'node scripts/verify-ephemeral-supabase-lease.mjs',
+      'npm run security:supabase-advisors:hosted -- --environment production',
+    ],
+  )
+  if (
+    !productionWorkerAdvisorBlock.includes(ephemeralAdvisorMapping)
+    || productionWorkerAdvisorBlock.includes('SUPABASE_SERVICE_ROLE_KEY')
+  ) {
+    throw new Error('Production Worker Advisor verification may receive only the ephemeral Management PAT.')
+  }
+  const productionWorkerRecheckBlock = requireExactRunCommands(
+    productionWorkflow,
+    'Recheck Production Worker current main, quality, Staging, and Advisor gates',
+    [
+      'set -euo pipefail',
+      'git fetch --no-tags origin main',
+      'test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"',
+      'test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"',
+      'node scripts/verify-github-quality-run.mjs',
+      'node scripts/verify-github-staging-run.mjs',
+      'node scripts/verify-ephemeral-supabase-lease.mjs',
+      'npm run security:supabase-advisors:hosted -- --environment production',
+    ],
+  )
+  if (
+    !productionWorkerRecheckBlock.includes(ephemeralAdvisorMapping)
+    || productionWorkerRecheckBlock.includes('SUPABASE_SERVICE_ROLE_KEY')
+  ) {
+    throw new Error('Production Worker final current-state gate may receive only the ephemeral Management PAT.')
+  }
+  requireExactRunCommands(
+    productionWorkflow,
+    'Verify the explicitly requested Production Worker token',
+    ['node scripts/verify-cloudflare-deploy-inputs.mjs'],
+  )
+  requireExactRunCommands(
+    productionWorkflow,
+    'Recheck the signed Production Worker cleanup and lease at mutation',
+    [
+      'node scripts/verify-ephemeral-cleanup-receipt.mjs',
+      'node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600',
+    ],
+  )
+  for (const stepName of [
+    'Verify the explicitly requested Production Worker token',
+    'Verify Production storage backup remains exactly OFF before Worker deployment',
+    'Verify the existing Production Worker secret allow-list before deployment',
+    'Recheck the active Production Worker token and OFF switch at the mutation boundary',
+    'Deploy the OFF-only Production storage backup Worker',
+    'Verify the active Production storage backup Worker deployment',
+    'Verify Production storage backup remains exactly OFF after Worker deployment',
+  ]) {
+    const block = workflowStepBlock(productionWorkflow, stepName)
+    if (
+      !block.includes('secrets.PRODUCTION_WORKER_EPHEMERAL_TOKEN')
+      || block.includes('secrets.PRODUCTION_PAGES_EPHEMERAL_TOKEN')
+    ) {
+      throw new Error(`${stepName} must use only the explicitly requested Production Worker ephemeral token.`)
+    }
+  }
+  if (
+    occurrenceCount(productionWorkflow, '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" kv key get runtime_config') !== 3
+    || occurrenceCount(productionWorkflow, '--namespace-id "$BURILLAB_RUNTIME_CONFIG_KV_ID"') !== 3
+    || occurrenceCount(productionWorkflow, '--remote') !== 3
+    || occurrenceCount(productionWorkflow, '--text') !== 3
+    || occurrenceCount(productionWorkflow, '--config workers/storage-backup/wrangler.production.jsonc') !== 7
+    || occurrenceCount(productionWorkflow, 'node scripts/verify-storage-backup-runtime-off.mjs') !== 3
+    || occurrenceCount(productionWorkflow, 'env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-worker-deployment.mjs preflight') !== 1
+    || occurrenceCount(productionWorkflow, '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" deploy \\') !== 1
+    || occurrenceCount(productionWorkflow, '--secrets-file') !== 0
+    || occurrenceCount(productionWorkflow, '--strict') !== 9
+    || occurrenceCount(productionWorkflow, '--autoconfig=false') !== 1
+    || occurrenceCount(productionWorkflow, '--tag "$worker_tag"') !== 1
+    || occurrenceCount(productionWorkflow, '--message "$worker_message"') !== 1
+    || occurrenceCount(productionWorkflow, '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" deployments status') !== 1
+    || occurrenceCount(productionWorkflow, '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" versions list') !== 1
+    || occurrenceCount(productionWorkflow, '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" secret list') !== 1
+    || occurrenceCount(productionWorkflow, '--name "$STORAGE_BACKUP_WORKER_NAME"') !== 3
+    || occurrenceCount(productionWorkflow, 'env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-worker-deployment.mjs active') !== 1
+    || occurrenceCount(productionWorkflow, 'cloudflare_worker_surface_get() {') !== 1
+    || occurrenceCount(productionWorkflow, 'cloudflare_worker_surface_get bindings') !== 1
+    || occurrenceCount(productionWorkflow, 'cloudflare_worker_surface_get routes') !== 1
+    || occurrenceCount(productionWorkflow, 'cloudflare_worker_surface_get domains') !== 1
+    || occurrenceCount(productionWorkflow, 'cloudflare_worker_surface_get subdomain') !== 1
+    || occurrenceCount(productionWorkflow, 'cloudflare_worker_surface_get service') !== 1
+    || occurrenceCount(productionWorkflow, 'cloudflare_worker_surface_get schedules') !== 1
+    || occurrenceCount(productionWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/bindings"') !== 1
+    || occurrenceCount(productionWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/routes?show_zonename=true"') !== 1
+    || occurrenceCount(productionWorkflow, 'endpoint="workers/domains?service=$STORAGE_BACKUP_WORKER_NAME&environment=production"') !== 1
+    || occurrenceCount(productionWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production/subdomain"') !== 1
+    || occurrenceCount(productionWorkflow, 'endpoint="workers/services/$STORAGE_BACKUP_WORKER_NAME/environments/production"') !== 1
+    || occurrenceCount(productionWorkflow, 'endpoint="workers/scripts/$STORAGE_BACKUP_WORKER_NAME/schedules"') !== 1
+    || occurrenceCount(productionWorkflow, '/usr/bin/timeout --signal=TERM --kill-after=5s 30s') !== 9
+    || occurrenceCount(productionWorkflow, '/usr/bin/timeout --signal=TERM --kill-after=15s 540s') !== 2
+  ) {
+    throw new Error('Production must verify exact-OFF three times and deploy and verify the code-only backup Worker exactly once.')
+  }
+  const productionWorkerDeployBlock = workflowStepBlock(
+    productionWorkflow,
+    'Deploy the OFF-only Production storage backup Worker',
+  )
+  const productionWorkerMutationMarkers = [
+    '/usr/bin/timeout --signal=TERM --kill-after=5s 30s git fetch --no-tags origin main',
+    'test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT_SHA"',
+    'test "$(git rev-parse origin/main)" = "$DEPLOY_COMMIT_SHA"',
+    'worker_tag="r$GITHUB_RUN_ID-l$DEPLOY_LEASE_ID"',
+    'worker_message="quality-approved production storage backup run $GITHUB_RUN_ID lease $DEPLOY_LEASE_ID commit $DEPLOY_COMMIT_SHA"',
+    'node scripts/verify-ephemeral-lease-grant.mjs --minimum-remaining-seconds 600',
+    '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" deploy',
+    'env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-worker-deployment.mjs wrangler-output',
+  ].map((marker) => productionWorkerDeployBlock.indexOf(marker))
+  if (
+    productionWorkerMutationMarkers.some((position) => position < 0)
+    || productionWorkerMutationMarkers.some((position, index) => index > 0 && position <= productionWorkerMutationMarkers[index - 1])
+    || !productionWorkerDeployBlock.includes('WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/burillab-production-worker-deploy.jsonl')
+    || !productionWorkerDeployBlock.includes('--config workers/storage-backup/wrangler.production.jsonc')
+    || productionWorkerDeployBlock.includes('--secrets-file')
+    || !workflowStepBlock(productionWorkflow, 'Verify the active Production storage backup Worker deployment')
+      .includes('EXPECTED_WORKER_VERSION_ID: ${{ steps.worker-deploy-command.outputs.worker_version_id }}')
+  ) {
+    throw new Error('The Production Worker mutation must preserve the existing secret and bind current main, lease, and the newly created version.')
+  }
+  const productionWorkerOrder = [
+    'Validate the supervised Production Worker confirmation',
+    'Verify the signed Production Worker lease',
+    'Verify the signed Production Worker cleanup receipt',
+    'Verify trusted main quality for the Production Worker',
+    'Verify the exact cleaned Staging run for the Production Worker',
+    'Verify the current production Supabase Advisor state for the Worker',
+    'Verify the explicitly requested Production Worker token',
+    'Verify Production storage backup remains exactly OFF before Worker deployment',
+    'Verify the existing Production Worker secret allow-list before deployment',
+    'Recheck Production Worker current main, quality, Staging, and Advisor gates',
+    'Recheck the active Production Worker token and OFF switch at the mutation boundary',
+    'Recheck the signed Production Worker cleanup and lease at mutation',
+    'Deploy the OFF-only Production storage backup Worker',
+    'Verify the active Production storage backup Worker deployment',
+    'Verify Production storage backup remains exactly OFF after Worker deployment',
+    'Record Production storage backup Worker evidence',
+    'Record Production Worker cleanup pending before the next lease',
+  ].map((marker) => productionWorkflow.indexOf(marker))
+  if (
+    productionWorkerOrder.some((position) => position < 0)
+    || productionWorkerOrder.some((position, index) => index > 0 && position <= productionWorkerOrder[index - 1])
+  ) {
+    throw new Error('Production backup Worker main-tip, exact-OFF, code-only deploy, active-version, and cleanup gates are out of order.')
+  }
+  requireImmediateNextStep(
+    productionWorkflow,
+    'Recheck Production Worker current main, quality, Staging, and Advisor gates',
+    'Recheck the active Production Worker token and OFF switch at the mutation boundary',
+  )
+  requireImmediateNextStep(
+    productionWorkflow,
+    'Recheck the active Production Worker token and OFF switch at the mutation boundary',
+    'Recheck the signed Production Worker cleanup and lease at mutation',
+  )
+  requireImmediateNextStep(
+    productionWorkflow,
+    'Recheck the signed Production Worker cleanup and lease at mutation',
+    'Deploy the OFF-only Production storage backup Worker',
+  )
+
   const qualityRunVerifier = 'node scripts/verify-github-quality-run.mjs'
   if (productionWorkflow.split(qualityRunVerifier).length - 1 < 2) {
     throw new Error('Production workflow must verify trusted main quality both early and immediately before deployment.')
@@ -1951,14 +2222,14 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   }
   const hostedAdvisorCommand = 'npm run security:supabase-advisors:hosted --'
   if (occurrenceCount(stagingWorkflow, hostedAdvisorCommand) !== 4
-      || occurrenceCount(productionWorkflow, hostedAdvisorCommand) !== 2) {
+      || occurrenceCount(productionWorkflow, hostedAdvisorCommand) !== 4) {
     throw new Error('Hosted Advisor checks must run directly before every Pages or optional Worker mutation.')
   }
   if (
-    occurrenceCount(productionWorkflow, 'node scripts/cloudflare-api-get.mjs') !== 2
-    || occurrenceCount(productionWorkflow, '--include-status false') !== 2
-    || occurrenceCount(productionWorkflow, '--include-status true') !== 0
-    || occurrenceCount(productionWorkflow, '--url "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/') !== 2
+    occurrenceCount(productionWorkflow, 'node scripts/cloudflare-api-get.mjs') !== 4
+    || occurrenceCount(productionWorkflow, '--include-status false') !== 3
+    || occurrenceCount(productionWorkflow, '--include-status true') !== 1
+    || occurrenceCount(productionWorkflow, '--url "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/') !== 4
     || occurrenceCount(productionWorkflow, 'env -u CLOUDFLARE_API_TOKEN node scripts/read-pages-deployment.mjs') !== 2
     || /Authorization\s*:\s*Bearer|curl\b[^\n]*(?:CLOUDFLARE|TOKEN)|--header\b[^\n]*(?:CLOUDFLARE|TOKEN)/i.test(productionWorkflow)
   ) {
@@ -1996,7 +2267,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
       }
     }
   }
-  const helperIntegrityLine = "printf '%s  %s\\n' 'fb55977e31c33aebcc229c1fef1febba21ba9b6435b59a85fd6805732b8e3317' scripts/cloudflare-api-get.mjs"
+  const helperIntegrityLine = `printf '%s  %s\\n' '${PINNED_CLOUDFLARE_HELPER_DIGEST}' scripts/cloudflare-api-get.mjs`
   for (const [workflow, stepNames] of [
     [stagingWorkflow, [
       'Resolve the immutable Staging deployment URL',
@@ -2006,6 +2277,8 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     [productionWorkflow, [
       'Resolve the immutable Staging deployment for this SHA',
       'Resolve the exact immutable production deployment',
+      'Verify the existing Production Worker secret allow-list before deployment',
+      'Verify the active Production storage backup Worker deployment',
     ]],
   ]) {
     for (const stepName of stepNames) {

@@ -874,7 +874,7 @@ async function runDetails(runId) {
   }
 }
 
-async function productionStagingEvidence(commitSha, publicKey, stagingRunId) {
+async function productionStagingEvidence(commitSha, publicKey, stagingRunId, storageBackup) {
   if (!/^\d+$/.test(stagingRunId || '')) {
     throw new Error('Production requires one exact supervised Staging run identifier.')
   }
@@ -893,6 +893,7 @@ async function productionStagingEvidence(commitSha, publicKey, stagingRunId) {
     repository: REPOSITORY,
     commitSha,
     runId: stagingRunId,
+    storageBackup: storageBackup ? true : undefined,
   })
   verifyCleanupReceiptCoversRun(cleanupReceipt, publicKey, run)
   return Object.freeze({
@@ -994,7 +995,7 @@ async function runStagingCredentialInjectionProbe({ commitSha, cleanupReceipt, p
 async function deploy(environment, commitSha, storageBackup, cloudflareAccountId, stagingRunId, inputIterator) {
   const contract = CONTRACTS[environment]
   if (!contract || !FULL_SHA_PATTERN.test(commitSha)) throw new Error('Deploy target is invalid.')
-  if (typeof storageBackup !== 'boolean' || (environment === 'production' && storageBackup)) {
+  if (typeof storageBackup !== 'boolean') {
     throw new Error('Deploy storage-backup selection is invalid.')
   }
   if (!/^[0-9a-f]{32}$/.test(cloudflareAccountId || '')) throw new Error('Cloudflare account identifier is malformed.')
@@ -1015,7 +1016,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
     throw new Error('Staging deploy must not accept a Production-only Staging run identifier.')
   }
   const stagingEvidence = environment === 'production'
-    ? await productionStagingEvidence(commitSha, publicKey, stagingRunId)
+    ? await productionStagingEvidence(commitSha, publicKey, stagingRunId, storageBackup)
     : null
   if (environment === 'staging') {
     await runStagingCredentialInjectionProbe({ commitSha, cleanupReceipt, privateKey })
@@ -1111,13 +1112,14 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
       ? 'STAGING_PAGES_EPHEMERAL_TOKEN'
       : 'PRODUCTION_PAGES_EPHEMERAL_TOKEN'
     await setSecret(environment, pageSecretName, credentials.cloudflare_pages_token)
-    if (storageBackup) {
-      await setSecret(environment, 'STAGING_WORKER_EPHEMERAL_TOKEN', credentials.cloudflare_worker_token)
-    }
+    const workerSecretName = environment === 'staging'
+      ? 'STAGING_WORKER_EPHEMERAL_TOKEN'
+      : 'PRODUCTION_WORKER_EPHEMERAL_TOKEN'
+    if (storageBackup) await setSecret(environment, workerSecretName, credentials.cloudflare_worker_token)
     await assertEnvironmentSecretsPresent(environment, [
       'SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN',
       pageSecretName,
-      ...(storageBackup ? ['STAGING_WORKER_EPHEMERAL_TOKEN'] : []),
+      ...(storageBackup ? [workerSecretName] : []),
     ])
     console.log('Waiting for GitHub environment-secret propagation before the supervised deployment dispatch.')
     await new Promise((resolvePromise) => setTimeout(resolvePromise, SECRET_DISPATCH_PROPAGATION_DELAY_MS))
@@ -1132,8 +1134,8 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
       '-f', `lease_id=${leaseId}`,
       '-f', `confirmation=${confirmation}`,
     ]
+    dispatchArguments.push('-f', `deploy_storage_backup=${storageBackup}`)
     if (environment === 'staging') {
-      dispatchArguments.push('-f', `deploy_storage_backup=${storageBackup}`)
       // The grant contains signed hashes, never a provider secret. It is passed
       // as an immutable dispatch input because environment variables can be
       // snapshotted before a just-written value becomes visible to a runner.
@@ -1143,7 +1145,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
     }
     expectedTitle = environment === 'staging'
       ? `Deploy staging ${commitSha} (lease=${leaseId}, storage-backup=${storageBackup})`
-      : `Deploy production ${commitSha} (lease=${leaseId})`
+      : `Deploy production ${commitSha} (lease=${leaseId}, storage-backup=${storageBackup})`
     pendingJournal = advanceProviderCreationJournal({
       journal: pendingJournal,
       publicKey,
@@ -1314,7 +1316,6 @@ export function verifyPendingMarker(rawMarker, publicKey, {
     || !FULL_SHA_PATTERN.test(payload.commit_sha)
     || !/^[0-9a-f]{32}$/.test(payload.lease_id)
     || typeof payload.storage_backup !== 'boolean'
-    || (environment === 'production' && payload.storage_backup)
     || payload.supabase_pat_label !== `burillab-${environment}-${leaseId}`
     || !Number.isFinite(Date.parse(payload.started_at))
     || Date.parse(payload.started_at) > Date.now() + 5 * 60 * 1000
@@ -1357,7 +1358,7 @@ async function getOptionalVariable(environment, name) {
 function expectedJournalRunTitle(payload) {
   return payload.environment === 'staging'
     ? `Deploy staging ${payload.commit_sha} (lease=${payload.lease_id}, storage-backup=${payload.storage_backup})`
-    : `Deploy production ${payload.commit_sha} (lease=${payload.lease_id})`
+    : `Deploy production ${payload.commit_sha} (lease=${payload.lease_id}, storage-backup=${payload.storage_backup})`
 }
 
 export async function findJournalRun(pending, {

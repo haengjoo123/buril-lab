@@ -189,6 +189,56 @@ describe('ephemeral release supervisor core', () => {
       })
   })
 
+  it('creates a two-token Production Worker lease bound to one cleaned Staging run', () => {
+    const keys = generateKeyPairSync('ed25519')
+    const legacyCredentials = [
+      { provider: 'cloudflare', credentialIdHash: '1'.repeat(64) },
+      { provider: 'supabase', credentialIdHash: '2'.repeat(64) },
+    ]
+    const productionReceipt = createInitialCleanupReceipt({
+      environment: 'production',
+      legacyCredentials,
+      privateKey: keys.privateKey,
+      now: NOW - 60_000,
+    })
+    const stagingReceipt = createInitialCleanupReceipt({
+      environment: 'staging',
+      legacyCredentials,
+      privateKey: keys.privateKey,
+      now: NOW - 60_000,
+    })
+    const material = createLeaseMaterial({
+      environment: 'production',
+      commitSha: SHA,
+      leaseId: LEASE,
+      storageBackup: true,
+      cleanupReceipt: productionReceipt,
+      cloudflareTokenIdHashes: [sha256(PAGE_TOKEN_ID), sha256(WORKER_TOKEN_ID)],
+      cloudflareTokens: [PAGE_TOKEN, WORKER_TOKEN],
+      supabasePatLabel: `burillab-production-${LEASE}`,
+      supabasePat: PAT,
+      stagingRunId: '31',
+      stagingCleanupReceipt: stagingReceipt,
+      privateKey: keys.privateKey,
+      now: NOW,
+    })
+    expect(verifyEphemeralLeaseGrant({
+      DEPLOY_ENVIRONMENT: 'production',
+      DEPLOY_COMMIT_SHA: SHA,
+      DEPLOY_LEASE_ID: LEASE,
+      DEPLOY_STORAGE_BACKUP: 'true',
+      DEPLOY_STAGING_RUN_ID: '31',
+      EPHEMERAL_CLEANUP_RECEIPT: productionReceipt,
+      STAGING_EPHEMERAL_CLEANUP_RECEIPT: stagingReceipt,
+      EPHEMERAL_LEASE_GRANT: material.grant,
+    }, keys.publicKey, { now: NOW })).toMatchObject({
+      environment: 'production',
+      storageBackup: true,
+      stagingRunId: '31',
+      cloudflareTokenIdHashes: [sha256(PAGE_TOKEN_ID), sha256(WORKER_TOKEN_ID)],
+    })
+  })
+
   it('appends a closed run only after its update time and preserves the signed cumulative history', () => {
     const { keys, receipt } = setup()
     const closed = appendClosedLeaseReceipt({
