@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   createExactLengthPng,
   STAGING_STORAGE_BACKUP_ACCEPTANCE_CONTRACT,
+  validateAcceptanceTriggerUrl,
   verifyAcceptanceManifest,
+  verifyScheduledTriggerResponse,
 } from './staging-storage-backup-acceptance.mjs'
 
 const SNAPSHOT_ID = '20260827t120000000z-00112233445566778899aabb'
@@ -115,6 +117,31 @@ describe('Staging storage backup acceptance contract', () => {
       'burillab-storage-backup-acceptance/fixture-a.png',
       'burillab-storage-backup-acceptance/fixture-b.png',
     ])
+  })
+
+  it('accepts only the exact loopback scheduled trigger contract', () => {
+    expect(validateAcceptanceTriggerUrl(
+      'http://127.0.0.1:8791/__scheduled?cron=%2A+%2A+%2A+%2A+%2A',
+    )).toContain('127.0.0.1:8791/__scheduled?')
+    expect(verifyScheduledTriggerResponse('Ran scheduled event')).toBe(true)
+  })
+
+  it.each([
+    'https://127.0.0.1:8791/__scheduled?cron=%2A+%2A+%2A+%2A+%2A',
+    'http://localhost:8791/__scheduled?cron=%2A+%2A+%2A+%2A+%2A',
+    'http://127.0.0.1:8792/__scheduled?cron=%2A+%2A+%2A+%2A+%2A',
+    'http://127.0.0.1:8791/__scheduled?cron=15+17+%2A+%2A+%2A',
+    'http://127.0.0.1:8791/__scheduled?cron=%2A+%2A+%2A+%2A+%2A&extra=1',
+  ])('rejects an unapproved scheduled trigger URL: %s', (value) => {
+    expect(() => validateAcceptanceTriggerUrl(value)).toThrow()
+  })
+
+  it.each([
+    '',
+    'Ran scheduled event\n',
+    'ran scheduled event',
+  ])('rejects an unsuccessful or expanded scheduled trigger response', (value) => {
+    expect(() => verifyScheduledTriggerResponse(value)).toThrow()
   })
 
   it('accepts only the complete latest-to-body hash chain', () => {

@@ -19,14 +19,16 @@ const R2_BUCKET = 'buril-lab-cabinet-backups-staging'
 const SOURCE_BUCKET = 'cabinets'
 const DAILY_CRON = '15 17 * * *'
 const ACCEPTANCE_CRON = '* * * * *'
+const ACCEPTANCE_TRIGGER_ORIGIN = 'http://127.0.0.1:8791'
+const ACCEPTANCE_TRIGGER_PATH = '/__scheduled'
 const CONFIRMATION = `RUN STAGING STORAGE BACKUP ACCEPTANCE ${STAGING_PROJECT_REF} ${WORKER_NAME}`
 const MAX_JSON_BYTES = 2 * 1024 * 1024
 const MAX_OBJECT_BYTES = 4 * 1024 * 1024
 const ENABLE_TTL_SECONDS = 35 * 60
 const KV_PROPAGATION_WAIT_MS = 70_000
-// Cloudflare documents up to 15 minutes for Cron Trigger changes to reach the
-// global network. Keep a bounded five-minute margin for the first invocation
-// and six sequential snapshot checks, while the GitHub job remains capped at 45m.
+// Each scheduled invocation is synchronous through Wrangler's loopback-only
+// test route. Keep one overall deadline for slow source downloads or R2 writes
+// while the GitHub job remains capped at 45 minutes.
 const ACCEPTANCE_TIMEOUT_MS = 32 * 60 * 1000
 const POLL_INTERVAL_MS = 15_000
 const RUNTIME_CONFIG_OFF = Object.freeze({
@@ -107,6 +109,40 @@ function validateEnvironment(environment, { needsCloudflare = false, needsSupaba
       throw new Error('Staging Supabase service credential is missing or malformed.')
     }
   }
+}
+
+export function validateAcceptanceTriggerUrl(raw) {
+  if (typeof raw !== 'string' || raw.length > 256 || /[\r\n\0]/.test(raw)) {
+    throw new Error('Staging scheduled trigger URL is missing or malformed.')
+  }
+  let url
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error('Staging scheduled trigger URL is invalid.')
+  }
+  const keys = [...url.searchParams.keys()]
+  if (
+    url.origin !== ACCEPTANCE_TRIGGER_ORIGIN
+    || url.pathname !== ACCEPTANCE_TRIGGER_PATH
+    || url.username !== ''
+    || url.password !== ''
+    || url.hash !== ''
+    || keys.length !== 1
+    || keys[0] !== 'cron'
+    || url.searchParams.getAll('cron').length !== 1
+    || url.searchParams.get('cron') !== ACCEPTANCE_CRON
+  ) {
+    throw new Error('Staging scheduled trigger URL is outside the exact loopback contract.')
+  }
+  return url.toString()
+}
+
+export function verifyScheduledTriggerResponse(value) {
+  if (value !== 'Ran scheduled event') {
+    throw new Error('Staging scheduled trigger did not complete successfully.')
+  }
+  return true
 }
 
 function crc32(bytes) {
@@ -886,22 +922,50 @@ async function waitForExpectedSnapshot(environment, {
   deadline,
 }) {
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
     const latest = await readR2Json(environment, 'control/latest.json', { allowMissing: true })
-    if (!latest) continue
-    const verified = await verifyCompletedSnapshot(environment, latest, {
-      startedAt,
-      previousSnapshotId,
-      expected,
-      expectedUploadedBodyCount,
-      expectedReusedBodyCount,
-    })
-    if (verified) {
-      console.log(`Verified Staging storage backup stage: ${stage}.`)
-      return verified
+    if (latest) {
+      const verified = await verifyCompletedSnapshot(environment, latest, {
+        startedAt,
+        previousSnapshotId,
+        expected,
+        expectedUploadedBodyCount,
+        expectedReusedBodyCount,
+      })
+      if (verified) {
+        console.log(`Verified Staging storage backup stage: ${stage}.`)
+        return verified
+      }
     }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
   }
   throw new Error(`Staging storage backup stage did not complete before the deadline: ${stage}.`)
+}
+
+async function triggerScheduledRun(environment) {
+  const url = validateAcceptanceTriggerUrl(environment.STAGING_STORAGE_BACKUP_TRIGGER_URL)
+  let response
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'text/plain' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(15 * 60_000),
+    })
+  } catch {
+    throw new Error('Calling the loopback Staging scheduled trigger failed.')
+  }
+  if (!response.ok || response.redirected || response.url !== url) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new Error(`The loopback Staging scheduled trigger returned HTTP ${response.status}.`)
+  }
+  const body = await readResponseBytes(response, 'Staging scheduled trigger response', 1024)
+  verifyScheduledTriggerResponse(body.toString('utf8'))
+}
+
+async function triggerAndWaitForExpectedSnapshot(environment, options) {
+  const startedAt = Date.now()
+  await triggerScheduledRun(environment)
+  return waitForExpectedSnapshot(environment, { ...options, startedAt })
 }
 
 async function replaceFirstFixture(supabase, environment) {
@@ -988,11 +1052,9 @@ async function runAcceptance(environment) {
     await writeRuntimeConfig(environment, RUNTIME_CONFIG_ON, ENABLE_TTL_SECONDS)
     await new Promise((resolve) => setTimeout(resolve, KV_PROPAGATION_WAIT_MS))
     exactRuntimeConfig(await readRuntimeConfig(environment), RUNTIME_CONFIG_ON, 'Enabled Staging runtime config')
-    await writeSchedules(environment, [ACCEPTANCE_CRON])
 
-    const initial = await waitForExpectedSnapshot(environment, {
+    const initial = await triggerAndWaitForExpectedSnapshot(environment, {
       stage: 'full initial copy',
-      startedAt,
       previousSnapshotId,
       expected: initialState,
       expectedUploadedBodyCount: 2,
@@ -1001,9 +1063,8 @@ async function runAcceptance(environment) {
     })
     previousSnapshotId = initial.snapshotId
 
-    const unchanged = await waitForExpectedSnapshot(environment, {
+    const unchanged = await triggerAndWaitForExpectedSnapshot(environment, {
       stage: 'unchanged full manifest with zero body uploads',
-      startedAt: Date.now(),
       previousSnapshotId,
       expected: initialState,
       expectedUploadedBodyCount: 0,
@@ -1016,9 +1077,8 @@ async function runAcceptance(environment) {
     if (changedState[0].etag === initialState[0].etag || changedState[0].sha256 === initialState[0].sha256) {
       throw new Error('The first synthetic Staging image did not produce a distinct changed state.')
     }
-    const changed = await waitForExpectedSnapshot(environment, {
+    const changed = await triggerAndWaitForExpectedSnapshot(environment, {
       stage: 'one changed body upload',
-      startedAt: Date.now(),
       previousSnapshotId,
       expected: changedState,
       expectedUploadedBodyCount: 1,
@@ -1028,9 +1088,8 @@ async function runAcceptance(environment) {
     previousSnapshotId = changed.snapshotId
 
     const deletedState = await deleteSecondFixture(supabase, environment)
-    const deleted = await waitForExpectedSnapshot(environment, {
+    const deleted = await triggerAndWaitForExpectedSnapshot(environment, {
       stage: 'one source deletion reflected in a complete manifest',
-      startedAt: Date.now(),
       previousSnapshotId,
       expected: deletedState,
       expectedUploadedBodyCount: 0,
@@ -1041,9 +1100,8 @@ async function runAcceptance(environment) {
 
     const secondBackup = changed.manifest.objects.find((item) => item.sourcePath === FIXTURE[1].path)
     const restoredState = await restoreSecondFixtureFromBackup(supabase, environment, secondBackup)
-    const restored = await waitForExpectedSnapshot(environment, {
+    const restored = await triggerAndWaitForExpectedSnapshot(environment, {
       stage: 'source restored from the retained content body',
-      startedAt: Date.now(),
       previousSnapshotId,
       expected: restoredState,
       expectedUploadedBodyCount: 0,
@@ -1055,9 +1113,8 @@ async function runAcceptance(environment) {
     const firstBackup = restored.manifest.objects.find((item) => item.sourcePath === FIXTURE[0].path)
     if (!firstBackup) throw new Error('The changed first fixture has no exact content body to test.')
     await deleteR2Object(environment, firstBackup.backupKey)
-    const repaired = await waitForExpectedSnapshot(environment, {
+    const repaired = await triggerAndWaitForExpectedSnapshot(environment, {
       stage: 'one missing content body automatically repaired',
-      startedAt: Date.now(),
       previousSnapshotId,
       expected: restoredState,
       expectedUploadedBodyCount: 1,

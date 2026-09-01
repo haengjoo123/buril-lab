@@ -62,6 +62,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
           CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN }}
+          STAGING_STORAGE_BACKUP_TRIGGER_URL: "http://127.0.0.1:8791/__scheduled?cron=%2A+%2A+%2A+%2A+%2A"
         run: node scripts/staging-storage-backup-acceptance.mjs preflight
 
       - name: Create only the exact synthetic cabinet fixture
@@ -72,7 +73,56 @@ jobs:
       - name: Run and verify the complete Staging backup v2 lifecycle
         id: acceptance
         env: *acceptance-environment
-        run: node scripts/staging-storage-backup-acceptance.mjs run
+        shell: bash
+        run: |
+          set -euo pipefail
+          dev_log="$RUNNER_TEMP/burillab-storage-backup-acceptance-dev.log"
+          dev_vars="$RUNNER_TEMP/burillab-storage-backup-acceptance.dev.vars"
+          dev_pid=''
+          cleanup_dev() {
+            if [[ -n "$dev_pid" ]] && kill -0 "$dev_pid" 2>/dev/null; then
+              kill "$dev_pid" 2>/dev/null || true
+              wait "$dev_pid" 2>/dev/null || true
+            fi
+            rm -f -- "$dev_log"
+            rm -f -- "$dev_vars"
+          }
+          trap cleanup_dev EXIT INT TERM
+          test -x "$GITHUB_WORKSPACE/node_modules/.bin/wrangler"
+          test ! -e "$dev_log"
+          test ! -e "$dev_vars"
+          umask 077
+          printf 'SUPABASE_SERVICE_ROLE_KEY=%s\n' "$SUPABASE_SERVICE_ROLE_KEY" > "$dev_vars"
+          test "$(stat -c '%a' "$dev_vars")" = "600"
+          env -u SUPABASE_SERVICE_ROLE_KEY -u SUPABASE_URL \
+            CLOUDFLARE_API_TOKEN="$CLOUDFLARE_STORAGE_BACKUP_ACCEPTANCE_TOKEN" \
+            "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" dev \
+              --config workers/storage-backup/wrangler.acceptance.jsonc \
+              --env-file "$dev_vars" \
+              --test-scheduled \
+              --ip 127.0.0.1 \
+              --port 8791 \
+              --log-level error \
+              --show-interactive-dev-session=false \
+              >"$dev_log" 2>&1 &
+          dev_pid=$!
+          dev_ready=false
+          for attempt in $(seq 1 30); do
+            if ! kill -0 "$dev_pid" 2>/dev/null; then
+              echo "The loopback acceptance Worker exited before becoming ready." >&2
+              exit 1
+            fi
+            if curl --silent --show-error --max-time 2 --output /dev/null http://127.0.0.1:8791/; then
+              dev_ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$dev_ready" != true ]]; then
+            echo "The loopback acceptance Worker did not become ready." >&2
+            exit 1
+          fi
+          node scripts/staging-storage-backup-acceptance.mjs run
 
       - name: Restore OFF state and remove the synthetic fixture
         if: always() && steps.install.outcome == 'success'
