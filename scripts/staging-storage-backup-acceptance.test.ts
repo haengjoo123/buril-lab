@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
   createExactLengthPng,
+  extractSafeWorkerFailureDiagnostic,
   STAGING_STORAGE_BACKUP_ACCEPTANCE_CONTRACT,
   validateAcceptanceTriggerUrl,
   verifyAcceptanceManifest,
@@ -90,6 +91,26 @@ function fixture() {
 }
 
 describe('Staging storage backup acceptance contract', () => {
+  it('extracts only allow-listed non-sensitive Worker failure codes', () => {
+    expect(extractSafeWorkerFailureDiagnostic([
+      'provider payload token=must-never-appear',
+      'Error: storage_backup_failed:r2_verify_failed',
+    ].join('\n'))).toEqual({ code: 'r2_verify_failed' })
+    expect(extractSafeWorkerFailureDiagnostic(
+      'Error: storage_backup_failed:source_request_failed:network_error',
+    )).toEqual({ code: 'source_request_failed', diagnosticCode: 'network_error' })
+    expect(extractSafeWorkerFailureDiagnostic(
+      'prefix {"code":"r2_verify_failed","count":0,"bytes":0,"durationMs":264000,"orphanCount":0} suffix',
+    )).toEqual({ code: 'r2_verify_failed' })
+    expect(extractSafeWorkerFailureDiagnostic(
+      'Error: storage_backup_failed:attacker_supplied_code:secret_value',
+    )).toBeNull()
+    expect(extractSafeWorkerFailureDiagnostic(
+      '{"code":"r2_verify_failed","count":0,"bytes":0,"durationMs":1,"orphanCount":0,"secret":"must-never-appear"}',
+    )).toBeNull()
+    expect(extractSafeWorkerFailureDiagnostic('token=must-never-appear')).toBeNull()
+  })
+
   it('constructs deterministic valid-sized PNG fixtures', () => {
     const first = createExactLengthPng(1_700_000, [23, 91, 146, 255])
     const repeated = createExactLengthPng(1_700_000, [23, 91, 146, 255])

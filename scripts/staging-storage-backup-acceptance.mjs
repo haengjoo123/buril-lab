@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { lstat, readFile, realpath } from 'node:fs/promises'
+import { isAbsolute, relative } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
@@ -42,6 +44,55 @@ const RUNTIME_CONFIG_ON = Object.freeze({
   ...RUNTIME_CONFIG_OFF,
   storage_backup_enabled: true,
 })
+const SAFE_BACKUP_FAILURE_CODES = new Set([
+  'config_invalid',
+  'content_gc_delete_failed',
+  'empty_source',
+  'execution_deadline_exceeded',
+  'flag_disabled_before_complete',
+  'lock_acquire_failed',
+  'lock_invalid',
+  'lock_lost',
+  'lock_release_failed',
+  'object_download_invalid',
+  'object_too_large',
+  'ownership_ambiguous',
+  'pointer_duplicate',
+  'pointer_invalid',
+  'pointer_missing_object',
+  'r2_checksum_failed',
+  'r2_lock_conflict',
+  'r2_verify_failed',
+  'r2_write_failed',
+  'source_contract_invalid',
+  'source_drift',
+  'source_http_rejected',
+  'source_limit_exceeded',
+  'source_request_failed',
+  'source_retry_exhausted',
+  'source_timeout',
+  'subrequest_budget_exceeded',
+  'unexpected_failure',
+  'workers_paid_plan_required',
+])
+const SAFE_FETCH_DIAGNOSTIC_CODES = new Set([
+  'abort_error',
+  'dns_error',
+  'fetch_type_error',
+  'illegal_invocation',
+  'invalid_request',
+  'network_error',
+  'redirect_cross_origin',
+  'redirect_invalid_location',
+  'redirect_limit',
+  'redirect_path_rejected',
+  'redirect_rejected',
+  'redirect_status_rejected',
+  'subrequest_limit',
+  'tls_error',
+  'unknown_exception',
+])
+const MAX_SAFE_WORKER_LOG_BYTES = 5 * 1024 * 1024
 const FIXTURE = Object.freeze([
   Object.freeze({
     id: '30000000-0000-4000-8000-000000000011',
@@ -60,6 +111,71 @@ const EXPECTED_TOTAL_BYTES = FIXTURE.reduce((sum, item) => sum + item.bytes, 0)
 
 function isRecord(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function extractSafeWorkerFailureDiagnostic(value) {
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_SAFE_WORKER_LOG_BYTES) {
+    return null
+  }
+  let result = null
+  const thrownPattern = /storage_backup_failed:([a-z0-9_]+)(?::([a-z0-9_]+))?/g
+  for (const match of value.matchAll(thrownPattern)) {
+    if (!SAFE_BACKUP_FAILURE_CODES.has(match[1])) continue
+    const diagnosticCode = match[2]
+    if (diagnosticCode !== undefined && !SAFE_FETCH_DIAGNOSTIC_CODES.has(diagnosticCode)) continue
+    result = Object.freeze({
+      code: match[1],
+      ...(diagnosticCode ? { diagnosticCode } : {}),
+    })
+  }
+  if (result) return result
+
+  for (const match of value.matchAll(/\{[^{}\r\n]{1,512}\}/g)) {
+    let entry
+    try {
+      entry = JSON.parse(match[0])
+    } catch {
+      continue
+    }
+    if (
+      !isRecord(entry)
+      || Object.keys(entry).sort().join(',') !== 'bytes,code,count,durationMs,orphanCount'
+      || !SAFE_BACKUP_FAILURE_CODES.has(entry.code)
+      || !['bytes', 'count', 'durationMs', 'orphanCount'].every((key) => (
+        Number.isSafeInteger(entry[key]) && entry[key] >= 0
+      ))
+    ) {
+      continue
+    }
+    result = Object.freeze({ code: entry.code })
+  }
+  return result
+}
+
+async function reportSafeWorkerFailure(environment, rawPath) {
+  if (
+    typeof environment.RUNNER_TEMP !== 'string'
+    || environment.RUNNER_TEMP.length < 1
+    || typeof rawPath !== 'string'
+    || !isAbsolute(rawPath)
+  ) {
+    throw new Error('Staging storage backup diagnostic path is invalid.')
+  }
+  const fileInfo = await lstat(rawPath)
+  if (!fileInfo.isFile() || fileInfo.isSymbolicLink() || fileInfo.size > MAX_SAFE_WORKER_LOG_BYTES) {
+    throw new Error('Staging storage backup diagnostic file is invalid.')
+  }
+  const [temporaryRoot, diagnosticFile] = await Promise.all([
+    realpath(environment.RUNNER_TEMP),
+    realpath(rawPath),
+  ])
+  const relativePath = relative(temporaryRoot, diagnosticFile)
+  if (relativePath === '' || relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    throw new Error('Staging storage backup diagnostic file is outside the runner temporary directory.')
+  }
+  const diagnostic = extractSafeWorkerFailureDiagnostic(await readFile(diagnosticFile, 'utf8'))
+  const suffix = diagnostic?.diagnosticCode ? `:${diagnostic.diagnosticCode}` : ''
+  console.error(`Staging storage backup safe failure code: ${diagnostic ? `${diagnostic.code}${suffix}` : 'unavailable'}.`)
 }
 
 function exactKeys(value, expected, label) {
@@ -1155,7 +1271,8 @@ async function main() {
   if (command === 'prepare') return prepareFixture(process.env)
   if (command === 'run') return runAcceptance(process.env)
   if (command === 'cleanup') return cleanup(process.env)
-  throw new Error('Usage: staging-storage-backup-acceptance.mjs preflight|prepare|run|cleanup')
+  if (command === 'diagnose-worker-log') return reportSafeWorkerFailure(process.env, process.argv[3])
+  throw new Error('Usage: staging-storage-backup-acceptance.mjs preflight|prepare|run|cleanup|diagnose-worker-log <absolute-log-path>')
 }
 
 export const STAGING_STORAGE_BACKUP_ACCEPTANCE_CONTRACT = Object.freeze({
