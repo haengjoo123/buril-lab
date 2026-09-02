@@ -68,6 +68,22 @@ describe('bounded request body reading', () => {
     expect(cancel).toHaveBeenCalledOnce()
   })
 
+  it('does not let an unresponsive stream cancellation defeat the read deadline', async () => {
+    vi.useFakeTimers()
+    const cancel = vi.fn(() => new Promise<void>(() => {}))
+    const request = streamingRequest(new ReadableStream({ cancel }))
+    let rejected = false
+    const result = readLimitedRequestBytes(request, 100).catch((error: unknown) => {
+      rejected = true
+      return error
+    })
+    await vi.advanceTimersByTimeAsync(REQUEST_BODY_TIMEOUT_MS)
+    expect(rejected, 'Stream cleanup must not prolong a rejected body read.').toBe(true)
+    expect(await result).toMatchObject({ status: 408, code: 'REQUEST_BODY_TIMEOUT' })
+    expect(cancel).toHaveBeenCalledOnce()
+    expect(request.body?.locked).toBe(false)
+  })
+
   it('returns generic JSON errors without fragments from a malformed payload', async () => {
     const request = new Request('https://example.com', { method: 'POST', body: '{PRIVATE_PAYLOAD' })
     const error = await readLimitedJson(request, 100).catch((value: unknown) => value)

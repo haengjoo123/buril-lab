@@ -67,7 +67,10 @@ export async function readLimitedRequestBytes(request: Request, maxBytes: number
     }
     return bytes.byteLength === length ? bytes : bytes.slice(0, length)
   } catch (error) {
-    await reader.cancel().catch(() => undefined)
+    // Cancellation asks the underlying source to clean up and may never settle
+    // for a stalled sender. Do not turn the 10-second read deadline into an
+    // unbounded cleanup wait; requesting cancellation closes pending reads now.
+    void reader.cancel().catch(() => undefined)
     throw error instanceof RequestBodyError ? error : invalidBody()
   } finally {
     clearTimeout(timer)

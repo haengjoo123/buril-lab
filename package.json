@@ -27,6 +27,7 @@
     "release:verify": "node scripts/verify-paid-release-blocked.mjs",
     "test:e2e:gate0": "playwright test --config playwright.gate0.config.ts",
     "test:e2e:gate0:staging": "playwright test --config playwright.staging.config.ts",
+    "test:pages-boundary": "node scripts/verify-pages-boundary-runtime.mjs && playwright test --config playwright.pages-boundary.config.ts",
     "ph:verify-sources": "node scripts/verify-ph-catalog-sources.mjs",
     "ph:verify-release": "vitest run src/features/phPrediction/catalogApproval.test.ts src/features/phPrediction/predictor.test.ts --reporter=dot",
     "golden:generate": "node scripts/generate-waste-golden-v2.mjs",
