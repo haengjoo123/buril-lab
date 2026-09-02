@@ -2,8 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import {
   exactKeys,
-  verifySignedAttestation,
 } from './ephemeral-release-attestation.mjs'
+import { verifyCleanupReceiptChain } from './ephemeral-cleanup-epochs.mjs'
+export { CLEANUP_ABSENT_SECRET_NAMES, MAX_CUMULATIVE_LEASES } from './ephemeral-cleanup-epochs.mjs'
 
 const MAX_RESPONSE_BYTES = 1024 * 1024
 const MAX_RUN_PAGES = 10
@@ -23,20 +24,6 @@ const TERMINAL_GATE_CONCLUSIONS = new Set([
   'success',
   'timed_out',
 ])
-
-export const CLEANUP_ABSENT_SECRET_NAMES = Object.freeze([
-  'CLOUDFLARE_API_TOKEN',
-  'EPHEMERAL_CREDENTIAL_SESSION',
-  'PRODUCTION_CLOUDFLARE_API_TOKEN',
-  'PRODUCTION_PAGES_EPHEMERAL_TOKEN',
-  'PRODUCTION_WORKER_EPHEMERAL_TOKEN',
-  'STAGING_CLOUDFLARE_API_TOKEN',
-  'STAGING_PAGES_EPHEMERAL_TOKEN',
-  'STAGING_WORKER_EPHEMERAL_TOKEN',
-  'SUPABASE_ACCESS_TOKEN',
-  'SUPABASE_HOSTED_ADVISOR_EPHEMERAL_TOKEN',
-])
-export const MAX_CUMULATIVE_LEASES = 32
 
 const WORKFLOW_CONTRACTS = Object.freeze({
   staging: Object.freeze({
@@ -117,33 +104,6 @@ function assertCurrentRunAnchor(runs, contract, repository, currentRunId, leaseI
   }
 }
 
-function verifyLegacyCredentials(entries) {
-  if (!Array.isArray(entries) || entries.length === 0) {
-    throw new Error('Signed cleanup receipt must include the initial legacy credential closure.')
-  }
-  const identities = new Set()
-  let hasSupabase = false
-  let hasCloudflare = false
-  for (const entry of entries) {
-    exactKeys(entry, ['provider', 'credential_id_hash', 'status'], 'Legacy credential closure')
-    if (
-      !['cloudflare', 'supabase'].includes(entry.provider)
-      || !HASH_PATTERN.test(entry.credential_id_hash)
-      || entry.status !== 'operator_verified_absent'
-    ) {
-      throw new Error('Signed cleanup receipt has invalid legacy credential closure evidence.')
-    }
-    const identity = `${entry.provider}:${entry.credential_id_hash}`
-    if (identities.has(identity)) throw new Error('Signed cleanup receipt repeats legacy credential evidence.')
-    identities.add(identity)
-    if (entry.provider === 'supabase') hasSupabase = true
-    if (entry.provider === 'cloudflare') hasCloudflare = true
-  }
-  if (!hasSupabase || !hasCloudflare) {
-    throw new Error('Signed cleanup receipt must close both legacy Supabase and Cloudflare credentials.')
-  }
-}
-
 function verifyLeaseEntry(entry, run, nowTimestamp) {
   exactKeys(entry, [
     'run_id',
@@ -191,57 +151,29 @@ function verifyLeaseEntry(entry, run, nowTimestamp) {
 
 export function verifyCleanupReceiptCoversRun(rawReceipt, publicKey, rawRun, {
   now = Date.now(),
+  readArchive,
 } = {}) {
   const contract = WORKFLOW_CONTRACTS.staging
   const run = parseTrustedRun(rawRun, contract, TRUSTED_REPOSITORY, '__no_current_run__')
   if (!run) throw new Error('Staging cleanup receipt target run is not trusted.')
   const nowTimestamp = now instanceof Date ? now.getTime() : Number(now)
   if (!Number.isFinite(nowTimestamp)) throw new Error('Staging cleanup receipt verification time is invalid.')
-  const signed = verifySignedAttestation(rawReceipt, publicKey, 'cleanup_receipt')
-  const receipt = signed.payload
-  exactKeys(receipt, [
-    'version', 'kind', 'environment', 'workflow', 'issued_at', 'sequence', 'legacy_verification_mode', 'github_secrets_absent',
-    'legacy_credentials', 'leases', 'supervisor_key_id',
-  ], 'Signed Staging cleanup receipt')
-  if (
-    receipt.version !== 3
-    || receipt.environment !== 'staging'
-    || receipt.workflow !== contract.filename
-    || receipt.legacy_verification_mode !== 'operator_dashboard_attestation'
-  ) {
-    throw new Error('Signed Staging cleanup receipt belongs to a different environment.')
-  }
-  if (
-    !Array.isArray(receipt.github_secrets_absent)
-    || JSON.stringify([...receipt.github_secrets_absent].sort())
-      !== JSON.stringify([...CLEANUP_ABSENT_SECRET_NAMES].sort())
-  ) {
-    throw new Error('Signed Staging cleanup receipt does not attest every GitHub secret is absent.')
-  }
-  verifyLegacyCredentials(receipt.legacy_credentials)
-  if (
-    !Array.isArray(receipt.leases)
-    || receipt.leases.length > MAX_CUMULATIVE_LEASES
-    || receipt.sequence !== receipt.leases.length
-  ) throw new Error('Signed Staging cleanup receipt has an invalid sequence or lease epoch.')
-  const entry = receipt.leases.find((candidate) => candidate?.run_id === run.runId)
+  const chain = verifyCleanupReceiptChain(rawReceipt, publicKey, { environment: 'staging', now, readArchive })
+  const entry = chain.leases.find((candidate) => candidate?.run_id === run.runId)
   if (!entry) throw new Error('Signed Staging cleanup receipt does not cover the exact deployed run.')
-  const closedAt = verifyLeaseEntry(entry, run, nowTimestamp)
-  const issuedAt = parseTimestamp(receipt.issued_at, 'Signed Staging cleanup receipt issued_at')
-  if (issuedAt < closedAt || issuedAt > nowTimestamp + FUTURE_TOLERANCE_MS) {
-    throw new Error('Signed Staging cleanup receipt issue time is inconsistent.')
-  }
+  verifyLeaseEntry(entry, run, nowTimestamp)
   return Object.freeze({
     runId: run.runId,
     leaseId: run.leaseId,
     commitSha: run.commitSha,
-    receiptHash: signed.envelopeHash,
+    receiptHash: chain.receiptHash,
   })
 }
 
 export function verifyEphemeralCleanupReceipt(runs, environment, {
   now = Date.now(),
   publicKey,
+  readArchive,
 } = {}) {
   const repository = environment.GITHUB_REPOSITORY?.trim()
   const deployEnvironment = environment.DEPLOY_ENVIRONMENT?.trim()
@@ -258,78 +190,55 @@ export function verifyEphemeralCleanupReceipt(runs, environment, {
   if (!Array.isArray(runs)) throw new Error('GitHub deployment run response is malformed.')
   if (!publicKey) throw new Error('Pinned ephemeral release public key is missing.')
 
+  return verifyCleanupReceiptHistory(runs, environment, { now, publicKey, readArchive, currentRunId, leaseId })
+}
+
+export function verifyCleanupReceiptHistory(runs, environment, {
+  now = Date.now(), publicKey, readArchive, currentRunId = '__no_current_run__', leaseId = null,
+} = {}) {
+  const repository = environment.GITHUB_REPOSITORY?.trim()
+  const deployEnvironment = environment.DEPLOY_ENVIRONMENT?.trim()
+  const contract = WORKFLOW_CONTRACTS[deployEnvironment]
+  if (repository !== TRUSTED_REPOSITORY || !contract || !Array.isArray(runs) || !publicKey) {
+    throw new Error('Cleanup history inputs are missing or untrusted.')
+  }
   const nowTimestamp = now instanceof Date ? now.getTime() : Number(now)
   if (!Number.isFinite(nowTimestamp)) throw new Error('Cleanup receipt verification time is invalid.')
   const priorRuns = runs
     .map((run) => parseTrustedRun(run, contract, repository, currentRunId, { requireLeaseEvidence: true }))
     .filter(Boolean)
     .sort((left, right) => Number(left.runId) - Number(right.runId))
+  if (new Set(priorRuns.map((run) => run.runId)).size !== priorRuns.length) {
+    throw new Error('GitHub cleanup history repeats a prior leased deployment run.')
+  }
   if (priorRuns.some((run) => run.leaseId === leaseId)) {
     throw new Error('Ephemeral lease identifiers must never be reused by a later workflow run.')
   }
 
-  const signed = verifySignedAttestation(
+  const chain = verifyCleanupReceiptChain(
     environment.EPHEMERAL_CLEANUP_RECEIPT?.trim() || '',
     publicKey,
-    'cleanup_receipt',
+    { environment: deployEnvironment, now, readArchive },
   )
-  const receipt = signed.payload
-  exactKeys(receipt, [
-    'version',
-    'kind',
-    'environment',
-    'workflow',
-    'issued_at',
-    'sequence',
-    'legacy_verification_mode',
-    'github_secrets_absent',
-    'legacy_credentials',
-    'leases',
-    'supervisor_key_id',
-  ], 'Signed cleanup receipt')
-  if (
-    receipt.version !== 3
-    || receipt.environment !== deployEnvironment
-    || receipt.workflow !== contract.filename
-    || receipt.legacy_verification_mode !== 'operator_dashboard_attestation'
-  ) {
-    throw new Error('Signed cleanup receipt belongs to a different deployment environment.')
-  }
-  if (
-    !Array.isArray(receipt.github_secrets_absent)
-    || JSON.stringify([...receipt.github_secrets_absent].sort())
-      !== JSON.stringify([...CLEANUP_ABSENT_SECRET_NAMES].sort())
-  ) {
-    throw new Error('Signed cleanup receipt does not attest every legacy and ephemeral GitHub secret is absent.')
-  }
-  verifyLegacyCredentials(receipt.legacy_credentials)
-  if (
-    !Array.isArray(receipt.leases)
-    || receipt.leases.length > MAX_CUMULATIVE_LEASES
-    || receipt.sequence !== receipt.leases.length
-    || receipt.leases.length !== priorRuns.length
-  ) {
+  if (chain.leases.length !== priorRuns.length) {
     throw new Error('Signed cleanup receipt does not cover every prior leased deployment run.')
   }
-  const receiptRunIds = new Set(receipt.leases.map((entry) => entry?.run_id))
+  const receiptRunIds = new Set(chain.leases.map((entry) => entry?.run_id))
   if (receiptRunIds.size !== priorRuns.length) {
     throw new Error('Signed cleanup receipt repeats or omits a prior leased deployment run.')
   }
-  let latestClosure = 0
   for (const run of priorRuns) {
-    const entry = receipt.leases.find((candidate) => candidate?.run_id === run.runId)
+    const entry = chain.leases.find((candidate) => candidate?.run_id === run.runId)
     if (!entry) throw new Error('Signed cleanup receipt omits a prior leased deployment run.')
-    latestClosure = Math.max(latestClosure, verifyLeaseEntry(entry, run, nowTimestamp))
-  }
-  const issuedAt = parseTimestamp(receipt.issued_at, 'Signed cleanup receipt issued_at')
-  if (issuedAt < latestClosure || issuedAt > nowTimestamp + FUTURE_TOLERANCE_MS) {
-    throw new Error('Signed cleanup receipt issue time is inconsistent with its lease closures.')
+    verifyLeaseEntry(entry, run, nowTimestamp)
   }
 
   return Object.freeze({
     environment: deployEnvironment,
     coveredRunCount: priorRuns.length,
-    receiptHash: signed.envelopeHash,
+    receiptHash: chain.receiptHash,
+    epoch: chain.epoch,
+    currentEpochLeaseCount: chain.payload.sequence,
   })
 }
 
@@ -425,10 +334,12 @@ async function attachLeaseGateEvidence(run, contract, repository, token, fetchIm
   })
 }
 
-export async function fetchAndVerifyEphemeralCleanupReceipt(environment = process.env, {
+async function fetchLeasedDeploymentHistory(environment, {
   fetchImpl = fetch,
   publicKey,
   now = Date.now(),
+  readArchive,
+  requireCurrentRun = true,
 } = {}) {
   const token = environment.GITHUB_TOKEN?.trim()
   const repository = environment.GITHUB_REPOSITORY?.trim()
@@ -437,6 +348,10 @@ export async function fetchAndVerifyEphemeralCleanupReceipt(environment = proces
   if (!token || token.length < 20 || repository !== TRUSTED_REPOSITORY || !contract) {
     throw new Error('GitHub cleanup receipt verification inputs are missing or untrusted.')
   }
+  const chain = verifyCleanupReceiptChain(environment.EPHEMERAL_CLEANUP_RECEIPT?.trim() || '', publicKey, {
+    environment: deployEnvironment, now, readArchive,
+  })
+  const currentRunId = requireCurrentRun ? (environment.GITHUB_RUN_ID?.trim() || '') : '__no_current_run__'
   const allRuns = []
   const seenRunIds = new Set()
   let expectedRunCount = null
@@ -494,15 +409,11 @@ export async function fetchAndVerifyEphemeralCleanupReceipt(environment = proces
   if (expectedRunCount === null || allRuns.length !== expectedRunCount) {
     throw new Error('GitHub deployment run pagination is incomplete for total_count.')
   }
-  assertCurrentRunAnchor(
-    allRuns,
-    contract,
-    repository,
-    environment.GITHUB_RUN_ID?.trim() || '',
-    environment.DEPLOY_LEASE_ID?.trim() || '',
-  )
+  if (requireCurrentRun) {
+    assertCurrentRunAnchor(allRuns, contract, repository, currentRunId, environment.DEPLOY_LEASE_ID?.trim() || '')
+  }
   const candidateRuns = allRuns.filter((run) => (
-    parseTrustedRun(run, contract, repository, environment.GITHUB_RUN_ID?.trim() || '') !== null
+    parseTrustedRun(run, contract, repository, currentRunId) !== null
   ))
   const evidencedRuns = []
   for (let offset = 0; offset < candidateRuns.length; offset += 8) {
@@ -510,11 +421,23 @@ export async function fetchAndVerifyEphemeralCleanupReceipt(environment = proces
       attachLeaseGateEvidence(run, contract, repository, token, fetchImpl)
     )))
     evidencedRuns.push(...batch)
-    if (evidencedRuns.filter((run) => run.credential_lease_gate_succeeded === true).length > MAX_CUMULATIVE_LEASES) {
-      throw new Error('GitHub leased deployment history exceeds the reviewed receipt epoch.')
+    if (evidencedRuns.filter((run) => run.credential_lease_gate_succeeded === true).length > chain.leases.length) {
+      throw new Error('Signed cleanup receipt does not cover every prior leased deployment run across the reviewed epochs.')
     }
   }
-  return verifyEphemeralCleanupReceipt(evidencedRuns, environment, { now, publicKey })
+  return evidencedRuns
+}
+
+export async function fetchAndVerifyEphemeralCleanupReceipt(environment = process.env, options = {}) {
+  const runs = await fetchLeasedDeploymentHistory(environment, { ...options, requireCurrentRun: true })
+  return verifyEphemeralCleanupReceipt(runs, environment, options)
+}
+
+// Supervisor-only preflight: no invented current run and no history cut-off.
+// Every first-attempt leased run, including unsuccessful deployments, is read.
+export async function fetchAndVerifyCleanupHistory(environment, options = {}) {
+  const runs = await fetchLeasedDeploymentHistory(environment, { ...options, requireCurrentRun: false })
+  return verifyCleanupReceiptHistory(runs, environment, { ...options, currentRunId: '__no_current_run__', leaseId: null })
 }
 
 async function main() {

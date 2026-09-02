@@ -7,6 +7,7 @@ import { verifyDatabaseReleaseSafety } from './verify-database-release-safety.mj
 export const OPS3_BASE_SHA = '45eba849183935e2dfa675b7355ad0efda5a9644'
 export const OPS3_APPROVED_PATHS = Object.freeze([
   '.github/workflows/quality.yml',
+  'config/ephemeral-cleanup-epochs/staging/2f34d77f5313398a4fdf6e06a9f926306063a7963943e2fc6e6b3b773aae3e77.json',
   'docs/operations/ops3-api-boundary-preparation.md',
   'e2e/gate0/gate0.spec.ts',
   'e2e/pages-boundary/pages-boundary.spec.ts',
@@ -57,11 +58,21 @@ export const OPS3_APPROVED_PATHS = Object.freeze([
   'playwright.pages-boundary.config.ts',
   'public/_headers',
   'scripts/cloudflare-release.test.ts',
+  'scripts/ephemeral-cleanup-epochs.mjs',
+  'scripts/ephemeral-cleanup-epochs.test.ts',
+  'scripts/ephemeral-release-supervisor-core.mjs',
+  'scripts/ephemeral-release-supervisor-core.test.ts',
   'scripts/gate0-enrichment-policy.mjs',
   'scripts/pages-boundary-local.mjs',
   'scripts/pages-boundary-local.test.ts',
+  'scripts/rollover-ephemeral-cleanup-epoch.mjs',
+  'scripts/rollover-ephemeral-cleanup-epoch.test.ts',
   'scripts/static-security-headers.test.ts',
+  'scripts/supervise-ephemeral-release.mjs',
+  'scripts/supervise-ephemeral-release.test.ts',
   'scripts/verify-cloudflare-release-config.mjs',
+  'scripts/verify-ephemeral-cleanup-receipt.mjs',
+  'scripts/verify-ephemeral-cleanup-receipt.test.ts',
   'scripts/verify-ops3-release-scope.mjs',
   'scripts/verify-ops3-release-scope.test.ts',
   'scripts/verify-pages-boundary-runtime.mjs',
@@ -128,16 +139,18 @@ function verifyPackageBoundary(root) {
   const candidatePackage = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
   const expectedScripts = {
     ...basePackage.scripts,
+    'cloudflare:test': basePackage.scripts['cloudflare:test'].replace(' --reporter=dot',
+      ' scripts/ephemeral-cleanup-epochs.test.ts scripts/rollover-ephemeral-cleanup-epoch.test.ts --reporter=dot'),
     'test:pages-boundary': 'node scripts/verify-pages-boundary-runtime.mjs && playwright test --config playwright.pages-boundary.config.ts',
   }
   candidatePackage.scripts = {}
   basePackage.scripts = {}
   if (JSON.stringify(canonical(candidatePackage)) !== JSON.stringify(canonical(basePackage))) {
-    fail('package metadata or dependency declarations changed outside the reviewed test command')
+    fail('package metadata or dependency declarations changed outside the reviewed test commands')
   }
   const actual = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).scripts
   if (JSON.stringify(canonical(actual)) !== JSON.stringify(canonical(expectedScripts))) {
-    fail('package scripts differ from the base plus the one reviewed Pages-boundary command')
+    fail('package scripts differ from the base plus the reviewed Pages-boundary and signed-epoch tests')
   }
 }
 

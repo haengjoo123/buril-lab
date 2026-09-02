@@ -10,6 +10,9 @@ import {
   CLEANUP_ABSENT_SECRET_NAMES,
   MAX_CUMULATIVE_LEASES,
 } from './verify-ephemeral-cleanup-receipt.mjs'
+import {
+  cleanupReceiptFieldNames, MAX_ARCHIVED_CLEANUP_EPOCHS, verifyCleanupReceiptChain,
+} from './ephemeral-cleanup-epochs.mjs'
 
 const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/
 const LEASE_PATTERN = /^[0-9a-f]{32}$/
@@ -101,12 +104,9 @@ export function refreshCleanupReceiptSecretContract({
   const contract = workflowContract(environment)
   const signed = verifySignedAttestation(previousReceipt, publicKey, 'cleanup_receipt')
   const previous = signed.payload
-  exactKeys(previous, [
-    'version', 'kind', 'environment', 'workflow', 'issued_at', 'sequence', 'legacy_verification_mode',
-    'github_secrets_absent', 'legacy_credentials', 'leases', 'supervisor_key_id',
-  ], 'Cleanup receipt contract refresh')
+  exactKeys(previous, cleanupReceiptFieldNames(previous), 'Cleanup receipt contract refresh')
   if (
-    previous.version !== 3
+    ![3, 4].includes(previous.version)
     || previous.environment !== environment
     || previous.workflow !== contract.workflow
     || previous.legacy_verification_mode !== 'operator_dashboard_attestation'
@@ -253,6 +253,7 @@ export function createCredentialInjectionProbe({
   privateKey,
   now = Date.now(),
   lifetimeMs = 10 * 60 * 1000,
+  readArchive,
 }) {
   const contract = workflowContract(environment)
   if (
@@ -273,9 +274,9 @@ export function createCredentialInjectionProbe({
   if (!Number.isFinite(lifetimeMs) || lifetimeMs <= 0 || lifetimeMs > MAX_CREDENTIAL_INJECTION_PROBE_MS) {
     throw new Error('Credential-injection probe lifetime must be at most 15 minutes.')
   }
-  const receipt = verifySignedAttestation(cleanupReceipt, privateKey, 'cleanup_receipt').payload
+  const receipt = verifyCleanupReceiptChain(cleanupReceipt, privateKey, { environment, now, readArchive }).payload
   if (
-    receipt.version !== 3
+    ![3, 4].includes(receipt.version)
     || receipt.environment !== environment
     || receipt.workflow !== contract.workflow
     || !Array.isArray(receipt.leases)
@@ -314,6 +315,7 @@ export function createProviderCreationPending({
   cleanupReceipt,
   privateKey,
   now = Date.now(),
+  readArchive,
 }) {
   const contract = workflowContract(environment)
   if (
@@ -327,9 +329,9 @@ export function createProviderCreationPending({
   ) {
     throw new Error('Provider-creation pending evidence is malformed.')
   }
-  const base = verifySignedAttestation(cleanupReceipt, privateKey, 'cleanup_receipt').payload
+  const base = verifyCleanupReceiptChain(cleanupReceipt, privateKey, { environment, now, readArchive }).payload
   if (
-    base.version !== 3
+    ![3, 4].includes(base.version)
     || base.environment !== environment
     || base.workflow !== contract.workflow
     || !Array.isArray(base.leases)
@@ -340,7 +342,7 @@ export function createProviderCreationPending({
   }
   const timestamp = iso(now)
   return signAttestation({
-    version: 2,
+    version: base.version === 4 ? 3 : 2,
     kind: 'provider_creation_journal',
     environment,
     workflow: contract.workflow,
@@ -352,6 +354,10 @@ export function createProviderCreationPending({
     base_cleanup_receipt_sha256: attestationEnvelopeHash(cleanupReceipt),
     base_cleanup_sequence: base.sequence,
     base_cleanup_leases_sha256: sha256(JSON.stringify(base.leases)),
+    ...(base.version === 4 ? {
+      base_cleanup_epoch: base.epoch,
+      base_cleanup_previous_epoch_receipt_sha256: base.previous_epoch_receipt_sha256,
+    } : {}),
     started_at: timestamp,
     updated_at: timestamp,
     phase: 'provider_creation_pending',
@@ -420,6 +426,7 @@ export function verifyProviderCreationJournal(rawJournal, publicKey) {
     'base_cleanup_receipt_sha256',
     'base_cleanup_sequence',
     'base_cleanup_leases_sha256',
+    ...(payload.version === 3 ? ['base_cleanup_epoch', 'base_cleanup_previous_epoch_receipt_sha256'] : []),
     'started_at',
     'updated_at',
     'phase',
@@ -434,7 +441,7 @@ export function verifyProviderCreationJournal(rawJournal, publicKey) {
   const updatedAt = Date.parse(payload.updated_at)
   const phaseIndex = JOURNAL_PHASE_INDEX.get(payload.phase)
   if (
-    payload.version !== 2
+    ![2, 3].includes(payload.version)
     || !contract
     || payload.workflow !== contract.workflow
     || !FULL_SHA_PATTERN.test(payload.commit_sha)
@@ -447,6 +454,9 @@ export function verifyProviderCreationJournal(rawJournal, publicKey) {
     || payload.base_cleanup_sequence < 0
     || payload.base_cleanup_sequence >= MAX_CUMULATIVE_LEASES
     || !HASH_PATTERN.test(payload.base_cleanup_leases_sha256)
+    || (payload.version === 3 && (!Number.isSafeInteger(payload.base_cleanup_epoch)
+      || payload.base_cleanup_epoch < 1 || payload.base_cleanup_epoch > MAX_ARCHIVED_CLEANUP_EPOCHS
+      || !HASH_PATTERN.test(payload.base_cleanup_previous_epoch_receipt_sha256)))
     || !Number.isFinite(startedAt)
     || !Number.isFinite(updatedAt)
     || updatedAt < startedAt
@@ -561,6 +571,7 @@ export function advanceProviderCreationJournal({
   credentialGatesSucceeded,
   successorCleanupReceipt,
   now = Date.now(),
+  readArchive,
 }) {
   const current = verifyProviderCreationJournal(journal, publicKey).payload
   const currentIndex = JOURNAL_PHASE_INDEX.get(current.phase)
@@ -599,6 +610,7 @@ export function advanceProviderCreationJournal({
       cleanupReceipt: successorCleanupReceipt,
       publicKey,
       now,
+      readArchive,
     })
     next.successor_cleanup_receipt_sha256 = attestationEnvelopeHash(successorCleanupReceipt)
   }
@@ -612,6 +624,7 @@ export function verifyProviderCreationCleanupSuccessor({
   cleanupReceipt,
   publicKey,
   now = Date.now(),
+  readArchive,
 }) {
   const pending = verifyProviderCreationJournal(journal, publicKey).payload
   if (
@@ -621,14 +634,10 @@ export function verifyProviderCreationCleanupSuccessor({
   ) {
     throw new Error('Cleanup successor verification requires exact lease, run, and successful gate evidence.')
   }
-  const signed = verifySignedAttestation(cleanupReceipt, publicKey, 'cleanup_receipt')
-  const receipt = signed.payload
-  exactKeys(receipt, [
-    'version', 'kind', 'environment', 'workflow', 'issued_at', 'sequence', 'legacy_verification_mode',
-    'github_secrets_absent', 'legacy_credentials', 'leases', 'supervisor_key_id',
-  ], 'Provider-creation cleanup successor')
+  const chain = verifyCleanupReceiptChain(cleanupReceipt, publicKey, { environment: pending.environment, now, readArchive })
+  const receipt = chain.payload
   if (
-    receipt.version !== 3
+    !journalMatchesReceiptEpoch(pending, receipt)
     || receipt.environment !== pending.environment
     || receipt.workflow !== pending.workflow
     || !Array.isArray(receipt.leases)
@@ -670,11 +679,17 @@ export function verifyProviderCreationCleanupSuccessor({
   }
   if (
     pending.successor_cleanup_receipt_sha256 !== null
-    && pending.successor_cleanup_receipt_sha256 !== signed.envelopeHash
+    && pending.successor_cleanup_receipt_sha256 !== chain.receiptHash
   ) {
     throw new Error('Cleanup receipt does not match the successor recorded in the journal.')
   }
-  return Object.freeze({ payload: receipt, receiptHash: signed.envelopeHash })
+  return Object.freeze({ payload: receipt, receiptHash: chain.receiptHash })
+}
+
+function journalMatchesReceiptEpoch(pending, receipt) {
+  if (pending.version === 2) return receipt.version === 3
+  return receipt.version === 4 && receipt.epoch === pending.base_cleanup_epoch
+    && receipt.previous_epoch_receipt_sha256 === pending.base_cleanup_previous_epoch_receipt_sha256
 }
 
 export function resolveProviderCreationCleanupState({
@@ -682,13 +697,14 @@ export function resolveProviderCreationCleanupState({
   cleanupReceipt,
   publicKey,
   now = Date.now(),
+  readArchive,
 }) {
   const pending = verifyProviderCreationJournal(journal, publicKey).payload
-  const signed = verifySignedAttestation(cleanupReceipt, publicKey, 'cleanup_receipt')
-  if (signed.envelopeHash === pending.base_cleanup_receipt_sha256) {
-    const receipt = signed.payload
+  const chain = verifyCleanupReceiptChain(cleanupReceipt, publicKey, { environment: pending.environment, now, readArchive })
+  if (chain.receiptHash === pending.base_cleanup_receipt_sha256) {
+    const receipt = chain.payload
     if (
-      receipt.version !== 3
+      !journalMatchesReceiptEpoch(pending, receipt)
       || receipt.environment !== pending.environment
       || receipt.workflow !== pending.workflow
       || !Array.isArray(receipt.leases)
@@ -704,7 +720,7 @@ export function resolveProviderCreationCleanupState({
     return Object.freeze({
       state: 'base',
       payload: receipt,
-      receiptHash: signed.envelopeHash,
+      receiptHash: chain.receiptHash,
     })
   }
 
@@ -719,6 +735,7 @@ export function resolveProviderCreationCleanupState({
     cleanupReceipt,
     publicKey,
     now,
+    readArchive,
   })
   return Object.freeze({
     state: 'successor',
@@ -859,12 +876,13 @@ export function appendClosedLeaseReceipt({
   publicKey,
   privateKey,
   now = Date.now(),
+  readArchive,
 }) {
   const contract = workflowContract(environment)
-  const signed = verifySignedAttestation(previousReceipt, publicKey, 'cleanup_receipt')
-  const previous = signed.payload
+  const chain = verifyCleanupReceiptChain(previousReceipt, publicKey, { environment, now, readArchive })
+  const previous = chain.payload
   if (
-    previous.version !== 3
+    ![3, 4].includes(previous.version)
     || previous.environment !== environment
     || previous.workflow !== contract.workflow
     || !Array.isArray(previous.leases)
@@ -879,7 +897,7 @@ export function appendClosedLeaseReceipt({
   ) {
     throw new Error('Closed workflow run evidence is malformed.')
   }
-  if (previous.leases.some((entry) => entry?.run_id === String(run.id))) {
+  if (chain.leases.some((entry) => entry?.run_id === String(run.id) || entry?.lease_id === run.leaseId)) {
     throw new Error('Closed workflow run is already present in the cumulative receipt.')
   }
   if (previous.leases.length >= MAX_CUMULATIVE_LEASES) {
@@ -897,10 +915,11 @@ export function appendClosedLeaseReceipt({
   }
   const closedAt = now instanceof Date ? now.getTime() : Number(now)
   const updatedAt = Date.parse(run.updatedAt)
-  if (!Number.isFinite(closedAt) || !Number.isFinite(updatedAt) || closedAt < updatedAt) {
+  if (!Number.isFinite(closedAt) || !Number.isFinite(updatedAt) || closedAt < updatedAt
+    || closedAt < Date.parse(previous.issued_at)) {
     throw new Error('Closed workflow time is earlier than the workflow update time.')
   }
-  return signAttestation({
+  const successor = signAttestation({
     ...previous,
     issued_at: iso(closedAt),
     sequence: previous.sequence + 1,
@@ -913,7 +932,7 @@ export function appendClosedLeaseReceipt({
         lease_id: run.leaseId,
         storage_backup: run.storageBackup,
         closed_at: iso(closedAt),
-        previous_cleanup_receipt_sha256: signed.envelopeHash,
+        previous_cleanup_receipt_sha256: chain.receiptHash,
         cloudflare_token_id_hashes: [...cloudflareTokenIdHashes],
         supabase_pat_label_hash: supabasePatLabelHash,
         supabase_pat_sha256: supabasePatSha256,
@@ -922,6 +941,8 @@ export function appendClosedLeaseReceipt({
     ],
     supervisor_key_id: publicKeyFingerprint(privateKey),
   }, privateKey)
+  verifyCleanupReceiptChain(successor, publicKey, { environment, now, readArchive })
+  return successor
 }
 
 export { sha256 }
