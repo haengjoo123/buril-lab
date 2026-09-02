@@ -2853,7 +2853,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       storageBackupReadme.replace('`PRODUCTION_WORKER_EPHEMERAL_TOKEN`', '`PRODUCTION_WORKER_TOKEN_MISSING`'),
     )).toThrow(/Production Worker token documentation/)
     expect(() => verifyStorageBackupWorkerTokenDocumentation(
-      storageBackupReadme.replace('never uses\n`--secrets-file`', 'may use\n`--secrets-file`'),
+      storageBackupReadme.replace(/never uses\r?\n`--secrets-file`/, 'may use\n`--secrets-file`'),
     )).toThrow(/Production Worker token documentation/)
     expect(createHash('sha256').update(cloudflareApiHelper.replace(/\r\n/g, '\n'), 'utf8').digest('hex'))
       .toBe('50353a0f5b6fa7702d5e1fa01c77a31bd48368d009fbf7a734e73f451c80086b')

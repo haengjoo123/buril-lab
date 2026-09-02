@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { verifySignedAttestation } from './ephemeral-release-attestation.mjs'
+import { signAttestation, verifySignedAttestation } from './ephemeral-release-attestation.mjs'
 import {
   advanceProviderCreationJournal,
   appendClosedLeaseReceipt,
@@ -9,6 +9,7 @@ import {
   createInitialCleanupReceipt,
   createLeaseMaterial,
   createProviderCreationPending,
+  refreshCleanupReceiptSecretContract,
   resolveProviderCreationCleanupState,
   sha256,
   verifyProviderCreationCleanupSuccessor,
@@ -16,6 +17,7 @@ import {
   verifyProviderCreationLeaseGrant,
   verifyProviderCreationRecoveryEvidence,
 } from './ephemeral-release-supervisor-core.mjs'
+import { CLEANUP_ABSENT_SECRET_NAMES } from './verify-ephemeral-cleanup-receipt.mjs'
 import { verifyEphemeralLeaseGrant } from './verify-ephemeral-lease-grant.mjs'
 
 const NOW = Date.parse('2026-08-25T05:00:00Z')
@@ -155,6 +157,38 @@ function setupJournal() {
 }
 
 describe('ephemeral release supervisor core', () => {
+  it('refreshes an additive cleanup secret contract without losing lease history', () => {
+    const { keys, successor } = setupJournal()
+    const current = verifySignedAttestation(successor, keys.publicKey, 'cleanup_receipt').payload
+    const legacy = signAttestation({
+      ...current,
+      github_secrets_absent: current.github_secrets_absent
+        .filter((name: string) => name !== 'PRODUCTION_WORKER_EPHEMERAL_TOKEN'),
+    }, keys.privateKey)
+
+    const refreshed = refreshCleanupReceiptSecretContract({
+      previousReceipt: legacy,
+      environment: 'staging',
+      publicKey: keys.publicKey,
+      privateKey: keys.privateKey,
+      now: NOW + 10_000,
+    })
+    const payload = verifySignedAttestation(refreshed, keys.publicKey, 'cleanup_receipt').payload
+
+    expect(payload.github_secrets_absent).toEqual(CLEANUP_ABSENT_SECRET_NAMES)
+    expect(payload.sequence).toBe(current.sequence)
+    expect(payload.leases).toEqual(current.leases)
+    expect(payload.legacy_credentials).toEqual(current.legacy_credentials)
+    expect(payload.issued_at).toBe(new Date(NOW + 10_000).toISOString())
+    expect(() => refreshCleanupReceiptSecretContract({
+      previousReceipt: refreshed,
+      environment: 'staging',
+      publicKey: keys.publicKey,
+      privateKey: keys.privateKey,
+      now: NOW + 11_000,
+    })).toThrow(/already uses the current secret contract/)
+  })
+
   it('creates a signed initial cleanup and exact lease/session material', () => {
     const { keys, receipt } = setup()
     expect(verifySignedAttestation(receipt, keys.publicKey, 'cleanup_receipt').payload)

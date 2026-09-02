@@ -48,6 +48,18 @@ node scripts/supervise-ephemeral-release.mjs bootstrap --environment production
 
 초기 기록은 공급자 API가 과거에 잃어버린 토큰 원문을 검증한 결과가 아니라 `operator_dashboard_attestation`입니다. 따라서 외부 자동 검증 완료라고 표현하지 않습니다. 입력한 공개 가능한 토큰 식별자 해시와 정확한 확인문구를 서명해 남깁니다.
 
+### 정리 대상 secret 목록 확장
+
+새 배포용 임시 secret 이름을 추가하면 기존 서명 영수증은 자동으로 새 항목을 주장하지 않습니다. 공급자 생성 pending이 없고 현재·과거 임시 GitHub secret을 모두 제거한 뒤 다음 명령으로 목록 계약만 갱신합니다.
+
+```text
+node scripts/supervise-ephemeral-release.mjs refresh-receipt \
+  --environment <staging|production> \
+  --confirmation REFRESH_CLEANUP_SECRET_CONTRACT_<STAGING|PRODUCTION>
+```
+
+이 명령은 기존 목록이 현재 목록의 정확한 부분집합인 경우에만 동작합니다. 누적 lease 순서·실행 증거·기존 자격값 해시를 바꾸거나 지우지 않고, 새로 추가된 secret의 GitHub 부재를 확인한 뒤 같은 개인키로 다시 서명합니다. Staging 영수증을 갱신하면 운영 환경에 보관하는 Staging 사본도 같은 값으로 갱신합니다. 목록 축소, 알 수 없는 이름, pending 존재, 임시 secret 잔존은 모두 거부합니다.
+
 ## 감독형 Staging 배포
 
 실제 토큰 생성 직전에 별도 확인을 받고 다음 형식으로 시작합니다.
