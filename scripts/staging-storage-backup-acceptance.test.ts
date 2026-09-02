@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createExactLengthPng,
   extractSafeWorkerFailureDiagnostic,
+  readAuthenticatedFixtureBody,
   STAGING_STORAGE_BACKUP_ACCEPTANCE_CONTRACT,
   validateAcceptanceTriggerUrl,
   verifyAcceptanceManifest,
@@ -120,6 +121,49 @@ describe('Staging storage backup acceptance contract', () => {
     expect(first.subarray(-8, -4).toString('ascii')).toBe('IEND')
     expect(createHash('sha256').update(first).digest('hex'))
       .toBe(createHash('sha256').update(repeated).digest('hex'))
+  })
+
+  it('verifies changed fixtures through the authenticated Storage download path', async () => {
+    const body = Buffer.from('authenticated fixture body')
+    const expected = {
+      path: 'burillab-storage-backup-acceptance/fixture-a.png',
+      bytes: body.length,
+      sha256: createHash('sha256').update(body).digest('hex'),
+    }
+    const calls: string[] = []
+    const supabase = {
+      storage: {
+        from(bucket: string) {
+          calls.push(`bucket:${bucket}`)
+          return {
+            async download(path: string) {
+              calls.push(`path:${path}`)
+              return { data: new Blob([body]), error: null }
+            },
+          }
+        },
+      },
+    }
+
+    await expect(readAuthenticatedFixtureBody(supabase, expected)).resolves.toEqual(body)
+    expect(calls).toEqual([
+      'bucket:cabinets',
+      'path:burillab-storage-backup-acceptance/fixture-a.png',
+    ])
+
+    const staleSupabase = {
+      storage: {
+        from() {
+          return {
+            async download() {
+              return { data: new Blob([Buffer.from('stale CDN body')]), error: null }
+            },
+          }
+        },
+      },
+    }
+    await expect(readAuthenticatedFixtureBody(staleSupabase, expected))
+      .rejects.toThrow(/authenticated synthetic Staging image failed its size or SHA-256 check/)
   })
 
   it('pins the exact isolated Staging targets and production-sized synthetic total', () => {

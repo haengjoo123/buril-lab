@@ -439,6 +439,49 @@ function normalizeSourceEtag(value) {
   return normalized
 }
 
+export async function readAuthenticatedFixtureBody(supabase, fixture) {
+  if (
+    !supabase?.storage
+    || typeof supabase.storage.from !== 'function'
+    || !isRecord(fixture)
+    || typeof fixture.path !== 'string'
+    || !FIXTURE.some((item) => item.path === fixture.path)
+    || !Number.isSafeInteger(fixture.bytes)
+    || fixture.bytes < 1
+    || fixture.bytes > MAX_OBJECT_BYTES
+    || typeof fixture.sha256 !== 'string'
+    || !/^[0-9a-f]{64}$/.test(fixture.sha256)
+  ) {
+    throw new Error('Authenticated Staging fixture download input is invalid.')
+  }
+
+  let download
+  try {
+    download = await supabase.storage.from(SOURCE_BUCKET).download(fixture.path)
+  } catch {
+    throw new Error('Reading an authenticated synthetic Staging image failed.')
+  }
+  if (
+    download?.error
+    || !download?.data
+    || typeof download.data.arrayBuffer !== 'function'
+    || (Number.isFinite(download.data.size) && download.data.size > MAX_OBJECT_BYTES)
+  ) {
+    throw new Error('Reading an authenticated synthetic Staging image failed.')
+  }
+
+  let body
+  try {
+    body = Buffer.from(await download.data.arrayBuffer())
+  } catch {
+    throw new Error('Reading an authenticated synthetic Staging image failed.')
+  }
+  if (body.length !== fixture.bytes || createHash('sha256').update(body).digest('hex') !== fixture.sha256) {
+    throw new Error('An authenticated synthetic Staging image failed its size or SHA-256 check.')
+  }
+  return body
+}
+
 async function readFixtureState(supabase, environment, expected) {
   if (!Array.isArray(expected) || expected.length < 1 || expected.length > FIXTURE.length) {
     throw new Error('Expected Staging fixture state is invalid.')
@@ -466,16 +509,11 @@ async function readFixtureState(supabase, environment, expected) {
     ) {
       throw new Error('Staging cabinet fixture ownership or pointer differs from the approved fixture.')
     }
-    const response = await fetch(fixture.publicUrl, {
-      method: 'GET',
-      redirect: 'error',
-      signal: AbortSignal.timeout(30_000),
-    })
-    if (!response.ok || response.redirected) throw new Error('Reading a synthetic Staging image failed.')
-    const body = Buffer.from(await readResponseBytes(response, 'Synthetic Staging image', MAX_OBJECT_BYTES))
-    if (body.length !== fixture.bytes || createHash('sha256').update(body).digest('hex') !== fixture.sha256) {
-      throw new Error('A synthetic Staging image failed its size or SHA-256 check.')
-    }
+    // Public object URLs can briefly serve the previous CDN body after an
+    // in-place Storage upsert. The backup Worker itself reads the authenticated
+    // Storage object endpoint, so acceptance must verify the same fresh source
+    // rather than turning CDN propagation into a flaky change-detection gate.
+    await readAuthenticatedFixtureBody(supabase, fixture)
   }
   const objects = await listSourceObjects(environment)
   if (
