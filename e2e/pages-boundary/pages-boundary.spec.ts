@@ -155,3 +155,42 @@ test('CSP actually blocks inline scripts and unapproved script origins', async (
   expect(violations).toContainEqual({ directive: 'script-src-elem', blockedKind: 'inline' })
   expect(violations).toContainEqual({ directive: 'script-src-elem', blockedKind: 'https' })
 })
+
+test('CSP permits the two exact canonical API origins from a different Pages origin', async ({ page, localPages }) => {
+  const origins = ['https://burillab.com', 'https://staging.burillab.com']
+  const intercepted: string[] = []
+  for (const origin of origins) {
+    // Fulfill locally before the network. No Access credential, user token,
+    // database, paid provider or real canonical API is used by this test.
+    await page.route(`${origin}/api/__local_csp_probe`, (route) => {
+      intercepted.push(origin)
+      return route.fulfill({
+        status: 200,
+        headers: { 'Access-Control-Allow-Origin': localPages.origin },
+        contentType: 'application/json',
+        body: '{"localSyntheticProbe":true}',
+      })
+    })
+  }
+  await page.goto(`${localPages.origin}/login`)
+  await expect(page.locator('input[type="email"]')).toBeVisible()
+  for (const origin of origins) {
+    const result = await page.evaluate(async (target) => {
+      try {
+        const response = await fetch(`${target}/api/__local_csp_probe`)
+        return response.ok && (await response.json()).localSyntheticProbe === true
+      } catch { return false }
+    }, origin)
+    expect(result, 'The static CSP must allow the exact canonical API configured in hosted builds.').toBe(true)
+  }
+  expect(intercepted).toEqual(origins)
+  await expectNoCspViolations(page)
+
+  const unapproved = await page.evaluate(async () => {
+    try { await fetch('https://pages-boundary-blocked.invalid/api/probe'); return true }
+    catch { return false }
+  })
+  expect(unapproved).toBe(false)
+  await expect.poll(() => page.evaluate(() => window.__boundaryViolations.length)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => window.__boundaryViolations)).toContainEqual({ directive: 'connect-src', blockedKind: 'https' })
+})

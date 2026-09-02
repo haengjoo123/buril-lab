@@ -8,6 +8,7 @@ export const OPS3_BASE_SHA = '45eba849183935e2dfa675b7355ad0efda5a9644'
 export const OPS3_APPROVED_PATHS = Object.freeze([
   '.github/workflows/quality.yml',
   'docs/operations/ops3-api-boundary-preparation.md',
+  'e2e/gate0/gate0.spec.ts',
   'e2e/pages-boundary/pages-boundary.spec.ts',
   'functions/api/[[path]].ts',
   'functions/api/_middleware.test.ts',
@@ -56,6 +57,7 @@ export const OPS3_APPROVED_PATHS = Object.freeze([
   'playwright.pages-boundary.config.ts',
   'public/_headers',
   'scripts/cloudflare-release.test.ts',
+  'scripts/gate0-enrichment-policy.mjs',
   'scripts/pages-boundary-local.mjs',
   'scripts/pages-boundary-local.test.ts',
   'scripts/static-security-headers.test.ts',
