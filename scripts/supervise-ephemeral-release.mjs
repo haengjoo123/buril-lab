@@ -21,6 +21,7 @@ import {
   createInitialCleanupReceipt,
   createLeaseMaterial,
   createProviderCreationPending,
+  refreshCleanupReceiptSecretContract,
   resolveProviderCreationCleanupState,
   sha256,
   verifyProviderCreationCleanupSuccessor,
@@ -123,6 +124,8 @@ function parseArguments(argv) {
     exactKeys(values, keys, 'Deploy arguments')
   } else if (command === 'recover') {
     exactKeys(values, ['environment', 'lease', 'cloudflare-account-id'], 'Recovery arguments')
+  } else if (command === 'refresh-receipt') {
+    exactKeys(values, ['environment', 'confirmation'], 'Cleanup receipt refresh arguments')
   }
   return { command, values }
 }
@@ -607,6 +610,38 @@ async function bootstrap(environment, inputIterator) {
   const stored = await getVariable(environment, 'EPHEMERAL_CLEANUP_RECEIPT')
   if (stored !== receipt) throw new Error('GitHub did not preserve the exact signed bootstrap receipt.')
   console.log(`Signed ${environment} operator-dashboard bootstrap attestation recorded (${attestationEnvelopeHash(receipt)}).`)
+}
+
+async function refreshCleanupReceiptContract(environment, confirmation) {
+  if (!CONTRACTS[environment]) throw new Error('Cleanup receipt refresh environment must be staging or production.')
+  if (confirmation !== `REFRESH_CLEANUP_SECRET_CONTRACT_${environment.toUpperCase()}`) {
+    throw new Error('Cleanup receipt refresh confirmation is invalid.')
+  }
+  const { privateKey, publicKey } = await loadKeys()
+  await ensureNoProviderCreationPending(environment)
+  await clearGithubCredentialState(environment)
+  const previousReceipt = await getVariable(environment, 'EPHEMERAL_CLEANUP_RECEIPT')
+  const previousPayload = verifySignedAttestation(previousReceipt, publicKey, 'cleanup_receipt').payload
+  if (
+    Array.isArray(previousPayload.github_secrets_absent)
+    && JSON.stringify([...previousPayload.github_secrets_absent].sort())
+      === JSON.stringify([...CLEANUP_ABSENT_SECRET_NAMES].sort())
+  ) {
+    await publishStagingCleanupSuccessor(environment, previousReceipt)
+    console.log(`Signed ${environment} cleanup receipt already uses the current secret contract (${attestationEnvelopeHash(previousReceipt)}).`)
+    return
+  }
+  const refreshedReceipt = refreshCleanupReceiptSecretContract({
+    previousReceipt,
+    environment,
+    publicKey,
+    privateKey,
+  })
+  await setVariable(environment, 'EPHEMERAL_CLEANUP_RECEIPT', refreshedReceipt)
+  const stored = await getVariable(environment, 'EPHEMERAL_CLEANUP_RECEIPT')
+  if (stored !== refreshedReceipt) throw new Error('GitHub did not preserve the refreshed cleanup receipt.')
+  await publishStagingCleanupSuccessor(environment, refreshedReceipt)
+  console.log(`Signed ${environment} cleanup receipt secret contract refreshed (${attestationEnvelopeHash(refreshedReceipt)}).`)
 }
 
 async function readProviderCredentials(inputIterator, expectedPatLabel, storageBackup) {
@@ -1798,7 +1833,11 @@ async function main() {
         )
         return
       }
-      throw new Error('Usage: supervise-ephemeral-release.mjs bootstrap|deploy|recover with explicit environment arguments.')
+      if (command === 'refresh-receipt') {
+        await refreshCleanupReceiptContract(values.environment, values.confirmation)
+        return
+      }
+      throw new Error('Usage: supervise-ephemeral-release.mjs bootstrap|deploy|recover|refresh-receipt with explicit environment arguments.')
     }, { context: lockContext })
   } finally {
     reader?.close()

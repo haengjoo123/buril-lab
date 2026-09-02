@@ -91,6 +91,66 @@ export function createInitialCleanupReceipt({
   }, privateKey)
 }
 
+export function refreshCleanupReceiptSecretContract({
+  previousReceipt,
+  environment,
+  publicKey,
+  privateKey,
+  now = Date.now(),
+}) {
+  const contract = workflowContract(environment)
+  const signed = verifySignedAttestation(previousReceipt, publicKey, 'cleanup_receipt')
+  const previous = signed.payload
+  exactKeys(previous, [
+    'version', 'kind', 'environment', 'workflow', 'issued_at', 'sequence', 'legacy_verification_mode',
+    'github_secrets_absent', 'legacy_credentials', 'leases', 'supervisor_key_id',
+  ], 'Cleanup receipt contract refresh')
+  if (
+    previous.version !== 3
+    || previous.environment !== environment
+    || previous.workflow !== contract.workflow
+    || previous.legacy_verification_mode !== 'operator_dashboard_attestation'
+    || !Array.isArray(previous.leases)
+    || previous.sequence !== previous.leases.length
+    || previous.leases.length > MAX_CUMULATIVE_LEASES
+    || previous.supervisor_key_id !== publicKeyFingerprint(publicKey)
+  ) {
+    throw new Error('Previous cleanup receipt cannot be refreshed for this environment.')
+  }
+
+  const previousNames = previous.github_secrets_absent
+  if (
+    !Array.isArray(previousNames)
+    || previousNames.length === 0
+    || new Set(previousNames).size !== previousNames.length
+    || previousNames.some((name) => (
+      typeof name !== 'string' || !CLEANUP_ABSENT_SECRET_NAMES.includes(name)
+    ))
+  ) {
+    throw new Error('Previous cleanup receipt secret contract is not an additive predecessor.')
+  }
+  if (previousNames.length === CLEANUP_ABSENT_SECRET_NAMES.length) {
+    throw new Error('Cleanup receipt already uses the current secret contract.')
+  }
+
+  const refreshedAt = now instanceof Date ? now.getTime() : Number(now)
+  const previousIssuedAt = Date.parse(previous.issued_at)
+  if (
+    !Number.isFinite(refreshedAt)
+    || !Number.isFinite(previousIssuedAt)
+    || refreshedAt < previousIssuedAt
+  ) {
+    throw new Error('Cleanup receipt refresh time is invalid.')
+  }
+
+  return signAttestation({
+    ...previous,
+    issued_at: iso(refreshedAt),
+    github_secrets_absent: [...CLEANUP_ABSENT_SECRET_NAMES],
+    supervisor_key_id: publicKeyFingerprint(privateKey),
+  }, privateKey)
+}
+
 export function createLeaseMaterial({
   environment,
   commitSha,
