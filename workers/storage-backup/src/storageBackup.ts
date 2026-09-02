@@ -1990,7 +1990,9 @@ interface SnapshotDocuments {
 }
 
 function legacySnapshotPayloadId(object: R2HeadLike): string | null {
-  const match = /^snapshots\/([a-z0-9-]{8,128})\/objects\/(.+)$/.exec(object.key)
+  // v1 wrote referenced photos and quarantined orphans under distinct prefixes.
+  // Both remain part of its verified manifest; neither is a v2 GC target.
+  const match = /^snapshots\/([a-z0-9-]{8,128})\/(?:objects|quarantine\/unreferenced)\/(.+)$/.exec(object.key)
   if (!match) return null
   if (!isSnapshotId(match[1]) || object.size <= 0) fail('r2_verify_failed')
   return match[1]

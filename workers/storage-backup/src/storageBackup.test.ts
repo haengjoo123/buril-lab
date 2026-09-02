@@ -1706,6 +1706,63 @@ describe('reference-based content garbage collection', () => {
     return new FakeSource(fixtures.pointers.slice(0, 2), fixtures.objects.slice(0, 2))
   }
 
+  async function seedLegacySnapshot(
+    r2: FakeR2,
+    classifications: Array<'referenced' | 'unreferenced'>,
+  ) {
+    const snapshotId = 'legacy-snapshot'
+    const objects = classifications.map((classification, index) => {
+      const sourcePath = `legacy-fixture/photo-${index}.png`
+      const body = `legacy-photo-body-${index}`
+      const prefix = classification === 'referenced' ? 'objects' : 'quarantine/unreferenced'
+      return {
+        body,
+        entry: {
+          sourcePath,
+          backupKey: `snapshots/${snapshotId}/${prefix}/${sourcePath}`,
+          bytes: new TextEncoder().encode(body).byteLength,
+          sha256: createHash('sha256').update(body).digest('hex'),
+          classification,
+          ...(classification === 'referenced' ? { ownerScope: 'lab' } : {}),
+          contentType: 'image/png',
+        },
+      }
+    })
+    const manifest = {
+      schemaVersion: 1,
+      snapshotId,
+      environment: 'staging',
+      createdAt: new Date(FIXED_NOW - 5_000).toISOString(),
+      source: { supabaseProjectRef: STAGING_REF, storageBucket: 'cabinets', pointerMode: 'legacy_url' },
+      objectCount: objects.length,
+      referencedObjectCount: classifications.filter((value) => value === 'referenced').length,
+      orphanCount: classifications.filter((value) => value === 'unreferenced').length,
+      totalBytes: objects.reduce((sum, object) => sum + object.entry.bytes, 0),
+      objects: objects.map((object) => object.entry),
+    }
+    const manifestBody = `${JSON.stringify(manifest)}\n`
+    const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex')
+    const complete = {
+      schemaVersion: 1,
+      snapshotId,
+      environment: 'staging',
+      completedAt: new Date(FIXED_NOW - 1_000).toISOString(),
+      manifestKey: `snapshots/${snapshotId}/manifest.json`,
+      manifestSha256,
+      objectCount: manifest.objectCount,
+      referencedObjectCount: manifest.referencedObjectCount,
+      orphanCount: manifest.orphanCount,
+      totalBytes: manifest.totalBytes,
+    }
+    for (const object of objects) {
+      await r2.seed(object.entry.backupKey, object.body, undefined, FIXED_NOW - 6_000)
+    }
+    await r2.seed(complete.manifestKey, manifestBody, undefined, FIXED_NOW - 4_000)
+    await r2.seed(`snapshots/${snapshotId}/manifest.sha256`, `${manifestSha256}\n`, undefined, FIXED_NOW - 3_000)
+    await r2.seed(`snapshots/${snapshotId}/complete.json`, `${JSON.stringify(complete)}\n`, undefined, FIXED_NOW - 2_000)
+    return { snapshotId, objects, manifest, complete }
+  }
+
   it('keeps an old body protected when a complete manifest references it at the exact 30-day boundary', async () => {
     const prepared = await prepareOldContent()
     const boundary = await runFixture(
@@ -1880,73 +1937,14 @@ describe('reference-based content garbage collection', () => {
     expect(prepared.r2.objects.has(prepared.removedBodyKey)).toBe(false)
   })
 
-  it('preserves legacy snapshot payload bodies without treating them as v2 restore documents', async () => {
+  it.each([
+    { label: 'referenced-only', classifications: ['referenced'] },
+    { label: 'quarantine-only', classifications: ['unreferenced'] },
+    { label: 'referenced-and-quarantine', classifications: ['referenced', 'unreferenced'] },
+  ] as const)('preserves legacy $label payloads without restoring or collecting them as v2 bodies', async ({ classifications }) => {
     const prepared = await prepareOldContent()
     prepared.r2.now = FIXED_NOW
-    const snapshotId = 'legacy-snapshot'
-    const sourcePath = 'legacy-lab/cabinet-photo.png'
-    const legacyBodyKey = `snapshots/${snapshotId}/objects/${sourcePath}`
-    const legacyPhoto = 'legacy-photo-body'
-    const legacyPhotoSha256 = createHash('sha256').update(legacyPhoto).digest('hex')
-    const createdAt = new Date(FIXED_NOW - 5_000).toISOString()
-    const completedAt = new Date(FIXED_NOW - 1_000).toISOString()
-    const manifest = {
-      schemaVersion: 1,
-      snapshotId,
-      environment: 'staging',
-      createdAt,
-      source: {
-        supabaseProjectRef: STAGING_REF,
-        storageBucket: 'cabinets',
-        pointerMode: 'legacy_url',
-      },
-      objectCount: 1,
-      referencedObjectCount: 1,
-      orphanCount: 0,
-      totalBytes: new TextEncoder().encode(legacyPhoto).byteLength,
-      objects: [{
-        sourcePath,
-        backupKey: legacyBodyKey,
-        bytes: new TextEncoder().encode(legacyPhoto).byteLength,
-        sha256: legacyPhotoSha256,
-        classification: 'referenced',
-        ownerScope: 'lab',
-        contentType: 'image/png',
-      }],
-    }
-    const manifestBody = `${JSON.stringify(manifest)}\n`
-    const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex')
-    const complete = {
-      schemaVersion: 1,
-      snapshotId,
-      environment: 'staging',
-      completedAt,
-      manifestKey: `snapshots/${snapshotId}/manifest.json`,
-      manifestSha256,
-      objectCount: 1,
-      referencedObjectCount: 1,
-      orphanCount: 0,
-      totalBytes: manifest.totalBytes,
-    }
-    await prepared.r2.seed(legacyBodyKey, legacyPhoto, undefined, FIXED_NOW - 6_000)
-    await prepared.r2.seed(
-      `snapshots/${snapshotId}/manifest.json`,
-      manifestBody,
-      undefined,
-      FIXED_NOW - 4_000,
-    )
-    await prepared.r2.seed(
-      `snapshots/${snapshotId}/manifest.sha256`,
-      `${manifestSha256}\n`,
-      undefined,
-      FIXED_NOW - 3_000,
-    )
-    await prepared.r2.seed(
-      `snapshots/${snapshotId}/complete.json`,
-      `${JSON.stringify(complete)}\n`,
-      undefined,
-      FIXED_NOW - 2_000,
-    )
+    const legacy = await seedLegacySnapshot(prepared.r2, [...classifications])
 
     const current = await runFixture(withoutLastPhoto(prepared.fixtures), {
       r2: prepared.r2,
@@ -1954,9 +1952,47 @@ describe('reference-based content garbage collection', () => {
     })
 
     expect(current.result.status).toBe('completed')
-    expect(prepared.r2.objects.has(legacyBodyKey)).toBe(true)
-    expect(prepared.r2.deleteCalls).not.toContain(legacyBodyKey)
+    const second = await runFixture(withoutLastPhoto(prepared.fixtures), {
+      r2: prepared.r2,
+      now: FIXED_NOW + TEST_DAY_MS,
+    })
+    expect(second.result.status).toBe('completed')
+    expect(prepared.r2.deleteCalls).toContain(prepared.removedBodyKey)
+    for (const { entry, body } of legacy.objects) {
+      expect(prepared.r2.text(entry.backupKey)).toBe(body)
+      expect(prepared.r2.deleteCalls).not.toContain(entry.backupKey)
+      expect(contentGcState(prepared.r2).candidates).not.toContainEqual(
+        expect.objectContaining({ backupKey: entry.backupKey }),
+      )
+      expect(JSON.stringify(latestManifest(prepared.r2))).not.toContain(entry.sourcePath)
+    }
   })
+
+  it.each(['missing', 'checksum', 'extra-payload', 'unknown-prefix'] as const)(
+    'fails closed for a %s legacy quarantine payload without deleting or promoting a snapshot',
+    async (corruption) => {
+      const prepared = await prepareOldContent()
+      const previousLatest = prepared.r2.text('control/latest.json')
+      const legacy = await seedLegacySnapshot(prepared.r2, ['referenced', 'unreferenced'])
+      const quarantine = legacy.objects[1].entry.backupKey
+      if (corruption === 'missing') prepared.r2.objects.delete(quarantine)
+      if (corruption === 'checksum') prepared.r2.corruptHeadKeys.add(quarantine)
+      if (corruption === 'extra-payload') {
+        await prepared.r2.seed(`snapshots/${legacy.snapshotId}/quarantine/unreferenced/extra.png`, 'extra')
+      }
+      if (corruption === 'unknown-prefix') {
+        await prepared.r2.seed(`snapshots/${legacy.snapshotId}/quarantine/other/extra.png`, 'extra')
+      }
+      const deleteCount = prepared.r2.deleteCalls.length
+      const current = await runFixture(withoutLastPhoto(prepared.fixtures), {
+        r2: prepared.r2,
+        now: FIXED_NOW,
+      })
+      expect(current.result.status).toBe('failed')
+      expect(prepared.r2.deleteCalls).toHaveLength(deleteCount)
+      expect(prepared.r2.text('control/latest.json')).toBe(previousLatest)
+    },
+  )
 
   it('fails closed when a legacy snapshot hash chain is malformed', async () => {
     const prepared = await prepareOldContent()
