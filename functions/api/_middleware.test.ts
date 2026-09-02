@@ -48,7 +48,7 @@ function setup(path = '/api/chemicals/suggest', method = 'GET', headers: Headers
 }
 
 describe('environment-specific API CORS', () => {
-  it.each(['https://burillab.com', 'https://app.buril-lab.local'])('allows the production origin %s', (origin) => {
+  it.each(['https://burillab.com', 'https://app.buril-lab.local', 'capacitor://app.buril-lab.local'])('allows the production origin %s', (origin) => {
     expect(isAllowedCorsOrigin(origin, production)).toBe(true)
   })
 
@@ -58,6 +58,8 @@ describe('environment-specific API CORS', () => {
     'https://staging.burillab.com', 'https://buril-lab-staging.pages.dev',
     'https://attacker.pages.dev', 'https://burillab.com.evil.test',
     'https://burillab.com:8443', 'https://burillab.com/', 'null', null,
+    'capacitor://localhost', 'capacitor://app.buril-lab.local.evil.test',
+    'capacitor://app.buril-lab.local/', 'http://app.buril-lab.local',
   ])('rejects %s in production', (origin) => {
     expect(isAllowedCorsOrigin(origin, production)).toBe(false)
   })
@@ -66,11 +68,13 @@ describe('environment-specific API CORS', () => {
     const staging = { APP_ENVIRONMENT: 'staging' }
     expect(isAllowedCorsOrigin('https://staging.burillab.com', staging)).toBe(true)
     expect(isAllowedCorsOrigin('https://123e4567.buril-lab-staging.pages.dev', staging)).toBe(true)
+    expect(isAllowedCorsOrigin('capacitor://app.buril-lab.local', staging)).toBe(true)
     expect(isAllowedCorsOrigin('https://feature.buril-lab-staging.pages.dev', staging)).toBe(false)
     expect(isAllowedCorsOrigin('https://burillab.com', staging)).toBe(false)
     expect(isAllowedCorsOrigin('http://localhost:5173', staging)).toBe(false)
     expect(isAllowedCorsOrigin('http://localhost:5173', { APP_ENVIRONMENT: 'development' })).toBe(true)
     expect(isAllowedCorsOrigin('http://localhost:5173', {})).toBe(false)
+    expect(isAllowedCorsOrigin('capacitor://app.buril-lab.local', {})).toBe(false)
   })
 })
 
@@ -98,19 +102,21 @@ describe('API response boundary', () => {
     expect(applyRateLimit).not.toHaveBeenCalled()
   })
 
-  it('answers only allowed-origin preflight and never passes preflight to Redis', async () => {
-    const allowed = setup('/api/voice/query', 'OPTIONS', { Origin: 'https://app.buril-lab.local' })
-    const response = await allowed.handler(allowed.context)
-    expect(response.status).toBe(204)
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://app.buril-lab.local')
-    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('POST, OPTIONS')
-    expect(allowed.applyRateLimit).not.toHaveBeenCalled()
-    const denied = setup('/api/voice/query', 'OPTIONS', { Origin: 'http://localhost:5173' })
-    const rejection = await denied.handler(denied.context)
-    expect(rejection.status).toBe(403)
-    expect(rejection.headers.has('Access-Control-Allow-Origin')).toBe(false)
-    expect(denied.next).not.toHaveBeenCalled()
-  })
+  it.each(['https://app.buril-lab.local', 'capacitor://app.buril-lab.local'])(
+    'answers native preflight for %s without passing it to Redis', async (origin) => {
+      const allowed = setup('/api/voice/query', 'OPTIONS', { Origin: origin })
+      const response = await allowed.handler(allowed.context)
+      expect(response.status).toBe(204)
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin)
+      expect(response.headers.get('Access-Control-Allow-Methods')).toBe('POST, OPTIONS')
+      expect(allowed.applyRateLimit).not.toHaveBeenCalled()
+      const denied = setup('/api/voice/query', 'OPTIONS', { Origin: 'http://localhost:5173' })
+      const rejection = await denied.handler(denied.context)
+      expect(rejection.status).toBe(403)
+      expect(rejection.headers.has('Access-Control-Allow-Origin')).toBe(false)
+      expect(denied.next).not.toHaveBeenCalled()
+    },
+  )
 
   it('keeps API security headers on unauthenticated responses', async () => {
     const { handler, context, next } = setup('/api/admin/feedback/list', 'POST')

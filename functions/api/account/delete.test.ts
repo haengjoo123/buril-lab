@@ -20,6 +20,7 @@ function fullRuntimeConfig(accountDeletionEnabled: boolean) {
       kosha_content_mode: 'full',
       account_deletion_enabled: accountDeletionEnabled,
       maintenance_worker_enabled: false,
+      storage_backup_enabled: false,
     }),
   }
 }

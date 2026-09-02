@@ -24,7 +24,12 @@ type PagesContext<E = Env> = {
 
 type PagesFunction<E = Env> = (context: PagesContext<E>) => Response | Promise<Response>
 
-const NATIVE_APP_ORIGIN = 'https://app.buril-lab.local'
+// capacitor.config.ts fixes the hostname; Android uses https and iOS uses
+// Capacitor's default scheme. Never allow arbitrary native or localhost origins.
+const NATIVE_APP_ORIGINS = new Set([
+  'https://app.buril-lab.local',
+  'capacitor://app.buril-lab.local',
+])
 const LOCAL_ORIGIN_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/
 const IMMUTABLE_STAGING_ORIGIN_PATTERN = /^https:\/\/[a-f0-9]{8}\.buril-lab-staging\.pages\.dev$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -36,16 +41,16 @@ function isProductionEnvironment(env: Env): boolean {
 export function isAllowedCorsOrigin(origin: string | null, env: Env): origin is string {
   if (!origin) return false
   if (isProductionEnvironment(env)) {
-    return origin === 'https://burillab.com' || origin === NATIVE_APP_ORIGIN
+    return origin === 'https://burillab.com' || NATIVE_APP_ORIGINS.has(origin)
   }
   if (env.APP_ENVIRONMENT === 'staging') {
     return origin === 'https://staging.burillab.com'
       || origin === 'https://buril-lab-staging.pages.dev'
-      || origin === NATIVE_APP_ORIGIN
+      || NATIVE_APP_ORIGINS.has(origin)
       || IMMUTABLE_STAGING_ORIGIN_PATTERN.test(origin)
   }
   if (env.APP_ENVIRONMENT === 'development' || env.APP_ENVIRONMENT === 'local') {
-    return origin === NATIVE_APP_ORIGIN || LOCAL_ORIGIN_PATTERN.test(origin)
+    return NATIVE_APP_ORIGINS.has(origin) || LOCAL_ORIGIN_PATTERN.test(origin)
   }
   // A missing or unrecognized environment cannot expand cross-origin access.
   return false

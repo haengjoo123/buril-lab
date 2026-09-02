@@ -83,7 +83,7 @@ export async function verifyPagesBoundaryRuntime(runtime) {
       method: 'POST', headers: { Origin: origin }, body: '{}',
     }), 403, 'ORIGIN_NOT_ALLOWED', null)
   }
-  for (const origin of [ORIGIN, 'https://app.buril-lab.local']) {
+  for (const origin of [ORIGIN, 'https://app.buril-lab.local', 'capacitor://app.buril-lab.local']) {
     const response = await fetchApi('/api/voice/query', { method: 'OPTIONS', headers: { Origin: origin } })
     assert.equal(response.status, 204)
     assert.equal(await response.text(), '')
@@ -92,6 +92,9 @@ export async function verifyPagesBoundaryRuntime(runtime) {
     assert.match(response.headers.get('x-request-id') || '', UUID)
     checks += 1
   }
+  await assertError(await fetchApi('/api/voice/query', {
+    method: 'POST', headers: { Origin: 'capacitor://app.buril-lab.local' }, body: '{}',
+  }), 401, 'AUTH_REQUIRED', 'capacitor://app.buril-lab.local')
 
   const authorization = await runtime.syntheticAuthorization()
   for (const pathname of ['/api/ai/classify', '/api/voice/query', '/api/admin/feedback/list']) {
