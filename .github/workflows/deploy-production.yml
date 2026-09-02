@@ -926,7 +926,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/verify-cloudflare-deploy-inputs.mjs
+          env -u CLOUDFLARE_API_TOKEN node scripts/verify-cloudflare-deploy-inputs.mjs
           runtime_config_json="$(
             /usr/bin/timeout --signal=TERM --kill-after=5s 30s \
               "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" kv key get runtime_config \

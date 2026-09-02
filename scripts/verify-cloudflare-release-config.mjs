@@ -66,7 +66,7 @@ const STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256 = 'd278ccb8f65af20551fbc065f
 const STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256 = '98ed65a9c1934a4c0583dae60030d765465dab797badafb76d1553cb7ee077c5'
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
-  production: '82925ca58ecc3f1c5048dee5763e5e2a98a3b04862b009e2220f0d5adcd7d65d',
+  production: '2cd59ed92644fe7edea197fdf91ecc9d2ff761ac651df6235475541453d4ec82',
   quality: '58365cd60a3fcada2d05c95af4d4c99fdd7b19f282f79de3a6106c73bef63636',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
   'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,
@@ -2116,6 +2116,7 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     || occurrenceCount(productionWorkflow, '--text') !== 3
     || occurrenceCount(productionWorkflow, '--config workers/storage-backup/wrangler.production.jsonc') !== 7
     || occurrenceCount(productionWorkflow, 'node scripts/verify-storage-backup-runtime-off.mjs') !== 3
+    || occurrenceCount(productionWorkflow, 'env -u CLOUDFLARE_API_TOKEN node scripts/verify-cloudflare-deploy-inputs.mjs') !== 1
     || occurrenceCount(productionWorkflow, 'env -u CLOUDFLARE_API_TOKEN node scripts/verify-storage-backup-worker-deployment.mjs preflight') !== 1
     || occurrenceCount(productionWorkflow, '"$GITHUB_WORKSPACE/node_modules/.bin/wrangler" deploy \\') !== 1
     || occurrenceCount(productionWorkflow, '--secrets-file') !== 0

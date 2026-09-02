@@ -2993,6 +2993,14 @@ describe('Prep 0 Cloudflare release controls', () => {
         /must not suppress command failures|fully reviewed command contract/,
       ],
       [
+        'production',
+        productionWorkflow.replace(
+          'env -u CLOUDFLARE_API_TOKEN node scripts/verify-cloudflare-deploy-inputs.mjs',
+          'node scripts/verify-cloudflare-deploy-inputs.mjs',
+        ),
+        /exact-OFF three times|fully reviewed command contract/,
+      ],
+      [
         'staging',
         stagingWorkflow.replace(
           '--deployment-id "${{ steps.pages-deploy-command.outputs.deployment_id }}"',
