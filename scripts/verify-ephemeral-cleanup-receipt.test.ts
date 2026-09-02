@@ -2,13 +2,17 @@ import { generateKeyPairSync } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import {
   publicKeyFingerprint,
+  attestationEnvelopeHash,
   signAttestation,
 } from './ephemeral-release-attestation.mjs'
 import {
   CLEANUP_ABSENT_SECRET_NAMES,
   fetchAndVerifyEphemeralCleanupReceipt,
+  fetchAndVerifyCleanupHistory,
   verifyEphemeralCleanupReceipt,
 } from './verify-ephemeral-cleanup-receipt.mjs'
+import { createCleanupEpochSuccessor } from './ephemeral-cleanup-epochs.mjs'
+import { appendClosedLeaseReceipt } from './ephemeral-release-supervisor-core.mjs'
 
 const SHA = 'a'.repeat(40)
 const OLD_LEASE = 'b'.repeat(32)
@@ -103,6 +107,59 @@ function environment(receipt: string, overrides: Record<string, string> = {}) {
 }
 
 describe('signed cumulative ephemeral cleanup receipt', () => {
+  it('reads and verifies every archived and current-epoch GitHub gate without a time cutoff', async () => {
+    const keys = generateKeyPairSync('ed25519')
+    const prior = Array.from({ length: 32 }, (_, index) => run({ id: 1000 + index,
+      display_title: `Deploy staging ${SHA} (lease=${index.toString(16).padStart(32, '0')}, storage-backup=false)`,
+    }))
+    const archived = signedReceipt(keys, prior)
+    const hash = attestationEnvelopeHash(archived)
+    const readArchive = (_environment: string, target: string) => {
+      if (target !== hash) throw new Error('missing archive')
+      return archived
+    }
+    const empty = createCleanupEpochSuccessor({ previousReceipt: archived, environment: 'staging', publicKey: keys.publicKey,
+      privateKey: keys.privateKey, now: NOW - 5 * 60_000, readArchive })
+    const latest = run({ id: 2000, display_title: `Deploy staging ${SHA} (lease=${'e'.repeat(32)}, storage-backup=false)`,
+      created_at: '2026-08-25T04:50:00Z', updated_at: '2026-08-25T04:51:00Z', credential_run_updated_at: '2026-08-25T04:51:00Z', conclusion: 'failure',
+    })
+    const receipt = appendClosedLeaseReceipt({ previousReceipt: empty, environment: 'staging', publicKey: keys.publicKey, privateKey: keys.privateKey,
+      run: { id: 2000, runAttempt: 1, commitSha: SHA, leaseId: 'e'.repeat(32), storageBackup: false, updatedAt: latest.updated_at },
+      cloudflareTokenIdHashes: [HASH], supabasePatLabelHash: 'f'.repeat(64), supabasePatSha256: '0'.repeat(64), now: NOW, readArchive,
+    })
+    const all = [...prior, latest]
+    let includeAnchor = true
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input))
+      let payload
+      if (url.pathname.endsWith('/jobs')) {
+        const id = Number(url.pathname.split('/').at(-2))
+        const matching = all.find((item) => item.id === id)
+        if (!matching) throw new Error('unapproved synthetic run')
+        payload = { jobs: [{ id: id + 10_000, run_id: id, run_attempt: 1, name: 'Supervised deploy of verified commit to buril-lab-staging',
+          status: 'completed', conclusion: matching.conclusion || 'success', completed_at: matching.credential_run_updated_at,
+          steps: [{ name: 'Verify the signed current ephemeral lease', status: 'completed', conclusion: 'success' },
+            { name: 'Verify the signed cumulative credential cleanup receipt', status: 'completed', conclusion: 'success' }],
+        }] }
+      } else {
+        const listed = includeAnchor ? [...all, currentRun()] : all
+        payload = { total_count: listed.length, workflow_runs: listed }
+      }
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    await expect(fetchAndVerifyEphemeralCleanupReceipt(environment(receipt), { now: NOW, publicKey: keys.publicKey, readArchive, fetchImpl: fetchMock }))
+      .resolves.toMatchObject({ coveredRunCount: 33, epoch: 1, currentEpochLeaseCount: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(34)
+    includeAnchor = false
+    // Local preflight deliberately does not exclude a caller-supplied current ID.
+    await expect(fetchAndVerifyCleanupHistory(environment(receipt, { GITHUB_RUN_ID: '2000' }), {
+      now: NOW, publicKey: keys.publicKey, readArchive, fetchImpl: fetchMock,
+    })).resolves.toMatchObject({ coveredRunCount: 33 })
+    all.push(run({ id: 3000, display_title: `Deploy staging ${SHA} (lease=${'d'.repeat(32)}, storage-backup=false)` }))
+    await expect(fetchAndVerifyCleanupHistory(environment(receipt), { now: NOW, publicKey: keys.publicKey, readArchive, fetchImpl: fetchMock }))
+      .rejects.toThrow(/every prior/)
+  })
+
   it('requires a signed initial cleanup even when no prior leased run exists', () => {
     const keys = generateKeyPairSync('ed25519')
     const receipt = signedReceipt(keys, [])

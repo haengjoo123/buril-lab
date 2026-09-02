@@ -32,8 +32,10 @@ import {
 } from './ephemeral-release-supervisor-core.mjs'
 import {
   CLEANUP_ABSENT_SECRET_NAMES,
+  fetchAndVerifyCleanupHistory,
   MAX_CUMULATIVE_LEASES,
 } from './verify-ephemeral-cleanup-receipt.mjs'
+import { verifyCleanupReceiptChain } from './ephemeral-cleanup-epochs.mjs'
 import {
   verifyEventuallyActiveSupabasePat,
   verifyEventuallyInactiveCloudflareToken,
@@ -576,9 +578,16 @@ export function readHiddenTtyLine({ input = process.stdin, output = process.stdo
   })
 }
 
+export async function assertCleanupBootstrapAbsent(environment, { run = runGh } = {}) {
+  if (!CONTRACTS[environment]) throw new Error('Bootstrap environment must be staging or production.')
+  const variables = await listEnvironmentVariables(environment, run)
+  if (variables.has('EPHEMERAL_CLEANUP_RECEIPT')) {
+    throw new Error('An existing signed cleanup history must never be replaced by bootstrap; use the reviewed epoch transition.')
+  }
+}
+
 async function bootstrap(environment, inputIterator) {
-  const contract = CONTRACTS[environment]
-  if (!contract) throw new Error('Bootstrap environment must be staging or production.')
+  await assertCleanupBootstrapAbsent(environment)
   const { privateKey, publicKey } = await loadKeys()
   process.stdout.write(`After checking both provider dashboards, provide public-safe legacy credential hashes and the exact operator confirmation for ${environment} as one JSON line.\n`)
   const raw = await nextInputLine(inputIterator, 'Bootstrap evidence')
@@ -606,6 +615,7 @@ async function bootstrap(environment, inputIterator) {
     privateKey,
   })
   verifySignedAttestation(receipt, publicKey, 'cleanup_receipt')
+  await assertCleanupBootstrapAbsent(environment)
   await setVariable(environment, 'EPHEMERAL_CLEANUP_RECEIPT', receipt)
   const stored = await getVariable(environment, 'EPHEMERAL_CLEANUP_RECEIPT')
   if (stored !== receipt) throw new Error('GitHub did not preserve the exact signed bootstrap receipt.')
@@ -1027,6 +1037,24 @@ async function runStagingCredentialInjectionProbe({ commitSha, cleanupReceipt, p
   if (operationFailure) throw operationFailure
 }
 
+export async function verifyLocalCleanupBeforeProviderCreation(environment, cleanupReceipt, publicKey, {
+  run = runGh, fetchHistory = fetchAndVerifyCleanupHistory, now = Date.now(), readArchive,
+} = {}) {
+  verifyCleanupReceiptChain(cleanupReceipt, publicKey, { environment, now, readArchive })
+  const stagingReceipt = environment === 'staging' ? cleanupReceipt
+    : await run(['variable', 'get', 'EPHEMERAL_CLEANUP_RECEIPT', '--repo', REPOSITORY, '--env', 'staging'])
+  verifyCleanupReceiptChain(stagingReceipt, publicKey, { environment: 'staging', now, readArchive })
+  const mirrored = await run(['variable', 'get', 'STAGING_EPHEMERAL_CLEANUP_RECEIPT', '--repo', REPOSITORY, '--env', 'production'])
+  if (mirrored !== stagingReceipt) {
+    throw new Error('The Staging cleanup receipt mirror is unfinished; resume its exact transition before creating credentials.')
+  }
+  const token = await run(['auth', 'token'])
+  return fetchHistory({
+    GITHUB_TOKEN: token, GITHUB_REPOSITORY: REPOSITORY,
+    DEPLOY_ENVIRONMENT: environment, EPHEMERAL_CLEANUP_RECEIPT: cleanupReceipt,
+  }, { publicKey, now, readArchive })
+}
+
 async function deploy(environment, commitSha, storageBackup, cloudflareAccountId, stagingRunId, inputIterator) {
   const contract = CONTRACTS[environment]
   if (!contract || !FULL_SHA_PATTERN.test(commitSha)) throw new Error('Deploy target is invalid.')
@@ -1036,7 +1064,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
   if (!/^[0-9a-f]{32}$/.test(cloudflareAccountId || '')) throw new Error('Cloudflare account identifier is malformed.')
   const { privateKey, publicKey } = await loadKeys()
   const cleanupReceipt = await getVariable(environment, 'EPHEMERAL_CLEANUP_RECEIPT')
-  const cleanupPayload = verifySignedAttestation(cleanupReceipt, publicKey, 'cleanup_receipt').payload
+  const cleanupPayload = verifyCleanupReceiptChain(cleanupReceipt, publicKey, { environment }).payload
   if (cleanupPayload.environment !== environment) throw new Error('Current signed cleanup receipt belongs to another environment.')
   if (
     !Array.isArray(cleanupPayload.leases)
@@ -1047,6 +1075,7 @@ async function deploy(environment, commitSha, storageBackup, cloudflareAccountId
   }
   await ensureNoProviderCreationPending(environment)
   await clearGithubCredentialState(environment)
+  await verifyLocalCleanupBeforeProviderCreation(environment, cleanupReceipt, publicKey)
   if (environment === 'staging' && stagingRunId !== undefined) {
     throw new Error('Staging deploy must not accept a Production-only Staging run identifier.')
   }

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  assertCleanupBootstrapAbsent,
   assertNoRepositoryCredentialState,
   credentialGateResult,
   credentialGatesSucceeded,
@@ -19,6 +20,7 @@ import {
   runGh,
   verifyAbortedLeaseReceipt,
   verifyPendingMarker,
+  verifyLocalCleanupBeforeProviderCreation,
   withSupervisorProcessLock,
 } from './supervise-ephemeral-release.mjs'
 import { CLEANUP_ABSENT_SECRET_NAMES } from './verify-ephemeral-cleanup-receipt.mjs'
@@ -29,6 +31,32 @@ import {
 } from './ephemeral-release-supervisor-core.mjs'
 
 describe('ephemeral release lifecycle finalization', () => {
+  it('cannot use bootstrap to overwrite any existing signed receipt', async () => {
+    const existing = vi.fn(async () => JSON.stringify([{ name: 'EPHEMERAL_CLEANUP_RECEIPT' }]))
+    await expect(assertCleanupBootstrapAbsent('staging', { run: existing })).rejects.toThrow(/never be replaced by bootstrap/)
+    expect(existing.mock.calls).toHaveLength(1)
+    const empty = vi.fn(async () => '[]')
+    await expect(assertCleanupBootstrapAbsent('staging', { run: empty })).resolves.toBeUndefined()
+  })
+
+  it('requires an exact Staging mirror and full history before new provider credentials', async () => {
+    const keys = generateKeyPairSync('ed25519')
+    const receipt = createInitialCleanupReceipt({ environment: 'staging', privateKey: keys.privateKey,
+      legacyCredentials: [{ provider: 'cloudflare', credentialIdHash: '1'.repeat(64) }, { provider: 'supabase', credentialIdHash: '2'.repeat(64) }],
+    })
+    const run = vi.fn(async (args: string[]) => args[0] === 'variable' ? receipt : 'synthetic-managed-github-session-only')
+    const fetchHistory = vi.fn(async () => ({ coveredRunCount: 0 }))
+    await expect(verifyLocalCleanupBeforeProviderCreation('staging', receipt, keys.publicKey, { run, fetchHistory }))
+      .resolves.toMatchObject({ coveredRunCount: 0 })
+    expect(fetchHistory).toHaveBeenCalledTimes(1)
+    expect(run.mock.calls.every(([args]) => (args[0] === 'variable' && args[1] === 'get') || args[0] === 'auth')).toBe(true)
+    const mismatch = vi.fn(async () => 'not-the-signed-receipt')
+    const notCalled = vi.fn()
+    await expect(verifyLocalCleanupBeforeProviderCreation('staging', receipt, keys.publicKey, { run: mismatch, fetchHistory: notCalled }))
+      .rejects.toThrow(/mirror is unfinished/)
+    expect(notCalled).not.toHaveBeenCalled()
+  })
+
   it('matches an aborted receipt against the signed journal envelope', () => {
     const keys = generateKeyPairSync('ed25519')
     const leaseId = 'd'.repeat(32)

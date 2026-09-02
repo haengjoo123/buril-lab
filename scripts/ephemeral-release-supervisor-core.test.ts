@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { signAttestation, verifySignedAttestation } from './ephemeral-release-attestation.mjs'
+import { attestationEnvelopeHash, signAttestation, verifySignedAttestation } from './ephemeral-release-attestation.mjs'
+import { createCleanupEpochSuccessor, verifyCleanupReceiptChain } from './ephemeral-cleanup-epochs.mjs'
 import {
   advanceProviderCreationJournal,
   appendClosedLeaseReceipt,
@@ -46,8 +47,27 @@ function setup() {
   return { keys, receipt }
 }
 
-function setupJournal() {
-  const { keys, receipt } = setup()
+function setupJournal(withEpoch = false) {
+  const { keys, receipt: initialReceipt } = setup()
+  let receipt = initialReceipt
+  let readArchive: ((environment: string, hash: string) => string) | undefined
+  if (withEpoch) {
+    for (let id = 1000; id < 1032; id += 1) {
+      receipt = appendClosedLeaseReceipt({ previousReceipt: receipt, environment: 'staging', publicKey: keys.publicKey, privateKey: keys.privateKey,
+        run: { id, runAttempt: 1, commitSha: SHA, leaseId: id.toString(16).padStart(32, '0'), storageBackup: false,
+          updatedAt: new Date(NOW - 40_000).toISOString() },
+        cloudflareTokenIdHashes: ['3'.repeat(64)], supabasePatLabelHash: '4'.repeat(64), supabasePatSha256: '5'.repeat(64), now: NOW - 20_000,
+      })
+    }
+    const archived = receipt
+    const hash = attestationEnvelopeHash(archived)
+    readArchive = (environment, target) => {
+      if (environment !== 'staging' || target !== hash) throw new Error('missing test archive')
+      return archived
+    }
+    receipt = createCleanupEpochSuccessor({ previousReceipt: archived, environment: 'staging', publicKey: keys.publicKey,
+      privateKey: keys.privateKey, now: NOW - 10_000, readArchive })
+  }
   const pending = createProviderCreationPending({
     environment: 'staging',
     commitSha: SHA,
@@ -58,6 +78,7 @@ function setupJournal() {
     cleanupReceipt: receipt,
     privateKey: keys.privateKey,
     now: NOW,
+    readArchive,
   })
   const material = createLeaseMaterial({
     environment: 'staging',
@@ -133,6 +154,7 @@ function setupJournal() {
     publicKey: keys.publicKey,
     privateKey: keys.privateKey,
     now: NOW + 5_000,
+    readArchive,
   })
   const cleanupStored = advanceProviderCreationJournal({
     journal: gatesVerified,
@@ -141,6 +163,7 @@ function setupJournal() {
     nextPhase: 'cleanup_receipt_stored',
     successorCleanupReceipt: successor,
     now: NOW + 6_000,
+    readArchive,
   })
   return {
     keys,
@@ -153,10 +176,42 @@ function setupJournal() {
     gatesVerified,
     successor,
     cleanupStored,
+    readArchive,
   }
 }
 
 describe('ephemeral release supervisor core', () => {
+  it('binds the new journal to its exact archived epoch through normal and interrupted cleanup', () => {
+    const f = setupJournal(true)
+    const opts = { publicKey: f.keys.publicKey, readArchive: f.readArchive, now: NOW + 10_000 }
+    const pending = verifyProviderCreationJournal(f.pending, f.keys.publicKey).payload
+    expect(pending).toMatchObject({ version: 3, base_cleanup_epoch: 1, base_cleanup_sequence: 0 })
+    expect(resolveProviderCreationCleanupState({ journal: f.gatesVerified, cleanupReceipt: f.receipt, ...opts }))
+      .toMatchObject({ state: 'base' })
+    expect(verifyProviderCreationCleanupSuccessor({ journal: f.gatesVerified, cleanupReceipt: f.successor, ...opts }))
+      .toMatchObject({ payload: { version: 4, epoch: 1, sequence: 1 } })
+    expect(resolveProviderCreationCleanupState({ journal: f.gatesVerified, cleanupReceipt: f.successor, ...opts }))
+      .toMatchObject({ state: 'successor' })
+    expect(verifyCleanupReceiptChain(f.successor, f.keys.publicKey, { environment: 'staging', ...opts }).leases).toHaveLength(33)
+    expect(() => resolveProviderCreationCleanupState({ journal: f.cleanupStored, cleanupReceipt: f.receipt, ...opts }))
+      .toThrow(/rolled back/)
+  })
+
+  it('rejects dropping or changing the archived epoch during successor recovery', () => {
+    const f = setupJournal(true)
+    const opts = { publicKey: f.keys.publicKey, readArchive: f.readArchive, now: NOW + 10_000 }
+    const payload = verifyProviderCreationJournal(f.gatesVerified, f.keys.publicKey).payload
+    const changed = signAttestation({ ...payload, base_cleanup_epoch: 2 }, f.keys.privateKey)
+    expect(() => verifyProviderCreationCleanupSuccessor({ journal: changed, cleanupReceipt: f.successor, ...opts }))
+      .toThrow(/exact journal successor/)
+    const successor = verifySignedAttestation(f.successor, f.keys.publicKey, 'cleanup_receipt').payload
+    const dropped = { ...successor, version: 3 }
+    delete dropped.epoch
+    delete dropped.previous_epoch_receipt_sha256
+    expect(() => verifyProviderCreationCleanupSuccessor({ journal: f.gatesVerified, cleanupReceipt: signAttestation(dropped, f.keys.privateKey), ...opts }))
+      .toThrow(/exact journal successor/)
+  })
+
   it('refreshes an additive cleanup secret contract without losing lease history', () => {
     const { keys, successor } = setupJournal()
     const current = verifySignedAttestation(successor, keys.publicKey, 'cleanup_receipt').payload
