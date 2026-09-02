@@ -1,10 +1,11 @@
-import { FEEDBACK_SELECT_FIELDS, json, requireFeedbackAdmin, type FeedbackAdminEnv, type FeedbackRow } from './_shared'
+import { FEEDBACK_SELECT_FIELDS, internalErrorResponse, json, requireFeedbackAdmin, type FeedbackAdminEnv, type FeedbackRow } from './_shared'
+import { isUuid } from '../../_shared/validation'
 
 const VALID_STATUSES = new Set(['new', 'in_progress', 'resolved'])
 
 interface UpdateFeedbackStatusBody {
-  feedbackId?: string
-  status?: string
+  feedbackId?: unknown
+  status?: unknown
 }
 
 export const onRequestPost = async (context: {
@@ -23,11 +24,14 @@ export const onRequestPost = async (context: {
     return json({ error: 'A valid JSON body is required.' }, { status: 400 })
   }
 
-  const feedbackId = body.feedbackId?.trim()
-  const status = body.status?.trim()
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json({ error: 'A JSON object is required.' }, { status: 400 })
+  }
+  const feedbackId = typeof body.feedbackId === 'string' ? body.feedbackId.trim() : null
+  const status = typeof body.status === 'string' ? body.status.trim() : null
 
-  if (!feedbackId) {
-    return json({ error: 'feedbackId is required.' }, { status: 400 })
+  if (!isUuid(feedbackId)) {
+    return json({ error: 'feedbackId must be a UUID.' }, { status: 400 })
   }
 
   if (!status || !VALID_STATUSES.has(status)) {
@@ -49,8 +53,9 @@ export const onRequestPost = async (context: {
     .single()
 
   if (error) {
-    const statusCode = error.code === 'PGRST116' ? 404 : 500
-    return json({ error: error.message }, { status: statusCode })
+    return error.code === 'PGRST116'
+      ? json({ error: 'Feedback was not found.' }, { status: 404 })
+      : internalErrorResponse('admin.feedback.status', error)
   }
 
   return json({

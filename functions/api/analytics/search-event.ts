@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   analyticsJson,
   boundedInteger,
   classifySearchQuery,
@@ -89,7 +90,7 @@ export const onRequestPost = async (context: {
   try {
     adminClient = createAnalyticsAdminClient(context.env)
   } catch (error) {
-    return analyticsJson({ error: error instanceof Error ? error.message : 'Analytics is unavailable.' }, { status: 500 })
+    return internalErrorResponse('analytics.search-event.initialize', error)
   }
 
   let guestSubjectId: string | null = null
@@ -104,7 +105,7 @@ export const onRequestPost = async (context: {
         delete_token_hash: guest.deleteTokenHash,
         last_seen_at: new Date().toISOString(),
       }, { onConflict: 'id' })
-    if (error) return analyticsJson({ error: error.message }, { status: 500 })
+    if (error) return internalErrorResponse('analytics.search-event.guest', error)
   }
 
   const labId = identity.userId && isUuid(body.labId) ? body.labId : null
@@ -182,7 +183,7 @@ export const onRequestPost = async (context: {
         return analyticsJson({ eventId: body.eventId, duplicate: true })
       }
     }
-    return analyticsJson({ error: insertError.message }, { status: 500 })
+    return internalErrorResponse('analytics.search-event.insert', insertError)
   }
 
   if (

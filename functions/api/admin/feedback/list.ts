@@ -1,4 +1,4 @@
-import { FEEDBACK_SELECT_FIELDS, json, requireFeedbackAdmin, type FeedbackAdminEnv, type FeedbackRow } from './_shared'
+import { FEEDBACK_SELECT_FIELDS, internalErrorResponse, json, requireFeedbackAdmin, type FeedbackAdminEnv, type FeedbackRow } from './_shared'
 
 export const onRequestPost = async (context: {
   request: Request
@@ -17,7 +17,7 @@ export const onRequestPost = async (context: {
     .limit(200)
 
   if (error) {
-    return json({ error: error.message }, { status: 500 })
+    return internalErrorResponse('admin.feedback.list', error)
   }
 
   return json({

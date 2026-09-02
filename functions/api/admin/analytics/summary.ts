@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   json,
   parseBoundedDays,
   requireAnalyticsAdmin,
@@ -18,8 +19,8 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
     auth.context.adminClient.rpc('analytics_admin_summary', { p_days: days }),
     auth.context.adminClient.rpc('analytics_admin_governance'),
   ])
-  if (summaryResult.error) return json({ error: summaryResult.error.message }, { status: 500 })
-  if (governanceResult.error) return json({ error: governanceResult.error.message }, { status: 500 })
+  if (summaryResult.error) return internalErrorResponse('admin.analytics.summary', summaryResult.error)
+  if (governanceResult.error) return internalErrorResponse('admin.analytics.governance', governanceResult.error)
   return json({
     summary: unwrapRpcJson(summaryResult.data),
     governance: unwrapRpcJson(governanceResult.data),

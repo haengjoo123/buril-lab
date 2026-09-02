@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { internalErrorResponse } from '../_shared/json'
+import { readLimitedJson, RequestBodyError, requestBodyErrorResponse } from '../_shared/requestBody'
 import { z } from 'zod'
 import {
   buildVoiceUiAction,
@@ -647,12 +649,27 @@ export const onRequestPost = async (context: {
     return json({ error: 'Authentication is required.' }, { status: 401 })
   }
 
-  let body: VoiceQueryRequest
+  let input: unknown
   try {
-    body = await context.request.json() as VoiceQueryRequest
-  } catch {
+    input = await readLimitedJson(context.request, 256 * 1024)
+  } catch (error) {
+    if (error instanceof RequestBodyError) return requestBodyErrorResponse(error)
     return json({ error: 'A valid JSON body is required.' }, { status: 400 })
   }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return json({ error: 'A JSON object is required.' }, { status: 400 })
+  }
+  const fields = input as Record<string, unknown>
+  const queryContext = fields.context as Record<string, unknown> | undefined
+  if (typeof fields.text !== 'string'
+    || (fields.source !== undefined && fields.source !== 'typed' && fields.source !== 'voice')
+    || (fields.context !== undefined && (!queryContext || typeof queryContext !== 'object' || Array.isArray(queryContext)))
+    || (queryContext?.labId !== undefined && typeof queryContext.labId !== 'string')
+    || (queryContext?.cabinetId !== undefined && typeof queryContext.cabinetId !== 'string')
+    || (queryContext?.language !== undefined && queryContext.language !== 'ko' && queryContext.language !== 'en')) {
+    return json({ error: 'Voice query fields are invalid.' }, { status: 400 })
+  }
+  const body = input as VoiceQueryRequest
 
   const rawText = body.text?.trim()
   if (!rawText) {
@@ -969,12 +986,6 @@ export const onRequestPost = async (context: {
 
     return json(response)
   } catch (error) {
-    console.error('[voice/query] failed:', error)
-    return json(
-      {
-        error: error instanceof Error ? error.message : 'Failed to process voice query.',
-      },
-      { status: 502 },
-    )
+    return internalErrorResponse('voice.query', error, 502)
   }
 }

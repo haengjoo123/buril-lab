@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   analyticsJson,
   createAnalyticsAdminClient,
   isBodyTooLarge,
@@ -40,7 +41,7 @@ export const onRequestPost = async (context: {
   try {
     adminClient = createAnalyticsAdminClient(context.env)
   } catch (error) {
-    return analyticsJson({ error: error instanceof Error ? error.message : 'Analytics is unavailable.' }, { status: 500 })
+    return internalErrorResponse('analytics.user-delete.initialize', error)
   }
 
   const { data, error } = await adminClient.rpc('analytics_delete_user_search', {
@@ -50,7 +51,7 @@ export const onRequestPost = async (context: {
     p_reason: deleteAll ? 'history_cleared' : 'history_item_deleted',
   })
   if (error) {
-    return analyticsJson({ error: error.message }, { status: 500 })
+    return internalErrorResponse('analytics.user-delete', error)
   }
   return analyticsJson(data)
 }

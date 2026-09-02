@@ -1,11 +1,13 @@
 import {
+  internalErrorResponse,
   json,
   requireFeedbackAdmin,
   type SafetyCenterAdminEnv,
 } from './_shared'
+import { isUuid } from '../../_shared/validation'
 
 interface SafetyCenterDocumentUrlBody {
-  centerId?: string
+  centerId?: unknown
 }
 
 export const onRequestPost = async (context: {
@@ -24,9 +26,12 @@ export const onRequestPost = async (context: {
     return json({ error: 'A valid JSON body is required.' }, { status: 400 })
   }
 
-  const centerId = body.centerId?.trim()
-  if (!centerId) {
-    return json({ error: 'centerId is required.' }, { status: 400 })
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json({ error: 'A JSON object is required.' }, { status: 400 })
+  }
+  const centerId = typeof body.centerId === 'string' ? body.centerId.trim() : null
+  if (!isUuid(centerId)) {
+    return json({ error: 'centerId must be a UUID.' }, { status: 400 })
   }
 
   const { adminClient } = auth.context
@@ -37,8 +42,9 @@ export const onRequestPost = async (context: {
     .single()
 
   if (fetchError) {
-    const statusCode = fetchError.code === 'PGRST116' ? 404 : 500
-    return json({ error: fetchError.message }, { status: statusCode })
+    return fetchError.code === 'PGRST116'
+      ? json({ error: 'Safety center was not found.' }, { status: 404 })
+      : internalErrorResponse('admin.safety-centers.document.read', fetchError)
   }
 
   const path = center?.verification_document_path
@@ -53,7 +59,7 @@ export const onRequestPost = async (context: {
     })
 
   if (signedUrlError) {
-    return json({ error: signedUrlError.message }, { status: 500 })
+    return internalErrorResponse('admin.safety-centers.document.sign', signedUrlError)
   }
 
   return json({

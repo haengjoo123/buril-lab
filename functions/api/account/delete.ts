@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { resolveRuntimeConfig, type RuntimeConfigEnv } from '../_runtimeConfig'
+import { internalErrorResponse } from '../_shared/json'
 
 interface AccountDeleteEnv extends RuntimeConfigEnv {
   SUPABASE_URL?: string
@@ -23,6 +24,13 @@ interface QueryResult {
 interface CleanupWarning {
   step: string
   error: string
+}
+
+export function publicCleanupWarnings(warnings: CleanupWarning[]): CleanupWarning[] {
+  return warnings.length === 0 ? [] : [{
+    step: 'Account cleanup',
+    error: 'Some account data could not be fully removed. Please contact support.',
+  }]
 }
 
 interface CabinetImageRow {
@@ -273,10 +281,7 @@ export const onRequestPost = async (context: {
     userClient = createSupabaseUserClient(context.env, authHeader)
     adminClient = createSupabaseAdminClient(context.env)
   } catch (error) {
-    return json(
-      { error: error instanceof Error ? error.message : 'Failed to initialize account deletion.' },
-      { status: 500 },
-    )
+    return internalErrorResponse('account.delete.initialize', error)
   }
 
   const { data, error: userError } = await userClient.auth.getUser()
@@ -288,28 +293,22 @@ export const onRequestPost = async (context: {
   try {
     await removePersonalRows(adminClient, data.user.id, warnings)
   } catch (error) {
-    return json(
-      { error: error instanceof Error ? error.message : 'Failed to remove account data.' },
-      { status: 500 },
-    )
+    return internalErrorResponse('account.delete.data', error)
   }
 
   const { error: hardDeleteError } = await adminClient.auth.admin.deleteUser(data.user.id)
   if (!hardDeleteError) {
-    return json({ success: true, warnings })
+    return json({ success: true, warnings: publicCleanupWarnings(warnings) })
   }
 
   const { error: softDeleteError } = await adminClient.auth.admin.deleteUser(data.user.id, true)
   if (softDeleteError) {
-    return json(
-      { error: `Failed to delete auth account: ${softDeleteError.message}` },
-      { status: 500 },
-    )
+    return internalErrorResponse('account.delete.auth', softDeleteError)
   }
 
   warnings.push({
     step: 'Hard delete auth account',
     error: hardDeleteError.message,
   })
-  return json({ success: true, softDeleted: true, warnings })
+  return json({ success: true, softDeleted: true, warnings: publicCleanupWarnings(warnings) })
 }

@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   json,
   parseBoundedLimit,
   requireAnalyticsAdmin,
@@ -31,6 +32,9 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
   if (!auth.ok) return auth.response
   let body: ReviewsBody = {}
   try { body = await context.request.json() as ReviewsBody } catch { /* Empty body lists candidates. */ }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json({ error: 'A JSON object is required.' }, { status: 400 })
+  }
   const operation = body.operation === 'decide' ? 'decide' : 'list'
 
   if (operation === 'decide') {
@@ -62,12 +66,16 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
       p_canonical_name: canonicalName,
       p_canonical_cas: canonicalCas,
     })
-    if (error) return json({ error: error.message }, { status: error.code === 'P0002' ? 404 : 400 })
+    if (error) {
+      return error.code === 'P0002'
+        ? json({ error: 'Review candidate was not found.' }, { status: 404 })
+        : internalErrorResponse('admin.analytics.reviews.decide', error)
+    }
     return json({ item: data })
   }
 
-  const { error: refreshError } = await auth.context.adminClient.rpc('analytics_admin_refresh_reviews')
-  if (refreshError) return json({ error: refreshError.message }, { status: 500 })
+  // Candidate refresh belongs to the existing scheduled database job. Listing
+  // reviews must never create or update records as a side effect.
   const limit = parseBoundedLimit(body.limit, 50, 100)
   let query = auth.context.adminClient
     .from('analytics_review_candidates')
@@ -82,7 +90,7 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
     query = query.or(`created_at.lt.${cursorTimestamp},and(created_at.eq.${cursorTimestamp},id.lt.${cursorId})`)
   }
   const { data, error } = await query
-  if (error) return json({ error: error.message }, { status: 500 })
+  if (error) return internalErrorResponse('admin.analytics.reviews.list', error)
   const rows = (data || []) as unknown as Array<Record<string, unknown> & {
     id: string
     created_at: string

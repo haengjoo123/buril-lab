@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   json,
   requireFeedbackAdmin,
   SAFETY_CENTER_SELECT_FIELDS,
@@ -23,7 +24,7 @@ export const onRequestPost = async (context: {
     .limit(200)
 
   if (error) {
-    return json({ error: error.message }, { status: 500 })
+    return internalErrorResponse('admin.safety-centers.list', error)
   }
 
   return json({

@@ -6,6 +6,7 @@ import type {
   ChemicalEnrichmentResult,
 } from '../../../src/types'
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
+import { readLimitedJson, RequestBodyError, requestBodyErrorResponse } from '../_shared/requestBody'
 import {
   getChemicalLookupKeys,
   createChemicalCacheAdminClient,
@@ -315,16 +316,18 @@ async function foregroundSupplement(
 }
 
 export const onRequestPost = async (context: FunctionContext): Promise<Response> => {
-  const contentLength = Number(context.request.headers.get('content-length') || 0)
-  if (contentLength > MAX_BODY_BYTES) return jsonResponse({ error: 'Request body is too large.' }, 413)
-
+  let input: unknown
+  try {
+    input = await readLimitedJson(context.request, MAX_BODY_BYTES)
+  } catch (error) {
+    if (error instanceof RequestBodyError) return requestBodyErrorResponse(error)
+    return jsonResponse({ error: 'Invalid request body.' }, 400)
+  }
   let requestBody: ChemicalEnrichmentRequest
   try {
-    const rawText = await context.request.text()
-    if (new TextEncoder().encode(rawText).byteLength > MAX_BODY_BYTES) {
-      return jsonResponse({ error: 'Request body is too large.' }, 413)
-    }
-    requestBody = parseRequest(JSON.parse(rawText) as unknown)
+    // Only our fixed field-validation messages may reach this response.
+    // JSON parser exceptions, which can contain request fragments, are isolated above.
+    requestBody = parseRequest(input)
   } catch (error) {
     return jsonResponse({ error: error instanceof Error ? error.message : 'Invalid request body.' }, 400)
   }

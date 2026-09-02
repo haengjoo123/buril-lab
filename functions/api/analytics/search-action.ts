@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   analyticsJson,
   createAnalyticsAdminClient,
   isBodyTooLarge,
@@ -67,7 +68,7 @@ export const onRequestPost = async (context: {
   try {
     adminClient = createAnalyticsAdminClient(context.env)
   } catch (error) {
-    return analyticsJson({ error: error instanceof Error ? error.message : 'Analytics is unavailable.' }, { status: 500 })
+    return internalErrorResponse('analytics.search-action.initialize', error)
   }
 
   let guestSubjectId: string | null = null
@@ -82,7 +83,7 @@ export const onRequestPost = async (context: {
     .select('id, user_id, guest_subject_id')
     .eq('id', body.eventId)
     .maybeSingle()
-  if (eventError) return analyticsJson({ error: eventError.message }, { status: 500 })
+  if (eventError) return internalErrorResponse('analytics.search-action.read', eventError)
   const ownsEvent = event && (identity.userId
     ? event.user_id === identity.userId
     : event.guest_subject_id === guestSubjectId)
@@ -113,7 +114,7 @@ export const onRequestPost = async (context: {
     metadata: sanitizeActionMetadata(body.metadata),
   })
   if (error && error.code !== '23505') {
-    return analyticsJson({ error: error.message }, { status: 500 })
+    return internalErrorResponse('analytics.search-action.insert', error)
   }
   return analyticsJson({ actionId: body.actionId, duplicate: error?.code === '23505' })
 }
