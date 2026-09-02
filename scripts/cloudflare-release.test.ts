@@ -540,6 +540,13 @@ describe('Prep 0 Cloudflare release controls', () => {
     })).toThrow(/exactly true or false/)
   })
 
+  it.each([0, 4, 100])('reports only the rejected Gate0 enrichment count without changing its budget: %s', (blockedRequests) => {
+    expect(() => verifyGate0EnrichmentIsolation({
+      featureFlag: 'true',
+      blockedRequests,
+    })).toThrow(`Enabled chemical enrichment must stay within the blocked Gate0 attempt budget (blockedRequests=${blockedRequests}; expected=1..3).`)
+  })
+
   it('binds Gate0 to the exact Staging custom or immutable deployment target', () => {
     const immutable = resolveStagingGate0Target(validGate0TargetEnvironment())
     expect(immutable).toEqual({

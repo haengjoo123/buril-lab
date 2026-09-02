@@ -17,6 +17,16 @@ describe('static response security headers', () => {
     expect(headers).not.toMatch(/includeSubDomains|preload/)
   })
 
+  it('allows only the exact canonical first-party API hosts for cross-origin Pages builds', () => {
+    const connect = headers.match(/connect-src ([^;]+);/)?.[1].split(' ')
+    expect(connect).toContain('https://burillab.com')
+    expect(connect).toContain('https://staging.burillab.com')
+    expect(connect).not.toContain('https://*.burillab.com')
+    expect(connect).not.toContain('https://*.pages.dev')
+    expect(connect).not.toContain('https:')
+    expect(connect).not.toContain('*')
+  })
+
   it('keeps the release manifest fresh and allows required camera/audio/3D resources', () => {
     expect(headers).toContain('/release.json\n  Cache-Control: no-store')
     expect(headers).toContain('camera=(self), microphone=(self)')

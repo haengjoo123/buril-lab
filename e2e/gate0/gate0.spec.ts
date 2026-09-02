@@ -44,6 +44,11 @@ test.beforeEach(async ({ context }) => {
 test('login → lab → inventory search → reviewed waste record → direct link', async ({ page }) => {
   let unapprovedAccessHeaderRequests = 0
   let unexpectedTopLevelNavigations = 0
+  const cspViolationCounts: Record<string, number> = {}
+  page.on('console', (message) => {
+    const match = message.text().match(/^GATE0_CSP_VIOLATION ([a-z-]+)$/)
+    if (match) cspViolationCounts[match[1]] = (cspViolationCounts[match[1]] || 0) + 1
+  })
   page.on('request', (request) => {
     const accessHeaderPresent = Object.keys(request.headers())
       .some((name) => /^cf-access-client-(?:id|secret)$/i.test(name))
@@ -67,14 +72,21 @@ test('login → lab → inventory search → reviewed waste record → direct li
   })
 
   let blockedEnrichmentRequests = 0
+  let enrichmentPhase: 'inventory' | 'batch' | 'record' | 'directLink' = 'inventory'
+  const blockedEnrichmentByPhase = { inventory: 0, batch: 0, record: 0, directLink: 0 }
   await page.route('**/api/chemicals/enrich', async (route) => {
     blockedEnrichmentRequests += 1
+    blockedEnrichmentByPhase[enrichmentPhase] += 1
     // Gate0 validates the core workflow without invoking the deployed
     // enrichment endpoint or any of its paid upstream providers.
     await route.abort('blockedbyclient')
   })
 
   await page.addInitScript(() => {
+    window.addEventListener('securitypolicyviolation', (event) => {
+      // Report only a fixed directive name; never expose the blocked URL.
+      console.info('GATE0_CSP_VIOLATION', event.effectiveDirective)
+    })
     window.localStorage.setItem('i18nextLng', 'ko')
     // Support the versioned Gate0 contract and the pre-Gate0 local snapshot.
     window.localStorage.setItem('buril:safety-acknowledgement', JSON.stringify({
@@ -130,6 +142,7 @@ test('login → lab → inventory search → reviewed waste record → direct li
   await inventorySearch.fill(INVENTORY_NAME)
   await expect(page.getByRole('heading', { name: INVENTORY_NAME }).first()).toBeVisible()
 
+  enrichmentPhase = 'batch'
   await page.getByRole('button', { name: '내용물 실제 폐기' }).click()
   const batchDialog = page.getByRole('dialog', { name: /폐액 배치/ })
   await expect(batchDialog).toBeVisible()
@@ -158,6 +171,7 @@ test('login → lab → inventory search → reviewed waste record → direct li
 
   const receipt = page.getByRole('dialog', { name: '처리 기록이 저장되었습니다.' })
   await expect(receipt).toBeVisible()
+  enrichmentPhase = 'record'
   await receipt.getByRole('button', { name: '기록 보기' }).click()
   await expect(page).toHaveURL(/\/app\/logs\?record=[0-9a-f-]{36}/)
   expectExactStagingTargetOrigin(page.url(), 'The record navigation must remain on the exact Staging target origin.')
@@ -169,11 +183,20 @@ test('login → lab → inventory search → reviewed waste record → direct li
   await expect(recordDetail).toContainText(`ID: ${recordId?.slice(0, 12)}`)
 
   const directRecordUrl = page.url()
+  enrichmentPhase = 'directLink'
   await page.goto(directRecordUrl)
   await expect(page).toHaveURL(/\/app\/logs\?record=[0-9a-f-]{36}/)
   expectExactStagingTargetOrigin(page.url(), 'The direct-link navigation must remain on the exact Staging target origin.')
   await expect(page.getByRole('main').locator('aside:visible').filter({ hasText: INVENTORY_NAME }))
     .toContainText(`ID: ${recordId?.slice(0, 12)}`)
+  // Only counts and fixed phase names are logged. Request bodies, fixture
+  // identifiers, URLs, headers and credentials must never enter this evidence.
+  console.info('Gate0 enrichment isolation counts', JSON.stringify({
+    blockedRequests: blockedEnrichmentRequests,
+    byPhase: blockedEnrichmentByPhase,
+  }))
+  console.info('Gate0 CSP violation counts', JSON.stringify(cspViolationCounts))
+  expect(cspViolationCounts, 'The authenticated Gate0 flow must not violate the deployed CSP.').toEqual({})
   verifyGate0EnrichmentIsolation({
     featureFlag: process.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
     blockedRequests: blockedEnrichmentRequests,
