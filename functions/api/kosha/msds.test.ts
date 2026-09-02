@@ -8,6 +8,7 @@ function runtimeConfig(koshaContentMode: 'full' | 'link_only') {
       kosha_content_mode: koshaContentMode,
       account_deletion_enabled: false,
       maintenance_worker_enabled: false,
+      storage_backup_enabled: false,
     }),
   }
 }
@@ -19,6 +20,14 @@ describe('KOSHA MSDS content mode', () => {
     ['missing KV', {}],
     ['explicit link-only', { BURILLAB_RUNTIME_CONFIG: runtimeConfig('link_only') }],
     ['partial KV', { BURILLAB_RUNTIME_CONFIG: { get: vi.fn().mockResolvedValue({ kosha_content_mode: 'full' }) } }],
+    ['missing backup field', { BURILLAB_RUNTIME_CONFIG: { get: vi.fn().mockResolvedValue({
+      voice_disposal_mode: 'redirect', kosha_content_mode: 'full',
+      account_deletion_enabled: false, maintenance_worker_enabled: false,
+    }) } }],
+    ['malformed backup field', { BURILLAB_RUNTIME_CONFIG: { get: vi.fn().mockResolvedValue({
+      voice_disposal_mode: 'redirect', kosha_content_mode: 'full',
+      account_deletion_enabled: false, maintenance_worker_enabled: false, storage_backup_enabled: 'true',
+    }) } }],
   ])('returns an official link with zero upstream calls for %s', async (_label, env) => {
     const upstreamFetch = vi.fn()
     vi.stubGlobal('fetch', upstreamFetch)

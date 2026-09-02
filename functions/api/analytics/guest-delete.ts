@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   analyticsJson,
   createAnalyticsAdminClient,
   isBodyTooLarge,
@@ -29,7 +30,7 @@ export const onRequestPost = async (context: {
   try {
     adminClient = createAnalyticsAdminClient(context.env)
   } catch (error) {
-    return analyticsJson({ error: error instanceof Error ? error.message : 'Analytics is unavailable.' }, { status: 500 })
+    return internalErrorResponse('analytics.guest-delete.initialize', error)
   }
   const guest = await requireGuestSubject(adminClient, body.guestSubjectId, body.guestDeleteToken)
   if ('error' in guest) return guest.error
@@ -39,7 +40,9 @@ export const onRequestPost = async (context: {
     p_delete_token_hash: guest.deleteTokenHash,
   })
   if (error) {
-    return analyticsJson({ error: error.message }, { status: error.code === 'P0002' ? 404 : 500 })
+    return error.code === 'P0002'
+      ? analyticsJson({ error: 'Search history was not found.' }, { status: 404 })
+      : internalErrorResponse('analytics.guest-delete', error)
   }
   return analyticsJson(data)
 }

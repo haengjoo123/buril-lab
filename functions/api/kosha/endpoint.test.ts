@@ -8,6 +8,7 @@ function runtimeConfig(koshaContentMode: 'full' | 'link_only') {
       kosha_content_mode: koshaContentMode,
       account_deletion_enabled: false,
       maintenance_worker_enabled: false,
+      storage_backup_enabled: false,
     }),
   }
 }

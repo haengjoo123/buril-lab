@@ -1,4 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { internalErrorResponse, json } from '../../_shared/json'
+
+export { internalErrorResponse, json }
 
 export interface FeedbackAdminEnv {
   SUPABASE_URL?: string
@@ -47,16 +50,6 @@ export const FEEDBACK_SELECT_FIELDS = [
   'resolved_at',
   'resolved_by',
 ].join(', ')
-
-export function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      ...(init?.headers || {}),
-    },
-  })
-}
 
 function resolveSupabaseUrl(env: FeedbackAdminEnv): string | null {
   return env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim() || null
@@ -132,10 +125,7 @@ export async function requireFeedbackAdmin(
   } catch (error) {
     return {
       ok: false,
-      response: json(
-        { error: error instanceof Error ? error.message : 'Failed to initialize Supabase auth.' },
-        { status: 500 },
-      ),
+      response: internalErrorResponse('admin.auth.initialize', error),
     }
   }
 
@@ -151,7 +141,7 @@ export async function requireFeedbackAdmin(
   if (allowlist.size === 0) {
     return {
       ok: false,
-      response: json({ error: 'Operator admin allowlist is not configured.' }, { status: 500 }),
+      response: internalErrorResponse('admin.auth.allowlist', null),
     }
   }
 
@@ -169,10 +159,7 @@ export async function requireFeedbackAdmin(
   } catch (error) {
     return {
       ok: false,
-      response: json(
-        { error: error instanceof Error ? error.message : 'Failed to initialize feedback admin access.' },
-        { status: 500 },
-      ),
+      response: internalErrorResponse('admin.client.initialize', error),
     }
   }
 

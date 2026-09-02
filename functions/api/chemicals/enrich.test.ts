@@ -81,6 +81,23 @@ describe('POST /api/chemicals/enrich', () => {
     expect(mocks.enrichChemicalItem).not.toHaveBeenCalled()
   })
 
+  it('does not expose malformed JSON fragments', async () => {
+    const run = context({})
+    run.value.request = new Request('https://example.test/api/chemicals/enrich', { method: 'POST', body: '{PRIVATE_PAYLOAD' })
+    const response = await onRequestPost(run.value)
+    expect(response.status).toBe(400)
+    expect(await response.text()).not.toContain('PRIVATE_PAYLOAD')
+    expect(mocks.enrichChemicalItem).not.toHaveBeenCalled()
+  })
+
+  it('bounds an undeclared oversized body before upstream calls', async () => {
+    const run = context({})
+    run.value.request = new Request('https://example.test/api/chemicals/enrich', { method: 'POST', body: 'x'.repeat(64 * 1024 + 1) })
+    const response = await onRequestPost(run.value)
+    expect(response.status).toBe(413)
+    expect(mocks.enrichChemicalItem).not.toHaveBeenCalled()
+  })
+
   it('rejects a lab scope for a guest before enrichment', async () => {
     const request = context({
       items: [{ requestId: 'one', name: 'Sodium acetate' }],

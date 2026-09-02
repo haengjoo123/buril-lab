@@ -39,6 +39,8 @@ export function createOpenAIClient(env: VoiceEnv): OpenAI {
 
   return new OpenAI({
     apiKey: env.OPENAI_API_KEY,
+    timeout: 30_000,
+    maxRetries: 0,
   })
 }
 
@@ -89,39 +91,31 @@ export function getOptionalString(value: FormDataEntryValue | unknown): string |
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-export function parseJsonBody<T>(request: Request): Promise<T> {
-  return request.json() as Promise<T>
-}
-
 export function openAIErrorResponse(error: unknown, fallbackMessage: string) {
   let status = 502
-  let message = fallbackMessage
 
   if (typeof error === 'object' && error !== null) {
-    const candidate = error as {
-      status?: number
-      message?: string
-      error?: { message?: string }
-    }
+    const candidate = error as { status?: number }
 
-    if (typeof candidate.status === 'number' && candidate.status >= 400 && candidate.status < 600) {
+    // Provider authentication is server configuration, not the caller's login.
+    // Never forward provider messages: they may contain keys or account details.
+    if (
+      typeof candidate.status === 'number'
+      && Number.isInteger(candidate.status)
+      && candidate.status >= 400
+      && candidate.status < 600
+      && candidate.status !== 401
+      && candidate.status !== 403
+    ) {
       status = candidate.status
     }
-
-    if (typeof candidate.message === 'string' && candidate.message.trim()) {
-      message = candidate.message
-    } else if (typeof candidate.error?.message === 'string' && candidate.error.message.trim()) {
-      message = candidate.error.message
-    }
-  } else if (error instanceof Error && error.message.trim()) {
-    message = error.message
   }
 
   return json(
     {
-      error: message,
+      error: fallbackMessage,
       code: 'openai_error',
     },
-    { status },
+    { status, headers: { 'Cache-Control': 'no-store' } },
   )
 }

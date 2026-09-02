@@ -1,4 +1,4 @@
-import { json, requireFeedbackAdmin, type FeedbackAdminEnv } from '../feedback/_shared'
+import { json, internalErrorResponse, requireFeedbackAdmin, type FeedbackAdminEnv } from '../feedback/_shared'
 
 export type SafetyCenterAdminEnv = FeedbackAdminEnv
 
@@ -38,4 +38,4 @@ export const SAFETY_CENTER_SELECT_FIELDS = [
   'updated_at',
 ].join(', ')
 
-export { json, requireFeedbackAdmin }
+export { json, internalErrorResponse, requireFeedbackAdmin }

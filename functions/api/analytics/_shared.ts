@@ -1,5 +1,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { normalizeCasNumber } from '../../../src/utils/casNumber'
+import { internalErrorResponse, json } from '../_shared/json'
+import { isUuid } from '../_shared/validation'
+
+export { internalErrorResponse, isUuid }
 
 export interface SearchAnalyticsEnv {
   SUPABASE_URL?: string
@@ -16,23 +20,14 @@ export interface SearchAnalyticsIdentity {
 
 export type SearchAnalyticsClient = SupabaseClient
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const CAS_CANDIDATE_PATTERN = /\b\d{2,7}-\d{2}-\d\b/g
 const FORMULA_PATTERN = /^(?=.{1,100}$)(?=.*[A-Z])(?:[A-Z][a-z]?\d*|[()[\]]|\d+|[.+\-·])+$/
 const MAX_BODY_BYTES = 32 * 1024
 
 export function analyticsJson(data: unknown, init?: ResponseInit): Response {
-  return Response.json(data, {
-    ...init,
-    headers: {
-      'Cache-Control': 'no-store',
-      ...(init?.headers || {}),
-    },
-  })
-}
-
-export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value)
+  const headers = new Headers(init?.headers)
+  headers.set('Cache-Control', 'no-store')
+  return json(data, { ...init, headers })
 }
 
 export function isBodyTooLarge(request: Request): boolean {
@@ -143,7 +138,7 @@ export async function resolveAnalyticsIdentity(
   const url = resolveSupabaseUrl(env)
   const anonKey = resolveSupabaseAnonKey(env)
   if (!url || !anonKey) {
-    return { error: analyticsJson({ error: 'Analytics authentication is not configured.' }, { status: 500 }) }
+    return { error: internalErrorResponse('analytics.auth.initialize', null) }
   }
 
   const userClient = createClient(url, anonKey, {
@@ -196,7 +191,7 @@ export async function requireGuestSubject(
     .eq('id', guestSubjectId)
     .maybeSingle()
   if (error) {
-    return { error: analyticsJson({ error: error.message }, { status: 500 }) }
+    return { error: internalErrorResponse('analytics.guest.lookup', error) }
   }
   if (data && data.delete_token_hash !== deleteTokenHash) {
     return { error: analyticsJson({ error: 'Guest deletion token does not match.' }, { status: 403 }) }

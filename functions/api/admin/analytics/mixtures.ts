@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   json,
   parseBoundedDays,
   parseBoundedLimit,
@@ -18,6 +19,6 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
     p_days: parseBoundedDays(body.days, 90),
     p_limit: parseBoundedLimit(body.limit, 100),
   })
-  if (error) return json({ error: error.message }, { status: 500 })
+  if (error) return internalErrorResponse('admin.analytics.mixtures', error)
   return json(unwrapRpcJson(data))
 }

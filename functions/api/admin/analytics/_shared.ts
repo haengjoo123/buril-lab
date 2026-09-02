@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   json,
   requireFeedbackAdmin,
   type FeedbackAdminContext,
@@ -8,7 +9,7 @@ import {
 export interface AnalyticsAdminEnv extends FeedbackAdminEnv {
   OPS_ANALYTICS_EXPORT_EMAILS?: string
 }
-export { json }
+export { json, internalErrorResponse }
 
 export function parseBoundedDays(value: unknown, fallback: number): number {
   const numeric = Number(value)
@@ -37,7 +38,7 @@ export async function requireAnalyticsExportAdmin(
   if (allowlist.size === 0) {
     return {
       ok: false,
-      response: json({ error: 'Analytics export allowlist is not configured.' }, { status: 500 }),
+      response: internalErrorResponse('admin.analytics.export.allowlist', null),
     }
   }
   if (!allowlist.has(auth.context.identity.email)) {

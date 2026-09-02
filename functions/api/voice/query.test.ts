@@ -143,6 +143,20 @@ describe('voice query lab scope', () => {
     expect(createClientMock).not.toHaveBeenCalled()
   })
 
+  it.each([
+    null, [], 1, { text: 1 }, { text: 'test', context: null },
+    { text: 'test', context: { labId: 1 } },
+    { text: 'test', context: { labId: LAB_ID, language: {} } },
+    { text: 'test', context: { labId: LAB_ID, cabinetId: [] } },
+  ])('rejects malformed query fields before AI or database access: %#', async (body) => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const response = await onRequestPost({ request: createRequest(body), env: openAIEnv })
+    expect(response.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(createClientMock).not.toHaveBeenCalled()
+  })
+
   it('checks membership and filters every candidate source to the current lab', async () => {
     const builders = new Map<string, QueryBuilder>()
     const from = vi.fn((table: string) => {

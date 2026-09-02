@@ -44,6 +44,7 @@ function parseRuntimeConfig(value: unknown): RuntimeConfig | null {
     'kosha_content_mode',
     'account_deletion_enabled',
     'maintenance_worker_enabled',
+    'storage_backup_enabled',
   ] as const
   if (!requiredFields.every((field) => Object.prototype.hasOwnProperty.call(value, field))) {
     return null
@@ -53,11 +54,15 @@ function parseRuntimeConfig(value: unknown): RuntimeConfig | null {
   const koshaContentMode = value.kosha_content_mode
   const accountDeletionEnabled = value.account_deletion_enabled
   const maintenanceEnabled = value.maintenance_worker_enabled
+  const storageBackupEnabled = value.storage_backup_enabled
 
   if (voiceDisposalMode !== 'redirect' && voiceDisposalMode !== 'guided') return null
   if (koshaContentMode !== 'full' && koshaContentMode !== 'link_only') return null
   if (typeof accountDeletionEnabled !== 'boolean') return null
   if (typeof maintenanceEnabled !== 'boolean') return null
+  // Pages consumes only the web-facing controls below. The dedicated backup
+  // Worker owns the backup switch, but both must reject an incomplete envelope.
+  if (typeof storageBackupEnabled !== 'boolean') return null
 
   return {
     // Gate 0 contains neither guided disposal nor the deletion/maintenance
@@ -78,8 +83,8 @@ export async function resolveRuntimeConfig(env: RuntimeConfigEnv): Promise<Runti
     const stored = await namespace.get(RUNTIME_CONFIG_KEY, 'json')
     if (stored === null || stored === undefined) return { ...SAFE_RUNTIME_CONFIG }
     return parseRuntimeConfig(stored) ?? { ...SAFE_RUNTIME_CONFIG }
-  } catch (error) {
-    console.error('[runtime-config] KV read failed:', error)
+  } catch {
+    console.error(JSON.stringify({ event: 'runtime_config_unavailable' }))
     return { ...SAFE_RUNTIME_CONFIG }
   }
 }

@@ -1,4 +1,5 @@
 import {
+  internalErrorResponse,
   json,
   requireAnalyticsExportAdmin,
   type AnalyticsAdminEnv,
@@ -134,7 +135,7 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
     .limit(MAX_EXPORT_ROWS + 1)
   if (outcome) query = query.eq('outcome', outcome)
   const { data, error } = await query
-  if (error) return json({ error: error.message }, { status: 500 })
+  if (error) return internalErrorResponse('admin.analytics.export.read', error)
   if ((data || []).length > MAX_EXPORT_ROWS) {
     return json({ error: 'Export exceeds 50,000 events. Narrow the filters.' }, { status: 413 })
   }
@@ -203,7 +204,7 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
     row_count: rows.length - 1,
     file_sha256: hash,
   })
-  if (auditError) return json({ error: `Export audit failed: ${auditError.message}` }, { status: 500 })
+  if (auditError) return internalErrorResponse('admin.analytics.export.audit', auditError)
 
   return new Response(csv, {
     status: 200,

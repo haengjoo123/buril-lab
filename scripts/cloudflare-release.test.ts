@@ -2882,6 +2882,17 @@ describe('Prep 0 Cloudflare release controls', () => {
     }
     expect(verifyReleaseConfiguration(configuration)).toMatchObject({ projectCount: 2 })
 
+    for (const requiredCheck of ['npm run test:pages-boundary', 'node scripts/verify-ops3-release-scope.mjs']) {
+      expect(qualityWorkflow).toContain(requiredCheck)
+      expect(() => verifyReleaseConfiguration({
+        ...configuration,
+        workflows: {
+          ...configuration.workflows,
+          quality: qualityWorkflow.replace(requiredCheck, 'echo skipped'),
+        },
+      })).toThrow(/quality deployment workflow differs from the fully reviewed command contract/)
+    }
+
     expect(() => verifyReleaseConfiguration({
       ...configuration,
       workflows: {

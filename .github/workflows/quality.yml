@@ -67,6 +67,12 @@ jobs:
       - name: Scan the client artifact for server secrets
         run: npm run security:client-secrets
 
+      - name: Install Chromium for the isolated Pages boundary test
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify real Pages HTTP boundaries and browser CSP without provider credentials
+        run: npm run test:pages-boundary
+
       - name: Reject high or critical runtime advisories
         run: npm audit --omit=dev --audit-level=high
 
@@ -274,9 +280,9 @@ jobs:
         if: steps.browser-contract.outputs.enabled == 'true'
         run: npx playwright install --with-deps chromium
 
-      - name: Verify the Gate 0 release scope
+      - name: Verify the reviewed Ops3 API-boundary release scope
         if: steps.browser-contract.outputs.enabled == 'true'
-        run: node scripts/verify-gate0-release-scope.mjs
+        run: node scripts/verify-ops3-release-scope.mjs
 
       - name: Run only the reviewed Gate 0 browser flow
         if: steps.browser-contract.outputs.enabled == 'true'
