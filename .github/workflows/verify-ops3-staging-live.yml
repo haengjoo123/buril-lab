@@ -1,0 +1,140 @@
+name: Verify Ops3 Staging live APIs and photo
+
+run-name: Verify Ops3 Staging ${{ inputs.target_commit_sha }} (${{ inputs.target_deployment_id }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_commit_sha:
+        description: Full lowercase SHA already deployed successfully to Staging
+        required: true
+        type: string
+      target_deployment_id:
+        description: Exact successful buril-lab-staging Pages deployment UUID
+        required: true
+        type: string
+      staging_run_id:
+        description: Exact successful Deploy staging run with signed credential cleanup
+        required: true
+        type: string
+      confirmation:
+        description: Type "VERIFY OPS3 STAGING <deployment UUID> <full SHA> <Staging run ID>"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cloudflare-staging
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify existing Staging without deployment credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: https://staging.burillab.com
+    env:
+      BASH_ENV: /dev/null
+      ENV: /dev/null
+      NODE_OPTIONS: ""
+      OPS3_TARGET_COMMIT_SHA: ${{ inputs.target_commit_sha }}
+      OPS3_TARGET_DEPLOYMENT_ID: ${{ inputs.target_deployment_id }}
+      OPS3_STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+      OPS3_CONFIRMATION: ${{ inputs.confirmation }}
+
+    steps:
+      - name: Validate protected-main verification before checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REPOSITORY" = haengjoo123/buril-lab
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$OPS3_TARGET_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$OPS3_TARGET_DEPLOYMENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+          [[ "$OPS3_STAGING_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          test "$OPS3_CONFIRMATION" = "VERIFY OPS3 STAGING $OPS3_TARGET_DEPLOYMENT_ID $OPS3_TARGET_COMMIT_SHA $OPS3_STAGING_RUN_ID"
+
+      - name: Check out protected-main verification code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require current main and a trusted ancestor runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$OPS3_TARGET_COMMIT_SHA" "$GITHUB_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked verification dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify the current main Quality result
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPLOY_COMMIT_SHA: ${{ github.sha }}
+        run: node scripts/verify-github-quality-run.mjs
+
+      - name: Verify the exact successful Staging run and signed cleanup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPLOY_COMMIT_SHA: ${{ inputs.target_commit_sha }}
+          DEPLOY_STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          DEPLOY_STORAGE_BACKUP: "false"
+          STAGING_EPHEMERAL_CLEANUP_RECEIPT: ${{ vars.EPHEMERAL_CLEANUP_RECEIPT }}
+        run: node scripts/verify-github-staging-run.mjs
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Recheck protected main before synthetic writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+      - name: Run bounded live APIs and synthetic photo verification
+        id: live
+        timeout-minutes: 12
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: node scripts/verify-ops3-staging-live.mjs run
+
+      - name: Always recover exact pending synthetic cleanup
+        if: always() && steps.live.outcome != 'skipped' && steps.live.outcome != ''
+        timeout-minutes: 5
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: node scripts/verify-ops3-staging-live.mjs cleanup

@@ -2803,6 +2803,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       qualityWorkflowRaw,
       credentialProbeWorkflowRaw,
       rollbackVerificationWorkflowRaw,
+      ops3LiveVerificationWorkflowRaw,
       storageBackupAcceptanceWorkflowRaw,
       iosWorkflowRaw,
       stagingPlaywrightConfig,
@@ -2820,6 +2821,7 @@ describe('Prep 0 Cloudflare release controls', () => {
       readFile('.github/workflows/quality.yml', 'utf8'),
       readFile('.github/workflows/verify-staging-ephemeral-credentials.yml', 'utf8'),
       readFile('.github/workflows/verify-staging-rollback.yml', 'utf8'),
+      readFile('.github/workflows/verify-ops3-staging-live.yml', 'utf8'),
       readFile('.github/workflows/verify-staging-storage-backup.yml', 'utf8'),
       readFile('.github/workflows/ios-testflight.yml', 'utf8'),
       readFile('playwright.staging.config.ts', 'utf8'),
@@ -2836,6 +2838,7 @@ describe('Prep 0 Cloudflare release controls', () => {
     const qualityWorkflow = normalizeLineEndings(qualityWorkflowRaw)
     const credentialProbeWorkflow = normalizeLineEndings(credentialProbeWorkflowRaw)
     const rollbackVerificationWorkflow = normalizeLineEndings(rollbackVerificationWorkflowRaw)
+    const ops3LiveVerificationWorkflow = normalizeLineEndings(ops3LiveVerificationWorkflowRaw)
     const storageBackupAcceptanceWorkflow = normalizeLineEndings(storageBackupAcceptanceWorkflowRaw)
     const iosWorkflow = normalizeLineEndings(iosWorkflowRaw)
     expect(verifyCloudflareApiHelperSource(cloudflareApiHelper)).toBe(true)
@@ -2877,6 +2880,7 @@ describe('Prep 0 Cloudflare release controls', () => {
         quality: qualityWorkflow,
         'verify-staging-ephemeral-credentials.yml': credentialProbeWorkflow,
         'verify-staging-rollback.yml': rollbackVerificationWorkflow,
+        'verify-ops3-staging-live.yml': ops3LiveVerificationWorkflow,
         'verify-staging-storage-backup.yml': storageBackupAcceptanceWorkflow,
         'ios-testflight.yml': iosWorkflow,
       },
@@ -2888,6 +2892,17 @@ describe('Prep 0 Cloudflare release controls', () => {
       },
     }
     expect(verifyReleaseConfiguration(configuration)).toMatchObject({ projectCount: 2 })
+
+    for (const mutation of [
+      ops3LiveVerificationWorkflow.replace('verify-github-staging-run.mjs', 'skipped.mjs'),
+      ops3LiveVerificationWorkflow.replace('verify-github-quality-run.mjs', 'skipped.mjs'),
+      ops3LiveVerificationWorkflow.replace('verify-ops3-staging-live.mjs cleanup', 'verify-ops3-staging-live.mjs run'),
+      ops3LiveVerificationWorkflow.replace('secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY', 'secrets.SUPABASE_SERVICE_ROLE_KEY'),
+    ]) {
+      expect(() => verifyReleaseConfiguration({ ...configuration, workflows: {
+        ...configuration.workflows, 'verify-ops3-staging-live.yml': mutation,
+      } })).toThrow(/fully reviewed command contract/)
+    }
 
     for (const requiredCheck of ['npm run test:pages-boundary', 'node scripts/verify-ops3-release-scope.mjs']) {
       expect(qualityWorkflow).toContain(requiredCheck)

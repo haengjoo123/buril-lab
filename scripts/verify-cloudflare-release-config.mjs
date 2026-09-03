@@ -69,6 +69,7 @@ const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   production: '2cd59ed92644fe7edea197fdf91ecc9d2ff761ac651df6235475541453d4ec82',
   quality: '0d457dda7b5ee48057de3591de3a1fe169116569a96cc19bdebdf07f9406dead',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
+  'verify-ops3-staging-live.yml': '23971e8c0e147d55c2cdec555560c8e7a1146f60a5d54be20f41011714128d17',
   'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,
   'verify-staging-rollback.yml': STAGING_ROLLBACK_VERIFICATION_WORKFLOW_SHA256,
   'verify-staging-storage-backup.yml': STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256,
@@ -111,6 +112,10 @@ const APPROVED_WORKFLOW_ACTION_REFERENCES = Object.freeze({
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
     'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
     'supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1',
+  ],
+  'verify-ops3-staging-live.yml': [
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
   ],
   'verify-staging-ephemeral-credentials.yml': [
     'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
