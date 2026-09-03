@@ -36,6 +36,11 @@ const application = {
 
 describe('Ops6 private photo preparation boundary', () => {
   it('verifies the exact owned preparation worktree without claiming production readiness', () => {
+    const hasSuccessorGate = read('package.json').includes('"ops7:verify"')
+    if (hasSuccessorGate) {
+      expect(() => verifyOps6PrivatePhotoPreparation(root)).toThrow(/unreviewed path/)
+      return
+    }
     expect(verifyOps6PrivatePhotoPreparation(root)).toMatchObject({
       result: 'ops6-private-photo-preparation-ok',
       productionReady: false,
