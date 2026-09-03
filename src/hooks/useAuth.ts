@@ -21,7 +21,7 @@ interface UseAuthReturn extends AuthState {
     requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
     updatePassword: (password: string) => Promise<{ error: string | null }>;
     signOut: () => Promise<void>;
-    deleteAccount: () => Promise<{ error: string | null }>;
+    deleteAccount: () => Promise<{ error: string | null; jobId?: string }>;
 }
 
 function getPasswordResetRedirectUrl(): string {
@@ -94,15 +94,21 @@ export function useAuth(): UseAuthReturn {
 
     const deleteAccount = useCallback(async () => {
         try {
-            await postJson<{ success: boolean }>('/api/account/delete', {});
+            const queued = await postJson<{ success: boolean; jobId: string; status: string }>(
+                '/api/account/delete',
+                { requestId: crypto.randomUUID() },
+            );
+            if (!queued || typeof queued !== 'object'
+                || queued.success !== true
+                || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(queued.jobId)
+                || !['pending', 'running', 'retry_wait'].includes(queued.status)) {
+                return { error: 'The deletion request could not be verified.' };
+            }
+            return { error: null, jobId: queued.jobId };
         } catch (error) {
             return { error: error instanceof Error ? error.message : 'Failed to delete account.' };
         }
-
-        if (currentUserId) useInventoryHazardStore.getState().clearUser(currentUserId);
-        await supabase.auth.signOut();
-        return { error: null };
-    }, [currentUserId]);
+    }, []);
 
     return {
         ...state,

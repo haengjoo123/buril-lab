@@ -4,4 +4,4 @@ export const onRequestPost = async (context: {
   request: Request
   env: DeletionIntakeEnv
   data?: Record<string, unknown>
-}): Promise<Response> => enqueueDeletionRequest(context, 'account')
+}): Promise<Response> => enqueueDeletionRequest(context, 'lab')

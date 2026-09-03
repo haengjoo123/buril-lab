@@ -33,6 +33,7 @@ export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260904021000_ops6_private_cabinet_photos_switch.sql': 'd153d1e380ea87613cf4f228b06823f4c46387e08346e5ce68f721d3cdd5a63d',
   '20260904030000_ops7_contract_legacy_join_audit.sql': '073927a0689e3cfd11e93ebcb47a3bd2ba828625553adc6389806a94e554951e',
   '20260904040000_ops8_lab_password_policy.sql': '3f7210de31759efc6179ee712616a9dbb89b0f34e366f3c86eb951d0baca0f18',
+  '20260904050000_ops9_deletion_jobs.sql': 'cee5a601083e84b127181751fd9cb978dc71dd52c0058d39a6de7728aa9013f9',
 })
 export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
   'baseline_permissions.sql': EXPECTED_PERMISSION_TEST_SHA256,
@@ -40,6 +41,7 @@ export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
   'ops6_private_photos_permissions.sql': '56be7e3115c21332eb11e25674ef5f6e7498522919c4d091b7e0b12e9d175c48',
   'ops7_contract_permissions.sql': '73cf2ec168ed0f6ec60ead91a901be4f9e39d24de3dba12cf2ff37bd6b75d942',
   'ops8_lab_password_policy.sql': '19ebad4a89d75a9e905cc827e3014db4d0f675130f474550ad2748957ce87733',
+  'ops9_deletion_jobs.sql': 'ed2f7fea60791bc25bd2637de5ab318741d41c5b8e6bbf6e0887b97b238f9c3b',
 })
 export const EXPECTED_CI_MARKER = '{"schema_version":1,"enabled":true,"reset_count":2,"permission_tests":true}'
 

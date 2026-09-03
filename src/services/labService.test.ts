@@ -115,3 +115,31 @@ describe('Ops8 lab password writes', () => {
     })
   })
 })
+
+describe('Ops9 lab deletion intake', () => {
+  const jobId = '22222222-2222-4222-8222-222222222222'
+
+  it('queues through the server API without deleting a lab from the browser', async () => {
+    mocked.postJson.mockResolvedValueOnce({ success: true, jobId, status: 'pending' })
+
+    await expect(labService.requestLabDeletion(labId)).resolves.toEqual({ jobId, status: 'pending' })
+    expect(mocked.postJson).toHaveBeenCalledTimes(1)
+    expect(mocked.postJson.mock.calls[0][0]).toBe('/api/labs/delete')
+    expect(mocked.postJson.mock.calls[0][1]).toEqual({
+      labId,
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+    })
+    expect(mocked.from).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    null,
+    { success: false, jobId, status: 'pending' },
+    { success: true, jobId: 'bad', status: 'pending' },
+    { success: true, jobId, status: 'completed' },
+  ])('fails closed for an unverifiable queue response: %j', async (payload) => {
+    mocked.postJson.mockResolvedValueOnce(payload)
+    await expect(labService.requestLabDeletion(labId)).rejects.toThrow('could not be verified')
+    expect(mocked.from).not.toHaveBeenCalled()
+  })
+})

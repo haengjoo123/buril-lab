@@ -13,6 +13,7 @@ import {
     type LabPasswordPolicyIssue,
     validateLabJoinPassword,
 } from '../utils/labPasswordPolicy';
+import { DELETION_UI_ENABLED } from '../config/deletion';
 
 type LabWithPassword = Lab & { has_password?: boolean };
 import { AppSelect } from './AppSelect';
@@ -261,11 +262,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
         setIsLoading(true);
         setError(null);
         try {
-            await labService.deleteLab(currentLabId);
-            const updatedLabs = await labService.getMyLabs();
-            setMyLabs(updatedLabs);
-            setCurrentLabId(null);
-            alert(t('lab_mgmt_delete_success'));
+            await labService.requestLabDeletion(currentLabId);
+            alert(t('lab_mgmt_delete_queued', '연구실 삭제 요청이 안전하게 접수되었습니다.'));
             onClose();
         } catch (err: any) {
             setError(err.message || t('admin_remove_error'));
@@ -852,7 +850,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 </button>
                             </div>
 
-                            <div className="mt-8 pt-6 border-t border-red-100 dark:border-red-900/30">
+                            {DELETION_UI_ENABLED && <div className="mt-8 pt-6 border-t border-red-100 dark:border-red-900/30">
                                 <h4 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">{t('lab_mgmt_danger_zone')}</h4>
                                 <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30 flex flex-col gap-3">
                                     <div className="text-sm text-red-700 dark:text-red-300">
@@ -867,7 +865,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                         {t('lab_mgmt_delete_lab_btn')}
                                     </button>
                                 </div>
-                            </div>
+                            </div>}
                         </form>
                     )}
 

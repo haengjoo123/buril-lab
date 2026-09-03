@@ -313,13 +313,18 @@ export const labService = {
         }
     },
 
-    async deleteLab(labId: string): Promise<void> {
-        const { error } = await supabase
-            .from('labs')
-            .delete()
-            .eq('id', labId);
-
-        if (error) throw error;
+    async requestLabDeletion(labId: string): Promise<{ jobId: string; status: string }> {
+        const queued = await postJson<{ success: boolean; jobId: string; status: string }>(
+            '/api/labs/delete',
+            { labId, requestId: crypto.randomUUID() },
+        );
+        if (!queued || typeof queued !== 'object'
+            || queued.success !== true
+            || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(queued.jobId)
+            || !['pending', 'running', 'retry_wait'].includes(queued.status)) {
+            throw new Error('The deletion request could not be verified.');
+        }
+        return { jobId: queued.jobId, status: queued.status };
     },
 
     async transferAdmin(labId: string, newAdminUserId: string): Promise<void> {

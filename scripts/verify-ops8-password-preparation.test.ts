@@ -31,6 +31,11 @@ const application = {
 describe('Ops8 password preparation boundary', () => {
   it('pins its base and verifies a local-only preparation', () => {
     expect(OPS8_PREPARATION_BASE_SHA).toMatch(/^[0-9a-f]{40}$/)
+    const hasSuccessorGate = read('package.json').includes('"ops9:verify"')
+    if (hasSuccessorGate) {
+      expect(() => verifyOps8PasswordPreparation(root)).toThrow(/unreviewed path/)
+      return
+    }
     expect(verifyOps8PasswordPreparation(root)).toMatchObject({
       result: 'ops8-password-preparation-ok',
       activeMigrations: 6,

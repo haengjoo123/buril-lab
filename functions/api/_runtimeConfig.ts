@@ -65,12 +65,12 @@ function parseRuntimeConfig(value: unknown): RuntimeConfig | null {
   if (typeof storageBackupEnabled !== 'boolean') return null
 
   return {
-    // Gate 0 contains neither guided disposal nor the deletion/maintenance
-    // workers. Preserve schema compatibility without allowing KV to activate
-    // code paths that are intentionally absent from this release.
+    // Guided disposal and maintenance remain unavailable. Operations 9 adds
+    // deletion intake, but its fail-closed KV switch stays false in every
+    // environment until the Operations 11 worker is proven separately.
     voiceDisposalMode: 'redirect',
     koshaContentMode,
-    accountDeletionEnabled: false,
+    accountDeletionEnabled,
     maintenanceEnabled: false,
   }
 }
