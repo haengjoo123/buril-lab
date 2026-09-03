@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getJson, InternalApiError, postJson } from './internalApi'
+import { getJson, InternalApiError, postBytes, postJson } from './internalApi'
 
 const mocked = vi.hoisted(() => ({ getSession: vi.fn(), fetch: vi.fn() }))
 vi.mock('./supabaseClient', () => ({ supabase: { auth: { getSession: mocked.getSession } } }))
@@ -25,6 +25,18 @@ describe('internal API response contract', () => {
     mocked.fetch.mockResolvedValueOnce(Response.json(['synthetic']))
     expect(await getJson('/api/example', { cache: 'no-store' })).toEqual(['synthetic'])
     expect(mocked.fetch.mock.calls[1][1]).toMatchObject({ method: 'GET', cache: 'no-store' })
+  })
+
+  it('posts an authenticated binary body without converting it to JSON', async () => {
+    mocked.fetch.mockResolvedValueOnce(Response.json({ success: true }))
+    const body = new Blob(['webp'], { type: 'image/webp' })
+    await expect(postBytes('/api/cabinets/id/image', body, 'image/webp')).resolves.toEqual({ success: true })
+    expect(mocked.fetch).toHaveBeenCalledWith('/api/cabinets/id/image', {
+      method: 'POST', headers: { Authorization: 'Bearer synthetic-token', 'Content-Type': 'image/webp' },
+      body, signal: undefined,
+    })
+    await expect(postBytes('/api/example', body, 'bad\nvalue')).rejects.toThrow('content type')
+    expect(mocked.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('preserves lock code, HTTP status, and Retry-After seconds as a typed error', async () => {

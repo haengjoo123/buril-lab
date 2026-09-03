@@ -22,12 +22,12 @@ const archivedVersions = snapshot.migrations
   .map((row: { local?: string }) => row.local || '')
   .filter((version: string) => version && !EXPECTED_LOCAL_ONLY_WITHOUT_SQL.includes(version))
 
-describe('Prep 1 database release safety manifest', () => {
-  it('locks the release to one baseline and the reviewed production history', () => {
+describe('database release safety manifest through Ops6', () => {
+  it('locks the release to one baseline, three incrementals, and the reviewed production history', () => {
     expect(verifyDatabaseReleaseSafety()).toEqual({
-      activeMigrations: 1,
+      activeMigrations: 4,
       legacySqlFiles: 50,
-      activePgTapTests: 1,
+      activePgTapTests: 3,
       legacySqlTests: 8,
       baseline: {
         publicTables: 49,
@@ -65,12 +65,18 @@ describe('Prep 1 database release safety manifest', () => {
     expect(EXPECTED_LOCAL_ONLY_WITHOUT_SQL).toEqual(['20260823163832'])
   })
 
-  it('keeps the exact CI opt-in marker and a real pgTAP permission test', () => {
+  it('keeps the exact CI opt-in marker and all active pgTAP permission tests', () => {
     expect(readFileSync(resolve(repoRoot, 'supabase/ci-quality.json'), 'utf8').trim()).toBe(EXPECTED_CI_MARKER)
-    const permissionTest = readFileSync(resolve(repoRoot, 'supabase/tests/baseline_permissions.sql'), 'utf8')
-    expect(permissionTest).toContain('create extension if not exists pgtap with schema extensions;')
-    expect(permissionTest).toContain('select plan(11);')
-    expect(permissionTest).toContain('select * from finish();')
-    expect(permissionTest).not.toMatch(/\bdo\s+\$\$/i)
+    for (const name of [
+      'baseline_permissions.sql',
+      'ops5_expand_permissions.sql',
+      'ops6_private_photos_permissions.sql',
+    ]) {
+      const permissionTest = readFileSync(resolve(repoRoot, 'supabase/tests', name), 'utf8')
+      expect(permissionTest).toContain('create extension if not exists pgtap with schema extensions;')
+      expect(permissionTest).toMatch(/select plan\(\d+\);/)
+      expect(permissionTest).toContain('select * from finish();')
+      expect(permissionTest).not.toMatch(/\bdo\s+\$\$/i)
+    }
   })
 })

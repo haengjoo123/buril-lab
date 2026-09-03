@@ -80,6 +80,23 @@ export async function postJson<TResponse>(
   return parseJsonResponse<TResponse>(response)
 }
 
+export async function postBytes<TResponse>(
+  url: string,
+  body: Blob | ArrayBuffer,
+  contentType: string,
+  options?: { signal?: AbortSignal },
+): Promise<TResponse> {
+  if (!/^[-a-z0-9.+]+\/[-a-z0-9.+]+$/i.test(contentType)) {
+    throw new Error('A valid request content type is required.')
+  }
+  const headers = await authorizedHeaders(false)
+  headers['Content-Type'] = contentType
+  const response = await fetch(getInternalApiUrl(url), {
+    method: 'POST', headers, body, signal: options?.signal,
+  })
+  return parseJsonResponse<TResponse>(response)
+}
+
 export async function getJson<TResponse>(
   url: string,
   options?: { signal?: AbortSignal; cache?: RequestCache },

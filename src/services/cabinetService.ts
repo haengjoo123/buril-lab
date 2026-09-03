@@ -5,6 +5,7 @@ import { normalizeTemplateFromDb } from '../utils/normalizeTemplateFromDb';
 import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
 import { optimizeCabinetImage } from '../utils/cabinetImageOptimization';
+import { postBytes, postJson } from './internalApi';
 
 export interface Cabinet {
     id: string;
@@ -73,7 +74,30 @@ export const cabinetService = {
             console.error('Error fetching cabinets:', error);
             throw error;
         }
-        return data || [];
+        const cabinets = (data || []) as Cabinet[];
+        const privateIds = cabinets.filter((cabinet) => Boolean(cabinet.image_path)).map((cabinet) => cabinet.id);
+        if (privateIds.length === 0) return cabinets;
+        // Never fall back to a stored public URL after image_path exists. A
+        // temporary signing failure hides the photo instead of reopening the
+        // legacy public path.
+        const privateCabinets = cabinets.map((cabinet) => cabinet.image_path
+            ? { ...cabinet, image_url: undefined } : cabinet);
+        try {
+            const result = await postJson<{ success: true; urls: Record<string, string | null> }>(
+                '/api/cabinets/image-urls', { cabinetIds: privateIds },
+            );
+            if (result?.success !== true || !result.urls || typeof result.urls !== 'object'
+                || Array.isArray(result.urls) || Object.keys(result.urls).length !== privateIds.length
+                || privateIds.some((id) => !(id in result.urls)
+                    || !(result.urls[id] === null || typeof result.urls[id] === 'string'))) {
+                throw new Error('Invalid private cabinet image response');
+            }
+            return privateCabinets.map((cabinet) => cabinet.image_path
+                ? { ...cabinet, image_url: result.urls[cabinet.id] || undefined } : cabinet);
+        } catch {
+            console.error('Private cabinet image URLs are temporarily unavailable');
+            return privateCabinets;
+        }
     },
 
     async createCabinet(name: string, location?: string, width = 5, height = 9, depth = 2): Promise<Cabinet> {
@@ -115,7 +139,7 @@ export const cabinetService = {
         return data;
     },
 
-    async updateCabinet(id: string, updates: { name?: string; location?: string; image_url?: string; width?: number; height?: number; depth?: number; }): Promise<void> {
+    async updateCabinet(id: string, updates: { name?: string; location?: string; width?: number; height?: number; depth?: number; }): Promise<void> {
         const { error } = await supabase
             .from('cabinets')
             .update(updates)
@@ -132,41 +156,32 @@ export const cabinetService = {
         // bounded for the daily private-storage recovery copy. The source file is
         // never uploaded to Storage.
         const optimized = await optimizeCabinetImage(file);
-        const filePath = `${cabinetId}-${uuidv4()}.webp`;
-
-        const { error: uploadError } = await supabase.storage
-            .from('cabinets')
-            .upload(filePath, optimized.file, {
-                upsert: false,
-                contentType: 'image/webp',
-                cacheControl: '31536000',
-            });
-
-        if (uploadError) {
-            console.error('Error uploading cabinet image:', uploadError);
-            throw uploadError;
+        const result = await postBytes<{
+            success: true;
+            imageUrl: string | null;
+            referencedCount: number;
+            warning: boolean;
+            urlUnavailable: boolean;
+        }>(`/api/cabinets/${cabinetId}/image`, optimized.file, 'image/webp');
+        if (result?.success !== true || !(result.imageUrl === null || typeof result.imageUrl === 'string')) {
+            throw new Error('Invalid private cabinet image response');
         }
+        return result.imageUrl || '';
+    },
 
-        const { data } = supabase.storage
-            .from('cabinets')
-            .getPublicUrl(filePath);
-
-        const publicUrl = data.publicUrl;
-
-        try {
-            await this.updateCabinet(cabinetId, { image_url: publicUrl });
-        } catch (error) {
-            // This is a brand-new, unreferenced optimized file. Removing it here
-            // avoids adding a failed upload to the later orphan-cleanup queue;
-            // it does not remove the previously attached photo, which keeps the
-            // agreed retention/migration policy intact.
-            await supabase.storage.from('cabinets').remove([filePath]).catch(() => undefined);
-            throw error;
+    async removeCabinetImage(cabinetId: string): Promise<void> {
+        const result = await postJson<{ success: true; imageUrl: null }>(
+            `/api/cabinets/${cabinetId}/image`, { action: 'remove' },
+        );
+        if (result?.success !== true || result.imageUrl !== null) {
+            throw new Error('Invalid private cabinet image removal response');
         }
-        return publicUrl;
     },
 
     async deleteCabinet(id: string): Promise<void> {
+        // The database refuses deletion while a private image is still live.
+        // Detaching first preserves its ownership and seven-day retention row.
+        await this.removeCabinetImage(id);
         const { error } = await supabase
             .from('cabinets')
             .delete()

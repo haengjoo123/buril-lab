@@ -134,7 +134,7 @@ describe('scheduled Worker in the Cloudflare runtime', () => {
         id: '11111111-1111-4111-8111-111111111111',
         lab_id: '22222222-2222-4222-8222-222222222222',
         user_id: null,
-        image_url: `${env.SUPABASE_URL}/storage/v1/object/public/cabinets/${sourceNames[0]}`,
+        image_path: sourceNames[0],
       }])
       if (url.pathname === '/storage/v1/object/list/cabinets') return Response.json(sourceNames.map((name, index) => ({
         name,

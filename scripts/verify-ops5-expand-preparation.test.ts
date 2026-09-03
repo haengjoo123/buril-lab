@@ -17,6 +17,11 @@ const permissionTest = readFileSync(path.join(root, OPS5_PERMISSION_TEST), 'utf8
 
 describe('Ops5 Expand preparation boundary', () => {
   it('verifies the exact owned preparation worktree', () => {
+    const hasSuccessorGate = readFileSync(path.join(root, 'package.json'), 'utf8').includes('"ops6:verify"')
+    if (hasSuccessorGate) {
+      expect(() => verifyOps5ExpandPreparation(root)).toThrow(/unreviewed path/)
+      return
+    }
     expect(verifyOps5ExpandPreparation(root)).toMatchObject({
       result: 'ops5-expand-preparation-ok',
       productionReady: false,

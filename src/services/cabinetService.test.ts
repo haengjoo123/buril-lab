@@ -1,19 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const optimizeCabinetImageMock = vi.hoisted(() => vi.fn());
-const uploadMock = vi.hoisted(() => vi.fn());
-const getPublicUrlMock = vi.hoisted(() => vi.fn());
-const removeMock = vi.hoisted(() => vi.fn());
-const storageFromMock = vi.hoisted(() => vi.fn());
 const rpcMock = vi.hoisted(() => vi.fn());
+const fromMock = vi.hoisted(() => vi.fn());
+const postBytesMock = vi.hoisted(() => vi.fn());
+const postJsonMock = vi.hoisted(() => vi.fn());
 
 vi.mock('./supabaseClient', () => ({
     supabase: {
         rpc: rpcMock,
-        storage: {
-            from: storageFromMock,
-        },
+        from: fromMock,
     },
+}));
+
+vi.mock('./internalApi', () => ({ postBytes: postBytesMock, postJson: postJsonMock }));
+vi.mock('../store/useLabStore', () => ({
+    useLabStore: { getState: () => ({ currentLabId: '33333333-3333-4333-8333-333333333333' }) },
 }));
 
 vi.mock('../utils/cabinetImageOptimization', () => ({
@@ -67,54 +69,67 @@ describe('atomic cabinet activity audit', () => {
 describe('cabinet image upload', () => {
     beforeEach(() => {
         optimizeCabinetImageMock.mockReset();
-        uploadMock.mockReset();
-        getPublicUrlMock.mockReset();
-        removeMock.mockReset();
-        storageFromMock.mockReset();
-        storageFromMock.mockReturnValue({
-            upload: uploadMock,
-            getPublicUrl: getPublicUrlMock,
-            remove: removeMock,
-        });
+        postBytesMock.mockReset();
+        postJsonMock.mockReset();
         optimizeCabinetImageMock.mockResolvedValue({ file: optimizedFile });
-        uploadMock.mockResolvedValue({ error: null });
-        getPublicUrlMock.mockReturnValue({ data: { publicUrl: 'https://example.test/cabinets/photo.webp' } });
-        removeMock.mockResolvedValue({ error: null });
+        postBytesMock.mockResolvedValue({ success: true,
+            imageUrl: 'https://supabase.example/storage/v1/object/sign/cabinets/photo.webp?token=signed',
+            referencedCount: 1, warning: false, urlUnavailable: false });
+        postJsonMock.mockResolvedValue({ success: true, imageUrl: null, referencedCount: 0, warning: false });
     });
 
-    it('uploads only the optimized WebP and keeps the source file out of Storage', async () => {
-        const updateSpy = vi.spyOn(cabinetService, 'updateCabinet').mockResolvedValue();
-
+    it('sends only the optimized WebP through the authenticated server path', async () => {
         await expect(cabinetService.uploadCabinetImage(cabinetId, originalFile))
-            .resolves.toBe('https://example.test/cabinets/photo.webp');
+            .resolves.toContain('/storage/v1/object/sign/cabinets/');
 
         expect(optimizeCabinetImageMock).toHaveBeenCalledWith(originalFile);
-        expect(uploadMock).toHaveBeenCalledWith(
-            `${cabinetId}-11111111-1111-4111-8111-111111111111.webp`,
-            optimizedFile,
-            {
-                upsert: false,
-                contentType: 'image/webp',
-                cacheControl: '31536000',
-            },
-        );
-        expect(uploadMock.mock.calls[0][1]).not.toBe(originalFile);
-        expect(updateSpy).toHaveBeenCalledWith(cabinetId, {
-            image_url: 'https://example.test/cabinets/photo.webp',
-        });
-        expect(removeMock).not.toHaveBeenCalled();
-        updateSpy.mockRestore();
+        expect(postBytesMock).toHaveBeenCalledWith(`/api/cabinets/${cabinetId}/image`, optimizedFile, 'image/webp');
+        expect(postBytesMock.mock.calls[0][1]).not.toBe(originalFile);
     });
 
-    it('cleans up a newly uploaded transformed file if the database link fails', async () => {
-        const updateSpy = vi.spyOn(cabinetService, 'updateCabinet').mockRejectedValue(new Error('database unavailable'));
-
+    it('does not fall back to browser Storage when the server upload fails', async () => {
+        postBytesMock.mockRejectedValueOnce(new Error('server unavailable'));
         await expect(cabinetService.uploadCabinetImage(cabinetId, originalFile))
-            .rejects.toThrow('database unavailable');
+            .rejects.toThrow('server unavailable');
+        expect(postBytesMock).toHaveBeenCalledOnce();
+    });
 
-        expect(removeMock).toHaveBeenCalledWith([
-            `${cabinetId}-11111111-1111-4111-8111-111111111111.webp`,
-        ]);
-        updateSpy.mockRestore();
+    it('removes a photo only through the retention-aware server path', async () => {
+        await expect(cabinetService.removeCabinetImage(cabinetId)).resolves.toBeUndefined();
+        expect(postJsonMock).toHaveBeenCalledWith(`/api/cabinets/${cabinetId}/image`, { action: 'remove' });
+    });
+});
+
+describe('private cabinet image hydration', () => {
+    const row = { id: cabinetId, name: 'Private cabinet', image_path:
+        `labs/33333333-3333-4333-8333-333333333333/cabinets/${cabinetId}/44444444-4444-4444-8444-444444444444.webp`,
+    image_url: 'https://legacy-public.example/photo.webp' };
+
+    beforeEach(() => {
+        const query: Record<string, ReturnType<typeof vi.fn>> = {};
+        query.select = vi.fn(() => query);
+        query.eq = vi.fn(() => query);
+        query.is = vi.fn(() => query);
+        query.order = vi.fn().mockResolvedValue({ data: [row], error: null });
+        fromMock.mockReset();
+        fromMock.mockReturnValue(query);
+        postJsonMock.mockReset();
+    });
+
+    it('replaces a stored public URL with a short signed URL', async () => {
+        const signed = 'https://supabase.example/storage/v1/object/sign/cabinets/photo.webp?token=signed';
+        postJsonMock.mockResolvedValueOnce({ success: true, urls: { [cabinetId]: signed } });
+        const result = await cabinetService.getCabinets();
+        expect(result[0].image_url).toBe(signed);
+        expect(postJsonMock).toHaveBeenCalledWith('/api/cabinets/image-urls', { cabinetIds: [cabinetId] });
+    });
+
+    it('hides the legacy URL when signing is unavailable', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        postJsonMock.mockRejectedValueOnce(new Error('signing unavailable'));
+        const result = await cabinetService.getCabinets();
+        expect(result[0].image_url).toBeUndefined();
+        expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain('signing unavailable');
+        consoleSpy.mockRestore();
     });
 });

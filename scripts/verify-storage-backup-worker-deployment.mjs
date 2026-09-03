@@ -8,7 +8,7 @@ const SECRET_FILE_PATTERN = /^\/home\/runner\/work\/_temp\/burillab-storage-back
 const COMPATIBILITY_DATE = '2026-08-20'
 const COMPATIBILITY_FLAGS = Object.freeze(['nodejs_compat'])
 const COMMON_PLAIN_TEXT_BINDINGS = Object.freeze({
-  SOURCE_POINTER_MODE: 'legacy_url',
+  SOURCE_POINTER_MODE: 'private_path',
   SOURCE_STORAGE_BUCKET: 'cabinets',
   WORKERS_SUBREQUEST_LIMIT: '4000',
   WORKERS_USAGE_PLAN: 'paid',

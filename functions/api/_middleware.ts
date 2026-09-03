@@ -64,6 +64,7 @@ function mergeVary(current: string | null, value: string): string {
 
 const SENSITIVE_API_PATTERNS = [
   /^\/api\/account\//,
+  /^\/api\/cabinets\//,
   /^\/api\/labs\//,
   /^\/api\/admin\//,
   /^\/api\/(?:ai|gemini)\//,
@@ -117,6 +118,11 @@ const LIMIT_CONFIGS = {
     user: { count: 30, window: '1 m' },
     ip: { count: 2, window: '1 m' },
     pattern: /^\/api\/labs\//,
+  },
+  CABINETS: {
+    user: { count: 60, window: '1 m' },
+    ip: { count: 2, window: '1 m' },
+    pattern: /^\/api\/cabinets\//,
   },
   ADMIN: {
     user: { count: 20, window: '1 m' },
@@ -177,6 +183,7 @@ type RateLimitResult = {
 
 const PROTECTED_API_PATTERNS = [
   /^\/api\/account\//,
+  /^\/api\/cabinets\//,
   /^\/api\/labs\//,
   /^\/api\/admin\//,
   /^\/api\/ai\//,
@@ -191,6 +198,7 @@ export function isProtectedApiPath(path: string): boolean {
 }
 
 export function resolveRateLimitCategory(path: string): RateLimitCategory | null {
+  if (LIMIT_CONFIGS.CABINETS.pattern.test(path)) return 'CABINETS'
   if (LIMIT_CONFIGS.LABS.pattern.test(path)) return 'LABS'
   if (LIMIT_CONFIGS.ADMIN.pattern.test(path)) return 'ADMIN'
   if (LIMIT_CONFIGS.VOICE.pattern.test(path)) return 'VOICE'

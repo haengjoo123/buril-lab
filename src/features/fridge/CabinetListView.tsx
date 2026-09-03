@@ -199,7 +199,9 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             memo: getTextField(log.after_data, ['memo']) || getTextField(log.before_data, ['memo']) || log.location_context || undefined,
             actorName: log.actor_name || undefined,
             occurredAt: log.created_at,
-            isPhotoChange: log.entity_type === 'cabinet' && (diffKeys.includes('image_url') || Boolean(getTextField(log.after_data, ['image_url']))),
+            isPhotoChange: log.entity_type === 'cabinet_photo'
+                || (log.entity_type === 'cabinet' && (diffKeys.includes('image_url') || diffKeys.includes('image_path')
+                    || Boolean(getTextField(log.after_data, ['image_url', 'image_path'])))),
             isMove: diffKeys.includes('cabinet_id') || includesAny([log.location_context, beforeName, afterName], [/이동/i, /move/i]),
         };
 
@@ -943,12 +945,13 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 onSelectGallery={() => {
                     fileInputRef.current?.click();
                 }}
-                hasImage={!!cabinets.find(c => c.id === imageMenu.cabinetId)?.image_url}
+                hasImage={Boolean(cabinets.find(c => c.id === imageMenu.cabinetId)?.image_path
+                    || cabinets.find(c => c.id === imageMenu.cabinetId)?.image_url)}
                 onDeleteImage={async () => {
                     const cabinetId = imageMenu.cabinetId;
                     if (!cabinetId) return;
                     try {
-                        await cabinetService.updateCabinet(cabinetId, { image_url: '' });
+                        await cabinetService.removeCabinetImage(cabinetId);
                         await cabinetService.logActivity(
                             cabinetId,
                             'update',

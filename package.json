@@ -25,6 +25,7 @@
     "ops:verify": "node scripts/verify-pages-project-config.mjs",
     "ops:recovery-preflight": "node scripts/verify-supabase-recovery-preflight.mjs",
     "ops5:verify": "node scripts/verify-ops5-expand-preparation.mjs",
+    "ops6:verify": "node scripts/verify-ops6-private-photo-preparation.mjs",
     "release:verify": "node scripts/verify-paid-release-blocked.mjs",
     "test:e2e:gate0": "playwright test --config playwright.gate0.config.ts",
     "test:e2e:gate0:staging": "playwright test --config playwright.staging.config.ts",

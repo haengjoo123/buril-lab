@@ -25,6 +25,7 @@ const POST_ROUTES = [
   '/api/analytics/search-event',
   '/api/analytics/user-delete',
   '/api/chemicals/enrich',
+  '/api/cabinets/image-urls',
   '/api/gemini/classify',
   '/api/gemini/disposal-guide',
   '/api/gemini/scan-label',
@@ -47,6 +48,10 @@ const exactPolicies = new Map<string, ApiRoutePolicy>([
 ])
 
 const dynamicPolicies: ReadonlyArray<{ pattern: RegExp; policy: ApiRoutePolicy }> = [
+  {
+    pattern: /^\/api\/cabinets\/[0-9a-f-]{36}\/image$/i,
+    policy: { id: '/api/cabinets/[id]/image', methods: ['POST'] },
+  },
   {
     pattern: /^\/api\/kosha\/[^/]+$/,
     policy: { id: '/api/kosha/[endpoint]', methods: ['GET'] },
@@ -71,6 +76,8 @@ export function isAllowedApiMethod(policy: ApiRoutePolicy, method: string): meth
 }
 
 export function getApiRequestBodyLimit(policy: ApiRoutePolicy): number {
+  if (policy.id === '/api/cabinets/[id]/image') return 2 * 1024 * 1024
+  if (policy.id === '/api/cabinets/image-urls') return 8 * 1024
   if (policy.id === '/api/labs/join') return 8 * 1024
   if (/^\/api\/(?:ai|gemini)\/scan-label$/.test(policy.id)) return 12 * 1024 * 1024
   if (policy.id === '/api/voice/transcribe') return 5 * 1024 * 1024 + 64 * 1024
