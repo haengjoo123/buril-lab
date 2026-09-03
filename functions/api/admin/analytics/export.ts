@@ -93,8 +93,10 @@ async function sha256(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export const onRequestPost = async (context: { request: Request; env: AnalyticsAdminEnv }) => {
-  const auth = await requireAnalyticsExportAdmin(context.request, context.env)
+export const onRequestPost = async (context: {
+  request: Request; env: AnalyticsAdminEnv; data?: { requestId?: unknown }
+}) => {
+  const auth = await requireAnalyticsExportAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) return auth.response
 
   let body: ExportBody

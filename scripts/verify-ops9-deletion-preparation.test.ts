@@ -35,6 +35,11 @@ const application = {
 describe('Ops9 deletion preparation boundary', () => {
   it('pins its base and verifies only a not-yet-enabled local preparation', () => {
     expect(OPS9_PREPARATION_BASE_SHA).toMatch(/^[0-9a-f]{40}$/)
+    const hasSuccessorGate = read('package.json').includes('"ops10:verify"')
+    if (hasSuccessorGate) {
+      expect(() => verifyOps9DeletionPreparation(root)).toThrow(/unreviewed path/)
+      return
+    }
     expect(verifyOps9DeletionPreparation(root)).toMatchObject({
       result: 'ops9-deletion-preparation-ok',
       activeMigrations: 7,

@@ -22,12 +22,12 @@ const archivedVersions = snapshot.migrations
   .map((row: { local?: string }) => row.local || '')
   .filter((version: string) => version && !EXPECTED_LOCAL_ONLY_WITHOUT_SQL.includes(version))
 
-describe('database release safety manifest through Ops9', () => {
-  it('locks the release to one baseline, six incrementals, and the reviewed production history', () => {
+describe('database release safety manifest through Ops10', () => {
+  it('locks the release to one baseline, seven incrementals, and the reviewed production history', () => {
     expect(verifyDatabaseReleaseSafety()).toEqual({
-      activeMigrations: 7,
+      activeMigrations: 8,
       legacySqlFiles: 50,
-      activePgTapTests: 6,
+      activePgTapTests: 7,
       legacySqlTests: 8,
       baseline: {
         publicTables: 49,
@@ -74,6 +74,7 @@ describe('database release safety manifest through Ops9', () => {
       'ops7_contract_permissions.sql',
       'ops8_lab_password_policy.sql',
       'ops9_deletion_jobs.sql',
+      'ops10_operator_roles_mfa.sql',
     ]) {
       const permissionTest = readFileSync(resolve(repoRoot, 'supabase/tests', name), 'utf8')
       expect(permissionTest).toContain('create extension if not exists pgtap with schema extensions;')

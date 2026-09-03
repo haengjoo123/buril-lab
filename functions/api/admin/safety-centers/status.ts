@@ -2,7 +2,6 @@ import {
   internalErrorResponse,
   json,
   requireFeedbackAdmin,
-  SAFETY_CENTER_SELECT_FIELDS,
   type SafetyCenterAdminEnv,
   type SafetyCenterAdminRow,
 } from './_shared'
@@ -18,8 +17,9 @@ interface UpdateSafetyCenterStatusBody {
 export const onRequestPost = async (context: {
   request: Request
   env: SafetyCenterAdminEnv
+  data?: { requestId?: unknown }
 }) => {
-  const auth = await requireFeedbackAdmin(context.request, context.env)
+  const auth = await requireFeedbackAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) {
     return auth.response
   }
@@ -45,46 +45,37 @@ export const onRequestPost = async (context: {
     return json({ error: 'status must be one of pending, approved, or rejected.' }, { status: 400 })
   }
 
-  const nowIso = new Date().toISOString()
   const { adminClient, identity } = auth.context
-
-  if (status === 'approved') {
-    const { data: existingCenter, error: fetchError } = await adminClient
-      .from('safety_centers')
-      .select('id, verification_document_path')
-      .eq('id', centerId)
-      .single()
-
-    if (fetchError) {
-      return fetchError.code === 'PGRST116'
-        ? json({ error: 'Safety center was not found.' }, { status: 404 })
-        : internalErrorResponse('admin.safety-centers.status.read', fetchError)
-    }
-
-    if (!existingCenter?.verification_document_path) {
-      return json({ error: 'Verification document is required before approving a safety center.' }, { status: 400 })
-    }
-  }
-
-  const { data, error } = await adminClient
-    .from('safety_centers')
-    .update({
-      status,
-      approved_by: status === 'approved' ? identity.id : null,
-      approved_at: status === 'approved' ? nowIso : null,
-      updated_at: nowIso,
-    })
-    .eq('id', centerId)
-    .select(SAFETY_CENTER_SELECT_FIELDS)
-    .single()
+  const { data, error } = await adminClient.rpc('operator_safety_center_status_v1', {
+    p_operator_user_id: identity.id,
+    p_center_id: centerId,
+    p_status: status,
+    p_request_id: identity.requestId,
+    p_assurance_level: identity.assuranceLevel,
+  })
 
   if (error) {
-    return error.code === 'PGRST116'
-      ? json({ error: 'Safety center was not found.' }, { status: 404 })
-      : internalErrorResponse('admin.safety-centers.status.update', error)
+    return internalErrorResponse('admin.safety-centers.status.update', error)
+  }
+  const result = Array.isArray(data) && data.length === 1 ? data[0] : data
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return internalErrorResponse('admin.safety-centers.status.result', null)
+  }
+  const record = result as Record<string, unknown>
+  if (record.success !== true) {
+    if (record.code === 'safety_center_not_found') {
+      return json({ error: 'Safety center was not found.' }, { status: 404 })
+    }
+    if (record.code === 'verification_document_required') {
+      return json({ error: 'Verification document is required before approving a safety center.' }, { status: 400 })
+    }
+    return internalErrorResponse('admin.safety-centers.status.authorization', null)
+  }
+  if (!record.item || typeof record.item !== 'object' || Array.isArray(record.item)) {
+    return internalErrorResponse('admin.safety-centers.status.item', null)
   }
 
   return json({
-    item: data as SafetyCenterAdminRow,
+    item: record.item as SafetyCenterAdminRow,
   })
 }

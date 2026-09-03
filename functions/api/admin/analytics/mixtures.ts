@@ -10,8 +10,10 @@ import {
 
 interface MixturesBody { days?: unknown; limit?: unknown }
 
-export const onRequestPost = async (context: { request: Request; env: AnalyticsAdminEnv }) => {
-  const auth = await requireAnalyticsAdmin(context.request, context.env)
+export const onRequestPost = async (context: {
+  request: Request; env: AnalyticsAdminEnv; data?: { requestId?: unknown }
+}) => {
+  const auth = await requireAnalyticsAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) return auth.response
   let body: MixturesBody = {}
   try { body = await context.request.json() as MixturesBody } catch { /* Empty body uses defaults. */ }
