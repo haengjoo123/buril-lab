@@ -17,6 +17,7 @@ import {
 import {
   SMOKE_ORIGIN, UUID, SMOKE_API_PATHS, VOICE_LOCATION_INPUT, SmokeError, check, hash,
   safeFailure, resolveSmokeTarget, smokeApiUrl, requestBudget, verifyApiHeaders,
+  runSmokeChecks,
   verifyCabinet, verifyPhotoPath, photoPathFromUrl, newOwnedRowIds,
   verifySmokeCacheRow, validateSmokeJournal,
 } from './ops3-live-smoke-safety.mjs'
@@ -24,6 +25,8 @@ import {
 const runFile = promisify(execFile)
 const env = process.env
 const result = { schemaVersion: 1, phases: [], cleanup: 'not-started' }
+// Match the reviewed Gate0 Staging assertion deadline, not standalone expect's 5s default.
+const browserExpect = expect.configure({ timeout: 15_000 })
 let phase = 'validate'
 function mark(value) { phase = value; console.log(JSON.stringify({ event: 'ops3_smoke_phase', phase })) }
 function checkedData(value, code) { check(!value.error && value.data !== null, code); return value.data }
@@ -269,6 +272,9 @@ async function runApis(jwt, state, labelImage) {
 
 async function runBrowser(admin, state, target) {
   const browser = await chromium.launch()
+  const diagnostics = { cspViolations: 0, escapedCredentials: 0, unexpectedPaidRequests: 0,
+    pageErrors: 0, authHttpStatus: null, page: 'not-opened' }
+  result.browser = diagnostics
   try {
     const context = await browser.newContext({ baseURL: SMOKE_ORIGIN, locale: 'ko-KR',
       viewport: { width: 1440, height: 1000 }, serviceWorkers: 'block' })
@@ -279,19 +285,27 @@ async function runBrowser(admin, state, target) {
     const page = await context.newPage()
     page.setDefaultTimeout(20_000)
     page.setDefaultNavigationTimeout(30_000)
-    let cspViolations = 0
-    let escapedCredentials = 0
-    let unexpectedPaidRequests = 0
     let uploadSha256 = null
     let uploadCount = 0
     let uploadError = false
-    page.on('console', (message) => { if (/^OPS3_CSP_VIOLATION [a-z-]+$/.test(message.text())) cspViolations += 1 })
+    page.on('console', (message) => { if (/^OPS3_CSP_VIOLATION [a-z-]+$/.test(message.text())) diagnostics.cspViolations += 1 })
+    page.on('pageerror', () => { diagnostics.pageErrors += 1 })
+    page.on('response', (response) => {
+      const url = new URL(response.url())
+      if (url.origin === GATE0_STAGING_ORIGIN && url.pathname === '/auth/v1/token') diagnostics.authHttpStatus = response.status()
+    })
+    page.on('framenavigated', (frame) => {
+      if (frame !== page.mainFrame() || frame.url() === 'about:blank') return
+      const url = new URL(frame.url())
+      diagnostics.page = url.origin !== SMOKE_ORIGIN ? 'unexpected-origin'
+        : ['/login', '/app/inventory', '/app/cabinet'].includes(url.pathname) ? url.pathname : 'other-staging-page'
+    })
     page.on('request', (request) => {
       if (Object.keys(request.headers()).some((name) => /^cf-access-client-(id|secret)$/i.test(name))
-        && new URL(request.url()).origin !== SMOKE_ORIGIN) escapedCredentials += 1
+        && new URL(request.url()).origin !== SMOKE_ORIGIN) diagnostics.escapedCredentials += 1
     })
     // This browser validates only login and photo processing. Paid API checks run once above.
-    await page.route(/\/api\/(?:ai|gemini|voice)\//, async (route) => { unexpectedPaidRequests += 1; await route.abort('blockedbyclient') })
+    await page.route(/\/api\/(?:ai|gemini|voice)\//, async (route) => { diagnostics.unexpectedPaidRequests += 1; await route.abort('blockedbyclient') })
     await page.route('**/api/chemicals/enrich', (route) => route.abort('blockedbyclient'))
     await page.route(`${GATE0_STAGING_ORIGIN}/storage/v1/object/cabinets/*`, async (route) => {
       try {
@@ -317,25 +331,30 @@ async function runBrowser(admin, state, target) {
       localStorage.setItem('i18nextLng', 'ko')
       localStorage.setItem('buril:safety-acknowledgement', JSON.stringify({ version: '2026-08-24.1', acknowledgedAt: '2026-08-24T00:00:00.000Z' }))
     })
-    mark('browser-login-and-cabinet')
+    mark('browser-open-login')
     await page.goto('/login?returnTo=%2Fapp%2Finventory')
+    mark('browser-submit-login')
     await page.locator('input[type="email"]').fill(env.GATE0_E2E_EMAIL)
     await page.locator('input[type="password"]').fill(env.GATE0_E2E_PASSWORD)
     await page.locator('form').getByRole('button', { name: /로그인|log in/i }).click()
-    await expect(page).toHaveURL(/\/app\/inventory/)
+    mark('browser-await-inventory')
+    await browserExpect(page).toHaveURL(/\/app\/inventory/)
+    mark('browser-select-synthetic-lab')
     const switcher = page.getByRole('banner').getByTitle('연구실 / 개인공간 전환')
     await switcher.click()
     await page.getByRole('button', { name: new RegExp(GATE0_LAB_NAME) }).click()
-    await expect(switcher).toContainText(GATE0_LAB_NAME)
+    await browserExpect(switcher).toContainText(GATE0_LAB_NAME)
     const skip = page.getByRole('button', { name: /온보딩 건너뛰기|건너뛰기|skip onboarding/i }).first()
     await skip.waitFor({ state: 'visible', timeout: 2000 }).then(() => skip.click(), () => undefined)
+    mark('browser-open-cabinet-list')
     await page.goto('/app/cabinet')
     check(new URL(page.url()).origin === SMOKE_ORIGIN, 'BROWSER_ORIGIN_CHANGED')
+    mark('browser-create-cabinet')
     await page.getByRole('button', { name: '새 시약장 만들기', exact: true }).click()
     const name = page.getByPlaceholder('예: 메인 시약장, 위험물 보관함')
     await name.fill(state.cabinetName)
     await name.press('Enter')
-    await expect.poll(async () => Boolean(await matchingCabinet(admin, state)), { timeout: 20_000 }).toBe(true)
+    await browserExpect.poll(async () => Boolean(await matchingCabinet(admin, state)), { timeout: 20_000 }).toBe(true)
     state.cabinetId = verifyCabinet(await matchingCabinet(admin, state), state)
     await save(state)
     const synthetic = await page.evaluate(() => {
@@ -355,7 +374,7 @@ async function runBrowser(admin, state, target) {
     await page.locator('input[type="file"][accept="image/jpeg,image/png,image/webp"]').setInputFiles({
       name: 'ops3-synthetic.png', mimeType: 'image/png', buffer: Buffer.from(synthetic, 'base64'),
     })
-    await expect.poll(async () => Boolean((await matchingCabinet(admin, state))?.image_url), { timeout: 30_000 }).toBe(true)
+    await browserExpect.poll(async () => Boolean((await matchingCabinet(admin, state))?.image_url), { timeout: 30_000 }).toBe(true)
     const cabinet = await matchingCabinet(admin, state)
     const key = photoPathFromUrl(cabinet.image_url, state.cabinetId)
     const downloaded = checkedData(await admin.storage.from('cabinets').download(key), 'PHOTO_DOWNLOAD')
@@ -369,13 +388,15 @@ async function runBrowser(admin, state, target) {
       try { return { width: image.width, height: image.height } } finally { image.close() }
     }, bytes.toString('base64'))
     check(Math.max(shape.width, shape.height) === 1920 && Math.min(shape.width, shape.height) > 0, 'PHOTO_RESIZE_CONTRACT')
-    await expect(page.getByAltText(state.cabinetName).first()).toBeVisible()
-    await expect.poll(() => page.getByAltText(state.cabinetName).first().evaluate((image) => image.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0)
+    await browserExpect(page.getByAltText(state.cabinetName).first()).toBeVisible()
+    await browserExpect.poll(() => page.getByAltText(state.cabinetName).first().evaluate((image) => image.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0)
     const again = checkedData(await admin.storage.from('cabinets').download(key), 'PHOTO_HASH_RECHECK')
     check(hash(Buffer.from(await again.arrayBuffer())) === hash(bytes), 'PHOTO_HASH_MISMATCH')
-    check(cspViolations === 0 && escapedCredentials === 0 && unexpectedPaidRequests === 0, 'BROWSER_SECURITY_BOUNDARY')
+    check(diagnostics.cspViolations === 0 && diagnostics.escapedCredentials === 0 && diagnostics.unexpectedPaidRequests === 0
+      && diagnostics.pageErrors === 0, 'BROWSER_SECURITY_BOUNDARY')
     result.photo = { sourceWidth: 2400, sourceHeight: 1600, ...shape, bytes: bytes.byteLength, sha256: hash(bytes),
-      contentType: 'image/webp', cspViolations, escapedCredentials, unexpectedPaidRequests }
+      contentType: 'image/webp', cspViolations: diagnostics.cspViolations,
+      escapedCredentials: diagnostics.escapedCredentials, unexpectedPaidRequests: diagnostics.unexpectedPaidRequests }
     result.phases.push('browser-webp-upload')
   } finally { await browser.close() }
 }
@@ -398,6 +419,7 @@ async function makeLabel() {
 async function main() {
   const target = resolveSmokeTarget(env)
   result.targetSha = target.sha; result.deploymentId = target.deploymentId; result.verificationRunId = target.verificationRunId
+  result.verificationScope = target.scope
   requireSecrets()
   const { admin, user } = clients()
   if (process.argv[2] === 'cleanup') {
@@ -428,8 +450,11 @@ async function main() {
     try {
       const login = checkedData(await user.auth.signInWithPassword({ email: env.GATE0_E2E_EMAIL, password: env.GATE0_E2E_PASSWORD }), 'API_FIXTURE_SIGNIN')
       check(login.user?.id === state.ownerId && login.session?.access_token, 'API_FIXTURE_IDENTITY')
-      await runApis(login.session.access_token, state, await makeLabel())
-      await runBrowser(admin, state, target)
+      if (target.scope === 'photo') result.api = { requests: 0, paidRequests: 0, skipped: true }
+      await runSmokeChecks({ scope: target.scope,
+        api: async () => runApis(login.session.access_token, state, await makeLabel()),
+        browser: () => runBrowser(admin, state, target),
+      })
     } catch (error) { failure = error; result.failedPhase = phase; result.failure = safeFailure(error) }
     finally {
       mark('exact-synthetic-cleanup')

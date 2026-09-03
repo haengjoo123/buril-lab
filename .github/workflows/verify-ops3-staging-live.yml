@@ -1,6 +1,6 @@
 name: Verify Ops3 Staging live APIs and photo
 
-run-name: Verify Ops3 Staging ${{ inputs.target_commit_sha }} (${{ inputs.target_deployment_id }})
+run-name: Verify Ops3 Staging ${{ inputs.verification_scope }} ${{ inputs.target_commit_sha }} (${{ inputs.target_deployment_id }})
 
 on:
   workflow_dispatch:
@@ -17,8 +17,16 @@ on:
         description: Exact successful Deploy staging run with signed credential cleanup
         required: true
         type: string
+      verification_scope:
+        description: Full verification, or photo-only recovery without repeating paid API calls
+        required: true
+        type: choice
+        default: full
+        options:
+          - full
+          - photo
       confirmation:
-        description: Type "VERIFY OPS3 STAGING <deployment UUID> <full SHA> <Staging run ID>"
+        description: Type "VERIFY OPS3 STAGING <deployment UUID> <full SHA> <Staging run ID> <full|photo>"
         required: true
         type: string
 
@@ -45,6 +53,7 @@ jobs:
       OPS3_TARGET_COMMIT_SHA: ${{ inputs.target_commit_sha }}
       OPS3_TARGET_DEPLOYMENT_ID: ${{ inputs.target_deployment_id }}
       OPS3_STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+      OPS3_VERIFICATION_SCOPE: ${{ inputs.verification_scope }}
       OPS3_CONFIRMATION: ${{ inputs.confirmation }}
 
     steps:
@@ -60,7 +69,8 @@ jobs:
           [[ "$OPS3_TARGET_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$OPS3_TARGET_DEPLOYMENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
           [[ "$OPS3_STAGING_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
-          test "$OPS3_CONFIRMATION" = "VERIFY OPS3 STAGING $OPS3_TARGET_DEPLOYMENT_ID $OPS3_TARGET_COMMIT_SHA $OPS3_STAGING_RUN_ID"
+          [[ "$OPS3_VERIFICATION_SCOPE" = full || "$OPS3_VERIFICATION_SCOPE" = photo ]]
+          test "$OPS3_CONFIRMATION" = "VERIFY OPS3 STAGING $OPS3_TARGET_DEPLOYMENT_ID $OPS3_TARGET_COMMIT_SHA $OPS3_STAGING_RUN_ID $OPS3_VERIFICATION_SCOPE"
 
       - name: Check out protected-main verification code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
