@@ -24,17 +24,28 @@ export function check(value, code) { if (!value) throw new SmokeError(code) }
 export function safeFailure(error) { return error instanceof SmokeError ? error.message : 'UNEXPECTED_FAILURE_REDACTED' }
 export function hash(value) { return createHash('sha256').update(value).digest('hex') }
 
+export function verifySmokeScope(scope) {
+  check(scope === 'full' || scope === 'photo', 'INVALID_VERIFICATION_SCOPE')
+  return scope
+}
+
+export async function runSmokeChecks({ scope, api, browser }) {
+  if (verifySmokeScope(scope) === 'full') await api()
+  await browser()
+}
+
 export function resolveSmokeTarget(env) {
   const sha = env.OPS3_TARGET_COMMIT_SHA
   const deploymentId = env.OPS3_TARGET_DEPLOYMENT_ID
   const runId = env.OPS3_STAGING_RUN_ID
+  const scope = verifySmokeScope(env.OPS3_VERIFICATION_SCOPE)
   check(SHA.test(sha || '') && UUID.test(deploymentId || '') && /^[1-9][0-9]{0,19}$/.test(runId || ''), 'INVALID_TARGET')
   check(env.GITHUB_EVENT_NAME === 'workflow_dispatch' && env.GITHUB_REPOSITORY === 'haengjoo123/buril-lab'
     && env.GITHUB_REF === 'refs/heads/main' && env.GITHUB_RUN_ATTEMPT === '1'
     && SHA.test(env.GITHUB_SHA || '') && /^[1-9][0-9]{0,19}$/.test(env.GITHUB_RUN_ID || ''), 'UNTRUSTED_RUN')
-  check(env.OPS3_CONFIRMATION === `VERIFY OPS3 STAGING ${deploymentId} ${sha} ${runId}`, 'CONFIRMATION_MISMATCH')
+  check(env.OPS3_CONFIRMATION === `VERIFY OPS3 STAGING ${deploymentId} ${sha} ${runId} ${scope}`, 'CONFIRMATION_MISMATCH')
   check(env.SUPABASE_URL === GATE0_STAGING_ORIGIN, 'NOT_EXACT_STAGING_DATABASE')
-  return { sha, deploymentId, runId, sourceSha: env.GITHUB_SHA, verificationRunId: env.GITHUB_RUN_ID,
+  return { sha, deploymentId, runId, scope, sourceSha: env.GITHUB_SHA, verificationRunId: env.GITHUB_RUN_ID,
     immutableOrigin: `https://${deploymentId.slice(0, 8)}.buril-lab-staging.pages.dev` }
 }
 

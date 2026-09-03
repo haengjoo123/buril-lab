@@ -7,7 +7,7 @@
 - 보호된 `main`에서 `Verify Ops3 Staging live APIs and photo`를 수동 실행한다. 재실행(run attempt > 1)은 거부하며, 새 검증은 새로운 run으로 실행한다.
 - 검증 코드의 SHA는 현재 `main`이어야 하며 최신 Quality 검사가 성공해야 한다.
 - 대상 runtime SHA는 `main`의 조상이어야 한다. 정확한 성공 Staging run과 해당 run의 서명된 자격값 폐기 영수증을 확인한다.
-- `target_commit_sha`, `target_deployment_id`, `staging_run_id`와 `VERIFY OPS3 STAGING <deployment UUID> <full SHA> <Staging run ID>` 확인문구가 정확히 일치해야 한다.
+- `target_commit_sha`, `target_deployment_id`, `staging_run_id`, `verification_scope`와 `VERIFY OPS3 STAGING <deployment UUID> <full SHA> <Staging run ID> <full|photo>` 확인문구가 정확히 일치해야 한다.
 - 실제 요청 전 custom·immutable 주소가 모두 Access로 보호되고 동일한 Staging `release.json`을 반환해야 한다.
 - 다른 Staging 배포·합성시험과 같은 `cloudflare-staging` 동시 실행 잠금을 사용한다. 운영용 프로젝트·키·Storage·KV는 접근하지 않는다.
 
@@ -22,6 +22,10 @@
 7. Chromium에서 합성 계정으로 로그인하고 합성 연구실에 시약장을 한 개 만든다. 2400×1600 가상 PNG를 실제 파일 입력으로 올려 WebP, 긴 변 1920px, 2MiB 이하, 업로드/다운로드 SHA-256 일치를 확인한다. 브라우저 CSP 위반과 예상 밖 유료 API 요청은 0이어야 한다.
 
 앱 HTTP 요청은 최대 28회, 유료 처리가 가능한 정상 요청은 최대 9회다. 음성 위치의 별칭 생성처럼 한 서버 요청이 추가 공급자 호출을 포함할 수 있으므로 **공급자 호출 총수가 정확히 9회라는 뜻은 아니다**. 요청 재시도는 하지 않으며 서버 측 기존 제한도 유지한다. 브라우저의 별도 AI·음성 호출은 차단한다.
+
+`verification_scope=photo`는 이미 통과한 유료 API 검사를 반복하지 않고 사진 부분만 다시 확인한다. 동일한 main·배포·서명 영수증·Access·정리 검사는 유지하며, 실제 API 검사 콜백은 호출하지 않는다. 결과에는 `verificationScope=photo`, `api.skipped=true`, 유료 요청 0건을 표시한다. 이 결과만으로 전체 API 검사가 성공했다고 표시하지 않는다. 같은 runtime SHA에서 성공한 API 증거와 사진 증거를 각각 연결한다.
+
+독립 실행 브라우저의 화면 확인 대기시간은 기존 Gate0 Staging과 같은 15초다. 로그인 화면 열기·제출·재고 이동·연구실 선택·시약장 생성·사진 업로드를 구분해 실패 위치를 기록한다. 실패 시에도 CSP/페이지 오류 개수, 로그인 응답 상태 번호와 고정된 페이지 종류만 남기고 원문 오류·URL 쿼리·사용자 정보는 기록하지 않는다.
 
 ## 비밀값과 정리
 

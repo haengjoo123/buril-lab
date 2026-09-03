@@ -4,6 +4,7 @@ import {
   resolveSmokeTarget, smokeApiUrl, requestBudget, verifyApiHeaders, verifyCabinet,
   verifyPhotoPath, photoPathFromUrl, newOwnedRowIds, validateSmokeJournal, verifySmokeCacheRow,
   safeFailure, SmokeError, MAX_API_REQUESTS, MAX_PAID_REQUESTS, VOICE_LOCATION_INPUT,
+  runSmokeChecks,
 } from './ops3-live-smoke-safety.mjs'
 import { generateClassificationCacheKey } from '../functions/api/ai/classify'
 import { generateDisposalGuideCacheKey } from '../functions/api/ai/disposal-guide'
@@ -19,7 +20,7 @@ const sha = 'a'.repeat(40)
 const targetId = '7237c27b-e24f-4e74-8889-f1aeb1da4f74'
 const environment = {
   OPS3_TARGET_COMMIT_SHA: sha, OPS3_TARGET_DEPLOYMENT_ID: targetId, OPS3_STAGING_RUN_ID: '123',
-  OPS3_CONFIRMATION: `VERIFY OPS3 STAGING ${targetId} ${sha} 123`,
+  OPS3_VERIFICATION_SCOPE: 'full', OPS3_CONFIRMATION: `VERIFY OPS3 STAGING ${targetId} ${sha} 123 full`,
   GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REPOSITORY: 'haengjoo123/buril-lab',
   GITHUB_REF: 'refs/heads/main', GITHUB_RUN_ATTEMPT: '1', GITHUB_SHA: 'b'.repeat(40), GITHUB_RUN_ID: '456', SUPABASE_URL: supabase,
 }
@@ -42,8 +43,25 @@ describe('Ops3 live Staging verification safety', () => {
     ['GITHUB_REPOSITORY', 'fork/buril-lab'], ['GITHUB_RUN_ATTEMPT', '2'],
     ['OPS3_TARGET_COMMIT_SHA', 'abc'], ['OPS3_TARGET_DEPLOYMENT_ID', '../other'],
     ['OPS3_STAGING_RUN_ID', '1;true'], ['OPS3_CONFIRMATION', 'approved'],
+    ['OPS3_VERIFICATION_SCOPE', 'all'], ['OPS3_VERIFICATION_SCOPE', 'photo'],
   ])('refuses a changed protected boundary: %s', (key, value) => {
     expect(() => resolveSmokeTarget({ ...environment, [key]: value })).toThrow()
+  })
+  it('binds photo-only recovery to an exact scope confirmation', () => {
+    expect(resolveSmokeTarget({ ...environment, OPS3_VERIFICATION_SCOPE: 'photo',
+      OPS3_CONFIRMATION: `VERIFY OPS3 STAGING ${targetId} ${sha} 123 photo` })).toMatchObject({ scope: 'photo' })
+  })
+  it('does not invoke the paid API callback during photo-only recovery', async () => {
+    const calls: string[] = []
+    const callbacks = { api: async () => { calls.push('api') }, browser: async () => { calls.push('browser') } }
+    await runSmokeChecks({ scope: 'photo', ...callbacks })
+    expect(calls).toEqual(['browser'])
+    calls.length = 0
+    await runSmokeChecks({ scope: 'full', ...callbacks })
+    expect(calls).toEqual(['api', 'browser'])
+    calls.length = 0
+    await expect(runSmokeChecks({ scope: 'unknown', ...callbacks })).rejects.toThrow('INVALID_VERIFICATION_SCOPE')
+    expect(calls).toEqual([])
   })
   it.each(['/api/account/delete', '/api/admin/analytics/export', 'https://burillab.com/api/ai/classify', '//other/api/ai/classify', '/api/ai/../ai/classify'])('never sends credentials to %s', (value) => {
     expect(() => smokeApiUrl(value)).toThrow('UNAPPROVED_API_TARGET')
@@ -119,5 +137,12 @@ describe('Ops3 live Staging verification safety', () => {
     expect(runner).toContain('uploadSha256 === hash(bytes)')
     expect(runner).toContain("scope: 'global'")
     expect(runner).not.toContain("from('audit_logs').delete")
+    expect(workflow).toContain('OPS3_VERIFICATION_SCOPE: ${{ inputs.verification_scope }}')
+    expect(runner).toContain('expect.configure({ timeout: 15_000 })')
+    expect(runner).toContain("mark('browser-await-inventory')")
+    expect(runner).toContain('result.browser = diagnostics')
+    expect(runner).not.toContain('diagnostics.page = page.url()')
+    expect(runner).toContain('runSmokeChecks({ scope: target.scope,')
+    expect(runner).toContain('result.verificationScope = target.scope')
   })
 })
