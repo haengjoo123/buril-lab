@@ -15,11 +15,12 @@
 | Pages deployment | `0f9f8be8-5409-4690-8044-59d4015644c2` |
 | 고정 주소 | `https://0f9f8be8.buril-lab-staging.pages.dev` |
 | Pages 생성 시각 | 2026-09-03 03:48:52 UTC |
-| GitHub Pages deployment | `6236550161`, 최신 status success |
+| GitHub Pages 환경 이력 | `6236550161`, 배포 시 success; 후속 검증 환경 이력 활성화 뒤 inactive |
 | Worker 배포 | `storage-backup=false`, 선택적 Worker job skipped |
 | 실제 전체 검증 | [33713297440](https://github.com/haengjoo123/buril-lab/actions/runs/33713297440), 같은 SHA, `verificationScope=full`, success |
+| GitHub 검증 전용 환경 이력 | `6236648843`, 최신 status success |
 
-Cloudflare의 production deployment라는 표시는 **`buril-lab-staging` 안의 정식 배포**를 뜻한다. 실제 운영 프로젝트 `buril-lab`의 변경이 아니다. 같은 run의 빌드용 GitHub deployment `6236537360`은 inactive이며, 서비스 중인 위 Pages deployment의 실패로 해석하지 않는다.
+Cloudflare의 production deployment라는 표시는 **`buril-lab-staging` 안의 정식 배포**를 뜻한다. 실제 운영 프로젝트 `buril-lab`의 변경이 아니다. 같은 run의 빌드용 GitHub deployment `6236537360`은 inactive다. 검증 전용 workflow도 GitHub의 `staging` 환경을 사용하므로 검증 이력 `6236648843`이 03:59:40 UTC에 success가 된 뒤 이전 배포 이력 `6236550161`은 03:59:41 UTC에 inactive로 바뀌었다. 이는 GitHub 환경 이력의 표시이며 실제 Pages 서비스 중단이나 배포 실패가 아니다. 마지막 공급자 대조에서도 Cloudflare `canonical_deployment`는 위 `0f9f8be8`·2a3 SHA 그대로였다. 운영도 기존 `bb0bc6ae`·eaf SHA였다. GitHub의 최신 환경 이력과 실제 Cloudflare 서비스 배포를 구분한다.
 
 배포 workflow는 자격값 없는 빌드와 별도 배포 runner, 정확한 산출물·SHA·서명, main Quality, 공급자 권한·만료·자동 배포 통제, 변경 직전 재검사, Supabase Hosted Advisor exact 목록을 모두 검증했다. 기존 Advisor 경고를 0건으로 없앴다는 뜻은 아니다.
 
