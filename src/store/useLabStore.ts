@@ -9,6 +9,7 @@ export interface Lab {
     institution_name?: string;
     institution_type?: string;
     research_field?: string;
+    join_password_needs_change?: boolean;
 }
 
 export interface LabMember {

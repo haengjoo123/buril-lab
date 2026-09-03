@@ -95,3 +95,23 @@ describe('new client join path', () => {
     expect(isLabMembershipLimitError({ code: 'max_lab_memberships_exceeded' })).toBe(true)
   })
 })
+
+describe('Ops8 lab password writes', () => {
+  it('preserves every password character for the server policy and full-input hash', async () => {
+    mocked.rpc.mockResolvedValueOnce({ data: { success: true }, error: null })
+    await labService.updateLabJoinPassword(labId, '  Safe phrase 2026!  ')
+    expect(mocked.rpc).toHaveBeenCalledExactlyOnceWith('set_lab_join_password', {
+      target_lab_id: labId,
+      p_password: '  Safe phrase 2026!  ',
+    })
+  })
+
+  it('uses null only for an intentional password removal', async () => {
+    mocked.rpc.mockResolvedValueOnce({ data: { success: true }, error: null })
+    await labService.updateLabJoinPassword(labId, '')
+    expect(mocked.rpc).toHaveBeenCalledExactlyOnceWith('set_lab_join_password', {
+      target_lab_id: labId,
+      p_password: null,
+    })
+  })
+})

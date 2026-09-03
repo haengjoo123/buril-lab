@@ -9,6 +9,7 @@ export const LAB_MEMBERSHIP_LIMIT_ERROR = `계정당 최대 ${LAB_MEMBERSHIP_LIM
 const LAB_MEMBERSHIP_LIMIT_DB_CODE = 'max_lab_memberships_exceeded';
 const LAB_SELECT = 'id, name, created_by, created_at, institution_type, research_field';
 const LAB_SELECT_WITH_INSTITUTION_NAME = `id, name, created_by, created_at, institution_name, institution_type, research_field`;
+const LAB_SELECT_WITH_PASSWORD_POLICY = `${LAB_SELECT_WITH_INSTITUTION_NAME}, join_password_needs_change`;
 const LAB_MEMBER_SELECT = `
                 *,
                 lab:labs(${LAB_SELECT})
@@ -16,6 +17,10 @@ const LAB_MEMBER_SELECT = `
 const LAB_MEMBER_SELECT_WITH_INSTITUTION_NAME = `
                 *,
                 lab:labs(${LAB_SELECT_WITH_INSTITUTION_NAME})
+            `;
+const LAB_MEMBER_SELECT_WITH_PASSWORD_POLICY = `
+                *,
+                lab:labs(${LAB_SELECT_WITH_PASSWORD_POLICY})
             `;
 
 const getErrorText = (error: unknown): string => {
@@ -52,6 +57,12 @@ const isMissingInstitutionNameColumnError = (error: unknown): boolean => {
         && message.includes('institution_name');
 };
 
+const isMissingPasswordPolicyColumnError = (error: unknown): boolean => {
+    const message = getErrorText(error);
+    return ((error as any)?.code === '42703' || message.includes('column'))
+        && message.includes('join_password_needs_change');
+};
+
 const isMissingInstitutionNameRpcArgumentError = (error: unknown): boolean => {
     const message = getErrorText(error);
     return message.includes('create_lab_secure')
@@ -60,45 +71,62 @@ const isMissingInstitutionNameRpcArgumentError = (error: unknown): boolean => {
 };
 
 const fetchLabById = async (labId: string): Promise<Lab> => {
+    const { data: policyData, error: policyError } = await supabase
+        .from('labs')
+        .select(LAB_SELECT_WITH_PASSWORD_POLICY)
+        .eq('id', labId)
+        .single();
+
+    if (!policyError) return policyData as Lab;
+    if (!isMissingPasswordPolicyColumnError(policyError)) {
+        if (!isMissingInstitutionNameColumnError(policyError)) throw policyError;
+    }
+
     const { data, error } = await supabase
         .from('labs')
         .select(LAB_SELECT_WITH_INSTITUTION_NAME)
         .eq('id', labId)
         .single();
 
-    if (error && isMissingInstitutionNameColumnError(error)) {
-        const { data: fallbackData, error: fallbackError } = await supabase
-            .from('labs')
-            .select(LAB_SELECT)
-            .eq('id', labId)
-            .single();
+    if (!error) return data as Lab;
+    if (!isMissingInstitutionNameColumnError(error)) throw error;
 
-        if (fallbackError) throw fallbackError;
-        return fallbackData as Lab;
-    }
+    const { data: fallbackData, error: fallbackError } = await supabase
+        .from('labs')
+        .select(LAB_SELECT)
+        .eq('id', labId)
+        .single();
 
-    if (error) throw error;
-    return data as Lab;
+    if (fallbackError) throw fallbackError;
+    return fallbackData as Lab;
 };
 
 const fetchMyLabMemberships = async (userId: string): Promise<LabMember[]> => {
+    const { data: policyData, error: policyError } = await supabase
+        .from('lab_members')
+        .select(LAB_MEMBER_SELECT_WITH_PASSWORD_POLICY)
+        .eq('user_id', userId);
+
+    if (!policyError) return policyData as LabMember[];
+    if (!isMissingPasswordPolicyColumnError(policyError)) {
+        if (!isMissingInstitutionNameColumnError(policyError)) throw policyError;
+    }
+
     const { data, error } = await supabase
         .from('lab_members')
         .select(LAB_MEMBER_SELECT_WITH_INSTITUTION_NAME)
         .eq('user_id', userId);
 
-    if (error && isMissingInstitutionNameColumnError(error)) {
-        const { data: fallbackData, error: fallbackError } = await supabase
-            .from('lab_members')
-            .select(LAB_MEMBER_SELECT)
-            .eq('user_id', userId);
+    if (!error) return data as LabMember[];
+    if (!isMissingInstitutionNameColumnError(error)) throw error;
 
-        if (fallbackError) throw fallbackError;
-        return fallbackData as LabMember[];
-    }
+    const { data: fallbackData, error: fallbackError } = await supabase
+        .from('lab_members')
+        .select(LAB_MEMBER_SELECT)
+        .eq('user_id', userId);
 
-    if (error) throw error;
-    return data as LabMember[];
+    if (fallbackError) throw fallbackError;
+    return fallbackData as LabMember[];
 };
 
 export const labService = {
@@ -112,7 +140,7 @@ export const labService = {
     ): Promise<Lab> {
         const createLabParams = {
             p_name: name,
-            p_password: password || null,
+            p_password: password === '' || password === undefined ? null : password,
             p_nickname: nickname || null,
             p_institution_type: institutionType || null,
             p_research_field: researchField || null
@@ -276,7 +304,7 @@ export const labService = {
     async updateLabJoinPassword(labId: string, password: string): Promise<void> {
         const { data, error } = await supabase.rpc('set_lab_join_password', {
             target_lab_id: labId,
-            p_password: password.trim() ? password.trim() : null,
+            p_password: password === '' ? null : password,
         });
 
         if (error) throw error;

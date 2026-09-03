@@ -30,6 +30,11 @@ const application = {
 describe('Ops7 Contract preparation boundary', () => {
   it('pins its base and verifies only a not-yet-applicable local preparation', () => {
     expect(OPS7_PREPARATION_BASE_SHA).toMatch(/^[0-9a-f]{40}$/)
+    const hasSuccessorGate = read('package.json').includes('"ops8:verify"')
+    if (hasSuccessorGate) {
+      expect(() => verifyOps7ContractPreparation(root)).toThrow(/unreviewed path/)
+      return
+    }
     expect(verifyOps7ContractPreparation(root)).toMatchObject({
       result: 'ops7-contract-preparation-ok',
       activeMigrations: 5,

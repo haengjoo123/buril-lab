@@ -32,12 +32,14 @@ export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260904020000_ops6_private_cabinet_photos_expand.sql': 'a5c63cb5342e58aa0bd1555713ecad98e20d22bf3b82e2bd3d39d9104d07d4c8',
   '20260904021000_ops6_private_cabinet_photos_switch.sql': 'd153d1e380ea87613cf4f228b06823f4c46387e08346e5ce68f721d3cdd5a63d',
   '20260904030000_ops7_contract_legacy_join_audit.sql': '073927a0689e3cfd11e93ebcb47a3bd2ba828625553adc6389806a94e554951e',
+  '20260904040000_ops8_lab_password_policy.sql': '3f7210de31759efc6179ee712616a9dbb89b0f34e366f3c86eb951d0baca0f18',
 })
 export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
   'baseline_permissions.sql': EXPECTED_PERMISSION_TEST_SHA256,
   'ops5_expand_permissions.sql': '183a3a73c23a66b274ac9fd4d4a00cca38a65ba4d1af4d34c901370e919812b3',
   'ops6_private_photos_permissions.sql': '56be7e3115c21332eb11e25674ef5f6e7498522919c4d091b7e0b12e9d175c48',
   'ops7_contract_permissions.sql': '73cf2ec168ed0f6ec60ead91a901be4f9e39d24de3dba12cf2ff37bd6b75d942',
+  'ops8_lab_password_policy.sql': '19ebad4a89d75a9e905cc827e3014db4d0f675130f474550ad2748957ce87733',
 })
 export const EXPECTED_CI_MARKER = '{"schema_version":1,"enabled":true,"reset_count":2,"permission_tests":true}'
 
@@ -246,7 +248,7 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
   const config = readFileSync(resolve(repoRoot, 'supabase/config.toml'), 'utf8')
   assert(/major_version\s*=\s*17/.test(config), 'Local database major version must match the PG17 baseline.')
   assert(/\[db\.seed\][\s\S]*?enabled\s*=\s*false/.test(config), 'Prep 1 must not seed production-like data.')
-  assert(/minimum_password_length\s*=\s*6/.test(config), 'Prep 1 must retain the pre-Gate2 local password baseline.')
+  assert(/minimum_password_length\s*=\s*6/.test(config), 'Local account-password length remains separate from the Ops8 shared lab-password policy.')
   assert(!/\[auth\.mfa(?:\.|\])/.test(config), 'MFA configuration belongs to a later gate.')
   assert(!/auto_expose_new_tables\s*=\s*true/.test(config), 'Data API auto-exposure must remain disabled.')
 

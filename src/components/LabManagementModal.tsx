@@ -6,6 +6,13 @@ import { useTranslation } from 'react-i18next';
 import { LAB_MEMBERSHIP_LIMIT, isLabMembershipLimitError, labService } from '../services/labService';
 import { useLabStore } from '../store/useLabStore';
 import type { Lab } from '../store/useLabStore';
+import {
+    LAB_JOIN_PASSWORD_MAX_LENGTH,
+    LAB_JOIN_PASSWORD_MIN_LENGTH,
+    labPasswordIssueFromError,
+    type LabPasswordPolicyIssue,
+    validateLabJoinPassword,
+} from '../utils/labPasswordPolicy';
 
 type LabWithPassword = Lab & { has_password?: boolean };
 import { AppSelect } from './AppSelect';
@@ -46,9 +53,14 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
     const { myLabs, setMyLabs, currentLabId, setCurrentLabId } = useLabStore();
 
-    const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
+    const currentMembership = myLabs.find(m => m.lab_id === currentLabId);
+    const currentRole = currentMembership?.role;
     const hasReachedLabLimit = myLabs.length >= LAB_MEMBERSHIP_LIMIT;
     const labLimitMessage = t('lab_mgmt_limit_reached', { max: LAB_MEMBERSHIP_LIMIT });
+    const passwordIssueMessage = (issue: LabPasswordPolicyIssue) => t(`lab_mgmt_password_${issue}`, {
+        min: LAB_JOIN_PASSWORD_MIN_LENGTH,
+        max: LAB_JOIN_PASSWORD_MAX_LENGTH,
+    });
 
     const handleLeaveLab = async (labId: string, labName: string) => {
         if (!window.confirm(t('lab_leave_confirm', { name: labName }))) return;
@@ -136,6 +148,11 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!createName.trim() || !createNickname.trim() || !createInstitutionName.trim() || !createInstitutionType || !createResearchField) return;
+        const passwordIssue = validateLabJoinPassword(createName, createPassword);
+        if (passwordIssue) {
+            setError(passwordIssueMessage(passwordIssue));
+            return;
+        }
         if (hasReachedLabLimit) {
             setError(labLimitMessage);
             return;
@@ -157,7 +174,10 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             setCurrentLabId(newLab.id);
             onClose();
         } catch (err: any) {
-            setError(isLabMembershipLimitError(err) ? labLimitMessage : (err.message || "Failed to create lab"));
+            const passwordIssue = labPasswordIssueFromError(err);
+            setError(passwordIssue
+                ? passwordIssueMessage(passwordIssue)
+                : isLabMembershipLimitError(err) ? labLimitMessage : (err.message || "Failed to create lab"));
         } finally {
             setIsLoading(false);
         }
@@ -193,6 +213,13 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     const handleUpdateSettings = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!currentLabId || !settingsName.trim()) return;
+        if (!settingsRemovePassword && settingsPassword !== '') {
+            const passwordIssue = validateLabJoinPassword(settingsName, settingsPassword);
+            if (passwordIssue) {
+                setError(passwordIssueMessage(passwordIssue));
+                return;
+            }
+        }
         setIsLoading(true);
         setError(null);
         try {
@@ -202,7 +229,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                 institution_type: settingsInstitutionType.trim() ? settingsInstitutionType.trim() : null,
                 research_field: settingsResearchField.trim() ? settingsResearchField.trim() : null
             });
-            if (settingsRemovePassword || settingsPassword.trim()) {
+            if (settingsRemovePassword || settingsPassword !== '') {
                 await labService.updateLabJoinPassword(
                     currentLabId,
                     settingsRemovePassword ? '' : settingsPassword
@@ -213,7 +240,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
             alert(t('lab_mgmt_settings_saved'));
             setView('menu');
         } catch (err: any) {
-            setError(err.message || t('admin_role_change_error'));
+            const passwordIssue = labPasswordIssueFromError(err);
+            setError(passwordIssue ? passwordIssueMessage(passwordIssue) : (err.message || t('admin_role_change_error')));
         } finally {
             setIsLoading(false);
         }
@@ -528,7 +556,15 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     placeholder={t('lab_mgmt_form_password_placeholder')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     autoComplete="new-password"
+                                    minLength={createPassword ? LAB_JOIN_PASSWORD_MIN_LENGTH : undefined}
+                                    maxLength={LAB_JOIN_PASSWORD_MAX_LENGTH}
                                 />
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                    {t('lab_mgmt_password_help', {
+                                        min: LAB_JOIN_PASSWORD_MIN_LENGTH,
+                                        max: LAB_JOIN_PASSWORD_MAX_LENGTH,
+                                    })}
+                                </p>
                             </div>
                             <div className="flex gap-2 pt-4 pb-4">
                                 <button type="button" onClick={() => setView('menu')} className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 transition-colors">
@@ -749,6 +785,11 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('lab_mgmt_form_password')}</label>
+                                {currentMembership?.lab?.join_password_needs_change && (
+                                    <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+                                        {t('lab_mgmt_password_replacement_required')}
+                                    </div>
+                                )}
                                 <input
                                     type="password"
                                     value={settingsPassword}
@@ -759,6 +800,8 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100 disabled:opacity-60"
                                     autoComplete="new-password"
                                     disabled={settingsRemovePassword}
+                                    minLength={settingsPassword ? LAB_JOIN_PASSWORD_MIN_LENGTH : undefined}
+                                    maxLength={LAB_JOIN_PASSWORD_MAX_LENGTH}
                                 />
                                 <p className="text-xs text-slate-500 mt-1">
                                     {t('lab_mgmt_form_password_update_info', {

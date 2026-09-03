@@ -1,7 +1,7 @@
 # 활성 Supabase 마이그레이션
 
 이 폴더는 Supabase CLI가 새 로컬 DB와 빈 Staging DB에 적용하는 활성 경로입니다.
-Ops7 준비 시점의 활성 SQL은 다음 다섯 파일로 고정합니다. 빈 환경에서는 아래 순서로
+Ops8 준비 시점의 활성 SQL은 다음 여섯 파일로 고정합니다. 빈 환경에서는 아래 순서로
 재구성하지만, 운영에는 각 관문의 통과조건을 만족한 증분 파일만 순서대로 적용합니다.
 
 - `20260824000000_production_baseline.sql`
@@ -9,6 +9,7 @@ Ops7 준비 시점의 활성 SQL은 다음 다섯 파일로 고정합니다. 빈
 - `20260904020000_ops6_private_cabinet_photos_expand.sql`
 - `20260904021000_ops6_private_cabinet_photos_switch.sql`
 - `20260904030000_ops7_contract_legacy_join_audit.sql`
+- `20260904040000_ops8_lab_password_policy.sql`
 
 ## 절대 금지
 
@@ -26,7 +27,7 @@ Repair 도구는 검토한 Supabase CLI `2.115.0`이 이미 설치되어 있을 
 `npx --no-install`로 실행됩니다. 실행 중 최신 CLI를 자동 다운로드하지 않습니다.
 
 `supabase test db`가 실행하는 활성 SQL 검사는 기준선, Ops5 Expand, Ops6 비공개
-사진 전환, Ops7 Contract용 pgTAP 네 파일입니다. 기준선 전환 전의 절차형 SQL 검증문은 삭제하지
+사진 전환, Ops7 Contract, Ops8 비밀번호 정책용 pgTAP 다섯 파일입니다. 기준선 전환 전의 절차형 SQL 검증문은 삭제하지
 않고 `supabase/legacy_tests`에 보관하며 활성 pgTAP 검사에 섞지 않습니다.
 
 ## 이력 전환과 복구
@@ -45,9 +46,11 @@ SHA-256으로 검증됩니다.
 
 ## 다음 변경
 
-Ops5부터 Ops7까지의 뒤쪽 스키마 변경도 새 시각의 증분 migration으로만 추가합니다. 계정
+Ops5부터 Ops8까지의 뒤쪽 스키마 변경도 새 시각의 증분 migration으로만 추가합니다. 계정
 삭제, 운영자 역할/MFA, SDS, 알림 migration은 아직 활성 경로에 포함하지 않습니다.
 Ops6 Switch는 외부 복사 manifest와 해시 검증, 보존 원본, 접근 차단 시험을 모두
 통과한 뒤에만 적용하며 Expand와 같은 운영 배포에 섞지 않습니다.
 Ops7 Contract는 새 가입·감사 경로 배포 후 7일 동안 구 경로 호출이 0건이라는
 운영 증거가 있을 때만 적용합니다.
+Ops8은 Contract가 적용된 뒤 기존 비밀번호 해시를 보존한 채 교체 필요 표시만 추가하고,
+새로 만들거나 바꾸는 연구실 비밀번호에만 12~128자 정책을 적용합니다.
