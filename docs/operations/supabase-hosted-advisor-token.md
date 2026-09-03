@@ -14,6 +14,14 @@ Hosted Supabase Advisor와 Cloudflare 배포는 실제 Staging 또는 운영 환
 
 Staging 자동 배포 대신 감독형 수동 실행을 쓰는 것은 의도된 변경입니다. Cloudflare 쓰기 권한이 계정 범위이기 때문에 품질검사 성공만으로 자격값을 자동 발급하지 않습니다.
 
+## 이미 승인된 작업을 이어가는 기준
+
+사용자는 운영 안전 완성 계획 안의 최소권한·최단수명 토큰 생성, 기존 Staging/운영 GitHub 환경으로의 숨김 전달, 사용 직후 공급자 폐기·비활성 검증·서명 정리를 승인했다. **같은 범위의 토큰 작업마다 승인을 반복 요청하지 않는다.** 필요한 토큰만 만들며 Pages만 배포할 때는 Worker·acceptance 토큰을 추가하지 않는다.
+
+이 승인은 상태 검사나 서명을 생략하라는 뜻이 아니다. 기존 pending·lease·감독기가 있으면 정확한 기존 작업부터 이어서 정리하고, 임시 secret 부재·공급자 비활성·영수증 연결을 확인한다. SHA·환경·대상 계정·권한·수명·용도는 실행 때마다 확인한다. 운영의 주간 배포 간격, 이전 묶음 관찰, 복구 및 같은 SHA의 Staging 검증 조건도 그대로 적용한다.
+
+사용자 개입은 본인 로그인/MFA처럼 자동으로 대신할 수 없는 단계, 또는 승인한 계획보다 대상·권한·보존기간·비용이 실질적으로 늘어나는 경우에만 요청한다. 새 조직/계정, 더 넓은 권한, 장기 자격값, 다른 외부 전달처를 임의로 승인된 것으로 취급하지 않는다.
+
 ## 실행 전 조건
 
 - 배포 커밋은 현재 보호된 `main`의 정확한 40자리 SHA여야 합니다.
@@ -62,7 +70,7 @@ node scripts/supervise-ephemeral-release.mjs refresh-receipt \
 
 ## 감독형 Staging 배포
 
-실제 토큰 생성 직전에 별도 확인을 받고 다음 형식으로 시작합니다.
+승인된 범위와 현재 상태를 확인한 뒤 다음 형식으로 시작합니다. 위 기준에 해당하는 같은 범위의 재시도에는 추가 승인 질문을 하지 않습니다.
 
 ```text
 node scripts/supervise-ephemeral-release.mjs deploy \
@@ -102,7 +110,7 @@ node scripts/supervise-ephemeral-release.mjs deploy \
   --staging-run-id <승인한 Staging run ID>
 ```
 
-운영 임대에는 `staging_run_id`와 해당 Staging 정리 영수증 해시가 함께 서명됩니다. workflow도 목록의 최신 실행을 임의 선택하지 않고 `/actions/runs/{run_id}`로 정확한 실행을 직접 조회합니다. 복구훈련과 별도 운영 승인 전에는 이 명령을 실행하지 않습니다.
+운영 임대에는 `staging_run_id`와 해당 Staging 정리 영수증 해시가 함께 서명됩니다. workflow도 목록의 최신 실행을 임의 선택하지 않고 `/actions/runs/{run_id}`로 정확한 실행을 직접 조회합니다. 승인된 운영 범위, 복구훈련, 이전 운영 묶음의 관찰 및 같은 SHA의 Staging 검증 조건을 충족하기 전에는 이 명령을 실행하지 않습니다. 토큰 작업 승인은 이 배포 관문을 대신하지 않습니다.
 
 ## 입력·실행 중단 복구
 
