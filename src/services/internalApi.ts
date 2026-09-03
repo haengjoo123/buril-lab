@@ -3,6 +3,30 @@ import { getInternalApiUrl } from './apiUrl'
 
 interface ApiErrorPayload {
   error?: string
+  code?: unknown
+  retryAfterSeconds?: unknown
+}
+
+export class InternalApiError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly retryAfterSeconds?: number
+
+  constructor(message: string, status: number, code?: string, retryAfterSeconds?: number) {
+    super(message)
+    this.name = 'InternalApiError'
+    this.status = status
+    this.code = code
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+function retryDelay(payload: ApiErrorPayload | undefined, response: Response): number | undefined {
+  const fromHeader = response.headers.get('Retry-After')
+  const value = payload?.retryAfterSeconds
+    ?? (fromHeader && /^\d+$/.test(fromHeader) ? Number(fromHeader) : undefined)
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 86_400
+    ? value : undefined
 }
 
 /**
@@ -22,13 +46,18 @@ async function authorizedHeaders(includeJsonContentType: boolean): Promise<Recor
 
 async function parseJsonResponse<TResponse>(response: Response): Promise<TResponse> {
   const contentType = response.headers.get('content-type') || ''
-  const payload = contentType.includes('application/json')
-    ? (await response.json()) as TResponse & ApiErrorPayload
-    : undefined
+  let payload: (TResponse & ApiErrorPayload) | undefined
+  if (contentType.includes('application/json')) {
+    try { payload = await response.json() as TResponse & ApiErrorPayload }
+    catch { /* Preserve the HTTP error and retry header even for malformed JSON. */ }
+  }
 
   if (!response.ok) {
-    const message = payload?.error || `Request failed with status ${response.status}`
-    throw new Error(message)
+    const message = typeof payload?.error === 'string' && payload.error
+      ? payload.error : `Request failed with status ${response.status}`
+    const code = typeof payload?.code === 'string' && /^[A-Za-z0-9_]{1,64}$/.test(payload.code)
+      ? payload.code : undefined
+    throw new InternalApiError(message, response.status, code, retryDelay(payload, response))
   }
 
   if (!payload) throw new Error('Server returned an empty response.')

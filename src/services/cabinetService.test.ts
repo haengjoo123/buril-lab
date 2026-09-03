@@ -5,9 +5,11 @@ const uploadMock = vi.hoisted(() => vi.fn());
 const getPublicUrlMock = vi.hoisted(() => vi.fn());
 const removeMock = vi.hoisted(() => vi.fn());
 const storageFromMock = vi.hoisted(() => vi.fn());
+const rpcMock = vi.hoisted(() => vi.fn());
 
 vi.mock('./supabaseClient', () => ({
     supabase: {
+        rpc: rpcMock,
         storage: {
             from: storageFromMock,
         },
@@ -27,6 +29,40 @@ import { cabinetService } from './cabinetService';
 const cabinetId = '22222222-2222-4222-8222-222222222222';
 const optimizedFile = new File(['optimized'], 'cabinet-photo-optimized.webp', { type: 'image/webp' });
 const originalFile = new File(['original'], 'large-camera-photo.jpg', { type: 'image/jpeg' });
+
+describe('atomic cabinet activity audit', () => {
+    beforeEach(() => {
+        rpcMock.mockReset();
+        rpcMock.mockResolvedValue({ data: { success: true }, error: null });
+    });
+
+    it('uses only the database-derived activity and audit path', async () => {
+        await cabinetService.logActivity(cabinetId, 'add', 'Synthetic reagent', 'Inventory registration', 'memo');
+
+        expect(rpcMock).toHaveBeenCalledOnce();
+        expect(rpcMock).toHaveBeenCalledWith('record_cabinet_activity_v2', {
+            p_cabinet_id: cabinetId,
+            p_action_type: 'add',
+            p_item_name: 'Synthetic reagent',
+            p_reason: 'Inventory registration',
+            p_memo: 'memo',
+            p_request_id: '11111111-1111-4111-8111-111111111111',
+        });
+    });
+
+    it('never falls back to the forgeable generic audit path', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        rpcMock.mockResolvedValue({ data: null, error: { code: '42501', message: 'sensitive provider detail' } });
+
+        await expect(cabinetService.logActivity(cabinetId, 'remove', 'Synthetic reagent')).resolves.toBeUndefined();
+
+        expect(rpcMock).toHaveBeenCalledOnce();
+        expect(rpcMock).not.toHaveBeenCalledWith('insert_audit_log_rpc', expect.anything());
+        expect(consoleSpy).toHaveBeenCalledWith('Error logging atomic cabinet activity:', { code: '42501' });
+        expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain('sensitive provider detail');
+        consoleSpy.mockRestore();
+    });
+});
 
 describe('cabinet image upload', () => {
     beforeEach(() => {

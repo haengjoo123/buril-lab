@@ -26,6 +26,12 @@ describe('AI route middleware contract', () => {
     expect(resolveRateLimitCategory('/api/vision/ocr')).toBeNull()
     expect(isProtectedApiPath('/api/vision/ocr')).toBe(false)
   })
+
+  it('protects the server join route with its own request bucket and small body bound', () => {
+    expect(isProtectedApiPath('/api/labs/join')).toBe(true)
+    expect(resolveRateLimitCategory('/api/labs/join')).toBe('LABS')
+    expect(getApiRequestBodyLimit(resolveApiRoutePolicy('/api/labs/join')!)).toBe(8 * 1024)
+  })
 })
 
 const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -149,7 +155,7 @@ describe('API response boundary', () => {
 
   it.each([
     '/api/admin/feedback/list', '/api/ai/classify', '/api/gemini/scan-label',
-    '/api/voice/query', '/api/account/delete', '/api/analytics/guest-delete',
+    '/api/voice/query', '/api/account/delete', '/api/analytics/guest-delete', '/api/labs/join',
   ])('fails closed on Redis failure for %s', async (path) => {
     const run = setup(path, 'POST', { Authorization: 'Bearer fixture-token' })
     run.applyRateLimit.mockRejectedValue(new Error('redis internal detail token=never-expose'))

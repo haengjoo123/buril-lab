@@ -32,7 +32,7 @@ export function requestBodyErrorResponse(error: RequestBodyError): Response {
   })
 }
 
-export async function readLimitedRequestBytes(request: Request, maxBytes: number): Promise<Uint8Array<ArrayBuffer>> {
+export async function readLimitedRequestBytes(request: Pick<Request, 'headers' | 'body'>, maxBytes: number): Promise<Uint8Array<ArrayBuffer>> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('Invalid request body limit.')
   const declaredLength = request.headers.get('Content-Length')
   if (declaredLength !== null) {

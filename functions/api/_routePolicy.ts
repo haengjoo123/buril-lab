@@ -28,6 +28,7 @@ const POST_ROUTES = [
   '/api/gemini/classify',
   '/api/gemini/disposal-guide',
   '/api/gemini/scan-label',
+  '/api/labs/join',
   '/api/reagents/cas-resolve',
   '/api/voice/query',
   '/api/voice/speak',
@@ -70,6 +71,7 @@ export function isAllowedApiMethod(policy: ApiRoutePolicy, method: string): meth
 }
 
 export function getApiRequestBodyLimit(policy: ApiRoutePolicy): number {
+  if (policy.id === '/api/labs/join') return 8 * 1024
   if (/^\/api\/(?:ai|gemini)\/scan-label$/.test(policy.id)) return 12 * 1024 * 1024
   if (policy.id === '/api/voice/transcribe') return 5 * 1024 * 1024 + 64 * 1024
   if (policy.id.startsWith('/api/analytics/')) return 32 * 1024

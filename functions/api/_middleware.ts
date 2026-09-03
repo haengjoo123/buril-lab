@@ -64,6 +64,7 @@ function mergeVary(current: string | null, value: string): string {
 
 const SENSITIVE_API_PATTERNS = [
   /^\/api\/account\//,
+  /^\/api\/labs\//,
   /^\/api\/admin\//,
   /^\/api\/(?:ai|gemini)\//,
   /^\/api\/voice\//,
@@ -112,6 +113,11 @@ function withResponseHeaders(
 const supabaseJwksCache = new Map<string, ReturnType<typeof jose.createRemoteJWKSet>>()
 
 const LIMIT_CONFIGS = {
+  LABS: {
+    user: { count: 30, window: '1 m' },
+    ip: { count: 2, window: '1 m' },
+    pattern: /^\/api\/labs\//,
+  },
   ADMIN: {
     user: { count: 20, window: '1 m' },
     ip: { count: 2, window: '1 m' },
@@ -171,6 +177,7 @@ type RateLimitResult = {
 
 const PROTECTED_API_PATTERNS = [
   /^\/api\/account\//,
+  /^\/api\/labs\//,
   /^\/api\/admin\//,
   /^\/api\/ai\//,
   /^\/api\/gemini\//,
@@ -184,6 +191,7 @@ export function isProtectedApiPath(path: string): boolean {
 }
 
 export function resolveRateLimitCategory(path: string): RateLimitCategory | null {
+  if (LIMIT_CONFIGS.LABS.pattern.test(path)) return 'LABS'
   if (LIMIT_CONFIGS.ADMIN.pattern.test(path)) return 'ADMIN'
   if (LIMIT_CONFIGS.VOICE.pattern.test(path)) return 'VOICE'
   if (LIMIT_CONFIGS.AI.pattern.test(path)) return 'AI'
