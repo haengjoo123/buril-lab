@@ -49,6 +49,8 @@ export const OPS3_APPROVED_PATHS = Object.freeze([
   'functions/api/chemicals/enrich.ts',
   'functions/api/kosha/endpoint.test.ts',
   'functions/api/kosha/msds.test.ts',
+  'functions/api/voice/_reagentAliases.test.ts',
+  'functions/api/voice/_reagentAliases.ts',
   'functions/api/voice/_shared.ts',
   'functions/api/voice/audio.test.ts',
   'functions/api/voice/query.test.ts',

@@ -144,5 +144,8 @@ describe('Ops3 live Staging verification safety', () => {
     expect(runner).not.toContain('diagnostics.page = page.url()')
     expect(runner).toContain('runSmokeChecks({ scope: target.scope,')
     expect(runner).toContain('result.verificationScope = target.scope')
+    expect(runner).toContain("const root = page.locator('main:visible')")
+    expect(runner).toContain("createButton: root.locator('header').getByRole('button'")
+    expect(runner).toContain('await cabinetControls.fileInput.setInputFiles(')
   })
 })

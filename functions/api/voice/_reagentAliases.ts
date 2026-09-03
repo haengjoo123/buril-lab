@@ -43,6 +43,8 @@ const MAX_MATCH_CANDIDATES = 120
 const MAX_GENERATED_ALIASES = 10
 export const VOICE_ALIAS_MAX_OUTPUT_TOKENS = 500
 export const VOICE_CANDIDATE_MAX_OUTPUT_TOKENS = 500
+export const VOICE_REFERENCE_TIMEOUT_MS = 5_000
+export const VOICE_REFERENCE_MAX_BYTES = 256 * 1024
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -67,6 +69,71 @@ const candidateResolutionSchema = z.object({
   confidence: z.number().min(0).max(1),
   queryAliases: z.array(z.string().min(1).max(120)).max(MAX_GENERATED_ALIASES),
 })
+const pubchemPropertiesSchema = z.object({
+  PropertyTable: z.object({ Properties: z.array(z.object({
+    CID: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    Title: z.string().optional(),
+    IUPACName: z.string().optional(),
+  })) }),
+})
+const pubchemSynonymsSchema = z.object({
+  InformationList: z.object({ Information: z.array(z.object({ Synonym: z.array(z.string()) })) }),
+})
+
+// Optional reference lookups must not hold up an already matched inventory
+// result indefinitely. One deadline covers headers AND the complete body.
+async function fetchReferenceText(url: string, provider: 'pubchem' | 'kosha'): Promise<string | null> {
+  const controller = new AbortController()
+  let response: Response | undefined
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error('Reference deadline exceeded'))
+    }, VOICE_REFERENCE_TIMEOUT_MS)
+  })
+  try {
+    response = await Promise.race([fetch(url, {
+      method: 'GET', redirect: 'error', signal: controller.signal,
+      headers: { Accept: provider === 'kosha' ? 'application/xml,text/xml' : 'application/json' },
+    }), deadline])
+    if (!response.ok || !response.body) return null
+    const declared = response.headers.get('content-length')
+    if (declared !== null && (!/^\d+$/.test(declared)
+      || !Number.isSafeInteger(Number(declared)) || Number(declared) > VOICE_REFERENCE_MAX_BYTES)) return null
+    reader = response.body.getReader()
+    let bytes = new Uint8Array(16 * 1024)
+    let length = 0
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), deadline])
+      if (done) break
+      if (value.byteLength > VOICE_REFERENCE_MAX_BYTES - length) return null
+      if (length + value.byteLength > bytes.byteLength) {
+        const grown = new Uint8Array(Math.min(VOICE_REFERENCE_MAX_BYTES, Math.max(bytes.byteLength * 2, length + value.byteLength)))
+        grown.set(bytes.subarray(0, length))
+        bytes = grown
+      }
+      bytes.set(value, length)
+      length += value.byteLength
+    }
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length))
+  } catch {
+    // Never log the URL (KOSHA query contains a key), search term or raw error.
+    console.warn('[voice/aliases] Reference lookup unavailable:', { provider })
+    return null
+  } finally {
+    clearTimeout(timer)
+    controller.abort()
+    if (reader) {
+      // A source's cancel hook may never finish; it must not defeat the deadline.
+      void reader.cancel().catch(() => undefined)
+      reader.releaseLock()
+    } else if (response?.body) {
+      void response.body.cancel().catch(() => undefined)
+    }
+  }
+}
 
 function isUsefulAlias(value: string): boolean {
   const trimmed = value.trim()
@@ -117,23 +184,19 @@ async function fetchKoshaKoreanNameByCas(env: ReagentAliasEnv, casNumber?: strin
     numOfRows: '3',
   })
 
-  const response = await fetch(`${KOSHA_BASE_URL}/chemlist?${params.toString()}`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/xml,text/xml;q=0.9,*/*;q=0.8',
-    },
-  })
-
-  if (!response.ok) {
+  try {
+    const text = await fetchReferenceText(`${KOSHA_BASE_URL}/chemlist?${params.toString()}`, 'kosha')
+    if (text === null) return null
+    const items = extractXmlItems(text)
+    const exactMatch = items.find(
+      (item) => normalizeCasNumber(String(item.casNo || '')) === normalizedCasNumber,
+    )
+    const name = exactMatch?.chemNameKor
+    return typeof name === 'string' ? name.trim() || null : null
+  } catch {
+    console.warn('[voice/aliases] Invalid reference response:', { provider: 'kosha' })
     return null
   }
-
-  const items = extractXmlItems(await response.text())
-  const exactMatch = items.find(
-    (item) => normalizeCasNumber(String(item.casNo || '')) === normalizedCasNumber,
-  )
-  const name = exactMatch?.chemNameKor?.trim()
-  return name || null
 }
 
 async function fetchPubChemAliases(query: string): Promise<PubChemResolution | null> {
@@ -142,42 +205,22 @@ async function fetchPubChemAliases(query: string): Promise<PubChemResolution | n
 
   try {
     const propertyUrl = `${PUBCHEM_BASE_URL}/compound/name/${encodeURIComponent(lookup)}/property/Title,IUPACName/JSON`
-    const propertyResponse = await fetch(propertyUrl)
-
-    if (!propertyResponse.ok) {
-      return null
-    }
-
-    const propertyData = await propertyResponse.json() as {
-      PropertyTable?: {
-        Properties?: Array<{
-          CID?: number
-          Title?: string
-          IUPACName?: string
-        }>
-      }
-    }
-
-    const property = propertyData.PropertyTable?.Properties?.[0]
+    const propertyText = await fetchReferenceText(propertyUrl, 'pubchem')
+    if (propertyText === null) return null
+    const propertyData = pubchemPropertiesSchema.safeParse(JSON.parse(propertyText))
+    if (!propertyData.success) return null
+    const property = propertyData.data.PropertyTable.Properties[0]
     const cid = property?.CID
     if (!cid) {
       return null
     }
 
-    const synonymsResponse = await fetch(
-      `${PUBCHEM_BASE_URL}/compound/cid/${cid}/synonyms/JSON`,
-    )
+    const synonymsText = await fetchReferenceText(`${PUBCHEM_BASE_URL}/compound/cid/${cid}/synonyms/JSON`, 'pubchem')
 
     let synonyms: string[] = []
-    if (synonymsResponse.ok) {
-      const synonymsData = await synonymsResponse.json() as {
-        InformationList?: {
-          Information?: Array<{
-            Synonym?: string[]
-          }>
-        }
-      }
-      synonyms = synonymsData.InformationList?.Information?.[0]?.Synonym || []
+    if (synonymsText !== null) {
+      const synonymsData = pubchemSynonymsSchema.safeParse(JSON.parse(synonymsText))
+      if (synonymsData.success) synonyms = synonymsData.data.InformationList.Information[0]?.Synonym || []
     }
 
     const casNumber = synonyms
@@ -188,8 +231,8 @@ async function fetchPubChemAliases(query: string): Promise<PubChemResolution | n
       casNumber,
       synonyms,
     }
-  } catch (error) {
-    console.warn('[voice/aliases] PubChem lookup failed:', error)
+  } catch {
+    console.warn('[voice/aliases] Invalid reference response:', { provider: 'pubchem' })
     return null
   }
 }

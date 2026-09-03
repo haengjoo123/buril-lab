@@ -1,5 +1,6 @@
 import { expect, test as base, type Page } from '@playwright/test'
 import { startPagesBoundaryLocal } from '../../scripts/pages-boundary-local.mjs'
+import { cabinetSmokeControls } from '../../scripts/verify-ops3-staging-live.mjs'
 
 type LocalPages = Awaited<ReturnType<typeof startPagesBoundaryLocal>>
 type CspViolation = { directive: string; blockedKind: string }
@@ -59,6 +60,27 @@ async function expectNoCspViolations(page: Page) {
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   expect(await page.evaluate(() => window.__boundaryViolations)).toEqual([])
 }
+
+test('photo smoke selects the visible cabinet toolbar and its hidden file input', async ({ page }) => {
+  // Model the existing responsive duplicate trees and the two visible create
+  // buttons, without a database, provider, credential or real photo upload.
+  await page.setContent(`
+    <div hidden><main><header><button>새 시약장 만들기</button></header>
+      <input type="file" accept="image/jpeg,image/png,image/webp" hidden></main></div>
+    <main><header><button id="toolbar-create">새 시약장 만들기</button></header>
+      <section><button>새 시약장 만들기</button></section>
+      <input type="file" accept="image/jpeg,image/png,image/webp" hidden></main>`)
+  const ambiguous = page.getByRole('button', { name: '새 시약장 만들기', exact: true })
+  await expect(ambiguous).toHaveCount(2)
+  await expect(ambiguous.click({ timeout: 1000 })).rejects.toThrow(/strict mode violation/)
+  const controls = cabinetSmokeControls(page)
+  await expect(controls.root).toHaveCount(1)
+  await expect(controls.createButton).toHaveAttribute('id', 'toolbar-create')
+  await controls.createButton.click()
+  await controls.fileInput.setInputFiles({ name: 'synthetic.webp', mimeType: 'image/webp', buffer: Buffer.from('fixture') })
+  expect(await controls.fileInput.evaluate((input: HTMLInputElement) => input.files?.length)).toBe(1)
+  expect(await page.locator('div[hidden] input').evaluate((input: HTMLInputElement) => input.files?.length)).toBe(0)
+})
 
 test('unchanged Pages CSP permits login/search UI, synthetic camera preview, and voice UI', async ({ page, localPages }) => {
   const pageErrors: string[] = []
