@@ -270,6 +270,17 @@ async function runApis(jwt, state, labelImage) {
   result.phases.push('voice-and-real-audio')
 }
 
+export function cabinetSmokeControls(page) {
+  // MainLayout mounts both responsive trees, and the desktop list also has two
+  // create buttons. Never select a hidden tree or an ambiguous whole-page button.
+  const root = page.locator('main:visible')
+  return {
+    root,
+    createButton: root.locator('header').getByRole('button', { name: '새 시약장 만들기', exact: true }),
+    fileInput: root.locator('input[type="file"][accept="image/jpeg,image/png,image/webp"]'),
+  }
+}
+
 async function runBrowser(admin, state, target) {
   const browser = await chromium.launch()
   const diagnostics = { cspViolations: 0, escapedCredentials: 0, unexpectedPaidRequests: 0,
@@ -350,10 +361,14 @@ async function runBrowser(admin, state, target) {
     await page.goto('/app/cabinet')
     check(new URL(page.url()).origin === SMOKE_ORIGIN, 'BROWSER_ORIGIN_CHANGED')
     mark('browser-create-cabinet')
-    await page.getByRole('button', { name: '새 시약장 만들기', exact: true }).click()
-    const name = page.getByPlaceholder('예: 메인 시약장, 위험물 보관함')
+    const cabinetControls = cabinetSmokeControls(page)
+    await browserExpect(cabinetControls.root).toHaveCount(1)
+    await cabinetControls.createButton.click()
+    mark('browser-fill-cabinet-name')
+    const name = cabinetControls.root.getByPlaceholder('예: 메인 시약장, 위험물 보관함')
     await name.fill(state.cabinetName)
     await name.press('Enter')
+    mark('browser-await-cabinet-row')
     await browserExpect.poll(async () => Boolean(await matchingCabinet(admin, state)), { timeout: 20_000 }).toBe(true)
     state.cabinetId = verifyCabinet(await matchingCabinet(admin, state), state)
     await save(state)
@@ -370,8 +385,8 @@ async function runBrowser(admin, state, target) {
     })
     mark('browser-webp-upload')
     // The freshly seeded lab has exactly this one cabinet; the photo menu sets its ID.
-    await page.getByTitle('시약장 사진 변경', { exact: true }).first().click()
-    await page.locator('input[type="file"][accept="image/jpeg,image/png,image/webp"]').setInputFiles({
+    await cabinetControls.root.getByTitle('시약장 사진 변경', { exact: true }).first().click()
+    await cabinetControls.fileInput.setInputFiles({
       name: 'ops3-synthetic.png', mimeType: 'image/png', buffer: Buffer.from(synthetic, 'base64'),
     })
     await browserExpect.poll(async () => Boolean((await matchingCabinet(admin, state))?.image_url), { timeout: 30_000 }).toBe(true)
@@ -388,8 +403,9 @@ async function runBrowser(admin, state, target) {
       try { return { width: image.width, height: image.height } } finally { image.close() }
     }, bytes.toString('base64'))
     check(Math.max(shape.width, shape.height) === 1920 && Math.min(shape.width, shape.height) > 0, 'PHOTO_RESIZE_CONTRACT')
-    await browserExpect(page.getByAltText(state.cabinetName).first()).toBeVisible()
-    await browserExpect.poll(() => page.getByAltText(state.cabinetName).first().evaluate((image) => image.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0)
+    const displayedImage = cabinetControls.root.getByAltText(state.cabinetName).first()
+    await browserExpect(displayedImage).toBeVisible()
+    await browserExpect.poll(() => displayedImage.evaluate((image) => image.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0)
     const again = checkedData(await admin.storage.from('cabinets').download(key), 'PHOTO_HASH_RECHECK')
     check(hash(Buffer.from(await again.arrayBuffer())) === hash(bytes), 'PHOTO_HASH_MISMATCH')
     check(diagnostics.cspViolations === 0 && diagnostics.escapedCredentials === 0 && diagnostics.unexpectedPaidRequests === 0
