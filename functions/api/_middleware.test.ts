@@ -26,6 +26,16 @@ describe('AI route middleware contract', () => {
     expect(resolveRateLimitCategory('/api/vision/ocr')).toBeNull()
     expect(isProtectedApiPath('/api/vision/ocr')).toBe(false)
   })
+
+  it('protects the server join route with its own request bucket and small body bound', () => {
+    expect(isProtectedApiPath('/api/labs/join')).toBe(true)
+    expect(resolveRateLimitCategory('/api/labs/join')).toBe('LABS')
+    expect(getApiRequestBodyLimit(resolveApiRoutePolicy('/api/labs/join')!)).toBe(8 * 1024)
+    expect(isProtectedApiPath('/api/labs/delete')).toBe(true)
+    expect(resolveRateLimitCategory('/api/labs/delete')).toBe('LABS')
+    expect(getApiRequestBodyLimit(resolveApiRoutePolicy('/api/labs/delete')!)).toBe(2 * 1024)
+    expect(getApiRequestBodyLimit(resolveApiRoutePolicy('/api/account/delete')!)).toBe(2 * 1024)
+  })
 })
 
 const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
@@ -102,6 +112,35 @@ describe('API response boundary', () => {
     expect(applyRateLimit).not.toHaveBeenCalled()
   })
 
+  it('routes the machine-only deletion processor without treating its secret as a user JWT', async () => {
+    const run = setup('/api/internal/deletions/process', 'POST', {
+      Authorization: 'Bearer purpose-specific-scheduler-secret',
+      'Content-Length': '0',
+    })
+    const response = await run.handler(run.context)
+    expect(response.status).toBe(200)
+    expect(run.next).toHaveBeenCalledOnce()
+    expect(run.verifyToken).not.toHaveBeenCalled()
+    expect(run.applyRateLimit).not.toHaveBeenCalled()
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(response.headers.get('X-Request-ID')).toBe(run.context.data.requestId)
+  })
+
+  it('rejects any body on the machine-only deletion processor route', async () => {
+    const run = setup('/api/internal/deletions/process', 'POST', {
+      Authorization: 'Bearer purpose-specific-scheduler-secret',
+    })
+    run.context.request = new Request('https://burillab.com/api/internal/deletions/process', {
+      method: 'POST', body: 'x',
+      headers: { Authorization: 'Bearer purpose-specific-scheduler-secret' },
+    })
+    const response = await run.handler(run.context)
+    expect(response.status).toBe(413)
+    expect(run.next).not.toHaveBeenCalled()
+    expect(run.verifyToken).not.toHaveBeenCalled()
+    expect(run.applyRateLimit).not.toHaveBeenCalled()
+  })
+
   it.each(['https://app.buril-lab.local', 'capacitor://app.buril-lab.local'])(
     'answers native preflight for %s without passing it to Redis', async (origin) => {
       const allowed = setup('/api/voice/query', 'OPTIONS', { Origin: origin })
@@ -149,7 +188,7 @@ describe('API response boundary', () => {
 
   it.each([
     '/api/admin/feedback/list', '/api/ai/classify', '/api/gemini/scan-label',
-    '/api/voice/query', '/api/account/delete', '/api/analytics/guest-delete',
+    '/api/voice/query', '/api/account/delete', '/api/analytics/guest-delete', '/api/labs/join', '/api/labs/delete',
   ])('fails closed on Redis failure for %s', async (path) => {
     const run = setup(path, 'POST', { Authorization: 'Bearer fixture-token' })
     run.applyRateLimit.mockRejectedValue(new Error('redis internal detail token=never-expose'))

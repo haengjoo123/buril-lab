@@ -27,7 +27,7 @@ describe('runtime configuration resolver', () => {
     expect(namespace.get).toHaveBeenCalledWith(RUNTIME_CONFIG_KEY, 'json')
   })
 
-  it('keeps unavailable Gate 0 workflows disabled even if KV requests them', async () => {
+  it('allows the prepared deletion intake and maintenance switches for Ops11', async () => {
     await expect(resolveRuntimeConfig({
       BURILLAB_RUNTIME_CONFIG: kv({
         voice_disposal_mode: 'guided',
@@ -39,8 +39,8 @@ describe('runtime configuration resolver', () => {
     })).resolves.toEqual({
       voiceDisposalMode: 'redirect',
       koshaContentMode: 'full',
-      accountDeletionEnabled: false,
-      maintenanceEnabled: false,
+      accountDeletionEnabled: true,
+      maintenanceEnabled: true,
     })
   })
 

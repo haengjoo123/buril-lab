@@ -1,4 +1,4 @@
-import { FEEDBACK_SELECT_FIELDS, internalErrorResponse, json, requireFeedbackAdmin, type FeedbackAdminEnv, type FeedbackRow } from './_shared'
+import { internalErrorResponse, json, requireFeedbackAdmin, type FeedbackAdminEnv, type FeedbackRow } from './_shared'
 import { isUuid } from '../../_shared/validation'
 
 const VALID_STATUSES = new Set(['new', 'in_progress', 'resolved'])
@@ -11,8 +11,9 @@ interface UpdateFeedbackStatusBody {
 export const onRequestPost = async (context: {
   request: Request
   env: FeedbackAdminEnv
+  data?: { requestId?: unknown }
 }) => {
-  const auth = await requireFeedbackAdmin(context.request, context.env)
+  const auth = await requireFeedbackAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) {
     return auth.response
   }
@@ -38,27 +39,34 @@ export const onRequestPost = async (context: {
     return json({ error: 'status must be one of new, in_progress, or resolved.' }, { status: 400 })
   }
 
-  const nowIso = new Date().toISOString()
   const { adminClient, identity } = auth.context
-  const { data, error } = await adminClient
-    .from('feedback')
-    .update({
-      status,
-      updated_at: nowIso,
-      resolved_at: status === 'resolved' ? nowIso : null,
-      resolved_by: status === 'resolved' ? identity.id : null,
-    })
-    .eq('id', feedbackId)
-    .select(FEEDBACK_SELECT_FIELDS)
-    .single()
+  const { data, error } = await adminClient.rpc('operator_feedback_status_v1', {
+    p_operator_user_id: identity.id,
+    p_feedback_id: feedbackId,
+    p_status: status,
+    p_request_id: identity.requestId,
+    p_assurance_level: identity.assuranceLevel,
+  })
 
   if (error) {
-    return error.code === 'PGRST116'
-      ? json({ error: 'Feedback was not found.' }, { status: 404 })
-      : internalErrorResponse('admin.feedback.status', error)
+    return internalErrorResponse('admin.feedback.status', error)
+  }
+  const result = Array.isArray(data) && data.length === 1 ? data[0] : data
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return internalErrorResponse('admin.feedback.status.result', null)
+  }
+  const record = result as Record<string, unknown>
+  if (record.success !== true) {
+    if (record.code === 'feedback_not_found') {
+      return json({ error: 'Feedback was not found.' }, { status: 404 })
+    }
+    return internalErrorResponse('admin.feedback.status.authorization', null)
+  }
+  if (!record.item || typeof record.item !== 'object' || Array.isArray(record.item)) {
+    return internalErrorResponse('admin.feedback.status.item', null)
   }
 
   return json({
-    item: data as FeedbackRow,
+    item: record.item as FeedbackRow,
   })
 }

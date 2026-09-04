@@ -9,8 +9,10 @@ import {
 
 interface SummaryBody { days?: unknown }
 
-export const onRequestPost = async (context: { request: Request; env: AnalyticsAdminEnv }) => {
-  const auth = await requireAnalyticsAdmin(context.request, context.env)
+export const onRequestPost = async (context: {
+  request: Request; env: AnalyticsAdminEnv; data?: { requestId?: unknown }
+}) => {
+  const auth = await requireAnalyticsAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) return auth.response
   let body: SummaryBody = {}
   try { body = await context.request.json() as SummaryBody } catch { /* Empty body uses defaults. */ }

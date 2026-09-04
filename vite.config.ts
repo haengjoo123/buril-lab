@@ -16,6 +16,7 @@ import { onRequestPost as getAnalyticsSearches } from './functions/api/admin/ana
 import { onRequestPost as getAnalyticsMixtures } from './functions/api/admin/analytics/mixtures'
 import { onRequestPost as manageAnalyticsReviews } from './functions/api/admin/analytics/reviews'
 import { onRequestPost as exportAnalyticsCsv } from './functions/api/admin/analytics/export'
+import { createLocalLabJoinApi } from './scripts/ops5-local-join-api'
 
 const disabledAutomaticClientEnvPrefix = 'BURIL_AUTO_ENV_DISABLED_'
 
@@ -223,12 +224,18 @@ async function requireLocalAdmin(
 }
 
 function localAdminApiPlugin(env: Record<string, string>): Plugin {
+  const localJoinApi = createLocalLabJoinApi(env)
   return {
     name: 'buril-local-admin-api',
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use(async (request, response, next) => {
         const pathname = new URL(request.url || '/', 'http://localhost').pathname
+
+        if (/^\/api\/labs\/join\/?$/.test(pathname)) {
+          await localJoinApi(request, response)
+          return
+        }
 
         const pagesHandler = localPagesPostHandlers[pathname]
         if (pagesHandler) {

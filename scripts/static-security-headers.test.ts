@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const headers = readFileSync(new URL('../public/_headers', import.meta.url), 'utf8')
+const headers = readFileSync(new URL('../public/_headers', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 describe('static response security headers', () => {
   it('adds static protections independently of the API middleware', () => {

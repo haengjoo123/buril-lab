@@ -4,20 +4,15 @@ import type { ShelfData, ReagentPlacement } from '../types/fridge';
 import { normalizeTemplateFromDb } from '../utils/normalizeTemplateFromDb';
 import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
-import { getCurrentUserDisplayName } from '../utils/userDisplayName';
 import { optimizeCabinetImage } from '../utils/cabinetImageOptimization';
-
-const mapCabinetActionToAuditAction = (actionType: ActivityActionType): 'create' | 'update' | 'delete' => {
-    if (actionType === 'add') return 'create';
-    if (actionType === 'remove') return 'delete';
-    return 'update';
-};
+import { postBytes, postJson } from './internalApi';
 
 export interface Cabinet {
     id: string;
     name: string;
     location?: string;
     image_url?: string;
+    image_path?: string;
     width: number;
     height: number;
     depth: number;
@@ -79,7 +74,30 @@ export const cabinetService = {
             console.error('Error fetching cabinets:', error);
             throw error;
         }
-        return data || [];
+        const cabinets = (data || []) as Cabinet[];
+        const privateIds = cabinets.filter((cabinet) => Boolean(cabinet.image_path)).map((cabinet) => cabinet.id);
+        if (privateIds.length === 0) return cabinets;
+        // Never fall back to a stored public URL after image_path exists. A
+        // temporary signing failure hides the photo instead of reopening the
+        // legacy public path.
+        const privateCabinets = cabinets.map((cabinet) => cabinet.image_path
+            ? { ...cabinet, image_url: undefined } : cabinet);
+        try {
+            const result = await postJson<{ success: true; urls: Record<string, string | null> }>(
+                '/api/cabinets/image-urls', { cabinetIds: privateIds },
+            );
+            if (result?.success !== true || !result.urls || typeof result.urls !== 'object'
+                || Array.isArray(result.urls) || Object.keys(result.urls).length !== privateIds.length
+                || privateIds.some((id) => !(id in result.urls)
+                    || !(result.urls[id] === null || typeof result.urls[id] === 'string'))) {
+                throw new Error('Invalid private cabinet image response');
+            }
+            return privateCabinets.map((cabinet) => cabinet.image_path
+                ? { ...cabinet, image_url: result.urls[cabinet.id] || undefined } : cabinet);
+        } catch {
+            console.error('Private cabinet image URLs are temporarily unavailable');
+            return privateCabinets;
+        }
     },
 
     async createCabinet(name: string, location?: string, width = 5, height = 9, depth = 2): Promise<Cabinet> {
@@ -121,7 +139,7 @@ export const cabinetService = {
         return data;
     },
 
-    async updateCabinet(id: string, updates: { name?: string; location?: string; image_url?: string; width?: number; height?: number; depth?: number; }): Promise<void> {
+    async updateCabinet(id: string, updates: { name?: string; location?: string; width?: number; height?: number; depth?: number; }): Promise<void> {
         const { error } = await supabase
             .from('cabinets')
             .update(updates)
@@ -138,41 +156,32 @@ export const cabinetService = {
         // bounded for the daily private-storage recovery copy. The source file is
         // never uploaded to Storage.
         const optimized = await optimizeCabinetImage(file);
-        const filePath = `${cabinetId}-${uuidv4()}.webp`;
-
-        const { error: uploadError } = await supabase.storage
-            .from('cabinets')
-            .upload(filePath, optimized.file, {
-                upsert: false,
-                contentType: 'image/webp',
-                cacheControl: '31536000',
-            });
-
-        if (uploadError) {
-            console.error('Error uploading cabinet image:', uploadError);
-            throw uploadError;
+        const result = await postBytes<{
+            success: true;
+            imageUrl: string | null;
+            referencedCount: number;
+            warning: boolean;
+            urlUnavailable: boolean;
+        }>(`/api/cabinets/${cabinetId}/image`, optimized.file, 'image/webp');
+        if (result?.success !== true || !(result.imageUrl === null || typeof result.imageUrl === 'string')) {
+            throw new Error('Invalid private cabinet image response');
         }
+        return result.imageUrl || '';
+    },
 
-        const { data } = supabase.storage
-            .from('cabinets')
-            .getPublicUrl(filePath);
-
-        const publicUrl = data.publicUrl;
-
-        try {
-            await this.updateCabinet(cabinetId, { image_url: publicUrl });
-        } catch (error) {
-            // This is a brand-new, unreferenced optimized file. Removing it here
-            // avoids adding a failed upload to the later orphan-cleanup queue;
-            // it does not remove the previously attached photo, which keeps the
-            // agreed retention/migration policy intact.
-            await supabase.storage.from('cabinets').remove([filePath]).catch(() => undefined);
-            throw error;
+    async removeCabinetImage(cabinetId: string): Promise<void> {
+        const result = await postJson<{ success: true; imageUrl: null }>(
+            `/api/cabinets/${cabinetId}/image`, { action: 'remove' },
+        );
+        if (result?.success !== true || result.imageUrl !== null) {
+            throw new Error('Invalid private cabinet image removal response');
         }
-        return publicUrl;
     },
 
     async deleteCabinet(id: string): Promise<void> {
+        // The database refuses deletion while a private image is still live.
+        // Detaching first preserves its ownership and seven-day retention row.
+        await this.removeCabinetImage(id);
         const { error } = await supabase
             .from('cabinets')
             .delete()
@@ -319,78 +328,20 @@ export const cabinetService = {
         reason?: string,
         memo?: string
     ): Promise<void> {
-        const { currentLabId } = useLabStore.getState();
-        const { data: userData } = await supabase.auth.getUser();
-        const actorName = await getCurrentUserDisplayName(currentLabId);
-        const { data: cabinetRow } = await supabase
-            .from('cabinets')
-            .select('lab_id')
-            .eq('id', cabinetId)
-            .maybeSingle();
-        const targetLabId = cabinetRow?.lab_id || currentLabId || null;
         const { error } = await supabase
-            .from('cabinet_activity_logs')
-            .insert({
-                cabinet_id: cabinetId,
-                action_type: actionType,
-                item_name: itemName,
-                reason: reason || null,
-                memo: memo || null,
-                performed_by: userData.user?.id || null
+            .rpc('record_cabinet_activity_v2', {
+                p_cabinet_id: cabinetId,
+                p_action_type: actionType,
+                p_item_name: itemName,
+                p_reason: reason || null,
+                p_memo: memo || null,
+                p_request_id: uuidv4(),
             });
 
         if (error) {
-            console.error('Error logging activity:', error);
-            // 로그 실패는 silent — 실제 작업을 막으면 안 됨
-        }
-
-        // 감사로그는 admin 전역 조회 화면에서 확인되므로 별도로 남깁니다.
-        const { error: auditError } = await supabase.rpc('insert_audit_log_rpc', {
-            p_actor_user_id: userData.user?.id || null,
-            p_actor_name: actorName || null,
-            p_lab_id: targetLabId,
-            p_entity_type: 'cabinet_activity',
-            p_entity_id: cabinetId,
-            p_action: mapCabinetActionToAuditAction(actionType),
-            p_location_context: cabinetId,
-            p_before_data: null,
-            p_after_data: {
-                action_type: actionType,
-                item_name: itemName,
-                reason: reason || null,
-                memo: memo || null,
-            },
-            p_diff_data: null,
-            p_source: 'ui',
-            p_request_id: null,
-        });
-
-        if (auditError) {
-            console.error('Error logging audit entry from cabinet activity:', auditError);
-            const { error: fallbackAuditError } = await supabase
-                .from('audit_logs')
-                .insert({
-                    actor_user_id: userData.user?.id || null,
-                    actor_name: actorName || null,
-                    lab_id: targetLabId,
-                    entity_type: 'cabinet_activity',
-                    entity_id: cabinetId,
-                    action: mapCabinetActionToAuditAction(actionType),
-                    location_context: cabinetId,
-                    before_data: null,
-                    after_data: {
-                        action_type: actionType,
-                        item_name: itemName,
-                        reason: reason || null,
-                        memo: memo || null,
-                    },
-                    diff_data: null,
-                    source: 'ui',
-                    request_id: null,
-                });
-            if (fallbackAuditError) {
-                console.error('Error logging audit entry with fallback insert:', fallbackAuditError);
-            }
+            // Keep the existing best-effort UI behavior. The database function
+            // guarantees there is never an activity row without its audit row.
+            console.error('Error logging atomic cabinet activity:', { code: error.code || null });
         }
     },
 

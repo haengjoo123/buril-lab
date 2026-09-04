@@ -1276,6 +1276,31 @@ describe('snapshot creation and consistency barriers', () => {
     expect(select).not.toContain('image_url')
   })
 
+  it('preserves a verified legacy-url v2 snapshot when switching to private paths', async () => {
+    const legacyFixtures = validFixtures('legacy_url')
+    const legacy = await runFixture(
+      new FakeSource(legacyFixtures.pointers, legacyFixtures.objects),
+      { now: FIXED_NOW - TEST_DAY_MS },
+    )
+    expect(legacy.result.status).toBe('completed')
+
+    const privateFixtures = validFixtures('private_path')
+    const privateSource = new FakeSource(privateFixtures.pointers, privateFixtures.objects)
+    const transitioned = await runFixture(privateSource, {
+      r2: legacy.r2,
+      now: FIXED_NOW,
+      bindingOverrides: { SOURCE_POINTER_MODE: 'private_path' },
+    })
+
+    expect(transitioned.result.status).toBe('completed')
+    expect([...privateSource.downloadAttempts.values()].reduce((sum, count) => sum + count, 0)).toBe(3)
+    expect(latestManifest(legacy.r2)).toMatchObject({
+      source: { pointerMode: 'private_path' },
+      uploadedBodyCount: 0,
+      reusedBodyCount: 3,
+    })
+  })
+
   it('can reproduce the anonymous 2-object, 3,410,853-byte acceptance shape using synthetic data only', async () => {
     const objects: ObjectFixture[] = [
       {

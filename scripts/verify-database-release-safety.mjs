@@ -27,6 +27,26 @@ export const EXPECTED_LEGACY_TESTS = [
   'waste_disposal_v2_verification.sql',
 ]
 export const EXPECTED_PERMISSION_TEST_SHA256 = '48edb5c96bfdfa8f42ae1660b4c15f229cbf5b2a6fc0aa6ece3ddff625d350d3'
+export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
+  '20260903162850_ops5_expand_server_join.sql': '09c9aeb92e2b5745ce69b8acc0b0c754cae4ca30bf735f6c5ba1f57aa584bc1b',
+  '20260904020000_ops6_private_cabinet_photos_expand.sql': 'a5c63cb5342e58aa0bd1555713ecad98e20d22bf3b82e2bd3d39d9104d07d4c8',
+  '20260904021000_ops6_private_cabinet_photos_switch.sql': 'd153d1e380ea87613cf4f228b06823f4c46387e08346e5ce68f721d3cdd5a63d',
+  '20260904030000_ops7_contract_legacy_join_audit.sql': '073927a0689e3cfd11e93ebcb47a3bd2ba828625553adc6389806a94e554951e',
+  '20260904040000_ops8_lab_password_policy.sql': '3f7210de31759efc6179ee712616a9dbb89b0f34e366f3c86eb951d0baca0f18',
+  '20260904050000_ops9_deletion_jobs.sql': 'cee5a601083e84b127181751fd9cb978dc71dd52c0058d39a6de7728aa9013f9',
+  '20260904060000_ops10_operator_roles_mfa.sql': 'c74fcb093c2c456c90303ecef2dedd331310a44cc126558a62a71331cac9af22',
+  '20260904070000_ops11_deletion_worker.sql': '6e476e51dc55ed168fb51d590143ad7b752c74d937235bc4a248821a37c0e26c',
+})
+export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
+  'baseline_permissions.sql': EXPECTED_PERMISSION_TEST_SHA256,
+  'ops5_expand_permissions.sql': '183a3a73c23a66b274ac9fd4d4a00cca38a65ba4d1af4d34c901370e919812b3',
+  'ops6_private_photos_permissions.sql': '56be7e3115c21332eb11e25674ef5f6e7498522919c4d091b7e0b12e9d175c48',
+  'ops7_contract_permissions.sql': '73cf2ec168ed0f6ec60ead91a901be4f9e39d24de3dba12cf2ff37bd6b75d942',
+  'ops8_lab_password_policy.sql': '19ebad4a89d75a9e905cc827e3014db4d0f675130f474550ad2748957ce87733',
+  'ops9_deletion_jobs.sql': 'ed2f7fea60791bc25bd2637de5ab318741d41c5b8e6bbf6e0887b97b238f9c3b',
+  'ops10_operator_roles_mfa.sql': 'fb41468364973f2171c6c090a4306c7b8f8f4c0382d1ee1817a189e21dfeda7d',
+  'ops11_deletion_worker.sql': '3369e23259b8833d6b1884674eba7b7b7f64838aeee3373a6838f37b53161395',
+})
 export const EXPECTED_CI_MARKER = '{"schema_version":1,"enabled":true,"reset_count":2,"permission_tests":true}'
 
 function assert(condition, message) {
@@ -182,15 +202,16 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
   const deferredDirectory = resolve(repoRoot, 'supabase/deferred_migrations')
 
   const activeNames = readdirSync(activeDirectory).sort()
+  const expectedActiveNames = [BASELINE_FILE, ...Object.keys(EXPECTED_INCREMENTAL_MIGRATIONS), 'README.md'].sort()
   assert(
-    JSON.stringify(activeNames) === JSON.stringify([BASELINE_FILE, 'README.md'].sort()),
+    JSON.stringify(activeNames) === JSON.stringify(expectedActiveNames),
     `Active migration directory contains unreviewed files: ${activeNames.join(', ')}`,
   )
   assert(!existsSync(deferredDirectory), 'Deferred pilot migrations must not be present in the Prep 1 release slice.')
 
   const activeTests = readdirSync(activeTestsDirectory).sort()
   assert(
-    JSON.stringify(activeTests) === JSON.stringify(['baseline_permissions.sql']),
+    JSON.stringify(activeTests) === JSON.stringify(Object.keys(EXPECTED_ACTIVE_PERMISSION_TESTS).sort()),
     `Active database test directory contains non-pgTAP files: ${activeTests.join(', ')}`,
   )
   const legacyTests = readdirSync(legacyTestsDirectory)
@@ -203,6 +224,14 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
 
   const baselineSql = readFileSync(resolve(activeDirectory, BASELINE_FILE), 'utf8')
   const baseline = verifyBaselineSql(baselineSql)
+  for (const [name, expectedSha256] of Object.entries(EXPECTED_INCREMENTAL_MIGRATIONS)) {
+    const migration = normalizeText(readFileSync(resolve(activeDirectory, name), 'utf8'))
+    assert(sha256(migration) === expectedSha256, `Reviewed incremental migration changed: ${name}`)
+    assert(/(?:^|\n)begin;\n/i.test(migration), `Incremental migration must start an explicit transaction: ${name}`)
+    assert(/\ncommit;\n?$/i.test(migration), `Incremental migration must commit its explicit transaction: ${name}`)
+    assert(/set local lock_timeout\s*=\s*'5s';/i.test(migration), `Incremental migration has no 5s lock timeout: ${name}`)
+    assert(/set local statement_timeout\s*=\s*'60s';/i.test(migration), `Incremental migration has no 60s statement timeout: ${name}`)
+  }
 
   const legacyFiles = migrationFiles(legacyDirectory)
   assert(legacyFiles.length === EXPECTED_LEGACY_SQL_COUNT, 'Legacy SQL archive file count changed.')
@@ -225,26 +254,22 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
   const config = readFileSync(resolve(repoRoot, 'supabase/config.toml'), 'utf8')
   assert(/major_version\s*=\s*17/.test(config), 'Local database major version must match the PG17 baseline.')
   assert(/\[db\.seed\][\s\S]*?enabled\s*=\s*false/.test(config), 'Prep 1 must not seed production-like data.')
-  assert(/minimum_password_length\s*=\s*6/.test(config), 'Prep 1 must retain the pre-Gate2 local password baseline.')
+  assert(/minimum_password_length\s*=\s*6/.test(config), 'Local account-password length remains separate from the Ops8 shared lab-password policy.')
   assert(!/\[auth\.mfa(?:\.|\])/.test(config), 'MFA configuration belongs to a later gate.')
   assert(!/auto_expose_new_tables\s*=\s*true/.test(config), 'Data API auto-exposure must remain disabled.')
 
-  const permissionTest = normalizeText(readFileSync(
-    resolve(repoRoot, 'supabase/tests/baseline_permissions.sql'),
-    'utf8',
-  ))
-  assert(
-    sha256(permissionTest) === EXPECTED_PERMISSION_TEST_SHA256,
-    'Baseline catalog permission test content changed.',
-  )
-  for (const marker of [
-    'begin;',
-    'create extension if not exists pgtap with schema extensions;',
-    'select plan(11);',
-    'select * from finish();',
-    'rollback;',
-  ]) {
-    assert(permissionTest.includes(marker), `Baseline permission pgTAP contract is missing: ${marker}`)
+  for (const [name, expectedSha256] of Object.entries(EXPECTED_ACTIVE_PERMISSION_TESTS)) {
+    const permissionTest = normalizeText(readFileSync(resolve(activeTestsDirectory, name), 'utf8'))
+    assert(sha256(permissionTest) === expectedSha256, `Reviewed permission pgTAP test changed: ${name}`)
+    for (const marker of [
+      'begin;',
+      'create extension if not exists pgtap with schema extensions;',
+      'select * from finish();',
+      'rollback;',
+    ]) {
+      assert(permissionTest.includes(marker), `Permission pgTAP contract ${name} is missing: ${marker}`)
+    }
+    assert(/select plan\(\d+\);/i.test(permissionTest), `Permission pgTAP contract ${name} has no explicit plan.`)
   }
 
   const ciMarker = normalizeText(readFileSync(resolve(repoRoot, 'supabase/ci-quality.json'), 'utf8')).trim()
@@ -276,7 +301,7 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
   assert(!repairScript.includes("'db', 'reset'"), 'Repair must never execute db reset.')
 
   return {
-    activeMigrations: 1,
+    activeMigrations: 1 + Object.keys(EXPECTED_INCREMENTAL_MIGRATIONS).length,
     legacySqlFiles: legacyFiles.length,
     activePgTapTests: activeTests.length,
     legacySqlTests: legacyTests.length,

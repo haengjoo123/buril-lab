@@ -14,6 +14,7 @@ import {
     LEGACY_SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY,
     SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY,
 } from './SafetyDisclaimer';
+import { DELETION_UI_ENABLED } from '../config/deletion';
 
 const onboardingPlatform = Capacitor.isNativePlatform() ? 'native' : 'web';
 
@@ -527,7 +528,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <Lightbulb className="w-5 h-5" />
                         </button>
 
-                        {session && (
+                        {session && DELETION_UI_ENABLED && (
                             <>
                                 <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
                                 <button
@@ -568,7 +569,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 inputPlaceholder={dialogConfig.inputPlaceholder}
                 isConfirmLoading={dialogConfig.isConfirmLoading}
                 onConfirm={async () => {
-                    if (dialogConfig.type === 'prompt' && dialogConfig.title === t('settings_delete_account')) {
+                    if (DELETION_UI_ENABLED
+                        && dialogConfig.type === 'prompt'
+                        && dialogConfig.title === t('settings_delete_account')) {
                         if (deleteInputValue !== deleteConfirmPhrase) {
                             alert(t('settings_delete_account_confirm_input', { phrase: deleteConfirmPhrase }));
                             return;
@@ -582,10 +585,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             alert(t('settings_delete_account_error') + '\n' + error);
                         } else {
                             closeDialog();
-                            setTimeout(() => {
-                                alert(t('settings_delete_account_success'));
-                                window.location.href = '/';
-                            }, 100);
+                            setTimeout(() => alert(t(
+                                'settings_delete_account_queued',
+                                '계정 삭제 요청이 안전하게 접수되었습니다.',
+                            )), 100);
                         }
                     } else if (dialogConfig.onConfirm) {
                         dialogConfig.onConfirm();

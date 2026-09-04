@@ -37,7 +37,7 @@
     "BACKUP_ENVIRONMENT": "staging",
     "SUPABASE_PROJECT_REF": "qpgnomuqdcucjmxrunnw",
     "SUPABASE_URL": "https://qpgnomuqdcucjmxrunnw.supabase.co",
-    "SOURCE_POINTER_MODE": "legacy_url",
+    "SOURCE_POINTER_MODE": "private_path",
     "SOURCE_STORAGE_BUCKET": "cabinets",
     "WORKERS_SUBREQUEST_LIMIT": "4000",
     "WORKERS_USAGE_PLAN": "paid"

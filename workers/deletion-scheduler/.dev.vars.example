@@ -1,0 +1,3 @@
+DELETION_MAINTENANCE_SECRET=replace-with-a-purpose-specific-secret-at-least-32-characters
+CF_ACCESS_CLIENT_ID=staging-only-access-service-token-id
+CF_ACCESS_CLIENT_SECRET=staging-only-access-service-token-secret

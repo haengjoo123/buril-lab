@@ -10,8 +10,9 @@ import {
 export const onRequestPost = async (context: {
   request: Request
   env: SafetyCenterAdminEnv
+  data?: { requestId?: unknown }
 }) => {
-  const auth = await requireFeedbackAdmin(context.request, context.env)
+  const auth = await requireFeedbackAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) {
     return auth.response
   }

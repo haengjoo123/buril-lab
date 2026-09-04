@@ -10,8 +10,10 @@ import {
 
 interface SearchBody { days?: unknown; limit?: unknown; order?: unknown }
 
-export const onRequestPost = async (context: { request: Request; env: AnalyticsAdminEnv }) => {
-  const auth = await requireAnalyticsAdmin(context.request, context.env)
+export const onRequestPost = async (context: {
+  request: Request; env: AnalyticsAdminEnv; data?: { requestId?: unknown }
+}) => {
+  const auth = await requireAnalyticsAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) return auth.response
   let body: SearchBody = {}
   try { body = await context.request.json() as SearchBody } catch { /* Empty body uses defaults. */ }

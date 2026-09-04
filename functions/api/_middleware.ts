@@ -2,7 +2,7 @@ import { Redis } from '@upstash/redis/cloudflare'
 import { Ratelimit } from '@upstash/ratelimit'
 import * as jose from 'jose'
 import { json } from './_shared/json'
-import { readLimitedRequestBytes, RequestBodyError, requestBodyErrorResponse } from './_shared/requestBody'
+import { readLimitedRequestBytes, RequestBodyError, requestBodyErrorResponse, requestBodyTooLarge } from './_shared/requestBody'
 import { getApiRequestBodyLimit, isAllowedApiMethod, resolveApiRoutePolicy, type ApiRoutePolicy } from './_routePolicy'
 
 interface Env {
@@ -33,6 +33,7 @@ const NATIVE_APP_ORIGINS = new Set([
 const LOCAL_ORIGIN_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/
 const IMMUTABLE_STAGING_ORIGIN_PATTERN = /^https:\/\/[a-f0-9]{8}\.buril-lab-staging\.pages\.dev$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const DELETION_PROCESSOR_ROUTE = '/api/internal/deletions/process'
 
 function isProductionEnvironment(env: Env): boolean {
   return env.APP_ENVIRONMENT === 'production' || env.APP_ENVIRONMENT === 'production-preview-disabled'
@@ -64,6 +65,8 @@ function mergeVary(current: string | null, value: string): string {
 
 const SENSITIVE_API_PATTERNS = [
   /^\/api\/account\//,
+  /^\/api\/cabinets\//,
+  /^\/api\/labs\//,
   /^\/api\/admin\//,
   /^\/api\/(?:ai|gemini)\//,
   /^\/api\/voice\//,
@@ -112,6 +115,16 @@ function withResponseHeaders(
 const supabaseJwksCache = new Map<string, ReturnType<typeof jose.createRemoteJWKSet>>()
 
 const LIMIT_CONFIGS = {
+  LABS: {
+    user: { count: 30, window: '1 m' },
+    ip: { count: 2, window: '1 m' },
+    pattern: /^\/api\/labs\//,
+  },
+  CABINETS: {
+    user: { count: 60, window: '1 m' },
+    ip: { count: 2, window: '1 m' },
+    pattern: /^\/api\/cabinets\//,
+  },
   ADMIN: {
     user: { count: 20, window: '1 m' },
     ip: { count: 2, window: '1 m' },
@@ -171,6 +184,8 @@ type RateLimitResult = {
 
 const PROTECTED_API_PATTERNS = [
   /^\/api\/account\//,
+  /^\/api\/cabinets\//,
+  /^\/api\/labs\//,
   /^\/api\/admin\//,
   /^\/api\/ai\//,
   /^\/api\/gemini\//,
@@ -184,6 +199,8 @@ export function isProtectedApiPath(path: string): boolean {
 }
 
 export function resolveRateLimitCategory(path: string): RateLimitCategory | null {
+  if (LIMIT_CONFIGS.CABINETS.pattern.test(path)) return 'CABINETS'
+  if (LIMIT_CONFIGS.LABS.pattern.test(path)) return 'LABS'
   if (LIMIT_CONFIGS.ADMIN.pattern.test(path)) return 'ADMIN'
   if (LIMIT_CONFIGS.VOICE.pattern.test(path)) return 'VOICE'
   if (LIMIT_CONFIGS.AI.pattern.test(path)) return 'AI'
@@ -283,6 +300,21 @@ export function createApiMiddleware(dependencies: MiddlewareDependencies = {}): 
       return respond(json({ error: 'Method not allowed.', code: 'METHOD_NOT_ALLOWED' }, {
         status: 405, headers: { Allow: [...policy.methods, 'OPTIONS'].join(', ') },
       }))
+    }
+
+    // This machine-only route authenticates a purpose-specific Scheduler
+    // secret in its handler. It must not be interpreted as a user Supabase JWT
+    // or depend on Upstash before it can fail closed and disable intake.
+    if (policy.id === DELETION_PROCESSOR_ROUTE) {
+      try {
+        const bytes = await readLimitedRequestBytes(request, getApiRequestBodyLimit(policy))
+        if (bytes.byteLength !== 0) throw requestBodyTooLarge()
+        return respond(await next(new Request(request, { body: null })))
+      } catch (error) {
+        if (error instanceof RequestBodyError) return respond(requestBodyErrorResponse(error))
+        safeLog('api_handler_failed', { requestId, route: policy.id, category: null })
+        return respond(json({ error: 'The service is temporarily unavailable.', code: 'INTERNAL_ERROR' }, { status: 500 }))
+      }
     }
 
     let identifier = request.headers.get('cf-connecting-ip') || 'anonymous'

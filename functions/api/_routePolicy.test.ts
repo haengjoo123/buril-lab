@@ -18,14 +18,15 @@ function routeFiles(directory: string): string[] {
 
 describe('API file routing policy', () => {
   it('explicitly covers every method-specific Pages handler', () => {
-    const registered = [...KNOWN_EXACT_API_ROUTES, '/api/kosha/[endpoint]'].sort()
+    const registered = [...KNOWN_EXACT_API_ROUTES, '/api/cabinets/[id]/image', '/api/kosha/[endpoint]'].sort()
     const actual = routeFiles(apiRoot)
       .map((file) => `/api/${relative(apiRoot, file).replaceAll('\\', '/').replace(/\.ts$/, '')}`)
       .sort()
     expect(registered).toEqual(actual)
     for (const file of routeFiles(apiRoot)) {
       const route = `/api/${relative(apiRoot, file).replaceAll('\\', '/').replace(/\.ts$/, '')}`
-      const policy = resolveApiRoutePolicy(route)
+      const policyPath = route.replace('/cabinets/[id]/', '/cabinets/00000000-0000-4000-8000-000000000000/')
+      const policy = resolveApiRoutePolicy(policyPath)
       const source = readFileSync(file, 'utf8')
       expect(policy?.methods).toEqual(source.includes('onRequestGet') ? ['GET'] : ['POST'])
     }
@@ -36,6 +37,9 @@ describe('API file routing policy', () => {
     expect(resolveApiRoutePolicy('/api/kosha/chemdetail01')?.id).toBe('/api/kosha/[endpoint]')
     expect(resolveApiRoutePolicy('/api/voice/query/')?.methods).toEqual(['POST'])
     expect(resolveApiRoutePolicy('/api/voice/query//')).toBeNull()
+    expect(resolveApiRoutePolicy('/api/cabinets/00000000-0000-4000-8000-000000000000/image')?.id)
+      .toBe('/api/cabinets/[id]/image')
+    expect(resolveApiRoutePolicy('/api/cabinets/not-a-uuid/image')).toBeNull()
   })
 
   it.each(['/api', '/api/missing', '/api/voice/query/extra', '/api/kosha/a/b', '/api/_middleware']) (

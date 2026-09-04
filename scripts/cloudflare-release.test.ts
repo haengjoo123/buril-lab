@@ -290,7 +290,7 @@ function storageBackupBindingsFixture(environment: 'staging' | 'production' = 's
     { name: 'BACKUP_ENVIRONMENT', text: environment, type: 'plain_text' },
     { name: 'SUPABASE_PROJECT_REF', text: production ? 'zafxzidbtbryiksemlwc' : 'qpgnomuqdcucjmxrunnw', type: 'plain_text' },
     { name: 'SUPABASE_URL', text: production ? 'https://zafxzidbtbryiksemlwc.supabase.co' : 'https://qpgnomuqdcucjmxrunnw.supabase.co', type: 'plain_text' },
-    { name: 'SOURCE_POINTER_MODE', text: 'legacy_url', type: 'plain_text' },
+    { name: 'SOURCE_POINTER_MODE', text: 'private_path', type: 'plain_text' },
     { name: 'SOURCE_STORAGE_BUCKET', text: 'cabinets', type: 'plain_text' },
     { name: 'WORKERS_SUBREQUEST_LIMIT', text: '4000', type: 'plain_text' },
     { name: 'WORKERS_USAGE_PLAN', text: 'paid', type: 'plain_text' },
