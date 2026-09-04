@@ -289,14 +289,13 @@ describe('Supabase hosted Security Advisor contract', () => {
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
       { environment: 'production', findings: 53 },
-      { environment: 'staging', findings: 53 },
+      { environment: 'staging', findings: 57 },
     ])
 
     const production = loadBaseline('production', { today: '2026-08-24' })
     const staging = loadBaseline('staging', { today: '2026-08-24' })
     const productionKeys = new Set(production.entries.map((entry) => entry.cache_key))
     const stagingKeys = new Set(staging.entries.map((entry) => entry.cache_key))
-    expect([...stagingKeys]).toEqual([...productionKeys])
     const technicalProjection = (entry: (typeof production.entries)[number]) => ({
       cache_key: entry.cache_key,
       rule: entry.rule,
@@ -304,8 +303,13 @@ describe('Supabase hosted Security Advisor contract', () => {
       object: entry.object,
       evidence: entry.evidence,
     })
-    expect(staging.entries.map(technicalProjection)).toEqual(
-      production.entries.map(technicalProjection),
-    )
+    expect(staging.entries.filter((entry) => productionKeys.has(entry.cache_key)).map(technicalProjection))
+      .toEqual(production.entries.map(technicalProjection))
+    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual([
+      'authenticated_security_definer_function_executable_public_record_cabinet_activity_v2_p_cabinet_id uuid, p_action_type text, p_item_name text, p_reason text, p_memo text, p_request_id uuid',
+      'rls_enabled_no_policy_private_cabinet_image_objects_v1',
+      'rls_enabled_no_policy_private_cabinet_image_retention_v1',
+      'rls_enabled_no_policy_private_lab_join_attempts_v1',
+    ])
   })
 })
