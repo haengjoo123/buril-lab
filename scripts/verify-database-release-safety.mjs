@@ -35,6 +35,7 @@ export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260904040000_ops8_lab_password_policy.sql': '3f7210de31759efc6179ee712616a9dbb89b0f34e366f3c86eb951d0baca0f18',
   '20260904050000_ops9_deletion_jobs.sql': 'cee5a601083e84b127181751fd9cb978dc71dd52c0058d39a6de7728aa9013f9',
   '20260904060000_ops10_operator_roles_mfa.sql': 'c74fcb093c2c456c90303ecef2dedd331310a44cc126558a62a71331cac9af22',
+  '20260904070000_ops11_deletion_worker.sql': '6e476e51dc55ed168fb51d590143ad7b752c74d937235bc4a248821a37c0e26c',
 })
 export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
   'baseline_permissions.sql': EXPECTED_PERMISSION_TEST_SHA256,
@@ -44,6 +45,7 @@ export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
   'ops8_lab_password_policy.sql': '19ebad4a89d75a9e905cc827e3014db4d0f675130f474550ad2748957ce87733',
   'ops9_deletion_jobs.sql': 'ed2f7fea60791bc25bd2637de5ab318741d41c5b8e6bbf6e0887b97b238f9c3b',
   'ops10_operator_roles_mfa.sql': 'fb41468364973f2171c6c090a4306c7b8f8f4c0382d1ee1817a189e21dfeda7d',
+  'ops11_deletion_worker.sql': '3369e23259b8833d6b1884674eba7b7b7f64838aeee3373a6838f37b53161395',
 })
 export const EXPECTED_CI_MARKER = '{"schema_version":1,"enabled":true,"reset_count":2,"permission_tests":true}'
 

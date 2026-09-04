@@ -27,7 +27,7 @@ describe('runtime configuration resolver', () => {
     expect(namespace.get).toHaveBeenCalledWith(RUNTIME_CONFIG_KEY, 'json')
   })
 
-  it('allows the prepared deletion intake switch while unavailable workflows stay disabled', async () => {
+  it('allows the prepared deletion intake and maintenance switches for Ops11', async () => {
     await expect(resolveRuntimeConfig({
       BURILLAB_RUNTIME_CONFIG: kv({
         voice_disposal_mode: 'guided',
@@ -40,7 +40,7 @@ describe('runtime configuration resolver', () => {
       voiceDisposalMode: 'redirect',
       koshaContentMode: 'full',
       accountDeletionEnabled: true,
-      maintenanceEnabled: false,
+      maintenanceEnabled: true,
     })
   })
 

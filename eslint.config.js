@@ -12,6 +12,7 @@ export default defineConfig([
     '.codex-tmp/**',
     '.wrangler/**',
     'workers/storage-backup/worker-configuration.d.ts',
+    'workers/deletion-scheduler/worker-configuration.d.ts',
   ]),
   {
     files: ['**/*.{ts,tsx}'],

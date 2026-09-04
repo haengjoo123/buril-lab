@@ -32,18 +32,9 @@ const application = {
 }
 
 describe('Ops10 operator-role and MFA preparation boundary', () => {
-  it('pins its base and verifies only a not-yet-applied local preparation', () => {
+  it('pins its base and rejects the later Ops11 successor tree', () => {
     expect(OPS10_PREPARATION_BASE_SHA).toMatch(/^[0-9a-f]{40}$/)
-    expect(verifyOps10OperatorPreparation(root)).toMatchObject({
-      result: 'ops10-operator-preparation-ok',
-      activeMigrations: 8,
-      activePgTapTests: 7,
-      productionReady: false,
-      operatorRolesProvisioned: false,
-      operatorAuthModeApplied: false,
-      hostedSupabaseAcceptance: false,
-      requiresEarlierOperationalGates: true,
-    })
+    expect(() => verifyOps10OperatorPreparation(root)).toThrow(/ops10-preparation/)
   })
 
   it.each(['../escape.ts','src\\escape.ts','src/unreviewed.ts'])(

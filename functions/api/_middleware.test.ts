@@ -112,6 +112,35 @@ describe('API response boundary', () => {
     expect(applyRateLimit).not.toHaveBeenCalled()
   })
 
+  it('routes the machine-only deletion processor without treating its secret as a user JWT', async () => {
+    const run = setup('/api/internal/deletions/process', 'POST', {
+      Authorization: 'Bearer purpose-specific-scheduler-secret',
+      'Content-Length': '0',
+    })
+    const response = await run.handler(run.context)
+    expect(response.status).toBe(200)
+    expect(run.next).toHaveBeenCalledOnce()
+    expect(run.verifyToken).not.toHaveBeenCalled()
+    expect(run.applyRateLimit).not.toHaveBeenCalled()
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(response.headers.get('X-Request-ID')).toBe(run.context.data.requestId)
+  })
+
+  it('rejects any body on the machine-only deletion processor route', async () => {
+    const run = setup('/api/internal/deletions/process', 'POST', {
+      Authorization: 'Bearer purpose-specific-scheduler-secret',
+    })
+    run.context.request = new Request('https://burillab.com/api/internal/deletions/process', {
+      method: 'POST', body: 'x',
+      headers: { Authorization: 'Bearer purpose-specific-scheduler-secret' },
+    })
+    const response = await run.handler(run.context)
+    expect(response.status).toBe(413)
+    expect(run.next).not.toHaveBeenCalled()
+    expect(run.verifyToken).not.toHaveBeenCalled()
+    expect(run.applyRateLimit).not.toHaveBeenCalled()
+  })
+
   it.each(['https://app.buril-lab.local', 'capacitor://app.buril-lab.local'])(
     'answers native preflight for %s without passing it to Redis', async (origin) => {
       const allowed = setup('/api/voice/query', 'OPTIONS', { Origin: origin })

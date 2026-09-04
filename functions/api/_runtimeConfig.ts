@@ -65,13 +65,13 @@ function parseRuntimeConfig(value: unknown): RuntimeConfig | null {
   if (typeof storageBackupEnabled !== 'boolean') return null
 
   return {
-    // Guided disposal and maintenance remain unavailable. Operations 9 adds
-    // deletion intake, but its fail-closed KV switch stays false in every
-    // environment until the Operations 11 worker is proven separately.
+    // Guided disposal remains unavailable. Deletion and its worker remain
+    // fail-closed by default, but Ops11 may enable them independently after
+    // the Scheduler has passed its hosted soak checks.
     voiceDisposalMode: 'redirect',
     koshaContentMode,
     accountDeletionEnabled,
-    maintenanceEnabled: false,
+    maintenanceEnabled,
   }
 }
 
