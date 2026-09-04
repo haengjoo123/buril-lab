@@ -20,6 +20,7 @@ export const OPS11_HISTORY_REPAIR_TEST_SHA256 = 'ebc5943260692b0b180ee175379c3e4
 export const OPS11_LOCAL_JOIN_TEST_SHA256 = 'e2f289273f956df33bdf17c1a40e61644e4767acb64309ccb09c20fa2729b61b'
 
 export const OPS11_APPROVED_PATHS = Object.freeze([
+  '.gitleaksignore',
   'docs/operations/accelerated-ops3-11-release-2026-09-05.md',
   'docs/operations/ops11-deletion-worker-preparation.md',
   'docs/operations/operations-safety-rollout.md',

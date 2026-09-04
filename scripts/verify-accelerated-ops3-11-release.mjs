@@ -10,6 +10,7 @@ export const ACCELERATED_RELEASE_OPS11_SHA = '9570667443155db55719d12c8a825fad92
 export const ACCELERATED_RELEASE_POLICY = 'docs/operations/accelerated-ops3-11-release-2026-09-05.md'
 
 function fail(message) { throw new Error(`[accelerated-ops3-11] ${message}`) }
+function normalized(value) { return value.replace(/\r\n/g, '\n') }
 function requireMarkers(source, markers, label) {
   for (const marker of markers) if (!source.includes(marker)) fail(`${label} is missing: ${marker}`)
 }
@@ -19,6 +20,8 @@ function git(root, args) {
 }
 
 export function verifyAcceleratedPolicySources({ policy, rollout }) {
+  policy = normalized(policy)
+  rollout = normalized(rollout)
   requireMarkers(policy, [
     'policyMode: accelerated-risk-based',
     'releaseTarget: Ops3-Ops11',

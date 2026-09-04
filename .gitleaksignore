@@ -12,3 +12,7 @@ ade9fe3142cd1d75c930513322c1faca5038bf99:scripts/scrape_welgene.js:jwt:33
 93ea565951d70ef1ac096187e56e9244a79fc9f9:scripts/verify-cloudflare-release-config.mjs:generic-api-key:53
 913114a19d40001adb584e10a2039247c5c65602:scripts/verify-cloudflare-release-config.mjs:generic-api-key:52
 158960bbeed4cc561ece4ff21cac9e417cf09994:scripts/verify-cloudflare-release-config.mjs:generic-api-key:68
+dc26715ad965344ae35d19a05e4f94e98f19be13:scripts/verify-ops11-deletion-worker-preparation.mjs:generic-api-key:18
+700895b2a5351851912452f0f692608ee8cc9e5d:scripts/verify-database-release-safety.mjs:generic-api-key:35
+700895b2a5351851912452f0f692608ee8cc9e5d:scripts/verify-database-release-safety.mjs:generic-api-key:42
+700895b2a5351851912452f0f692608ee8cc9e5d:src/utils/labPasswordPolicy.ts:generic-api-key:14
