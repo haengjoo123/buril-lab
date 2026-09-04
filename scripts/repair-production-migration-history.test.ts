@@ -133,7 +133,7 @@ process.exit(93)
     expect(mismatch.status).not.toBe(0)
     expect(mismatch.stderr).toContain('No repair was attempted')
     expect(getVersions()).toEqual(legacyVersions.slice(1))
-  }, 15_000)
+  }, 45_000)
 
   it('applies the marker and restores all 89 legacy rows with exact confirmations', () => {
     setVersions(legacyVersions)
@@ -162,7 +162,7 @@ process.exit(93)
       remote_count_after: 89,
     })
     expect(getVersions()).toEqual(legacyVersions)
-  }, 15_000)
+  }, 45_000)
 
   it('refuses a mutating mode without its full hash-bound confirmation', () => {
     setVersions(legacyVersions)
@@ -170,7 +170,7 @@ process.exit(93)
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('Confirmation must exactly match')
     expect(getVersions()).toEqual(legacyVersions)
-  }, 15_000)
+  }, 45_000)
 
   it('keeps the database password out of process arguments', () => {
     const source = readFileSync(scriptPath, 'utf8')

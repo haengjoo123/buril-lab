@@ -9,12 +9,20 @@ export const OPS11_PREPARATION_BASE_SHA = 'b42304fa226ba127da438b015b6d8b72223b4
 export const OPS11_MIGRATION = 'supabase/migrations/20260904070000_ops11_deletion_worker.sql'
 export const OPS11_PERMISSION_TEST = 'supabase/tests/ops11_deletion_worker.sql'
 export const OPS11_NATIVE_ASSERTIONS = 'scripts/fixtures/ops11-deletion-worker-assertions.sql'
+export const OPS11_DPAPI_TEST = 'scripts/ephemeral-release-key-store.test.ts'
+export const OPS11_HISTORY_REPAIR_TEST = 'scripts/repair-production-migration-history.test.ts'
+export const OPS11_LOCAL_JOIN_TEST = 'scripts/ops5-local-join-api.test.ts'
 export const OPS11_MIGRATION_SHA256 = '6e476e51dc55ed168fb51d590143ad7b752c74d937235bc4a248821a37c0e26c'
 export const OPS11_PERMISSION_TEST_SHA256 = '3369e23259b8833d6b1884674eba7b7b7f64838aeee3373a6838f37b53161395'
 export const OPS11_NATIVE_ASSERTIONS_SHA256 = '8b86710c9abc4ff1189f56946cb0df2248db1f00cf371b47efd834584c50f7c8'
+export const OPS11_DPAPI_TEST_SHA256 = '422ffaaf22194fc0aa14f4e8e700e575ceda5dc12aeb733d87604f0bb2cfa5d6'
+export const OPS11_HISTORY_REPAIR_TEST_SHA256 = 'ebc5943260692b0b180ee175379c3e472c70e7af5d5a7397e56736fb7929fc64'
+export const OPS11_LOCAL_JOIN_TEST_SHA256 = 'e2f289273f956df33bdf17c1a40e61644e4767acb64309ccb09c20fa2729b61b'
 
 export const OPS11_APPROVED_PATHS = Object.freeze([
+  'docs/operations/accelerated-ops3-11-release-2026-09-05.md',
   'docs/operations/ops11-deletion-worker-preparation.md',
+  'docs/operations/operations-safety-rollout.md',
   'eslint.config.js',
   'functions/api/_middleware.test.ts',
   'functions/api/_middleware.ts',
@@ -26,7 +34,12 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   'functions/api/internal/deletions/process.ts',
   'package.json',
   OPS11_NATIVE_ASSERTIONS,
+  OPS11_DPAPI_TEST,
+  OPS11_HISTORY_REPAIR_TEST,
+  OPS11_LOCAL_JOIN_TEST,
   'scripts/test-ops11-local-postgres.mjs',
+  'scripts/verify-accelerated-ops3-11-release.mjs',
+  'scripts/verify-accelerated-ops3-11-release.test.ts',
   'scripts/verify-database-release-safety.mjs',
   'scripts/verify-database-release-safety.test.ts',
   'scripts/verify-ops10-operator-preparation.test.ts',
@@ -213,6 +226,20 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
     if (!status?.isFile()) fail(`reviewed path must be a regular file: ${candidate}`)
   }
   const read = (relativePath) => readFileSync(path.join(root, relativePath), 'utf8')
+  const dpapiTest = normalized(read(OPS11_DPAPI_TEST))
+  if (sha256(dpapiTest) !== OPS11_DPAPI_TEST_SHA256 || !dpapiTest.includes('}, 35_000)')) {
+    fail('reviewed Windows DPAPI test timeout changed')
+  }
+  const historyRepairTest = normalized(read(OPS11_HISTORY_REPAIR_TEST))
+  if (sha256(historyRepairTest) !== OPS11_HISTORY_REPAIR_TEST_SHA256
+    || [...historyRepairTest.matchAll(/}, 45_000\)/g)].length !== 3) {
+    fail('reviewed Windows migration-history test timeout changed')
+  }
+  const localJoinTest = normalized(read(OPS11_LOCAL_JOIN_TEST))
+  if (sha256(localJoinTest) !== OPS11_LOCAL_JOIN_TEST_SHA256
+    || !localJoinTest.includes('fetchBlockedPorts.has(address.port)')) {
+    fail('reviewed local join fetch-safe port test changed')
+  }
   const database = verifyOps11DatabaseSources({
     migration: read(OPS11_MIGRATION), permissionTest: read(OPS11_PERMISSION_TEST),
     nativeAssertions: read(OPS11_NATIVE_ASSERTIONS),
@@ -249,6 +276,9 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
   return Object.freeze({
     result: 'ops11-deletion-worker-preparation-ok', baseSha: OPS11_PREPARATION_BASE_SHA,
     changedFiles: paths.length, database, application, worker,
+    dpapiTestSha256: sha256(dpapiTest),
+    historyRepairTestSha256: sha256(historyRepairTest),
+    localJoinTestSha256: sha256(localJoinTest),
     activeMigrations: releaseSafety.activeMigrations, activePgTapTests: releaseSafety.activePgTapTests,
     productionReady: false, schedulerDeployed: false, deletionIntakeEnabled: false,
     deletionUiEnabled: false, hostedSupabaseAcceptance: false,

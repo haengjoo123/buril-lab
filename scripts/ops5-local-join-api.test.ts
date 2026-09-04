@@ -6,6 +6,14 @@ import type { onRequestPost } from '../functions/api/labs/join'
 import { createLocalLabJoinApi } from './ops5-local-join-api'
 
 const servers: Server[] = []
+const fetchBlockedPorts = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
+  87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
+  139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540,
+  548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049,
+  3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697,
+  10080,
+])
 afterEach(async () => {
   vi.restoreAllMocks()
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve, reject) => {
@@ -15,12 +23,22 @@ afterEach(async () => {
 })
 
 async function serve(dependencies: Parameters<typeof createLocalLabJoinApi>[1] = {}) {
-  const server = createServer(createLocalLabJoinApi({ APP_ENVIRONMENT: 'production' }, dependencies))
-  servers.push(server)
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('No local address')
-  return `http://127.0.0.1:${address.port}/api/labs/join`
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const server = createServer(createLocalLabJoinApi({ APP_ENVIRONMENT: 'production' }, dependencies))
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+      throw new Error('No local address')
+    }
+    if (fetchBlockedPorts.has(address.port)) {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+      continue
+    }
+    servers.push(server)
+    return `http://127.0.0.1:${address.port}/api/labs/join`
+  }
+  throw new Error('Could not allocate a fetch-safe local port')
 }
 
 const authorizedMiddleware = () => createApiMiddleware({

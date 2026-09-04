@@ -39,6 +39,9 @@ describe('Ops11 deletion Worker preparation boundary', () => {
     expect(OPS11_PREPARATION_BASE_SHA).toMatch(/^[0-9a-f]{40}$/)
     expect(verifyOps11DeletionWorkerPreparation(root)).toMatchObject({
       result: 'ops11-deletion-worker-preparation-ok', activeMigrations: 9, activePgTapTests: 8,
+      dpapiTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      historyRepairTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      localJoinTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       productionReady: false, schedulerDeployed: false, deletionIntakeEnabled: false,
       deletionUiEnabled: false, hostedSupabaseAcceptance: false,
       requiresEarlierOperationalGates: true,

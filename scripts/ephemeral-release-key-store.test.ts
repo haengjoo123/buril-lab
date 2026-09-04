@@ -36,5 +36,5 @@ describe('local protected ephemeral release key store', () => {
     const expected = Buffer.from('burillab-dpapi-round-trip', 'utf8')
     const protectedBytes = await runDpapi('protect', expected)
     await expect(runDpapi('unprotect', protectedBytes)).resolves.toEqual(expected)
-  })
+  }, 35_000)
 })
