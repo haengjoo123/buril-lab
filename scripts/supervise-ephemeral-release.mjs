@@ -1523,7 +1523,8 @@ async function collectRecoveryProviderEvidence(
   for (const provider of providers) {
     const notCreatedConfirmation = `NOT_CREATED:${pending.payload.lease_id}:${provider}`
     const dashboardRevokedConfirmation = `DASHBOARD_REVOKED:${pending.payload.lease_id}:${provider}`
-    console.log(`Enter the revoked ${provider} credential, exactly ${notCreatedConfirmation} when it was not created, or exactly ${dashboardRevokedConfirmation} when it was created and revoked in the provider dashboard before the supervisor captured it.`)
+    const processLossConfirmation = `DASHBOARD_REVOKED_AFTER_PROCESS_LOSS:${pending.payload.lease_id}:${provider}`
+    console.log(`Enter the revoked ${provider} credential, exactly ${notCreatedConfirmation} when it was not created, exactly ${dashboardRevokedConfirmation} when it was revoked before a deployment mutation, or exactly ${processLossConfirmation} after the exact terminal run when the captured credential was lost with the supervisor process and its dashboard revocation has been verified.`)
     const value = await nextInputLine(inputIterator, `${provider} recovery evidence`)
     if (value === notCreatedConfirmation) {
       if (pending.payload.lease_evidence) {
@@ -1545,6 +1546,17 @@ async function collectRecoveryProviderEvidence(
         status: pending.payload.lease_evidence
           ? 'operator_verified_dashboard_revoked_pre_deployment'
           : 'operator_verified_dashboard_revoked',
+        credentialSha256: null,
+      })
+      continue
+    }
+    if (value === processLossConfirmation) {
+      if (!pending.payload.lease_evidence || !allowMaterializedDashboardRevocation) {
+        throw new Error(`${provider} process-loss recovery requires a materialized lease and one exact terminal workflow run.`)
+      }
+      providerEvidence.push({
+        provider,
+        status: 'operator_verified_dashboard_revoked_after_process_loss',
         credentialSha256: null,
       })
       continue
@@ -1686,7 +1698,7 @@ async function recoverPendingProviderCreation(environment, leaseId, cloudflareAc
   const allowMaterializedDashboardRevocation = Boolean(
     pending.payload.lease_evidence
     && discoveredRun
-    && failedBeforePagesMutation(discoveredRun, contract),
+    && discoveredRun.status === 'completed',
   )
   const providerEvidence = await collectRecoveryProviderEvidence(
     pending,
@@ -1750,9 +1762,14 @@ async function recoverPendingProviderCreation(environment, leaseId, cloudflareAc
     if (!currentPending.payload.lease_evidence) {
       throw new Error('Recovered gated run lacks signed lease evidence.')
     }
+    const dashboardRevocationAfterProcessLoss = providerEvidence.every((entry) => (
+      entry.status === 'operator_verified_dashboard_revoked_after_process_loss'
+      && entry.credentialSha256 === null
+    ))
     if (
       providerEvidence.some((entry) => entry.status !== 'api_verified_inactive')
       && !failedBeforePagesMutation(run, contract)
+      && !(allowMaterializedDashboardRevocation && dashboardRevocationAfterProcessLoss)
     ) {
       throw new Error('A gated run requires API-verified inactivity for every captured provider credential.')
     }

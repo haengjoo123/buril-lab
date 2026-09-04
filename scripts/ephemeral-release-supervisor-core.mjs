@@ -809,6 +809,7 @@ export function verifyProviderCreationRecoveryEvidence({
         'operator_verified_not_created',
         'operator_verified_dashboard_revoked',
         'operator_verified_dashboard_revoked_pre_deployment',
+        'operator_verified_dashboard_revoked_after_process_loss',
       ].includes(entry?.status)
       || (entry.status === 'api_verified_inactive' && !HASH_PATTERN.test(entry.credentialSha256))
       || (
@@ -816,6 +817,7 @@ export function verifyProviderCreationRecoveryEvidence({
           'operator_verified_not_created',
           'operator_verified_dashboard_revoked',
           'operator_verified_dashboard_revoked_pre_deployment',
+          'operator_verified_dashboard_revoked_after_process_loss',
         ].includes(entry.status)
         && entry.credentialSha256 !== null
       )
@@ -843,11 +845,14 @@ export function verifyProviderCreationRecoveryEvidence({
     if (pending.storage_backup) {
       expectedHashes.set('cloudflare_worker', pending.lease_evidence.cloudflare_token_sha256[1])
     }
-    const dashboardRevocationAfterPreDeploymentFailure = normalized.every((entry) => (
-      entry.status === 'operator_verified_dashboard_revoked_pre_deployment'
+    const dashboardRevocationAfterMaterialization = normalized.every((entry) => (
+      [
+        'operator_verified_dashboard_revoked_pre_deployment',
+        'operator_verified_dashboard_revoked_after_process_loss',
+      ].includes(entry.status)
       && entry.credential_sha256 === null
     ))
-    if (dashboardRevocationAfterPreDeploymentFailure && allowMaterializedDashboardRevocation) {
+    if (dashboardRevocationAfterMaterialization && allowMaterializedDashboardRevocation) {
       return Object.freeze({
         pending,
         providerEvidence: Object.freeze(normalized),
