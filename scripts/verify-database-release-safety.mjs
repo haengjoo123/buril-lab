@@ -26,7 +26,7 @@ export const EXPECTED_LEGACY_TESTS = [
   'waste_disposal_v2_policy.sql',
   'waste_disposal_v2_verification.sql',
 ]
-export const EXPECTED_PERMISSION_TEST_SHA256 = '48edb5c96bfdfa8f42ae1660b4c15f229cbf5b2a6fc0aa6ece3ddff625d350d3'
+export const EXPECTED_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260903162850_ops5_expand_server_join.sql': '09c9aeb92e2b5745ce69b8acc0b0c754cae4ca30bf735f6c5ba1f57aa584bc1b',
   '20260904020000_ops6_private_cabinet_photos_expand.sql': 'a5c63cb5342e58aa0bd1555713ecad98e20d22bf3b82e2bd3d39d9104d07d4c8',

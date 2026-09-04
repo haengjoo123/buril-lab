@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   OPS3_APPROVED_PATHS, OPS3_BASE_SHA, verifyOps3ChangedPaths,
-  verifyOps3ReleaseScope, verifyRedirectOnlyVoiceSource,
+  verifyOps3OrAcceleratedReleaseScope, verifyOps3ReleaseScope, verifyRedirectOnlyVoiceSource,
 } from './verify-ops3-release-scope.mjs'
 
 const repoRoot = resolve(import.meta.dirname, '..')
@@ -55,6 +55,15 @@ describe('Ops3 release-scope boundary', () => {
       activeMigrations: 1,
       voiceMode: 'redirect',
       result: 'ops3-release-scope-ok',
+    })
+  })
+
+  it('routes an explicitly pinned accelerated Ops3-11 candidate through its stricter aggregate contract', () => {
+    expect(verifyOps3OrAcceleratedReleaseScope()).toMatchObject({
+      result: 'accelerated-ops3-11-candidate-ok',
+      candidateReady: true,
+      productionReady: false,
+      ops12Included: false,
     })
   })
 })

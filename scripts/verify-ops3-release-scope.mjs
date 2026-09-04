@@ -1,8 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { lstatSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { verifyDatabaseReleaseSafety } from './verify-database-release-safety.mjs'
+import {
+  ACCELERATED_RELEASE_POLICY,
+  verifyAcceleratedOps311Release,
+} from './verify-accelerated-ops3-11-release.mjs'
 
 export const OPS3_BASE_SHA = '45eba849183935e2dfa675b7355ad0efda5a9644'
 export const OPS3_APPROVED_PATHS = Object.freeze([
@@ -191,8 +195,15 @@ export function verifyOps3ReleaseScope(root = fileURLToPath(new URL('../', impor
   }
 }
 
+export function verifyOps3OrAcceleratedReleaseScope(root = fileURLToPath(new URL('../', import.meta.url))) {
+  if (existsSync(path.join(root, ACCELERATED_RELEASE_POLICY))) {
+    return verifyAcceleratedOps311Release(root)
+  }
+  return verifyOps3ReleaseScope(root)
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { console.log(JSON.stringify(verifyOps3ReleaseScope())) }
+  try { console.log(JSON.stringify(verifyOps3OrAcceleratedReleaseScope())) }
   catch (error) {
     console.error(error instanceof Error ? error.message : 'Ops3 release-scope verification failed.')
     process.exitCode = 1
