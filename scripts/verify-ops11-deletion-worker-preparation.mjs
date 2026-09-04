@@ -18,6 +18,7 @@ export const OPS11_NATIVE_ASSERTIONS_SHA256 = '8b86710c9abc4ff1189f56946cb0df224
 export const OPS11_DPAPI_TEST_SHA256 = '422ffaaf22194fc0aa14f4e8e700e575ceda5dc12aeb733d87604f0bb2cfa5d6'
 export const OPS11_HISTORY_REPAIR_TEST_SHA256 = 'ebc5943260692b0b180ee175379c3e472c70e7af5d5a7397e56736fb7929fc64'
 export const OPS11_LOCAL_JOIN_TEST_SHA256 = 'e2f289273f956df33bdf17c1a40e61644e4767acb64309ccb09c20fa2729b61b'
+export const OPS11_IGNORED_GENERATED_UNTRACKED_PATHS = Object.freeze(['results.sarif'])
 
 export const OPS11_APPROVED_PATHS = Object.freeze([
   '.gitleaksignore',
@@ -80,6 +81,11 @@ export function verifyOps11Paths(paths) {
     if (!allowed.has(candidate)) fail(`unreviewed path is present: ${candidate}`)
   }
   return paths.length
+}
+
+export function filterOps11GeneratedUntrackedPaths(paths) {
+  const ignored = new Set(OPS11_IGNORED_GENERATED_UNTRACKED_PATHS)
+  return paths.filter((candidate) => !ignored.has(candidate))
 }
 
 export function verifyOps11DatabaseSources({ migration, permissionTest, nativeAssertions }) {
@@ -218,8 +224,9 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
   git(root, ['merge-base','--is-ancestor',OPS11_PREPARATION_BASE_SHA,'HEAD'])
   const changed = git(root, ['diff','--name-only',OPS11_PREPARATION_BASE_SHA,'--'])
     .split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
-  const untracked = git(root, ['ls-files','--others','--exclude-standard','--'])
+  const untracked = filterOps11GeneratedUntrackedPaths(git(root, ['ls-files','--others','--exclude-standard','--'])
     .split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
+  )
   const paths = [...new Set([...changed,...untracked])].sort()
   verifyOps11Paths(paths)
   for (const candidate of paths) {

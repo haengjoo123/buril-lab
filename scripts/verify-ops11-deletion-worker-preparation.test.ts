@@ -7,6 +7,7 @@ import {
   OPS11_NATIVE_ASSERTIONS,
   OPS11_PERMISSION_TEST,
   OPS11_PREPARATION_BASE_SHA,
+  filterOps11GeneratedUntrackedPaths,
   verifyOps11ApplicationSources,
   verifyOps11DatabaseSources,
   verifyOps11DeletionWorkerPreparation,
@@ -52,6 +53,12 @@ describe('Ops11 deletion Worker preparation boundary', () => {
     'rejects an unreviewed or malformed path: %s',
     (candidate) => expect(() => verifyOps11Paths([candidate])).toThrow(/ops11-preparation/),
   )
+
+  it('ignores only the exact Gitleaks CI report as an untracked generated artifact', () => {
+    expect(filterOps11GeneratedUntrackedPaths(['results.sarif', 'src/unreviewed.ts']))
+      .toEqual(['src/unreviewed.ts'])
+    expect(() => verifyOps11Paths(['results.sarif'])).toThrow(/unreviewed path/)
+  })
 
   it('pins the exact migration, pgTAP, and native assertions', () => {
     expect(verifyOps11DatabaseSources(database)).toMatchObject({
