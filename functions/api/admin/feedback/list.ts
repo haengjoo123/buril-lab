@@ -3,8 +3,9 @@ import { FEEDBACK_SELECT_FIELDS, internalErrorResponse, json, requireFeedbackAdm
 export const onRequestPost = async (context: {
   request: Request
   env: FeedbackAdminEnv
+  data?: { requestId?: unknown }
 }) => {
-  const auth = await requireFeedbackAdmin(context.request, context.env)
+  const auth = await requireFeedbackAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) {
     return auth.response
   }

@@ -90,8 +90,8 @@ select is(
       and c.relkind in ('r', 'p')
       and r.rolname = 'anon'
   ),
-  25::bigint,
-  'anon has the reviewed explicit table GRANT set'
+  24::bigint,
+  'anon has the reviewed effective table GRANT set after Ops7 Contract'
 );
 
 select is(

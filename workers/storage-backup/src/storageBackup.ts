@@ -1669,6 +1669,7 @@ interface VerifiedSnapshot {
   completedAt: string
   manifestSha256: string
   orphanCount: number
+  pointerMode: SourcePointerMode
   objects: BackedObject[]
 }
 
@@ -1734,7 +1735,7 @@ async function readVerifiedSnapshot(
     || !hasExactObjectKeys(manifest.source, ['supabaseProjectRef', 'storageBucket', 'pointerMode'])
     || manifest.source.supabaseProjectRef !== config.projectRef
     || manifest.source.storageBucket !== SOURCE_BUCKET
-    || manifest.source.pointerMode !== config.pointerMode
+    || (manifest.source.pointerMode !== 'legacy_url' && manifest.source.pointerMode !== 'private_path')
     || !Array.isArray(manifest.objects)
   ) {
     fail('r2_verify_failed')
@@ -1781,6 +1782,7 @@ async function readVerifiedSnapshot(
     completedAt: complete.completedAt as string,
     manifestSha256: complete.manifestSha256,
     orphanCount,
+    pointerMode: manifest.source.pointerMode,
     objects: parsed,
   }
 }
@@ -1819,6 +1821,7 @@ async function readPreviousManifest(
   ) {
     fail('r2_verify_failed')
   }
+  if (snapshot.pointerMode !== config.pointerMode) return new Map<string, BackedObject>()
   return new Map(snapshot.objects.map((object) => [object.sourcePath, object]))
 }
 
@@ -2099,7 +2102,7 @@ async function verifyLegacySnapshotForContentGc(
     || !hasExactObjectKeys(manifest.source, ['supabaseProjectRef', 'storageBucket', 'pointerMode'])
     || manifest.source.supabaseProjectRef !== config.projectRef
     || manifest.source.storageBucket !== SOURCE_BUCKET
-    || manifest.source.pointerMode !== config.pointerMode
+    || (manifest.source.pointerMode !== 'legacy_url' && manifest.source.pointerMode !== 'private_path')
     || !Array.isArray(manifest.objects)
     || manifest.objects.length > dependencies.limits.maxStorageObjects
   ) {

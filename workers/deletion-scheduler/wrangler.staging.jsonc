@@ -1,0 +1,30 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "buril-lab-deletion-scheduler-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  "upload_source_maps": true,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "secrets": {
+    "required": [
+      "DELETION_MAINTENANCE_SECRET",
+      "CF_ACCESS_CLIENT_ID",
+      "CF_ACCESS_CLIENT_SECRET"
+    ]
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "kv_namespaces": [
+    { "binding": "BURILLAB_RUNTIME_CONFIG", "id": "dcaa52254fa6447bbe7c21f54354ad0d" }
+  ],
+  "vars": {
+    "DELETION_ENVIRONMENT": "staging",
+    "DELETION_TARGET_ORIGIN": "https://staging.burillab.com",
+    "RUNTIME_CONFIG_KEY": "runtime_config",
+    "SCHEDULER_HEALTH_KEY": "scheduler:deletion-maintenance:health:v1",
+    "REQUEST_TIMEOUT_MS": "45000"
+  }
+}

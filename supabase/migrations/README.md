@@ -1,9 +1,18 @@
 # 활성 Supabase 마이그레이션
 
 이 폴더는 Supabase CLI가 새 로컬 DB와 빈 Staging DB에 적용하는 활성 경로입니다.
-Prep 1 완료 시점의 활성 SQL은 다음 기준선 하나뿐입니다.
+Ops11 준비 시점의 활성 SQL은 다음 아홉 파일로 고정합니다. 빈 환경에서는 아래 순서로
+재구성하지만, 운영에는 각 관문의 통과조건을 만족한 증분 파일만 순서대로 적용합니다.
 
 - `20260824000000_production_baseline.sql`
+- `20260903162850_ops5_expand_server_join.sql`
+- `20260904020000_ops6_private_cabinet_photos_expand.sql`
+- `20260904021000_ops6_private_cabinet_photos_switch.sql`
+- `20260904030000_ops7_contract_legacy_join_audit.sql`
+- `20260904040000_ops8_lab_password_policy.sql`
+- `20260904050000_ops9_deletion_jobs.sql`
+- `20260904060000_ops10_operator_roles_mfa.sql`
+- `20260904070000_ops11_deletion_worker.sql`
 
 ## 절대 금지
 
@@ -20,10 +29,10 @@ Prep 1 완료 시점의 활성 SQL은 다음 기준선 하나뿐입니다.
 Repair 도구는 검토한 Supabase CLI `2.115.0`이 이미 설치되어 있을 때만
 `npx --no-install`로 실행됩니다. 실행 중 최신 CLI를 자동 다운로드하지 않습니다.
 
-`supabase test db`가 실행하는 활성 SQL 검사는
-`supabase/tests/baseline_permissions.sql` 하나뿐입니다. 기준선 전환 전의 절차형 SQL
-검증문은 삭제하지 않고 `supabase/legacy_tests`에 보관하며 활성 pgTAP 검사에 섞지
-않습니다.
+`supabase test db`가 실행하는 활성 SQL 검사는 기준선, Ops5 Expand, Ops6 비공개
+사진 전환, Ops7 Contract, Ops8 비밀번호 정책, Ops9 삭제 작업 기반, Ops10 운영자 역할·MFA,
+Ops11 삭제 Worker용 pgTAP 여덟 파일입니다. 기준선 전환 전의 절차형 SQL 검증문은 삭제하지
+않고 `supabase/legacy_tests`에 보관하며 활성 pgTAP 검사에 섞지 않습니다.
 
 ## 이력 전환과 복구
 
@@ -41,6 +50,20 @@ SHA-256으로 검증됩니다.
 
 ## 다음 변경
 
-Prep 1 뒤의 스키마 변경은 새 시각의 증분 migration으로 추가합니다. 연구실 가입,
-비공개 사진, 계정 삭제, 운영자 역할/MFA, SDS, 알림 migration은 이 기준선 커밋에
-포함하지 않습니다.
+Ops5부터 Ops11까지의 뒤쪽 스키마 변경도 새 시각의 증분 migration으로만 추가합니다. SDS와
+알림 migration은 아직 활성 경로에 포함하지 않습니다.
+Ops6 Switch는 외부 복사 manifest와 해시 검증, 보존 원본, 접근 차단 시험을 모두
+통과한 뒤에만 적용하며 Expand와 같은 운영 배포에 섞지 않습니다.
+Ops7 Contract는 새 가입·감사 경로 배포 후 7일 동안 구 경로 호출이 0건이라는
+운영 증거가 있을 때만 적용합니다.
+Ops8은 Contract가 적용된 뒤 기존 비밀번호 해시를 보존한 채 교체 필요 표시만 추가하고,
+새로 만들거나 바꾸는 연구실 비밀번호에만 12~128자 정책을 적용합니다.
+Ops9은 삭제 UI와 Worker를 켜지 않고 서비스 전용 작업표·추가 전용 상태 기록·파일 소유권
+확인 경로만 추가합니다. 실제 삭제 접수와 처리는 Ops11의 Scheduler 검증 전까지 OFF입니다.
+Ops10은 서버 전용 `reader`, `approver`, `raw_exporter` 역할과 AAL2 확인, 월간 권한 검토,
+추가 전용 운영자 감사를 추가합니다. 실제 운영자 역할 부여와 이메일 허용목록 제거는 선행
+관문의 순차 적용과 Hosted Supabase 검증을 통과한 별도 운영 변경에서만 수행합니다.
+Ops11은 삭제 파일 임시 목록, DB 기반 단일 실행 임대, 단계별 재개 RPC와 최대 12회 재시도를
+추가합니다. 삭제 경로는 서비스 역할만 실행할 수 있고 파일 경로는 작업 완료 전에 제거됩니다.
+Scheduler 배포, `maintenance_worker_enabled`, 삭제 접수와 UI는 선행 운영 관문과 Staging 합성시험,
+예약 호출 3회 성공을 통과하기 전까지 계속 OFF입니다.

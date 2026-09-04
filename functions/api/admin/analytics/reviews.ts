@@ -27,8 +27,10 @@ const SELECT_FIELDS = [
   'review_notes', 'reviewed_by', 'reviewed_at', 'created_at', 'updated_at',
 ].join(', ')
 
-export const onRequestPost = async (context: { request: Request; env: AnalyticsAdminEnv }) => {
-  const auth = await requireAnalyticsAdmin(context.request, context.env)
+export const onRequestPost = async (context: {
+  request: Request; env: AnalyticsAdminEnv; data?: { requestId?: unknown }
+}) => {
+  const auth = await requireAnalyticsAdmin(context.request, context.env, context.data?.requestId)
   if (!auth.ok) return auth.response
   let body: ReviewsBody = {}
   try { body = await context.request.json() as ReviewsBody } catch { /* Empty body lists candidates. */ }
@@ -56,7 +58,7 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
     if (canonicalCasInput && !canonicalCas) {
       return json({ error: 'canonicalCas must be a checksum-valid CAS number.' }, { status: 400 })
     }
-    const { data, error } = await auth.context.adminClient.rpc('analytics_review_candidate_decide', {
+    const { data, error } = await auth.context.adminClient.rpc('operator_analytics_review_decide_v1', {
       p_candidate_id: candidateId,
       p_status: status,
       p_notes: notes,
@@ -65,13 +67,23 @@ export const onRequestPost = async (context: { request: Request; env: AnalyticsA
       p_proposed_alias: proposedAlias,
       p_canonical_name: canonicalName,
       p_canonical_cas: canonicalCas,
+      p_request_id: auth.context.identity.requestId,
+      p_assurance_level: auth.context.identity.assuranceLevel,
     })
     if (error) {
       return error.code === 'P0002'
         ? json({ error: 'Review candidate was not found.' }, { status: 404 })
         : internalErrorResponse('admin.analytics.reviews.decide', error)
     }
-    return json({ item: data })
+    const result = Array.isArray(data) && data.length === 1 ? data[0] : data
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      return internalErrorResponse('admin.analytics.reviews.result', null)
+    }
+    const record = result as Record<string, unknown>
+    if (record.success !== true || !('item' in record)) {
+      return internalErrorResponse('admin.analytics.reviews.authorization', null)
+    }
+    return json({ item: record.item })
   }
 
   // Candidate refresh belongs to the existing scheduled database job. Listing

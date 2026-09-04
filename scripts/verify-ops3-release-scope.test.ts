@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   OPS3_APPROVED_PATHS, OPS3_BASE_SHA, verifyOps3ChangedPaths,
-  verifyOps3ReleaseScope, verifyRedirectOnlyVoiceSource,
+  verifyOps3OrAcceleratedReleaseScope, verifyOps3ReleaseScope, verifyRedirectOnlyVoiceSource,
 } from './verify-ops3-release-scope.mjs'
+
+const repoRoot = resolve(import.meta.dirname, '..')
 
 describe('Ops3 release-scope boundary', () => {
   it('pins an exact pre-Ops3 main commit and a duplicate-free reviewed path set', () => {
@@ -41,11 +45,25 @@ describe('Ops3 release-scope boundary', () => {
   })
 
   it('verifies this working tree against the fixed database and voice safety contracts', () => {
+    const hasSuccessorGate = readFileSync(resolve(repoRoot, 'package.json'), 'utf8').includes('"ops6:verify"')
+    if (hasSuccessorGate) {
+      expect(() => verifyOps3ReleaseScope()).toThrow(/unreviewed path/)
+      return
+    }
     expect(verifyOps3ReleaseScope()).toMatchObject({
       baseSha: OPS3_BASE_SHA,
       activeMigrations: 1,
       voiceMode: 'redirect',
       result: 'ops3-release-scope-ok',
+    })
+  })
+
+  it('routes an explicitly pinned accelerated Ops3-11 candidate through its stricter aggregate contract', () => {
+    expect(verifyOps3OrAcceleratedReleaseScope()).toMatchObject({
+      result: 'accelerated-ops3-11-candidate-ok',
+      candidateReady: true,
+      productionReady: false,
+      ops12Included: false,
     })
   })
 })
