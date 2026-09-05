@@ -526,7 +526,9 @@ export default defineConfig(({ mode }) => {
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt',
+      // Security and account controls must not remain hidden behind an old
+      // installed PWA shell after a successful deployment.
+      registerType: 'autoUpdate',
       includeAssets: ['pwa-192.png', 'pwa-512.png', 'pwa-maskable-512.png'],
       manifest: {
         name: 'Buril-Lab — 랩실 폐시약 안전 관리',
@@ -561,6 +563,13 @@ export default defineConfig(({ mode }) => {
         ]
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [
+          /^\/api(?:\/|$)/,
+          /^\/release\.json$/,
+          /^\/sw\.js$/,
+          /^\/cdn-cgi(?:\/|$)/,
+        ],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // 현재 메인 번들이 기본 precache 한도(2 MiB)를 넘어서므로 배포 빌드를 위해 상향합니다.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
