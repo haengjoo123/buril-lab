@@ -594,6 +594,26 @@ describe('ephemeral release supervisor core', () => {
     }).providerEvidence).toHaveLength(3)
   })
 
+  it('permits an explicit dashboard-revoked attestation after a supervisor process loses captured credentials', () => {
+    const { keys, gatesVerified } = setupJournal()
+    const dashboardEvidence = [
+      { provider: 'supabase', status: 'operator_verified_dashboard_revoked_after_process_loss', credentialSha256: null },
+      { provider: 'cloudflare_pages', status: 'operator_verified_dashboard_revoked_after_process_loss', credentialSha256: null },
+      { provider: 'cloudflare_worker', status: 'operator_verified_dashboard_revoked_after_process_loss', credentialSha256: null },
+    ]
+    expect(() => verifyProviderCreationRecoveryEvidence({
+      journal: gatesVerified,
+      providerEvidence: dashboardEvidence,
+      publicKey: keys.publicKey,
+    })).toThrow(/exact signed credentials/)
+    expect(verifyProviderCreationRecoveryEvidence({
+      journal: gatesVerified,
+      providerEvidence: dashboardEvidence,
+      publicKey: keys.publicKey,
+      allowMaterializedDashboardRevocation: true,
+    }).providerEvidence).toHaveLength(3)
+  })
+
   it('accepts only the exact successor after receipt storage and before pending deletion', () => {
     const {
       keys,
