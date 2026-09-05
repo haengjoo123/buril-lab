@@ -43,7 +43,10 @@ if (args[1] === '--version') {
 }
 if (args[1] !== 'migration') process.exit(90)
 if (args[2] === 'list') {
-  console.log(JSON.stringify(state.versions.map((remote) => ({ local: '', remote, time: '' }))))
+  console.log(JSON.stringify({
+    migrations: state.versions.map((remote) => ({ local: '', remote, time: '' })),
+    message: 'Migrations listed',
+  }))
   process.exit(0)
 }
 if (args[2] === 'repair') {

@@ -214,7 +214,9 @@ function Get-RemoteMigrationVersions {
     throw 'The remote migration list contains duplicate versions; refusing repair.'
   }
 
-  return ,$versions
+  # Let the pipeline enumerate each version. Every caller wraps the result in
+  # @(...), which keeps both a single remote row and many rows as string[].
+  return $versions
 }
 
 function Invoke-MigrationRepair {
@@ -320,7 +322,9 @@ $baselineVersions = @($baselineVersion)
 $transitionVersions = @($legacyVersions + $baselineVersion | Sort-Object -Unique)
 $databasePassword = Get-DatabasePassword
 Assert-SupabaseCliVersion -DatabasePassword $databasePassword
-$beforeVersions = Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+$beforeVersions = @(
+  Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+)
 $beforeState = Get-HistoryState -Actual $beforeVersions -Legacy $legacyVersions -Transition $transitionVersions -Baseline $baselineVersions
 $changed = $false
 
@@ -336,7 +340,9 @@ if ($Mode -eq 'plan') {
 
     if ($beforeState -eq 'legacy') {
       Invoke-MigrationRepair -Versions $baselineVersions -Status 'applied' -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
-      $transitionCheck = Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+      $transitionCheck = @(
+        Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+      )
       if (-not (Test-ExactVersionSet -Actual $transitionCheck -Expected $transitionVersions)) {
         throw 'Baseline marker was not added to the exact 89-version history; refusing the revert step.'
       }
@@ -355,7 +361,9 @@ if ($Mode -eq 'plan') {
 
     if ($beforeState -eq 'baseline') {
       Invoke-MigrationRepair -Versions $legacyVersions -Status 'applied' -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
-      $transitionCheck = Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+      $transitionCheck = @(
+        Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+      )
       if (-not (Test-ExactVersionSet -Actual $transitionCheck -Expected $transitionVersions)) {
         throw 'The exact 89-version history was not restored alongside the baseline; refusing the final step.'
       }
@@ -366,10 +374,13 @@ if ($Mode -eq 'plan') {
   }
 }
 
-$afterVersions = if ($Mode -eq 'plan') {
-  $beforeVersions
+$afterVersions = @()
+if ($Mode -eq 'plan') {
+  $afterVersions = @($beforeVersions)
 } else {
-  Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+  $afterVersions = @(
+    Get-RemoteMigrationVersions -TargetProjectRef $ProjectRef -DatabasePassword $databasePassword
+  )
 }
 $afterState = Get-HistoryState -Actual $afterVersions -Legacy $legacyVersions -Transition $transitionVersions -Baseline $baselineVersions
 
@@ -387,6 +398,11 @@ $recommendedMode = switch ($afterState) {
   default { 'stop' }
 }
 
+$beforeCount = @($beforeVersions).Count
+$afterCount = @($afterVersions).Count
+$beforeHistorySha256 = Get-HistorySha256 -Versions @($beforeVersions)
+$afterHistorySha256 = Get-HistorySha256 -Versions @($afterVersions)
+
 Write-SafeEvidence -Evidence ([ordered]@{
   evidence_schema = 'burillab.migration-history-repair.v1'
   generated_at_utc = [DateTime]::UtcNow.ToString('o')
@@ -399,10 +415,10 @@ Write-SafeEvidence -Evidence ([ordered]@{
   reviewed_legacy_count = $expectedLegacyCount
   reviewed_legacy_history_sha256 = $legacyHistorySha256
   reviewed_snapshot_sha256 = $expectedSnapshotSha256
-  remote_count_before = $beforeVersions.Count
-  remote_history_sha256_before = Get-HistorySha256 -Versions $beforeVersions
-  remote_count_after = $afterVersions.Count
-  remote_history_sha256_after = Get-HistorySha256 -Versions $afterVersions
+  remote_count_before = $beforeCount
+  remote_history_sha256_before = $beforeHistorySha256
+  remote_count_after = $afterCount
+  remote_history_sha256_after = $afterHistorySha256
   project_ref_sha256 = Get-TextSha256 -Text $ProjectRef
   connection_auth = if ($UseSupabaseLoginRole) { 'supabase_login_role' } else { 'database_password' }
 })
