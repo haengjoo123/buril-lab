@@ -64,6 +64,13 @@ describe('Ops11 deletion Worker preparation boundary', () => {
     expect(() => verifyOps11Paths(['results.sarif'])).toThrow(/unreviewed path/)
   })
 
+  it('allows only the reviewed PWA migration assets, without widening the public directory', () => {
+    expect(verifyOps11Paths([
+      'public/_headers', 'public/sw-legacy-refresh.js', 'scripts/pwa-legacy-refresh.test.ts',
+    ])).toBe(3)
+    expect(() => verifyOps11Paths(['public/unreviewed.js'])).toThrow(/unreviewed path/)
+  })
+
   it('pins the exact migration, pgTAP, and native assertions', () => {
     expect(verifyOps11DatabaseSources(database)).toMatchObject({
       migrationSha256: expect.stringMatching(/^[0-9a-f]{64}$/),

@@ -7,6 +7,7 @@ describe('PWA update safety', () => {
   it('activates deployed application updates automatically', () => {
     expect(viteConfig).toContain("registerType: 'autoUpdate'")
     expect(viteConfig).toContain('cleanupOutdatedCaches: true')
+    expect(viteConfig).toContain("importScripts: ['/sw-legacy-refresh.js']")
   })
 
   it('never replaces operational endpoints with the cached SPA shell', () => {
