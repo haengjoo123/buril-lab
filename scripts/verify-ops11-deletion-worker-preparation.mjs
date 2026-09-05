@@ -204,6 +204,9 @@ export function verifyOps11ApplicationSources({
 }
 
 export function verifyOps11WorkerSources({ scheduler, index, stagingConfig, productionConfig, generatedTypes }) {
+  if (scheduler.includes("redirect: 'error'")) {
+    fail('Scheduler uses a redirect mode unsupported by Cloudflare Workers')
+  }
   requireMarkers(scheduler, [
     'STALE_SUCCESS_MS = 3 * 60 * 1000',
     'MAX_CONSECUTIVE_FAILURES = 2',
@@ -212,6 +215,7 @@ export function verifyOps11WorkerSources({ scheduler, index, stagingConfig, prod
     "account_deletion_enabled: false",
     "maintenance_worker_enabled: false",
     "response.status !== 200",
+    "redirect: 'manual'",
     'summary.failed > 0',
     'enablement_eligible',
   ], 'deletion Scheduler')

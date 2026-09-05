@@ -86,5 +86,8 @@ describe('Ops11 deletion Worker preparation boundary', () => {
     expect(() => verifyOps11WorkerSources({
       ...worker, productionConfig: `${worker.productionConfig}\nCF_ACCESS_CLIENT_ID`,
     })).toThrow(/Staging Access credentials/)
+    expect(() => verifyOps11WorkerSources({
+      ...worker, scheduler: worker.scheduler.replace("redirect: 'manual'", "redirect: 'error'"),
+    })).toThrow(/redirect mode unsupported/)
   })
 })

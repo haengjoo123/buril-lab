@@ -400,7 +400,11 @@ export async function runDeletionScheduler<TStore extends RuntimeConfigStore>(
     const target = endpoint(env.DELETION_TARGET_ORIGIN, env.DELETION_ENVIRONMENT)
     const requestId = crypto.randomUUID()
     const response = await fetcher(target, {
-      method: 'POST', body: null, cache: 'no-store', redirect: 'error',
+      // Cloudflare Workers does not implement Request.redirect="error" and
+      // throws before sending the subrequest. Keep redirects observable and
+      // let validateMaintenanceResponse reject every non-200 response without
+      // forwarding the maintenance credential to another origin.
+      method: 'POST', body: null, cache: 'no-store', redirect: 'manual',
       headers: {
         Accept: 'application/json', Authorization: `Bearer ${secret}`,
         'X-Request-ID': requestId, ...accessHeaders(env, target),
