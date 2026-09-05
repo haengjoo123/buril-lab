@@ -5,8 +5,14 @@ export const OPS6_MAX_REFERENCED_PER_SCOPE = 50
 export const OPS6_WARNING_REFERENCED_PER_SCOPE = 40
 export const OPS6_MAX_CABINETS = 5_000
 export const OPS6_MAX_OBJECTS = 10_000
+export const OPS6_MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024
+export const OPS6_MAX_SOURCE_PIXELS = 64_000_000
+export const OPS6_MAX_LONG_EDGE = 1920
+export const OPS6_MIN_LONG_EDGE = 1280
+export const OPS6_WEBP_QUALITY_STEPS = Object.freeze([84, 78, 72])
 export const OPS6_MAX_IMAGE_BYTES = 2 * 1024 * 1024
 export const OPS6_WEBP_MIME = 'image/webp'
+export const OPS6_SOURCE_IMAGE_MIME_TYPES = Object.freeze(['image/jpeg', 'image/png', OPS6_WEBP_MIME])
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SHA256 = /^[0-9a-f]{64}$/
@@ -108,6 +114,54 @@ export function inspectWebp(bytes) {
   })
 }
 
+export function inspectSourceImage(bytes, declaredMime = '') {
+  const value = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes ?? [])
+  if (!value.length || value.length > OPS6_MAX_SOURCE_IMAGE_BYTES) {
+    fail('cabinet source image exceeds its byte boundary')
+  }
+  let mimeType = null
+  if (value.length >= 3 && value[0] === 0xff && value[1] === 0xd8 && value[2] === 0xff) {
+    mimeType = 'image/jpeg'
+  } else if (value.length >= 8 && value.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))) {
+    mimeType = 'image/png'
+  } else if (value.length >= 12 && value.subarray(0,4).toString('ascii') === 'RIFF'
+    && value.subarray(8,12).toString('ascii') === 'WEBP') {
+    mimeType = OPS6_WEBP_MIME
+  }
+  if (!mimeType) fail('cabinet source image type is unsupported')
+  const normalizedDeclared = typeof declaredMime === 'string' ? declaredMime.trim().toLowerCase() : ''
+  if (normalizedDeclared && (!OPS6_SOURCE_IMAGE_MIME_TYPES.includes(normalizedDeclared) || normalizedDeclared !== mimeType)) {
+    fail('cabinet source image content type does not match its bytes')
+  }
+  return Object.freeze({
+    mimeType,
+    sizeBytes: value.length,
+    sha256: createHash('sha256').update(value).digest('hex'),
+  })
+}
+
+export function optimizedLongEdges(sourceLongEdge) {
+  if (!Number.isSafeInteger(sourceLongEdge) || sourceLongEdge < 1) fail('cabinet source dimensions are invalid')
+  const initial = Math.min(sourceLongEdge, OPS6_MAX_LONG_EDGE)
+  const reduced = Math.min(initial, Math.max(OPS6_MIN_LONG_EDGE, Math.floor(initial * 0.8)))
+  const minimum = Math.min(initial, OPS6_MIN_LONG_EDGE)
+  return Object.freeze([...new Set([initial, reduced, minimum])])
+}
+
+export function scaledDimensions(width, height, maxLongEdge) {
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1
+    || !Number.isSafeInteger(maxLongEdge) || maxLongEdge < 1) {
+    fail('cabinet source dimensions are invalid')
+  }
+  const longEdge = Math.max(width, height)
+  if (longEdge <= maxLongEdge) return Object.freeze({ width, height })
+  const scale = maxLongEdge / longEdge
+  return Object.freeze({
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  })
+}
+
 function normalizeRow(row) {
   if (!isRecord(row) || !isUuid(row.id)
     || !(row.lab_id === null || row.lab_id === undefined || isUuid(row.lab_id))
@@ -198,14 +252,28 @@ export function canonicalManifestEntry(entry) {
     || typeof entry.verifiedAt !== 'string' || Number.isNaN(Date.parse(entry.verifiedAt))) {
     fail('manifest verification evidence is invalid')
   }
-  return Object.freeze({
+  const hasAnySourceEvidence = entry.sourceSha256 !== undefined || entry.sourceSizeBytes !== undefined
+    || entry.sourceMimeType !== undefined
+  if (hasAnySourceEvidence && (typeof entry.sourceSha256 !== 'string' || !SHA256.test(entry.sourceSha256)
+    || !Number.isSafeInteger(entry.sourceSizeBytes) || entry.sourceSizeBytes < 1
+    || entry.sourceSizeBytes > OPS6_MAX_SOURCE_IMAGE_BYTES
+    || !OPS6_SOURCE_IMAGE_MIME_TYPES.includes(entry.sourceMimeType))) {
+    fail('manifest source evidence is invalid')
+  }
+  const canonical = {
     cabinetId: entry.cabinetId.toLowerCase(),
     sourcePath,
     privatePath,
     sha256: entry.sha256,
     sizeBytes: entry.sizeBytes,
     verifiedAt: new Date(entry.verifiedAt).toISOString(),
+  }
+  if (hasAnySourceEvidence) Object.assign(canonical, {
+    sourceSha256: entry.sourceSha256,
+    sourceSizeBytes: entry.sourceSizeBytes,
+    sourceMimeType: entry.sourceMimeType,
   })
+  return Object.freeze(canonical)
 }
 
 export function nextManifestJournalLine(previousHash, entry) {

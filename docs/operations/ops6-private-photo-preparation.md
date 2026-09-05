@@ -11,7 +11,7 @@
 - 조회 주소는 1시간짜리 서명 URL이며, 요청한 정확한 Storage 경로와 일치할 때만 브라우저에 반환합니다.
 - 교체·제거된 본문과 공개 원본은 즉시 삭제하지 않고 최소 7일 보존 목록에 둡니다.
 - 공개 사진이 아직 이관되지 않은 시약장은 교체·사진 제거·시약장 삭제를 거부합니다.
-- `migrate-ops6-private-photos.mjs apply`는 복사와 검증 및 DB 경로 연결만 수행합니다. 공개 원본 삭제, 버킷 비공개 전환, 운영 배포는 하지 않습니다.
+- `migrate-ops6-private-photos.mjs apply`는 기존 JPEG·PNG·WebP 원본을 엄격히 해석한 뒤 최대 긴 변 1920px·2 MiB의 단일 프레임 WebP로 다시 만들고, 복사와 검증 및 DB 경로 연결만 수행합니다. 공개 원본 삭제, 버킷 비공개 전환, 운영 배포는 하지 않습니다.
 - 계정·연구실 삭제 기능은 이 묶음에서 켜지지 않습니다. 현재 삭제 경로는 `image_url` 중심이므로 운영 9 작업표 기반 삭제로 전환하기 전까지 계속 OFF입니다.
 
 ## DB 적용 순서
@@ -19,7 +19,7 @@
 1. 운영 5의 Expand가 적용된 상태에서 `20260904020000_ops6_private_cabinet_photos_expand.sql`만 적용합니다.
 2. 새 API를 아직 공개하지 않은 채 이관 도구를 먼저 `plan`으로 실행합니다.
 3. 참조 누락이 0인지 확인한 뒤 `apply`를 실행합니다.
-4. 도구가 원본 다운로드, SHA-256, 비공개 경로 업로드, 재다운로드, 크기·SHA-256 일치, DB 연결을 순서대로 확인합니다.
+4. 도구가 원본 다운로드, 형식·크기·픽셀 수·단일 프레임 확인, WebP 변환, 비공개 경로 업로드, 재다운로드, 크기·SHA-256 일치, DB 연결을 순서대로 확인합니다. journal에는 원본과 변환본의 SHA-256·크기·원본 MIME을 함께 기록합니다.
 5. 저장소 밖의 증거 폴더에 해시 연결 journal과 DPAPI Ed25519 서명 영수증을 남깁니다. 원문 파일·사용자 정보·비밀값은 Git 저장소에 넣지 않습니다.
 6. 모든 참조가 연결되고 본문 검증이 끝난 뒤에만 `20260904021000_ops6_private_cabinet_photos_switch.sql`을 적용합니다.
 7. 같은 후보 SHA의 Pages API와 `SOURCE_POINTER_MODE=private_path` 백업 Worker를 배포합니다.
@@ -75,7 +75,8 @@ APPLY OPS6 PRIVATE PHOTO COPY <staging|production> <project-ref> <40자리 SHA>
 - Git 작업트리 변경 또는 후보 SHA 불일치
 - 외부 주소 이동, 20초 초과, 과대 응답
 - 한 Storage 본문을 여러 시약장이 참조
-- 참조 본문 누락, WebP 형식 오류, 2 MiB 초과
+- 참조 본문 누락, JPEG·PNG·WebP 이외 형식, 선언 형식과 실제 바이트 불일치, 손상·다중 프레임, 20 MiB 또는 6,400만 픽셀 초과
+- 변환한 WebP가 긴 변 1920px 또는 2 MiB를 초과
 - 복사 후 재다운로드 SHA-256 또는 크기 불일치
 - DB 연결 응답을 잃고 재조회로도 정확한 연결을 증명할 수 없음
 - 기존 journal·서명 영수증이 현재 공급자 상태와 불일치
@@ -104,7 +105,8 @@ APPLY OPS6 PRIVATE PHOTO COPY <staging|production> <project-ref> <40자리 SHA>
 ## 현재 판정
 
 - `productionReady: false`
-- 실제 Supabase·Cloudflare 변경: 0
+- 실제 Supabase 변경: 운영 5 및 운영 6 Expand 적용, 사진 본문·DB 사진 경로는 아직 미변경
+- 실제 Cloudflare 변경: 이 준비 수정에서는 0
 - 실제 파일 삭제: 0
-- 필요한 선행 관문: 운영 1·2 관찰, 운영 3, 운영 4, 운영 5
-- 다음 실환경 단계: 선행 관문 뒤 Staging Expand → 복사훈련 → Switch → Pages/Worker 배포 → 접근·백업 검증
+- 완료된 선행 관문: 운영 1·2, 운영 3, 운영 4, 운영 5
+- 다음 실환경 단계: 운영 원본 변환·비공개 복사 → Switch → Pages/Worker 검증 → 접근·백업 검증
