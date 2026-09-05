@@ -18,7 +18,8 @@ describe('accelerated Ops3-11 release boundary', () => {
       result: 'accelerated-ops3-11-candidate-ok',
       activeMigrations: 9,
       activePgTapTests: 8,
-      deletionUiEnabled: false,
+      deletionUiEnabled: true,
+      deletionRuntimeDefaultEnabled: false,
       storageBackupPointerMode: 'private_path',
       ops12Included: false,
       candidateReady: true,
@@ -46,5 +47,9 @@ describe('accelerated Ops3-11 release boundary', () => {
       policy: policy.replaceAll('initialDeletionUi: false', 'initialDeletionUi: true'),
       rollout,
     })).toThrow(/initialDeletionUi/)
+    expect(() => verifyAcceleratedPolicySources({
+      policy: policy.replace('deletionRuntimeActivation: post-same-sha-staging-and-production', ''),
+      rollout,
+    })).toThrow(/deletionRuntimeActivation/)
   })
 })

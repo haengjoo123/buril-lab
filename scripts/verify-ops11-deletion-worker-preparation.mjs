@@ -4,6 +4,7 @@ import { lstatSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { verifyDatabaseReleaseSafety } from './verify-database-release-safety.mjs'
+import { verifyOps9ApplicationSources } from './verify-ops9-deletion-preparation.mjs'
 
 export const OPS11_PREPARATION_BASE_SHA = 'b42304fa226ba127da438b015b6d8b72223b45b5'
 export const OPS11_MIGRATION = 'supabase/migrations/20260904070000_ops11_deletion_worker.sql'
@@ -67,6 +68,8 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   'scripts/verify-database-release-safety.mjs',
   'scripts/verify-database-release-safety.test.ts',
   'scripts/verify-ops10-operator-preparation.test.ts',
+  'scripts/verify-ops9-deletion-preparation.mjs',
+  'scripts/verify-ops9-deletion-preparation.test.ts',
   'scripts/verify-ops11-deletion-worker-preparation.mjs',
   'scripts/verify-ops11-deletion-worker-preparation.test.ts',
   'scripts/verify-ops3-release-scope.mjs',
@@ -78,6 +81,7 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   'src/components/MainLayout.tsx',
   'src/components/SettingsModal.auth.test.tsx',
   'src/components/SettingsModal.tsx',
+  'src/config/deletion.ts',
   'src/locales/translations.ts',
   'src/services/mfaService.test.ts',
   'src/services/mfaService.ts',
@@ -179,6 +183,7 @@ export function verifyOps11DatabaseSources({ migration, permissionTest, nativeAs
 export function verifyOps11ApplicationSources({
   runtimeConfig, middleware, routePolicy, processor, handler, deletionUi,
   mfaService, mfaPanel, mainLayout, settingsModal,
+  deletionIntake, accountHandler, labHandler, authHook, labService, labModal,
 }) {
   requireMarkers(runtimeConfig, [
     'maintenanceEnabled,', 'accountDeletionEnabled,', 'maintenanceEnabled: false',
@@ -206,9 +211,14 @@ export function verifyOps11ApplicationSources({
     'MAX_UPSTREAM_REQUESTS = 32',
     "internalErrorResponse('deletions.worker.process'",
   ], 'deletion processor handler')
-  if (!deletionUi.includes('DELETION_UI_ENABLED = false as const')) {
-    fail('deletion UI was enabled before three scheduled successes')
+  if (!deletionUi.includes('DELETION_UI_ENABLED = true as const')) {
+    fail('deletion UI does not match the reviewed post-readiness follow-up')
   }
+  const intake = verifyOps9ApplicationSources({
+    runtimeConfig, intake: deletionIntake, accountHandler, labHandler,
+    deletionConfig: deletionUi, authHook, labService, settingsModal, labModal,
+    uiEnabled: true,
+  })
   requireMarkers(mfaService, [
     'supabase.auth.mfa.listFactors()',
     'supabase.auth.mfa.getAuthenticatorAssuranceLevel()',
@@ -242,7 +252,8 @@ export function verifyOps11ApplicationSources({
   }
   return Object.freeze({
     stages: ['database','storage','auth','finalize'], claimLimit: 1,
-    deletionUiEnabled: false, idempotentAuthNotFound: true,
+    deletionUiEnabled: intake.uiEnabled, runtimeDefaultEnabled: intake.runtimeDefaultEnabled,
+    idempotentAuthNotFound: true,
     mfaEnrollmentUi: true, mfaEnrollmentMaterialPersisted: false,
   })
 }
@@ -333,6 +344,12 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
     mfaPanel: read('src/components/MfaSettingsPanel.tsx'),
     mainLayout: read('src/components/MainLayout.tsx'),
     settingsModal: read('src/components/SettingsModal.tsx'),
+    deletionIntake: read('functions/api/deletions/_shared.ts'),
+    accountHandler: read('functions/api/account/delete.ts'),
+    labHandler: read('functions/api/labs/delete.ts'),
+    authHook: read('src/hooks/useAuth.ts'),
+    labService: read('src/services/labService.ts'),
+    labModal: read('src/components/LabManagementModal.tsx'),
   })
   const worker = verifyOps11WorkerSources({
     scheduler: read('workers/deletion-scheduler/src/scheduler.ts'),
@@ -365,7 +382,7 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
     localJoinTestSha256: sha256(localJoinTest),
     activeMigrations: releaseSafety.activeMigrations, activePgTapTests: releaseSafety.activePgTapTests,
     productionReady: false, schedulerDeployed: false, deletionIntakeEnabled: false,
-    deletionUiEnabled: false, hostedSupabaseAcceptance: false,
+    deletionUiEnabled: application.deletionUiEnabled, hostedSupabaseAcceptance: false,
     requiresEarlierOperationalGates: true,
   })
 }

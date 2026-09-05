@@ -1,5 +1,11 @@
 # Ops11 삭제 Worker 준비 증거
 
+이 문서의 준비 상태와 아래 OFF 값은 최초 Ops11 후보의 이력입니다. Scheduler 실제
+성공과 운영자 MFA 검증 뒤 삭제 UI만 켜는 후속 후보는
+[가속 출시 정책의 후속 절차](./accelerated-ops3-11-release-2026-09-05.md)를 따릅니다.
+현재 검증기는 UI ON과 서버 기본 OFF를 별도로 보고하며, 실제 접수 활성화는 같은 SHA의
+전체 CI·Staging·운영 배포 후 KV에서 수행합니다. 정적 검사는 Hosted 완료를 주장하지 않습니다.
+
 ## 상태
 
 - `productionReady: false`

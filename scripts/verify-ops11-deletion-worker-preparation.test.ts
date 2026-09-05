@@ -30,6 +30,12 @@ const application = {
   mfaPanel: read('src/components/MfaSettingsPanel.tsx'),
   mainLayout: read('src/components/MainLayout.tsx'),
   settingsModal: read('src/components/SettingsModal.tsx'),
+  deletionIntake: read('functions/api/deletions/_shared.ts'),
+  accountHandler: read('functions/api/account/delete.ts'),
+  labHandler: read('functions/api/labs/delete.ts'),
+  authHook: read('src/hooks/useAuth.ts'),
+  labService: read('src/services/labService.ts'),
+  labModal: read('src/components/LabManagementModal.tsx'),
 }
 const worker = {
   scheduler: read('workers/deletion-scheduler/src/scheduler.ts'),
@@ -48,7 +54,7 @@ describe('Ops11 deletion Worker preparation boundary', () => {
       historyRepairTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       localJoinTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       productionReady: false, schedulerDeployed: false, deletionIntakeEnabled: false,
-      deletionUiEnabled: false, hostedSupabaseAcceptance: false,
+      deletionUiEnabled: true, hostedSupabaseAcceptance: false,
       requiresEarlierOperationalGates: true,
     })
   })
@@ -90,9 +96,17 @@ describe('Ops11 deletion Worker preparation boundary', () => {
     })).toThrow(/reviewed deletion worker migration changed/)
   })
 
-  it('rejects early UI enablement or removal of the purpose-specific secret boundary', () => {
+  it('allows only the exact deletion follow-up paths', () => {
+    expect(verifyOps11Paths([
+      'src/config/deletion.ts', 'scripts/verify-ops9-deletion-preparation.mjs',
+      'scripts/verify-ops9-deletion-preparation.test.ts',
+    ])).toBe(3)
+    expect(() => verifyOps11Paths(['src/config/unreviewed.ts'])).toThrow(/unreviewed path/)
+  })
+
+  it('rejects inconsistent UI enablement or removal of the purpose-specific secret boundary', () => {
     expect(() => verifyOps11ApplicationSources({
-      ...application, deletionUi: application.deletionUi.replace('false as const', 'true as const'),
+      ...application, deletionUi: application.deletionUi.replace('true as const', 'false as const'),
     })).toThrow(/deletion UI/)
     expect(() => verifyOps11ApplicationSources({
       ...application, handler: application.handler.replace('expectedSecret.length < 32', 'expectedSecret.length < 1'),
@@ -105,6 +119,20 @@ describe('Ops11 deletion Worker preparation boundary', () => {
       ...application,
       mfaService: application.mfaService.replace('supabase.auth.mfa.challengeAndVerify({ factorId, code })', 'Promise.resolve()'),
     })).toThrow(/MFA client service/)
+  })
+
+  it('retains authenticated queued intake and runtime OFF defaults with visible controls', () => {
+    expect(verifyOps11ApplicationSources(application)).toMatchObject({
+      deletionUiEnabled: true, runtimeDefaultEnabled: false,
+    })
+    expect(() => verifyOps11ApplicationSources({
+      ...application,
+      settingsModal: application.settingsModal.replace('isAuthenticated && DELETION_UI_ENABLED', 'DELETION_UI_ENABLED'),
+    })).toThrow(/authenticated and gated/)
+    expect(() => verifyOps11ApplicationSources({
+      ...application,
+      runtimeConfig: application.runtimeConfig.replaceAll('accountDeletionEnabled: false', 'accountDeletionEnabled: true'),
+    })).toThrow(/runtime configuration/)
   })
 
   it('rejects Scheduler auto-enable and Staging credentials in production', () => {
