@@ -29,6 +29,7 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   'docs/operations/ops4-production-migration-history-evidence-2026-09-05.md',
   'docs/operations/ops5-production-expand-evidence-2026-09-05.md',
   'docs/operations/ops6-private-photo-preparation.md',
+  'docs/operations/ops8-ops11-accelerated-production-evidence-2026-09-05.md',
   'docs/operations/operations-safety-rollout.md',
   'docs/operations/supabase-hosted-advisor-token.md',
   'eslint.config.js',
