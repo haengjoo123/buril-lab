@@ -26,6 +26,9 @@ const application = {
   routePolicy: read('functions/api/_routePolicy.ts'),
   processor: read('functions/api/internal/deletions/_processor.ts'),
   handler: read('functions/api/internal/deletions/process.ts'), deletionUi: read('src/config/deletion.ts'),
+  mfaService: read('src/services/mfaService.ts'),
+  mfaPanel: read('src/components/MfaSettingsPanel.tsx'),
+  settingsModal: read('src/components/SettingsModal.tsx'),
 }
 const worker = {
   scheduler: read('workers/deletion-scheduler/src/scheduler.ts'),
@@ -77,6 +80,14 @@ describe('Ops11 deletion Worker preparation boundary', () => {
     expect(() => verifyOps11ApplicationSources({
       ...application, handler: application.handler.replace('expectedSecret.length < 32', 'expectedSecret.length < 1'),
     })).toThrow(/processor handler/)
+    expect(() => verifyOps11ApplicationSources({
+      ...application,
+      mfaService: `${application.mfaService}\nlocalStorage.setItem('mfa', secret)`,
+    })).toThrow(/persisted or logged/)
+    expect(() => verifyOps11ApplicationSources({
+      ...application,
+      mfaService: application.mfaService.replace('supabase.auth.mfa.challengeAndVerify({ factorId, code })', 'Promise.resolve()'),
+    })).toThrow(/MFA client service/)
   })
 
   it('rejects Scheduler auto-enable and Staging credentials in production', () => {

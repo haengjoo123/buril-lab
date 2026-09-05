@@ -68,6 +68,11 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   'scripts/verify-ops6-private-photo-preparation.mjs',
   'scripts/verify-supabase-security-advisors.mjs',
   'scripts/verify-supabase-security-advisors.test.ts',
+  'src/components/MfaSettingsPanel.tsx',
+  'src/components/SettingsModal.tsx',
+  'src/locales/translations.ts',
+  'src/services/mfaService.test.ts',
+  'src/services/mfaService.ts',
   OPS11_MIGRATION,
   'supabase/migrations/README.md',
   'supabase/security-advisors/staging.json',
@@ -162,6 +167,7 @@ export function verifyOps11DatabaseSources({ migration, permissionTest, nativeAs
 
 export function verifyOps11ApplicationSources({
   runtimeConfig, middleware, routePolicy, processor, handler, deletionUi,
+  mfaService, mfaPanel, settingsModal,
 }) {
   requireMarkers(runtimeConfig, [
     'maintenanceEnabled,', 'accountDeletionEnabled,', 'maintenanceEnabled: false',
@@ -192,6 +198,28 @@ export function verifyOps11ApplicationSources({
   if (!deletionUi.includes('DELETION_UI_ENABLED = false as const')) {
     fail('deletion UI was enabled before three scheduled successes')
   }
+  requireMarkers(mfaService, [
+    'supabase.auth.mfa.listFactors()',
+    'supabase.auth.mfa.getAuthenticatorAssuranceLevel()',
+    "factor.factor_type === 'totp' && factor.status === 'unverified'",
+    'supabase.auth.mfa.challengeAndVerify({ factorId, code })',
+    "return value.replace(/\\D/g, '').slice(0, 6)",
+  ], 'MFA client service')
+  requireMarkers(mfaPanel, [
+    "status?.currentLevel === 'aal2'",
+    '<img src={enrollment.qrCode}',
+    '{enrollment.secret}',
+    'autoComplete="one-time-code"',
+  ], 'MFA settings panel')
+  requireMarkers(settingsModal, [
+    "import { MfaSettingsPanel } from './MfaSettingsPanel'",
+    '{session && <MfaSettingsPanel />}',
+  ], 'settings integration')
+  for (const source of [mfaService, mfaPanel]) {
+    if (/\b(?:localStorage|sessionStorage)\b|console\.(?:log|error)/.test(source)) {
+      fail('MFA enrollment material may be persisted or logged')
+    }
+  }
   for (const source of [processor, handler]) {
     if (/console\.(?:log|error)\([^)]*(?:path|email|lab|chemical|token)/i.test(source)) {
       fail('deletion processor may log sensitive job data')
@@ -200,6 +228,7 @@ export function verifyOps11ApplicationSources({
   return Object.freeze({
     stages: ['database','storage','auth','finalize'], claimLimit: 1,
     deletionUiEnabled: false, idempotentAuthNotFound: true,
+    mfaEnrollmentUi: true, mfaEnrollmentMaterialPersisted: false,
   })
 }
 
@@ -285,6 +314,9 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
     middleware: read('functions/api/_middleware.ts'), routePolicy: read('functions/api/_routePolicy.ts'),
     processor: read('functions/api/internal/deletions/_processor.ts'),
     handler: read('functions/api/internal/deletions/process.ts'), deletionUi: read('src/config/deletion.ts'),
+    mfaService: read('src/services/mfaService.ts'),
+    mfaPanel: read('src/components/MfaSettingsPanel.tsx'),
+    settingsModal: read('src/components/SettingsModal.tsx'),
   })
   const worker = verifyOps11WorkerSources({
     scheduler: read('workers/deletion-scheduler/src/scheduler.ts'),
