@@ -564,6 +564,7 @@ export default defineConfig(({ mode }) => {
       },
       workbox: {
         cleanupOutdatedCaches: true,
+        importScripts: ['/sw-legacy-refresh.js'],
         navigateFallbackDenylist: [
           /^\/api(?:\/|$)/,
           /^\/release\.json$/,

@@ -14,3 +14,6 @@ https://burillab.com/*
 
 /sw.js
   Cache-Control: no-cache
+
+/sw-legacy-refresh.js
+  Cache-Control: no-cache
