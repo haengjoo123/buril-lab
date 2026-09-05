@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
+import sharp from 'sharp'
 import {
   chmod,
   lstat,
@@ -23,11 +24,19 @@ import {
   OPS6_CABINET_BUCKET,
   OPS6_MAX_CABINETS,
   OPS6_MAX_IMAGE_BYTES,
+  OPS6_MAX_LONG_EDGE,
   OPS6_MAX_OBJECTS,
+  OPS6_MAX_SOURCE_IMAGE_BYTES,
+  OPS6_MAX_SOURCE_PIXELS,
+  OPS6_WEBP_QUALITY_STEPS,
   buildPhotoMigrationInventory,
+  canonicalManifestEntry,
   derivePrivatePath,
+  inspectSourceImage,
   inspectWebp,
   nextManifestJournalLine,
+  optimizedLongEdges,
+  scaledDimensions,
   verifyManifestJournal,
 } from './ops6-private-photo-migration-core.mjs'
 
@@ -119,7 +128,8 @@ export function createBoundedSupabaseFetch(origin, fetchImpl = fetch) {
       signal: AbortSignal.timeout(20_000),
     })
     if (response.status >= 300 && response.status < 400) fail('Supabase redirect was refused')
-    return readBoundedResponse(response, MAX_API_RESPONSE_BYTES)
+    const isCabinetObject = /^\/storage\/v1\/object\/(?:authenticated\/|public\/)?cabinets(?:\/|$)/.test(target.pathname)
+    return readBoundedResponse(response, isCabinetObject ? OPS6_MAX_SOURCE_IMAGE_BYTES : MAX_API_RESPONSE_BYTES)
   }
 }
 
@@ -175,16 +185,17 @@ export async function createOps6SupabaseAdapter({ origin, credential, createClie
     async download(objectPath) {
       const result = await client.storage.from(OPS6_CABINET_BUCKET).download(objectPath)
       if (result.error || !result.data || typeof result.data.arrayBuffer !== 'function'
-        || (Number.isFinite(result.data.size) && result.data.size > OPS6_MAX_IMAGE_BYTES)) {
+        || (Number.isFinite(result.data.size) && result.data.size > OPS6_MAX_SOURCE_IMAGE_BYTES)) {
         fail('cabinet object download failed')
       }
       const body = Buffer.from(await result.data.arrayBuffer())
-      inspectWebp(body)
+      inspectSourceImage(body, result.data.type)
       return body
     },
     async tryDownload(objectPath) {
       const result = await client.storage.from(OPS6_CABINET_BUCKET).download(objectPath)
-      if (result.error || !result.data || typeof result.data.arrayBuffer !== 'function') return null
+      if (result.error || !result.data || typeof result.data.arrayBuffer !== 'function'
+        || (Number.isFinite(result.data.size) && result.data.size > OPS6_MAX_IMAGE_BYTES)) return null
       const body = Buffer.from(await result.data.arrayBuffer())
       inspectWebp(body)
       return body
@@ -213,34 +224,127 @@ export async function createOps6SupabaseAdapter({ origin, credential, createClie
   })
 }
 
+export async function prepareLegacyCabinetWebp(sourceBytes, sharpImpl = sharp) {
+  const source = Buffer.isBuffer(sourceBytes) ? sourceBytes : Buffer.from(sourceBytes ?? [])
+  const sourceEvidence = inspectSourceImage(source)
+  let metadata
+  try {
+    metadata = await sharpImpl(source, {
+      failOn: 'warning',
+      limitInputPixels: OPS6_MAX_SOURCE_PIXELS,
+      sequentialRead: true,
+    }).metadata()
+  } catch {
+    fail('cabinet source image cannot be decoded safely')
+  }
+  if (!metadata || metadata.format !== sourceEvidence.mimeType.slice('image/'.length)
+    || !Number.isSafeInteger(metadata.width) || !Number.isSafeInteger(metadata.height)
+    || metadata.width < 1 || metadata.height < 1 || (metadata.pages ?? 1) !== 1) {
+    fail('cabinet source image metadata is unsupported')
+  }
+  const orientedWidth = metadata.autoOrient?.width ?? metadata.width
+  const orientedHeight = metadata.autoOrient?.height ?? metadata.height
+  const sourcePixels = metadata.width * metadata.height
+  if (!Number.isSafeInteger(orientedWidth) || !Number.isSafeInteger(orientedHeight)
+    || orientedWidth < 1 || orientedHeight < 1 || !Number.isSafeInteger(sourcePixels)
+    || sourcePixels > OPS6_MAX_SOURCE_PIXELS) {
+    fail('cabinet source image pixel boundary was exceeded')
+  }
+
+  for (const longEdge of optimizedLongEdges(Math.max(orientedWidth, orientedHeight))) {
+    const dimensions = scaledDimensions(orientedWidth, orientedHeight, longEdge)
+    for (const quality of OPS6_WEBP_QUALITY_STEPS) {
+      let converted
+      try {
+        converted = await sharpImpl(source, {
+          failOn: 'warning',
+          limitInputPixels: OPS6_MAX_SOURCE_PIXELS,
+          sequentialRead: true,
+        })
+          .autoOrient()
+          .flatten({ background: '#ffffff' })
+          .resize({ width: dimensions.width, height: dimensions.height, fit: 'fill', withoutEnlargement: true })
+          .webp({ quality, alphaQuality: quality, effort: 6, smartSubsample: true })
+          .toBuffer({ resolveWithObject: true })
+      } catch {
+        fail('cabinet source image cannot be decoded safely')
+      }
+      const body = Buffer.from(converted.data)
+      if (body.length > OPS6_MAX_IMAGE_BYTES) continue
+      const outputEvidence = inspectWebp(body)
+      if (converted.info?.format !== 'webp' || converted.info.width !== dimensions.width
+        || converted.info.height !== dimensions.height || converted.info.size !== outputEvidence.sizeBytes
+        || Math.max(converted.info.width, converted.info.height) > OPS6_MAX_LONG_EDGE) {
+        fail('cabinet WebP conversion result is invalid')
+      }
+      return Object.freeze({
+        body,
+        sourceSha256: sourceEvidence.sha256,
+        sourceSizeBytes: sourceEvidence.sizeBytes,
+        sourceMimeType: sourceEvidence.mimeType,
+        sha256: outputEvidence.sha256,
+        sizeBytes: outputEvidence.sizeBytes,
+        width: converted.info.width,
+        height: converted.info.height,
+        quality,
+        converted: !source.equals(body),
+      })
+    }
+  }
+  fail('cabinet image cannot fit the bounded WebP output')
+}
+
 function equalBody(left, right) {
   return left.length === right.length && createHash('sha256').update(left).digest('hex') === createHash('sha256').update(right).digest('hex')
 }
 
-export async function migrateOps6PhotoSet({ inventory, adapter, priorEntries = [], appendEntry, now = () => new Date() }) {
+export async function migrateOps6PhotoSet({
+  inventory,
+  adapter,
+  priorEntries = [],
+  appendEntry,
+  now = () => new Date(),
+  prepareSource = prepareLegacyCabinetWebp,
+}) {
   if (!inventory || !adapter || typeof appendEntry !== 'function' || inventory.missing.length) fail('migration input is incomplete')
-  const priorByCabinet = new Map(priorEntries.map((entry) => [entry.cabinetId, entry]))
+  const canonicalPriorEntries = priorEntries.map((entry) => canonicalManifestEntry(entry))
+  const priorByCabinet = new Map(canonicalPriorEntries.map((entry) => [entry.cabinetId, entry]))
   if (priorByCabinet.size !== priorEntries.length) fail('prior migration evidence repeats a cabinet')
   const candidates = [...inventory.pending, ...inventory.migrated.filter((row) => row.legacyPath)]
     .sort((a,b) => a.id.localeCompare(b.id, 'en'))
   const completed = []
+  let converted = 0
   for (const row of candidates) {
     const source = await adapter.download(row.legacyPath)
-    const evidence = inspectWebp(source)
+    const sourceEvidence = inspectSourceImage(source)
+    const prepared = await prepareSource(source)
+    const output = Buffer.isBuffer(prepared?.body) ? prepared.body : Buffer.from(prepared?.body ?? [])
+    const evidence = inspectWebp(output)
+    if (prepared?.sourceSha256 !== sourceEvidence.sha256 || prepared?.sourceSizeBytes !== sourceEvidence.sizeBytes
+      || prepared?.sourceMimeType !== sourceEvidence.mimeType || prepared?.sha256 !== evidence.sha256
+      || prepared?.sizeBytes !== evidence.sizeBytes || !Number.isSafeInteger(prepared?.width)
+      || !Number.isSafeInteger(prepared?.height) || prepared.width < 1 || prepared.height < 1
+      || Math.max(prepared.width, prepared.height) > OPS6_MAX_LONG_EDGE
+      || !OPS6_WEBP_QUALITY_STEPS.includes(prepared?.quality) || typeof prepared?.converted !== 'boolean') {
+      fail('cabinet WebP preparation evidence is invalid')
+    }
+    if (prepared.converted) converted += 1
     const expectedPrivatePath = derivePrivatePath({ id: row.id, lab_id: row.labId, user_id: row.userId }, row.legacyPath, evidence.sha256)
     if (row.privatePath && row.privatePath !== expectedPrivatePath) fail('existing private path does not match deterministic verified evidence')
     const previous = priorByCabinet.get(row.id)
     if (previous && (previous.sourcePath !== row.legacyPath || previous.privatePath !== expectedPrivatePath
-      || previous.sha256 !== evidence.sha256 || previous.sizeBytes !== evidence.sizeBytes)) {
+      || previous.sha256 !== evidence.sha256 || previous.sizeBytes !== evidence.sizeBytes
+      || (previous.sourceSha256 !== undefined && (previous.sourceSha256 !== sourceEvidence.sha256
+        || previous.sourceSizeBytes !== sourceEvidence.sizeBytes || previous.sourceMimeType !== sourceEvidence.mimeType)))) {
       fail('prior migration evidence no longer matches provider state')
     }
     let privateBody = await adapter.tryDownload(expectedPrivatePath)
     if (!privateBody) {
-      const uploaded = await adapter.upload(expectedPrivatePath, source)
+      const uploaded = await adapter.upload(expectedPrivatePath, output)
       privateBody = await adapter.tryDownload(expectedPrivatePath)
       if (!uploaded && !privateBody) fail('private object upload failed')
     }
-    if (!privateBody || !equalBody(source, privateBody)) fail('private object failed its download SHA-256 verification')
+    if (!privateBody || !equalBody(output, privateBody)) fail('private object failed its download SHA-256 verification')
     const current = await adapter.readCabinet(row.id)
     if (!current.image_path) {
       const acknowledged = await adapter.migrate({
@@ -263,12 +367,15 @@ export async function migrateOps6PhotoSet({ inventory, adapter, priorEntries = [
       privatePath: expectedPrivatePath,
       sha256: evidence.sha256,
       sizeBytes: evidence.sizeBytes,
+      sourceSha256: sourceEvidence.sha256,
+      sourceSizeBytes: sourceEvidence.sizeBytes,
+      sourceMimeType: sourceEvidence.mimeType,
       verifiedAt: now().toISOString(),
     })
     if (!previous) await appendEntry(entry)
     completed.push(entry)
   }
-  return Object.freeze({ candidates: candidates.length, completed: Object.freeze(completed) })
+  return Object.freeze({ candidates: candidates.length, converted, completed: Object.freeze(completed) })
 }
 
 async function prepareEvidenceDirectory(candidate, header) {

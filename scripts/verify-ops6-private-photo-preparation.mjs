@@ -200,6 +200,9 @@ export function verifyOps6ApplicationSources({ cabinetService, sharedApi, imageA
     "if (!['plan','apply'].includes(mode)",
     'exact action-time confirmation is missing',
     'private object failed its download SHA-256 verification',
+    'prepareLegacyCabinetWebp',
+    'OPS6_MAX_SOURCE_PIXELS',
+    "sourceMimeType: sourceEvidence.mimeType",
     'loadProtectedEphemeralReleaseKey()',
     "kind: 'ops6_private_photo_copy_receipt'",
     'switchApplied: false, deletions: 0',
@@ -218,9 +221,10 @@ export function verifyOps6ApplicationSources({ cabinetService, sharedApi, imageA
   if (!workerVerifier.includes("SOURCE_POINTER_MODE: 'private_path'")) fail('deployed Worker verifier is not pinned to private_path')
   requireMarkers(documentation, [
     '`productionReady: false`',
-    '실제 Supabase·Cloudflare 변경: 0',
+    '실제 Supabase 변경: 운영 5 및 운영 6 Expand 적용',
+    '실제 Cloudflare 변경: 이 준비 수정에서는 0',
     '실제 파일 삭제: 0',
-    '운영 1·2 관찰, 운영 3, 운영 4, 운영 5',
+    '완료된 선행 관문: 운영 1·2, 운영 3, 운영 4, 운영 5',
   ], 'Ops6 documentation')
   if (!packageSource.includes('"ops6:verify": "node scripts/verify-ops6-private-photo-preparation.mjs"')) {
     fail('package script does not expose the Ops6 verifier')

@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
+import sharp from 'sharp'
 import {
   createBoundedSupabaseFetch,
   migrateOps6PhotoSet,
   parseOps6SupabaseTarget,
+  prepareLegacyCabinetWebp,
   verifyOps6BackendCredential,
 } from './migrate-ops6-private-photos.mjs'
 import {
   buildPhotoMigrationInventory,
   derivePrivatePath,
+  inspectSourceImage,
   inspectWebp,
 } from './ops6-private-photo-migration-core.mjs'
 
@@ -24,6 +27,23 @@ const credential = (projectRef = ref, role = 'service_role') => [
   Buffer.from(JSON.stringify({ iss: 'supabase', role, ref: projectRef })).toString('base64url'),
   'signature-that-is-long-enough',
 ].join('.')
+
+async function prepareIdentity(body: Buffer) {
+  const source = inspectSourceImage(body)
+  const output = inspectWebp(body)
+  return {
+    body,
+    sourceSha256: source.sha256,
+    sourceSizeBytes: source.sizeBytes,
+    sourceMimeType: source.mimeType,
+    sha256: output.sha256,
+    sizeBytes: output.sizeBytes,
+    width: 1,
+    height: 1,
+    quality: 84,
+    converted: false,
+  }
+}
 
 function inventory(objects = [sourcePath]) {
   return buildPhotoMigrationInventory([{
@@ -88,6 +108,40 @@ describe('Ops6 private photo migration runtime', () => {
       headers: { 'content-length': String(5 * 1024 * 1024) },
     })) as typeof fetch)
     await expect(oversized(`${origin}/rest/v1/cabinets`)).rejects.toThrow(/byte limit/)
+
+    const cabinetObject = createBoundedSupabaseFetch(origin, vi.fn(async () => new Response('x', {
+      headers: { 'content-length': String(5 * 1024 * 1024) },
+    })) as typeof fetch)
+    await expect(cabinetObject(`${origin}/storage/v1/object/cabinets/legacy/photo.jpg`)).resolves.toBeInstanceOf(Response)
+  })
+
+  it('strictly decodes JPEG, PNG, and WebP and creates a bounded single-frame WebP', async () => {
+    const inputs = [
+      await sharp({ create: { width: 2400, height: 1350, channels: 3, background: '#315f78' } }).jpeg().toBuffer(),
+      await sharp({ create: { width: 32, height: 16, channels: 4, background: { r: 1, g: 2, b: 3, alpha: 0.4 } } }).png().toBuffer(),
+      await sharp({ create: { width: 32, height: 16, channels: 3, background: '#abcdef' } }).webp().toBuffer(),
+    ]
+    const expectedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    for (const [index, input] of inputs.entries()) {
+      const result = await prepareLegacyCabinetWebp(input)
+      expect(result).toMatchObject({ sourceMimeType: expectedTypes[index], quality: 84, converted: true })
+      expect(result.sizeBytes).toBeLessThanOrEqual(2 * 1024 * 1024)
+      expect(Math.max(result.width, result.height)).toBeLessThanOrEqual(1920)
+      expect(inspectWebp(result.body)).toMatchObject({ sha256: result.sha256, sizeBytes: result.sizeBytes })
+      const metadata = await sharp(result.body).metadata()
+      expect(metadata).toMatchObject({ format: 'webp', width: result.width, height: result.height })
+      expect(metadata.pages ?? 1).toBe(1)
+    }
+  })
+
+  it('rejects multi-frame or unsafe source metadata before writing anything', async () => {
+    const fakeSharp = vi.fn(() => ({
+      metadata: vi.fn(async () => ({
+        format: 'webp', width: 1, height: 1, autoOrient: { width: 1, height: 1 }, pages: 2,
+      })),
+    }))
+    await expect(prepareLegacyCabinetWebp(webp, fakeSharp as never)).rejects.toThrow(/metadata is unsupported/)
+    expect(fakeSharp).toHaveBeenCalledTimes(1)
   })
 
   it('copies, downloads, hashes, binds, and journals one pending photo without deletion', async () => {
@@ -97,6 +151,7 @@ describe('Ops6 private photo migration runtime', () => {
       inventory: inventory(), adapter: fixture.adapter,
       appendEntry: async (entry: unknown) => { entries.push(entry) },
       now: () => new Date('2026-09-04T01:00:00Z'),
+      prepareSource: prepareIdentity,
     })
     expect(result).toMatchObject({ candidates: 1 })
     expect(entries).toEqual([expect.objectContaining({ cabinetId: cabinet, sourcePath, privatePath: fixture.target })])
@@ -111,6 +166,7 @@ describe('Ops6 private photo migration runtime', () => {
     await expect(migrateOps6PhotoSet({
       inventory: inventory(), adapter: fixture.adapter,
       appendEntry: async (entry: unknown) => { entries.push(entry) },
+      prepareSource: prepareIdentity,
     })).resolves.toMatchObject({ candidates: 1 })
     expect(entries).toHaveLength(1)
   })
@@ -121,12 +177,14 @@ describe('Ops6 private photo migration runtime', () => {
     await expect(migrateOps6PhotoSet({
       inventory: inventory([sourcePath, mismatch.target]), adapter: mismatch.adapter,
       appendEntry: async () => undefined,
+      prepareSource: prepareIdentity,
     })).rejects.toThrow(/SHA-256 verification/)
 
     const unknown = adapterFixture({ acknowledge: false, commit: false })
     await expect(migrateOps6PhotoSet({
       inventory: inventory(), adapter: unknown.adapter,
       appendEntry: async () => undefined,
+      prepareSource: prepareIdentity,
     })).rejects.toThrow(/did not bind/)
   })
 
@@ -143,12 +201,12 @@ describe('Ops6 private photo migration runtime', () => {
       inventory: buildPhotoMigrationInventory([{
         id: cabinet, user_id: actor, lab_id: lab, image_url: sourceUrl, image_path: fixture.target,
       }], [sourcePath, fixture.target], origin),
-      adapter: fixture.adapter, priorEntries: [prior], appendEntry,
+      adapter: fixture.adapter, priorEntries: [prior], appendEntry, prepareSource: prepareIdentity,
     })
     expect(appendEntry).not.toHaveBeenCalled()
     await expect(migrateOps6PhotoSet({
       inventory: inventory(), adapter: fixture.adapter,
-      priorEntries: [{ ...prior, sha256: 'f'.repeat(64) }], appendEntry,
+      priorEntries: [{ ...prior, sha256: 'f'.repeat(64) }], appendEntry, prepareSource: prepareIdentity,
     })).rejects.toThrow(/no longer matches/)
   })
 })
