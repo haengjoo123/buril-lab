@@ -71,6 +71,15 @@ describe('Ops11 deletion Worker preparation boundary', () => {
     expect(() => verifyOps11Paths(['public/unreviewed.js'])).toThrow(/unreviewed path/)
   })
 
+  it('allows the exact Pages authorization configuration and its release checks', () => {
+    expect(verifyOps11Paths([
+      'wrangler.jsonc', 'wrangler.staging.jsonc',
+      'scripts/verify-cloudflare-release-config.mjs', 'scripts/cloudflare-release.test.ts',
+    ])).toBe(4)
+    expect(() => verifyOps11Paths(['wrangler.unreviewed.jsonc'])).toThrow(/unreviewed path/)
+    expect(() => verifyOps11Paths(['scripts/unreviewed.test.ts'])).toThrow(/unreviewed path/)
+  })
+
   it('pins the exact migration, pgTAP, and native assertions', () => {
     expect(verifyOps11DatabaseSources(database)).toMatchObject({
       migrationSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
