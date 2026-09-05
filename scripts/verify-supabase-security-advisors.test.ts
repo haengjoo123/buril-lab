@@ -242,9 +242,9 @@ describe('Supabase hosted Security Advisor contract', () => {
       schema_version: 1,
       environment: 'production',
       advisor_cli_version: '2.115.0',
-      expected_count: 53,
+      expected_count: 55,
       observed_on: '2026-08-24',
-      entries: Array.from({ length: 53 }, (_, index) => ({
+      entries: Array.from({ length: 55 }, (_, index) => ({
         ...structuredClone(entries[index % entries.length]),
         cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
       })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1),
@@ -252,7 +252,7 @@ describe('Supabase hosted Security Advisor contract', () => {
     baseline.entries[1].cache_key = baseline.entries[0].cache_key
     expect(() => validateBaseline(baseline, 'production', { today: '2026-08-24' })).toThrow()
 
-    baseline.entries = Array.from({ length: 53 }, (_, index) => ({
+    baseline.entries = Array.from({ length: 55 }, (_, index) => ({
       ...structuredClone(entries[index % entries.length]),
       cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
     })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1)
@@ -288,7 +288,7 @@ describe('Supabase hosted Security Advisor contract', () => {
 
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
-      { environment: 'production', findings: 53 },
+      { environment: 'production', findings: 55 },
       { environment: 'staging', findings: 57 },
     ])
 
@@ -306,10 +306,8 @@ describe('Supabase hosted Security Advisor contract', () => {
     expect(staging.entries.filter((entry) => productionKeys.has(entry.cache_key)).map(technicalProjection))
       .toEqual(production.entries.map(technicalProjection))
     expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual([
-      'authenticated_security_definer_function_executable_public_record_cabinet_activity_v2_p_cabinet_id uuid, p_action_type text, p_item_name text, p_reason text, p_memo text, p_request_id uuid',
       'rls_enabled_no_policy_private_cabinet_image_objects_v1',
       'rls_enabled_no_policy_private_cabinet_image_retention_v1',
-      'rls_enabled_no_policy_private_lab_join_attempts_v1',
     ])
   })
 })

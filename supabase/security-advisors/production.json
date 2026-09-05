@@ -2,8 +2,8 @@
   "schema_version": 1,
   "environment": "production",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 53,
-  "observed_on": "2026-08-24",
+  "expected_count": 55,
+  "observed_on": "2026-09-05",
   "entries": [
     {
       "cache_key": "auth_leaked_password_protection",
@@ -807,6 +807,32 @@
       "target_gate": "관문 2 함수별 권한 검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_cabinet_activity_v2_p_cabinet_id uuid, p_action_type text, p_item_name text, p_reason text, p_memo text, p_request_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_cabinet_activity_v2",
+        "identity_arguments": "p_cabinet_id uuid, p_action_type text, p_item_name text, p_reason text, p_memo text, p_request_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "public.record_cabinet_activity_v2는 auth.uid()와 시약장 소유 연구실 회원 여부를 함수 안에서 다시 확인하고 감사행을 같은 트랜잭션에 기록하지만, authenticated SECURITY DEFINER 경계는 운영 7 Contract 때 다시 검토한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": "2026-12-31",
+      "target_gate": "운영 7 구 감사 RPC Contract와 함수 권한 재검토"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_record_inventory_disposal_v2_p_request_id uuid, p_items jsonb, p_batch jsonb, p_lab_id uuid, p_actor_name text",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -1221,6 +1247,53 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_lab_join_attempts_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "lab_join_attempts_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.lab_join_attempts_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 서버 가입 RPC로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
     },
     {
       "cache_key": "rls_enabled_no_policy_public_chemical_enrichment_cache",
