@@ -7,7 +7,7 @@ import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 
 export const ADVISOR_CLI_VERSION = '2.115.0'
 export const BASELINE_ENVIRONMENTS = ['production', 'staging']
-export const EXPECTED_COUNTS = Object.freeze({ production: 55, staging: 57 })
+export const EXPECTED_COUNTS = Object.freeze({ production: 60, staging: 60 })
 const SUPABASE_CLI_EXECUTABLE = 'supabase'
 
 const repoRoot = resolve(import.meta.dirname, '..')

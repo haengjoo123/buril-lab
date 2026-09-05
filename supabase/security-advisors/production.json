@@ -2,30 +2,9 @@
   "schema_version": 1,
   "environment": "production",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 55,
+  "expected_count": 60,
   "observed_on": "2026-09-05",
   "entries": [
-    {
-      "cache_key": "auth_leaked_password_protection",
-      "rule": "auth_leaked_password_protection",
-      "level": "WARN",
-      "object": {
-        "kind": "auth_setting",
-        "entity": "Auth",
-        "name": "leaked_password_protection"
-      },
-      "evidence": {
-        "kind": "advisor_only",
-        "advisor_assertion": "auth_leaked_password_protection"
-      },
-      "remediation_url": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection",
-      "disposition": "temporary_open",
-      "reason": "운영에서 유출 비밀번호 차단 경고가 남아 있음을 숨기지 않고 운영 7 활성화까지 임시 추적하며, 현재 상태를 안전하다고 인정하지 않는다.",
-      "reviewed_by_role": "internal_security_owner",
-      "reviewed_at": "2026-08-24",
-      "expires_on": "2026-12-31",
-      "target_gate": "운영 7 유출 비밀번호 차단 활성화"
-    },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_activate_waste_policy_v2_p_policy_version_id uuid",
       "rule": "authenticated_security_definer_function_executable",
@@ -625,32 +604,6 @@
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
     },
     {
-      "cache_key": "authenticated_security_definer_function_executable_public_insert_audit_log_rpc_p_actor_user_id uuid, p_actor_name text, p_lab_id uuid, p_entity_type text, p_entity_id uuid, p_action text, p_location_context text, p_before_data jsonb, p_after_data jsonb, p_diff_data jsonb, p_source text, p_request_id uuid",
-      "rule": "authenticated_security_definer_function_executable",
-      "level": "WARN",
-      "object": {
-        "kind": "function",
-        "schema": "public",
-        "name": "insert_audit_log_rpc",
-        "identity_arguments": "p_actor_user_id uuid, p_actor_name text, p_lab_id uuid, p_entity_type text, p_entity_id uuid, p_action text, p_location_context text, p_before_data jsonb, p_after_data jsonb, p_diff_data jsonb, p_source text, p_request_id uuid",
-        "language": "plpgsql",
-        "security_definer": true
-      },
-      "evidence": {
-        "kind": "function_execute",
-        "anon_execute": false,
-        "authenticated_execute": true,
-        "service_role_execute": true
-      },
-      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
-      "disposition": "temporary_open",
-      "reason": "public.insert_audit_log_rpc은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
-      "reviewed_by_role": "internal_security_owner",
-      "reviewed_at": "2026-08-24",
-      "expires_on": "2026-12-31",
-      "target_gate": "운영 6 기존 RPC 권한 Contract"
-    },
-    {
       "cache_key": "authenticated_security_definer_function_executable_public_is_lab_admin_target_lab_id uuid",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -701,32 +654,6 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
-    },
-    {
-      "cache_key": "authenticated_security_definer_function_executable_public_join_lab_p_lab_id uuid, p_password text, p_nickname text",
-      "rule": "authenticated_security_definer_function_executable",
-      "level": "WARN",
-      "object": {
-        "kind": "function",
-        "schema": "public",
-        "name": "join_lab",
-        "identity_arguments": "p_lab_id uuid, p_password text, p_nickname text",
-        "language": "plpgsql",
-        "security_definer": true
-      },
-      "evidence": {
-        "kind": "function_execute",
-        "anon_execute": false,
-        "authenticated_execute": true,
-        "service_role_execute": true
-      },
-      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
-      "disposition": "temporary_open",
-      "reason": "public.join_lab은 현재 authenticated 실행 가능 경계를 정확히 고정하기 위한 임시 공개 항목이며, 함수 내부의 사용자·연구실 권한 검토 전에는 안전하다고 간주하지 않는다.",
-      "reviewed_by_role": "internal_security_owner",
-      "reviewed_at": "2026-08-24",
-      "expires_on": "2026-12-31",
-      "target_gate": "운영 6 기존 RPC 권한 Contract"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_leave_lab_target_lab_id uuid",
@@ -1249,6 +1176,288 @@
       "target_gate": "관문 2 함수별 권한 검토"
     },
     {
+      "cache_key": "rls_enabled_no_policy_private_cabinet_image_objects_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "cabinet_image_objects_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.cabinet_image_objects_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_cabinet_image_retention_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "cabinet_image_retention_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.cabinet_image_retention_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_deletion_file_targets_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "deletion_file_targets_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.deletion_file_targets_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_deletion_job_events_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "deletion_job_events_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.deletion_job_events_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_deletion_jobs_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "deletion_jobs_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.deletion_jobs_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_deletion_worker_lease_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "deletion_worker_lease_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.deletion_worker_lease_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
       "cache_key": "rls_enabled_no_policy_private_lab_join_attempts_v1",
       "rule": "rls_enabled_no_policy",
       "level": "INFO",
@@ -1290,6 +1499,100 @@
       "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
       "disposition": "accepted_design",
       "reason": "private.lab_join_attempts_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 서버 가입 RPC로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_operator_action_audit_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "operator_action_audit_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.operator_action_audit_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_private_operator_role_assignments_v1",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "private",
+        "name": "operator_role_assignments_v1"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": false,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "private.operator_role_assignments_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
       "reviewed_by_role": "internal_security_owner",
       "reviewed_at": "2026-09-05",
       "expires_on": null,

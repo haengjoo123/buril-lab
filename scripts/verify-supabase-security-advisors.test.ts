@@ -242,9 +242,9 @@ describe('Supabase hosted Security Advisor contract', () => {
       schema_version: 1,
       environment: 'production',
       advisor_cli_version: '2.115.0',
-      expected_count: 55,
+      expected_count: 60,
       observed_on: '2026-08-24',
-      entries: Array.from({ length: 55 }, (_, index) => ({
+      entries: Array.from({ length: 60 }, (_, index) => ({
         ...structuredClone(entries[index % entries.length]),
         cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
       })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1),
@@ -252,7 +252,7 @@ describe('Supabase hosted Security Advisor contract', () => {
     baseline.entries[1].cache_key = baseline.entries[0].cache_key
     expect(() => validateBaseline(baseline, 'production', { today: '2026-08-24' })).toThrow()
 
-    baseline.entries = Array.from({ length: 55 }, (_, index) => ({
+    baseline.entries = Array.from({ length: 60 }, (_, index) => ({
       ...structuredClone(entries[index % entries.length]),
       cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
     })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1)
@@ -262,15 +262,22 @@ describe('Supabase hosted Security Advisor contract', () => {
 
   it('never accepts leaked-password or SECURITY DEFINER warnings as design decisions', () => {
     const production = loadBaseline('production', { today: '2026-08-24' })
-
-    const leakedPasswordAccepted = structuredClone(production)
-    const leakedPasswordEntry = leakedPasswordAccepted.entries.find(
+    const leakedFixture = fixtureObserved().find(
       (entry) => entry.rule === 'auth_leaked_password_protection',
     )
-    if (!leakedPasswordEntry) throw new Error('production fixture is missing the leaked-password finding')
-    leakedPasswordEntry.disposition = 'accepted_design'
-    leakedPasswordEntry.expires_on = null
-    leakedPasswordEntry.target_gate = null
+    if (!leakedFixture) throw new Error('advisor fixture is missing the leaked-password finding')
+
+    const leakedPasswordAccepted = structuredClone(production)
+    leakedPasswordAccepted.entries[0] = {
+      ...leakedFixture,
+      disposition: 'accepted_design',
+      reason: 'A leaked-password warning must never be accepted as a permanent design decision.',
+      reviewed_by_role: 'test_security_owner',
+      reviewed_at: '2026-08-24',
+      expires_on: null,
+      target_gate: null,
+    }
+    leakedPasswordAccepted.entries.sort((left, right) => left.cache_key < right.cache_key ? -1 : 1)
     expect(() => validateBaseline(leakedPasswordAccepted, 'production', { today: '2026-08-24' }))
       .toThrow('only a reviewed default-deny RLS finding may be accepted_design')
 
@@ -288,8 +295,8 @@ describe('Supabase hosted Security Advisor contract', () => {
 
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
-      { environment: 'production', findings: 55 },
-      { environment: 'staging', findings: 57 },
+      { environment: 'production', findings: 60 },
+      { environment: 'staging', findings: 60 },
     ])
 
     const production = loadBaseline('production', { today: '2026-08-24' })
@@ -305,9 +312,6 @@ describe('Supabase hosted Security Advisor contract', () => {
     })
     expect(staging.entries.filter((entry) => productionKeys.has(entry.cache_key)).map(technicalProjection))
       .toEqual(production.entries.map(technicalProjection))
-    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual([
-      'rls_enabled_no_policy_private_cabinet_image_objects_v1',
-      'rls_enabled_no_policy_private_cabinet_image_retention_v1',
-    ])
+    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual([])
   })
 })
