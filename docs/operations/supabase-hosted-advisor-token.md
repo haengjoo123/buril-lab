@@ -124,7 +124,8 @@ node scripts/supervise-ephemeral-release.mjs recover \
 ```
 
 - 폐기한 토큰 원문이 있으면 숨김 입력으로 넣습니다. stale pending에 서명된 grant가 남아 있으면 먼저 그 grant의 exact 자격값 해시로 `lease_materialized` 상태를 복원하고, 입력한 원문 해시가 그 값과 같을 때만 공급자 비활성을 API로 확인합니다.
-- 실제로 만들지 않은 자격값은 아직 임대가 materialize되기 전 단계에서만 `NOT_CREATED:<lease>:<provider>` 문구로 확인할 수 있습니다. 생성 직후 대시보드에서 폐기해 감독기가 원문을 받지 못한 자격값은 같은 단계에서만 `DASHBOARD_REVOKED:<lease>:<provider>` 문구로 구분해 기록합니다. 두 항목 모두 자동 검증이 아니라 운영자 확인이며, 임대에 토큰 해시가 기록된 뒤에는 어느 문구로도 대신할 수 없습니다.
+- 실제로 만들지 않은 자격값은 아직 임대가 materialize되기 전 단계에서만 `NOT_CREATED:<lease>:<provider>` 문구로 확인할 수 있습니다. 생성 직후 대시보드에서 폐기해 감독기가 원문을 받지 못한 자격값은 같은 단계에서만 `DASHBOARD_REVOKED:<lease>:<provider>` 문구로 구분해 기록합니다.
+- 임대가 materialize되고 exact workflow run까지 종료된 뒤 감독기 프로세스와 함께 원문이 사라진 예외에서는, GitHub 임시 secret 부재와 exact terminal run을 먼저 확인하고 공급자 대시보드에서 정확한 표시 이름의 자격값이 만료·폐기됐음을 직접 확인한 경우에만 `DASHBOARD_REVOKED_AFTER_PROCESS_LOSS:<lease>:<provider>`를 사용합니다. 이 증거는 API `401` 검증이 아닌 서명된 운영자 대시보드 확인으로 명확히 구분하며, 실행 중이거나 exact run을 찾지 못한 상태에는 사용할 수 없습니다.
 - 자격값이 아직 materialize되지 않은 dispatch 전 중단만 모든 임시 GitHub secret 부재와 공급자 상태를 확인한 뒤 `EPHEMERAL_LAST_ABORTED_LEASE_RECEIPT`를 서명하고 정확히 다시 읽습니다. 서명된 grant나 materialize 증거가 있으면 run이 없어도 단순 중단 영수증으로 닫지 않습니다.
 - `dispatch_intent` 뒤 exact run을 아직 찾지 못했거나 관문 결과가 불명확하면 pending 표식과 일지를 그대로 보존합니다. 실행이 없었다거나 실패했다고 추정해 닫지 않습니다.
 - dispatch 뒤 중단이면 서명 일지와 GitHub의 exact run을 다시 조회합니다. 두 자격값 관문을 통과한 종료 run은 이전 영수증 해시를 부모로 갖는 누적 cleanup 후속 영수증에 반드시 포함하고, 실행이 권위 있게 실패한 것으로 확인된 경우만 중단 영수증으로 닫습니다.
