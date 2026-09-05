@@ -50,6 +50,8 @@ describe('SettingsModal authentication state', () => {
 
     expect(html).toContain('settings_password_change')
     expect(html).toContain('mfa-settings-marker')
+    expect(html).toContain('settings_delete_account')
+    expect(html).toContain('settings_delete_account_desc')
   })
 
   it('does not show account or MFA settings for guests', () => {
@@ -57,5 +59,6 @@ describe('SettingsModal authentication state', () => {
 
     expect(html).not.toContain('settings_password_change')
     expect(html).not.toContain('mfa-settings-marker')
+    expect(html).not.toContain('settings_delete_account')
   })
 })

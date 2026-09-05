@@ -7,6 +7,8 @@ policyMode: accelerated-risk-based
 releaseTarget: Ops3-Ops11
 ops12Included: false
 initialDeletionUi: false
+followUpDeletionUi: true
+deletionRuntimeActivation: post-same-sha-staging-and-production
 legacyContractRevocation: post-new-path-smoke
 hostedAcceptance: required
 productionReady: false
@@ -116,6 +118,41 @@ Staging과 운영의 Wrangler 최상위 변수에 비밀값이 아닌
 수정 후보는 새 main Quality 통과 뒤 Staging에 먼저 배포합니다. 실제 런타임 변수,
 AAL1 민감 API 거부, MFA 등록 후 AAL2 성공과 감사 기록, 합성 계정 복구·정리를
 확인하기 전에는 운영 배포나 MFA 검증 완료로 기록하지 않습니다.
+
+## 삭제 화면 후속 후보와 별도 접수 활성화
+
+2026-09-05 운영 SHA `5a489187af5e366abaeba763a47d314bc4bd7cfe`의 감독형
+run `33966176714`에서 공개/고정 배포 SHA 일치, API 인증 경계와 기존 PWA 창의
+새 번들 자동 전환을 확인했습니다. 같은 SHA의 Staging run `33965501342`에서
+합성 운영자 AAL1 거부, AAL2 성공, factor 초기화 후 재등록과 정리를 검증했습니다.
+실제 운영자도 직접 MFA 등록을 완료했고, `feedback.list`가 12:35:55Z AAL1에서
+`MFA_REQUIRED`, 12:38:14Z AAL2에서 `authorized`로 감사 기록에 남았습니다.
+두 배포의 공급자 토큰 폐기·API 비활성·서명 cleanup과 임시 자격 상태 0을 확인했습니다.
+운영 Scheduler의 KV health는 후속 변경 전 연속 성공 289회, 연속 실패 0회,
+`enablement_eligible=true`였으며 삭제 접수는 OFF였습니다.
+
+이 후속 후보는 `DELETION_UI_ENABLED=true`로 인증된 사용자의 계정 삭제 요청과
+연구실 관리자의 삭제 요청 화면을 노출합니다. 한국어·영어 접수 안내는 삭제 완료와
+구별하며, 백업본은 별도 보관 정책에 따라 만료된다는 사실을 확인 화면에 안내합니다.
+검증기는 초기 Ops9 준비 단계의 OFF 계약을 유지하면서 후속 단계의 UI ON, 서버
+기본 OFF, 인증된 제어, 즉시 삭제 없는 작업 등록 계약을 함께 검사합니다.
+`productionReady`와 Hosted 검증 결과를 정적 코드 검사만으로 true로 만들지 않습니다.
+
+1. 새 후보 전체 Quality와 같은 SHA Staging 배포를 통과시킵니다. 접수 OFF에서
+   화면·확인·서버 거부를 확인하고 임시 토큰을 폐기합니다.
+2. 같은 SHA를 운영에 감독형 배포하고 public/immutable 버전, 인증 경계, PWA와
+   화면을 확인한 뒤 임시 토큰 폐기·비활성 확인·서명 cleanup을 완료합니다.
+3. 최신 Scheduler 성공이 3분 이내이고 연속 성공 3회 이상이며 실패 0임을 다시
+   확인한 뒤에만 운영 KV의 `account_deletion_enabled`를 true로 바꿉니다.
+   음성 redirect, KOSHA full, maintenance/backup true는 그대로 보존합니다.
+4. 최소 2분 동안 실제 응답을 반복 확인합니다. 실제 사용자나 연구실 대신 정확히
+   식별한 일회용 시험 계정·연구실로 HTTP 202 접수, 중복 요청의 동일 작업,
+   예약 처리·정리 및 감사 집계를 확인합니다. DB 재시도·최대 12회와 Scheduler
+   실패 2회/성공 3분 부재 시 양쪽 OFF 계약의 시험 증거를 함께 기록합니다.
+5. 부정확한 응답이나 중단 기준이 발생하면 승인된 안전 OFF 절차를 적용합니다.
+   30분·24시간·7일 관찰은 마지막 실제 배포/활성화 시각과 증거를 기준으로 남깁니다.
+
+이 단계는 Ops12 공개 원본·고아 파일 삭제를 포함하지 않습니다.
 
 ## 출시 완료의 의미
 

@@ -1,4 +1,4 @@
-// Operations 9 only prepares the durable deletion queue. User-facing intake
-// remains unavailable until the Operations 11 scheduler has passed its live
-// checks and the runtime safety switch is enabled deliberately.
-export const DELETION_UI_ENABLED = false as const;
+// The Operations 11 scheduler and operator MFA passed their hosted checks.
+// This exposes queue request controls; the server still requires the separate
+// runtime intake switch, enabled only after same-SHA Staging and production.
+export const DELETION_UI_ENABLED = true as const;

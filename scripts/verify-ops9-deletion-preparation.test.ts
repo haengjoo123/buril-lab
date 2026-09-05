@@ -21,6 +21,7 @@ const database = {
   nativeAssertions: read(OPS9_NATIVE_ASSERTIONS),
 }
 const application = {
+  uiEnabled: true,
   runtimeConfig: read('functions/api/_runtimeConfig.ts'),
   intake: read('functions/api/deletions/_shared.ts'),
   accountHandler: read('functions/api/account/delete.ts'),
@@ -68,10 +69,17 @@ describe('Ops9 deletion preparation boundary', () => {
     })).toThrow(/reviewed deletion migration changed/)
   })
 
-  it('rejects an enabled UI or a return to browser-side deletion', () => {
+  it('allows reviewed follow-up controls while retaining queued intake and runtime OFF defaults', () => {
+    expect(verifyOps9ApplicationSources(application)).toMatchObject({
+      uiEnabled: true, runtimeDefaultEnabled: false,
+      immediateAccountDeletionRemoved: true, directLabDeletionRemoved: true,
+    })
+  })
+
+  it('still rejects enabled UI in the original preparation phase or browser-side deletion', () => {
     expect(() => verifyOps9ApplicationSources({
       ...application,
-      deletionConfig: application.deletionConfig.replace('false as const', 'true as const'),
+      uiEnabled: false,
     })).toThrow(/pinned OFF/)
     expect(() => verifyOps9ApplicationSources({
       ...application,

@@ -27,6 +27,8 @@ export function verifyAcceleratedPolicySources({ policy, rollout }) {
     'releaseTarget: Ops3-Ops11',
     'ops12Included: false',
     'initialDeletionUi: false',
+    'followUpDeletionUi: true',
+    'deletionRuntimeActivation: post-same-sha-staging-and-production',
     'legacyContractRevocation: post-new-path-smoke',
     'hostedAcceptance: required',
     'productionReady: false',
@@ -64,11 +66,6 @@ export function verifyAcceleratedOps311Release(root = fileURLToPath(new URL('../
     rollout: read('docs/operations/operations-safety-rollout.md'),
   })
 
-  const deletionUi = read('src/config/deletion.ts')
-  if (!deletionUi.includes('DELETION_UI_ENABLED = false as const')) {
-    fail('initial deletion UI must remain OFF until three scheduled successes')
-  }
-
   for (const configPath of [
     'workers/storage-backup/wrangler.staging.jsonc',
     'workers/storage-backup/wrangler.production.jsonc',
@@ -90,7 +87,8 @@ export function verifyAcceleratedOps311Release(root = fileURLToPath(new URL('../
     policy,
     activeMigrations: database.activeMigrations,
     activePgTapTests: database.activePgTapTests,
-    deletionUiEnabled: false,
+    deletionUiEnabled: ops11.application.deletionUiEnabled,
+    deletionRuntimeDefaultEnabled: ops11.application.runtimeDefaultEnabled,
     storageBackupPointerMode: 'private_path',
     ops12Included: false,
     candidateReady: true,

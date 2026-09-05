@@ -117,6 +117,7 @@ export function verifyOps9DatabaseSources({ migration, permissionTest, nativeAss
 export function verifyOps9ApplicationSources({
   runtimeConfig, intake, accountHandler, labHandler, deletionConfig,
   authHook, labService, settingsModal, labModal,
+  uiEnabled = false,
 }) {
   requireMarkers(runtimeConfig, [
     'accountDeletionEnabled,',
@@ -139,7 +140,9 @@ export function verifyOps9ApplicationSources({
       fail('a deletion API still performs immediate table deletion')
     }
   }
-  if (!deletionConfig.includes('DELETION_UI_ENABLED = false as const')) fail('deletion UI is not pinned OFF')
+  if (!deletionConfig.includes(`DELETION_UI_ENABLED = ${uiEnabled} as const`)) {
+    fail(`deletion UI is not pinned ${uiEnabled ? 'ON for the reviewed follow-up' : 'OFF'}`)
+  }
   requireMarkers(authHook, [
     "'/api/account/delete'",
     '{ requestId: crypto.randomUUID() }',
@@ -155,10 +158,10 @@ export function verifyOps9ApplicationSources({
   if (/async\s+deleteLab[\s\S]*?\.from\s*\(\s*['"]labs['"]\s*\)[\s\S]*?\.delete\s*\(/i.test(labService)) {
     fail('the browser still directly deletes labs')
   }
-  if (!settingsModal.includes('session && DELETION_UI_ENABLED')) fail('account deletion control is not hidden')
+  if (!settingsModal.includes('isAuthenticated && DELETION_UI_ENABLED')) fail('account deletion control is not authenticated and gated')
   if (!labModal.includes('DELETION_UI_ENABLED && <div')) fail('lab deletion control is not hidden')
   return Object.freeze({
-    uiEnabled: false,
+    uiEnabled,
     runtimeDefaultEnabled: false,
     immediateAccountDeletionRemoved: true,
     directLabDeletionRemoved: true,
