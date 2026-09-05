@@ -42,15 +42,31 @@ Staging 적용 직전에는 시약장 사진 참조와 Storage 객체가 모두 
   Ops 7에서 회수한 구 가입·감사 RPC 경고와 해결한 유출 비밀번호 경고는 목록에서
   사라졌습니다.
 
+## 운영 Scheduler 활성화 증거
+
+- Worker 수정은 PR #86으로 병합됐고 `main` SHA
+  `61368c3e56c24c1bb35d5104306de24292a81906`의 전체 Quality 4개 작업이 통과했습니다.
+- 운영 Worker `buril-lab-deletion-scheduler-production`의 Version ID는
+  `54a8d278-a73b-4869-b29e-0c9ab46bb2d9`이며 1분 예약 실행을 유지합니다.
+- 이전 구현은 Cloudflare Workers가 지원하지 않는 `redirect: error` 때문에 요청 전에
+  중단됐습니다. 수정 구현은 수동 redirect 모드에서 200이 아닌 응답을 거부하므로
+  인증값을 다른 주소로 자동 전달하지 않습니다.
+- 수정 배포에 사용한 임시 Cloudflare 토큰 두 개는 공급자에서 모두 폐기했고, 최종
+  사용 토큰은 401 비활성 응답과 동일 이름 잔여 0건을 확인했습니다.
+- 운영 KV의 이전 실패 상태를 초기화한 뒤 유지보수 Worker만 켰습니다. 계정 삭제
+  접수는 계속 꺼진 상태에서 1분 예약 호출이 3회 연속 성공했고, 실패는 0회,
+  `enablement_eligible=true`가 됐습니다.
+- 세 번째 성공 로그의 `claimed`, `completed`, `pending`, `failed`는 모두 0이므로
+  검증 중 사용자 계정·연구실·파일을 변경하지 않았습니다.
+
 ## 아직 닫히지 않은 런타임 조건
 
 - 지정 운영자의 실제 Supabase Auth MFA factor는 아직 0건입니다. 역할은 부여됐지만
   AAL2 세션 전에는 민감 관리자 API가 계속 거부됩니다.
-- 운영 삭제 Scheduler Worker는 아직 배포하지 않았습니다.
-- `maintenance_worker_enabled=false`, `account_deletion_enabled=false`와 삭제 UI OFF를
-  유지합니다.
-- Scheduler에 같은 전용 secret을 결합하고 빈 대기열 예약 호출이 3회 연속 성공하기
-  전에는 삭제 접수와 UI를 활성화하지 않습니다.
+- 운영 삭제 Scheduler Worker는 배포와 빈 대기열 3회 연속 성공을 완료했으며
+  `maintenance_worker_enabled=true`를 유지합니다.
+- `account_deletion_enabled=false`와 삭제 UI OFF는 실제 MFA 등록과 AAL2 검증이
+  완료될 때까지 유지합니다.
 - 시약장 원본과 격리된 고아 파일은 삭제하지 않았습니다. Ops 12는 이 가속 범위에서
   제외합니다.
 
@@ -69,7 +85,7 @@ Staging 적용 직전에는 시약장 사진 참조와 Storage 객체가 모두 
 
 1. 이 exact Advisor 경계와 문서를 보호된 `main`에 병합하고 Quality를 통과합니다.
 2. 운영 Pages에 삭제 유지보수 secret을 결합하되 두 삭제 스위치는 OFF로 유지합니다.
-3. `buril-lab-deletion-scheduler-production`을 OFF 상태로 배포합니다.
-4. 유지보수만 ON으로 바꾸고 빈 대기열 예약 호출 3회 연속 성공을 확인합니다.
+3. ~~`buril-lab-deletion-scheduler-production`을 OFF 상태로 배포합니다.~~ 완료
+4. ~~유지보수만 ON으로 바꾸고 빈 대기열 예약 호출 3회 연속 성공을 확인합니다.~~ 완료
 5. 지정 운영자가 MFA를 등록하고 AAL2 민감 작업 성공을 확인합니다.
 6. 마지막으로 삭제 접수와 UI를 활성화합니다.

@@ -15,6 +15,7 @@ import {
     SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY,
 } from './SafetyDisclaimer';
 import { DELETION_UI_ENABLED } from '../config/deletion';
+import { MfaSettingsPanel } from './MfaSettingsPanel';
 
 const onboardingPlatform = Capacitor.isNativePlatform() ? 'native' : 'web';
 
@@ -496,6 +497,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 <span>{passwordChangeSuccess}</span>
                             </div>
                         )}
+
+                        {session && <MfaSettingsPanel />}
 
                         <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
 
