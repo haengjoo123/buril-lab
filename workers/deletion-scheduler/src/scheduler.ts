@@ -60,7 +60,27 @@ export interface SchedulerResult {
     | 'health_write_failed'
   summary?: MaintenanceSummary
   enablementEligible?: boolean
+  failureCategory?: MaintenanceFailureCategory
 }
+
+export type MaintenanceFailureCategory =
+  | 'configuration_error'
+  | 'request_timeout'
+  | 'network_error'
+  | 'http_401'
+  | 'http_403'
+  | 'http_429'
+  | 'http_503_disabled'
+  | 'http_503_unavailable'
+  | 'http_503_internal'
+  | 'http_503'
+  | 'http_5xx'
+  | 'http_207'
+  | 'http_other'
+  | 'invalid_content_type'
+  | 'response_too_large'
+  | 'invalid_summary'
+  | 'reported_failure'
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -142,7 +162,15 @@ function logOutcome(env: Pick<Env, 'DELETION_ENVIRONMENT'>, scheduledAt: number,
     reason: result.reason,
     ...(result.summary ? { summary: result.summary } : {}),
     ...(result.enablementEligible === true ? { enablement_eligible: true } : {}),
+    ...(result.failureCategory ? { failure_category: result.failureCategory } : {}),
   }))
+}
+
+class MaintenanceRequestError extends Error {
+  constructor(readonly category: MaintenanceFailureCategory) {
+    super(category)
+    this.name = 'MaintenanceRequestError'
+  }
 }
 
 async function readBoundedBody(response: Response): Promise<string> {
@@ -179,13 +207,37 @@ function nonNegativeInteger(record: Record<string, unknown>, field: string): num
 }
 
 async function validateMaintenanceResponse(response: Response): Promise<MaintenanceSummary> {
-  if (response.status !== 200) throw new Error('unexpected_status')
+  if (response.status !== 200) {
+    let responseCode: string | null = null
+    if ((response.headers.get('content-type') || '').toLowerCase().includes('application/json')) {
+      const record = parseJsonRecord(await readBoundedBody(response), MAX_RESPONSE_BYTES)
+      responseCode = typeof record?.code === 'string' ? record.code : null
+    } else {
+      await response.body?.cancel().catch(() => undefined)
+    }
+    if (response.status === 401) throw new MaintenanceRequestError('http_401')
+    if (response.status === 403) throw new MaintenanceRequestError('http_403')
+    if (response.status === 429) throw new MaintenanceRequestError('http_429')
+    if (response.status === 503 && responseCode === 'DELETION_MAINTENANCE_DISABLED') {
+      throw new MaintenanceRequestError('http_503_disabled')
+    }
+    if (response.status === 503 && responseCode === 'DELETION_MAINTENANCE_UNAVAILABLE') {
+      throw new MaintenanceRequestError('http_503_unavailable')
+    }
+    if (response.status === 503 && responseCode === 'INTERNAL_ERROR') {
+      throw new MaintenanceRequestError('http_503_internal')
+    }
+    if (response.status === 503) throw new MaintenanceRequestError('http_503')
+    if (response.status === 207) throw new MaintenanceRequestError('http_207')
+    if (response.status >= 500) throw new MaintenanceRequestError('http_5xx')
+    throw new MaintenanceRequestError('http_other')
+  }
   if (!(response.headers.get('content-type') || '').toLowerCase().includes('application/json')) {
-    throw new Error('invalid_content_type')
+    throw new MaintenanceRequestError('invalid_content_type')
   }
   const record = parseJsonRecord(await readBoundedBody(response), MAX_RESPONSE_BYTES)
   if (!record || Object.keys(record).sort().join('|') !== 'claimed|completed|failed|pending') {
-    throw new Error('invalid_summary')
+    throw new MaintenanceRequestError('invalid_summary')
   }
   const summary = {
     claimed: nonNegativeInteger(record, 'claimed'),
@@ -194,9 +246,24 @@ async function validateMaintenanceResponse(response: Response): Promise<Maintena
     failed: nonNegativeInteger(record, 'failed'),
   }
   if (summary.completed + summary.pending + summary.failed !== summary.claimed || summary.failed > 0) {
-    throw new Error('reported_failure')
+    throw new MaintenanceRequestError('reported_failure')
   }
   return summary
+}
+
+function classifyMaintenanceFailure(error: unknown): MaintenanceFailureCategory {
+  if (error instanceof MaintenanceRequestError) return error.category
+  if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+    return 'request_timeout'
+  }
+  if (error instanceof Error) {
+    if (error.message === 'response_too_large') return 'response_too_large'
+    if (error.message === 'invalid_summary') return 'invalid_summary'
+    if (error.message === 'reported_failure') return 'reported_failure'
+    if (['missing_secret', 'invalid_target', 'invalid_access_credentials', 'missing_access_credentials',
+      'unexpected_access_credentials', 'invalid_timeout'].includes(error.message)) return 'configuration_error'
+  }
+  return 'network_error'
 }
 
 function endpoint(origin: string, environment: string): URL {
@@ -326,6 +393,7 @@ export async function runDeletionScheduler<TStore extends RuntimeConfigStore>(
 
   let summary: MaintenanceSummary | undefined
   let succeeded = false
+  let failureCategory: MaintenanceFailureCategory | undefined
   try {
     const secret = env.DELETION_MAINTENANCE_SECRET.trim()
     if (secret.length < 32) throw new Error('missing_secret')
@@ -341,8 +409,9 @@ export async function runDeletionScheduler<TStore extends RuntimeConfigStore>(
     })
     summary = await validateMaintenanceResponse(response)
     succeeded = true
-  } catch {
+  } catch (error) {
     succeeded = false
+    failureCategory = classifyMaintenanceFailure(error)
   }
 
   const nextHealth: SchedulerHealth = succeeded
@@ -375,10 +444,13 @@ export async function runDeletionScheduler<TStore extends RuntimeConfigStore>(
   }
   if (nextHealth.consecutive_failures >= MAX_CONSECUTIVE_FAILURES) {
     const result = await failClosed(env, config, 'maintenance_request_failed')
-    logOutcome(env, scheduledAt, result)
-    return result
+    const diagnosed = { ...result, failureCategory }
+    logOutcome(env, scheduledAt, diagnosed)
+    return diagnosed
   }
-  const result: SchedulerResult = { outcome: 'skipped_fail_closed', reason: 'maintenance_request_failed' }
+  const result: SchedulerResult = {
+    outcome: 'skipped_fail_closed', reason: 'maintenance_request_failed', failureCategory,
+  }
   logOutcome(env, scheduledAt, result)
   return result
 }

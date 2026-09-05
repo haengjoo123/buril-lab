@@ -99,26 +99,38 @@ describe('Ops11 deletion Scheduler', () => {
   })
 
   it.each([
-    ['401', () => new Response('{}', { status: 401, headers: { 'Content-Type': 'application/json' } })],
-    ['503', () => new Response('{}', { status: 503, headers: { 'Content-Type': 'application/json' } })],
-    ['207', () => new Response('{}', { status: 207, headers: { 'Content-Type': 'application/json' } })],
-    ['invalid JSON', () => new Response('{broken', { status: 200, headers: { 'Content-Type': 'application/json' } })],
-    ['reported failure', () => ok({ claimed: 1, completed: 0, pending: 0, failed: 1 })],
-  ])('turns both deletion switches OFF after two consecutive %s responses', async (_label, makeResponse) => {
+    ['401', 'http_401', () => new Response('{}', { status: 401, headers: { 'Content-Type': 'application/json' } })],
+    ['503', 'http_503', () => new Response('{}', { status: 503, headers: { 'Content-Type': 'application/json' } })],
+    ['207', 'http_207', () => new Response('{}', { status: 207, headers: { 'Content-Type': 'application/json' } })],
+    ['invalid JSON', 'invalid_summary', () => new Response('{broken', { status: 200, headers: { 'Content-Type': 'application/json' } })],
+    ['reported failure', 'reported_failure', () => ok({ claimed: 1, completed: 0, pending: 0, failed: 1 })],
+  ])('turns both deletion switches OFF after two consecutive %s responses', async (_label, failureCategory, makeResponse) => {
     const kv = new FakeKv()
     const schedulerEnv = environment(kv)
     const fetcher = vi.fn(async () => makeResponse())
     await expect(runDeletionScheduler(schedulerEnv, NOW, fetcher)).resolves.toMatchObject({
-      outcome: 'skipped_fail_closed', reason: 'maintenance_request_failed',
+      outcome: 'skipped_fail_closed', reason: 'maintenance_request_failed', failureCategory,
     })
     await expect(runDeletionScheduler(schedulerEnv, NOW + 60_000, fetcher)).resolves.toMatchObject({
-      outcome: 'disabled', reason: 'maintenance_request_failed',
+      outcome: 'disabled', reason: 'maintenance_request_failed', failureCategory,
     })
     expect(JSON.parse(kv.values.get(RUNTIME_KEY) ?? '{}')).toEqual({
       voice_disposal_mode: 'redirect', kosha_content_mode: 'full',
       account_deletion_enabled: false, maintenance_worker_enabled: false,
       storage_backup_enabled: true,
     })
+  })
+
+  it('logs only an allowlisted failure category, never an upstream response body', async () => {
+    const marker = 'sensitive-upstream-detail-must-not-be-logged'
+    const response = () => new Response(JSON.stringify({
+      code: 'DELETION_MAINTENANCE_DISABLED', detail: marker,
+    }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+    const result = await runDeletionScheduler(environment(new FakeKv()), NOW, vi.fn(async () => response()))
+    expect(result).toMatchObject({ failureCategory: 'http_503_disabled' })
+    const logged = vi.mocked(console.log).mock.calls.flat().join(' ')
+    expect(logged).toContain('"failure_category":"http_503_disabled"')
+    expect(logged).not.toContain(marker)
   })
 
   it('turns both switches OFF when no success was recorded for three minutes', async () => {
