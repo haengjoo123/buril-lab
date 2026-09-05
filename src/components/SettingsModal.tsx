@@ -20,10 +20,11 @@ import { MfaSettingsPanel } from './MfaSettingsPanel';
 const onboardingPlatform = Capacitor.isNativePlatform() ? 'native' : 'web';
 
 interface SettingsModalProps {
+    isAuthenticated?: boolean;
     onClose: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: authenticatedFromLayout, onClose }) => {
         const clearCart = useWasteStore((state) => state.clearCart);
         const clearSearchHistory = useWasteStore((state) => state.clearSearchHistory);
         const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
@@ -31,6 +32,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const deleteConfirmPhrase = t('settings_delete_account_confirm_phrase');
 
     const { session, updatePassword, deleteAccount } = useAuth();
+    const isAuthenticated = authenticatedFromLayout ?? Boolean(session);
     const { isDarkMode, toggleThemeMode } = useThemeMode();
     const [dialogConfig, setDialogConfig] = React.useState<{
         isOpen: boolean;
@@ -400,7 +402,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         {/* Feedback Button */}
                         <button
                             onClick={() => {
-                                if (!session) {
+                                if (!isAuthenticated) {
                                     setDialogConfig({
                                         isOpen: true,
                                         type: 'alert',
@@ -421,7 +423,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <MessageSquarePlus className="w-5 h-5 flex-shrink-0 ml-2" />
                         </button>
 
-                        {session && (
+                        {isAuthenticated && (
                             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 overflow-hidden">
                                 <button
                                     type="button"
@@ -498,7 +500,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             </div>
                         )}
 
-                        {session && <MfaSettingsPanel />}
+                        {isAuthenticated && <MfaSettingsPanel />}
 
                         <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
 
@@ -531,7 +533,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <Lightbulb className="w-5 h-5" />
                         </button>
 
-                        {session && DELETION_UI_ENABLED && (
+                        {isAuthenticated && DELETION_UI_ENABLED && (
                             <>
                                 <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
                                 <button

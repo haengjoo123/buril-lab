@@ -163,7 +163,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             </div>
 
             {isSettingsOpen && (
-                <SettingsModal onClose={() => setIsSettingsOpen(false)} />
+                <SettingsModal
+                    isAuthenticated={Boolean(userEmail)}
+                    onClose={() => setIsSettingsOpen(false)}
+                />
             )}
         </div>
     );

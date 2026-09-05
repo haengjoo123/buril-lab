@@ -28,6 +28,7 @@ const application = {
   handler: read('functions/api/internal/deletions/process.ts'), deletionUi: read('src/config/deletion.ts'),
   mfaService: read('src/services/mfaService.ts'),
   mfaPanel: read('src/components/MfaSettingsPanel.tsx'),
+  mainLayout: read('src/components/MainLayout.tsx'),
   settingsModal: read('src/components/SettingsModal.tsx'),
 }
 const worker = {
