@@ -378,6 +378,23 @@ export async function migrateOps6PhotoSet({
   return Object.freeze({ candidates: candidates.length, converted, completed: Object.freeze(completed) })
 }
 
+export function verifyOps6EvidenceHeader(stored, current) {
+  const identityKeys = ['version', 'kind', 'environment', 'projectRef', 'commitSha']
+  if (!stored || typeof stored !== 'object' || identityKeys.some((key) => stored[key] !== current[key])) {
+    fail('existing evidence header does not match this exact run')
+  }
+  const countKeys = ['initialPending', 'initialMigratedWithLegacy', 'initialQuarantine']
+  if (countKeys.some((key) => !Number.isSafeInteger(stored[key]) || stored[key] < 0)) {
+    fail('existing evidence header does not match this exact run')
+  }
+  const storedReferenced = stored.initialPending + stored.initialMigratedWithLegacy
+  const currentReferenced = current.initialPending + current.initialMigratedWithLegacy
+  if (storedReferenced !== currentReferenced || stored.initialQuarantine !== current.initialQuarantine) {
+    fail('existing evidence header does not match this exact run')
+  }
+  return stored
+}
+
 async function prepareEvidenceDirectory(candidate, header) {
   if (!isAbsolute(candidate)) fail('OPS6_EVIDENCE_DIRECTORY must be absolute')
   const repositoryRoot = await realpath(repository)
@@ -396,8 +413,9 @@ async function prepareEvidenceDirectory(candidate, header) {
   const headerPath = path.join(requested, 'header.json')
   try { await writeFile(headerPath, `${JSON.stringify(header)}\n`, { flag: 'wx', mode: 0o600 }) } catch (error) {
     if (error?.code !== 'EEXIST') throw error
-    const stored = JSON.parse(await readFile(headerPath, 'utf8'))
-    if (JSON.stringify(stored) !== JSON.stringify(header)) fail('existing evidence header does not match this exact run')
+    let stored
+    try { stored = JSON.parse(await readFile(headerPath, 'utf8')) } catch { fail('existing evidence header does not match this exact run') }
+    verifyOps6EvidenceHeader(stored, header)
   }
   return requested
 }
@@ -434,13 +452,7 @@ async function writeSyncedExclusive(target, value) {
   } finally { await handle.close() }
 }
 
-async function readExistingReceipt(directory, expected, journal) {
-  let raw
-  try { raw = await readFile(path.join(directory, 'receipt.json'), 'utf8') } catch (error) {
-    if (error?.code === 'ENOENT') return null
-    throw error
-  }
-  const publicKey = await readFile(path.join(repository, 'config/ephemeral-release-public-key.pem'), 'utf8')
+export function verifyOps6CopyReceipt(raw, publicKey, expected, journal) {
   const signed = verifySignedAttestation(raw, publicKey, 'ops6_private_photo_copy_receipt')
   const payload = signed.payload
   if (payload.environment !== expected.environment || payload.project_ref !== expected.projectRef
@@ -449,6 +461,16 @@ async function readExistingReceipt(directory, expected, journal) {
     fail('existing signed migration receipt does not match current evidence')
   }
   return Object.freeze({ receipt: raw, receiptSha256: createHash('sha256').update(raw, 'utf8').digest('hex') })
+}
+
+async function readExistingReceipt(directory, expected, journal) {
+  let raw
+  try { raw = await readFile(path.join(directory, 'receipt.json'), 'utf8') } catch (error) {
+    if (error?.code === 'ENOENT') return null
+    throw error
+  }
+  const publicKey = await readFile(path.join(repository, 'config/ephemeral-release-public-key.pem'), 'utf8')
+  return verifyOps6CopyReceipt(raw, publicKey, expected, journal)
 }
 
 function git(args) {
