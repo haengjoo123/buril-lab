@@ -69,6 +69,8 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   'scripts/verify-supabase-security-advisors.mjs',
   'scripts/verify-supabase-security-advisors.test.ts',
   'src/components/MfaSettingsPanel.tsx',
+  'src/components/MainLayout.tsx',
+  'src/components/SettingsModal.auth.test.tsx',
   'src/components/SettingsModal.tsx',
   'src/locales/translations.ts',
   'src/services/mfaService.test.ts',
@@ -167,7 +169,7 @@ export function verifyOps11DatabaseSources({ migration, permissionTest, nativeAs
 
 export function verifyOps11ApplicationSources({
   runtimeConfig, middleware, routePolicy, processor, handler, deletionUi,
-  mfaService, mfaPanel, settingsModal,
+  mfaService, mfaPanel, mainLayout, settingsModal,
 }) {
   requireMarkers(runtimeConfig, [
     'maintenanceEnabled,', 'accountDeletionEnabled,', 'maintenanceEnabled: false',
@@ -213,8 +215,12 @@ export function verifyOps11ApplicationSources({
   ], 'MFA settings panel')
   requireMarkers(settingsModal, [
     "import { MfaSettingsPanel } from './MfaSettingsPanel'",
-    '{session && <MfaSettingsPanel />}',
+    'const isAuthenticated = authenticatedFromLayout ?? Boolean(session)',
+    '{isAuthenticated && <MfaSettingsPanel />}',
   ], 'settings integration')
+  requireMarkers(mainLayout, [
+    'isAuthenticated={Boolean(userEmail)}',
+  ], 'settings authentication handoff')
   for (const source of [mfaService, mfaPanel]) {
     if (/\b(?:localStorage|sessionStorage)\b|console\.(?:log|error)/.test(source)) {
       fail('MFA enrollment material may be persisted or logged')
@@ -316,6 +322,7 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
     handler: read('functions/api/internal/deletions/process.ts'), deletionUi: read('src/config/deletion.ts'),
     mfaService: read('src/services/mfaService.ts'),
     mfaPanel: read('src/components/MfaSettingsPanel.tsx'),
+    mainLayout: read('src/components/MainLayout.tsx'),
     settingsModal: read('src/components/SettingsModal.tsx'),
   })
   const worker = verifyOps11WorkerSources({
