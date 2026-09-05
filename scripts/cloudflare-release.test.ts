@@ -2893,6 +2893,18 @@ describe('Prep 0 Cloudflare release controls', () => {
     }
     expect(verifyReleaseConfiguration(configuration)).toMatchObject({ projectCount: 2 })
 
+    for (const configKey of ['productionRaw', 'stagingRaw'] as const) {
+      for (const authMode of [undefined, '', 'email_allowlist', 'server_role']) {
+        const invalidConfig = JSON.parse(configuration[configKey])
+        if (authMode === undefined) delete invalidConfig.vars.OPS_AUTH_MODE
+        else invalidConfig.vars.OPS_AUTH_MODE = authMode
+        expect(() => verifyReleaseConfiguration({
+          ...configuration,
+          [configKey]: JSON.stringify(invalidConfig),
+        })).toThrow(/OPS_AUTH_MODE must select server_roles/)
+      }
+    }
+
     for (const mutation of [
       ops3LiveVerificationWorkflow.replace('verify-github-staging-run.mjs', 'skipped.mjs'),
       ops3LiveVerificationWorkflow.replace('verify-github-quality-run.mjs', 'skipped.mjs'),

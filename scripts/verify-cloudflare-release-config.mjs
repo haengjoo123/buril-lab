@@ -483,6 +483,9 @@ function verifyWranglerConfig(config, {
   if (config.vars?.APP_ENVIRONMENT !== environment || config.vars?.PUBLIC_APP_ORIGIN !== origin) {
     throw new Error(`${name} public environment identity is invalid.`)
   }
+  if (config.vars?.OPS_AUTH_MODE !== 'server_roles') {
+    throw new Error(`${name} OPS_AUTH_MODE must select server_roles for role and MFA authorization.`)
+  }
 
   if (requireEmptyPreview) {
     if (
