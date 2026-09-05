@@ -64,6 +64,7 @@ describe('Ops11 deletion Scheduler', () => {
       expect(headers.get('Authorization')).toBe('Bearer purpose-specific-secret-at-least-32-characters')
       expect(headers.get('CF-Access-Client-Id')).toBe('staging-access-id')
       expect(headers.get('CF-Access-Client-Secret')).toBe('staging-access-secret')
+      expect(init?.redirect).toBe('manual')
       return ok()
     })
     await expect(runDeletionScheduler(environment(kv), NOW, fetcher)).resolves.toMatchObject({
@@ -100,6 +101,7 @@ describe('Ops11 deletion Scheduler', () => {
 
   it.each([
     ['401', 'http_401', () => new Response('{}', { status: 401, headers: { 'Content-Type': 'application/json' } })],
+    ['redirect', 'http_other', () => new Response(null, { status: 302, headers: { Location: 'https://example.test/' } })],
     ['503', 'http_503', () => new Response('{}', { status: 503, headers: { 'Content-Type': 'application/json' } })],
     ['207', 'http_207', () => new Response('{}', { status: 207, headers: { 'Content-Type': 'application/json' } })],
     ['invalid JSON', 'invalid_summary', () => new Response('{broken', { status: 200, headers: { 'Content-Type': 'application/json' } })],
