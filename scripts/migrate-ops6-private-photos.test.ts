@@ -5,6 +5,7 @@ import {
   migrateOps6PhotoSet,
   parseOps6SupabaseTarget,
   prepareLegacyCabinetWebp,
+  verifyOps6EvidenceHeader,
   verifyOps6BackendCredential,
 } from './migrate-ops6-private-photos.mjs'
 import {
@@ -82,6 +83,21 @@ function adapterFixture({ existingBody = null, acknowledge = true, commit = true
 }
 
 describe('Ops6 private photo migration runtime', () => {
+  it('accepts the original evidence header after pending photos become migrated', () => {
+    const original = {
+      version: 1, kind: 'ops6_private_photo_copy', environment: 'production',
+      projectRef: ref, commitSha: 'a'.repeat(40),
+      initialPending: 1, initialMigratedWithLegacy: 0, initialQuarantine: 1,
+    }
+    const afterCopy = {
+      ...original, initialPending: 0, initialMigratedWithLegacy: 1,
+    }
+    expect(verifyOps6EvidenceHeader(original, afterCopy)).toBe(original)
+    expect(() => verifyOps6EvidenceHeader(original, { ...afterCopy, projectRef: 'z'.repeat(20) })).toThrow(/exact run/)
+    expect(() => verifyOps6EvidenceHeader(original, { ...afterCopy, initialPending: 1 })).toThrow(/exact run/)
+    expect(() => verifyOps6EvidenceHeader(original, { ...afterCopy, initialQuarantine: 0 })).toThrow(/exact run/)
+  })
+
   it('binds the exact HTTPS Supabase project and backend credential', () => {
     expect(parseOps6SupabaseTarget(`${origin}/`, ref)).toEqual({ origin, projectRef: ref })
     expect(() => parseOps6SupabaseTarget('https://other-project-ref.supabase.co/', ref)).toThrow(/exact approved project/)
