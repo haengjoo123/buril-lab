@@ -89,7 +89,11 @@ process.exit(93)
     return (JSON.parse(readFileSync(statePath, 'utf8')) as { versions: string[] }).versions
   }
 
-  function run(mode: 'plan' | 'apply' | 'restore-legacy', confirmation = '') {
+  function run(
+    mode: 'plan' | 'apply' | 'restore-legacy',
+    confirmation = '',
+    useSupabaseLoginRole = false,
+  ) {
     const args = [
       '-NoProfile',
       '-File',
@@ -100,6 +104,7 @@ process.exit(93)
       snapshot.production_project_ref,
     ]
     if (confirmation) args.push('-Confirmation', confirmation)
+    if (useSupabaseLoginRole) args.push('-UseSupabaseLoginRole')
 
     return spawnSync('pwsh', args, {
       cwd: repoRoot,
@@ -133,6 +138,19 @@ process.exit(93)
     expect(mismatch.status).not.toBe(0)
     expect(mismatch.stderr).toContain('No repair was attempted')
     expect(getVersions()).toEqual(legacyVersions.slice(1))
+  }, 45_000)
+
+  it('supports an explicitly selected authenticated Supabase CLI login role', () => {
+    setVersions(legacyVersions)
+    const result = run('plan', '', true)
+    expect(result.status, result.stderr).toBe(0)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      operation: 'plan',
+      changed: false,
+      state_before: 'legacy',
+      connection_auth: 'supabase_login_role',
+    })
+    expect(getVersions()).toEqual(legacyVersions)
   }, 45_000)
 
   it('applies the marker and restores all 89 legacy rows with exact confirmations', () => {
@@ -175,6 +193,8 @@ process.exit(93)
   it('keeps the database password out of process arguments', () => {
     const source = readFileSync(scriptPath, 'utf8')
     expect(source).toContain("SetEnvironmentVariable('SUPABASE_DB_PASSWORD'")
+    expect(source).toContain('[switch] $UseSupabaseLoginRole')
+    expect(source).toContain("'supabase_login_role'")
     expect(source).not.toContain("'--password'")
     expect(source).toContain("'--output-format', 'json'")
     expect(source).toContain("npx '--no-install'")

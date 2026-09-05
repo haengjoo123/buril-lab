@@ -10,7 +10,9 @@ param(
 
   [string] $Confirmation = '',
 
-  [string] $EvidencePath = ''
+  [string] $EvidencePath = '',
+
+  [switch] $UseSupabaseLoginRole
 )
 
 Set-StrictMode -Version Latest
@@ -81,6 +83,10 @@ function Test-ExactVersionSet {
 }
 
 function Get-DatabasePassword {
+  if ($UseSupabaseLoginRole) {
+    return ''
+  }
+
   $password = [Environment]::GetEnvironmentVariable('BURILLAB_PRODUCTION_DB_PASSWORD', 'Process')
   if ([string]::IsNullOrWhiteSpace($password)) {
     $password = [Environment]::GetEnvironmentVariable('BURILLAB_PRODUCTION_DB_PASSWORD', 'User')
@@ -96,7 +102,7 @@ function Get-DatabasePassword {
 function Invoke-SupabaseCliCaptured {
   param(
     [Parameter(Mandatory = $true)][string[]] $Arguments,
-    [Parameter(Mandatory = $true)][string] $DatabasePassword
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string] $DatabasePassword
   )
 
   $stderrPath = [IO.Path]::GetTempFileName()
@@ -109,7 +115,11 @@ function Invoke-SupabaseCliCaptured {
     # Supabase officially supports SUPABASE_DB_PASSWORD for non-interactive
     # execution. Do not put the password in argv, where local process viewers
     # and diagnostic tooling could capture it.
-    [Environment]::SetEnvironmentVariable('SUPABASE_DB_PASSWORD', $DatabasePassword, 'Process')
+    # When explicitly requested, leave SUPABASE_DB_PASSWORD absent so the
+    # authenticated Supabase CLI creates its short-lived login role. This
+    # avoids resetting or materialising the production database password.
+    $passwordForCli = if ([string]::IsNullOrWhiteSpace($DatabasePassword)) { $null } else { $DatabasePassword }
+    [Environment]::SetEnvironmentVariable('SUPABASE_DB_PASSWORD', $passwordForCli, 'Process')
     try {
       # Never let npx download an unreviewed CLI during a production-history
       # operation. Install the reviewed version before running this script.
@@ -139,7 +149,7 @@ function Invoke-SupabaseCliCaptured {
 }
 
 function Assert-SupabaseCliVersion {
-  param([Parameter(Mandatory = $true)][string] $DatabasePassword)
+  param([Parameter(Mandatory = $true)][AllowEmptyString()][string] $DatabasePassword)
 
   $output = Invoke-SupabaseCliCaptured -Arguments @('supabase', '--version') -DatabasePassword $DatabasePassword
   $actual = ([string]::Join('', @($output))).Trim()
@@ -152,7 +162,7 @@ function Assert-SupabaseCliVersion {
 function Get-RemoteMigrationVersions {
   param(
     [Parameter(Mandatory = $true)][string] $TargetProjectRef,
-    [Parameter(Mandatory = $true)][string] $DatabasePassword
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string] $DatabasePassword
   )
 
   $arguments = @(
@@ -212,7 +222,7 @@ function Invoke-MigrationRepair {
     [Parameter(Mandatory = $true)][string[]] $Versions,
     [Parameter(Mandatory = $true)][ValidateSet('applied', 'reverted')][string] $Status,
     [Parameter(Mandatory = $true)][string] $TargetProjectRef,
-    [Parameter(Mandatory = $true)][string] $DatabasePassword
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string] $DatabasePassword
   )
 
   if ($Versions.Count -eq 0) {
@@ -394,4 +404,5 @@ Write-SafeEvidence -Evidence ([ordered]@{
   remote_count_after = $afterVersions.Count
   remote_history_sha256_after = Get-HistorySha256 -Versions $afterVersions
   project_ref_sha256 = Get-TextSha256 -Text $ProjectRef
+  connection_auth = if ($UseSupabaseLoginRole) { 'supabase_login_role' } else { 'database_password' }
 })

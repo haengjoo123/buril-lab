@@ -16,7 +16,7 @@ export const OPS11_MIGRATION_SHA256 = '6e476e51dc55ed168fb51d590143ad7b752c74d93
 export const OPS11_PERMISSION_TEST_SHA256 = '3369e23259b8833d6b1884674eba7b7b7f64838aeee3373a6838f37b53161395'
 export const OPS11_NATIVE_ASSERTIONS_SHA256 = '8b86710c9abc4ff1189f56946cb0df2248db1f00cf371b47efd834584c50f7c8'
 export const OPS11_DPAPI_TEST_SHA256 = '422ffaaf22194fc0aa14f4e8e700e575ceda5dc12aeb733d87604f0bb2cfa5d6'
-export const OPS11_HISTORY_REPAIR_TEST_SHA256 = 'ebc5943260692b0b180ee175379c3e472c70e7af5d5a7397e56736fb7929fc64'
+export const OPS11_HISTORY_REPAIR_TEST_SHA256 = 'aa70ef78a6467af65fc9c2af409f2841af8df68a68f7dab2ec900e04074e6fa7'
 export const OPS11_LOCAL_JOIN_TEST_SHA256 = 'e2f289273f956df33bdf17c1a40e61644e4767acb64309ccb09c20fa2729b61b'
 export const OPS11_IGNORED_GENERATED_UNTRACKED_PATHS = Object.freeze(['results.sarif'])
 
@@ -25,6 +25,7 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   'docs/operations/accelerated-ops3-11-release-2026-09-05.md',
   'docs/operations/ops11-deletion-worker-preparation.md',
   'docs/operations/ops1-ops2-daily-backup-2of2-2026-09-05.md',
+  'docs/operations/ops3-production-and-ops4-plan-2026-09-05.md',
   'docs/operations/operations-safety-rollout.md',
   'docs/operations/supabase-hosted-advisor-token.md',
   'eslint.config.js',
@@ -41,6 +42,7 @@ export const OPS11_APPROVED_PATHS = Object.freeze([
   OPS11_DPAPI_TEST,
   OPS11_HISTORY_REPAIR_TEST,
   OPS11_LOCAL_JOIN_TEST,
+  'scripts/repair-production-migration-history.ps1',
   'scripts/ephemeral-release-supervisor-core.mjs',
   'scripts/ephemeral-release-supervisor-core.test.ts',
   'scripts/test-ops11-local-postgres.mjs',
@@ -251,7 +253,7 @@ export function verifyOps11DeletionWorkerPreparation(root = fileURLToPath(new UR
   }
   const historyRepairTest = normalized(read(OPS11_HISTORY_REPAIR_TEST))
   if (sha256(historyRepairTest) !== OPS11_HISTORY_REPAIR_TEST_SHA256
-    || [...historyRepairTest.matchAll(/}, 45_000\)/g)].length !== 3) {
+    || [...historyRepairTest.matchAll(/}, 45_000\)/g)].length !== 4) {
     fail('reviewed Windows migration-history test timeout changed')
   }
   const localJoinTest = normalized(read(OPS11_LOCAL_JOIN_TEST))
