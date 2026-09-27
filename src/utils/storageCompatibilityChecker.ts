@@ -486,6 +486,8 @@ interface ClassifiedItem {
  * Returns deduplicated warnings sorted by severity.
  */
 export function checkShelfCompatibility(items: ReagentPlacement[], _dividers: number[] = []): StorageWarning[] {
+    // Keep the parameter for existing callers; visual dividers do not prove segregation.
+    void _dividers;
     if (items.length < 2) return [];
 
     // Pre-classify all items
