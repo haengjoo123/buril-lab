@@ -481,9 +481,11 @@ interface ClassifiedItem {
 
 /**
  * Check storage compatibility for all items on a shelf.
+ * Visual shelf dividers do not prove chemical segregation, so they never
+ * suppress a compatibility warning.
  * Returns deduplicated warnings sorted by severity.
  */
-export function checkShelfCompatibility(items: ReagentPlacement[], dividers: number[] = []): StorageWarning[] {
+export function checkShelfCompatibility(items: ReagentPlacement[], _dividers: number[] = []): StorageWarning[] {
     if (items.length < 2) return [];
 
     // Pre-classify all items
@@ -500,27 +502,6 @@ export function checkShelfCompatibility(items: ReagentPlacement[], dividers: num
         for (let j = i + 1; j < classified.length; j++) {
             const a = classified[i];
             const b = classified[j];
-
-            // Check if items are physically separated by a divider
-            // Use the center point of each item to determine its position relative to dividers
-            let isSeparated = false;
-            if (dividers && dividers.length > 0) {
-                const centerA = a.item.position + (a.item.width / 2);
-                const centerB = b.item.position + (b.item.width / 2);
-                const minPos = Math.min(centerA, centerB);
-                const maxPos = Math.max(centerA, centerB);
-                
-                // If there's any divider between the two centers, they are separated
-                for (const d of dividers) {
-                    if (d > minPos && d < maxPos) {
-                        isSeparated = true;
-                        break;
-                    }
-                }
-            }
-
-            // If separated by a divider, they are considered safely stored
-            if (isSeparated) continue;
 
             // Check each rule
             for (const rule of STORAGE_RULES) {

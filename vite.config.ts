@@ -17,6 +17,8 @@ import { onRequestPost as getAnalyticsMixtures } from './functions/api/admin/ana
 import { onRequestPost as manageAnalyticsReviews } from './functions/api/admin/analytics/reviews'
 import { onRequestPost as exportAnalyticsCsv } from './functions/api/admin/analytics/export'
 import { createLocalLabJoinApi } from './scripts/ops5-local-join-api'
+import { onRequestPost as analyzeInventoryImport } from './functions/api/ai/inventory-import'
+import { pdfJsAssets } from './scripts/vite-pdfjs-assets'
 
 const disabledAutomaticClientEnvPrefix = 'BURIL_AUTO_ENV_DISABLED_'
 
@@ -30,6 +32,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_PH_PREDICTION',
   'VITE_ENABLE_CHEMICAL_ENRICHMENT',
   'VITE_ENABLE_SEARCH_ANALYTICS',
+  'VITE_ENABLE_INVENTORY_IMPORT_V2',
 ] as const
 
 type AdminIdentity = {
@@ -48,6 +51,7 @@ type LocalPagesPostHandler = (context: {
 }) => Promise<Response>
 
 const localPagesPostHandlers: Record<string, LocalPagesPostHandler> = {
+  '/api/ai/inventory-import': analyzeInventoryImport,
   '/api/analytics/search-event': postSearchAnalyticsEvent,
   '/api/analytics/search-action': postSearchAnalyticsAction,
   '/api/analytics/guest-delete': deleteGuestSearchAnalytics,
@@ -460,6 +464,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_PH_PREDICTION': JSON.stringify(explicitClientEnv.VITE_ENABLE_PH_PREDICTION),
     'import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT': JSON.stringify(explicitClientEnv.VITE_ENABLE_CHEMICAL_ENRICHMENT),
     'import.meta.env.VITE_ENABLE_SEARCH_ANALYTICS': JSON.stringify(explicitClientEnv.VITE_ENABLE_SEARCH_ANALYTICS),
+    'import.meta.env.VITE_ENABLE_INVENTORY_IMPORT_V2': JSON.stringify(explicitClientEnv.VITE_ENABLE_INVENTORY_IMPORT_V2),
   },
   resolve: {
     alias: {
@@ -523,6 +528,7 @@ export default defineConfig(({ mode }) => {
   },
   plugins: [
     localAdminApiPlugin(env),
+    pdfJsAssets(),
     react(),
     tailwindcss(),
     VitePWA({

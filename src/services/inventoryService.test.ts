@@ -89,6 +89,35 @@ describe('inventoryService V2 record removal', () => {
         mocks.labState.currentLabId = '11111111-1111-4111-8111-111111111111';
     });
 
+    it('reads every inventory page beyond the Supabase 1000-row limit', async () => {
+        const rows = Array.from({ length: 1501 }, (_, index) => inventoryItem(`item-${index}`));
+        const offsets: number[] = [];
+        mocks.from.mockImplementation((table: string) => {
+            const chain = {
+                select: () => chain, eq: () => chain, is: () => chain, order: () => chain,
+                range: (from: number, to: number) => {
+                    if (table === 'inventory') offsets.push(from);
+                    return Promise.resolve({ data: table === 'inventory' ? rows.slice(from, to + 1) : [], error: null });
+                },
+            };
+            return chain;
+        });
+        const result = await inventoryService.getItems();
+        expect(result).toHaveLength(1501);
+        expect(result.at(-1)?.id).toBe('item-1500');
+        expect(offsets).toEqual([0, 500, 1000, 1500]);
+    });
+
+    it('does not hide an existing cabinet bottle when a matching import was explicitly added as new', async () => {
+        const imported = { ...inventoryItem('imported'), storage_type: 'cabinet', cabinet_id: 'cabinet', source_attributes: [{ label: 'Lot', value: 'New lot', address: 'C2' }] };
+        const bottle = { id: 'existing-bottle', name: imported.name, capacity: imported.capacity, cabinet_id: 'cabinet', created_at: imported.created_at, cabinets: { name: 'A', lab_id: mocks.labState.currentLabId } };
+        mocks.from.mockImplementation((table: string) => {
+            const chain = { select: () => chain, eq: () => chain, order: () => chain, range: () => Promise.resolve({ data: table === 'inventory' ? [imported] : [bottle], error: null }) };
+            return chain;
+        });
+        expect((await inventoryService.getItems()).map(row => row.id)).toEqual(['imported', 'existing-bottle']);
+    });
+
     it('moves multiple inventory records to one storage location with one exact RPC receipt', async () => {
         const requestId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
         const locationId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';

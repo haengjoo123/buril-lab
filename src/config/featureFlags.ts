@@ -15,6 +15,8 @@ export function isExplicitlyDisabled(value: string | undefined): boolean {
 }
 
 export const isWasteV2Enabled = !isExplicitlyDisabled(import.meta.env.VITE_ENABLE_WASTE_V2)
+/** Enable only after the additive import migration and AI endpoint are deployed. */
+export const isInventoryImportV2Enabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INVENTORY_IMPORT_V2)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

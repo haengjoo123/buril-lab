@@ -20,6 +20,7 @@ const POST_ROUTES = [
   '/api/ai/classify',
   '/api/ai/disposal-guide',
   '/api/ai/scan-label',
+  '/api/ai/inventory-import',
   '/api/analytics/guest-delete',
   '/api/analytics/search-action',
   '/api/analytics/search-event',

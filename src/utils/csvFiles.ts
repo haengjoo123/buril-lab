@@ -10,7 +10,8 @@ function escapeCsvCell(value: unknown): string {
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export function parseCsvText(text: string): string[][] {
+export function parseCsvText(text: string, delimiter = ','): string[][] {
+    if (![',', ';', '\t', '|'].includes(delimiter)) throw new Error('Unsupported delimiter.');
     const rows: string[][] = [];
     let row: string[] = [];
     let cell = '';
@@ -33,7 +34,7 @@ export function parseCsvText(text: string): string[][] {
 
         if (character === '"' && cell.length === 0) {
             quoted = true;
-        } else if (character === ',') {
+        } else if (character === delimiter) {
             row.push(cell);
             cell = '';
         } else if (character === '\n' || character === '\r') {
@@ -47,6 +48,7 @@ export function parseCsvText(text: string): string[][] {
         }
     }
 
+    if (quoted) throw new Error('CSV contains an unterminated quoted field.');
     if (cell.length > 0 || row.length > 0) {
         row.push(cell);
         rows.push(row);
@@ -58,7 +60,7 @@ export async function downloadRowsAsCsv(
     rows: Array<Record<string, unknown>>,
     fileName: string,
 ): Promise<void> {
-    const headers = rows[0] ? Object.keys(rows[0]) : [];
+    const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
     const lines = [
         headers.map(escapeCsvCell).join(','),
         ...rows.map((row) => headers.map((header) => escapeCsvCell(row[header])).join(',')),
