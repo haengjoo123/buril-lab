@@ -27,6 +27,8 @@ export const CABINET_RELEASE_PATHS = Object.freeze([
   'scripts/verify-cabinet-release.test.ts',
   'scripts/verify-database-release-safety.mjs',
   'scripts/verify-database-release-safety.test.ts',
+  'scripts/verify-supabase-security-advisors.mjs',
+  'scripts/verify-supabase-security-advisors.test.ts',
   'scripts/verify-accelerated-ops3-11-release.mjs',
   'scripts/verify-accelerated-ops3-11-release.test.ts',
   'scripts/verify-ops3-release-scope.mjs',
@@ -69,6 +71,7 @@ export const CABINET_RELEASE_PATHS = Object.freeze([
   'supabase/tests/cabinet_import_permissions.sql',
   'supabase/tests/cabinet_trash_behavior.sql',
   'supabase/tests/inventory_import_behavior.sql',
+  'supabase/security-advisors/staging.json',
   'vite.config.ts',
 ])
 

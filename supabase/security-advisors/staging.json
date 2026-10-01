@@ -2,8 +2,8 @@
   "schema_version": 1,
   "environment": "staging",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 60,
-  "observed_on": "2026-09-05",
+  "expected_count": 68,
+  "observed_on": "2026-10-02",
   "entries": [
     {
       "cache_key": "authenticated_security_definer_function_executable_public_activate_waste_policy_v2_p_policy_version_id uuid",
@@ -82,6 +82,58 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_commit_inventory_import_batch_v1_p_job_id uuid, p_revision integer, p_rows jsonb",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "commit_inventory_import_batch_v1",
+        "identity_arguments": "p_job_id uuid, p_revision integer, p_rows jsonb",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "가져오기 작업의 개인·연구실 접근과 삭제 작업 상태를 확인하고 작업 행을 잠근다. revision·행별 영수증·100행 한도를 검사한다. authenticated 실행은 기능에 필요하나 SECURITY DEFINER 경고를 해소했다고 보지 않으며 함수별 권한 검토를 계속한다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_cabinet_v2_p_name text, p_location text, p_width integer, p_height integer, p_depth integer, p_lab_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_cabinet_v2",
+        "identity_arguments": "p_name text, p_location text, p_width integer, p_height integer, p_depth integer, p_lab_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "auth.uid()와 요청 연구실의 membership을 확인하며 사용자 ID를 호출자의 값으로 설정한다. 캐비넷 이름·크기 한도를 검사한다. authenticated 생성 권한은 필요하지만 SECURITY DEFINER 경고는 임시 미해결로 유지한다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_create_inventory_item_atomic_p_name text, p_storage_type text, p_brand text, p_product_number text, p_cas_number text, p_quantity integer, p_capacity text, p_cabinet_id uuid, p_storage_location_id uuid, p_product_id uuid, p_expiry_date date, p_memo text, p_remaining_percent integer, p_lab_id uuid, p_actor_user_id uuid, p_actor_name text",
@@ -368,6 +420,58 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_cabinet_state_v2_p_cabinet_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_cabinet_state_v2",
+        "identity_arguments": "p_cabinet_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "private.require_cabinet_access_v2가 auth.uid()와 캐비넷 소유자 또는 연구실 membership을 확인한 후 같은 MVCC snapshot으로 상태를 읽는다. 조회 권한의 정확한 경계를 고정하고 SECURITY DEFINER 경고는 미해결로 유지한다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_cabinet_trash_v2_p_cabinet_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_cabinet_trash_v2",
+        "identity_arguments": "p_cabinet_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "캐비넷 소유자 또는 연구실 membership을 확인한 뒤 요청 캐비넷의 만료 전 payload만 반환한다. 조회 권한의 정확한 경계를 고정하고 SECURITY DEFINER 경고는 미해결로 유지한다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_get_lab_members_target_lab_id uuid",
@@ -942,6 +1046,84 @@
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_restore_cabinet_trash_v2_p_cabinet_id uuid, p_trash_id uuid, p_expected_revision bigint",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "restore_cabinet_trash_v2",
+        "identity_arguments": "p_cabinet_id uuid, p_trash_id uuid, p_expected_revision bigint",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "캐비넷 접근 확인 후 캐비넷·휴지통 행을 잠그고 revision·캐비넷 ID·만료·기존 ID 충돌·복원 공간을 검사한다. 이 동작과 외부 캐비넷 거부는 hosted fixture로 검증했지만 SECURITY DEFINER 경고를 해소했다고 보지 않는다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_save_cabinet_state_v2_p_cabinet_id uuid, p_shelves jsonb, p_width integer, p_height integer, p_depth integer, p_expected_revision bigint, p_removed_shelf_ids uuid[], p_removed_item_ids uuid[]",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "save_cabinet_state_v2",
+        "identity_arguments": "p_cabinet_id uuid, p_shelves jsonb, p_width integer, p_height integer, p_depth integer, p_expected_revision bigint, p_removed_shelf_ids uuid[], p_removed_item_ids uuid[]",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "캐비넷 접근·행 잠금·revision·명시적 삭제 목록을 검사한다. inventory의 개인·연구실 범위와 공유 연결·기하 조건을 확인하고 휴지통 생성과 저장을 같은 transaction에서 수행한다. 권한 및 외부 범위 거부 시험을 통과했으며 SECURITY DEFINER 경고는 미해결로 유지한다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_save_inventory_import_v1_p_job_id uuid, p_revision integer, p_metadata jsonb, p_rows jsonb, p_request_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "save_inventory_import_v1",
+        "identity_arguments": "p_job_id uuid, p_revision integer, p_metadata jsonb, p_rows jsonb, p_request_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "가져오기 작업의 개인·연구실 접근과 삭제 작업 상태를 확인하고 작업 행을 잠근다. revision·요청 ID·100행·10,000행 한도를 검사한다. authenticated 실행 경계만 고정하며 SECURITY DEFINER 경고는 임시 미해결로 유지한다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_save_safety_center_waste_policy_draft_v2_p_center_id uuid, p_version_label text, p_name text, p_streams jsonb, p_source_refs jsonb",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -1044,6 +1226,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_update_cabinet_item_ghs_v2_p_cabinet_id uuid, p_item_id uuid, p_expected_cas text, p_expected_name text, p_h_codes jsonb, p_status text, p_checked_at timestamp with time zone",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "update_cabinet_item_ghs_v2",
+        "identity_arguments": "p_cabinet_id uuid, p_item_id uuid, p_expected_cas text, p_expected_name text, p_h_codes jsonb, p_status text, p_checked_at timestamp with time zone",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "캐비넷 접근 확인과 행 잠금 후 요청 캐비넷·item ID·예상 CAS·이름이 일치하는 행의 GHS 필드만 갱신한다. anon·service_role 실행은 금지한다. SECURITY DEFINER 경고는 미해결로 유지한다.",
+      "reviewed_by_role": "automated_code_review",
+      "reviewed_at": "2026-10-02",
+      "expires_on": "2026-12-31",
+      "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_update_inventory_item_atomic_p_item_id uuid, p_item_source text, p_updates jsonb, p_actor_name text",
