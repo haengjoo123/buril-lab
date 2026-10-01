@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const OPS5_PREPARATION_BASE_SHA = '7a210b10034a9c0deecb60a7a4022317f082db58'
 export const OPS5_MIGRATION = 'supabase/migrations/20260903162850_ops5_expand_server_join.sql'
-export const OPS5_PERMISSION_TEST = 'supabase/tests/ops5_expand_permissions.sql'
+export const OPS5_PERMISSION_TEST = 'supabase/legacy_tests/ops5_expand_permissions.sql'
 export const OPS5_MIGRATION_SHA256 = '09c9aeb92e2b5745ce69b8acc0b0c754cae4ca30bf735f6c5ba1f57aa584bc1b'
 export const OPS5_PERMISSION_TEST_SHA256 = '183a3a73c23a66b274ac9fd4d4a00cca38a65ba4d1af4d34c901370e919812b3'
 

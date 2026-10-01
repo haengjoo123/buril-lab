@@ -104,8 +104,8 @@ select is(
 );
 
 select ok(
-  not has_function_privilege('authenticated', 'public.join_lab(uuid,text,text)', 'EXECUTE'),
-  'the old join function remains revoked after Contract'
+  has_function_privilege('authenticated', 'public.join_lab(uuid,text,text)', 'EXECUTE'),
+  'legacy clients retain the old join function during Expand'
 );
 
 select ok(
@@ -114,7 +114,7 @@ select ok(
     'public.insert_audit_log_rpc(uuid,text,uuid,text,uuid,text,text,jsonb,jsonb,jsonb,text,uuid)',
     'EXECUTE'
   ),
-  'the generic audit function remains revoked after Contract'
+  'legacy clients retain the generic audit function until Contract'
 );
 
 select is(

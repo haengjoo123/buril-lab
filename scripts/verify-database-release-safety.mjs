@@ -18,6 +18,7 @@ export const EXPECTED_SNAPSHOT_SHA256 = 'c72f031e8d459e2db425352d9f97daadecada97
 export const EXPECTED_LOCAL_ONLY_WITHOUT_SQL = ['20260823163832']
 export const EXPECTED_LEGACY_TESTS = [
   'baseline_permissions_ops11.sql',
+  'ops5_expand_permissions.sql',
   'cabinet_state_atomic.sql',
   'reagent_date_tracking.sql',
   'search_batch_intelligence.sql',
@@ -47,7 +48,7 @@ export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
   'cabinet_trash_behavior.sql': '7a1ebddf59ac8fb9f4a0adb59c18dac40626ce43c6e959725928c4426d44bebb',
   'cabinet_import_permissions.sql': 'fb2b4f00a926a7861774a2ade222425b67d105a0985d0d11f0c6432334db624d',
   'baseline_permissions.sql': EXPECTED_PERMISSION_TEST_SHA256,
-  'ops5_expand_permissions.sql': '183a3a73c23a66b274ac9fd4d4a00cca38a65ba4d1af4d34c901370e919812b3',
+  'ops5_expand_permissions.sql': '7d41b53cf0705b75b337b14513532ee1f80c0aacd2fcc763fad291250d46f2e3',
   'ops6_private_photos_permissions.sql': '56be7e3115c21332eb11e25674ef5f6e7498522919c4d091b7e0b12e9d175c48',
   'ops7_contract_permissions.sql': '73cf2ec168ed0f6ec60ead91a901be4f9e39d24de3dba12cf2ff37bd6b75d942',
   'ops8_lab_password_policy.sql': '19ebad4a89d75a9e905cc827e3014db4d0f675130f474550ad2748957ce87733',
@@ -232,6 +233,7 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
 
   assert(sha256(normalizeText(readFileSync(resolve(legacyTestsDirectory, 'baseline_permissions_ops11.sql'), 'utf8'))) === EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256, 'Historical Ops11 permission test changed.')
 
+  assert(sha256(normalizeText(readFileSync(resolve(legacyTestsDirectory, 'ops5_expand_permissions.sql'), 'utf8'))) === '183a3a73c23a66b274ac9fd4d4a00cca38a65ba4d1af4d34c901370e919812b3', 'Historical Ops5 permission test changed.')
   const baselineSql = readFileSync(resolve(activeDirectory, BASELINE_FILE), 'utf8')
   const baseline = verifyBaselineSql(baselineSql)
   for (const [name, expectedSha256] of Object.entries(EXPECTED_INCREMENTAL_MIGRATIONS)) {

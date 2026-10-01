@@ -28,7 +28,7 @@ describe('database release safety manifest through cabinet trash', () => {
       activeMigrations: 12,
       legacySqlFiles: 50,
       activePgTapTests: 11,
-      legacySqlTests: 9,
+      legacySqlTests: 10,
       baseline: {
         publicTables: 49,
         explicitRoleGrants: {

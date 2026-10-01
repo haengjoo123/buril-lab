@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { verifyDatabaseReleaseSafety } from './verify-database-release-safety.mjs'
 import { verifyAcceleratedPolicySources, verifyNoOps12Paths } from './verify-accelerated-ops3-11-release.mjs'
-import { verifyOps11ApplicationSources, verifyOps11WorkerSources } from './verify-ops11-deletion-worker-preparation.mjs'
+import { filterOps11GeneratedUntrackedPaths, verifyOps11ApplicationSources, verifyOps11WorkerSources } from './verify-ops11-deletion-worker-preparation.mjs'
 
 export const CABINET_RELEASE_BASE_SHA = 'd99fe93c4ae09674cda01bd24b2a463ac23686c2'
 export const CABINET_RELEASE_POLICY = 'config/cabinet-release-20261002.json'
@@ -61,6 +61,8 @@ export const CABINET_RELEASE_PATHS = Object.freeze([
   'src/utils/cabinetPlacementValidation.ts',
   'src/utils/reagentPlacementMetrics.ts',
   'supabase/legacy_tests/baseline_permissions_ops11.sql',
+  'supabase/legacy_tests/ops5_expand_permissions.sql',
+  'supabase/tests/ops5_expand_permissions.sql',
   'supabase/migrations/20261002000000_cabinet_trash_and_revision.sql',
   'supabase/migrations/20261002010000_inventory_import_service_grants.sql',
   'supabase/tests/baseline_permissions.sql',
@@ -104,7 +106,9 @@ export function verifyCabinetRelease(root = fileURLToPath(new URL('../', import.
   git(root, ['cat-file', '-e', `${CABINET_RELEASE_BASE_SHA}^{commit}`])
   git(root, ['merge-base', '--is-ancestor', CABINET_RELEASE_BASE_SHA, 'HEAD'])
   const changed = git(root, ['diff', '--name-only', '-z', CABINET_RELEASE_BASE_SHA, '--']).split('\0').filter(Boolean)
-  const untracked = git(root, ['ls-files', '-z', '--others', '--exclude-standard', '--']).split('\0').filter(Boolean)
+  // Gitleaks creates this exact report before Application tests. This filter
+  // applies only to untracked reports; a committed report remains rejected.
+  const untracked = filterOps11GeneratedUntrackedPaths(git(root, ['ls-files', '-z', '--others', '--exclude-standard', '--']).split('\0').filter(Boolean))
   const paths = [...new Set([...changed, ...untracked])].sort()
   verifyCabinetChangedPaths(paths)
   for (const candidate of paths) {

@@ -103,3 +103,5 @@ Ops12의 공개 사진 원본·고아 파일 정리는 여전히 최소 7일 보
 Quality 워크플로 변경은 SQL 시험 전체 실행과 현재 후보 단계 명칭이다. Cloudflare 검증기의 Quality 고정 해시도 검토한 워크플로 본문으로 갱신했으며 Staging·Production 배포 워크플로와 임시 토큰·같은 SHA 검증은 유지한다. npm audit의 고위험 런타임 brace-expansion 취약점은 기존 메이저 범위 내 패치로 해결했고, 정확한 lockfile 해시를 후보에 고정한다.
 
 로컬 전체 단위·회귀 1,620개 통과, 7개 건너뜀, 전체 lint 통과, 독립 PG17 캐비넷 동작·최종 테이블 권한 집계 통과를 확인했다. Hosted SQL 및 실제 Quality·Staging·Production 결과는 별도 실행 증거가 필요하며 이 로컬 결과로 완료를 선언하지 않는다.
+
+첫 실제 Quality 실행 `36897684797`에서 신규 권한 96개·캐비넷·10,000행 import 시험을 포함한 DB 검증은 수행됐으며, 과거 Ops5의 임시 호환 권한 기대 2개가 현재 Ops7 Contract와 모순돼 실패했다. Ops5 원본 pgTAP는 기존 해시 그대로 legacy_tests에 보존하고, 활성 시험은 현재의 구 join·범용 audit 실행 금지를 요구하도록 갱신했다. Gitleaks가 생성한 정확한 미추적 `results.sarif`는 기존 Ops11 생성물 필터로 처리한다. 커밋된 report와 다른 미승인 경로는 계속 거부한다.
