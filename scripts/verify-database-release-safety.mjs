@@ -17,6 +17,7 @@ export const EXPECTED_SNAPSHOT_ROW_COUNT = 118
 export const EXPECTED_SNAPSHOT_SHA256 = 'c72f031e8d459e2db425352d9f97daadecada97e3f0c57060fe2b57217a964d6'
 export const EXPECTED_LOCAL_ONLY_WITHOUT_SQL = ['20260823163832']
 export const EXPECTED_LEGACY_TESTS = [
+  'baseline_permissions_ops11.sql',
   'cabinet_state_atomic.sql',
   'reagent_date_tracking.sql',
   'search_batch_intelligence.sql',
@@ -26,8 +27,12 @@ export const EXPECTED_LEGACY_TESTS = [
   'waste_disposal_v2_policy.sql',
   'waste_disposal_v2_verification.sql',
 ]
-export const EXPECTED_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
+export const EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
+export const EXPECTED_PERMISSION_TEST_SHA256 = '7ec6362717b7a0d6fbec003e79157c08f73b92ed34425da8a87cf6d47765b564'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
+  '20261002010000_inventory_import_service_grants.sql': 'bdaf72cbf2d00c216690f717d34b3bc682894dc46bf9b5bb2bc58f81799005a7',
+  '20261002000000_cabinet_trash_and_revision.sql': '5b433ab9c36944ebae3de6748f8cfa204093d978740a16427624980c2e70e2d7',
+  '20260922010000_inventory_import_v2.sql': '93cf5cd008146a6d9b0e16b4d2f5d11fbdfa32fc0d2d12288cf96451f8248808',
   '20260903162850_ops5_expand_server_join.sql': '09c9aeb92e2b5745ce69b8acc0b0c754cae4ca30bf735f6c5ba1f57aa584bc1b',
   '20260904020000_ops6_private_cabinet_photos_expand.sql': 'a5c63cb5342e58aa0bd1555713ecad98e20d22bf3b82e2bd3d39d9104d07d4c8',
   '20260904021000_ops6_private_cabinet_photos_switch.sql': 'd153d1e380ea87613cf4f228b06823f4c46387e08346e5ce68f721d3cdd5a63d',
@@ -38,6 +43,9 @@ export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260904070000_ops11_deletion_worker.sql': '6e476e51dc55ed168fb51d590143ad7b752c74d937235bc4a248821a37c0e26c',
 })
 export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
+  'inventory_import_behavior.sql': '166c3ef4fed5b3b2d6f45c2fa1b031f45f97567c348b352019f7d2292963fd61',
+  'cabinet_trash_behavior.sql': '7a1ebddf59ac8fb9f4a0adb59c18dac40626ce43c6e959725928c4426d44bebb',
+  'cabinet_import_permissions.sql': 'fb2b4f00a926a7861774a2ade222425b67d105a0985d0d11f0c6432334db624d',
   'baseline_permissions.sql': EXPECTED_PERMISSION_TEST_SHA256,
   'ops5_expand_permissions.sql': '183a3a73c23a66b274ac9fd4d4a00cca38a65ba4d1af4d34c901370e919812b3',
   'ops6_private_photos_permissions.sql': '56be7e3115c21332eb11e25674ef5f6e7498522919c4d091b7e0b12e9d175c48',
@@ -221,6 +229,8 @@ export function verifyDatabaseReleaseSafety(repoRoot = defaultRepoRoot) {
     JSON.stringify(legacyTests) === JSON.stringify([...EXPECTED_LEGACY_TESTS].sort()),
     `Legacy database test archive changed: ${legacyTests.join(', ')}`,
   )
+
+  assert(sha256(normalizeText(readFileSync(resolve(legacyTestsDirectory, 'baseline_permissions_ops11.sql'), 'utf8'))) === EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256, 'Historical Ops11 permission test changed.')
 
   const baselineSql = readFileSync(resolve(activeDirectory, BASELINE_FILE), 'utf8')
   const baseline = verifyBaselineSql(baselineSql)

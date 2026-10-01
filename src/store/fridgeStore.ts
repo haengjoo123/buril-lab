@@ -1,3 +1,4 @@
+import { hasPlacementCollision, isCabinetLayoutValid } from '../utils/cabinetPlacementValidation';
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type {
@@ -12,7 +13,6 @@ import { useLabStore } from './useLabStore';
 import { buildCabinetAutoLayoutPlan } from '../utils/cabinetAutoLayoutPlanner';
 import { findNearbyReagentSlot } from '../utils/findNearbyReagentSlot';
 import {
-    CONTAINER_BASE_WIDTHS,
     getItemDepthPct,
     getItemVisualWidthPct,
 } from '../utils/reagentPlacementMetrics';
@@ -41,6 +41,7 @@ interface FridgeStore extends FridgeState {
     cabinetId: string | null;
     cabinetName: string;
     isLoadingCabinet: boolean;
+    loadedCabinetId: string | null;
     cabinetSaveError: string | null;
     loadCabinet: (cabinetId: string) => Promise<void>;
     saveCabinet: () => Promise<void>;
@@ -70,7 +71,7 @@ const INITIAL_SHELVES: ShelfData[] = [
 const DEFAULT_CABINET_WIDTH = 5;
 const DEFAULT_CABINET_HEIGHT = 9;
 const DEFAULT_CABINET_DEPTH = 2;
-const GHS_QUEUED_ITEM_IDS_BY_CABINET = new Map<string, Set<string>>();
+let cabinetLoadSequence = 0;
 const GHS_IN_FLIGHT_ITEM_IDS = new Set<string>();
 const CABINET_SAVE_QUEUES = new Map<string, Promise<void>>();
 
@@ -80,6 +81,7 @@ interface CabinetSaveSnapshot {
     width: number;
     height: number;
     depth: number;
+    generation?: number;
 }
 
 const getCabinetSaveErrorMessage = (error: unknown): string => {
@@ -95,7 +97,9 @@ const enqueueCabinetSave = (snapshot: CabinetSaveSnapshot): Promise<void> => {
     const previousSave = CABINET_SAVE_QUEUES.get(snapshot.cabinetId) ?? Promise.resolve();
     const queuedSave = previousSave
         .catch(() => undefined)
-        .then(() => cabinetService.saveCabinetState(
+        .then(() => {
+            if (snapshot.generation !== undefined && snapshot.generation !== cabinetLoadSequence) throw new Error('캐비넷이 변경되었습니다. 다시 저장해 주세요.');
+            return cabinetService.saveCabinetState(
             snapshot.cabinetId,
             snapshot.shelves,
             {
@@ -103,7 +107,8 @@ const enqueueCabinetSave = (snapshot: CabinetSaveSnapshot): Promise<void> => {
                 height: snapshot.height,
                 depth: snapshot.depth,
             }
-        ));
+        );
+        });
 
     CABINET_SAVE_QUEUES.set(snapshot.cabinetId, queuedSave);
     void queuedSave.finally(() => {
@@ -148,8 +153,18 @@ function getLayoutTransientCleanup(state: FridgeStore, shelves: ShelfData[]): Pa
 }
 
 function createLayoutStorePatch(state: FridgeStore, shelves: ShelfData[]): Partial<FridgeStore> | null {
+    if (state.isLoadingCabinet || state.isApplyingCompatibilityPlan || (state.cabinetId && state.loadedCabinetId !== state.cabinetId)) return null;
     const historyChange = createCabinetLayoutHistoryChange(state, shelves);
-    if (!historyChange) return null;
+    if (!historyChange || !shelves.length) return null;
+    if (shelves.length > state.shelves.length && !isCabinetLayoutValid(shelves, state)) return null;
+    if (shelves.length === state.shelves.length && shelves.some(shelf => {
+        const previous = state.shelves.find(s => s.id === shelf.id);
+        const dividersChanged = JSON.stringify(previous?.dividers) !== JSON.stringify(shelf.dividers);
+        return shelf.items.some(item => {
+            const oldItem = state.shelves.flatMap(s => s.items).find(i => i.id === item.id);
+            return (dividersChanged || JSON.stringify(oldItem) !== JSON.stringify(item)) && hasPlacementCollision(shelves, state, item, item.id);
+        });
+    })) return null;
 
     return {
         ...historyChange,
@@ -179,6 +194,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     cabinetId: null,
     cabinetName: '',
     isLoadingCabinet: false,
+    loadedCabinetId: null,
     cabinetSaveError: null,
     autoPlaceResult: null as AutoPlaceResult | null,
     compatibilityPlanPreview: null,
@@ -186,10 +202,17 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     isApplyingCompatibilityPlan: false,
 
     loadCabinet: async (cabinetId: string) => {
+        const pendingSave = CABINET_SAVE_QUEUES.get(cabinetId);
+        if (pendingSave) await pendingSave.catch(() => undefined);
+        const requestSequence = ++cabinetLoadSequence;
         const previousState = get();
         const isSameCabinet = previousState.cabinetId === cabinetId;
         set({
-            isLoadingCabinet: isSameCabinet ? previousState.isLoadingCabinet : true,
+            isLoadingCabinet: true,
+            loadedCabinetId: null,
+            draggedItem: null, draggedTemplate: null, pendingPlacement: null,
+            focusedShelfId: null, selectedReagentId: null, highlightedItemId: null,
+            cabinetAspectRatio: null,
             cabinetId,
             cabinetName: isSameCabinet ? previousState.cabinetName : '',
             shelves: isSameCabinet ? previousState.shelves : [],
@@ -202,9 +225,10 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         });
         try {
             const { shelves, cabinetName, width, height, depth } = await cabinetService.getCabinetDetails(cabinetId);
-            if (get().cabinetId !== cabinetId) return;
+            if (requestSequence !== cabinetLoadSequence || get().cabinetId !== cabinetId) return;
             set({
-                shelves: shelves.length > 0 ? shelves : INITIAL_SHELVES,
+                shelves,
+                loadedCabinetId: cabinetId,
                 cabinetName,
                 cabinetWidth: width,
                 cabinetHeight: height,
@@ -215,9 +239,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             });
 
             // Background: enrich existing items that have CAS but no H-codes
-            const loadedShelves = shelves.length > 0 ? shelves : INITIAL_SHELVES;
-            const queuedIds = GHS_QUEUED_ITEM_IDS_BY_CABINET.get(cabinetId) ?? new Set<string>();
-            GHS_QUEUED_ITEM_IDS_BY_CABINET.set(cabinetId, queuedIds);
+            const loadedShelves = shelves;
             const itemsNeedingEnrichment = loadedShelves
                 .flatMap(s => s.items)
                 .filter(item => item.casNo
@@ -225,23 +247,23 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                     && item.ghsStatus !== 'success'
                     && item.ghsStatus !== 'no_ghs'
                     && item.ghsStatus !== 'not_found'
-                    && item.ghsStatus !== 'invalid_cas'
-                    && !queuedIds.has(item.id));
+                    && item.ghsStatus !== 'invalid_cas');
 
             if (itemsNeedingEnrichment.length > 0) {
-                itemsNeedingEnrichment.forEach((item) => queuedIds.add(item.id));
                 // Enrich sequentially with small delay to respect PubChem rate limits (5 req/sec)
                 (async () => {
                     for (const item of itemsNeedingEnrichment) {
+                        if (requestSequence !== cabinetLoadSequence) break;
                         await get().enrichReagentGHS(item.id);
                         await new Promise(r => setTimeout(r, 250)); // ~4 req/sec
                     }
                 })();
             }
         } catch (err) {
+            if (requestSequence === cabinetLoadSequence) set({ cabinetSaveError: getCabinetSaveErrorMessage(err) });
             console.error('Failed to load cabinet', err);
         } finally {
-            if (get().cabinetId === cabinetId) {
+            if (requestSequence === cabinetLoadSequence) {
                 set({ isLoadingCabinet: false });
             }
         }
@@ -249,7 +271,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
     saveCabinetStrict: async () => {
         const state = get();
-        if (!state.cabinetId) {
+        if (!state.cabinetId || state.isLoadingCabinet || state.isApplyingCompatibilityPlan || state.loadedCabinetId !== state.cabinetId) {
             const error = new Error('Cannot save a cabinet before it has loaded');
             set({ cabinetSaveError: error.message });
             throw error;
@@ -257,6 +279,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
         const snapshot: CabinetSaveSnapshot = {
             cabinetId: state.cabinetId,
+            generation: cabinetLoadSequence,
             shelves: createCabinetLayoutSnapshot(state.shelves),
             width: state.cabinetWidth,
             height: state.cabinetHeight,
@@ -265,8 +288,11 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
         try {
             await enqueueCabinetSave(snapshot);
-            if (get().cabinetId === snapshot.cabinetId) {
-                set({ cabinetSaveError: null });
+            if (get().cabinetId === snapshot.cabinetId && snapshot.generation === cabinetLoadSequence) {
+                const current = get();
+                const ids = new Set(snapshot.shelves.flatMap(s => [s.id, ...s.items.map(i => i.id)]));
+                const containsDeleted = [...current.layoutUndoStack, ...current.layoutRedoStack].some(layout => layout.some(s => !ids.has(s.id) || s.items.some(i => !ids.has(i.id))));
+                set({ cabinetSaveError: null, ...(containsDeleted ? { layoutUndoStack: [], layoutRedoStack: [] } : {}) });
             }
         } catch (error) {
             if (get().cabinetId === snapshot.cabinetId) {
@@ -283,6 +309,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     setMode: (mode) => set(state => ({
         mode,
         focusedShelfId: mode === 'PLACE' ? state.focusedShelfId : null,
+        draggedItem: null, draggedTemplate: null, pendingPlacement: null,
     })),
     setFocusedShelfId: (id) => set({ focusedShelfId: id }),
     setSearchQuery: (query) => set({ searchQuery: query }),
@@ -292,6 +319,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
     setCabinetDimensions: (width, height) => {
         const state = get();
+        if (state.isLoadingCabinet || state.isApplyingCompatibilityPlan) return;
         const ratio = state.cabinetAspectRatio;
         let newWidth = width ?? state.cabinetWidth;
         let newHeight = height ?? state.cabinetHeight;
@@ -301,6 +329,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             else if (height != null) newWidth = newHeight * ratio;
         }
 
+        const dimensions = { ...state, cabinetWidth: Math.max(4, Math.min(20, Math.round(newWidth))), cabinetHeight: Math.max(2, Math.min(15, Math.round(newHeight))) };
+        if (!isCabinetLayoutValid(state.shelves, dimensions)) { set({ cabinetSaveError: '현재 시약이 들어갈 공간이 부족합니다.' }); return; }
         set({
             cabinetWidth: Math.max(4, Math.min(20, Math.round(newWidth))),
             cabinetHeight: Math.max(2, Math.min(15, Math.round(newHeight))),
@@ -308,10 +338,13 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         });
     },
 
-    setCabinetDepth: (depth) => set({
-        cabinetDepth: Math.max(1, Math.min(4, Math.round(depth))),
-        ...resetCompatibilityPlanPreview(),
-    }),
+    setCabinetDepth: (depth) => {
+        const state = get();
+        if (state.isLoadingCabinet || state.isApplyingCompatibilityPlan) return;
+        const cabinetDepth = Math.max(1, Math.min(4, Math.round(depth)));
+        if (!isCabinetLayoutValid(state.shelves, { ...state, cabinetDepth })) { set({ cabinetSaveError: '현재 시약이 들어갈 공간이 부족합니다.' }); return; }
+        set({ cabinetDepth, ...resetCompatibilityPlanPreview() });
+    },
 
     setCabinetAspectRatio: (ratio) => set({
         cabinetAspectRatio: ratio,
@@ -319,59 +352,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     }),
 
     checkCollision: (shelfId, position, width, depthPosition = 50, templateType = 'A', ignoreItemId) => {
-        const shelf = get().shelves.find(s => s.id === shelfId);
-        if (!shelf) return true; // Invalid shelf
-
-        const start = position;
-        const end = position + width;
-
-        if (start < 0 || end > 100) return true; // Out of bounds
-
         const state = get();
-        const cabinetWidth = state.cabinetWidth;
-        const cabinetDepth = state.cabinetDepth;
-
-        // Target item depth/width range (centered)
-        const targetVisualWidthPct = getItemVisualWidthPct(
-            templateType as keyof typeof CONTAINER_BASE_WIDTHS,
-            width,
-            cabinetWidth
-        );
-        const startVis = position + (width / 2) - (targetVisualWidthPct / 2);
-        const endVis = position + (width / 2) + (targetVisualWidthPct / 2);
-
-        const targetDepthPct = getItemDepthPct(
-            templateType as keyof typeof CONTAINER_BASE_WIDTHS,
-            width,
-            cabinetDepth
-        );
-        const targetZStart = depthPosition - (targetDepthPct / 2);
-        const targetZEnd = depthPosition + (targetDepthPct / 2);
-
-        // Check against other items
-        for (const item of shelf.items) {
-            if (item.id === ignoreItemId) continue;
-
-            // X-axis Overlap Check
-            const itemVisualWidthPct = getItemVisualWidthPct(item.template, item.width, cabinetWidth);
-            const itemStartVis = item.position + (item.width / 2) - (itemVisualWidthPct / 2);
-            const itemEndVis = item.position + (item.width / 2) + (itemVisualWidthPct / 2);
-
-            const xOverlap = !(endVis <= itemStartVis || startVis >= itemEndVis);
-
-            if (xOverlap) {
-                // Check Z-axis Overlap
-                const itemDepthPct = getItemDepthPct(item.template, item.width, cabinetDepth);
-                const itemZStart = (item.depthPosition ?? 50) - (itemDepthPct / 2);
-                const itemZEnd = (item.depthPosition ?? 50) + (itemDepthPct / 2);
-
-                const zOverlap = !(targetZEnd <= itemZStart || targetZStart >= itemZEnd);
-
-                if (zOverlap) return true;
-            }
-        }
-
-        return false;
+        return hasPlacementCollision(state.shelves, state, { shelfId, position, width, depthPosition, template: templateType as ReagentPlacement['template'] }, ignoreItemId);
     },
 
     addShelf: () => set(state => {
@@ -385,7 +367,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     }),
 
     removeShelf: (shelfId) => set(state => {
-        if (state.shelves.length === 0) return state;
+        if (state.shelves.length <= 1) return state;
         const next = state.shelves.filter(s => s.id !== shelfId);
         return createLayoutStorePatch(state, next.map((s, i) => ({ ...s, level: i }))) ?? state;
     }),
@@ -436,6 +418,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     })),
 
     placeReagent: (shelfId, itemData) => {
+        if (get().isApplyingCompatibilityPlan || (get().cabinetId && get().loadedCabinetId !== get().cabinetId) || get().isLoadingCabinet || get().checkCollision(shelfId, itemData.position, itemData.width, itemData.depthPosition, itemData.template)) return false;
 
         const newItem: ReagentPlacement = {
             ...itemData,
@@ -477,6 +460,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         if (!item || !oldShelfId) return false;
 
         const depthPos = newDepthPosition ?? item.depthPosition ?? 50;
+        if (store.isApplyingCompatibilityPlan || (store.cabinetId && store.loadedCabinetId !== store.cabinetId) || store.isLoadingCabinet || store.checkCollision(newShelfId, newPosition, item.width, depthPos, item.template, id)) return false;
 
         set(state => ({
             ...(createLayoutStorePatch(state, state.shelves.map(s => {
@@ -549,6 +533,8 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     },
 
     buildCompatibilityPlan: async () => {
+        const sequence = cabinetLoadSequence;
+        if (get().isLoadingCabinet || (get().cabinetId && get().loadedCabinetId !== get().cabinetId)) return null;
         set({
             isBuildingCompatibilityPlan: true,
             ...resetCompatibilityPlanPreview(),
@@ -565,10 +551,12 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                     && item.ghsStatus !== 'invalid_cas');
 
             for (const item of itemsNeedingEnrichment) {
+                if (sequence !== cabinetLoadSequence) return null;
                 await get().enrichReagentGHS(item.id);
                 await new Promise((resolve) => setTimeout(resolve, 250));
             }
 
+            if (sequence !== cabinetLoadSequence) return null;
             const refreshedState = get();
             const preview = buildCabinetAutoLayoutPlan(
                 refreshedState.shelves,
@@ -586,18 +574,19 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             console.error('Failed to build compatibility plan', err);
             return null;
         } finally {
-            set({ isBuildingCompatibilityPlan: false });
+            if (sequence === cabinetLoadSequence) set({ isBuildingCompatibilityPlan: false });
         }
     },
 
     applyCompatibilityPlan: async () => {
         const stateBeforeSave = get();
         const preview = stateBeforeSave.compatibilityPlanPreview;
-        if (!preview?.canApply || !stateBeforeSave.cabinetId) return false;
+        if (!preview?.canApply || !stateBeforeSave.cabinetId || stateBeforeSave.isLoadingCabinet || stateBeforeSave.loadedCabinetId !== stateBeforeSave.cabinetId || !isCabinetLayoutValid(preview.plannedShelves, stateBeforeSave)) return false;
 
         const plannedShelves = createCabinetLayoutSnapshot(preview.plannedShelves);
         const snapshot: CabinetSaveSnapshot = {
             cabinetId: stateBeforeSave.cabinetId,
+            generation: cabinetLoadSequence,
             shelves: plannedShelves,
             width: stateBeforeSave.cabinetWidth,
             height: stateBeforeSave.cabinetHeight,
@@ -609,9 +598,12 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         try {
             await enqueueCabinetSave(snapshot);
 
-            if (get().cabinetId === snapshot.cabinetId) {
+            if (get().cabinetId === snapshot.cabinetId && snapshot.generation === cabinetLoadSequence) {
                 set(currentState => ({
-                    ...(createLayoutStorePatch(currentState, plannedShelves) ?? resetCompatibilityPlanPreview()),
+                    ...(createLayoutStorePatch({ ...currentState, isApplyingCompatibilityPlan: false }, plannedShelves.map(s => ({ ...s, items: s.items.map(item => {
+                        const latest = currentState.shelves.flatMap(shelf => shelf.items).find(i => i.id === item.id);
+                        return { ...item, ...latest, shelfId: item.shelfId, position: item.position, depthPosition: item.depthPosition, width: item.width, template: item.template };
+                    }) }))) ?? resetCompatibilityPlanPreview()),
                     cabinetSaveError: null,
                 }));
             }
@@ -620,7 +612,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             console.error('Failed to apply compatibility plan', err);
             return false;
         } finally {
-            set({ isApplyingCompatibilityPlan: false });
+            if (snapshot.generation === cabinetLoadSequence) set({ isApplyingCompatibilityPlan: false });
         }
     },
 
@@ -630,6 +622,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
     autoPlaceReagent: (itemData, options) => {
         const state = get();
+        if (state.isApplyingCompatibilityPlan || state.isLoadingCabinet || (state.cabinetId && state.loadedCabinetId !== state.cabinetId)) return null;
         const width = itemData.width;
         const template = itemData.template;
         const STEP = 2; // scan in 2% increments
@@ -685,6 +678,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
                         // Set focusedShelfId in next microtask so FridgeScene's useEffect picks up the change
                         queueMicrotask(() => {
+                            if (!get().shelves.some(s => s.items.some(i => i.id === newItem.id))) return;
                             set({ focusedShelfId: shelf.id });
                         });
 
@@ -713,6 +707,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
 
     placeReagentNear: (referenceItemId, itemData) => {
         const state = get();
+        if (state.isLoadingCabinet || state.isApplyingCompatibilityPlan || (state.cabinetId && state.loadedCabinetId !== state.cabinetId)) return null;
         const referenceShelf = state.shelves.find((shelf) =>
             shelf.items.some((item) => item.id === referenceItemId)
         );
@@ -726,7 +721,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             cabinetDepth: state.cabinetDepth,
         });
 
-        if (!slot) return null;
+        if (!slot || get().checkCollision(slot.shelfId, slot.position, itemData.width, slot.depthPosition, itemData.template)) return null;
 
         const targetShelf = state.shelves.find((shelf) => shelf.id === slot.shelfId);
         if (!targetShelf) return null;
@@ -759,6 +754,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         }));
 
         queueMicrotask(() => {
+            if (!get().shelves.some(s => s.items.some(i => i.id === newItem.id))) return;
             set({ focusedShelfId: slot.shelfId });
         });
 
@@ -777,7 +773,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     },
 
     enrichReagentGHS: async (reagentId: string) => {
-        if (GHS_IN_FLIGHT_ITEM_IDS.has(reagentId)) return;
+
         // Find the reagent
         const state = get();
         let targetItem: ReagentPlacement | undefined;
@@ -786,7 +782,13 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             if (found) { targetItem = found; break; }
         }
         if (!targetItem) return;
-        GHS_IN_FLIGHT_ITEM_IDS.add(reagentId);
+        const sequence = cabinetLoadSequence;
+        const cabinetId = state.cabinetId;
+        const requestKey = `${sequence}:${cabinetId}:${reagentId}:${targetItem.casNo ?? ''}:${targetItem.name}`;
+        if (GHS_IN_FLIGHT_ITEM_IDS.has(requestKey)) return;
+        GHS_IN_FLIGHT_ITEM_IDS.add(requestKey);
+        const stillCurrent = () => sequence === cabinetLoadSequence && get().cabinetId === cabinetId
+            && get().shelves.some(s => s.items.some(i => i.id === reagentId && i.casNo === targetItem!.casNo && i.name === targetItem!.name));
 
         set(st => ({
             shelves: st.shelves.map(s => ({
@@ -803,6 +805,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             const result = targetItem.casNo
                 ? await lookupGHSByCAS(targetItem.casNo, { labId: currentLabId })
                 : await lookupGHSByIdentity({ name: targetItem.name }, { labId: currentLabId });
+            if (!stillCurrent()) return;
             const recoveredCas = 'casNumber' in result && typeof result.casNumber === 'string'
                 ? result.casNumber
                 : undefined;
@@ -829,18 +832,17 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 ...resetCompatibilityPlanPreview(),
             }));
 
-            if (get().cabinetId) {
-                try {
-                    await get().saveCabinet();
-                } catch (saveError) {
-                    console.warn('[GHS Enrich] Failed to persist GHS result for', targetItem.casNo, saveError);
-                }
+            if (cabinetId && get().loadedCabinetId === cabinetId) {
+                const item = get().shelves.flatMap(s => s.items).find(i => i.id === reagentId)!;
+                try { await cabinetService.saveReagentGHS(cabinetId, item, targetItem.casNo, targetItem.name); }
+                catch (error) { console.warn('Failed to persist item GHS:', error); }
             }
 
             console.log(
                 `[GHS Enrich] ${targetItem.name} (CAS: ${targetItem.casNo}) → H-codes: [${result.hCodes.join(', ')}]`
             );
         } catch (err) {
+            if (!stillCurrent()) return;
             set(st => ({
                 shelves: st.shelves.map(s => ({
                     ...s,
@@ -857,32 +859,21 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 })),
                 ...resetCompatibilityPlanPreview(),
             }));
-            if (get().cabinetId) {
-                try {
-                    await get().saveCabinet();
-                } catch (saveError) {
-                    console.warn('[GHS Enrich] Failed to persist lookup failure for', targetItem.casNo, saveError);
-                }
-            }
             console.warn('[GHS Enrich] Failed for', targetItem.casNo, err);
         } finally {
-            GHS_IN_FLIGHT_ITEM_IDS.delete(reagentId);
+            GHS_IN_FLIGHT_ITEM_IDS.delete(requestKey);
         }
     },
 
-    updateReagent: (id, updates) => set(state => ({
-        shelves: state.shelves.map(s => {
-            const hasItem = s.items.some(i => i.id === id);
-            if (!hasItem) return s;
-            return {
-                ...s,
-                items: s.items.map(item =>
-                    item.id === id ? { ...item, ...updates } : item
-                )
-            };
-        }),
-        ...resetCompatibilityPlanPreview(),
-    })),
+    updateReagent: (id, updates) => {
+        const state = get();
+        const original = state.shelves.flatMap(s => s.items).find(i => i.id === id);
+        if (!original || state.isLoadingCabinet || state.isApplyingCompatibilityPlan || (state.cabinetId && state.loadedCabinetId !== state.cabinetId)) return false;
+        const next = { ...original, ...updates, id: original.id, shelfId: original.shelfId };
+        if (state.checkCollision(next.shelfId, next.position, next.width, next.depthPosition, next.template, id)) return false;
+        set({ shelves: state.shelves.map(s => ({ ...s, items: s.items.map(i => i.id === id ? next : i) })), ...resetCompatibilityPlanPreview() });
+        return true;
+    },
 
     sortShelves: (criteria: 'name' | 'type') => {
         const currentState = get();
@@ -1109,6 +1100,9 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             }
         }
 
+        const beforeIds = currentState.shelves.flatMap(s => s.items.map(i => i.id));
+        const afterIds = Object.values(shelfResults).flat().map(i => i.id);
+        if (beforeIds.length !== afterIds.length || new Set(afterIds).size !== beforeIds.length || beforeIds.some(id => !afterIds.includes(id))) return;
         // 5. Update state
         set(state => ({
             ...(createLayoutStorePatch(state, currentState.shelves.map(shelf => ({

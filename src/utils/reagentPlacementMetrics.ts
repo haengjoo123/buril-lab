@@ -8,24 +8,24 @@ export const CONTAINER_BASE_WIDTHS: Record<ReagentTemplateType, number> = {
 };
 
 export const TEMPLATE_DEPTHS: Record<ReagentTemplateType, number> = {
-    A: 0.44,
-    B: 0.35,
-    C: 0.44,
-    D: 0.44,
+    A: 0.37934,
+    B: 0.44560,
+    C: 0.48572,
+    D: 0.40690,
 };
 
 export const MESH_BASE_WIDTHS: Record<ReagentTemplateType, number> = {
-    A: 0.44,
-    B: 0.5,
-    C: 0.44,
-    D: 0.5,
+    A: 0.37088,
+    B: 0.44455,
+    C: 0.48773,
+    D: 0.40191,
 };
 
 export const TEMPLATE_HEIGHTS: Record<ReagentTemplateType, number> = {
-    A: 1.05,
-    B: 1.15,
-    C: 0.95,
-    D: 1.0,
+    A: 0.87685,
+    B: 0.99359,
+    C: 0.99768,
+    D: 0.99735,
 };
 
 export interface ShelfZone {
@@ -111,7 +111,7 @@ export function getShelfZones(
         }
     }
 
-    if (zones.length === 0) {
+    if (zones.length === 0 && dividers.length === 0) {
         return [{ xStart: margin, xEnd: 100 - margin }];
     }
 

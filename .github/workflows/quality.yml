@@ -190,7 +190,7 @@ jobs:
 
       - name: Run SQL permission tests
         if: steps.database-contract.outputs.enabled == 'true'
-        run: supabase test db supabase/tests/baseline_permissions.sql
+        run: supabase test db supabase/tests
 
       - name: Stop isolated local Supabase
         if: always() && steps.database-contract.outputs.enabled == 'true'
@@ -280,7 +280,7 @@ jobs:
         if: steps.browser-contract.outputs.enabled == 'true'
         run: npx playwright install --with-deps chromium
 
-      - name: Verify the reviewed Ops3 API-boundary release scope
+      - name: Verify the reviewed current release scope
         if: steps.browser-contract.outputs.enabled == 'true'
         run: node scripts/verify-ops3-release-scope.mjs
 

@@ -32,6 +32,38 @@ const cabinetId = '22222222-2222-4222-8222-222222222222';
 const optimizedFile = new File(['optimized'], 'cabinet-photo-optimized.webp', { type: 'image/webp' });
 const originalFile = new File(['original'], 'large-camera-photo.jpg', { type: 'image/jpeg' });
 
+describe('versioned cabinet snapshots', () => {
+    it('creates the cabinet and its initial shelves in one transaction', async () => {
+        rpcMock.mockReset();
+        rpcMock.mockResolvedValueOnce({ data: { id: cabinetId }, error: null });
+        expect(await cabinetService.createCabinet('New cabinet')).toEqual({ id: cabinetId });
+        expect(rpcMock).toHaveBeenCalledOnce();
+        expect(rpcMock).toHaveBeenCalledWith('create_cabinet_v2', {
+            p_name: 'New cabinet', p_lab_id: '33333333-3333-4333-8333-333333333333',
+            p_width: 5, p_height: 9, p_depth: 2, p_location: null,
+        });
+    });
+
+    it('requires loading the cabinet and sends explicit deletion IDs from that snapshot', async () => {
+        const id = '77777777-7777-4777-8777-777777777777';
+        rpcMock.mockReset();
+        await expect(cabinetService.saveCabinetState(id, [], { width: 5, height: 9, depth: 2 })).rejects.toThrow('불러온');
+        expect(rpcMock).not.toHaveBeenCalled();
+        rpcMock.mockResolvedValueOnce({ data: { cabinet: { name: 'Test', width: 5, height: 9, depth: 2, layout_revision: 12 }, shelves: [{ id: 'shelf', level: 0, dividers: [] }], items: [{ id: 'item', shelf_id: 'shelf', name: 'Test', width: 8, position: 30, depth_position: null, template: 'A' }] }, error: null });
+        const details = await cabinetService.getCabinetDetails(id);
+        expect(details.shelves[0].items[0].depthPosition).toBe(50);
+        rpcMock.mockResolvedValueOnce({ data: 13, error: null });
+        await cabinetService.saveCabinetState(id, [], { width: 5, height: 9, depth: 2 });
+        expect(rpcMock).toHaveBeenLastCalledWith('save_cabinet_state_v2', expect.objectContaining({ p_expected_revision: 12, p_removed_shelf_ids: ['shelf'], p_removed_item_ids: ['item'] }));
+    });
+
+    it('uses the server clock for listing trash and never requests permanent deletion from the browser', async () => {
+        rpcMock.mockResolvedValueOnce({ data: [], error: null });
+        expect(await cabinetService.getTrash(cabinetId)).toEqual([]);
+        expect(rpcMock).toHaveBeenLastCalledWith('get_cabinet_trash_v2', { p_cabinet_id: cabinetId });
+    });
+});
+
 describe('atomic cabinet activity audit', () => {
     beforeEach(() => {
         rpcMock.mockReset();

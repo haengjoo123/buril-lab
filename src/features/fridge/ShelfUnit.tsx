@@ -1,3 +1,4 @@
+import { getItemDepthPct, getItemVisualWidthPct } from '../../utils/reagentPlacementMetrics';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useRef, useState } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -59,7 +60,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
 
     const getPlacementCandidate = (e: ThreeEvent<PointerEvent>) => {
         const dragWidth = draggedTemplate?.width ?? draggedPlacement?.width;
-        if (!draggedTemplate && !isPlacedItemDrag) return;
+        if (useFridgeStore.getState().mode !== 'PLACE' || (!draggedTemplate && !isPlacedItemDrag)) return;
         if (!dragWidth) return null;
 
         const localX = e.point.x - position[0];
@@ -70,7 +71,11 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         if (pct + dragWidth > 100) pct = 100 - dragWidth;
 
         const depthPct = ((localZ + shelfDepth / 2) / shelfDepth) * 100;
-        const depthClamped = Math.max(0, Math.min(100, depthPct));
+        const template = draggedTemplate?.type ?? draggedPlacement!.template;
+        const halfX = getItemVisualWidthPct(template, dragWidth, shelfWidth) / 2;
+        const halfZ = getItemDepthPct(template, dragWidth, shelfDepth) / 2;
+        pct = Math.max(0, 1 + halfX - dragWidth / 2, Math.min(pct, 100 - dragWidth, 99 - halfX - dragWidth / 2));
+        const depthClamped = Math.max(1 + halfZ, Math.min(99 - halfZ, depthPct));
 
         return {
             position: pct,
@@ -82,7 +87,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
     const updatePlacementPreview = (pct: number, depthPosition: number, dragWidth: number) => {
         setGhostPos(pct);
         setGhostDepthPos(depthPosition);
-        setIsValid(true);
+        setIsValid(!useFridgeStore.getState().checkCollision(shelf.id, pct, dragWidth, depthPosition, draggedTemplate?.type ?? draggedPlacement?.template, draggedItem?.id));
 
         // 모바일에서는 hover가 없으므로 탭한 지점을 즉시 프리뷰로 보여줍니다.
         if (draggedTemplate?.chemicalData) {
@@ -192,8 +197,9 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         }
         e.stopPropagation();
 
+        if (useFridgeStore.getState().mode !== 'PLACE' || useFridgeStore.getState().checkCollision(shelf.id, nextGhostPos, draggedTemplate?.width ?? draggedPlacement?.width ?? 0, nextGhostDepthPos, draggedTemplate?.type ?? draggedPlacement?.template, draggedItem?.id)) return;
         if (isPlacedItemDrag && draggedItem) {
-            moveReagent(draggedItem.id, shelf.id, nextGhostPos, nextGhostDepthPos);
+            if (!moveReagent(draggedItem.id, shelf.id, nextGhostPos, nextGhostDepthPos)) return;
             // 시약 이동 후 자동 저장 트리거
             void useFridgeStore.getState().saveCabinet().catch((error) => {
                 console.error('Failed to save dragged cabinet item:', error);

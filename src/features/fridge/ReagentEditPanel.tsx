@@ -307,21 +307,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             casSuggestion.appliedSuggestion?.confidence,
         );
 
-        const updatePayload = {
-            name,
-            memo: notes || undefined,
-            expiry_date: expiryDate || undefined,
-            manufacturer_date_type: manufacturerDateType,
-            received_date: receivedDate || undefined,
-            opened_date: openedDate || undefined,
-            capacity: capacity || undefined,
-            brand: brand || undefined,
-            product_number: productNumber || undefined,
-            cas_number: casNo || undefined,
-            remaining_percent: remainingPercent,
-        };
-
-        updateReagent(selectedReagentId, {
+        const updated = updateReagent(selectedReagentId, {
             name,
             notes,
             expiryDate: expiryDate || undefined,
@@ -344,35 +330,16 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             } : {}),
         });
 
+        if (!updated) { setDisposalError('공간이 부족하거나 다른 시약과 겹칩니다. 크기를 조정해 주세요.'); return; }
         // If CAS changed and now has a value, trigger PubChem enrichment
         if (casChanged && casNo) {
             const enrichStore = useFridgeStore.getState();
             enrichStore.enrichReagentGHS(selectedReagentId);
         }
 
-        // 감사로그를 남기기 위해 cabinet_item 업데이트 RPC를 먼저 호출합니다.
+        // The versioned save commits layout, linked metadata, and audit together.
         setIsSaving(true);
         try {
-            await inventoryService.updateItem(selectedReagentId, updatePayload, 'cabinet_item');
-            if (selectedItem.linkedInventoryItemId) {
-                await inventoryService.updateItem(selectedItem.linkedInventoryItemId, {
-                    ...updatePayload,
-                    storage_type: 'cabinet',
-                    cabinet_id: cabinetId || undefined,
-                }, 'inventory');
-            } else if (casChanged) {
-                await inventoryService.syncLinkedCabinetCas({
-                    source: 'cabinet_item',
-                    sourceId: selectedReagentId,
-                    cabinetId,
-                    name: selectedItem.name,
-                    brand: selectedItem.brand,
-                    productNumber: selectedItem.productNumber,
-                    capacity: selectedItem.capacity,
-                    previousCasNumber: selectedItem.casNo,
-                    nextCasNumber: casNo,
-                });
-            }
             await saveCabinet();
             if (shouldTrackCommerceUpdate) {
                 await analyticsService.trackCommerceIntentEvent({
@@ -394,6 +361,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             }
             setSelectedReagentId(null);
         } catch (err) {
+            setDisposalError(err instanceof Error ? err.message : '저장하지 못했습니다. 다시 시도해 주세요.');
             console.error('Failed to save reagent edits:', err);
         } finally {
             setIsSaving(false);
@@ -401,6 +369,20 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
     };
 
     const expiryStatus = getExpiryStatus(hasManufacturerDate(manufacturerDateType) ? expiryDate : null);
+
+    const handleTrash = async () => {
+        if (isSaving || !selectedReagentId || !cabinetId) return;
+        const previous = useFridgeStore.getState().shelves;
+        setIsSaving(true); setDisposalError(null);
+        try {
+            removeReagent(selectedReagentId);
+            await saveCabinet();
+            setSelectedReagentId(null);
+        } catch (reason) {
+            if (useFridgeStore.getState().cabinetId === cabinetId) useFridgeStore.setState({ shelves: previous });
+            setDisposalError(reason instanceof Error ? reason.message : '휴지통으로 이동하지 못했습니다.');
+        } finally { setIsSaving(false); }
+    };
 
     const handleDeleteClick = () => {
         setDisposalError(null);
@@ -473,7 +455,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                 if (actionResult.receipt.cabinetItemRemoved) {
                     // The RPC already removed the database rows. Only mirror that
                     // committed result in local cabinet state; do not save again.
-                    removeReagent(selectedReagentId);
+                    await useFridgeStore.getState().loadCabinet(cabinetId!);
                 }
                 usageCompletionRequestRef.current = null;
             }
@@ -790,6 +772,8 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                     </>
                 ) : (
                     <>
+                        {disposalError && <p role="alert" className="p-3 text-sm text-red-600">{disposalError}</p>}
+                        <button type="button" disabled={isSaving} onClick={() => void handleTrash()} className="mx-3 my-2 rounded-lg border px-3 py-2 text-sm text-red-600 disabled:opacity-50">휴지통으로 이동 · 10일 뒤 완전 삭제</button>
                         {/* Scrollable Content */}
                         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 text-slate-800 dark:text-slate-100">
                             {/* Expiry Alert Banner — shown at top only for urgent states */}

@@ -57,7 +57,7 @@ export function verifyAcceleratedOps311Release(root = fileURLToPath(new URL('../
     git(root, ['merge-base', '--is-ancestor', sha, 'HEAD'])
   }
 
-  const tracked = git(root, ['ls-files']).split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
+  const tracked = git(root, ['ls-files', '-z']).split('\0').filter(Boolean)
   verifyNoOps12Paths(tracked)
 
   const read = (relativePath) => readFileSync(path.join(root, relativePath), 'utf8')
