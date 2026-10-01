@@ -39,7 +39,7 @@ export async function downloadRowsAsXlsx(
     const { Workbook } = await import('exceljs');
     const workbook = new Workbook();
     const worksheet = workbook.addWorksheet(sheetName);
-    const headers = rows[0] ? Object.keys(rows[0]) : [];
+    const headers = [...new Set(rows.flatMap((row) => Object.keys(row)))];
 
     worksheet.columns = headers.map((header) => ({
         header,

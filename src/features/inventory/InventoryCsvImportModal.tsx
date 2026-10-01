@@ -1,4 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { isInventoryImportV2Enabled } from '../../config/featureFlags';
+import { InventoryImportModal } from './InventoryImportModal';
+import { parseImportQuantity } from './import/normalize';
 import { 
     Upload, 
     Download, 
@@ -143,8 +146,6 @@ const parseOptionalPositiveInteger = (raw: string): number | null => {
     return Number.isInteger(value) && value > 0 ? value : null;
 };
 
-// CSV support has been removed in favor of Excel (.xlsx)
-
 const toIsoDate = (raw: string): string | null => {
     return normalizeExpiryDate(raw);
 };
@@ -165,7 +166,10 @@ const parseManufacturerDateType = (raw: string): ManufacturerDateType | null => 
     return isManufacturerDateType(raw) ? raw : null;
 };
 
-export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
+export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (props) => isInventoryImportV2Enabled
+    ? <InventoryImportModal {...props} /> : <LegacyInventoryCsvImportModal {...props} />;
+
+const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
     isOpen,
     items,
     locations,
@@ -360,8 +364,8 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
             ));
         }
 
-        const quantity = quantityRaw ? Number.parseInt(quantityRaw, 10) : 1;
-        if (!Number.isInteger(quantity) || quantity < 1) {
+        const quantity = quantityRaw ? parseImportQuantity(quantityRaw) : 1;
+        if (quantity === null || !Number.isInteger(quantity) || quantity < 1) {
             reasons.push(t('inventory_csv_reason_quantity_invalid'));
         }
 
@@ -479,7 +483,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                 brand: brand || undefined,
                 product_number: productNumber || undefined,
                 cas_number: casNumber || undefined,
-                quantity,
+                quantity: quantity ?? undefined,
                 capacity: capacity || undefined,
                 storage_type: storageType || 'other',
                 storage_location_id: storageType === 'other' ? (locationId || undefined) : undefined,
@@ -681,7 +685,7 @@ export const InventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = (
                         const d = String(v.getDate()).padStart(2, '0');
                         return `${y}-${m}-${d}`;
                     }
-                    return String(v || '').trim();
+                    return String(v ?? '').trim();
                 });
 
                 rawRows.push({

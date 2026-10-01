@@ -115,10 +115,10 @@ export function verifyOps7ApplicationSources({ labService, joinHandler, cabinetS
 export function verifyOps7ContractPreparation(root = fileURLToPath(new URL('../', import.meta.url))) {
   git(root, ['cat-file','-e',`${OPS7_PREPARATION_BASE_SHA}^{commit}`])
   git(root, ['merge-base','--is-ancestor',OPS7_PREPARATION_BASE_SHA,'HEAD'])
-  const changed = git(root, ['diff','--name-only',OPS7_PREPARATION_BASE_SHA,'--'])
-    .split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
-  const untracked = git(root, ['ls-files','--others','--exclude-standard','--'])
-    .split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
+  const changed = git(root, ['diff','--name-only', '-z',OPS7_PREPARATION_BASE_SHA,'--'])
+    .split('\0').filter(Boolean)
+  const untracked = git(root, ['ls-files','-z', '--others','--exclude-standard','--'])
+    .split('\0').filter(Boolean)
   const paths = [...new Set([...changed,...untracked])].sort()
   verifyOps7Paths(paths)
   for (const candidate of paths) {

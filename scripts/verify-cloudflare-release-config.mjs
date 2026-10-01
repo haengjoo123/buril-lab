@@ -67,7 +67,7 @@ const STAGING_STORAGE_BACKUP_ACCEPTANCE_WORKFLOW_SHA256 = '98ed65a9c1934a4c0583d
 const PINNED_RELEASE_WORKFLOW_SHA256 = Object.freeze({
   staging: STAGING_RELEASE_WORKFLOW_SHA256,
   production: '2cd59ed92644fe7edea197fdf91ecc9d2ff761ac651df6235475541453d4ec82',
-  quality: '0d457dda7b5ee48057de3591de3a1fe169116569a96cc19bdebdf07f9406dead',
+  quality: 'eca854ed2be0b4db894f0d15ce69cf4b568a981a59c5dc3dd70488007ef80414',
   'ios-testflight.yml': '02b5d6c03f8abdb5ebee17fd823e77fed8ec4560a332a6ead20915af6ade7f87',
   'verify-ops3-staging-live.yml': '2eb9d749d98e319b5434fdfb3b8a5a3621ad83552525dc683fcf6010d09b7727',
   'verify-staging-ephemeral-credentials.yml': STAGING_CREDENTIAL_INJECTION_PROBE_WORKFLOW_SHA256,

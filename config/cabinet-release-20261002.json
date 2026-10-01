@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "baseSha": "d99fe93c4ae09674cda01bd24b2a463ac23686c2",
+  "scope": "inventory-import-and-cabinet-trash",
+  "ops12Included": false,
+  "requiresSameShaQuality": true,
+  "requiresSameShaStaging": true,
+  "requiresFreshProductionBackup": true,
+  "requiresHostedDatabaseAcceptance": true,
+  "requiresDeletionSchedulerAcceptance": true
+}

@@ -11,6 +11,7 @@ import { supabase } from '../../services/supabaseClient';
 import { AppSelect } from '../../components/AppSelect';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { ReagentDateFields } from '../../components/ReagentDateFields';
+import { readableImportAttributes } from './import/sourceAttributes';
 
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
@@ -904,6 +905,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                                     />
                                 </div>
 
+                                {readableImportAttributes(initialData?.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">가져온 원본 추가정보</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(initialData?.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
                                 {initialData && (
                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                                         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">

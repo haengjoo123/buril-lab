@@ -33,6 +33,7 @@ import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
 import { InventoryFormModal } from './InventoryFormModal';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
+import { exportImportAttributes, readableImportAttributes } from './import/sourceAttributes';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
 import { CustomDialog } from '../../components/CustomDialog';
 import { useTranslation } from 'react-i18next';
@@ -1081,7 +1082,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 [t('manufacturer_date_label')]: getTrackedManufacturerDate(item) || '',
                 [t('inventory_received_date')]: item.received_date || '',
                 [t('inventory_opened_date')]: item.opened_date || '',
-                [t('inventory_memo')]: item.memo || ''
+                [t('inventory_memo')]: item.memo || '',
+                ...exportImportAttributes(item.source_attributes),
             };
         });
 
@@ -2551,6 +2553,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             </div>
                         </div>
 
+                        {readableImportAttributes(selectedDesktopItem.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">가져온 원본 추가정보</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(selectedDesktopItem.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <button
                                 type="button"
@@ -2742,7 +2745,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
             <InventoryCsvImportModal
                 isOpen={isCsvImportOpen}
-                items={visibleItems}
+                items={items}
                 locations={locations}
                 cabinets={cabinets}
                 onClose={() => setIsCsvImportOpen(false)}

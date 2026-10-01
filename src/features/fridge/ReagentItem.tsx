@@ -1,4 +1,6 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import { ModelLoadBoundary, ModelPlaceholder } from './ModelLoadBoundary';
+import { CabinetModelReadyContext } from './cabinetModelReadyContext';
+import React, { Suspense, useContext, useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { ReagentPlacement } from '../../types/fridge';
@@ -73,54 +75,21 @@ export const ItemGeometry: React.FC<{ type: string; defaultColor: string; opacit
         color: defaultColor
     };
 
-    switch (type) {
-        case 'A': // 갈색 병 GLB 모델
-            return (
-                <group scale={scale}>
-                    <BrownBottleModel
-                        onMaterialsChange={(mats) => {
-                            materialsRef.current = mats;
-                        }}
-                        materialProps={materialProps}
-                    />
-                </group>
-            );
-        case 'B': // 플라스틱 용기 GLB 모델
-            return (
-                <group scale={scale}>
-                    <PlasticBottleModel
-                        onMaterialsChange={(mats) => {
-                            materialsRef.current = mats;
-                        }}
-                        materialProps={materialProps}
-                    />
-                </group>
-            );
-        case 'C': // 유리병 GLB 모델
-            return (
-                <group scale={scale}>
-                    <GlassBottleModel
-                        onMaterialsChange={(mats) => {
-                            materialsRef.current = mats;
-                        }}
-                        materialProps={materialProps}
-                    />
-                </group>
-            );
-        case 'D': // 사각병 GLB 모델
-            return (
-                <group scale={scale}>
-                    <SquareBottleModel
-                        onMaterialsChange={(mats) => {
-                            materialsRef.current = mats;
-                        }}
-                        materialProps={materialProps}
-                    />
-                </group>
-            );
-        default:
-            return null;
-    }
+    const model = {
+        A: { Component: BrownBottleModel, path: '/models/reagents/brown bottle.glb' },
+        B: { Component: PlasticBottleModel, path: '/models/reagents/plastic bottle.glb' },
+        C: { Component: GlassBottleModel, path: '/models/reagents/glass.glb' },
+        D: { Component: SquareBottleModel, path: '/models/reagents/square bottle.glb' },
+    }[type as 'A' | 'B' | 'C' | 'D'];
+    if (!model) return null;
+    const Model = model.Component;
+    return <group scale={scale}>
+        <ModelLoadBoundary key={model.path} path={model.path}>
+            <Suspense fallback={<ModelPlaceholder />}>
+                <Model onMaterialsChange={mats => { materialsRef.current = mats; }} materialProps={materialProps} />
+            </Suspense>
+        </ModelLoadBoundary>
+    </group>;
 };
 
 type MaterialEntry = { mat: THREE.MeshStandardMaterial; origColor: THREE.Color };
@@ -132,9 +101,11 @@ function useReagentGLBModel(
     onMaterialsChange: (entries: MaterialEntry[]) => void,
 ) {
     const { scene } = useGLTF(glbPath);
+    const notifyReady = useContext(CabinetModelReadyContext);
+    useEffect(() => { notifyReady(); }, [notifyReady, scene]);
     const { clonedScene, allEntries } = useMemo(() => {
         const clone = scene.clone(true);
-        const overrideErrorColor = materialProps.color === '#ef4444';
+        const overrideErrorColor = typeof materialProps.opacity === 'number' && materialProps.opacity < 1;
         const nextOpacity = typeof materialProps.opacity === 'number' ? materialProps.opacity : undefined;
         const collected: MaterialEntry[] = [];
 
@@ -142,7 +113,7 @@ function useReagentGLBModel(
             const next = original.clone();
             if (next instanceof THREE.MeshStandardMaterial) {
                 // 원본 색상 기록 (나중에 복원용)
-                const origColor = next.color.clone();
+                const origColor = overrideErrorColor ? new THREE.Color(materialProps.color as string) : next.color.clone();
                 if (nextOpacity !== undefined) {
                     next.opacity = nextOpacity;
                     next.transparent = nextOpacity < 1;
@@ -152,7 +123,7 @@ function useReagentGLBModel(
                     next.opacity = 1;
                 }
                 if (overrideErrorColor) {
-                    next.color = new THREE.Color('#ef4444');
+                    next.color.copy(origColor);
                 }
                 collected.push({ mat: next, origColor });
             }
@@ -168,6 +139,9 @@ function useReagentGLBModel(
                 mesh.castShadow = true;
             }
         });
+        const bounds = new THREE.Box3().setFromObject(clone, true);
+        const center = bounds.getCenter(new THREE.Vector3());
+        clone.position.add(new THREE.Vector3(-center.x, -bounds.min.y, -center.z));
         return { clonedScene: clone, allEntries: collected };
     }, [scene, materialProps.color, materialProps.opacity]);
 
@@ -176,6 +150,14 @@ function useReagentGLBModel(
         return () => onMaterialsChange([]);
     }, [onMaterialsChange, allEntries]);
 
+    useEffect(() => () => {
+        clonedScene.traverse(node => {
+            if ((node as THREE.Mesh).isMesh) {
+                const material = (node as THREE.Mesh).material;
+                (Array.isArray(material) ? material : [material]).forEach(m => m.dispose());
+            }
+        });
+    }, [clonedScene]);
     return clonedScene;
 }
 
@@ -326,6 +308,8 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
     const labelGroupRef = useRef<THREE.Group>(null);
     const geometryGroupRef = useRef<THREE.Group>(null);
     const lastScale = useRef<number>(0);
+    const lastTemplate = useRef(item.template);
+    const lastMeshUuid = useRef<string | undefined>(undefined);
     const measuredYRef = useRef<number | null>(null);
 
     useFrame(({ camera }) => {
@@ -333,7 +317,8 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
         if (!labelGroup) return;
 
         // 1. 실제 모델의 Bounding Box를 이용한 정밀한 높이 계산 (스케일 변경 시만 재계산)
-        if (geometryGroupRef.current && lastScale.current !== scale) {
+        const meshUuid = geometryGroupRef.current?.getObjectByProperty('isMesh', true)?.uuid;
+        if (geometryGroupRef.current && (lastScale.current !== scale || lastTemplate.current !== item.template || meshUuid !== lastMeshUuid.current)) {
             geometryGroupRef.current.updateMatrixWorld(true);
             const box = new THREE.Box3().setFromObject(geometryGroupRef.current);
             const height = box.max.y - box.min.y;
@@ -344,6 +329,8 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
                 const margin = 0.13;
                 measuredYRef.current = height + margin;
                 lastScale.current = scale;
+                lastTemplate.current = item.template;
+                lastMeshUuid.current = meshUuid;
             }
         }
 

@@ -2,7 +2,7 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
+import { OrbitControls, ContactShadows } from '@react-three/drei';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { ShelfUnit } from './ShelfUnit';
 import { CabinetFrame } from './CabinetFrame';
@@ -10,6 +10,8 @@ import { ResponsiveCamera } from './ResponsiveCamera';
 import { Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useThemeMode } from '../../hooks/useThemeMode';
+import { CabinetEnvironment } from './CabinetEnvironment';
+import { CabinetModelReadyContext } from './cabinetModelReadyContext';
 
 /** OrbitControls target가 변경될 때 동기화 (prop만으로는 갱신이 안 될 수 있음) */
 function SyncOrbitTarget({ target }: { target: [number, number, number] }) {
@@ -102,6 +104,8 @@ function useCabinetCamera(
 }
 
 export const FridgeScene: React.FC = () => {
+    const [shadowRevision, setShadowRevision] = useState(0);
+    const onModelReady = useCallback(() => setShadowRevision(revision => revision + 1), []);
     const { t } = useTranslation();
     const { isDarkMode } = useThemeMode();
     // Canvas 컨테이너의 실제 크기로 aspect ratio 추적 (window 크기 대신)
@@ -197,14 +201,19 @@ export const FridgeScene: React.FC = () => {
     const cameraConfig = useCabinetCamera(cabinetWidth, cabinetHeight, mode, containerAspect);
     const sceneTheme = useMemo(() => ({
         background: isDarkMode ? '#0f172a' : '#f3f4f6',
-        ambientIntensity: isDarkMode ? 0.92 : 0.5,
-        fillIntensity: isDarkMode ? 0.75 : 0.25,
-        hemisphereIntensity: isDarkMode ? 0.55 : 0,
+        ambientIntensity: isDarkMode ? 0.92 : 0.65,
+        fillIntensity: isDarkMode ? 0.75 : 0.6,
+        hemisphereIntensity: isDarkMode ? 0.55 : 0.35,
         spotIntensity: isDarkMode ? 1.45 : 1,
         spotColor: isDarkMode ? '#dbeafe' : '#ffffff',
         shadowColor: isDarkMode ? '#020617' : '#111827',
         shadowOpacity: isDarkMode ? 0.18 : 0.4,
     }), [isDarkMode]);
+    const interiorLightTarget = useMemo(() => {
+        const target = new THREE.Object3D();
+        target.position.set(0, cabinetHeight / 2 - 0.75, 0);
+        return target;
+    }, [cabinetHeight]);
     const [shelfFocusTarget, setShelfFocusTarget] = useState<[number, number, number] | null>(null);
     const [cameraStateId, setCameraStateId] = useState(0);
     const lastAutoFocusKeyRef = useRef<string | null>(null);
@@ -236,7 +245,7 @@ export const FridgeScene: React.FC = () => {
 
     const handleShelfFocus = useCallback((shelfId: string, localY: number) => {
         setCameraStateId(id => id + 1);
-        if (mode === 'PLACE' && focusedShelfId === shelfId) {
+        if (focusedShelfId === shelfId) {
             setShelfFocusTarget(null);
             setFocusedShelfId(null);
             setIsTopDownView(false);
@@ -244,7 +253,7 @@ export const FridgeScene: React.FC = () => {
             // 다른 선반으로 포커스 변경 시 탑뷰 해제
             if (focusedShelfId !== shelfId) setIsTopDownView(false);
             setShelfFocusTarget([0, GROUP_OFFSET_Y + localY, 0]);
-            if (mode === 'PLACE') setFocusedShelfId(shelfId);
+            setFocusedShelfId(shelfId);
         }
     }, [mode, focusedShelfId, setFocusedShelfId]);
 
@@ -252,6 +261,8 @@ export const FridgeScene: React.FC = () => {
     useEffect(() => {
         if (!focusedShelfId || (mode !== 'VIEW' && mode !== 'PLACE')) {
             lastAutoFocusKeyRef.current = null;
+            setShelfFocusTarget(null);
+            setIsTopDownView(false);
             return;
         }
 
@@ -264,6 +275,8 @@ export const FridgeScene: React.FC = () => {
 
         if (shelfY == null) {
             lastAutoFocusKeyRef.current = null;
+            setShelfFocusTarget(null);
+            setIsTopDownView(false);
             return;
         }
 
@@ -353,9 +366,11 @@ export const FridgeScene: React.FC = () => {
         <div ref={containerRef} className="w-full relative bg-gray-100 transition-colors dark:bg-slate-950" style={{ height: 'calc(100dvh - 7rem)' }}>
             <Canvas
                 shadows="percentage"
+                dpr={isCoarsePointer ? 1 : [1, 1.5]}
                 camera={{ position: cameraConfig.position, fov: 52 }}
-                gl={{ preserveDrawingBuffer: true }}
+                gl={{ antialias: true }}
             >
+                <CabinetModelReadyContext.Provider value={onModelReady}>
                 <Suspense fallback={null}>
                     <color attach="background" args={[sceneTheme.background]} />
                     <ResponsiveCamera
@@ -364,15 +379,18 @@ export const FridgeScene: React.FC = () => {
                         config={effectiveCameraConfig}
                         cameraStateId={cameraStateId}
                     />
-                    <Environment preset="city" />
+
                     <ambientLight intensity={sceneTheme.ambientIntensity} />
+                    <CabinetEnvironment intensity={isDarkMode ? 0.7 : 0.9} />
+                    <primitive object={interiorLightTarget} />
                     <hemisphereLight
                         color="#e0f2fe"
                         groundColor="#1e293b"
                         intensity={sceneTheme.hemisphereIntensity}
                     />
                     <directionalLight
-                        position={[0, 5, 8]}
+                        position={[0, cabinetHeight / 2 - 0.75, cabinetDepth + 6]}
+                        target={interiorLightTarget}
                         intensity={sceneTheme.fillIntensity}
                         color={sceneTheme.spotColor}
                     />
@@ -441,13 +459,14 @@ export const FridgeScene: React.FC = () => {
                     </group>
 
                     <ContactShadows
+                        key={shadowRevision}
                         position={[0, -1, 0]}
                         opacity={sceneTheme.shadowOpacity}
                         color={sceneTheme.shadowColor}
                         scale={Math.max(10, cabinetWidth * 1.5)}
                         blur={2.5}
                         far={4}
-                        frames={1}
+                        frames={30}
                     />
                     <OrbitControls
                         makeDefault
@@ -463,6 +482,7 @@ export const FridgeScene: React.FC = () => {
                     />
                     <SyncOrbitTarget target={orbitTarget} />
                 </Suspense>
+                </CabinetModelReadyContext.Provider>
             </Canvas>
 
             {/* 탑뷰 토글 버튼 - 선반 포커스 시에만 표시 */}

@@ -15,7 +15,7 @@ export interface ClaimedDeletionJob {
 }
 
 export interface DeletionFileTarget {
-  bucket: 'cabinets' | 'safety-center-verifications'
+  bucket: 'cabinets' | 'safety-center-verifications' | 'inventory-imports'
   path: string
 }
 
@@ -27,6 +27,7 @@ export interface DeletionProcessorSummary {
 }
 
 export interface DeletionProcessorGateway {
+  purgeCabinetTrash?: () => Promise<void>
   acquireRun: (runToken: string) => Promise<boolean>
   releaseRun: (runToken: string) => Promise<void>
   claimJobs: () => Promise<ClaimedDeletionJob[]>
@@ -44,7 +45,7 @@ type RpcResult = { data: unknown; error: unknown }
 type AdminClient = ReturnType<typeof createClient>
 
 const ALLOWED_STAGES = new Set<DeletionStage>(['queued', 'database', 'storage', 'auth', 'finalize'])
-const ALLOWED_BUCKETS = new Set<DeletionFileTarget['bucket']>(['cabinets', 'safety-center-verifications'])
+const ALLOWED_BUCKETS = new Set<DeletionFileTarget['bucket']>(['cabinets', 'safety-center-verifications', 'inventory-imports'])
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -119,6 +120,10 @@ async function rpc(admin: AdminClient, name: string, args: Record<string, unknow
 
 export function createDeletionProcessorGateway(admin: AdminClient): DeletionProcessorGateway {
   return {
+    purgeCabinetTrash: async () => {
+      const { error } = await admin.rpc('purge_expired_cabinet_trash_v2')
+      if (error) throw new Error('CABINET_TRASH_PURGE_FAILED')
+    },
     acquireRun: async (runToken) => {
       const result = requireSuccess(await rpc(admin, 'acquire_deletion_worker_run_v1', {
         p_lease_token: runToken, p_lease_seconds: 55,
@@ -227,6 +232,7 @@ export async function runDeletionProcessor(gateway: DeletionProcessorGateway): P
   const runToken = crypto.randomUUID()
   if (!await gateway.acquireRun(runToken)) return summary
   try {
+    await gateway.purgeCabinetTrash?.()
     const jobs = await gateway.claimJobs()
     summary.claimed = jobs.length
     for (const job of jobs) {

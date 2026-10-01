@@ -8,6 +8,8 @@ import { useLabStore } from '../store/useLabStore';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
 import type { ReagentTemplateType } from '../types/fridge';
 import type { ManufacturerDateType } from '../utils/manufacturerDate';
+import { readAllPages } from '../utils/readAllPages';
+import type { ImportAttribute } from '../features/inventory/import/types';
 
 // ── Types ──────────────────────────────────────────────
 type DisposalReasonKey = 'used' | 'expired' | 'broken' | 'other';
@@ -53,6 +55,7 @@ export interface InventoryItem {
     placement_template?: ReagentTemplateType | null;
     placement_width?: number | null;
     _source?: InventorySource;
+    source_attributes?: ImportAttribute[];
 }
 
 export interface CreateInventoryInput {
@@ -696,11 +699,8 @@ export const inventoryService = {
             invQuery = invQuery.is('lab_id', null);
         }
 
-        const { data: invData, error: invError } = await invQuery.order('created_at', { ascending: false });
-
-        if (invError) {
-            console.error('[Inventory] fetch error:', invError);
-        }
+        const orderedInventory = invQuery.order('created_at', { ascending: false }).order('id', { ascending: false });
+        const invData = await readAllPages((from, to) => orderedInventory.range(from, to));
 
         const inventoryRows = (invData || []) as InventoryRowWithRelations[];
         const inventoryItems: InventoryItem[] = inventoryRows.map((item) => ({
@@ -729,11 +729,8 @@ export const inventoryService = {
             cabQuery = cabQuery.is('cabinets.lab_id', null);
         }
 
-        const { data: cabData, error: cabError } = await cabQuery.order('created_at', { ascending: false });
-
-        if (cabError) {
-            console.error('[Inventory] cabinet_items fetch error:', cabError);
-        }
+        const orderedCabinets = cabQuery.order('created_at', { ascending: false }).order('id', { ascending: false });
+        const cabData = await readAllPages((from, to) => orderedCabinets.range(from, to));
 
         // 동일 스펙 다건을 누락시키지 않기 위해 키 단위 "개수" 기반 dedupe 사용
         const cabinetRows = (cabData || []) as CabinetItemRowWithCabinet[];
@@ -765,6 +762,9 @@ export const inventoryService = {
         for (const item of inventoryItems) {
             if (item.storage_type !== 'cabinet') continue;
             if (exactLinkedInventoryIds.has(item.id)) continue;
+            // Imported rows represent an explicit new record. A matching legacy
+            // bottle is only a duplicate candidate, never an inferred placement.
+            if (item.source_attributes?.length) continue;
 
             const key = buildCabinetItemKey({
                 cabinetId: item.cabinet_id,

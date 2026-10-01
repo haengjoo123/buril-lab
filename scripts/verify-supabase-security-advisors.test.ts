@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import {
   assertHostedEnvironment,
   buildObservedEntries,
+  buildProductionCabinetExpectation,
+  CABINET_ADVISOR_ADDITIONS,
   compareObservedWithBaseline,
   loadBaseline,
   normalizeAdvisorPayload,
@@ -296,7 +298,7 @@ describe('Supabase hosted Security Advisor contract', () => {
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
       { environment: 'production', findings: 60 },
-      { environment: 'staging', findings: 60 },
+      { environment: 'staging', findings: 68 },
     ])
 
     const production = loadBaseline('production', { today: '2026-08-24' })
@@ -312,6 +314,48 @@ describe('Supabase hosted Security Advisor contract', () => {
     })
     expect(staging.entries.filter((entry) => productionKeys.has(entry.cache_key)).map(technicalProjection))
       .toEqual(production.entries.map(technicalProjection))
-    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual([])
+    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual(
+      CABINET_ADVISOR_ADDITIONS.map(([name, args]) =>
+        `authenticated_security_definer_function_executable_public_${name}_${args}`),
+    )
+  })
+
+  it('requires the migrated production catalog while preserving the actual prior observation', () => {
+    const production = loadBaseline('production', { today: '2026-10-02' })
+    const staging = loadBaseline('staging', { today: '2026-10-02' })
+    const expected = buildProductionCabinetExpectation(production, staging, { today: '2026-10-02' })
+    expect(production.expected_count).toBe(60)
+    expect(production.observed_on).toBe('2026-09-05')
+    expect(expected).toMatchObject({ environment: 'production', expected_count: 68,
+      observation_source: { environment: 'staging', observed_on: '2026-10-02' } })
+    expect(() => compareObservedWithBaseline(expected, production.entries)).toThrow('missing=8')
+    expect(() => compareObservedWithBaseline(expected, staging.entries)).not.toThrow()
+
+    const anonymousGrant = structuredClone(staging.entries)
+    const newRpc = anonymousGrant.find((entry) => entry.object.name === 'save_cabinet_state_v2')
+    if (!newRpc) throw new Error('missing cabinet RPC')
+    newRpc.evidence.anon_execute = true
+    expect(() => compareObservedWithBaseline(expected, anonymousGrant)).toThrow('changed=1')
+  })
+
+  it('refuses broadened successor permissions and changes to prior findings', () => {
+    const production = loadBaseline('production', { today: '2026-10-02' })
+    const staging = loadBaseline('staging', { today: '2026-10-02' })
+    const drift = structuredClone(staging)
+    drift.entries[0].evidence.service_role_execute = false
+    expect(() => buildProductionCabinetExpectation(production, drift)).toThrow('changed=1')
+    const newGrant = structuredClone(staging)
+    const newRpc = newGrant.entries.find((entry) => entry.object.name === 'get_cabinet_trash_v2')
+    if (!newRpc) throw new Error('missing trash RPC')
+    newRpc.evidence.service_role_execute = true
+    expect(() => buildProductionCabinetExpectation(production, newGrant)).toThrow('reviewed RPC permissions')
+
+    const substitution = structuredClone(staging)
+    const entry = substitution.entries.find((entry) => entry.object.name === 'get_cabinet_trash_v2')
+    if (!entry) throw new Error('missing trash RPC')
+    entry.object.name = 'unreviewed_definer'
+    entry.cache_key = 'authenticated_security_definer_function_executable_public_unreviewed_definer_p_cabinet_id uuid'
+    substitution.entries.sort((left, right) => left.cache_key.localeCompare(right.cache_key))
+    expect(() => buildProductionCabinetExpectation(production, substitution)).toThrow()
   })
 })

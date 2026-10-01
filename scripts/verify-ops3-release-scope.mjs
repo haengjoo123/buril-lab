@@ -8,6 +8,8 @@ import {
   verifyAcceleratedOps311Release,
 } from './verify-accelerated-ops3-11-release.mjs'
 
+import { CABINET_RELEASE_POLICY, verifyCabinetRelease } from './verify-cabinet-release.mjs'
+
 export const OPS3_BASE_SHA = '45eba849183935e2dfa675b7355ad0efda5a9644'
 export const OPS3_APPROVED_PATHS = Object.freeze([
   '.github/workflows/quality.yml',
@@ -170,10 +172,10 @@ export function verifyOps3ReleaseScope(root = fileURLToPath(new URL('../', impor
   runGit(root, ['merge-base', '--is-ancestor', OPS3_BASE_SHA, 'HEAD'])
   // Include every change type, including file-to-symlink changes; filtering
   // those out would let an unreviewed path bypass the regular-file check.
-  const changed = runGit(root, ['diff', '--name-only', OPS3_BASE_SHA, '--'])
-    .split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
-  const untracked = runGit(root, ['ls-files', '--others', '--exclude-standard', '--'])
-    .split(/\r?\n/u).map((value) => value.trim()).filter((value) => RELEASABLE_UNTRACKED_ROOTS.test(value))
+  const changed = runGit(root, ['diff', '--name-only', '-z', OPS3_BASE_SHA, '--'])
+    .split('\0').filter(Boolean)
+  const untracked = runGit(root, ['ls-files', '-z', '--others', '--exclude-standard', '--'])
+    .split('\0').filter((value) => RELEASABLE_UNTRACKED_ROOTS.test(value))
   const paths = [...new Set([...changed, ...untracked])].sort()
   verifyOps3ChangedPaths(paths)
   for (const candidate of paths) {
@@ -196,6 +198,7 @@ export function verifyOps3ReleaseScope(root = fileURLToPath(new URL('../', impor
 }
 
 export function verifyOps3OrAcceleratedReleaseScope(root = fileURLToPath(new URL('../', import.meta.url))) {
+  if (existsSync(path.join(root, CABINET_RELEASE_POLICY))) return verifyCabinetRelease(root)
   if (existsSync(path.join(root, ACCELERATED_RELEASE_POLICY))) {
     return verifyAcceleratedOps311Release(root)
   }

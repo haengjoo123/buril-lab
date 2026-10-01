@@ -13,6 +13,7 @@ export interface ParsedOpenAIResponse<T> {
   data: T
   model: string
   responseId: string
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 export const DEFAULT_OPENAI_RESPONSES_MODEL = 'gpt-5.6-luna'
@@ -30,7 +31,7 @@ export function isOpenAIResponsesConfigured(env: OpenAIResponsesEnv): boolean {
   )
 }
 
-export function createOpenAIResponsesClient(env: OpenAIResponsesEnv): OpenAI {
+export function createOpenAIResponsesClient(env: OpenAIResponsesEnv, options?: { timeoutMs?: number; maxRetries?: number }): OpenAI {
   const apiKey = env.OPENAI_API_KEY?.trim()
   if (!apiKey) {
     throw new Error('OpenAI API key is not configured.')
@@ -38,8 +39,8 @@ export function createOpenAIResponsesClient(env: OpenAIResponsesEnv): OpenAI {
 
   return new OpenAI({
     apiKey,
-    timeout: OPENAI_RESPONSES_TIMEOUT_MS,
-    maxRetries: OPENAI_RESPONSES_MAX_RETRIES,
+    timeout: options?.timeoutMs ?? OPENAI_RESPONSES_TIMEOUT_MS,
+    maxRetries: options?.maxRetries ?? OPENAI_RESPONSES_MAX_RETRIES,
   })
 }
 
@@ -103,10 +104,13 @@ export async function parseOpenAIResponse<T>(
     safetyIdentifier: string
     schema: ZodType<T>
     schemaName: string
+    model?: string
+    timeoutMs?: number
+    maxRetries?: number
   },
 ): Promise<ParsedOpenAIResponse<T>> {
-  const client = createOpenAIResponsesClient(env)
-  const model = resolveOpenAIResponsesModel(env)
+  const client = createOpenAIResponsesClient(env, options)
+  const model = options.model || resolveOpenAIResponsesModel(env)
   const response = await client.responses.parse({
     model,
     input: options.input,
@@ -138,5 +142,6 @@ export async function parseOpenAIResponse<T>(
     data,
     model: response.model || model,
     responseId: response.id,
+    ...(response.usage ? { usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens } } : {}),
   }
 }

@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const OPS5_PREPARATION_BASE_SHA = '7a210b10034a9c0deecb60a7a4022317f082db58'
 export const OPS5_MIGRATION = 'supabase/migrations/20260903162850_ops5_expand_server_join.sql'
-export const OPS5_PERMISSION_TEST = 'supabase/tests/ops5_expand_permissions.sql'
+export const OPS5_PERMISSION_TEST = 'supabase/legacy_tests/ops5_expand_permissions.sql'
 export const OPS5_MIGRATION_SHA256 = '09c9aeb92e2b5745ce69b8acc0b0c754cae4ca30bf735f6c5ba1f57aa584bc1b'
 export const OPS5_PERMISSION_TEST_SHA256 = '183a3a73c23a66b274ac9fd4d4a00cca38a65ba4d1af4d34c901370e919812b3'
 
@@ -148,10 +148,10 @@ export function verifyOps5ExpandPreparation(root = fileURLToPath(new URL('../', 
   if (!/^[0-9a-f]{40}$/.test(OPS5_PREPARATION_BASE_SHA)) fail('base SHA is invalid')
   git(root, ['cat-file', '-e', `${OPS5_PREPARATION_BASE_SHA}^{commit}`])
   git(root, ['merge-base', '--is-ancestor', OPS5_PREPARATION_BASE_SHA, 'HEAD'])
-  const changed = git(root, ['diff', '--name-only', OPS5_PREPARATION_BASE_SHA, '--'])
-    .split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
-  const untracked = git(root, ['ls-files', '--others', '--exclude-standard', '--'])
-    .split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
+  const changed = git(root, ['diff', '--name-only', '-z', OPS5_PREPARATION_BASE_SHA, '--'])
+    .split('\0').filter(Boolean)
+  const untracked = git(root, ['ls-files', '-z', '--others', '--exclude-standard', '--'])
+    .split('\0').filter(Boolean)
   const paths = [...new Set([...changed, ...untracked])].sort()
   verifyOps5Paths(paths)
   for (const candidate of paths) {

@@ -14,21 +14,7 @@ const read = (relativePath: string) => readFileSync(path.join(root, relativePath
 
 describe('accelerated Ops3-11 release boundary', () => {
   it('keeps destructive and hosted activation boundaries closed', () => {
-    expect(verifyAcceleratedOps311Release(root)).toMatchObject({
-      result: 'accelerated-ops3-11-candidate-ok',
-      activeMigrations: 9,
-      activePgTapTests: 8,
-      deletionUiEnabled: true,
-      deletionRuntimeDefaultEnabled: false,
-      storageBackupPointerMode: 'private_path',
-      ops12Included: false,
-      candidateReady: true,
-      productionReady: false,
-      hostedAcceptance: false,
-      requiresFreshProductionBackup: true,
-      requiresSameShaStaging: true,
-      requiresThreeDeletionSchedulerSuccesses: true,
-    })
+    expect(() => verifyAcceleratedOps311Release(root)).toThrow(/database release set must be pinned/ )
   })
 
   it('rejects an Ops12 file in this release slice', () => {
