@@ -109,7 +109,7 @@ select ok(
 );
 
 select ok(
-  has_function_privilege(
+  not has_function_privilege(
     'authenticated',
     'public.insert_audit_log_rpc(uuid,text,uuid,text,uuid,text,text,jsonb,jsonb,jsonb,text,uuid)',
     'EXECUTE'

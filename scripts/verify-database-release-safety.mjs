@@ -48,7 +48,7 @@ export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
   'cabinet_trash_behavior.sql': '7a1ebddf59ac8fb9f4a0adb59c18dac40626ce43c6e959725928c4426d44bebb',
   'cabinet_import_permissions.sql': 'fb2b4f00a926a7861774a2ade222425b67d105a0985d0d11f0c6432334db624d',
   'baseline_permissions.sql': EXPECTED_PERMISSION_TEST_SHA256,
-  'ops5_expand_permissions.sql': '7d41b53cf0705b75b337b14513532ee1f80c0aacd2fcc763fad291250d46f2e3',
+  'ops5_expand_permissions.sql': 'a8a08144d8b67c6511b0bfc6b5af9d61c17bda5a5b8620bf3956fe7a4539a75a',
   'ops6_private_photos_permissions.sql': '56be7e3115c21332eb11e25674ef5f6e7498522919c4d091b7e0b12e9d175c48',
   'ops7_contract_permissions.sql': '73cf2ec168ed0f6ec60ead91a901be4f9e39d24de3dba12cf2ff37bd6b75d942',
   'ops8_lab_password_policy.sql': '19ebad4a89d75a9e905cc827e3014db4d0f675130f474550ad2748957ce87733',
