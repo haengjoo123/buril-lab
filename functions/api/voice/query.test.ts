@@ -21,7 +21,7 @@ function openAIResponse(data: Record<string, unknown>) {
     id: 'resp_voice',
     object: 'response',
     status: 'completed',
-    model: 'gpt-5.6-luna',
+    model: 'gpt-6-luna',
     output: [{
       id: 'msg_voice',
       type: 'message',

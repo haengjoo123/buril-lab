@@ -16,7 +16,7 @@ export interface ParsedOpenAIResponse<T> {
   usage?: { inputTokens: number; outputTokens: number }
 }
 
-export const DEFAULT_OPENAI_RESPONSES_MODEL = 'gpt-5.6-luna'
+export const DEFAULT_OPENAI_RESPONSES_MODEL = 'gpt-6-luna'
 export const OPENAI_RESPONSES_TIMEOUT_MS = 20_000
 export const OPENAI_RESPONSES_MAX_RETRIES = 2
 

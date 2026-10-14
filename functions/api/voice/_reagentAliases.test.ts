@@ -162,7 +162,7 @@ function modelResponse(candidateId: string, confidence: number) {
     id: 'resp_candidate',
     object: 'response',
     status: 'completed',
-    model: 'gpt-5.6-luna',
+    model: 'gpt-6-luna',
     output: [{
       id: 'msg_candidate',
       type: 'message',

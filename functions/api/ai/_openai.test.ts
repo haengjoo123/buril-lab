@@ -11,7 +11,7 @@ import {
 const originalFetch = globalThis.fetch
 const env = {
   OPENAI_API_KEY: 'test-key',
-  OPENAI_RESPONSES_MODEL: 'gpt-5.6-luna',
+  OPENAI_RESPONSES_MODEL: 'gpt-6-luna',
   OPENAI_SAFETY_HMAC_SECRET: 'test-safety-secret-at-least-32-bytes',
 }
 
@@ -27,7 +27,7 @@ function responsePayload(
     id: 'resp_test',
     object: 'response',
     status: options.status || 'completed',
-    model: 'gpt-5.6-luna',
+    model: 'gpt-6-luna',
     output: [{
       id: 'msg_test',
       type: 'message',
@@ -102,7 +102,7 @@ describe('OpenAI Responses privacy and reliability policy', () => {
     expect(result.data).toEqual({ value: 'ok' })
     const body = await readRequestBody(fetchMock.mock.calls[0])
     expect(body).toMatchObject({
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       max_output_tokens: 400,
       reasoning: { effort: 'none' },
       safety_identifier: safetyIdentifier,
@@ -129,9 +129,9 @@ describe('OpenAI Responses privacy and reliability policy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
     const bodies = await Promise.all(fetchMock.mock.calls.map(readRequestBody))
     expect(bodies.map((body) => body.model)).toEqual([
-      'gpt-5.6-luna',
-      'gpt-5.6-luna',
-      'gpt-5.6-luna',
+      'gpt-6-luna',
+      'gpt-6-luna',
+      'gpt-6-luna',
     ])
   })
 

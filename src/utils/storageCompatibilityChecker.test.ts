@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ReagentPlacement } from '../types/fridge';
 import { getAutoPlacementBlockReason } from './storagePlacementGate';
-import { classifyStoragePlacement, classifyStorageGroups } from './storageCompatibilityChecker';
+import { checkCabinetCompatibility, checkShelfCompatibility, classifyStoragePlacement, classifyStorageGroups } from './storageCompatibilityChecker';
 
 function createPlacement(overrides: Partial<ReagentPlacement> = {}): ReagentPlacement {
     return {
@@ -18,6 +18,30 @@ function createPlacement(overrides: Partial<ReagentPlacement> = {}): ReagentPlac
         ...overrides,
     };
 }
+
+describe('separate cabinet compartments', () => {
+    const flammable = createPlacement({ id: 'flammable', name: 'Acetone', position: 10, hCodes: ['H225'] });
+    const oxidizer = createPlacement({ id: 'oxidizer', name: 'Hydrogen Peroxide', position: 70, hCodes: ['H272'] });
+
+    it('clears cross-compartment warnings and restores them when the wall is removed', () => {
+        expect(checkShelfCompatibility([flammable, oxidizer], [50])).toEqual([]);
+        expect(checkShelfCompatibility([flammable, oxidizer], [])).toHaveLength(1);
+        expect(checkCabinetCompatibility([{ id: 'shelf-1', items: [flammable, oxidizer], dividers: [50] }]).size).toBe(0);
+    });
+
+    it('still warns about incompatible items inside the same compartment', () => {
+        expect(checkShelfCompatibility([flammable, { ...oxidizer, position: 25 }], [50])).toHaveLength(1);
+    });
+
+    it('handles multiple, unordered and duplicate walls', () => {
+        const middleOxidizer = { ...oxidizer, position: 40 };
+        expect(checkShelfCompatibility([flammable, middleOxidizer, { ...flammable, id: 'right', position: 80 }], [65, 30, 30])).toEqual([]);
+    });
+
+    it('does not let invalid wall positions suppress warnings', () => {
+        expect(checkShelfCompatibility([flammable, oxidizer], [NaN, Infinity, -5, 0, 100, 110])).toHaveLength(1);
+    });
+});
 
 describe('authoritative storage classification', () => {
     it.each(['Dichloromethane', 'DCM', 'Chloroform', 'DMSO'])('%s is not inferred as flammable from its name', (name) => {

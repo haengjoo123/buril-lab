@@ -41,7 +41,7 @@ function getPlacedItem(preview: ReturnType<typeof buildCabinetAutoLayoutPlan>, i
 }
 
 describe('buildCabinetAutoLayoutPlan', () => {
-    it('keeps a compatibility warning when incompatible reagents only have visual divider separation', () => {
+    it('resolves compatibility warnings by placing incompatible reagents in separate compartments', () => {
         const flammable = createItem({
             id: 'flammable',
             name: 'Acetone',
@@ -59,7 +59,9 @@ describe('buildCabinetAutoLayoutPlan', () => {
         const placedFlammable = getPlacedItem(preview, 'flammable');
         const placedOxidizer = getPlacedItem(preview, 'oxidizer');
 
-        expect(preview.afterWarningCount).toBe(1);
+        expect(preview.beforeWarningCount).toBe(1);
+        expect(preview.afterWarningCount).toBe(0);
+        expect(preview.canApply).toBe(true);
         expect(preview.unplacedItems).toHaveLength(0);
         expect(placedFlammable?.shelfId).toBe('shelf-1');
         expect(placedOxidizer?.shelfId).toBe('shelf-1');
