@@ -1,4 +1,5 @@
 60b2e3ef9524af3ecc5d60fac3a9abd58e33a5bb:.env:gcp-api-key:5
+50fcc8f32e1b7c6b718df478b56dbbd6aa699d15:.env:gcp-api-key:4
 68aaa96c60a37ffec33cc10bbb94dc007990b735:.env:jwt:3
 bfc4351b7149e70c9db8d810aa22d6b4ebe0f68b:scripts/scrape_thermo_chemicals.js:jwt:22
 29807a9fc47c1c88f22d06d9b1a9ed7d6cac36c7:scripts/scrape_thermo_gibco.js:jwt:29
@@ -16,3 +17,4 @@ dc26715ad965344ae35d19a05e4f94e98f19be13:scripts/verify-ops11-deletion-worker-pr
 700895b2a5351851912452f0f692608ee8cc9e5d:scripts/verify-database-release-safety.mjs:generic-api-key:35
 700895b2a5351851912452f0f692608ee8cc9e5d:scripts/verify-database-release-safety.mjs:generic-api-key:42
 700895b2a5351851912452f0f692608ee8cc9e5d:src/utils/labPasswordPolicy.ts:generic-api-key:14
+eef817db81060fb07dd83a97754be4376b102f60:.env:generic-api-key:1

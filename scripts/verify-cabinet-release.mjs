@@ -10,6 +10,7 @@ import { filterOps11GeneratedUntrackedPaths, verifyOps11ApplicationSources, veri
 export const CABINET_RELEASE_BASE_SHA = 'd99fe93c4ae09674cda01bd24b2a463ac23686c2'
 export const CABINET_RELEASE_POLICY = 'config/cabinet-release-20261002.json'
 export const CABINET_RELEASE_PATHS = Object.freeze([
+  '.gitleaksignore',
   '.github/workflows/quality.yml',
   CABINET_RELEASE_POLICY,
   'package-lock.json',
@@ -25,6 +26,8 @@ export const CABINET_RELEASE_PATHS = Object.freeze([
   'scripts/verify-cloudflare-release-config.mjs',
   'scripts/verify-cabinet-release.mjs',
   'scripts/verify-cabinet-release.test.ts',
+  'scripts/verify-gitleaks-ignore.mjs',
+  'scripts/verify-gitleaks-ignore.test.ts',
   'scripts/verify-database-release-safety.mjs',
   'scripts/verify-database-release-safety.test.ts',
   'scripts/verify-supabase-security-advisors.mjs',
