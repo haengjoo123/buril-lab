@@ -13,6 +13,16 @@ Staging 실행 `38505977680`은 후보 `66af34d26f84a0cfc663f8d23d36701c64044fb1
 
 사용자가 기억한 Staging 중단 조치도 재확인했다. 현재 `buril-lab-staging`의 KOSHA 키는 미등록이며, 전용 KV의 `kosha_content_mode`는 `link_only`다. 이는 [기존 Staging 계약](./gate0-release-status.md)과 일치하는 호출 중단이고 공급자의 인증키 폐기 증거는 아니다.
 
+### 동일 SHA Quality 통과 후 원격 Advisor 연결 경로 수정
+
+PR #94의 main SHA `16bc9628806237c695e52423a1af945b508924bb`는 Quality `38509210531`의 4개 작업을 모두 통과했다. 전체 이력 332개 커밋 검사에서도 승인된 정확한 예외 외 탐지가 없었다. Staging `38510033968`은 빌드·임대·정리 이력·동일 SHA Quality 검증까지 성공했으나 hosted Advisor CLI가 결과를 내기 전에 종료해 Pages와 Worker 배포는 실행하지 않았다.
+
+같은 임시 Staging PAT로 고정 CLI의 읽기 전용 명령을 로컬 재현하면 `LegacyDbConfigIpv6Error`와 IPv4 연결을 위한 link 설정 요구가 반환됐다. 기존 검사기는 CLI stderr를 숨겨 일반적인 exit status만 보고했다. 경고 수 증가로 판정하지 않으며, 고정 비교 기준이나 DB 권한 SQL을 변경하지 않는다.
+
+호스트 검사를 공식 Management API의 `GET /v1/projects/{ref}/advisors/security` 및 `POST /v1/projects/{ref}/database/query/read-only`로 전환했다. 고정된 프로젝트·공식 HTTPS 호스트·읽기 전용 카탈로그 SQL만 사용하고, redirect 거부, 전체 요청 120초 제한, 8 MiB 응답 제한 및 엄격한 JSON/자료형 검증을 유지한다. 응답 내용이나 자격값은 오류에 출력하지 않는다. 기존 CLI 버전 필드는 과거 baseline의 관찰 출처로 보존한다. 새 조회 결과도 기존 68건과 세부 권한을 정확히 비교하며 자동 수용하지 않는다.
+
+실패한 임대 `ba18e96b9f5dd37a71e891096cab044a`의 토큰 3개를 공급자에서 폐기했다. 감독 스크립트가 API 비활성과 정리 영수증 `752d8734be646358ca594a18ba0425153971e867af93f003df18c50677556f5b`를 확인했다. GitHub 임시 secret과 로컬 암호화 사본도 제거했다. 새 조회 경로의 실제 Staging 비교 및 재배포는 아직 남아 있다.
+
 ### 승인된 7일 한시 예외 — 출처·폐기 미확인 위험 수용
 
 사용자는 “7일 한시 예외 승인 — 배포 계속”으로 잔여 위험을 명시적으로 수용했다. 승인 기록 시각 `2026-10-14T03:44:00Z`부터 `2026-10-21T03:44:00Z`까지만 해당 KOSHA fingerprint를 허용한다. 한국 시간 만료는 10월 21일 12:44, Los Angeles 시간은 10월 20일 20:44다.
