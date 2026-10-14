@@ -1,4 +1,5 @@
 import { matchImportHeader, token } from './normalize'
+import i18n from '../../../locales/i18n'
 import { IMPORT_LIMITS, type ImportCell, type ImportDraftRow, type ImportGrid, type ImportMapping, type ImportSource, type ImportTable, type ImportValues } from './types'
 
 export function orientedCells(grid: ImportGrid, orientation: ImportTable['orientation']): ImportCell[][] {
@@ -11,7 +12,7 @@ export function tableHeaders(table: ImportTable, grid: ImportGrid): Array<{ id: 
   return Array.from({ length: Math.max(0, table.endColumn - table.startColumn + 1) }, (_, offset) => {
     const col = offset + table.startColumn
     const labels = [...new Set(cells.slice(table.headerRow, table.headerRow + table.headerDepth).map(row => row[col]?.text.trim()).filter(Boolean))]
-    return { id: `c${col}`, label: labels.join(' / ') || `열 ${col + 1}` }
+    return { id: `c${col}`, label: labels.join(' / ') || i18n.t('inv_col_n', { n: col + 1 }) }
   })
 }
 export function defaultMapping(table: ImportTable, grid: ImportGrid): ImportMapping {
@@ -61,7 +62,7 @@ export function detectTables(source: ImportSource): ImportTable[] {
       const header = headers[h]
       const next = headers.slice(h + 1).find(candidate => candidate.row > header.row && candidate.start <= header.end && candidate.end >= header.start)
       const table: ImportTable = { id: `${source.id}/${grid.id}/${header.row}/${header.start}`, sourceId: source.id, gridId: grid.id,
-        label: `${source.name} · ${grid.label}${headers.length > 1 ? ` · 표 ${h + 1}` : ''}`, headerRow: header.row, headerDepth: header.depth,
+        label: `${source.name} · ${grid.label}${headers.length > 1 ? ` · ${i18n.t('inv_table_n', { n: h + 1 })}` : ''}`, headerRow: header.row, headerDepth: header.depth,
         startRow: header.row + header.depth, endRow: (next?.row ?? cells.length) - 1,
         startColumn: header.start, endColumn: header.end, orientation, mapping: {},
         included: !grid.hidden, needsReview: header.uncertain || Boolean(source.encodingUncertain || grid.analysisWarnings?.length || grid.handwriting), confirmed: false }
@@ -101,7 +102,7 @@ export function rowsFromTable(table: ImportTable, source: ImportSource): ImportD
       attributes: headers.map(header => ({ label: header.label, value: row[Number(header.id.slice(1))]?.text || '', address: row[Number(header.id.slice(1))]?.address || header.id })),
       reviewRequired: (table.needsReview && !table.confirmed) || source.kind === 'image' || source.kind === 'pdf',
       reviewed: table.confirmed, excluded: summary || repeatedHeader,
-      ...(summary || repeatedHeader ? { error: summary ? '소계/합계 행 (제외 제안)' : '반복 제목 행 (제외 제안)' } : {}) })
+      ...(summary || repeatedHeader ? { error: summary ? i18n.t('inv_row_subtotal') : i18n.t('inv_row_repeated_header') } : {}) })
   }
   return rows
 }
@@ -117,6 +118,6 @@ export function buildImportRows(sources: ImportSource[], tables: ImportTable[], 
     // Preserve edits only when the source-to-field mapping has not changed.
     return JSON.stringify(existing.originalFields) === JSON.stringify(row.originalFields) ? { ...row, ...existing } : row
   })
-  if (rows.length > IMPORT_LIMITS.rows) throw new Error('10,000행을 넘습니다. 표 범위를 나누어 가져오세요. 일부 행만 등록하지 않았습니다.')
+  if (rows.length > IMPORT_LIMITS.rows) throw new Error(i18n.t('inv_err_rows_limit'))
   return rows
 }

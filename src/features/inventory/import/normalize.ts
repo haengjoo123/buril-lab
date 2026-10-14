@@ -2,6 +2,7 @@ import { normalizeCasNumber } from '../../../utils/casNumber'
 import { parseCapacityMeasurement } from '../../../utils/capacityParser'
 import { normalizeExpiryDate } from '../../../utils/dateValidation'
 import { isManufacturerDateType, type ManufacturerDateType } from '../../../utils/manufacturerDate'
+import i18n from '../../../locales/i18n'
 import type { ImportContext, ImportDraftRow, ImportField, ImportIssue, ValidatedImportRow } from './types'
 
 export const token = (value: string) => value.normalize('NFKC').toLowerCase().replace(/[\s_\-().:：/]+/g, '')
@@ -60,39 +61,39 @@ export function validateImportRow(row: ImportDraftRow, context: ImportContext, i
   const issues: ImportIssue[] = []
   const add = (field: ImportField | undefined, code: string, message: string) => issues.push({ field, code, message })
   const name = (fields.name || '').trim()
-  if (!name || name.length > 500) add('name', 'name', '시약명을 확인하세요 (1~500자).')
+  if (!name || name.length > 500) add('name', 'name', i18n.t('inv_issue_name'))
   const quantity = parseImportQuantity(fields.quantity || '')
-  if (quantity === null) add('quantity', 'quantity', '수량(개)을 확인하세요. 빈칸·소수는 자동으로 바꾸지 않습니다.')
-  if (quantity === 0) add('quantity', 'zero', '수량 0: 비재고 항목으로 제외할지 확인하세요.')
+  if (quantity === null) add('quantity', 'quantity', i18n.t('inv_issue_quantity'))
+  if (quantity === 0) add('quantity', 'zero', i18n.t('inv_issue_zero_qty'))
   const capacity = parseCapacityMeasurement(fields.capacity).rawText || ''
-  if (capacity && parseCapacityMeasurement(capacity).numericValue === null) add('capacity', 'capacity', '용량과 단위를 확인하세요 (예: 500 mL).')
+  if (capacity && parseCapacityMeasurement(capacity).numericValue === null) add('capacity', 'capacity', i18n.t('inv_issue_capacity'))
   const cas = fields.cas_number?.trim() || ''
-  if (cas && !normalizeCasNumber(cas)) add('cas_number', 'cas', 'CAS 번호의 형식 또는 체크섬이 맞지 않습니다.')
+  if (cas && !normalizeCasNumber(cas)) add('cas_number', 'cas', i18n.t('inv_issue_cas'))
   const location = fields.storage_location?.trim() || ''
   const cabinets = context.cabinets.filter(item => token(item.name) === token(location))
   const locations = context.locations.filter(item => token(item.name) === token(location))
   const explicitCabinet = /^(cabinet|시약장|캐비넷)$/i.test(fields.storage_type?.trim() || '')
   const explicitOther = /^(other|기타|기타보관)$/i.test(fields.storage_type?.trim() || '')
-  if (fields.storage_type?.trim() && !explicitCabinet && !explicitOther) add('storage_type', 'storage_type', '보관유형을 시약장/기타로 연결하거나 비워 주세요. 원문은 보존됩니다.')
+  if (fields.storage_type?.trim() && !explicitCabinet && !explicitOther) add('storage_type', 'storage_type', i18n.t('inv_issue_storage_type'))
   const candidates = explicitCabinet ? cabinets : explicitOther ? locations : [...cabinets, ...locations]
-  if (location && candidates.length !== 1) add('storage_location', 'location', '보관위치를 연결하거나 위치 미지정으로 바꾸세요.')
+  if (location && candidates.length !== 1) add('storage_location', 'location', i18n.t('inv_issue_location'))
   const cabinet = location && !explicitOther && cabinets.length === 1 && candidates.length === 1 ? cabinets[0] : undefined
   const storageLocation = !cabinet && candidates.length === 1 ? locations[0] : undefined
   const dates: Record<string, string | undefined> = {}
   for (const field of ['manufacturer_date', 'expiry_date', 'received_date', 'opened_date'] as const) {
     const raw = fields[field]?.trim()
     const parsed = raw ? normalizeImportDate(raw) : null
-    if (raw && !parsed) add(field, 'date', '날짜를 YYYY-MM-DD로 확인하세요. 모호한 월/일 순서는 추정하지 않습니다.')
+    if (raw && !parsed) add(field, 'date', i18n.t('inv_issue_date'))
     dates[field] = parsed || undefined
   }
   const manufacturerType = fields.manufacturer_date_type ? dateType(fields.manufacturer_date_type) : dates.expiry_date ? 'expiry' : 'unlabeled'
-  if (!manufacturerType || (dates.manufacturer_date && manufacturerType === 'unlabeled')) add('manufacturer_date_type', 'date_type', '제조사 날짜의 유형을 확인하세요.')
-  if (manufacturerType === 'unlabeled' && dates.expiry_date) add('expiry_date', 'date_type', '미표기 유형과 유효기간이 충돌합니다.')
-  if (dates.manufacturer_date && dates.expiry_date && dates.manufacturer_date !== dates.expiry_date) add('manufacturer_date', 'date_conflict', '제조사 날짜와 유효기간이 다릅니다. 날짜와 유형을 확인하세요.')
+  if (!manufacturerType || (dates.manufacturer_date && manufacturerType === 'unlabeled')) add('manufacturer_date_type', 'date_type', i18n.t('inv_issue_date_type'))
+  if (manufacturerType === 'unlabeled' && dates.expiry_date) add('expiry_date', 'date_type', i18n.t('inv_issue_unlabeled_conflict'))
+  if (dates.manufacturer_date && dates.expiry_date && dates.manufacturer_date !== dates.expiry_date) add('manufacturer_date', 'date_conflict', i18n.t('inv_issue_date_conflict'))
   const remainingRaw = fields.remaining_percent?.trim().replace(/%$/, '') || ''
   const remaining = remainingRaw ? Number(remainingRaw) : undefined
-  if (remainingRaw && (!/^\d+$/.test(remainingRaw) || !Number.isInteger(remaining) || remaining! < 0 || remaining! > 100)) add('remaining_percent', 'remaining', '잔량은 0~100%로 확인하세요.')
-  if (row.reviewRequired && !row.reviewed) add(undefined, 'source_review', '원본과 추출 결과를 확인하세요.')
+  if (remainingRaw && (!/^\d+$/.test(remainingRaw) || !Number.isInteger(remaining) || remaining! < 0 || remaining! > 100)) add('remaining_percent', 'remaining', i18n.t('inv_issue_remaining'))
+  if (row.reviewRequired && !row.reviewed) add(undefined, 'source_review', i18n.t('inv_issue_source_review'))
   for (const cell of row.cells) if (cell.issue && !row.reviewed) add(undefined, 'cell', cell.issue)
   const duplicates = index.get(duplicateKey({ id: row.id, name, cas_number: cas, brand: fields.brand, product_number: fields.product_number, capacity })) || []
   const status = row.importedId ? 'imported' : row.excluded || row.duplicateDecision === 'skip' ? 'excluded' : issues.length ? 'review' : duplicates.length && row.duplicateDecision !== 'new' ? 'duplicate' : 'ready'

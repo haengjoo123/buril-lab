@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { LucideIcon } from 'lucide-react'
 import { Building2, CheckCircle2, Clock, ExternalLink, FileText, Loader2, RefreshCw, Search, ShieldAlert, XCircle } from 'lucide-react'
 import { AppSelect } from '../../components/AppSelect'
@@ -13,17 +14,12 @@ import type { SafetyCenterStatus } from '../safety-center/types'
 
 type StatusFilter = 'all' | SafetyCenterStatus
 
-const statusOptions: Array<{ value: StatusFilter; label: string }> = [
-  { value: 'all', label: '전체 상태' },
-  { value: 'pending', label: '승인 대기' },
-  { value: 'approved', label: '승인됨' },
-  { value: 'rejected', label: '거절됨' },
-]
+const STATUS_FILTER_VALUES: StatusFilter[] = ['all', 'pending', 'approved', 'rejected']
 
-function statusLabel(status: SafetyCenterStatus): string {
-  if (status === 'approved') return '승인됨'
-  if (status === 'rejected') return '거절됨'
-  return '승인 대기'
+function statusLabel(status: SafetyCenterStatus, t: (key: string) => string): string {
+  if (status === 'approved') return t('ops_centers_status_approved')
+  if (status === 'rejected') return t('ops_centers_status_rejected')
+  return t('ops_centers_status_pending')
 }
 
 function statusTone(status: SafetyCenterStatus): string {
@@ -32,9 +28,9 @@ function statusTone(status: SafetyCenterStatus): string {
   return 'bg-amber-50 text-amber-700 border-amber-100'
 }
 
-function formatDateTime(value: string | null): string {
+function formatDateTime(value: string | null, language: string): string {
   if (!value) return '-'
-  return new Intl.DateTimeFormat('ko-KR', {
+  return new Intl.DateTimeFormat(language.startsWith('ko') ? 'ko-KR' : 'en-US', {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
@@ -73,6 +69,15 @@ function SummaryCard({
 }
 
 export function SafetyCenterApprovalsView() {
+  const { t, i18n } = useTranslation()
+  const language = i18n.language || 'ko'
+  const statusOptions = useMemo(
+    () => STATUS_FILTER_VALUES.map((value) => ({
+      value,
+      label: value === 'all' ? t('ops_centers_status_all') : statusLabel(value, t),
+    })),
+    [t],
+  )
   const [items, setItems] = useState<SafetyCenterApprovalItem[]>([])
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -104,7 +109,7 @@ export function SafetyCenterApprovalsView() {
       }
 
       setIsAccessDenied(false)
-      setError(loadError instanceof Error ? loadError.message : '센터 승인 요청을 불러오지 못했습니다.')
+      setError(loadError instanceof Error ? loadError.message : t('ops_centers_load_failed'))
     } finally {
       if (mode === 'initial') {
         setIsInitialLoading(false)
@@ -112,7 +117,7 @@ export function SafetyCenterApprovalsView() {
         setIsRefreshing(false)
       }
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void loadItems('initial')
@@ -150,15 +155,15 @@ export function SafetyCenterApprovalsView() {
       const updatedItem = await updateSafetyCenterApprovalStatus(centerId, nextStatus)
       setItems((prev) => prev.map((item) => item.id === centerId ? updatedItem : item))
     } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : '승인 상태를 변경하지 못했습니다.')
+      setError(updateError instanceof Error ? updateError.message : t('ops_centers_update_failed'))
     } finally {
       setUpdating(null)
     }
-  }, [])
+  }, [t])
 
   const handleOpenDocument = useCallback(async (item: SafetyCenterApprovalItem) => {
     if (!item.verification_document_path) {
-      setError('이 센터 요청에는 승인 증빙 문서가 첨부되어 있지 않습니다.')
+      setError(t('ops_centers_no_document_attached'))
       return
     }
 
@@ -169,11 +174,11 @@ export function SafetyCenterApprovalsView() {
       const { url } = await getSafetyCenterVerificationDocumentUrl(item.id)
       window.open(url, '_blank', 'noopener,noreferrer')
     } catch (documentError) {
-      setError(documentError instanceof Error ? documentError.message : '증빙 문서 링크를 만들지 못했습니다.')
+      setError(documentError instanceof Error ? documentError.message : t('ops_centers_document_link_failed'))
     } finally {
       setOpeningDocumentId(null)
     }
-  }, [])
+  }, [t])
 
   if (isInitialLoading) {
     return (
@@ -190,9 +195,9 @@ export function SafetyCenterApprovalsView() {
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white text-amber-600 shadow-sm">
             <ShieldAlert className="h-7 w-7" />
           </div>
-          <h2 className="text-lg font-medium text-slate-900">운영자 전용 페이지</h2>
+          <h2 className="text-lg font-medium text-slate-900">{t('ops_centers_denied_title')}</h2>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-600">
-            이 페이지는 운영자 allowlist에 등록된 계정만 접근할 수 있습니다.
+            {t('ops_centers_denied_body')}
           </p>
         </div>
       </div>
@@ -205,10 +210,10 @@ export function SafetyCenterApprovalsView() {
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-slate-950">
             <Building2 className="h-6 w-6 text-emerald-700" />
-            기관 센터 승인
+            {t('ops_centers_heading')}
           </h1>
           <p className="mt-1 text-sm font-normal text-slate-500">
-            기관 안전관리센터 개설 요청을 검토하고 승인 또는 거절합니다.
+            {t('ops_centers_subheading')}
           </p>
         </div>
         <button
@@ -218,7 +223,7 @@ export function SafetyCenterApprovalsView() {
           className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          새로고침
+          {t('ops_centers_refresh')}
         </button>
       </div>
 
@@ -229,10 +234,10 @@ export function SafetyCenterApprovalsView() {
       )}
 
       <div className="grid gap-3 md:grid-cols-4">
-        <SummaryCard label="전체" value={summary.total} Icon={Building2} tone="bg-slate-100 text-slate-700" />
-        <SummaryCard label="승인 대기" value={summary.pending} Icon={Clock} tone="bg-amber-50 text-amber-700" />
-        <SummaryCard label="승인됨" value={summary.approved} Icon={CheckCircle2} tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="거절됨" value={summary.rejected} Icon={XCircle} tone="bg-red-50 text-red-700" />
+        <SummaryCard label={t('ops_centers_summary_total')} value={summary.total} Icon={Building2} tone="bg-slate-100 text-slate-700" />
+        <SummaryCard label={t('ops_centers_status_pending')} value={summary.pending} Icon={Clock} tone="bg-amber-50 text-amber-700" />
+        <SummaryCard label={t('ops_centers_status_approved')} value={summary.approved} Icon={CheckCircle2} tone="bg-emerald-50 text-emerald-700" />
+        <SummaryCard label={t('ops_centers_status_rejected')} value={summary.rejected} Icon={XCircle} tone="bg-red-50 text-red-700" />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -248,7 +253,7 @@ export function SafetyCenterApprovalsView() {
             <input
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="기관명, 도메인, 센터명으로 검색"
+              placeholder={t('ops_centers_search_placeholder')}
               className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400"
             />
           </label>
@@ -268,25 +273,25 @@ export function SafetyCenterApprovalsView() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="truncate text-lg font-semibold text-slate-950">{item.center_name}</h2>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusTone(item.status)}`}>
-                      {statusLabel(item.status)}
+                      {statusLabel(item.status, t)}
                     </span>
                   </div>
                   <p className="mt-2 text-sm font-normal text-slate-600">
                     {item.institution_name} · {item.institution_domain}
                   </p>
                   <div className="mt-3 grid gap-1 text-xs font-normal text-slate-500 md:grid-cols-2">
-                    <span>요청자: {item.created_by}</span>
-                    <span>요청일: {formatDateTime(item.created_at)}</span>
-                    <span>승인자: {item.approved_by ?? '-'}</span>
-                    <span>승인일: {formatDateTime(item.approved_at)}</span>
+                    <span>{t('ops_centers_requested_by', { value: item.created_by })}</span>
+                    <span>{t('ops_centers_requested_at', { value: formatDateTime(item.created_at, language) })}</span>
+                    <span>{t('ops_centers_approved_by', { value: item.approved_by ?? '-' })}</span>
+                    <span>{t('ops_centers_approved_at', { value: formatDateTime(item.approved_at, language) })}</span>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                     <div className={`flex min-w-0 items-center gap-2 ${hasVerificationDocument ? 'text-slate-700' : 'text-red-600'}`}>
                       <FileText className="h-4 w-4 shrink-0" />
                       <span className="truncate">
                         {hasVerificationDocument
-                          ? `${item.verification_document_name ?? '증빙 문서'} · ${formatFileSize(item.verification_document_size)} · ${formatDateTime(item.verification_document_uploaded_at)}`
-                          : '증빙 문서 없음'}
+                          ? `${item.verification_document_name ?? t('ops_centers_document_default_name')} · ${formatFileSize(item.verification_document_size)} · ${formatDateTime(item.verification_document_uploaded_at, language)}`
+                          : t('ops_centers_no_document')}
                       </span>
                     </div>
                     <button
@@ -296,7 +301,7 @@ export function SafetyCenterApprovalsView() {
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {isOpeningDocument ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                      문서 열기
+                      {t('ops_centers_open_document')}
                     </button>
                   </div>
                 </div>
@@ -309,7 +314,7 @@ export function SafetyCenterApprovalsView() {
                       className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isUpdating && updating?.status === 'approved' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                      승인
+                      {t('ops_centers_action_approve')}
                     </button>
                   )}
                   {item.status !== 'rejected' && (
@@ -320,7 +325,7 @@ export function SafetyCenterApprovalsView() {
                       className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isUpdating && updating?.status === 'rejected' ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                      거절
+                      {t('ops_centers_action_reject')}
                     </button>
                   )}
                   {item.status !== 'pending' && (
@@ -331,7 +336,7 @@ export function SafetyCenterApprovalsView() {
                       className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isUpdating && updating?.status === 'pending' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
-                      대기로 변경
+                      {t('ops_centers_action_set_pending')}
                     </button>
                   )}
                 </div>
@@ -345,9 +350,9 @@ export function SafetyCenterApprovalsView() {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
               <Building2 className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-base font-semibold text-slate-800">표시할 센터 요청이 없습니다</h2>
+            <h2 className="mt-4 text-base font-semibold text-slate-800">{t('ops_centers_empty_title')}</h2>
             <p className="mt-2 text-sm font-normal text-slate-500">
-              {items.length === 0 ? '아직 기관 센터 승인 요청이 없습니다.' : '현재 필터에 맞는 요청이 없습니다.'}
+              {items.length === 0 ? t('ops_centers_empty_none') : t('ops_centers_empty_filtered')}
             </p>
           </div>
         )}

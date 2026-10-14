@@ -1,22 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cabinetService, type CabinetTrashEntry } from '../../../services/cabinetService';
 import { useFridgeStore } from '../../../store/fridgeStore';
 
 export function CabinetTrash() {
+    const { t, i18n } = useTranslation();
     const cabinetId = useFridgeStore(s => s.cabinetId);
     const [open, setOpen] = useState(false);
     const [entries, setEntries] = useState<CabinetTrashEntry[]>([]);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const rootRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!open) return;
+        const onPointerDown = (event: PointerEvent) => {
+            if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+        };
+        const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+        document.addEventListener('pointerdown', onPointerDown);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', onPointerDown);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [open]);
     useEffect(() => {
         if (!open || !cabinetId) return;
         let active = true;
         setBusy(true); setError('');
         cabinetService.getTrash(cabinetId).then(rows => { if (active) setEntries(rows); })
-            .catch(() => { if (active) setError('휴지통을 불러오지 못했습니다. 다시 열어 주세요.'); })
+            .catch(() => { if (active) setError(t('cabinet_trash_load_failed')); })
             .finally(() => { if (active) setBusy(false); });
         return () => { active = false; };
-    }, [open, cabinetId]);
+    }, [open, cabinetId, t]);
     async function restore(id: string) {
         if (!cabinetId || busy) return;
         setBusy(true); setError('');
@@ -27,21 +44,34 @@ export function CabinetTrash() {
             await useFridgeStore.getState().loadCabinet(cabinetId);
             setEntries(await cabinetService.getTrash(cabinetId));
         } catch (reason) {
-            setError(reason instanceof Error ? reason.message : '복원할 공간이 부족하거나 캐비넷이 변경되었습니다. 다시 불러와 주세요.');
+            setError(reason instanceof Error ? reason.message : t('cabinet_trash_restore_failed'));
         } finally { setBusy(false); }
     }
-    return <div className="absolute right-3 top-3 z-20">
-        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="rounded-lg border bg-white px-3 py-2 text-sm text-slate-800 shadow dark:bg-slate-900 dark:text-slate-100">휴지통</button>
-        {open && <section aria-label="캐비넷 휴지통" className="mt-2 max-h-[60vh] w-72 overflow-auto rounded-xl border bg-white p-3 text-sm text-slate-800 shadow-xl dark:bg-slate-900 dark:text-slate-100">
-            <p className="mb-3">삭제한 선반과 시약은 10일 동안 복원할 수 있습니다. 삭제 후 240시간이 지나면 자동으로 완전히 삭제됩니다.</p>
-            {error && <p role="alert" className="mb-2 text-red-600">{error}</p>}
-            {busy && <p role="status">처리 중…</p>}
-            {!busy && !error && entries.length === 0 && <p>휴지통이 비어 있습니다.</p>}
-            {entries.map(entry => <div key={entry.id} className="mb-2 rounded-lg border p-2">
-                <p>선반 {entry.payload.shelves.length}개 · 시약 {entry.payload.items.length}개</p>
-                {entry.payload.items.length > 0 && <p className="mt-1 truncate text-xs">{entry.payload.items.slice(0, 3).map(item => item.name).join(', ')}{entry.payload.items.length > 3 ? '…' : ''}</p>}
-                <p className="text-xs text-slate-500">완전 삭제: {new Date(entry.expires_at).toLocaleString()}</p>
-                <button type="button" disabled={busy} onClick={() => void restore(entry.id)} className="mt-2 rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50">복원</button>
+    return <div ref={rootRef} className="relative">
+        <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-haspopup="true"
+            title={t('cabinet_trash')}
+            aria-label={t('cabinet_trash')}
+            className={`rounded-lg p-2 transition-colors ${open
+                ? 'bg-blue-50 text-blue-600 dark:bg-slate-800 dark:text-blue-300'
+                : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                }`}
+        >
+            <Trash2 className="h-4 w-4" />
+        </button>
+        {open && <section aria-label={t('cabinet_trash_aria')} className="absolute right-0 top-full z-40 mt-2 max-h-[60vh] w-72 max-w-[calc(100vw-2rem)] overflow-auto rounded-2xl border border-gray-200 bg-white/95 p-3 text-sm text-slate-800 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100">
+            <p className="mb-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('cabinet_trash_notice')}</p>
+            {error && <p role="alert" className="mb-2 text-xs text-red-600">{error}</p>}
+            {busy && <p role="status" className="text-xs">{t('cabinet_processing')}</p>}
+            {!busy && !error && entries.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400">{t('cabinet_trash_empty')}</p>}
+            {entries.map(entry => <div key={entry.id} className="mb-2 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
+                <p className="text-xs font-medium">{t('cabinet_trash_summary', { shelves: entry.payload.shelves.length, items: entry.payload.items.length })}</p>
+                {entry.payload.items.length > 0 && <p className="mt-1 truncate text-xs text-slate-600 dark:text-slate-300">{entry.payload.items.slice(0, 3).map(item => item.name).join(', ')}{entry.payload.items.length > 3 ? '…' : ''}</p>}
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('cabinet_trash_expires', { date: new Date(entry.expires_at).toLocaleString(i18n.language) })}</p>
+                <button type="button" disabled={busy} onClick={() => void restore(entry.id)} className="mt-2 rounded-full bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50">{t('cabinet_trash_restore')}</button>
             </div>)}
         </section>}
     </div>;

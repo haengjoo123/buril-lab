@@ -406,8 +406,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
                                     setDialogConfig({
                                         isOpen: true,
                                         type: 'alert',
-                                        title: '로그인이 필요합니다',
-                                        description: '앱 개선 제안은 로그인을 하셔야 접수하실 수 있습니다.',
+                                        title: t('cmp_settings_login_required_title', '로그인이 필요합니다'),
+                                        description: t('cmp_settings_login_required_desc', '앱 개선 제안은 로그인을 하셔야 접수하실 수 있습니다.'),
                                         onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
                                     });
                                     return;

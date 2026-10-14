@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import * as cptable from 'xlsx/dist/cpexcel.full.mjs'
 import { parseCsvText } from '../../../utils/csvFiles'
+import i18n from '../../../locales/i18n'
 import { IMPORT_LIMITS, type ImportCell, type ImportGrid, type ImportSource } from './types'
 
 XLSX.set_cptable(cptable)
@@ -12,14 +13,14 @@ export function importKind(name: string): ImportSource['kind'] {
   if (ext === 'csv' || ext === 'tsv') return 'delimited'
   if (ext === 'pdf') return 'pdf'
   if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) return 'image'
-  throw new Error('XLSX·XLS·CSV·TSV·PDF·JPG·PNG·WebP를 선택하세요. HWP·DOCX는 PDF로 저장해 주세요.')
+  throw new Error(i18n.t('inv_err_file_type'))
 }
 export function checkImportFiles(files: Array<{ name: string; size: number }>, existingBytes = 0) {
   for (const file of files) {
     importKind(file.name)
-    if (file.size > IMPORT_LIMITS.fileBytes || file.size === 0) throw new Error(`${file.name}: 빈 파일 또는 20MB를 넘는 파일입니다.`)
+    if (file.size > IMPORT_LIMITS.fileBytes || file.size === 0) throw new Error(i18n.t('inv_err_file_empty_or_large', { name: file.name }))
   }
-  if (files.reduce((n, file) => n + file.size, existingBytes) > IMPORT_LIMITS.totalBytes) throw new Error('작업당 100MB를 넘습니다. 파일을 나누어 가져오세요.')
+  if (files.reduce((n, file) => n + file.size, existingBytes) > IMPORT_LIMITS.totalBytes) throw new Error(i18n.t('inv_err_total_size'))
 }
 export async function hashImportBytes(bytes: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes)
@@ -37,12 +38,12 @@ export function decodeImportText(bytes: Uint8Array, requested?: string) {
   let text: string
   try { text = new TextDecoder(encoding, { fatal: true }).decode(bytes) }
   catch {
-    if (requested || bom) throw new Error('선택한 문자 인코딩으로 읽을 수 없습니다.')
+    if (requested || bom) throw new Error(i18n.t('inv_err_encoding_unreadable'))
     encoding = 'euc-kr'; uncertain = true
     try { text = new TextDecoder(encoding, { fatal: true }).decode(bytes) }
-    catch { throw new Error('문자 인코딩을 확인하세요. UTF-8 또는 CP949로 저장해 다시 선택할 수 있습니다.') }
+    catch { throw new Error(i18n.t('inv_err_encoding_check')) }
   }
-  if (text.includes('\u0000')) throw new Error('문자 인코딩을 확인하세요. UTF-16 파일은 인코딩을 직접 선택해 주세요.')
+  if (text.includes('\u0000')) throw new Error(i18n.t('inv_err_encoding_utf16'))
   return { text: text.replace(/^\uFEFF/, ''), encoding, uncertain }
 }
 export function detectImportDelimiter(text: string): string {
@@ -56,7 +57,7 @@ export function detectImportDelimiter(text: string): string {
   return candidates.sort((a, b) => b.score - a.score)[0].delimiter
 }
 export function gridFromText(rows: string[][], id: string, label: string): ImportGrid {
-  if (rows.reduce((n, row) => n + row.length, 0) > IMPORT_LIMITS.cells) throw new Error('표가 너무 큽니다. 표 영역별로 파일을 나누어 주세요.')
+  if (rows.reduce((n, row) => n + row.length, 0) > IMPORT_LIMITS.cells) throw new Error(i18n.t('inv_err_table_too_big'))
   return { id, label, cells: rows.map((row, r) => row.map((value, c) => ({ address: XLSX.utils.encode_cell({ r, c }), raw: value, text: value }))) }
 }
 export function readSpreadsheet(bytes: ArrayBuffer): ImportGrid[] {
@@ -68,7 +69,7 @@ export function readSpreadsheet(bytes: ArrayBuffer): ImportGrid[] {
     if (!ref) return { id: `sheet-${sheetIndex}`, label, cells: [] }
     const range = XLSX.utils.decode_range(ref)
     totalCells += (range.e.r + 1) * (range.e.c + 1)
-    if (totalCells > IMPORT_LIMITS.cells) throw new Error('표 영역이 100만 셀을 넘습니다. 불필요한 서식 영역을 지우거나 파일을 나누어 주세요.')
+    if (totalCells > IMPORT_LIMITS.cells) throw new Error(i18n.t('inv_err_cells_limit'))
     const cells: ImportCell[][] = []
     for (let r = 0; r <= range.e.r; r++) {
       const row: ImportCell[] = []
@@ -83,7 +84,7 @@ export function readSpreadsheet(bytes: ArrayBuffer): ImportGrid[] {
         }
         if (raw instanceof Date) raw = raw.toISOString()
         row.push({ address, raw, text, ...(cell?.f ? { formula: cell.f } : {}),
-          ...(cell?.f && cell.v == null ? { issue: '계산 결과가 없는 수식입니다. 원본을 확인하세요.' } : cell?.t === 'e' ? { issue: '엑셀 오류 셀입니다.' } : {}) })
+          ...(cell?.f && cell.v == null ? { issue: i18n.t('inv_issue_formula_no_result') } : cell?.t === 'e' ? { issue: i18n.t('inv_issue_excel_error') } : {}) })
       }
       cells.push(row)
     }

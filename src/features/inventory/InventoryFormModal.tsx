@@ -323,7 +323,7 @@ export const InventoryFormModal: React.FC<Props> = ({
 
     async function moveItemStorage(sourceItem: InventoryItem, input: CreateInventoryInput): Promise<void> {
         if (input.storage_type === 'cabinet') {
-            if (!input.cabinet_id) throw new Error('보관할 시약장을 선택해주세요.');
+            if (!input.cabinet_id) throw new Error(t('inv_err_select_cabinet'));
 
             const geometry = await getSourceGeometry(sourceItem, input);
             const targetStore = useFridgeStore.getState();
@@ -361,7 +361,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                 remaining_percent: input.remaining_percent,
             });
             if (!placed) {
-                throw new Error('재고 이동 실패: 대상 시약장에 빈 공간이 없습니다.');
+                throw new Error(t('inv_err_move_no_space'));
             }
 
             await persistLoadedCabinetStateStrict(input.cabinet_id);
@@ -381,7 +381,7 @@ export const InventoryFormModal: React.FC<Props> = ({
 
                 if (sourceItem.storage_type === 'cabinet' && sourceItem.cabinet_id && sourceItem.cabinet_id !== input.cabinet_id) {
                     const removed = await removeSourceCabinetRow(sourceItem);
-                    if (!removed) throw new Error('원본 시약장에서 항목 제거에 실패했습니다.');
+                    if (!removed) throw new Error(t('inv_err_remove_from_source'));
                 }
             } catch (error) {
                 // Roll back target cabinet placement on downstream failures
@@ -422,7 +422,7 @@ export const InventoryFormModal: React.FC<Props> = ({
         }
 
         // Move to 'other' storage
-        if (!input.storage_location_id) throw new Error('기타 보관 장소를 선택해주세요.');
+        if (!input.storage_location_id) throw new Error(t('inv_err_select_other_location'));
 
         if (sourceItem._source === 'inventory') {
             await inventoryService.updateItem(sourceItem.id, {
@@ -438,7 +438,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                         storage_type: 'cabinet',
                         cabinet_id: sourceItem.cabinet_id,
                     }, 'inventory');
-                    throw new Error('원본 시약장 동기화에 실패했습니다.');
+                    throw new Error(t('inv_err_source_sync'));
                 }
             }
             return;
@@ -451,12 +451,12 @@ export const InventoryFormModal: React.FC<Props> = ({
             storage_location_id: input.storage_location_id,
             quantity: 1,
         });
-        if (!created) throw new Error('기타 위치 이동을 위한 재고 생성에 실패했습니다.');
+        if (!created) throw new Error(t('inv_err_create_for_other_move'));
 
         const removed = await removeSourceCabinetRow(sourceItem);
         if (!removed) {
             await inventoryService.deleteItem({ ...created, _source: 'inventory' });
-            throw new Error('원본 시약장 제거에 실패해 이동을 취소했습니다.');
+            throw new Error(t('inv_err_source_remove_cancelled'));
         }
     }
 
@@ -551,7 +551,7 @@ export const InventoryFormModal: React.FC<Props> = ({
     async function persistLoadedCabinetStateStrict(expectedCabinetId: string): Promise<void> {
         const state = useFridgeStore.getState();
         if (!state.cabinetId || state.cabinetId !== expectedCabinetId) {
-            throw new Error('시약장 상태가 동기화되지 않아 저장을 중단했습니다.');
+            throw new Error(t('inv_err_cabinet_not_synced'));
         }
         await useFridgeStore.getState().saveCabinetStrict();
     }
@@ -905,7 +905,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                                     />
                                 </div>
 
-                                {readableImportAttributes(initialData?.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">가져온 원본 추가정보</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(initialData?.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
+                                {readableImportAttributes(initialData?.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">{t('inv_imported_source_info')}</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(initialData?.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
                                 {initialData && (
                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                                         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">

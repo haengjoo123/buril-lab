@@ -31,6 +31,8 @@ export const EXPECTED_LEGACY_TESTS = [
 export const EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
 export const EXPECTED_PERMISSION_TEST_SHA256 = '7ec6362717b7a0d6fbec003e79157c08f73b92ed34425da8a87cf6d47765b564'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
+  '20261014080315_cabinet_allow_nonspatial_saves.sql': '7759d254fef093452b9b7889d8ddfa5e420f242a93aee51fa019837a316cf619',
+  '20261014081429_cabinet_restore_nearest_space.sql': '1b236b4aff38fabf2127869da619ded2254b07fb2c8a781bdc3e5329d0abb9db',
   '20261002010000_inventory_import_service_grants.sql': 'bdaf72cbf2d00c216690f717d34b3bc682894dc46bf9b5bb2bc58f81799005a7',
   '20261002000000_cabinet_trash_and_revision.sql': '5b433ab9c36944ebae3de6748f8cfa204093d978740a16427624980c2e70e2d7',
   '20260922010000_inventory_import_v2.sql': '93cf5cd008146a6d9b0e16b4d2f5d11fbdfa32fc0d2d12288cf96451f8248808',

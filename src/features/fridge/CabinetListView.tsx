@@ -1009,7 +1009,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                         <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-slate-700 shrink-0">
                             <div className="flex items-center gap-2">
                                 <Beaker className="w-5 h-5 text-emerald-500" />
-                                <span className="font-semibold text-slate-800 dark:text-slate-100">{inventoryModal.cabinetName} 재고 목록</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-100">{t('msc_cabinet_inventory_title', { name: inventoryModal.cabinetName })}</span>
                             </div>
                             <button
                                 onClick={() => setInventoryModal(prev => ({ ...prev, isOpen: false }))}
@@ -1025,7 +1025,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                     <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
                                 </div>
                             ) : inventoryModal.items.length === 0 ? (
-                                <p className="text-center text-slate-400 dark:text-slate-500 py-8">시약이 없습니다.</p>
+                                <p className="text-center text-slate-400 dark:text-slate-500 py-8">{t('msc_cabinet_no_reagents')}</p>
                             ) : (
                                 (() => {
                                     // Group by shelf level
@@ -1039,7 +1039,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                     return sortedLevels.map(level => (
                                         <div key={level}>
                                             <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
-                                                {`📦 ${level + 1}층 선반`}
+                                                {t('msc_cabinet_shelf_level', { level: level + 1 })}
                                             </h4>
                                             <div className="flex flex-col gap-1">
                                                 {grouped.get(level)!.map((item, idx) => (
@@ -1072,7 +1072,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                         {!inventoryModal.isLoading && inventoryModal.items.length > 0 && (
                             <div className="p-3 border-t border-gray-100 dark:border-slate-700 text-center shrink-0">
                                 <span className="text-xs text-slate-400 dark:text-slate-500">
-                                    총 {inventoryModal.items.length}개 시약
+                                    {t('msc_cabinet_total_reagents', { count: inventoryModal.items.length })}
                                 </span>
                             </div>
                         )}

@@ -116,7 +116,7 @@ describe('workflow security boundaries', () => {
       productionReady: false, ops12Included: false, deletionRuntimeDefaultEnabled: false })
   })
   it('keeps the new three-step path valid and rejects weakened gates', async () => {
-    const source = await readFile('.github/workflows/web-release.yml', 'utf8')
+    const source = (await readFile('.github/workflows/web-release.yml', 'utf8')).replace(/\r\n/g, '\n')
     expect(verifyWebReleaseWorkflow(source)).toBe(true)
     for (const altered of [
       source.replace('actions: read', 'actions: write'),

@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
 import { optimizeCabinetImage } from '../utils/cabinetImageOptimization';
 import { postBytes, postJson } from './internalApi';
+import i18n from '../locales/i18n';
 
 export interface Cabinet {
     id: string;
@@ -232,7 +233,7 @@ export const cabinetService = {
         dimensions: CabinetDimensions
     ): Promise<void> {
         const snapshot = loadedSnapshots.get(cabinetId);
-        if (!snapshot) throw new Error('캐비넷을 다시 불러온 후 저장해 주세요.');
+        if (!snapshot) throw new Error(i18n.t('msc_cabinet_reload_before_save'));
         const currentShelves = new Set(shelves.map(s => s.id));
         const currentItems = new Set(shelves.flatMap(s => s.items.map(i => i.id)));
         const { data, error } = await supabase.rpc('save_cabinet_state_v2', {
@@ -262,9 +263,16 @@ export const cabinetService = {
 
     async restoreTrash(cabinetId: string, trashId: string): Promise<void> {
         const snapshot = loadedSnapshots.get(cabinetId);
-        if (!snapshot) throw new Error('캐비넷을 먼저 불러와 주세요.');
+        if (!snapshot) throw new Error(i18n.t('msc_cabinet_load_first'));
         const { error } = await supabase.rpc('restore_cabinet_trash_v2', { p_cabinet_id: cabinetId, p_trash_id: trashId, p_expected_revision: snapshot.revision });
-        if (error) throw error;
+        if (error) {
+            const message = error.message || '';
+            const key = message.startsWith('CABINET_RESTORE_SPACE_REQUIRED') ? 'cabinet_trash_no_space'
+                : message.startsWith('CABINET_VERSION_CONFLICT') ? 'cabinet_trash_changed'
+                    : message.startsWith('CABINET_TRASH_EXPIRED') ? 'cabinet_trash_expired'
+                        : 'cabinet_trash_restore_failed';
+            throw new Error(i18n.t(key), { cause: error });
+        }
     },
 
     async logDisposal(cabinetId: string, itemName: string, reason: string, memo?: string): Promise<void> {

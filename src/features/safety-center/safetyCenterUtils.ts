@@ -1,3 +1,4 @@
+import i18n from '../../locales/i18n';
 import type { InventoryItem } from '../../services/inventoryService';
 import { getExpiryStatus } from '../../utils/expiryStatus';
 import { hasManufacturerDate } from '../../utils/manufacturerDate';
@@ -100,11 +101,11 @@ const HAZARD_FLAG_BY_CATEGORY: Record<InventoryHazardFilterCategory, SafetyCente
 };
 
 const HAZARD_CATEGORY_LABELS: Record<InventoryHazardFilterCategory, string> = {
-  special_high: '특수 고위험',
-  flammable: '인화성',
-  corrosive: '부식성',
-  toxic: '독성',
-  other_managed: '기타 관리 위험',
+  special_high: 'sc_hazard_special_high',
+  flammable: 'sc_hazard_flammable',
+  corrosive: 'sc_hazard_corrosive',
+  toxic: 'sc_hazard_toxic',
+  other_managed: 'sc_hazard_other_managed',
 };
 
 interface LabRiskAccumulator {
@@ -228,7 +229,7 @@ export function asInventoryItem(item: SafetyCenterRiskItem): InventoryItem {
 }
 
 export function getHazardCategoryLabel(category: InventoryHazardFilterCategory): string {
-  return HAZARD_CATEGORY_LABELS[category];
+  return i18n.t(HAZARD_CATEGORY_LABELS[category]);
 }
 
 export function getHazardCategoryFlag(category: InventoryHazardFilterCategory): SafetyCenterHazardFlag {
@@ -306,17 +307,17 @@ export function getRiskFlagLabel(flag: SafetyCenterRiskFlag): string {
 
   switch (flag) {
     case 'hazard':
-      return '관리 위험';
+      return i18n.t('sc_flag_hazard');
     case 'expired':
-      return '만료/긴급';
+      return i18n.t('sc_flag_expired');
     case 'expiring':
-      return '만료 임박';
+      return i18n.t('sc_flag_expiring');
     case 'missing_cas':
-      return 'CAS 누락';
+      return i18n.t('sc_flag_missing_cas');
     case 'low_remaining':
-      return '잔량 부족';
+      return i18n.t('sc_flag_low_remaining');
     case 'ghs_data_review':
-      return 'GHS 확인 필요';
+      return i18n.t('sc_flag_ghs_review');
     default:
       return flag;
   }
@@ -325,13 +326,13 @@ export function getRiskFlagLabel(flag: SafetyCenterRiskFlag): string {
 export function getRequestStatusLabel(status: SafetyCenterRequest['status']): string {
   switch (status) {
     case 'open':
-      return '요청됨';
+      return i18n.t('sc_status_open');
     case 'in_progress':
-      return '처리 중';
+      return i18n.t('sc_status_in_progress');
     case 'submitted':
-      return '제출됨';
+      return i18n.t('sc_status_submitted');
     case 'resolved':
-      return '완료';
+      return i18n.t('sc_status_resolved');
     default:
       return status;
   }
@@ -340,13 +341,13 @@ export function getRequestStatusLabel(status: SafetyCenterRequest['status']): st
 export function getPriorityLabel(priority: SafetyCenterRequest['priority']): string {
   switch (priority) {
     case 'urgent':
-      return '긴급';
+      return i18n.t('sc_priority_urgent');
     case 'high':
-      return '높음';
+      return i18n.t('sc_priority_high');
     case 'normal':
-      return '보통';
+      return i18n.t('sc_priority_normal');
     case 'low':
-      return '낮음';
+      return i18n.t('sc_priority_low');
     default:
       return priority;
   }

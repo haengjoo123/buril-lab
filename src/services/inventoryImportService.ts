@@ -2,13 +2,14 @@ import { supabase } from './supabaseClient'
 import { postJson } from './internalApi'
 import { IMPORT_LIMITS, type ImportJob, type ImportSource, type ImportProfile, type ImportCommitReceipt, type ValidatedImportRow } from '../features/inventory/import/types'
 import { buildImportRows } from '../features/inventory/import/tables'
+import i18n from '../locales/i18n';
 
 const BUCKET = 'inventory-imports'
 const pendingSaves = new Map<string, { signature: string; requestId: string }>()
 function fail(error: unknown): never {
   const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error)
-  if (/relation .* does not exist|schema cache|PGRST|function .* does not exist/i.test(message)) throw new Error('통합 가져오기 준비가 필요합니다. 데이터베이스 업데이트 후 다시 시도해 주세요.')
-  if (/revision changed|changed in another tab|already registered in another tab/i.test(message)) throw new Error('다른 탭에서 작업이 변경되거나 등록되었습니다. 저장된 작업을 다시 열어 최신 내용을 확인하세요.')
+  if (/relation .* does not exist|schema cache|PGRST|function .* does not exist/i.test(message)) throw new Error(i18n.t('msc_import_db_update_needed'))
+  if (/revision changed|changed in another tab|already registered in another tab/i.test(message)) throw new Error(i18n.t('msc_import_changed_other_tab'))
   throw new Error(message)
 }
 export function stripImportImages(sources: ImportSource[]): ImportSource[] {
@@ -31,7 +32,7 @@ export const inventoryImportService = {
   },
   async create(labId: string | null, name: string): Promise<ImportJob> {
     const { data: auth, error: authError } = await supabase.auth.getUser()
-    if (authError || !auth.user) throw new Error('로그인이 필요합니다.')
+    if (authError || !auth.user) throw new Error(i18n.t('msc_import_login_required'))
     const { data, error } = await supabase.from('inventory_import_jobs').insert({ lab_id: labId, user_id: auth.user.id, name }).select('id,revision').single()
     if (error) fail(error)
     return { id: data.id, revision: data.revision, userId: auth.user.id, labId, name, sources: [], tables: [], rows: [] }
@@ -39,7 +40,7 @@ export const inventoryImportService = {
   async load(id: string, expectedLabId: string | null): Promise<ImportJob> {
     const { data, error } = await supabase.from('inventory_import_jobs').select('*').eq('id', id).single()
     if (error) fail(error)
-    if (data.lab_id !== expectedLabId) throw new Error('다른 연구실의 가져오기 작업입니다.')
+    if (data.lab_id !== expectedLabId) throw new Error(i18n.t('msc_import_other_lab_job'))
     const storedRows: ImportJob['rows'] = []
     for (let offset = 0; ; offset += 500) {
       const result = await supabase.from('inventory_import_rows').select('draft,inventory_id').eq('job_id', id).order('row_id').range(offset, offset + 499)
@@ -91,13 +92,13 @@ export const inventoryImportService = {
     return data!.signedUrl
   },
   async commit(job: ImportJob, rows: ValidatedImportRow[]): Promise<ImportCommitReceipt[]> {
-    if (!rows.length || rows.length > IMPORT_LIMITS.batch || rows.some(row => row.status !== 'ready' || !row.input)) throw new Error('확인된 행을 100개 이하로 선택하세요.')
+    if (!rows.length || rows.length > IMPORT_LIMITS.batch || rows.some(row => row.status !== 'ready' || !row.input)) throw new Error(i18n.t('msc_import_select_rows'))
     const { data, error } = await supabase.rpc('commit_inventory_import_batch_v1', {
       p_job_id: job.id, p_revision: job.revision, p_rows: rows.map(row => ({ rowId: row.row.id, input: row.input })),
     })
     if (error) fail(error)
     const receipts = data as ImportCommitReceipt[]
-    if (!Array.isArray(receipts) || receipts.length !== rows.length || receipts.some((r, i) => r.rowId !== rows[i].row.id || (!r.inventoryId && !r.error))) throw new Error('등록 결과 확인이 필요합니다. 작업을 다시 열면 중복 없이 이어갈 수 있습니다.')
+    if (!Array.isArray(receipts) || receipts.length !== rows.length || receipts.some((r, i) => r.rowId !== rows[i].row.id || (!r.inventoryId && !r.error))) throw new Error(i18n.t('msc_import_receipt_check'))
     return receipts
   },
   async profiles(labId: string | null): Promise<ImportProfile[]> {
@@ -109,7 +110,7 @@ export const inventoryImportService = {
   },
   async saveProfile(job: ImportJob, profile: Omit<ImportProfile, 'id'>) {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('로그인이 필요합니다.')
+    if (!user) throw new Error(i18n.t('msc_import_login_required'))
     const { error } = await supabase.from('inventory_import_profiles').insert({ user_id: user.id, lab_id: job.labId, name: profile.name, signature: profile.signature, profile })
     if (error) fail(error)
   },

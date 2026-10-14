@@ -118,6 +118,8 @@ try {
     'serviceRoleTableGrants',count(*) filter (where exists(select 1 from pg_catalog.aclexplode(c.relacl) acl join pg_catalog.pg_roles r on r.oid=acl.grantee where r.rolname='service_role'))
   ) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p');`))
   console.log(await query(readFileSync(path.join(repository,'scripts/fixtures/cabinet-trash-assertions.sql'),'utf8')))
+  console.log(await query(readFileSync(path.join(repository,'scripts/fixtures/cabinet-nonspatial-assertions.sql'),'utf8')))
+  console.log(await query(readFileSync(path.join(repository,'scripts/fixtures/cabinet-restore-assertions.sql'),'utf8')))
 } finally {
   if (serverMayBeRunning) { await command(path.join(pgBin,'pg_ctl.exe'), ['-D',cluster,'-m','fast','-w','-t','30','stop']); serverStopped=true }
   else serverStopped=true

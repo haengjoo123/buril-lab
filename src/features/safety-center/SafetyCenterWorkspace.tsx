@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../locales/i18n';
 import {
   AlertTriangle,
   Archive,
@@ -56,9 +58,9 @@ import { AppSelect } from '../../components/AppSelect';
 type DatasetKey = 'risks' | 'waste' | 'audit';
 
 const getManufacturerDateTypeLabel = (type: SafetyCenterRiskItem['manufacturer_date_type']) => {
-  if (type === 'minimum_shelf_life') return '최소 보증기한';
-  if (type === 'expiry') return '유효기한';
-  return '미표기';
+  if (type === 'minimum_shelf_life') return i18n.t('sc_mfg_min_shelf_life');
+  if (type === 'expiry') return i18n.t('sc_mfg_expiry');
+  return i18n.t('sc_mfg_none');
 };
 
 const getTrackedManufacturerDate = (item: SafetyCenterRiskItem) => (
@@ -89,20 +91,23 @@ type SupabaseLikeError = {
 };
 
 const VERIFICATION_REQUIREMENTS = [
-  '기관명',
-  '신청자 이름, 소속 부서, 직책',
-  '신청자가 통합 안전관리센터를 개설하거나 운영할 권한이 있다는 내용',
-  '요청하는 센터명 또는 서비스 이용 목적',
-  '기관 도메인 또는 공식 홈페이지',
-  '발행일',
-  '부서장/기관 담당자/안전관리 책임자 등의 이름, 서명, 직인, 또는 확인 가능한 연락처',
+  'sc_req_institution_name',
+  'sc_req_applicant',
+  'sc_req_authority',
+  'sc_req_purpose',
+  'sc_req_domain',
+  'sc_req_issue_date',
+  'sc_req_signer',
 ];
 
-const DATASET_LABELS: Record<DatasetKey, string> = {
-  risks: '위험 재고 목록',
-  waste: '폐기 기록',
-  audit: '감사 로그',
+const DATASET_LABEL_KEYS: Record<DatasetKey, string> = {
+  risks: 'sc_dataset_risks',
+  waste: 'sc_dataset_waste',
+  audit: 'sc_dataset_audit',
 };
+const getDatasetLabel = (dataset: string): string => (
+  dataset in DATASET_LABEL_KEYS ? i18n.t(DATASET_LABEL_KEYS[dataset as DatasetKey]) : dataset
+);
 
 function normalizeInstitutionDomain(value: string): string {
   return value
@@ -118,22 +123,22 @@ function getCreateCenterErrorMessage(error: unknown): string {
   const message = [err?.message, err?.details].filter(Boolean).join('\n');
 
   if (err?.code === 'PGRST202' || err?.code === '42883' || message.includes('Could not find the function')) {
-    return '센터 개설 기능의 DB 마이그레이션이 아직 적용되지 않았습니다. Supabase 마이그레이션을 적용한 뒤 다시 시도해 주세요.';
+    return i18n.t('sc_err_migration');
   }
 
   if (message.includes('Bucket not found') || message.includes('safety-center-verifications')) {
-    return '증빙 문서 저장소가 아직 준비되지 않았습니다. Supabase 마이그레이션과 Storage 버킷 설정을 확인해 주세요.';
+    return i18n.t('sc_err_bucket');
   }
 
   if (err?.code === '42501') {
-    return '센터 개설 요청을 처리할 권한이 없습니다. 다시 로그인한 뒤 시도해 주세요.';
+    return i18n.t('sc_err_permission');
   }
 
   if (err?.code === '22023') {
-    return '기관명, 기관 도메인, 센터명을 모두 입력해 주세요.';
+    return i18n.t('sc_err_required');
   }
 
-  return '센터 개설 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  return i18n.t('sc_err_save_request');
 }
 
 function formatDate(value?: string | null): string {
@@ -169,11 +174,11 @@ function priorityTone(priority: SafetyCenterRequestPriority): string {
 }
 
 function linkStatusLabel(status: SafetyCenterLabCandidate['link_status']): string {
-  if (status === 'approved') return '승인됨';
-  if (status === 'requested') return '요청중';
-  if (status === 'rejected') return '거절됨';
-  if (status === 'revoked') return '철회됨';
-  return '미연결';
+  if (status === 'approved') return i18n.t('sc_link_approved');
+  if (status === 'requested') return i18n.t('sc_link_requested');
+  if (status === 'rejected') return i18n.t('sc_link_rejected');
+  if (status === 'revoked') return i18n.t('sc_link_revoked');
+  return i18n.t('sc_link_none');
 }
 
 function linkStatusTone(status: SafetyCenterLabCandidate['link_status']): string {
@@ -245,6 +250,7 @@ function EmptyPanel({ title, body }: { title: string; body: string }) {
 }
 
 export function SafetyCenterWorkspace() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const activeSection = getSafetyCenterSectionFromPath(location.pathname);
@@ -326,11 +332,11 @@ export function SafetyCenterWorkspace() {
       await loadCenters();
     } catch (err) {
       console.error(err);
-      setError('통합센터 정보를 불러오지 못했습니다.');
+      setError(t('sc_err_load_center'));
     } finally {
       setIsLoading(false);
     }
-  }, [loadCenters]);
+  }, [loadCenters, t]);
 
   useEffect(() => {
     void reloadAll();
@@ -342,10 +348,10 @@ export function SafetyCenterWorkspace() {
     loadCenterData(activeCenter)
       .catch((err) => {
         console.error(err);
-        setError('센터 데이터를 불러오지 못했습니다.');
+        setError(t('sc_err_load_data'));
       })
       .finally(() => setIsLoading(false));
-  }, [activeCenter, loadCenterData]);
+  }, [activeCenter, loadCenterData, t]);
 
   const dashboardSummary = useMemo(() => (
     buildSafetyCenterDashboardSummary({ candidates, riskItems, requests, wasteLogs })
@@ -379,11 +385,11 @@ export function SafetyCenterWorkspace() {
       navigate('/center/requests');
     } catch (err) {
       console.error(err);
-      setError('점검 요청을 만들지 못했습니다.');
+      setError(t('sc_err_create_request'));
     } finally {
       setIsActionLoading(false);
     }
-  }, [activeCenter, loadCenterData, navigate, requestDraft]);
+  }, [activeCenter, loadCenterData, navigate, requestDraft, t]);
 
   const buildExportRows = useCallback((datasets: DatasetKey[], options: ExportOptions = {}) => {
     const rows: Array<Record<string, unknown>> = [];
@@ -401,7 +407,7 @@ export function SafetyCenterWorkspace() {
       riskItems.filter((item) => includesLab(item.lab_id) && includesDate(item.updated_at ?? item.created_at)).forEach((item) => {
         const assessment = assessRiskItem(item);
         rows.push({
-          Dataset: DATASET_LABELS.risks,
+          Dataset: getDatasetLabel('risks'),
           Lab: item.lab_name,
           Name: item.inventory_name,
           CAS: item.cas_number ?? '',
@@ -420,7 +426,7 @@ export function SafetyCenterWorkspace() {
     if (datasets.includes('waste')) {
       wasteLogs.filter((log) => includesLab(log.lab_id) && includesDate(log.created_at)).forEach((log) => {
         rows.push({
-          Dataset: DATASET_LABELS.waste,
+          Dataset: getDatasetLabel('waste'),
           Lab: log.lab_name,
           CreatedAt: formatDateTime(log.created_at),
           Category: log.disposal_category,
@@ -434,7 +440,7 @@ export function SafetyCenterWorkspace() {
     if (datasets.includes('audit')) {
       auditLogs.filter((log) => includesLab(log.lab_id) && includesDate(log.created_at)).forEach((log) => {
         rows.push({
-          Dataset: DATASET_LABELS.audit,
+          Dataset: getDatasetLabel('audit'),
           Lab: log.lab_name,
           CreatedAt: formatDateTime(log.created_at),
           Actor: log.actor_name ?? '',
@@ -467,7 +473,7 @@ export function SafetyCenterWorkspace() {
       const exportLabIds = requestedLabIds.filter((labId) => exportableLabIds.includes(labId));
 
       if (exportLabIds.length === 0) {
-        setError('내보내기 권한이 있는 연구실이 없습니다.');
+        setError(t('sc_err_no_export_lab'));
         return;
       }
 
@@ -484,7 +490,7 @@ export function SafetyCenterWorkspace() {
         container.style.padding = '24px';
         container.style.fontFamily = 'system-ui, sans-serif';
         container.innerHTML = `
-          <h1 style="font-size:20px;margin:0 0 8px;">${escapeHtml(activeCenter.center_name)} 안전 리포트</h1>
+          <h1 style="font-size:20px;margin:0 0 8px;">${escapeHtml(activeCenter.center_name)} ${t('sc_safety_report_suffix')}</h1>
           <p style="font-size:12px;color:#64748b;margin:0 0 20px;">${escapeHtml(formatDateTime(new Date().toISOString()))}</p>
           <table style="width:100%;border-collapse:collapse;font-size:10px;">
             <thead>
@@ -514,11 +520,11 @@ export function SafetyCenterWorkspace() {
       await loadCenterData(activeCenter);
     } catch (err) {
       console.error(err);
-      setError('내보내기를 완료하지 못했습니다.');
+      setError(t('sc_err_export'));
     } finally {
       setIsActionLoading(false);
     }
-  }, [activeCenter, activeSection, approvedLabs, buildExportRows, loadCenterData]);
+  }, [activeCenter, activeSection, approvedLabs, buildExportRows, loadCenterData, t]);
 
   if (isLoading && centers.length === 0) {
     return (
@@ -535,14 +541,14 @@ export function SafetyCenterWorkspace() {
           <div>
             <div className="flex items-center gap-2 text-sm font-normal text-slate-500 dark:text-slate-400">
               <ShieldCheck className="h-4 w-4 text-blue-600" />
-              통합 안전관리센터
+              {t('sc_center_title')}
             </div>
             <h1 className="mt-1 text-2xl font-medium tracking-tight text-slate-950 dark:text-white">
-              {activeCenter?.center_name ?? '센터 개설'}
+              {activeCenter?.center_name ?? t('sc_open_center')}
             </h1>
             {activeCenter && (
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {activeCenter.institution_name} · {activeCenter.institution_domain} · {activeCenter.status === 'approved' ? '승인됨' : activeCenter.status === 'pending' ? '승인 대기' : '거절됨'}
+                {activeCenter.institution_name} · {activeCenter.institution_domain} · {activeCenter.status === 'approved' ? t('sc_link_approved') : activeCenter.status === 'pending' ? t('sc_status_pending_approval') : t('sc_link_rejected')}
               </p>
             )}
           </div>
@@ -562,7 +568,7 @@ export function SafetyCenterWorkspace() {
               className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               <RefreshCw className="h-4 w-4" />
-              새로고침
+              {t('sc_refresh')}
             </button>
           </div>
         </div>
@@ -594,7 +600,7 @@ export function SafetyCenterWorkspace() {
                 await loadCenterData(activeCenter);
               } catch (err) {
                 console.error(err);
-                setError('연구실 연결 요청을 보내지 못했습니다.');
+                setError(t('sc_err_link_request'));
               } finally {
                 setIsActionLoading(false);
               }
@@ -657,6 +663,7 @@ export function SafetyCenterWorkspace() {
 }
 
 function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation();
   const [institutionName, setInstitutionName] = useState('');
   const [institutionDomain, setInstitutionDomain] = useState('');
   const [centerName, setCenterName] = useState('');
@@ -688,7 +695,7 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
     const normalizedInstitutionDomain = normalizeInstitutionDomain(institutionDomain);
 
     if (!verificationDocument) {
-      setError('관장/부서장 명의의 센터 개설 요청 공문 또는 담당자 지정서를 업로드해 주세요.');
+      setError(t('sc_err_upload_doc'));
       setIsCreating(false);
       return;
     }
@@ -716,9 +723,9 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
           <Building2 className="h-6 w-6" />
         </div>
         <div>
-          <h2 className="text-xl font-medium text-slate-950 dark:text-white">기관 안전관리센터 개설</h2>
+          <h2 className="text-xl font-medium text-slate-950 dark:text-white">{t('sc_create_title')}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-            기관 도메인과 센터 정보를 제출하면 버릴랩 운영자 승인 후 같은 기관 소속으로 승인된 연구실과 연결할 수 있습니다.
+            {t('sc_create_desc')}
           </p>
         </div>
       </div>
@@ -727,29 +734,29 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <label className="text-sm font-normal text-slate-700 dark:text-slate-200">
-          기관명
+          {t('sc_req_institution_name')}
           <input
             value={institutionName}
             onChange={(event) => setInstitutionName(event.target.value)}
-            placeholder="예: 릴랩대학교"
+            placeholder={t('sc_ph_institution')}
             className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
         </label>
         <label className="text-sm font-normal text-slate-700 dark:text-slate-200">
-          기관 도메인
+          {t('sc_institution_domain')}
           <input
             value={institutionDomain}
             onChange={(event) => setInstitutionDomain(event.target.value)}
-            placeholder="예: rillab.ac.kr"
+            placeholder={t('sc_ph_domain')}
             className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
         </label>
         <label className="text-sm font-normal text-slate-700 dark:text-slate-200">
-          센터명
+          {t('sc_center_name')}
           <input
             value={centerName}
             onChange={(event) => setCenterName(event.target.value)}
-            placeholder="예: 릴랩대학교 안전관리센터"
+            placeholder={t('sc_ph_center')}
             className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
         </label>
@@ -758,15 +765,15 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
       <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div>
-            <h3 className="text-sm font-medium text-slate-950 dark:text-white">승인 증빙 문서</h3>
+            <h3 className="text-sm font-medium text-slate-950 dark:text-white">{t('sc_verification_docs')}</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              관장/부서장 명의의 센터 개설 요청 공문 또는 담당자 지정서를 업로드해 주세요. 기관별 양식은 달라도 괜찮지만 아래 항목이 확인되어야 합니다.
+              {t('sc_verification_desc')}
             </p>
             <ul className="mt-3 grid gap-2 text-sm text-slate-600 dark:text-slate-300 md:grid-cols-2">
               {VERIFICATION_REQUIREMENTS.map((requirement) => (
                 <li key={requirement} className="flex gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                  <span>{requirement}</span>
+                  <span>{t(requirement)}</span>
                 </li>
               ))}
             </ul>
@@ -781,12 +788,12 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
             />
             <FileText className="mx-auto h-8 w-8 text-blue-600" />
             <span className="mt-3 text-sm font-medium text-slate-900 dark:text-slate-100">
-              {verificationDocument ? verificationDocument.name : '증빙 문서 선택'}
+              {verificationDocument ? verificationDocument.name : t('sc_select_doc')}
             </span>
             <span className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
               {verificationDocument
-                ? `${formatFileSize(verificationDocument.size)} · 다시 선택하려면 클릭`
-                : 'PDF, HWP, HWPX, DOC, DOCX, PNG, JPG · 최대 10MB'}
+                ? `${formatFileSize(verificationDocument.size)} · ${t('sc_reselect_click')}`
+                : t('sc_doc_formats')}
             </span>
           </label>
         </div>
@@ -800,7 +807,7 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
           className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isCreating && <Loader2 className="h-4 w-4 animate-spin" />}
-          승인 요청 보내기
+          {t('sc_send_approval_request')}
         </button>
       </div>
     </div>
@@ -808,26 +815,27 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
 }
 
 function PendingCenterPanel({ center, members }: { center: SafetyCenter; members: SafetyCenterMember[] }) {
+  const { t } = useTranslation();
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="rounded-lg border border-amber-100 bg-amber-50 p-6 text-amber-900">
         <div className="flex items-start gap-4">
           <Clock className="mt-1 h-6 w-6" />
           <div>
-            <h2 className="text-xl font-medium">운영자 승인 대기 중입니다</h2>
+            <h2 className="text-xl font-medium">{t('sc_pending_title')}</h2>
             <p className="mt-2 text-sm leading-6">
-              {center.center_name}은 기관 승인 전 상태입니다. 승인 전에는 연구실 후보, 위험 상세, 내보내기 데이터가 열리지 않습니다.
+              {t('sc_pending_body', { name: center.center_name })}
             </p>
           </div>
         </div>
       </div>
       <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">센터 기본 정보</h3>
+        <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('sc_center_basic_info')}</h3>
         <div className="mt-4 space-y-3 text-sm">
-          <div className="flex justify-between gap-4"><span className="text-slate-500">기관</span><span className="font-normal">{center.institution_name}</span></div>
-          <div className="flex justify-between gap-4"><span className="text-slate-500">도메인</span><span className="font-normal">{center.institution_domain}</span></div>
-          <div className="flex justify-between gap-4"><span className="text-slate-500">멤버</span><span className="font-normal">{members.length}명</span></div>
-          <div className="flex justify-between gap-4"><span className="text-slate-500">요청일</span><span className="font-normal">{formatDate(center.created_at)}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_institution')}</span><span className="font-normal">{center.institution_name}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_domain')}</span><span className="font-normal">{center.institution_domain}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_members')}</span><span className="font-normal">{t('sc_member_count', { n: members.length })}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_requested_on')}</span><span className="font-normal">{formatDate(center.created_at)}</span></div>
         </div>
       </aside>
     </div>
@@ -849,6 +857,7 @@ function DashboardPage({
   canCreateRequest: boolean;
   onOpenRequest: (draft: RequestDraft) => void;
 }) {
+  const { t } = useTranslation();
   const topRisks = [...riskItems]
     .map((item) => ({ item, assessment: assessRiskItem(item) }))
     .sort((left, right) => right.assessment.score - left.assessment.score)
@@ -857,46 +866,46 @@ function DashboardPage({
   return (
     <div className="space-y-5">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="연결 연구실" value={summary.approvedLabCount} Icon={Building2} tone="bg-blue-50 text-blue-600" />
-        <MetricCard label="고위험 재고" value={summary.highRiskCount} Icon={AlertTriangle} tone="bg-red-50 text-red-600" />
-        <MetricCard label="만료/임박" value={summary.expiredOrExpiringCount} Icon={CalendarDays} tone="bg-amber-50 text-amber-600" />
-        <MetricCard label="미응답 요청" value={summary.openRequestCount} Icon={MessageSquare} tone="bg-violet-50 text-violet-600" />
-        <MetricCard label="최근 폐기" value={summary.recentWasteCount} Icon={Archive} tone="bg-emerald-50 text-emerald-600" />
+        <MetricCard label={t('sc_metric_linked_labs')} value={summary.approvedLabCount} Icon={Building2} tone="bg-blue-50 text-blue-600" />
+        <MetricCard label={t('sc_metric_high_risk')} value={summary.highRiskCount} Icon={AlertTriangle} tone="bg-red-50 text-red-600" />
+        <MetricCard label={t('sc_metric_expiring')} value={summary.expiredOrExpiringCount} Icon={CalendarDays} tone="bg-amber-50 text-amber-600" />
+        <MetricCard label={t('sc_metric_open_requests')} value={summary.openRequestCount} Icon={MessageSquare} tone="bg-violet-50 text-violet-600" />
+        <MetricCard label={t('sc_metric_recent_waste')} value={summary.recentWasteCount} Icon={Archive} tone="bg-emerald-50 text-emerald-600" />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="관리 위험 품목" value={summary.hazardCount} Icon={ShieldCheck} tone="bg-orange-50 text-orange-600" />
-        <MetricCard label="인화성" value={summary.flammableCount} Icon={AlertTriangle} tone="bg-orange-50 text-orange-600" />
-        <MetricCard label="부식성" value={summary.corrosiveCount} Icon={AlertTriangle} tone="bg-amber-50 text-amber-600" />
-        <MetricCard label="독성" value={summary.toxicCount} Icon={AlertTriangle} tone="bg-red-50 text-red-600" />
-        <MetricCard label="기타 관리 위험" value={summary.otherManagedCount} Icon={ShieldCheck} tone="bg-slate-50 text-slate-600" />
+        <MetricCard label={t('sc_metric_hazard_items')} value={summary.hazardCount} Icon={ShieldCheck} tone="bg-orange-50 text-orange-600" />
+        <MetricCard label={t('sc_hazard_flammable')} value={summary.flammableCount} Icon={AlertTriangle} tone="bg-orange-50 text-orange-600" />
+        <MetricCard label={t('sc_hazard_corrosive')} value={summary.corrosiveCount} Icon={AlertTriangle} tone="bg-amber-50 text-amber-600" />
+        <MetricCard label={t('sc_hazard_toxic')} value={summary.toxicCount} Icon={AlertTriangle} tone="bg-red-50 text-red-600" />
+        <MetricCard label={t('sc_hazard_other_managed')} value={summary.otherManagedCount} Icon={ShieldCheck} tone="bg-slate-50 text-slate-600" />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
             <div>
-              <h2 className="text-base font-medium text-slate-950 dark:text-white">연구실별 위험 heatmap</h2>
-              <p className="mt-1 text-xs text-slate-500">승인된 연구실의 위험 신호를 같은 기준으로 비교합니다.</p>
+              <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_heatmap_title')}</h2>
+              <p className="mt-1 text-xs text-slate-500">{t('sc_heatmap_desc')}</p>
             </div>
           </div>
           {summary.labSummaries.length === 0 ? (
             <div className="p-5">
-              <EmptyPanel title="연결된 연구실 데이터가 없습니다" body="연구실 연결 승인 후 통합 위험 현황이 표시됩니다." />
+              <EmptyPanel title={t('sc_no_linked_data_title')} body={t('sc_no_linked_data_body')} />
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs font-medium text-slate-500 dark:bg-slate-950/50 dark:text-slate-400">
                   <tr>
-                    <th className="px-4 py-3">연구실</th>
-                    <th className="px-4 py-3">위험 점수</th>
-                    <th className="px-4 py-3">부담량</th>
-                    <th className="px-4 py-3">고위험</th>
-                    <th className="px-4 py-3">관리 위험</th>
-                    <th className="px-4 py-3">만료</th>
-                    <th className="px-4 py-3">CAS 누락</th>
-                    <th className="px-4 py-3 text-right">작업</th>
+                    <th className="px-4 py-3">{t('sc_col_lab')}</th>
+                    <th className="px-4 py-3">{t('sc_col_risk_score')}</th>
+                    <th className="px-4 py-3">{t('sc_col_burden')}</th>
+                    <th className="px-4 py-3">{t('sc_col_high_risk')}</th>
+                    <th className="px-4 py-3">{t('sc_flag_hazard')}</th>
+                    <th className="px-4 py-3">{t('sc_col_expired')}</th>
+                    <th className="px-4 py-3">{t('sc_flag_missing_cas')}</th>
+                    <th className="px-4 py-3 text-right">{t('sc_col_actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -913,11 +922,11 @@ function DashboardPage({
                       </td>
                       <td className="px-4 py-3">
                         {lab.evaluationStatus === 'no_items' ? (
-                          <div className="text-xs text-slate-400">데이터 없음</div>
+                          <div className="text-xs text-slate-400">{t('sc_no_data')}</div>
                         ) : (
                           <>
-                            <div className="text-xs text-slate-500">부담량 {lab.riskBurden}</div>
-                            <div className="text-[11px] text-slate-400">평균 {lab.averageRiskScore} · 상위5 {lab.topFiveAverage}</div>
+                            <div className="text-xs text-slate-500">{t('sc_burden_value', { value: lab.riskBurden })}</div>
+                            <div className="text-[11px] text-slate-400">{t('sc_avg_top5', { avg: lab.averageRiskScore, top: lab.topFiveAverage })}</div>
                           </>
                         )}
                       </td>
@@ -932,15 +941,15 @@ function DashboardPage({
                           onClick={() => onOpenRequest({
                             labId: lab.labId,
                             labName: lab.labName,
-                            title: `${lab.labName} 위험 재고 확인 요청`,
-                            description: `고위험 ${lab.highRiskCount}건, 만료/임박 ${lab.expiredCount + lab.expiringCount}건을 확인해 주세요.`,
+                            title: t('sc_lab_risk_check_title', { name: lab.labName }),
+                            description: t('sc_lab_risk_check_desc', { high: lab.highRiskCount, expiring: lab.expiredCount + lab.expiringCount }),
                             priority: lab.riskScore >= 60 || lab.highRiskCount > 0 ? 'high' : 'normal',
                             dueDate: '',
                           })}
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
                         >
                           <Send className="h-3.5 w-3.5" />
-                          조치 요청
+                          {t('sc_request_action')}
                         </button>
                       </td>
                     </tr>
@@ -953,10 +962,10 @@ function DashboardPage({
 
         <aside className="space-y-5">
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="text-base font-medium text-slate-950 dark:text-white">우선 확인 큐</h2>
+            <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_priority_queue')}</h2>
             <div className="mt-4 space-y-3">
               {topRisks.length === 0 ? (
-                <p className="text-sm text-slate-500">현재 표시할 위험 항목이 없습니다.</p>
+                <p className="text-sm text-slate-500">{t('sc_no_risk_items')}</p>
               ) : topRisks.map(({ item, assessment }) => (
                 <div key={item.item_id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                   <div className="flex items-start justify-between gap-3">
@@ -979,15 +988,15 @@ function DashboardPage({
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="text-base font-medium text-slate-950 dark:text-white">최근 감사 이벤트</h2>
+            <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_recent_audit')}</h2>
             <div className="mt-4 space-y-3">
               {auditLogs.slice(0, 5).map((log) => (
                 <div key={log.id} className="border-l-2 border-slate-200 pl-3">
                   <p className="text-sm font-normal text-slate-800 dark:text-slate-100">{log.lab_name} · {log.entity_type}</p>
-                  <p className="mt-1 text-xs text-slate-500">{log.action} · {log.actor_name ?? '알 수 없음'} · {formatDateTime(log.created_at)}</p>
+                  <p className="mt-1 text-xs text-slate-500">{log.action} · {log.actor_name ?? t('sc_unknown')} · {formatDateTime(log.created_at)}</p>
                 </div>
               ))}
-              {auditLogs.length === 0 && <p className="text-sm text-slate-500">감사 이벤트가 없습니다.</p>}
+              {auditLogs.length === 0 && <p className="text-sm text-slate-500">{t('sc_no_audit_events')}</p>}
             </div>
           </section>
         </aside>
@@ -995,14 +1004,14 @@ function DashboardPage({
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-slate-950 dark:text-white">진행 중인 점검 요청</h2>
+          <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_open_inspections')}</h2>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {requests.filter((request) => request.status !== 'resolved').slice(0, 6).map((request) => (
             <RequestCard key={request.id} request={request} />
           ))}
           {requests.filter((request) => request.status !== 'resolved').length === 0 && (
-            <p className="text-sm text-slate-500">미해결 요청이 없습니다.</p>
+            <p className="text-sm text-slate-500">{t('sc_no_open_requests')}</p>
           )}
         </div>
       </section>
@@ -1023,6 +1032,7 @@ function LabsPage({
   onSearch: (query: string) => Promise<void>;
   onRequestLink: (labId: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const selectedLab = candidates[0] ?? null;
   const approvedCount = candidates.filter((candidate) => candidate.link_status === 'approved').length;
@@ -1034,13 +1044,13 @@ function LabsPage({
         <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-medium text-slate-950 dark:text-white">연구실 연결/관리</h2>
-              <p className="mt-1 text-xs text-slate-500">기관 소속 연구실만 후보로 표시하고, 연구실 admin 승인 후 상세 데이터가 열립니다.</p>
+              <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_labs_manage_title')}</h2>
+              <p className="mt-1 text-xs text-slate-500">{t('sc_labs_manage_desc')}</p>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center text-xs font-medium">
-              <span className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">승인 {approvedCount}</span>
-              <span className="rounded-lg bg-blue-50 px-3 py-2 text-blue-700">요청 {requestedCount}</span>
-              <span className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">후보 {candidates.length}</span>
+              <span className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">{t('sc_approved_count', { n: approvedCount })}</span>
+              <span className="rounded-lg bg-blue-50 px-3 py-2 text-blue-700">{t('sc_requested_count', { n: requestedCount })}</span>
+              <span className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600">{t('sc_candidate_count', { n: candidates.length })}</span>
             </div>
           </div>
           <form
@@ -1055,29 +1065,29 @@ function LabsPage({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="연구실명, 분야 검색"
+                placeholder={t('sc_ph_search_lab')}
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm font-normal outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950"
               />
             </div>
-            <button className="h-10 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white">검색</button>
+            <button className="h-10 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white">{t('sc_search')}</button>
           </form>
         </div>
 
         {candidates.length === 0 ? (
           <div className="p-5">
-            <EmptyPanel title="기관 소속 연구실 후보가 없습니다" body="연구실 설정의 기관명이 센터 기관명과 일치해야 후보로 표시됩니다." />
+            <EmptyPanel title={t('sc_no_candidates_title')} body={t('sc_no_candidates_body')} />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="bg-slate-50 text-xs font-medium text-slate-500 dark:bg-slate-950/50 dark:text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">연구실명</th>
-                  <th className="px-4 py-3">소속/분야</th>
-                  <th className="px-4 py-3">연결 상태</th>
-                  <th className="px-4 py-3">공개 범위</th>
-                  <th className="px-4 py-3">최근 업데이트</th>
-                  <th className="px-4 py-3 text-right">작업</th>
+                  <th className="px-4 py-3">{t('sc_col_lab_name')}</th>
+                  <th className="px-4 py-3">{t('sc_col_affiliation_field')}</th>
+                  <th className="px-4 py-3">{t('sc_col_link_status')}</th>
+                  <th className="px-4 py-3">{t('sc_col_visibility')}</th>
+                  <th className="px-4 py-3">{t('sc_col_last_update')}</th>
+                  <th className="px-4 py-3 text-right">{t('sc_col_actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1085,7 +1095,7 @@ function LabsPage({
                   <tr key={candidate.lab_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                     <td className="px-4 py-3 font-normal text-slate-900 dark:text-slate-100">{candidate.lab_name}</td>
                     <td className="px-4 py-3 text-xs text-slate-500">
-                      {candidate.institution_name ?? '-'} · {candidate.research_field ?? candidate.institution_type ?? '분야 미입력'}
+                      {candidate.institution_name ?? '-'} · {candidate.research_field ?? candidate.institution_type ?? t('sc_field_not_entered')}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`rounded border px-2 py-1 text-xs font-medium ${linkStatusTone(candidate.link_status)}`}>
@@ -1098,7 +1108,7 @@ function LabsPage({
                       {candidate.link_status === 'approved' ? (
                         <span className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-50 px-3 text-xs font-medium text-emerald-700">
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          연결됨
+                          {t('sc_linked')}
                         </span>
                       ) : (
                         <button
@@ -1108,7 +1118,7 @@ function LabsPage({
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
                         >
                           {isActionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                          {candidate.link_status === 'requested' ? '요청중' : '연결 요청'}
+                          {candidate.link_status === 'requested' ? t('sc_link_requested') : t('sc_request_link')}
                         </button>
                       )}
                     </td>
@@ -1122,26 +1132,26 @@ function LabsPage({
 
       <aside className="space-y-5">
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="text-base font-medium text-slate-950 dark:text-white">연결 원칙</h3>
+          <h3 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_link_principles')}</h3>
           <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
-            <p className="flex gap-2"><LockKeyhole className="mt-0.5 h-4 w-4 text-slate-400" />기관명이 일치하는 연구실만 후보로 노출됩니다.</p>
-            <p className="flex gap-2"><Users className="mt-0.5 h-4 w-4 text-slate-400" />연구실 admin 승인 전에는 상세 데이터가 열리지 않습니다.</p>
-            <p className="flex gap-2"><Layers3 className="mt-0.5 h-4 w-4 text-slate-400" />V1 공개 범위는 요약, 위험 상세, 내보내기입니다.</p>
+            <p className="flex gap-2"><LockKeyhole className="mt-0.5 h-4 w-4 text-slate-400" />{t('sc_principle_1')}</p>
+            <p className="flex gap-2"><Users className="mt-0.5 h-4 w-4 text-slate-400" />{t('sc_principle_2')}</p>
+            <p className="flex gap-2"><Layers3 className="mt-0.5 h-4 w-4 text-slate-400" />{t('sc_principle_3')}</p>
           </div>
         </section>
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="text-base font-medium text-slate-950 dark:text-white">선택 연구실</h3>
+          <h3 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_selected_lab')}</h3>
           {selectedLab ? (
             <div className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between gap-4"><span className="text-slate-500">연구실</span><span className="text-right font-normal">{selectedLab.lab_name}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-slate-500">상태</span><span className="font-normal">{linkStatusLabel(selectedLab.link_status)}</span></div>
-              <div className="flex justify-between gap-4"><span className="text-slate-500">분야</span><span className="text-right font-normal">{selectedLab.research_field ?? '-'}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_col_lab')}</span><span className="text-right font-normal">{selectedLab.lab_name}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_status')}</span><span className="font-normal">{linkStatusLabel(selectedLab.link_status)}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_field')}</span><span className="text-right font-normal">{selectedLab.research_field ?? '-'}</span></div>
               <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-                승인 후 센터는 원본 데이터를 수정하지 않고 위험 신호 조회, 점검 요청, 내보내기만 수행합니다.
+                {t('sc_selected_lab_note')}
               </div>
             </div>
           ) : (
-            <p className="mt-4 text-sm text-slate-500">후보 연구실이 없습니다.</p>
+            <p className="mt-4 text-sm text-slate-500">{t('sc_no_candidate_labs')}</p>
           )}
         </section>
       </aside>
@@ -1164,6 +1174,7 @@ function RisksPage({
   onOpenRequest: (draft: RequestDraft) => void;
   onExport: (format: SafetyCenterExportFormat) => void;
 }) {
+  const { t } = useTranslation();
   const [labId, setLabId] = useState('all');
   const [riskFlag, setRiskFlag] = useState('all');
   const [casState, setCasState] = useState('all');
@@ -1188,8 +1199,8 @@ function RisksPage({
         <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-medium text-slate-950 dark:text-white">위험 상세</h2>
-              <p className="mt-1 text-xs text-slate-500">고위험, 만료, CAS 누락, 잔량 부족 항목을 연구실별로 추적합니다.</p>
+              <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_risk_detail_title')}</h2>
+              <p className="mt-1 text-xs text-slate-500">{t('sc_risk_detail_desc')}</p>
             </div>
             <div className="flex gap-2">
               <button
@@ -1217,7 +1228,7 @@ function RisksPage({
               value={labId}
               onChange={setLabId}
               options={[
-                { value: 'all', label: '모든 연구실' },
+                { value: 'all', label: t('sc_all_labs') },
                 ...approvedLabs.map((lab) => ({ value: lab.lab_id, label: lab.lab_name })),
               ]}
               buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
@@ -1226,17 +1237,17 @@ function RisksPage({
               value={riskFlag}
               onChange={setRiskFlag}
               options={[
-                { value: 'all', label: '모든 위험' },
-                { value: 'hazard', label: '관리 위험 전체' },
-                { value: 'hazard_special_high', label: '특수 고위험' },
-                { value: 'hazard_flammable', label: '인화성' },
-                { value: 'hazard_corrosive', label: '부식성' },
-                { value: 'hazard_toxic', label: '독성' },
-                { value: 'hazard_other_managed', label: '기타 관리 위험' },
-                { value: 'expired', label: '만료/긴급' },
-                { value: 'expiring', label: '만료 임박' },
-                { value: 'missing_cas', label: 'CAS 누락' },
-                { value: 'low_remaining', label: '잔량 부족' },
+                { value: 'all', label: t('sc_all_risks') },
+                { value: 'hazard', label: t('sc_all_hazards') },
+                { value: 'hazard_special_high', label: t('sc_hazard_special_high') },
+                { value: 'hazard_flammable', label: t('sc_hazard_flammable') },
+                { value: 'hazard_corrosive', label: t('sc_hazard_corrosive') },
+                { value: 'hazard_toxic', label: t('sc_hazard_toxic') },
+                { value: 'hazard_other_managed', label: t('sc_hazard_other_managed') },
+                { value: 'expired', label: t('sc_flag_expired') },
+                { value: 'expiring', label: t('sc_flag_expiring') },
+                { value: 'missing_cas', label: t('sc_flag_missing_cas') },
+                { value: 'low_remaining', label: t('sc_flag_low_remaining') },
               ]}
               buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
             />
@@ -1244,9 +1255,9 @@ function RisksPage({
               value={casState}
               onChange={setCasState}
               options={[
-                { value: 'all', label: 'CAS 전체' },
-                { value: 'missing', label: 'CAS 누락' },
-                { value: 'present', label: 'CAS 있음' },
+                { value: 'all', label: t('sc_cas_all') },
+                { value: 'missing', label: t('sc_flag_missing_cas') },
+                { value: 'present', label: t('sc_cas_present') },
               ]}
               buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
             />
@@ -1254,33 +1265,33 @@ function RisksPage({
               value={expiryState}
               onChange={setExpiryState}
               options={[
-                { value: 'all', label: '제조사 날짜 전체' },
-                { value: 'expired', label: '만료' },
-                { value: 'warning', label: '임박' },
-                { value: 'none', label: '미입력' },
+                { value: 'all', label: t('sc_mfg_date_all') },
+                { value: 'expired', label: t('sc_col_expired') },
+                { value: 'warning', label: t('sc_mfg_warning') },
+                { value: 'none', label: t('sc_mfg_not_entered') },
               ]}
               buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
             />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="시약명, CAS, 위치 검색" className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('sc_ph_search_risk')} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400 dark:border-slate-700 dark:bg-slate-950" />
           </div>
         </div>
 
         {filteredItems.length === 0 ? (
           <div className="p-5">
-            <EmptyPanel title="조건에 맞는 위험 항목이 없습니다" body="필터를 조정하거나 연구실 연결 상태를 확인해 주세요." />
+            <EmptyPanel title={t('sc_no_matching_risk_title')} body={t('sc_no_matching_risk_body')} />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-xs font-medium text-slate-500 dark:bg-slate-950/50 dark:text-slate-400">
                 <tr>
-                  <th className="px-3 py-3">연구실</th>
-                  <th className="px-3 py-3">시약명</th>
+                  <th className="px-3 py-3">{t('sc_col_lab')}</th>
+                  <th className="px-3 py-3">{t('sc_col_reagent')}</th>
                   <th className="px-3 py-3">CAS</th>
-                  <th className="px-3 py-3">위험 신호</th>
-                  <th className="px-3 py-3">보관 위치</th>
-                  <th className="px-3 py-3">제조사 날짜</th>
-                  <th className="px-3 py-3 text-right">작업</th>
+                  <th className="px-3 py-3">{t('sc_col_risk_signal')}</th>
+                  <th className="px-3 py-3">{t('sc_col_storage')}</th>
+                  <th className="px-3 py-3">{t('sc_col_mfg_date')}</th>
+                  <th className="px-3 py-3 text-right">{t('sc_col_actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1301,7 +1312,7 @@ function RisksPage({
                           {assessment.flags.map((flag) => (
                             <span key={flag} className={`rounded border px-2 py-0.5 text-[11px] font-medium ${riskFlagTone(flag)}`}>{getRiskFlagLabel(flag)}</span>
                           ))}
-                          {assessment.flags.length === 0 && <span className="text-xs text-slate-400">낮음</span>}
+                          {assessment.flags.length === 0 && <span className="text-xs text-slate-400">{t('sc_priority_low')}</span>}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-xs text-slate-500">{item.cabinet_name ?? item.storage_location_name ?? '-'}</td>
@@ -1319,8 +1330,8 @@ function RisksPage({
                             onOpenRequest({
                               labId: item.lab_id,
                               labName: item.lab_name,
-                              title: `${item.inventory_name} 확인 요청`,
-                              description: `${assessment.flags.map(getRiskFlagLabel).join(', ') || '위험 신호'} 항목입니다. 보관 상태와 처리 계획을 확인해 주세요.`,
+                              title: t('sc_item_check_title', { name: item.inventory_name }),
+                              description: t('sc_item_check_desc', { flags: assessment.flags.map(getRiskFlagLabel).join(', ') || t('sc_col_risk_signal') }),
                               priority: assessment.riskBand === 'critical' || assessment.riskBand === 'high' ? 'high' : 'normal',
                               dueDate: '',
                               targetType: item.source_type,
@@ -1330,7 +1341,7 @@ function RisksPage({
                           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
                         >
                           <Send className="h-3.5 w-3.5" />
-                          요청
+                          {t('sc_request')}
                         </button>
                       </td>
                     </tr>
@@ -1356,10 +1367,11 @@ function RiskDetailPanel({
   canCreateRequest: boolean;
   onOpenRequest: (draft: RequestDraft) => void;
 }) {
+  const { t } = useTranslation();
   if (!item) {
     return (
       <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <EmptyPanel title="선택된 항목이 없습니다" body="왼쪽 표에서 위험 항목을 선택하세요." />
+        <EmptyPanel title={t('sc_no_selected_title')} body={t('sc_no_selected_body')} />
       </aside>
     );
   }
@@ -1373,7 +1385,7 @@ function RiskDetailPanel({
           <h3 className="text-lg font-medium text-slate-950 dark:text-white">{item.inventory_name}</h3>
           <p className="mt-1 text-sm text-slate-500">{item.lab_name}</p>
         </div>
-        <span className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">점수 {assessment.score}</span>
+        <span className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">{t('sc_score_value', { score: assessment.score })}</span>
       </div>
       <div className="mt-4 flex flex-wrap gap-1.5">
         {assessment.flags.filter((flag) => flag !== 'hazard').map((flag) => (
@@ -1383,24 +1395,24 @@ function RiskDetailPanel({
         ))}
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px]">
-        <div className="rounded-lg bg-red-50 p-2 text-red-700"><div>위험성</div><strong>{assessment.hazardScore}</strong></div>
-        <div className="rounded-lg bg-amber-50 p-2 text-amber-700"><div>운영상태</div><strong>{assessment.operationalScore}</strong></div>
-        <div className="rounded-lg bg-violet-50 p-2 text-violet-700"><div>데이터 보완</div><strong>{assessment.dataQualityScore}</strong></div>
+        <div className="rounded-lg bg-red-50 p-2 text-red-700"><div>{t('sc_hazard_score')}</div><strong>{assessment.hazardScore}</strong></div>
+        <div className="rounded-lg bg-amber-50 p-2 text-amber-700"><div>{t('sc_operational_score')}</div><strong>{assessment.operationalScore}</strong></div>
+        <div className="rounded-lg bg-violet-50 p-2 text-violet-700"><div>{t('sc_data_quality_score')}</div><strong>{assessment.dataQualityScore}</strong></div>
       </div>
       <div className="mt-5 space-y-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-        <div className="flex justify-between gap-4"><span className="text-slate-500">제조사 날짜 유형</span><span className="font-normal">{getManufacturerDateTypeLabel(item.manufacturer_date_type)}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">제조사 날짜</span><span className="font-normal">{getTrackedManufacturerDate(item) || '-'}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">입고일</span><span className="font-normal">{item.received_date || '-'}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">개봉일</span><span className="font-normal">{item.opened_date || '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_mfg_date_type')}</span><span className="font-normal">{getManufacturerDateTypeLabel(item.manufacturer_date_type)}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_col_mfg_date')}</span><span className="font-normal">{getTrackedManufacturerDate(item) || '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_received_date')}</span><span className="font-normal">{item.received_date || '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_opened_date')}</span><span className="font-normal">{item.opened_date || '-'}</span></div>
         <div className="flex justify-between gap-4"><span className="text-slate-500">CAS</span><span className="font-normal">{item.cas_number || '-'}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">브랜드</span><span className="font-normal">{item.brand || '-'}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">규격</span><span className="font-normal">{item.capacity || '-'}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">위치</span><span className="text-right font-normal">{item.cabinet_name ?? item.storage_location_name ?? '-'}</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">잔량</span><span className="font-normal">{item.remaining_percent ?? 100}%</span></div>
-        <div className="flex justify-between gap-4"><span className="text-slate-500">GHS 상태</span><span className="font-normal">{item.ghs_data_status ?? '미조회'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_brand')}</span><span className="font-normal">{item.brand || '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_spec')}</span><span className="font-normal">{item.capacity || '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_location')}</span><span className="text-right font-normal">{item.cabinet_name ?? item.storage_location_name ?? '-'}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_remaining')}</span><span className="font-normal">{item.remaining_percent ?? 100}%</span></div>
+        <div className="flex justify-between gap-4"><span className="text-slate-500">{t('sc_ghs_status')}</span><span className="font-normal">{item.ghs_data_status ?? t('sc_ghs_not_queried')}</span></div>
       </div>
       <div className="mt-5 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
-        센터는 이 항목을 직접 수정하지 않습니다. 연구실에 확인 요청을 보내고 연구실이 보관 상태, CAS 보완, 폐기 계획을 회신합니다.
+        {t('sc_detail_note')}
       </div>
       <button
         type="button"
@@ -1408,8 +1420,8 @@ function RiskDetailPanel({
         onClick={() => onOpenRequest({
           labId: item.lab_id,
           labName: item.lab_name,
-          title: `${item.inventory_name} 위험 항목 확인`,
-          description: `${assessment.flags.map(getRiskFlagLabel).join(', ')} 신호가 있습니다. 보관/폐기 계획을 회신해 주세요.`,
+          title: t('sc_detail_req_title', { name: item.inventory_name }),
+          description: t('sc_detail_req_desc', { flags: assessment.flags.map(getRiskFlagLabel).join(', ') }),
           priority: assessment.riskBand === 'critical' || assessment.riskBand === 'high' ? 'high' : 'normal',
           dueDate: '',
           targetType: item.source_type,
@@ -1418,7 +1430,7 @@ function RiskDetailPanel({
         className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
       >
         <Send className="h-4 w-4" />
-        점검 요청 만들기
+        {t('sc_create_inspection_request')}
       </button>
     </aside>
   );
@@ -1435,13 +1447,14 @@ function RequestsPage({
   canCreate: boolean;
   onOpenRequest: (draft: RequestDraft) => void;
 }) {
+  const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedRequest = requests.find((request) => request.id === selectedId) ?? requests[0] ?? null;
   const columns: Array<{ status: SafetyCenterRequest['status']; label: string }> = [
-    { status: 'open', label: '요청됨' },
-    { status: 'in_progress', label: '처리 중' },
-    { status: 'submitted', label: '제출됨' },
-    { status: 'resolved', label: '완료' },
+    { status: 'open', label: t('sc_status_open') },
+    { status: 'in_progress', label: t('sc_status_in_progress') },
+    { status: 'submitted', label: t('sc_status_submitted') },
+    { status: 'resolved', label: t('sc_status_resolved') },
   ];
 
   return (
@@ -1449,8 +1462,8 @@ function RequestsPage({
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-medium text-slate-950 dark:text-white">점검 협업</h2>
-            <p className="mt-1 text-xs text-slate-500">센터 요청과 연구실 응답 상태를 요청됨 → 처리 중 → 제출됨 → 완료 흐름으로 추적합니다.</p>
+            <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_inspection_collab')}</h2>
+            <p className="mt-1 text-xs text-slate-500">{t('sc_inspection_collab_desc')}</p>
           </div>
           <button
             type="button"
@@ -1461,8 +1474,8 @@ function RequestsPage({
               onOpenRequest({
                 labId: lab.lab_id,
                 labName: lab.lab_name,
-                title: '월간 안전 점검 확인 요청',
-                description: '위험 재고와 폐기 기록을 확인하고 특이사항을 회신해 주세요.',
+                title: t('sc_monthly_check_title'),
+                description: t('sc_monthly_check_desc'),
                 priority: 'normal',
                 dueDate: '',
               });
@@ -1470,13 +1483,13 @@ function RequestsPage({
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
           >
             <Send className="h-4 w-4" />
-            새 요청
+            {t('sc_new_request')}
           </button>
         </div>
 
         {requests.length === 0 ? (
           <div className="mt-5">
-            <EmptyPanel title="점검 요청이 없습니다" body="위험 상세 또는 연구실 화면에서 요청을 만들 수 있습니다." />
+            <EmptyPanel title={t('sc_no_inspection_title')} body={t('sc_no_inspection_body')} />
           </div>
         ) : (
           <div className="mt-5 grid gap-3 xl:grid-cols-4">
@@ -1499,7 +1512,7 @@ function RequestsPage({
                     ))}
                     {columnRequests.length === 0 && (
                       <div className="rounded-lg border border-dashed border-slate-200 bg-white p-4 text-xs font-normal text-slate-400 dark:border-slate-800 dark:bg-slate-900">
-                        해당 상태 요청 없음
+                        {t('sc_no_requests_in_status')}
                       </div>
                     )}
                   </div>
@@ -1511,7 +1524,7 @@ function RequestsPage({
       </section>
 
       <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h3 className="text-base font-medium text-slate-950 dark:text-white">요청 상세</h3>
+        <h3 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_request_details')}</h3>
         {selectedRequest ? (
           <div className="mt-4 space-y-4">
             <div>
@@ -1528,13 +1541,13 @@ function RequestsPage({
               </p>
             )}
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between gap-3"><span className="text-slate-500">마감일</span><span className="font-normal">{formatDate(selectedRequest.due_date)}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">대상</span><span className="text-right font-normal">{selectedRequest.target_type ?? '-'}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">생성일</span><span className="text-right font-normal">{formatDateTime(selectedRequest.created_at)}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{t('sc_due_date')}</span><span className="font-normal">{formatDate(selectedRequest.due_date)}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{t('sc_target')}</span><span className="text-right font-normal">{selectedRequest.target_type ?? '-'}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{t('sc_created_on')}</span><span className="text-right font-normal">{formatDateTime(selectedRequest.created_at)}</span></div>
             </div>
           </div>
         ) : (
-          <p className="mt-4 text-sm text-slate-500">선택된 요청이 없습니다.</p>
+          <p className="mt-4 text-sm text-slate-500">{t('sc_no_selected_request')}</p>
         )}
       </aside>
     </div>
@@ -1550,6 +1563,7 @@ function RequestCard({
   selected?: boolean;
   onClick?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <article
       onClick={onClick}
@@ -1569,7 +1583,7 @@ function RequestCard({
       {request.description && <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{request.description}</p>}
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className={`rounded border px-2 py-1 text-xs font-medium ${statusTone(request.status)}`}>{getRequestStatusLabel(request.status)}</span>
-        <span className="text-xs text-slate-500">마감 {formatDate(request.due_date)}</span>
+        <span className="text-xs text-slate-500">{t('sc_due_value', { date: formatDate(request.due_date) })}</span>
       </div>
     </article>
   );
@@ -1588,6 +1602,7 @@ function ExportsPage({
   exportLogs: SafetyCenterExportLog[];
   onExport: (format: SafetyCenterExportFormat, datasets: DatasetKey[], options: ExportOptions) => void;
 }) {
+  const { t } = useTranslation();
   const [format, setFormat] = useState<SafetyCenterExportFormat>('xlsx');
   const [datasets, setDatasets] = useState<DatasetKey[]>(['risks', 'waste', 'audit']);
   const [selectedLabIds, setSelectedLabIds] = useState<string[] | null>(null);
@@ -1627,15 +1642,15 @@ function ExportsPage({
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-base font-medium text-slate-950 dark:text-white">데이터 내보내기</h2>
-        <p className="mt-1 text-sm text-slate-500">승인된 연구실, 선택 기간, 데이터셋 범위만 파일로 생성하고 감사 이력에 남깁니다.</p>
+        <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_export_data')}</h2>
+        <p className="mt-1 text-sm text-slate-500">{t('sc_export_desc')}</p>
         <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
           <div>
-            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">데이터셋</p>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{t('sc_dataset')}</p>
             <div className="mt-3 grid gap-2 md:grid-cols-3">
-              {(Object.keys(DATASET_LABELS) as DatasetKey[]).map((dataset) => (
+              {(Object.keys(DATASET_LABEL_KEYS) as DatasetKey[]).map((dataset) => (
                 <label key={dataset} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal dark:border-slate-800">
-                  <span>{DATASET_LABELS[dataset]}</span>
+                  <span>{getDatasetLabel(dataset)}</span>
                   <input
                     type="checkbox"
                     checked={datasets.includes(dataset)}
@@ -1647,13 +1662,13 @@ function ExportsPage({
             </div>
             <div className="mt-5">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-100">연구실 범위</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{t('sc_lab_scope')}</p>
                 <button
                   type="button"
                   onClick={() => setSelectedLabIds(exportableLabIds)}
                   className="text-xs font-medium text-blue-600"
                 >
-                  전체 선택
+                  {t('sc_select_all')}
                 </button>
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -1670,14 +1685,14 @@ function ExportsPage({
                 ))}
                 {exportableLabs.length === 0 && (
                   <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-sm font-normal text-slate-400 dark:border-slate-800">
-                    내보내기 공개 범위가 승인된 연구실이 없습니다.
+                    {t('sc_no_export_labs')}
                   </div>
                 )}
               </div>
             </div>
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               <label className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                시작일
+                {t('sc_start_date')}
                 <input
                   type="date"
                   value={dateFrom}
@@ -1686,7 +1701,7 @@ function ExportsPage({
                 />
               </label>
               <label className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                종료일
+                {t('sc_end_date')}
                 <input
                   type="date"
                   value={dateTo}
@@ -1697,7 +1712,7 @@ function ExportsPage({
             </div>
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">파일 형식</p>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{t('sc_file_format')}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -1723,14 +1738,14 @@ function ExportsPage({
               className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
             >
               {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              내보내기 실행
+              {t('sc_run_export')}
             </button>
           </div>
         </div>
       </section>
 
       <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h3 className="text-base font-medium text-slate-950 dark:text-white">내보내기 이력</h3>
+        <h3 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_export_history')}</h3>
         <div className="mt-4 space-y-3">
           {exportLogs.map((log) => (
             <div key={log.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
@@ -1738,11 +1753,11 @@ function ExportsPage({
                 <span className="font-medium uppercase text-slate-900 dark:text-slate-100">{log.format}</span>
                 <span className="text-xs text-slate-500">{formatDateTime(log.created_at)}</span>
               </div>
-              <p className="mt-2 text-xs text-slate-500">{log.datasets.map((dataset) => DATASET_LABELS[dataset as DatasetKey] ?? dataset).join(', ')}</p>
-              <p className="mt-1 text-xs font-normal text-slate-700 dark:text-slate-300">{log.row_count}행 · {log.lab_ids.length}개 연구실</p>
+              <p className="mt-2 text-xs text-slate-500">{log.datasets.map((dataset) => getDatasetLabel(dataset)).join(', ')}</p>
+              <p className="mt-1 text-xs font-normal text-slate-700 dark:text-slate-300">{t('sc_export_log_counts', { rows: log.row_count, labs: log.lab_ids.length })}</p>
             </div>
           ))}
-          {exportLogs.length === 0 && <p className="text-sm text-slate-500">아직 내보내기 이력이 없습니다.</p>}
+          {exportLogs.length === 0 && <p className="text-sm text-slate-500">{t('sc_no_export_history')}</p>}
         </div>
       </aside>
     </div>
@@ -1760,6 +1775,7 @@ function SettingsPage({
   exportLogs: SafetyCenterExportLog[];
   canManage: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-5">
       {isWasteV2Enabled && (
@@ -1767,15 +1783,15 @@ function SettingsPage({
       )}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-base font-medium text-slate-950 dark:text-white">센터 설정</h2>
+        <h2 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_center_settings')}</h2>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {[
-            ['센터명', center.center_name],
-            ['기관명', center.institution_name],
-            ['기관 도메인', center.institution_domain],
-            ['승인 상태', center.status],
-            ['개설일', formatDate(center.created_at)],
-            ['승인일', formatDate(center.approved_at)],
+            [t('sc_center_name'), center.center_name],
+            [t('sc_req_institution_name'), center.institution_name],
+            [t('sc_institution_domain'), center.institution_domain],
+            [t('sc_approval_status'), center.status],
+            [t('sc_opened_on'), formatDate(center.created_at)],
+            [t('sc_approved_on'), formatDate(center.approved_at)],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
               <p className="text-xs font-medium text-slate-500">{label}</p>
@@ -1786,7 +1802,7 @@ function SettingsPage({
       </section>
       <aside className="space-y-5">
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="text-base font-medium text-slate-950 dark:text-white">센터 멤버</h3>
+          <h3 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_center_members')}</h3>
           <div className="mt-4 space-y-2">
             {members.map((member) => (
               <div key={member.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
@@ -1794,13 +1810,13 @@ function SettingsPage({
                 <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{member.role}</span>
               </div>
             ))}
-            {members.length === 0 && <p className="text-sm text-slate-500">멤버 정보를 불러오지 못했습니다.</p>}
+            {members.length === 0 && <p className="text-sm text-slate-500">{t('sc_no_members')}</p>}
           </div>
         </section>
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="text-base font-medium text-slate-950 dark:text-white">보안 기록</h3>
+          <h3 className="text-base font-medium text-slate-950 dark:text-white">{t('sc_security_log')}</h3>
           <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-            내보내기는 센터 멤버, 데이터셋, 연구실 범위, 행 수가 기록됩니다. 최근 기록 {exportLogs.length}건이 보관되어 있습니다.
+            {t('sc_security_note', { n: exportLogs.length })}
           </p>
         </section>
       </aside>
@@ -1822,12 +1838,13 @@ function RequestDraftModal({
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/40 p-4">
       <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-medium text-slate-950 dark:text-white">점검 요청 만들기</h2>
+            <h2 className="text-lg font-medium text-slate-950 dark:text-white">{t('sc_create_inspection_request')}</h2>
             <p className="mt-1 text-sm text-slate-500">{draft.labName}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
@@ -1836,7 +1853,7 @@ function RequestDraftModal({
         </div>
         <div className="mt-5 space-y-4">
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-            제목
+            {t('sc_title_label')}
             <input
               value={draft.title}
               onChange={(event) => onChange({ ...draft, title: event.target.value })}
@@ -1844,7 +1861,7 @@ function RequestDraftModal({
             />
           </label>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-            요청 내용
+            {t('sc_request_body')}
             <textarea
               value={draft.description}
               onChange={(event) => onChange({ ...draft, description: event.target.value })}
@@ -1854,22 +1871,22 @@ function RequestDraftModal({
           </label>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              <span>우선순위</span>
+              <span>{t('sc_priority')}</span>
               <AppSelect
                 value={draft.priority}
                 onChange={(value) => onChange({ ...draft, priority: value as SafetyCenterRequestPriority })}
                 options={[
-                  { value: 'low', label: '낮음' },
-                  { value: 'normal', label: '보통' },
-                  { value: 'high', label: '높음' },
-                  { value: 'urgent', label: '긴급' },
+                  { value: 'low', label: t('sc_priority_low') },
+                  { value: 'normal', label: t('sc_priority_normal') },
+                  { value: 'high', label: t('sc_priority_high') },
+                  { value: 'urgent', label: t('sc_priority_urgent') },
                 ]}
                 className="mt-2 w-full"
                 buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal dark:!border-slate-700 dark:!bg-slate-950"
               />
             </div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              마감일
+              {t('sc_due_date')}
               <input
                 type="date"
                 value={draft.dueDate}
@@ -1881,7 +1898,7 @@ function RequestDraftModal({
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
-            취소
+            {t('sc_cancel')}
           </button>
           <button
             type="button"
@@ -1890,7 +1907,7 @@ function RequestDraftModal({
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            요청 보내기
+            {t('sc_send_request')}
           </button>
         </div>
       </div>

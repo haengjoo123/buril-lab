@@ -4,6 +4,7 @@
  */
 
 import { supabase } from './supabaseClient';
+import i18n from '../locales/i18n';
 import { useLabStore } from '../store/useLabStore';
 import { getCurrentUserDisplayName } from '../utils/userDisplayName';
 import type { ReagentTemplateType } from '../types/fridge';
@@ -405,7 +406,7 @@ const parseUsageCompletionReceipt = (
     },
 ): InventoryUsageCompletionReceipt => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error('사용 완료 처리 결과를 확인할 수 없습니다. 재고 목록을 새로고침한 뒤 다시 확인해 주세요.');
+        throw new Error(i18n.t('inv_svc_err_consume_unverified'));
     }
 
     const payload = value as Record<string, unknown>;
@@ -439,7 +440,7 @@ const parseUsageCompletionReceipt = (
         typeof idempotent !== 'boolean' ||
         !quantitiesAreValid ||
         !removalFlagsAreValid) {
-        throw new Error('사용 완료 처리가 요청과 일치하지 않습니다. 재고 목록을 새로고침한 뒤 다시 확인해 주세요.');
+        throw new Error(i18n.t('inv_svc_err_consume_mismatch'));
     }
 
     return {
@@ -571,7 +572,7 @@ const parseRemovalResult = (
     expectedTargets: InventoryRemovalTarget[],
 ): InventoryRemovalResult => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error('재고 데이터 삭제 결과를 확인할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.');
+        throw new Error(i18n.t('inv_svc_err_delete_unverified'));
     }
 
     const payload = value as {
@@ -606,7 +607,7 @@ const parseRemovalResult = (
     if (removedCount !== expectedTargets.length ||
         items.length !== expectedTargets.length ||
         !resultMatchesRequest) {
-        throw new Error('재고 데이터 삭제가 완료되지 않았습니다. 어떤 항목도 부분 삭제로 처리하지 않습니다.');
+        throw new Error(i18n.t('inv_svc_err_delete_incomplete'));
     }
 
     return { removedCount, items };
@@ -619,14 +620,14 @@ const removeInventoryRecords = async (
     reason: string = RECORD_REMOVAL_REASON,
 ): Promise<InventoryRemovalResult> => {
     if (targets.length < 1 || targets.length > MAX_ATOMIC_REMOVAL_ITEMS) {
-        throw new Error('재고 데이터는 한 번에 1개 이상 100개 이하로 삭제할 수 있습니다.');
+        throw new Error(i18n.t('inv_svc_err_delete_count'));
     }
 
     const seen = new Set<string>();
     for (const target of targets) {
         const key = `${target.item_source}:${target.item_id}`;
         if (!target.item_id || seen.has(key)) {
-            throw new Error('중복되거나 올바르지 않은 재고 삭제 항목이 포함되어 있습니다.');
+            throw new Error(i18n.t('inv_svc_err_delete_invalid'));
         }
         seen.add(key);
     }
@@ -644,7 +645,7 @@ const removeInventoryRecords = async (
             error.code === 'PGRST202' ||
             errorText.includes('remove_inventory_record_v2');
         if (missingRpc) {
-            throw new Error('재고 데이터 삭제 기능이 서버에 배포되지 않았습니다. 관리자에게 문의해 주세요.');
+            throw new Error(i18n.t('inv_svc_err_delete_not_deployed'));
         }
         if (!isInventoryRecordNotFoundError(error)) {
             console.error('[Inventory] V2 record removal error:', error);
@@ -1253,7 +1254,7 @@ export const inventoryService = {
                 error.code === 'PGRST202' ||
                 errorText.includes('move_inventory_records_v2');
             if (missingRpc) {
-                throw new Error('재고 일괄 이동 기능이 서버에 배포되지 않았습니다. 관리자에게 문의해 주세요.');
+                throw new Error(i18n.t('inv_svc_err_bulk_move_not_deployed'));
             }
             throw error;
         }
@@ -1293,7 +1294,7 @@ export const inventoryService = {
                 error.code === 'PGRST202' ||
                 errorText.includes('record_inventory_usage_completion_v2');
             if (missingRpc) {
-                throw new Error('사용 완료 처리 기능이 서버에 배포되지 않았습니다. 관리자에게 문의해 주세요.');
+                throw new Error(i18n.t('inv_svc_err_consume_not_deployed'));
             }
             throw error;
         }
@@ -1367,7 +1368,7 @@ export const inventoryService = {
 
         const cabinetRows = (cabinetMatches || []) as Array<{ id: string }>;
         if (cabinetRows.length > 1) {
-            throw new Error('같은 이름의 시약이 여러 개라 삭제 대상을 안전하게 식별할 수 없습니다.');
+            throw new Error(i18n.t('inv_svc_err_ambiguous_reagent'));
         }
         if (cabinetRows.length === 1) {
             await removeExactRecord({
@@ -1388,7 +1389,7 @@ export const inventoryService = {
 
         const inventoryRows = (inventoryMatches || []) as Array<{ id: string }>;
         if (inventoryRows.length > 1) {
-            throw new Error('같은 이름의 재고가 여러 개라 삭제 대상을 안전하게 식별할 수 없습니다.');
+            throw new Error(i18n.t('inv_svc_err_ambiguous_inventory'));
         }
         if (inventoryRows.length === 1) {
             await removeExactRecord({
@@ -1424,7 +1425,7 @@ export const inventoryService = {
         );
         if (targets.length === 0) return;
         if (targets.length > MAX_ATOMIC_REMOVAL_ITEMS) {
-            throw new Error('시약장 연결 재고가 100개를 초과해 전체 삭제할 수 없습니다. 어떤 항목도 삭제되지 않았습니다.');
+            throw new Error(i18n.t('inv_svc_err_cabinet_delete_limit'));
         }
 
         const { currentLabId } = useLabStore.getState();

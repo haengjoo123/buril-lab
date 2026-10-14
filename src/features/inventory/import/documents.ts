@@ -1,15 +1,16 @@
 import { IMPORT_LIMITS, type ImportSource, type ImportTable } from './types'
 import type { ReadImportOptions } from './readers'
 import { readPdfTextTable } from './pdfText'
+import i18n from '../../../locales/i18n'
 
 export async function readInWorker(file: File, options?: ReadImportOptions, id: string = crypto.randomUUID()): Promise<{ source: ImportSource; tables: ImportTable[] }> {
   const worker = new Worker(new URL('./import.worker.ts', import.meta.url), { type: 'module' })
   const bytes = await file.arrayBuffer()
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { worker.terminate(); reject(new Error('파일 분석 시간이 초과되었습니다. 표 영역별로 나누어 주세요.')) }, 60_000)
+    const timer = setTimeout(() => { worker.terminate(); reject(new Error(i18n.t('inv_err_analysis_timeout'))) }, 60_000)
     worker.onmessage = event => { clearTimeout(timer); worker.terminate(); if (event.data.error) reject(new Error(event.data.error)); else resolve(event.data) }
-    worker.onerror = () => { clearTimeout(timer); worker.terminate(); reject(new Error('파일 분석에 실패했습니다.')) }
-    worker.postMessage({ name: file.name, bytes, id, options }, [bytes])
+    worker.onerror = () => { clearTimeout(timer); worker.terminate(); reject(new Error(i18n.t('inv_err_analysis_failed'))) }
+    worker.postMessage({ name: file.name, bytes, id, options, lng: i18n.language }, [bytes])
   })
 }
 function canvasImage(canvas: HTMLCanvasElement): string { return canvas.toDataURL('image/jpeg', 0.92) }
@@ -21,7 +22,7 @@ export async function prepareDocument(source: ImportSource, file: Blob): Promise
       const scale = Math.min(1, 3500 / Math.max(img.naturalWidth, img.naturalHeight))
       const canvas = document.createElement('canvas'); canvas.width = Math.round(img.naturalWidth * scale); canvas.height = Math.round(img.naturalHeight * scale)
       canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
-      return { ...source, grids: [{ id: 'page-1', label: '사진 1', page: 1, cells: [], needsAnalysis: true, imageData: canvasImage(canvas) }] }
+      return { ...source, grids: [{ id: 'page-1', label: i18n.t('inv_photo_n', { n: 1 }), page: 1, cells: [], needsAnalysis: true, imageData: canvasImage(canvas) }] }
     } finally { URL.revokeObjectURL(url) }
   }
   if (source.kind !== 'pdf') return source
@@ -31,7 +32,7 @@ export async function prepareDocument(source: ImportSource, file: Blob): Promise
   const pdfDocument = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false,
     cMapUrl: `${assets}cmaps/`, cMapPacked: true, standardFontDataUrl: `${assets}standard_fonts/`, wasmUrl: `${assets}wasm/` }).promise
   try {
-    if (pdfDocument.numPages > IMPORT_LIMITS.pages) throw new Error('PDF가 50페이지를 넘습니다. 나누어 가져오세요.')
+    if (pdfDocument.numPages > IMPORT_LIMITS.pages) throw new Error(i18n.t('inv_err_pdf_pages'))
     const grids: ImportSource['grids'] = []
     for (let pageIndex = 1; pageIndex <= pdfDocument.numPages; pageIndex++) {
       const page = await pdfDocument.getPage(pageIndex)
@@ -42,7 +43,7 @@ export async function prepareDocument(source: ImportSource, file: Blob): Promise
       const content = await page.getTextContent()
       const text = content.items.filter(item => 'str' in item).map(item => `${item.str} @${item.transform[4]},${item.transform[5]}`).join('\n')
       const cells = base.rotation === 0 ? readPdfTextTable(content.items.filter(item => 'str' in item).map(item => ({ str: item.str, x: item.transform[4], y: item.transform[5], width: item.width, height: item.height })), pageIndex, base.width, base.height) : null
-      grids.push({ id: `page-${pageIndex}`, label: `페이지 ${pageIndex}`, page: pageIndex, cells: cells || [], text, needsAnalysis: !cells, imageData: canvasImage(canvas) })
+      grids.push({ id: `page-${pageIndex}`, label: i18n.t('inv_page_n', { n: pageIndex }), page: pageIndex, cells: cells || [], text, needsAnalysis: !cells, imageData: canvasImage(canvas) })
       canvas.width = 0; canvas.height = 0; page.cleanup()
     }
     return { ...source, grids }

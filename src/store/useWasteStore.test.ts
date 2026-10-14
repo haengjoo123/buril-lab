@@ -1,3 +1,8 @@
+import i18n from '../locales/i18n';
+
+// These assertions deliberately verify Korean UI copy, independent of host locale.
+beforeEach(async () => { await i18n.changeLanguage('ko'); });
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartItem, ChemicalEnrichmentResult, DisposalCategory } from '../types';
 import { createEmptyWasteBatch, createWasteComponentFromAnalysis } from '../utils/wasteBatch';

@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
+import i18n from '../locales/i18n';
 import type {
   LabSafetyCenterLinkRequest,
   LabSafetyCenterRequest,
@@ -124,12 +125,12 @@ function buildVerificationDocumentPath(userId: string, centerId: string, fileNam
 
 export function validateSafetyCenterVerificationDocument(file: File): string | null {
   if (file.size > SAFETY_CENTER_VERIFICATION_MAX_BYTES) {
-    return '증빙 문서는 10MB 이하 파일만 업로드할 수 있습니다.';
+    return i18n.t('msc_safety_doc_too_large');
   }
 
   const extension = getFileExtension(file.name);
   if (!VERIFICATION_DOCUMENT_MIME_BY_EXTENSION[extension]) {
-    return 'PDF, HWP, HWPX, DOC, DOCX, PNG, JPG 파일만 업로드할 수 있습니다.';
+    return i18n.t('msc_safety_doc_bad_type');
   }
 
   return null;

@@ -512,17 +512,17 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">소속 기관명</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('cmp_lab_institution_name', '소속 기관명')}</label>
                                 <input
                                     type="text"
                                     value={createInstitutionName}
                                     onChange={e => setCreateInstitutionName(e.target.value)}
-                                    placeholder="예: 릴랩대학교"
+                                    placeholder={t('cmp_lab_institution_placeholder', '예: 릴랩대학교')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     required
                                 />
                                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                    통합 안전관리센터 연결 후보를 식별하는 기준입니다.
+                                    {t('cmp_lab_institution_hint_create', '통합 안전관리센터 연결 후보를 식별하는 기준입니다.')}
                                 </p>
                             </div>
                             <div>
@@ -698,7 +698,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                             <div className="flex justify-between items-start gap-2 mb-2">
                                                 <div className="flex flex-col min-w-0">
                                                     <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
-                                                        {member.nickname || member.email || '알 수 없는 사용자'}
+                                                        {member.nickname || member.email || t('cmp_lab_unknown_user', '알 수 없는 사용자')}
                                                     </span>
                                                     {member.nickname && member.email && (
                                                         <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
@@ -768,17 +768,17 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">소속 기관명</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t('cmp_lab_institution_name', '소속 기관명')}</label>
                                 <input
                                     type="text"
                                     value={settingsInstitutionName}
                                     onChange={e => setSettingsInstitutionName(e.target.value)}
-                                    placeholder="예: 릴랩대학교"
+                                    placeholder={t('cmp_lab_institution_placeholder', '예: 릴랩대학교')}
                                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
                                     required
                                 />
                                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                    같은 기관의 승인된 통합센터에서 연결 요청 후보로 찾을 때 사용됩니다.
+                                    {t('cmp_lab_institution_hint_edit', '같은 기관의 승인된 통합센터에서 연결 요청 후보로 찾을 때 사용됩니다.')}
                                 </p>
                             </div>
                             <div>

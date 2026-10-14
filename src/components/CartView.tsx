@@ -1540,7 +1540,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         />
                                                     </label>
                                                     <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                        <span>{t('unit', { defaultValue: '단위' })}</span>
+                                                        <span>{t('cmp_unit', { defaultValue: '단위' })}</span>
                                                         <AppSelect
                                                             value={solutionVolumeUnits[component.cartLineId] ?? component.solutionVolume?.unit ?? 'mL'}
                                                             onChange={(value) => {
@@ -1560,7 +1560,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                                 }
                                                             }}
                                                             options={SOLUTION_VOLUME_UNITS.map((unit) => ({ value: unit, label: unit }))}
-                                                            ariaLabel={t('unit', { defaultValue: '단위' })}
+                                                            ariaLabel={t('cmp_unit', { defaultValue: '단위' })}
                                                             className="mt-1 w-full"
                                                             buttonClassName="!min-h-11 !rounded-xl !border-slate-300 !bg-white !px-2 dark:!border-slate-700 dark:!bg-slate-950"
                                                         />
@@ -1606,7 +1606,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                     />
                                                 </label>
                                                 <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                    <span>{t('unit', { defaultValue: '단위' })}</span>
+                                                    <span>{t('cmp_unit', { defaultValue: '단위' })}</span>
                                                     <AppSelect
                                                         value={concentrationUnits[component.cartLineId] ?? component.concentration?.unit ?? 'M'}
                                                         onChange={(value) => {
@@ -1630,7 +1630,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             }
                                                         }}
                                                         options={CONCENTRATION_UNITS.map((unit) => ({ value: unit, label: unit }))}
-                                                        ariaLabel={t('unit', { defaultValue: '단위' })}
+                                                        ariaLabel={t('cmp_unit', { defaultValue: '단위' })}
                                                         className="mt-1 w-full"
                                                         buttonClassName="!min-h-11 !rounded-xl !border-slate-300 !bg-white !px-2 dark:!border-slate-700 dark:!bg-slate-950"
                                                     />
@@ -2300,7 +2300,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 value={batch.totalAmount.unit ?? allowedUnits[0]}
                                                 onChange={(value) => changeUnit(value as AmountUnit)}
                                                 options={allowedUnits.map((unit) => ({ value: unit, label: unit }))}
-                                                ariaLabel={t('unit', { defaultValue: '단위' })}
+                                                ariaLabel={t('cmp_unit', { defaultValue: '단위' })}
                                                 buttonClassName="!min-h-12 !rounded-xl !border-slate-300 !bg-white !px-3 dark:!border-slate-700 dark:!bg-slate-900"
                                             />
                                             {!hasComponentVolumeTotal && (

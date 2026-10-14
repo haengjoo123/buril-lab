@@ -17,6 +17,7 @@ import {
     getItemVisualWidthPct,
 } from '../utils/reagentPlacementMetrics';
 import { getShelfSectionByIndex } from '../utils/shelfSections';
+import i18n from '../locales/i18n';
 import {
     createCabinetLayoutSnapshot,
     createCabinetLayoutHistoryChange,
@@ -98,7 +99,7 @@ const enqueueCabinetSave = (snapshot: CabinetSaveSnapshot): Promise<void> => {
     const queuedSave = previousSave
         .catch(() => undefined)
         .then(() => {
-            if (snapshot.generation !== undefined && snapshot.generation !== cabinetLoadSequence) throw new Error('캐비넷이 변경되었습니다. 다시 저장해 주세요.');
+            if (snapshot.generation !== undefined && snapshot.generation !== cabinetLoadSequence) throw new Error(i18n.t('msc_cabinet_changed_resave'));
             return cabinetService.saveCabinetState(
             snapshot.cabinetId,
             snapshot.shelves,
@@ -330,7 +331,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         }
 
         const dimensions = { ...state, cabinetWidth: Math.max(4, Math.min(20, Math.round(newWidth))), cabinetHeight: Math.max(2, Math.min(15, Math.round(newHeight))) };
-        if (!isCabinetLayoutValid(state.shelves, dimensions)) { set({ cabinetSaveError: '현재 시약이 들어갈 공간이 부족합니다.' }); return; }
+        if (!isCabinetLayoutValid(state.shelves, dimensions)) { set({ cabinetSaveError: i18n.t('msc_cabinet_not_enough_space') }); return; }
         set({
             cabinetWidth: Math.max(4, Math.min(20, Math.round(newWidth))),
             cabinetHeight: Math.max(2, Math.min(15, Math.round(newHeight))),
@@ -342,7 +343,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
         const state = get();
         if (state.isLoadingCabinet || state.isApplyingCompatibilityPlan) return;
         const cabinetDepth = Math.max(1, Math.min(4, Math.round(depth)));
-        if (!isCabinetLayoutValid(state.shelves, { ...state, cabinetDepth })) { set({ cabinetSaveError: '현재 시약이 들어갈 공간이 부족합니다.' }); return; }
+        if (!isCabinetLayoutValid(state.shelves, { ...state, cabinetDepth })) { set({ cabinetSaveError: i18n.t('msc_cabinet_not_enough_space') }); return; }
         set({ cabinetDepth, ...resetCompatibilityPlanPreview() });
     },
 

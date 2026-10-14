@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { useLabStore } from '../../store/useLabStore';
 import { useAuth } from '../../hooks/useAuth';
-import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2, History, Copy } from 'lucide-react';
+import { X, Save, Trash2, Beaker, MapPin, CalendarClock, CheckCircle2, Tag, Package, Loader2, History, Copy, ShieldAlert, FlaskConicalOff, Droplets, ClipboardPenLine, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
@@ -26,6 +26,7 @@ import { classifyChemicalWithAI } from '../../services/aiClassificationService';
 import { ResultCard } from '../../components/ResultCard';
 import type { AnalysisResult } from '../../types';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
+import { AmberBottleIcon, PlasticContainerIcon, GlassBottleIcon, SquareBottleIcon } from './components/ContainerTypeIcons';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
 import {
     executeReagentDisposalAction,
@@ -33,21 +34,28 @@ import {
     type WasteBatchDisposalReason,
 } from './reagentDisposalFlow';
 
-const REASONS: { key: ReagentDisposalReason; i18n: string; icon: string }[] = [
-    { key: 'used', i18n: 'cabinet_dispose_reason_used', icon: '✅' },
-    { key: 'empty_container', i18n: 'cabinet_dispose_reason_empty_container', icon: '📦' },
-    { key: 'contaminated_container', i18n: 'cabinet_dispose_reason_contaminated_container', icon: '⚠️' },
-    { key: 'expired', i18n: 'cabinet_dispose_reason_expired', icon: '⏰' },
-    { key: 'broken', i18n: 'cabinet_dispose_reason_broken', icon: '💔' },
-    { key: 'leak', i18n: 'cabinet_dispose_reason_leak', icon: '💧' },
-    { key: 'other', i18n: 'cabinet_dispose_reason_other', icon: '📝' },
+const REASONS: { key: ReagentDisposalReason; i18n: string; icon: LucideIcon }[] = [
+    { key: 'used', i18n: 'cabinet_dispose_reason_used', icon: CheckCircle2 },
+    { key: 'empty_container', i18n: 'cabinet_dispose_reason_empty_container', icon: Beaker },
+    { key: 'contaminated_container', i18n: 'cabinet_dispose_reason_contaminated_container', icon: ShieldAlert },
+    { key: 'expired', i18n: 'cabinet_dispose_reason_expired', icon: CalendarClock },
+    { key: 'broken', i18n: 'cabinet_dispose_reason_broken', icon: FlaskConicalOff },
+    { key: 'leak', i18n: 'cabinet_dispose_reason_leak', icon: Droplets },
+    { key: 'other', i18n: 'cabinet_dispose_reason_other', icon: ClipboardPenLine },
 ];
 
-const CONTAINER_TYPES: { type: ReagentTemplateType; label: string; icon: string }[] = [
-    { type: 'A', label: 'cabinet_container_amber', icon: '🟤' },
-    { type: 'B', label: 'cabinet_container_plastic', icon: '🤍' },
-    { type: 'C', label: 'cabinet_container_glass', icon: '🧪' },
-    { type: 'D', label: 'cabinet_container_vial', icon: '🧴' },
+type DisposalChoice = ReagentDisposalReason | 'remove_from_cabinet';
+const REMOVE_FROM_CABINET_OPTION: { key: DisposalChoice; i18n: string; icon: LucideIcon } = {
+    key: 'remove_from_cabinet',
+    i18n: 'msc_dispose_reason_remove',
+    icon: Trash2,
+};
+
+const CONTAINER_TYPES: { type: ReagentTemplateType; label: string; icon: LucideIcon; color: string }[] = [
+    { type: 'A', label: 'cabinet_container_amber', icon: AmberBottleIcon, color: 'text-amber-700 dark:text-amber-400' },
+    { type: 'B', label: 'cabinet_container_plastic', icon: PlasticContainerIcon, color: 'text-slate-500 dark:text-slate-300' },
+    { type: 'C', label: 'cabinet_container_glass', icon: GlassBottleIcon, color: 'text-cyan-700 dark:text-cyan-400' },
+    { type: 'D', label: 'cabinet_container_vial', icon: SquareBottleIcon, color: 'text-slate-600 dark:text-slate-400' },
 ];
 
 const STORAGE_WARNING_PREVIEW_LIMIT = 3;
@@ -67,9 +75,12 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
     const { t, i18n } = useTranslation();
     const { user } = useAuth();
     const currentLabId = useLabStore((state) => state.currentLabId);
-    const disposalReasons = onStartWasteBatch
-        ? REASONS
-        : REASONS.filter(({ key }) => key === 'used' || key === 'empty_container');
+    const disposalReasons: { key: DisposalChoice; i18n: string; icon: LucideIcon }[] = [
+        ...(onStartWasteBatch
+            ? REASONS
+            : REASONS.filter(({ key }) => key === 'used' || key === 'empty_container')),
+        REMOVE_FROM_CABINET_OPTION,
+    ];
     const selectedReagentId = useFridgeStore(s => s.selectedReagentId);
     const shelves = useFridgeStore(s => s.shelves);
     const cabinetId = useFridgeStore(s => s.cabinetId);
@@ -94,7 +105,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
 
     // Disposal flow state
     const [showDisposalView, setShowDisposalView] = useState(false);
-    const [selectedReason, setSelectedReason] = useState<ReagentDisposalReason | null>(null);
+    const [selectedReason, setSelectedReason] = useState<DisposalChoice | null>(null);
     const [isDisposing, setIsDisposing] = useState(false);
     const [disposalError, setDisposalError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -330,7 +341,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             } : {}),
         });
 
-        if (!updated) { setDisposalError('공간이 부족하거나 다른 시약과 겹칩니다. 크기를 조정해 주세요.'); return; }
+        if (!updated) { setDisposalError(t('msc_reagent_no_space')); return; }
         // If CAS changed and now has a value, trigger PubChem enrichment
         if (casChanged && casNo) {
             const enrichStore = useFridgeStore.getState();
@@ -361,7 +372,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             }
             setSelectedReagentId(null);
         } catch (err) {
-            setDisposalError(err instanceof Error ? err.message : '저장하지 못했습니다. 다시 시도해 주세요.');
+            setDisposalError(err instanceof Error ? err.message : t('msc_reagent_save_failed'));
             console.error('Failed to save reagent edits:', err);
         } finally {
             setIsSaving(false);
@@ -377,10 +388,12 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
         try {
             removeReagent(selectedReagentId);
             await saveCabinet();
+            setShowDisposalView(false);
+            setSelectedReason(null);
             setSelectedReagentId(null);
         } catch (reason) {
             if (useFridgeStore.getState().cabinetId === cabinetId) useFridgeStore.setState({ shelves: previous });
-            setDisposalError(reason instanceof Error ? reason.message : '휴지통으로 이동하지 못했습니다.');
+            setDisposalError(reason instanceof Error ? reason.message : t('msc_reagent_trash_failed'));
         } finally { setIsSaving(false); }
     };
 
@@ -391,6 +404,10 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
 
     const confirmDisposal = async () => {
         if (!selectedReason || !cabinetId) return;
+        if (selectedReason === 'remove_from_cabinet') {
+            await handleTrash();
+            return;
+        }
         setIsDisposing(true);
         setDisposalError(null);
         try {
@@ -719,6 +736,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                             {disposalReasons.map(reason => (
                                 <button
                                     key={reason.key}
+                                    aria-pressed={selectedReason === reason.key}
                                     onClick={() => {
                                         setSelectedReason(reason.key);
                                         setDisposalError(null);
@@ -728,16 +746,23 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700'
                                         }`}
                                 >
-                                    <span className="text-base">{reason.icon}</span>
+                                    <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${selectedReason === reason.key
+                                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300'
+                                        : 'bg-slate-100 text-slate-500 dark:bg-slate-900/60 dark:text-slate-400'
+                                        }`}>
+                                        <reason.icon size={18} strokeWidth={1.75} aria-hidden="true" />
+                                    </span>
                                     <span className="font-medium">{t(reason.i18n)}</span>
                                     {selectedReason === reason.key && (
-                                        <CheckCircle2 size={16} className="ml-auto text-blue-500" />
+                                        <CheckCircle2 size={16} aria-hidden="true" className="ml-auto shrink-0 text-blue-500" />
                                     )}
                                 </button>
                             ))}
                             {selectedReason && (
                                 <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                                    {t(selectedReason === 'used' || selectedReason === 'empty_container'
+                                    {t(selectedReason === 'remove_from_cabinet'
+                                        ? 'msc_dispose_remove_notice'
+                                        : selectedReason === 'used' || selectedReason === 'empty_container'
                                         ? 'cabinet_usage_complete_notice'
                                         : selectedReason === 'contaminated_container'
                                             ? 'cabinet_contaminated_container_notice'
@@ -755,25 +780,28 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                             )}
                             <button
                                 onClick={confirmDisposal}
-                                disabled={!selectedReason || isDisposing}
+                                disabled={!selectedReason || isDisposing || isSaving}
                                 type="button"
                                 className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {selectedReason === 'used' || selectedReason === 'empty_container'
                                     ? <CheckCircle2 size={16} />
-                                    : <FlaskConical size={16} />}
-                                {isDisposing
+                                    : selectedReason === 'remove_from_cabinet'
+                                        ? <Trash2 size={16} />
+                                        : <FlaskConical size={16} />}
+                                {isDisposing || isSaving
                                     ? t('cabinet_processing')
-                                    : t(selectedReason === 'used' || selectedReason === 'empty_container'
-                                        ? 'cabinet_action_usage_complete'
-                                        : 'cabinet_action_continue_waste_batch')}
+                                    : t(selectedReason === 'remove_from_cabinet'
+                                        ? 'msc_action_move_to_trash'
+                                        : selectedReason === 'used' || selectedReason === 'empty_container'
+                                            ? 'cabinet_action_usage_complete'
+                                            : 'cabinet_action_continue_waste_batch')}
                             </button>
                         </div>
                     </>
                 ) : (
                     <>
                         {disposalError && <p role="alert" className="p-3 text-sm text-red-600">{disposalError}</p>}
-                        <button type="button" disabled={isSaving} onClick={() => void handleTrash()} className="mx-3 my-2 rounded-lg border px-3 py-2 text-sm text-red-600 disabled:opacity-50">휴지통으로 이동 · 10일 뒤 완전 삭제</button>
                         {/* Scrollable Content */}
                         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 text-slate-800 dark:text-slate-100">
                             {/* Expiry Alert Banner — shown at top only for urgent states */}
@@ -1005,17 +1033,24 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                     {CONTAINER_TYPES.map((ct) => (
                                         <button
                                             key={ct.type}
+                                            aria-pressed={template === ct.type}
                                             onClick={() => {
                                                 setTemplate(ct.type);
                                                 if (template !== ct.type) {
                                                     setWidth(CONTAINER_BASE_WIDTHS[ct.type] || 8);
                                                 }
                                             }}
-                                            className={`flex items-center justify-center px-1.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all min-h-[44px] ${template === ct.type
+                                            className={`flex flex-col items-center justify-center gap-1 px-1.5 py-2 rounded-lg border text-[11px] font-medium transition-all min-h-[44px] ${template === ct.type
                                                 ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300 dark:border-blue-500 dark:bg-blue-500/20 dark:text-blue-200 dark:ring-blue-500/40'
                                                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700'
                                                 }`}
                                         >
+                                            <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${template === ct.type
+                                                ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300'
+                                                : `bg-slate-100 dark:bg-slate-900/60 ${ct.color}`
+                                                }`}>
+                                                <ct.icon size={20} strokeWidth={1.75} aria-hidden="true" />
+                                            </span>
                                             <span className="leading-tight text-center">{t(ct.label)}</span>
                                         </button>
                                     ))}

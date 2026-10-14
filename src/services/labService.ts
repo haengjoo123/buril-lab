@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import i18n from '../locales/i18n';
 import { supabase } from './supabaseClient';
 import { InternalApiError, postJson } from './internalApi';
 import type { Lab, LabMember } from '../store/useLabStore';
@@ -162,7 +163,7 @@ export const labService = {
         }
         if (!data.success) {
             throwIfLabMembershipLimitError(data.error);
-            throw new Error(data.error || "연구실 생성에 실패했습니다.");
+            throw new Error(data.error || i18n.t('msc_lab_create_failed'));
         }
 
         return fetchLabById(data.lab_id);
@@ -183,31 +184,31 @@ export const labService = {
             // Never retry via join_lab: doing so would bypass a server lock or
             // repeat a membership that committed before a network interruption.
             if (error instanceof InternalApiError) {
-                let message = '지금은 가입을 처리할 수 없습니다. 연구실 목록에서 가입 여부를 확인한 뒤 다시 시도해 주세요.';
+                let message = i18n.t('msc_lab_join_unavailable');
                 let code = error.code;
                 if (error.code === 'already_member') {
-                    message = '이미 이 연구실에 가입되어 있습니다.';
+                    message = i18n.t('msc_lab_already_member');
                     code = '23505'; // Existing duplicate-membership UI contract.
                 } else if (error.code === 'incorrect_password') {
-                    message = '비밀번호가 올바르지 않습니다.';
+                    message = i18n.t('msc_lab_wrong_password');
                 } else if (error.code === 'lab_not_found') {
-                    message = '해당 연구실을 찾을 수 없습니다. 다시 검색해 주세요.';
+                    message = i18n.t('msc_lab_not_found');
                 } else if (isLabMembershipLimitError(error)) {
                     message = LAB_MEMBERSHIP_LIMIT_ERROR;
                 } else if (error.status === 401) {
-                    message = '로그인이 만료됐습니다. 다시 로그인해 주세요.';
+                    message = i18n.t('msc_lab_session_expired');
                 } else if (error.status === 429) {
                     const wait = error.retryAfterSeconds
-                        ? `약 ${Math.ceil(error.retryAfterSeconds / 60)}분 후` : '잠시 후';
-                    message = `반복된 가입 시도로 잠겼습니다. ${wait} 다시 시도해 주세요.`;
+                        ? i18n.t('msc_lab_wait_minutes', { minutes: Math.ceil(error.retryAfterSeconds / 60) }) : i18n.t('msc_lab_wait_moment');
+                    message = i18n.t('msc_lab_join_locked', { wait });
                 }
                 throw new InternalApiError(message, error.status, code, error.retryAfterSeconds);
             }
-            throw new Error('가입 결과를 확인하지 못했습니다. 연구실 목록에서 가입 여부를 확인해 주세요.');
+            throw new Error(i18n.t('msc_lab_join_unverified'));
         }
 
         const { data: userData } = await supabase.auth.getUser();
-        if (!userData.user) throw new Error("가입 후 사용자 정보를 불러올 수 없습니다.");
+        if (!userData.user) throw new Error(i18n.t('msc_lab_user_load_failed'));
 
         // Fetch the newly created member to return
         let { data: memberData, error: memberError } = await supabase
@@ -227,7 +228,7 @@ export const labService = {
         }
 
         if (memberError || !memberData || memberData.lab_id !== normalizedLabId || memberData.user_id !== userData.user.id) {
-            throw new Error('가입은 처리됐지만 연구실 정보를 불러오지 못했습니다. 연구실 목록을 새로고침해 주세요.');
+            throw new Error(i18n.t('msc_lab_info_load_failed'));
         }
         return memberData as LabMember;
     },

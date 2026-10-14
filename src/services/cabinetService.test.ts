@@ -1,3 +1,8 @@
+import i18n from '../locales/i18n';
+
+// These assertions deliberately verify Korean UI copy, independent of host locale.
+beforeEach(async () => { await i18n.changeLanguage('ko'); });
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const optimizeCabinetImageMock = vi.hoisted(() => vi.fn());
@@ -61,6 +66,27 @@ describe('versioned cabinet snapshots', () => {
         rpcMock.mockResolvedValueOnce({ data: [], error: null });
         expect(await cabinetService.getTrash(cabinetId)).toEqual([]);
         expect(rpcMock).toHaveBeenLastCalledWith('get_cabinet_trash_v2', { p_cabinet_id: cabinetId });
+    });
+});
+
+describe('cabinet trash restore errors', () => {
+    beforeEach(async () => {
+        rpcMock.mockReset();
+        rpcMock.mockResolvedValueOnce({ data: { cabinet: { name: 'Test', width: 5, height: 9, depth: 2, layout_revision: 12 }, shelves: [], items: [] }, error: null });
+        await cabinetService.getCabinetDetails(cabinetId);
+    });
+
+    it.each([
+        ['CABINET_RESTORE_SPACE_REQUIRED', '빈 공간'],
+        ['CABINET_VERSION_CONFLICT', '캐비넷이 변경'],
+        ['CABINET_TRASH_EXPIRED', '복원 기간'],
+        ['internal provider detail', '잠시 후'],
+    ])('gives an actionable message for %s', async (message, expected) => {
+        rpcMock.mockResolvedValueOnce({ data: null, error: { message, code: 'P0001' } });
+        await expect(cabinetService.restoreTrash(cabinetId, 'trash-id')).rejects.toThrow(expected);
+        expect(rpcMock).toHaveBeenLastCalledWith('restore_cabinet_trash_v2', {
+            p_cabinet_id: cabinetId, p_trash_id: 'trash-id', p_expected_revision: 12,
+        });
     });
 });
 

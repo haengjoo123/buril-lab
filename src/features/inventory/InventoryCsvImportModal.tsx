@@ -530,7 +530,7 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
             });
         } catch (error) {
             console.error('Failed to download inventory template:', error);
-            setGlobalError('템플릿 다운로드에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+            setGlobalError(t('inv_err_template_download'));
         } finally {
             setIsTemplateDownloading(false);
         }

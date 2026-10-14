@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import { Html, useGLTF } from '@react-three/drei';
+import i18n from '../../locales/i18n';
 
 export function ModelPlaceholder({ failed = false }: { failed?: boolean }) {
     return <mesh position={[0, 0.35, 0]}>
@@ -16,7 +17,7 @@ export class ModelLoadBoundary extends Component<{ path: string; children: React
         return <>
             <ModelPlaceholder failed />
             <Html position={[0, 0.9, 0]} center>
-                <button type="button" title="3D 모델 다시 불러오기" aria-label="3D 모델 다시 불러오기" className="h-8 w-8 rounded border bg-white text-lg text-red-700" onClick={() => {
+                <button type="button" title={i18n.t('msc_model_reload')} aria-label={i18n.t('msc_model_reload')} className="h-8 w-8 rounded border bg-white text-lg text-red-700" onClick={() => {
                     useGLTF.clear(this.props.path);
                     this.setState({ failed: false });
                 }}>↻</button>

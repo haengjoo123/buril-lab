@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import i18n from '../locales/i18n';
 import type {
     AmountUnit,
     CartItem,
@@ -769,25 +770,25 @@ const hasBatchContent = (batch: WasteBatchDraft): boolean =>
     batch.incidentContext !== 'none';
 
 const MATRIX_DISPLAY_NAMES: Record<WasteMatrix, string> = {
-    aqueous: '수용액 폐액',
-    organic_non_halogenated: '비할로겐 유기용매 폐액',
-    organic_halogenated: '할로겐 유기용매 폐액',
-    mixed_biphasic: '혼합용매·두 층 폐액',
-    solid_slurry: '고체·슬러리 폐액',
-    unknown: '미분류 폐액',
+    aqueous: 'wl_matrix_aqueous',
+    organic_non_halogenated: 'wl_matrix_organic_non_halogenated',
+    organic_halogenated: 'wl_matrix_organic_halogenated',
+    mixed_biphasic: 'wl_matrix_mixed_biphasic',
+    solid_slurry: 'wl_matrix_solid_slurry',
+    unknown: 'wl_matrix_unknown',
 };
 
 const buildParkedDisplayName = (batch: WasteBatchDraft): string => {
     const componentNames = batch.components
         .map(({ chemical }) => chemical.name.trim())
         .filter(Boolean);
-    if (componentNames.length === 1) return `${componentNames[0]} 폐액`;
+    if (componentNames.length === 1) return i18n.t('wl_parked_single', { name: componentNames[0] });
     if (componentNames.length > 1) {
-        return `${componentNames[0]} 외 ${componentNames.length - 1}개 성분 폐액`;
+        return i18n.t('wl_parked_multi', { name: componentNames[0], count: componentNames.length - 1 });
     }
-    if (batch.incidentContext === 'broken') return '파손 대응 폐액';
-    if (batch.incidentContext === 'leak') return '누출 대응 폐액';
-    return MATRIX_DISPLAY_NAMES[batch.matrix];
+    if (batch.incidentContext === 'broken') return i18n.t('wl_parked_broken');
+    if (batch.incidentContext === 'leak') return i18n.t('wl_parked_leak');
+    return i18n.t(MATRIX_DISPLAY_NAMES[batch.matrix]);
 };
 
 type AmountDimension = 'volume' | 'mass';
