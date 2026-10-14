@@ -73,7 +73,7 @@ function exactArray(value, expected, label) {
   }
 }
 
-function verifyWranglerSession(session, { commitSha, environment, target, outputWindow }) {
+function verifyWranglerSession(session, { commitSha, environment, target, outputWindow, webReleaseMessage }) {
   exactKeys(session, [
     'type', 'version', 'wrangler_version', 'command_line_args', 'log_file_path', 'timestamp',
   ], 'Wrangler session')
@@ -91,7 +91,11 @@ function verifyWranglerSession(session, { commitSha, environment, target, output
     ? /^quality-approved staging run [1-9][0-9]* lease [0-9a-f]{32}$/
     : /^approved production run [1-9][0-9]* lease [0-9a-f]{32}$/
   const args = session.command_line_args
-  if (!Array.isArray(args) || typeof args[10] !== 'string' || !messagePattern.test(args[10])) {
+  const validMessage = webReleaseMessage === undefined
+    ? messagePattern.test(args?.[10] || '')
+    : /^web release [1-9][0-9]* attempt [1-9][0-9]*$/.test(webReleaseMessage)
+      && args?.[10] === webReleaseMessage
+  if (!Array.isArray(args) || typeof args[10] !== 'string' || !validMessage) {
     throw new Error('Wrangler session deploy message is invalid.')
   }
   exactArray(args, [
@@ -111,6 +115,7 @@ export function verifyWranglerPagesDeployOutput(raw, {
   environment,
   project,
   startedAt,
+  webReleaseMessage,
   now = Date.now(),
 } = {}) {
   if (typeof raw !== 'string' || Buffer.byteLength(raw, 'utf8') === 0 || Buffer.byteLength(raw, 'utf8') > MAX_OUTPUT_BYTES) {
@@ -141,7 +146,7 @@ export function verifyWranglerPagesDeployOutput(raw, {
   const summary = summaries[0]
   const detailed = details[0]
   const outputWindow = { started, now: nowTime }
-  const sessionTime = verifyWranglerSession(session, { commitSha, environment, target, outputWindow })
+  const sessionTime = verifyWranglerSession(session, { commitSha, environment, target, outputWindow, webReleaseMessage })
   exactKeys(summary, ['type', 'version', 'pages_project', 'deployment_id', 'url', 'timestamp'], 'Wrangler Pages summary')
   exactKeysWithOptional(detailed, [
     'type', 'version', 'pages_project', 'deployment_id', 'url', 'environment',
@@ -193,10 +198,11 @@ export async function readWranglerPagesDeployOutput({
   project,
   startedAt,
   outputPath = process.env.GITHUB_OUTPUT,
+  webReleaseMessage,
   now = Date.now(),
 }) {
   const raw = await readFile(file, 'utf8')
-  const result = verifyWranglerPagesDeployOutput(raw, { commitSha, environment, project, startedAt, now })
+  const result = verifyWranglerPagesDeployOutput(raw, { commitSha, environment, project, startedAt, now, webReleaseMessage })
   if (outputPath) {
     await appendFile(outputPath, [
       `deployment_id=${result.deploymentId}`,

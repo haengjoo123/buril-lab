@@ -51,7 +51,8 @@ async function deploy() {
     await rename('.web-release-functions', 'functions')
   }
   const command = await readWranglerPagesDeployOutput({ file: outputFile, commitSha: env.DEPLOY_COMMIT_SHA,
-    environment: env.DEPLOY_ENVIRONMENT, project: selected.project, startedAt: started, outputPath: null })
+    environment: env.DEPLOY_ENVIRONMENT, project: selected.project, startedAt: started, outputPath: null,
+    webReleaseMessage: message })
   let verified
   for (let attempt = 0; attempt < 6; attempt++) {
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${selected.project}/deployments/${command.deploymentId}`, {
