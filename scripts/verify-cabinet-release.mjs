@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { lstatSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { verifyDatabaseReleaseSafety } from './verify-database-release-safety.mjs'
 import { verifyAcceleratedPolicySources, verifyNoOps12Paths } from './verify-accelerated-ops3-11-release.mjs'
 import { filterOps11GeneratedUntrackedPaths, verifyOps11ApplicationSources, verifyOps11WorkerSources } from './verify-ops11-deletion-worker-preparation.mjs'
+import { verifyWebReleaseWorkflow } from './verify-web-release-workflow.mjs'
 
 export const CABINET_RELEASE_BASE_SHA = 'd99fe93c4ae09674cda01bd24b2a463ac23686c2'
 export const CABINET_RELEASE_POLICY = 'config/cabinet-release-20261002.json'
@@ -128,9 +129,21 @@ export function verifyCabinetRelease(root = fileURLToPath(new URL('../', import.
   // applies only to untracked reports; a committed report remains rejected.
   const untracked = filterOps11GeneratedUntrackedPaths(git(root, ['ls-files', '-z', '--others', '--exclude-standard', '--']).split('\0').filter(Boolean))
   const paths = [...new Set([...changed, ...untracked])].sort()
-  verifyCabinetChangedPaths(paths)
+  const continuousWeb = existsSync(path.join(root, '.github/workflows/web-release.yml'))
+  if (continuousWeb) {
+    // The reviewed web workflow replaces the one-off cabinet file allow-list.
+    // Keep database, deletion, Worker and rollout safety invariants below; normal
+    // application changes no longer need to edit an old release's path list.
+    verifyWebReleaseWorkflow(readFileSync(path.join(root, '.github/workflows/web-release.yml'), 'utf8'))
+    verifyNoOps12Paths(paths)
+  } else {
+    verifyCabinetChangedPaths(paths)
+  }
   for (const candidate of paths) {
-    if (!lstatSync(path.join(root, candidate), { throwIfNoEntry: false })?.isFile()) fail(`release path must be a regular file: ${candidate}`)
+    const stat = lstatSync(path.join(root, candidate), { throwIfNoEntry: false })
+    // Ordinary refactors may remove files; mandatory safety sources are still
+    // read and checked below. Never accept a symlink or other special file.
+    if ((!stat && !continuousWeb) || (stat && !stat.isFile())) fail(`release path must be a regular file: ${candidate}`)
   }
   const read = relative => readFileSync(path.join(root, relative), 'utf8')
   const policy = verifyCabinetPolicy(JSON.parse(read(CABINET_RELEASE_POLICY)))
@@ -149,7 +162,10 @@ export function verifyCabinetRelease(root = fileURLToPath(new URL('../', import.
     labService: read('src/services/labService.ts'), labModal: read('src/components/LabManagementModal.tsx'),
   })
   verifyOps11WorkerSources({ scheduler: read('workers/deletion-scheduler/src/scheduler.ts'), index: read('workers/deletion-scheduler/src/index.ts'), stagingConfig: read('workers/deletion-scheduler/wrangler.staging.jsonc'), productionConfig: read('workers/deletion-scheduler/wrangler.production.jsonc'), generatedTypes: read('workers/deletion-scheduler/worker-configuration.d.ts') })
-  if (createHash('sha256').update(read('package-lock.json').replace(/\r\n/g, '\n')).digest('hex') !== '48eaf08d3ed9e2d4f7bafbe7ed820a86d4682ac7ac2fcf80af1086d7e6075095') fail('reviewed dependency lock changed')
+  // Continuous releases use npm ci plus mandatory runtime auditing in Quality
+  // and immediately before deployment, rather than freezing all dependencies
+  // to a historical cabinet rollout's lockfile hash.
+  if (!continuousWeb && createHash('sha256').update(read('package-lock.json').replace(/\r\n/g, '\n')).digest('hex') !== '48eaf08d3ed9e2d4f7bafbe7ed820a86d4682ac7ac2fcf80af1086d7e6075095') fail('reviewed dependency lock changed')
   const database = verifyDatabaseReleaseSafety(root)
   if (!read('functions/api/internal/deletions/_processor.ts').includes('purge_expired_cabinet_trash_v2')) fail('trash purge is not connected to maintenance')
   const workflow = read('.github/workflows/quality.yml')
@@ -157,7 +173,8 @@ export function verifyCabinetRelease(root = fileURLToPath(new URL('../', import.
   return Object.freeze({ result: 'cabinet-release-candidate-ok', baseSha: CABINET_RELEASE_BASE_SHA,
     changedFiles: paths.length, activeMigrations: database.activeMigrations, activePgTapTests: database.activePgTapTests,
     policy, deletionRuntimeDefaultEnabled: application.runtimeDefaultEnabled,
-    candidateReady: true, hostedAcceptance: false, productionReady: false, ops12Included: false })
+    candidateReady: true, hostedAcceptance: false, productionReady: false, ops12Included: false,
+    scopeMode: continuousWeb ? 'continuous-web' : 'cabinet-only' })
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

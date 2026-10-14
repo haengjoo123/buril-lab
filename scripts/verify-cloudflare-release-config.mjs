@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 import { REQUIRED_SERVER_SECRETS } from './verify-pages-project-config.mjs'
+import { verifyWebReleaseWorkflow } from './verify-web-release-workflow.mjs'
 const FORBIDDEN_PREP0_WORKFLOW_TERMS = [
   'account deletion',
   'deletion-scheduler',
@@ -597,6 +598,12 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
     name,
     normalizeLineEndings(source),
   ]))
+  // The opt-in web path has structural safety checks, rather than a hash of
+  // every display name. Keep the legacy maintenance contracts unchanged.
+  if (Object.hasOwn(workflows, 'web-release.yml')) {
+    verifyWebReleaseWorkflow(workflows['web-release.yml'])
+    delete workflows['web-release.yml']
+  }
   const workflowNames = Object.keys(workflows || {}).sort()
   const approvedWorkflowNames = Object.keys(APPROVED_WORKFLOW_ACTION_REFERENCES).sort()
   if (JSON.stringify(workflowNames) !== JSON.stringify(approvedWorkflowNames)) {

@@ -1,0 +1,233 @@
+name: Web release
+run-name: Web ${{ github.event_name == 'workflow_run' && 'staging' || 'production' }} ${{ github.event.workflow_run.head_sha || github.sha }}
+
+on:
+  workflow_run:
+    workflows: [Quality and security]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+# Share locks with the supervised maintenance workflows during migration.
+concurrency:
+  group: ${{ github.event_name == 'workflow_run' && 'cloudflare-staging' || 'cloudflare-production' }}
+  cancel-in-progress: false
+
+jobs:
+  select:
+    name: Select verified release
+    if: >-
+      vars.WEB_RELEASE_ENABLED == 'true' && github.repository == 'haengjoo123/buril-lab' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      environment: ${{ steps.select.outputs.environment }}
+      commit: ${{ steps.confirm.outputs.commit || steps.select.outputs.commit }}
+      quality_run_id: ${{ steps.confirm.outputs.quality_run_id || steps.select.outputs.quality_run_id }}
+      staging_run_id: ${{ steps.select.outputs.staging_run_id }}
+      staging_run_attempt: ${{ steps.confirm.outputs.staging_run_attempt }}
+      staging_url: ${{ steps.confirm.outputs.staging_url }}
+      staging_features: ${{ steps.confirm.outputs.staging_features }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Select candidate automatically
+        id: select
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WEB_RELEASE_ENABLED: ${{ vars.WEB_RELEASE_ENABLED }}
+        run: node scripts/web-release.mjs select
+      - name: Verify staging evidence archive
+        if: steps.select.outputs.environment == 'production'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EXPECTED_ARTIFACT_ID: ${{ steps.select.outputs.evidence_artifact_id }}
+          EXPECTED_ARTIFACT_SERVICE_DIGEST: ${{ steps.select.outputs.evidence_digest }}
+        run: node scripts/verify-github-artifact-digest.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: steps.select.outputs.environment == 'production'
+        with:
+          artifact-ids: ${{ steps.select.outputs.evidence_artifact_id }}
+          run-id: ${{ steps.select.outputs.staging_run_id }}
+          github-token: ${{ github.token }}
+          path: release-evidence
+          merge-multiple: true
+      - name: Bind production to the tested staging candidate
+        id: confirm
+        if: steps.select.outputs.environment == 'production'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAGING_RUN_ID: ${{ steps.select.outputs.staging_run_id }}
+        run: node scripts/web-release.mjs confirm
+
+  build:
+    name: Build without deployment credentials
+    needs: select
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ needs.select.outputs.environment }}
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      manifest_digest: ${{ steps.manifest.outputs.manifest_digest }}
+    env:
+      DEPLOY_COMMIT_SHA: ${{ needs.select.outputs.commit }}
+      DEPLOY_ENVIRONMENT: ${{ needs.select.outputs.environment }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_PUBLIC_APP_URL: ${{ needs.select.outputs.environment == 'staging' && 'https://staging.burillab.com' || 'https://burillab.com' }}
+      VITE_INTERNAL_API_BASE_URL: ${{ needs.select.outputs.environment == 'staging' && 'https://staging.burillab.com' || 'https://burillab.com' }}
+      VITE_AUTH_REDIRECT_URL: ${{ needs.select.outputs.environment == 'staging' && 'https://staging.burillab.com/auth/callback' || 'https://burillab.com/auth/callback' }}
+      VITE_ENABLE_WASTE_V2: ${{ vars.VITE_ENABLE_WASTE_V2 }}
+      VITE_ENABLE_PH_PREDICTION: ${{ vars.VITE_ENABLE_PH_PREDICTION }}
+      VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
+      VITE_ENABLE_SEARCH_ANALYTICS: ${{ vars.VITE_ENABLE_SEARCH_ANALYTICS }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.select.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Build and scan the client
+        run: npm run build
+      - name: Compile server functions and stamp the release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e dist/_worker.js
+          test ! -e dist/_routes.json
+          node node_modules/wrangler/bin/wrangler.js pages functions build functions \
+            --outdir "$GITHUB_WORKSPACE/dist/_worker.js" \
+            --output-routes-path "$GITHUB_WORKSPACE/dist/_routes.json" \
+            --compatibility-date 2026-08-24 --compatibility-flag nodejs_compat
+          node scripts/verify-pages-functions-routes.mjs dist/_routes.json
+          node scripts/write-release-manifest.mjs --output dist/release.json --commit "$DEPLOY_COMMIT_SHA" --environment "$DEPLOY_ENVIRONMENT"
+      - name: Hash the complete artifact
+        id: manifest
+        run: node scripts/web-release-artifact.mjs create
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: upload
+        with:
+          name: web-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist
+            release-artifact.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    name: Deploy and verify
+    needs: [select, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ needs.select.outputs.environment }}
+      url: ${{ needs.select.outputs.environment == 'staging' && 'https://staging.burillab.com' || 'https://burillab.com' }}
+    env:
+      WEB_RELEASE_ENABLED: ${{ vars.WEB_RELEASE_ENABLED }}
+      DEPLOY_COMMIT_SHA: ${{ needs.select.outputs.commit }}
+      DEPLOY_ENVIRONMENT: ${{ needs.select.outputs.environment }}
+      QUALITY_RUN_ID: ${{ needs.select.outputs.quality_run_id }}
+      STAGING_RUN_ID: ${{ needs.select.outputs.staging_run_id }}
+      STAGING_RUN_ATTEMPT: ${{ needs.select.outputs.staging_run_attempt }}
+      STAGING_URL: ${{ needs.select.outputs.staging_url }}
+      STAGING_FEATURES: ${{ needs.select.outputs.staging_features }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
+      STAGING_KOSHA_CONTENT_MODE: link_only
+      VITE_ENABLE_WASTE_V2: ${{ vars.VITE_ENABLE_WASTE_V2 }}
+      VITE_ENABLE_PH_PREDICTION: ${{ vars.VITE_ENABLE_PH_PREDICTION }}
+      VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
+      VITE_ENABLE_SEARCH_ANALYTICS: ${{ vars.VITE_ENABLE_SEARCH_ANALYTICS }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.select.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify artifact archive digest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EXPECTED_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          EXPECTED_ARTIFACT_SERVICE_DIGEST: ${{ needs.build.outputs.artifact_digest }}
+        run: node scripts/verify-github-artifact-digest.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: .
+          merge-multiple: true
+      - name: Verify every deployed file
+        env:
+          EXPECTED_MANIFEST_DIGEST: ${{ needs.build.outputs.manifest_digest }}
+        run: node scripts/web-release-artifact.mjs verify
+      - name: Reject vulnerable runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Verify current hosted database security
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.WEB_ADVISOR_TOKEN }}
+        run: npm run security:supabase-advisors:hosted -- --environment "$DEPLOY_ENVIRONMENT"
+      - name: Install staging browser
+        if: needs.select.outputs.environment == 'staging'
+        run: npx playwright install --with-deps chromium
+      - name: Recheck candidate and prevent accidental rollback
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WEB_DATABASE_REVIEWED_SHA: ${{ vars.WEB_DATABASE_REVIEWED_SHA }}
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: node scripts/web-release.mjs guard
+      - name: Deploy the verified artifact
+        id: pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.WEB_PAGES_TOKEN }}
+        run: node scripts/web-release-pages.mjs deploy
+      - name: Verify live release and staging user journeys
+        env:
+          DEPLOYMENT_ID: ${{ steps.pages.outputs.deployment_id }}
+          DEPLOYMENT_URL: ${{ steps.pages.outputs.deployment_url }}
+          STAGING_ACCESS_CLIENT_ID: ${{ needs.select.outputs.environment == 'staging' && secrets.STAGING_ACCESS_CLIENT_ID || '' }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ needs.select.outputs.environment == 'staging' && secrets.STAGING_ACCESS_CLIENT_SECRET || '' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ needs.select.outputs.environment == 'staging' && secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY || '' }}
+          GATE0_E2E_EMAIL: ${{ secrets.GATE0_E2E_EMAIL }}
+          GATE0_E2E_PASSWORD: ${{ secrets.GATE0_E2E_PASSWORD }}
+        run: node scripts/web-release-pages.mjs verify
+      - name: Publish staging evidence only after every check passes
+        if: needs.select.outputs.environment == 'staging'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: web-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-evidence/staging.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Explain failed release
+        if: failure()
+        run: echo 'Release verification failed. Production promotion is blocked. Read the failed step above; fix the issue and rerun Web release. For a post-deploy production failure, use the documented Pages rollback procedure.' >> "$GITHUB_STEP_SUMMARY"
