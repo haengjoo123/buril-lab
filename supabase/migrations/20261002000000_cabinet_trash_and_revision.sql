@@ -30,6 +30,7 @@ create index cabinet_trash_expiry on public.cabinet_trash(expires_at) where payl
 alter table public.cabinet_trash enable row level security;
 create policy cabinet_trash_read on public.cabinet_trash for select to authenticated
 using (payload is not null and expires_at>now() and exists(select 1 from public.cabinets c where c.id = cabinet_id));
+revoke all on public.cabinet_trash from public, anon, authenticated, service_role;
 grant select on public.cabinet_trash to authenticated;
 grant all on public.cabinet_trash to service_role;
 
@@ -291,9 +292,9 @@ begin
   return count;
 end $$;
 
-revoke all on function public.get_cabinet_state_v2(uuid),public.save_cabinet_state_v2(uuid,jsonb,integer,integer,integer,bigint,uuid[],uuid[]),public.restore_cabinet_trash_v2(uuid,uuid,bigint),public.update_cabinet_item_ghs_v2(uuid,uuid,text,text,jsonb,text,timestamptz),public.purge_expired_cabinet_trash_v2() from public;
-revoke all on function public.get_cabinet_trash_v2(uuid) from public;
-revoke all on function public.create_cabinet_v2(text,text,integer,integer,integer,uuid) from public;
+revoke all on function public.get_cabinet_state_v2(uuid),public.save_cabinet_state_v2(uuid,jsonb,integer,integer,integer,bigint,uuid[],uuid[]),public.restore_cabinet_trash_v2(uuid,uuid,bigint),public.update_cabinet_item_ghs_v2(uuid,uuid,text,text,jsonb,text,timestamptz),public.purge_expired_cabinet_trash_v2() from public, anon, authenticated, service_role;
+revoke all on function public.get_cabinet_trash_v2(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.create_cabinet_v2(text,text,integer,integer,integer,uuid) from public, anon, authenticated, service_role;
 grant execute on function public.create_cabinet_v2(text,text,integer,integer,integer,uuid) to authenticated;
 grant execute on function public.get_cabinet_trash_v2(uuid) to authenticated;
 grant execute on function public.get_cabinet_state_v2(uuid),public.save_cabinet_state_v2(uuid,jsonb,integer,integer,integer,bigint,uuid[],uuid[]),public.restore_cabinet_trash_v2(uuid,uuid,bigint),public.update_cabinet_item_ghs_v2(uuid,uuid,text,text,jsonb,text,timestamptz) to authenticated;

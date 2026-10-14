@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -7,8 +6,19 @@ import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 
 export const ADVISOR_CLI_VERSION = '2.115.0'
 export const BASELINE_ENVIRONMENTS = ['production', 'staging']
-export const EXPECTED_COUNTS = Object.freeze({ production: 60, staging: 60 })
-const SUPABASE_CLI_EXECUTABLE = 'supabase'
+// production.json preserves the last actual production observation. The
+// candidate's post-migration expectation is derived separately below.
+export const EXPECTED_COUNTS = Object.freeze({ production: 60, staging: 68 })
+export const CABINET_ADVISOR_ADDITIONS = Object.freeze([
+  ['commit_inventory_import_batch_v1', 'p_job_id uuid, p_revision integer, p_rows jsonb'],
+  ['create_cabinet_v2', 'p_name text, p_location text, p_width integer, p_height integer, p_depth integer, p_lab_id uuid'],
+  ['get_cabinet_state_v2', 'p_cabinet_id uuid'],
+  ['get_cabinet_trash_v2', 'p_cabinet_id uuid'],
+  ['restore_cabinet_trash_v2', 'p_cabinet_id uuid, p_trash_id uuid, p_expected_revision bigint'],
+  ['save_cabinet_state_v2', 'p_cabinet_id uuid, p_shelves jsonb, p_width integer, p_height integer, p_depth integer, p_expected_revision bigint, p_removed_shelf_ids uuid[], p_removed_item_ids uuid[]'],
+  ['save_inventory_import_v1', 'p_job_id uuid, p_revision integer, p_metadata jsonb, p_rows jsonb, p_request_id uuid'],
+  ['update_cabinet_item_ghs_v2', 'p_cabinet_id uuid, p_item_id uuid, p_expected_cas text, p_expected_name text, p_h_codes jsonb, p_status text, p_checked_at timestamp with time zone'],
+].map(pair => Object.freeze(pair)))
 
 const repoRoot = resolve(import.meta.dirname, '..')
 const baselineDirectory = resolve(repoRoot, 'supabase/security-advisors')
@@ -568,6 +578,40 @@ export function compareObservedWithBaseline(baseline, observedEntries, { include
   }
 }
 
+export function buildProductionCabinetExpectation(production, staging, options) {
+  validateBaseline(production, 'production', options)
+  validateBaseline(staging, 'staging', options)
+  const previousKeys = new Set(production.entries.map(entry => entry.cache_key))
+  // Existing findings, including their role evidence, cannot be silently
+  // replaced or removed when the new RPC findings are reviewed.
+  compareObservedWithBaseline(production, staging.entries.filter(entry => previousKeys.has(entry.cache_key)))
+  const additions = staging.entries.filter(entry => !previousKeys.has(entry.cache_key))
+  const expectedKeys = CABINET_ADVISOR_ADDITIONS.map(([name, args]) =>
+    `authenticated_security_definer_function_executable_public_${name}_${args}`)
+  if (JSON.stringify(additions.map(entry => entry.cache_key)) !== JSON.stringify(expectedKeys)) {
+    fail('cabinet advisor additions differ from the eight reviewed RPC signatures')
+  }
+  for (const entry of additions) {
+    if (entry.rule !== 'authenticated_security_definer_function_executable' || entry.level !== 'WARN'
+      || entry.object.kind !== 'function' || entry.object.schema !== 'public'
+      || entry.object.language !== 'plpgsql' || entry.object.security_definer !== true
+      || entry.evidence.kind !== 'function_execute' || entry.evidence.anon_execute !== false
+      || entry.evidence.authenticated_execute !== true || entry.evidence.service_role_execute !== false
+      || entry.disposition !== 'temporary_open') {
+      fail('cabinet advisor additions differ from reviewed RPC permissions')
+    }
+    const [name, args] = CABINET_ADVISOR_ADDITIONS.find(([name]) => name === entry.object.name) || []
+    if (!name || entry.object.identity_arguments !== args) fail('cabinet advisor RPC identity differs from its cache key')
+  }
+  // This is an expectation, not a fabricated production observation. Hosted
+  // production verification must see all 68 entries after the SQL migration.
+  return {
+    environment: 'production', expected_count: 68,
+    observation_source: { environment: 'staging', observed_on: staging.observed_on },
+    entries: [...production.entries, ...additions].sort((left, right) => compareText(left.cache_key, right.cache_key)),
+  }
+}
+
 export function assertHostedEnvironment(environment, env = process.env) {
   if (!BASELINE_ENVIRONMENTS.includes(environment)) fail('hosted mode requires staging or production')
   const accessToken = env.SUPABASE_ACCESS_TOKEN
@@ -593,59 +637,75 @@ function parseStrictJson(text, label) {
   }
 }
 
-function runSupabaseJson(args, label, env) {
-  const result = spawnSync(SUPABASE_CLI_EXECUTABLE, args, {
-    cwd: repoRoot,
-    env,
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-    timeout: 120_000,
-    maxBuffer: 8 * 1024 * 1024,
-    windowsHide: true,
-  })
-  if (result.error) {
-    if (result.error.code === 'ETIMEDOUT') fail(`${label} timed out before producing a reviewed result`)
-    fail(`${label} could not start the pinned CLI (${result.error.code || 'unknown error'})`)
+const MAX_HOSTED_RESPONSE_BYTES = 8 * 1024 * 1024
+
+export async function fetchHostedEvidence({ accessToken, projectRef }, { fetchImpl = fetch, timeoutMs = 120_000 } = {}) {
+  if (typeof projectRef !== 'string' || !PROJECT_REF_PATTERN.test(projectRef)
+    || typeof accessToken !== 'string' || !accessToken.trim()) fail('invalid hosted evidence credentials or project')
+  validatePermissionQuery()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  async function request(suffix, query) {
+    let response
+    try {
+      response = await fetchImpl(`https://api.supabase.com/v1/projects/${projectRef}/${suffix}`, {
+        method: query === undefined ? 'GET' : 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json',
+          ...(query === undefined ? {} : { 'Content-Type': 'application/json' }) },
+        ...(query === undefined ? {} : { body: JSON.stringify({ query }) }),
+        redirect: 'error', signal: controller.signal,
+      })
+    } catch {
+      fail('Supabase hosted evidence request failed or timed out')
+    }
+    if (!response.ok) fail(`Supabase hosted evidence returned HTTP ${response.status}`)
+    if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) {
+      fail('Supabase hosted evidence returned a non-JSON response')
+    }
+    if (Number(response.headers.get('content-length')) > MAX_HOSTED_RESPONSE_BYTES || !response.body) {
+      fail('Supabase hosted evidence response is empty or too large')
+    }
+    const reader = response.body.getReader()
+    const chunks = []
+    let total = 0
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        total += value.byteLength
+        if (total > MAX_HOSTED_RESPONSE_BYTES) fail('Supabase hosted evidence response is too large')
+        chunks.push(value)
+      }
+    } catch (error) {
+      if (error instanceof AdvisorContractError) throw error
+      fail('Supabase hosted evidence body failed or timed out')
+    } finally {
+      await reader.cancel().catch(() => {})
+      reader.releaseLock()
+    }
+    return parseStrictJson(Buffer.concat(chunks).toString('utf8'), 'Supabase hosted evidence')
   }
-  if (result.signal) {
-    fail(`${label} was terminated by ${result.signal} before producing a reviewed result`)
+  try {
+    // HTTPS management endpoints do not require a local CLI link, DB password,
+    // IPv6 connectivity, or creation of a privileged database login role.
+    const advisorResponse = await request('advisors/security')
+    if (!Array.isArray(advisorResponse?.lints)) fail('Supabase advisor API must return a lints array')
+    const permissionResponse = await request('database/query/read-only', readFileSync(permissionQueryPath, 'utf8'))
+    if (!Array.isArray(permissionResponse)) fail('Supabase read-only query API must return a row array')
+    return { advisorPayload: { results: advisorResponse.lints }, permissionPayload: { rows: permissionResponse } }
+  } finally {
+    clearTimeout(timer)
+    controller.abort()
   }
-  if (result.status !== 0) {
-    fail(`${label} exited with status ${result.status} before producing a reviewed result`)
-  }
-  return parseStrictJson(result.stdout, label)
 }
 
-export function runHostedCheck(environment, env = process.env) {
-  const { projectRef } = assertHostedEnvironment(environment, env)
+export async function runHostedCheck(environment, env = process.env, options = {}) {
+  const credentials = assertHostedEnvironment(environment, env)
   validatePermissionQuery()
-  const baseline = loadBaseline(environment)
-  const advisorPayload = runSupabaseJson(
-    [
-      'db', 'advisors',
-      '--linked',
-      '--project-ref', projectRef,
-      '--type', 'security',
-      '--level', 'info',
-      '--fail-on', 'none',
-      '--output-format', 'json',
-      '--agent', 'yes',
-    ],
-    'Supabase hosted Security Advisor',
-    env,
-  )
-  const permissionPayload = runSupabaseJson(
-    [
-      'db', 'query',
-      '--linked',
-      '--project-ref', projectRef,
-      '--file', permissionQueryPath,
-      '--output-format', 'json',
-      '--agent', 'yes',
-    ],
-    'Supabase hosted permission query',
-    env,
-  )
+  const baseline = environment === 'production'
+    ? buildProductionCabinetExpectation(loadBaseline('production'), loadBaseline('staging'))
+    : loadBaseline(environment)
+  const { advisorPayload, permissionPayload } = await fetchHostedEvidence(credentials, options)
   const advisors = normalizeAdvisorPayload(advisorPayload)
   const permissions = normalizePermissionPayload(permissionPayload)
   const observed = buildObservedEntries(advisors, permissions)
@@ -657,6 +717,7 @@ export function runHostedCheck(environment, env = process.env) {
 
 export function runStaticCheck(options) {
   validatePermissionQuery()
+  buildProductionCabinetExpectation(loadBaseline('production', options), loadBaseline('staging', options), options)
   return BASELINE_ENVIRONMENTS.map((environment) => {
     const baseline = loadBaseline(environment, options)
     return { environment, findings: baseline.entries.length }
@@ -668,7 +729,7 @@ function readArgument(name) {
   return index === -1 ? undefined : process.argv[index + 1]
 }
 
-function main() {
+async function main() {
   const mode = process.argv[2] || 'static'
   if (mode === 'static') {
     const results = runStaticCheck()
@@ -677,7 +738,7 @@ function main() {
   }
   if (mode === 'hosted') {
     const environment = readArgument('--environment') || process.env.ADVISOR_ENVIRONMENT
-    const result = runHostedCheck(environment)
+    const result = await runHostedCheck(environment)
     console.log(`Supabase hosted advisor contract verified for ${result.environment} (${result.findings} findings).`)
     return
   }
@@ -687,7 +748,7 @@ function main() {
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : ''
 if (import.meta.url === invokedPath) {
   try {
-    main()
+    await main()
   } catch (error) {
     const message = error instanceof AdvisorContractError
       ? error.message

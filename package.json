@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "deploy": "gh workflow run web-release.yml --ref main",
+    "deploy:status": "gh run list --workflow web-release.yml --limit 5",
+    "deploy:check": "node scripts/check-web-release-setup.mjs",
+    "deploy:test": "vitest run scripts/web-release.test.ts --reporter=dot",
     "dev": "vite",
     "assets:generate": "node scripts/generate-app-assets.mjs",
     "assets:capacitor": "npx @capacitor/assets generate --ios --android --assetPath resources --iconBackgroundColor \"#0f172a\" --iconBackgroundColorDark \"#0f172a\" --splashBackgroundColor \"#0f172a\" --splashBackgroundColorDark \"#0f172a\"",
@@ -125,6 +129,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "js-yaml": "4.1.1",
     "postcss": "^8.5.15",
     "sharp": "^0.34.4",
     "supabase": "2.115.0",

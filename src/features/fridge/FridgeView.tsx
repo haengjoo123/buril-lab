@@ -1138,6 +1138,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 )}
                 <Suspense fallback={<SceneLoadingFallback />}>
                     <FridgeScene />
+                    <CabinetTrash />
                 </Suspense>
 
                 {showOnboardingGuide && (

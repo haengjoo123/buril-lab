@@ -60,7 +60,7 @@ describe('Ops3 release-scope boundary', () => {
 
   it('routes an explicitly pinned accelerated Ops3-11 candidate through its stricter aggregate contract', () => {
     expect(verifyOps3OrAcceleratedReleaseScope()).toMatchObject({
-      result: 'accelerated-ops3-11-candidate-ok',
+      result: 'cabinet-release-candidate-ok',
       candidateReady: true,
       productionReady: false,
       ops12Included: false,

@@ -1077,6 +1077,31 @@ describe('Prep 0 Cloudflare release controls', () => {
     }
   })
 
+  it.each(['staging', 'production'] as const)('binds Web release output to the exact run and attempt for %s', async (environment) => {
+    const records = wranglerOutputFixture(environment).trim().split('\n').map((line) => JSON.parse(line))
+    const message = 'web release 38526992684 attempt 1'
+    records[0].command_line_args[10] = message
+    const raw = records.map((record) => JSON.stringify(record)).join('\n')
+    const options = {
+      commitSha: COMMIT, environment,
+      project: environment === 'staging' ? 'buril-lab-staging' : 'buril-lab',
+      startedAt: '2026-08-25T01:00:00Z', now: Date.parse('2026-08-25T01:01:00Z'),
+      webReleaseMessage: message,
+    }
+    expect(verifyWranglerPagesDeployOutput(raw, options).commitSha).toBe(COMMIT)
+    for (const webReleaseMessage of [undefined, 'web release 38526992685 attempt 1', 'web release 38526992684 attempt 2', '', 'arbitrary']) {
+      expect(() => verifyWranglerPagesDeployOutput(raw, { ...options, webReleaseMessage })).toThrow(/deploy message/)
+    }
+    const directory = await mkdtemp(join(tmpdir(), 'burillab-web-output-'))
+    try {
+      const file = join(directory, 'wrangler.jsonl')
+      await writeFile(file, raw, 'utf8')
+      await expect(readWranglerPagesDeployOutput({ ...options, file, outputPath: null })).resolves.toMatchObject({ commitSha: COMMIT })
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it('requires ephemeral Pages tokens and rejects legacy Cloudflare deployment inputs', () => {
     expect(() => verifyCloudflareDeployInputs({
       ...validDeployEnvironment('staging'),

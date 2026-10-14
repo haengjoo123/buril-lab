@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest'
 import {
   assertHostedEnvironment,
   buildObservedEntries,
+  buildProductionCabinetExpectation,
+  CABINET_ADVISOR_ADDITIONS,
   compareObservedWithBaseline,
+  fetchHostedEvidence,
   loadBaseline,
   normalizeAdvisorPayload,
   normalizePermissionPayload,
@@ -24,6 +27,61 @@ const baselineSchema = JSON.parse(readFileSync(
   resolve(import.meta.dirname, '../supabase/security-advisors/schema.json'),
   'utf8',
 ))
+
+describe('hosted HTTPS advisor evidence', () => {
+  const credentials = { projectRef: 'qpgnomuqdcucjmxrunnw', accessToken: 'fixture-token' }
+  const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), {
+    status, headers: { 'Content-Type': 'application/json' },
+  })
+  it('uses the exact project and read-only catalog endpoint without CLI linking', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = []
+    const result = await fetchHostedEvidence(credentials, { fetchImpl: async (url: string, init: RequestInit) => {
+      calls.push({ url, init })
+      return calls.length === 1 ? json({ lints: advisorFixture.results }) : json(permissionFixture.rows)
+    } })
+    expect(calls.map(call => [call.url, call.init.method, call.init.redirect])).toEqual([
+      ['https://api.supabase.com/v1/projects/qpgnomuqdcucjmxrunnw/advisors/security', 'GET', 'error'],
+      ['https://api.supabase.com/v1/projects/qpgnomuqdcucjmxrunnw/database/query/read-only', 'POST', 'error'],
+    ])
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ query: permissionQuery })
+    expect(result).toEqual({ advisorPayload: advisorFixture, permissionPayload: permissionFixture })
+    expect(buildObservedEntries(normalizeAdvisorPayload(result.advisorPayload), normalizePermissionPayload(result.permissionPayload)))
+      .toEqual(fixtureObserved())
+  })
+  it.each([401, 403, 429, 500])('fails closed on HTTP %s without echoing provider bodies', async status => {
+    await expect(fetchHostedEvidence(credentials, { fetchImpl: async () => json({ token: 'do-not-echo' }, status) }))
+      .rejects.toThrow(`returned HTTP ${status}`)
+  })
+  it('rejects redirects/network errors without exposing transport diagnostics', async () => {
+    await expect(fetchHostedEvidence(credentials, { fetchImpl: async () => { throw new Error('do-not-echo-secret') } }))
+      .rejects.toThrow('request failed or timed out')
+  })
+  it('rejects non-JSON, malformed JSON, and malformed advisor payloads', async () => {
+    for (const response of [new Response('<html>login</html>'),
+      new Response('{broken', { headers: { 'Content-Type': 'application/json' } }), json({})]) {
+      await expect(fetchHostedEvidence(credentials, { fetchImpl: async () => response })).rejects.toThrow()
+    }
+  })
+  it('rejects oversized bodies even without content-length', async () => {
+    await expect(fetchHostedEvidence(credentials, { fetchImpl: async () => new Response(' '.repeat(8 * 1024 * 1024 + 1), {
+      headers: { 'Content-Type': 'application/json' },
+    }) })).rejects.toThrow('too large')
+  })
+  it('bounds network waits with an abort signal', async () => {
+    await expect(fetchHostedEvidence(credentials, { timeoutMs: 5,
+      fetchImpl: async (_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      }),
+    })).rejects.toThrow('timed out')
+  })
+  it('refuses malformed permission results and project path injection', async () => {
+    let count = 0
+    await expect(fetchHostedEvidence(credentials, { fetchImpl: async () => ++count === 1 ? json({ lints: [] }) : json({ rows: [] }) }))
+      .rejects.toThrow('row array')
+    await expect(fetchHostedEvidence({ ...credentials, projectRef: '../other-project' }))
+      .rejects.toThrow('invalid hosted evidence')
+  })
+})
 
 function fixtureObserved() {
   return buildObservedEntries(
@@ -296,7 +354,7 @@ describe('Supabase hosted Security Advisor contract', () => {
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
       { environment: 'production', findings: 60 },
-      { environment: 'staging', findings: 60 },
+      { environment: 'staging', findings: 68 },
     ])
 
     const production = loadBaseline('production', { today: '2026-08-24' })
@@ -312,6 +370,48 @@ describe('Supabase hosted Security Advisor contract', () => {
     })
     expect(staging.entries.filter((entry) => productionKeys.has(entry.cache_key)).map(technicalProjection))
       .toEqual(production.entries.map(technicalProjection))
-    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual([])
+    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual(
+      CABINET_ADVISOR_ADDITIONS.map(([name, args]) =>
+        `authenticated_security_definer_function_executable_public_${name}_${args}`),
+    )
+  })
+
+  it('requires the migrated production catalog while preserving the actual prior observation', () => {
+    const production = loadBaseline('production', { today: '2026-10-02' })
+    const staging = loadBaseline('staging', { today: '2026-10-02' })
+    const expected = buildProductionCabinetExpectation(production, staging, { today: '2026-10-02' })
+    expect(production.expected_count).toBe(60)
+    expect(production.observed_on).toBe('2026-09-05')
+    expect(expected).toMatchObject({ environment: 'production', expected_count: 68,
+      observation_source: { environment: 'staging', observed_on: '2026-10-02' } })
+    expect(() => compareObservedWithBaseline(expected, production.entries)).toThrow('missing=8')
+    expect(() => compareObservedWithBaseline(expected, staging.entries)).not.toThrow()
+
+    const anonymousGrant = structuredClone(staging.entries)
+    const newRpc = anonymousGrant.find((entry) => entry.object.name === 'save_cabinet_state_v2')
+    if (!newRpc) throw new Error('missing cabinet RPC')
+    newRpc.evidence.anon_execute = true
+    expect(() => compareObservedWithBaseline(expected, anonymousGrant)).toThrow('changed=1')
+  })
+
+  it('refuses broadened successor permissions and changes to prior findings', () => {
+    const production = loadBaseline('production', { today: '2026-10-02' })
+    const staging = loadBaseline('staging', { today: '2026-10-02' })
+    const drift = structuredClone(staging)
+    drift.entries[0].evidence.service_role_execute = false
+    expect(() => buildProductionCabinetExpectation(production, drift)).toThrow('changed=1')
+    const newGrant = structuredClone(staging)
+    const newRpc = newGrant.entries.find((entry) => entry.object.name === 'get_cabinet_trash_v2')
+    if (!newRpc) throw new Error('missing trash RPC')
+    newRpc.evidence.service_role_execute = true
+    expect(() => buildProductionCabinetExpectation(production, newGrant)).toThrow('reviewed RPC permissions')
+
+    const substitution = structuredClone(staging)
+    const entry = substitution.entries.find((entry) => entry.object.name === 'get_cabinet_trash_v2')
+    if (!entry) throw new Error('missing trash RPC')
+    entry.object.name = 'unreviewed_definer'
+    entry.cache_key = 'authenticated_security_definer_function_executable_public_unreviewed_definer_p_cabinet_id uuid'
+    substitution.entries.sort((left, right) => left.cache_key.localeCompare(right.cache_key))
+    expect(() => buildProductionCabinetExpectation(production, substitution)).toThrow()
   })
 })

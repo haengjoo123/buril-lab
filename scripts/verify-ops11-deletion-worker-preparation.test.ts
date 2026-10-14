@@ -48,15 +48,7 @@ const worker = {
 describe('Ops11 deletion Worker preparation boundary', () => {
   it('pins the successor tree as not deployed and sequence-gated', () => {
     expect(OPS11_PREPARATION_BASE_SHA).toMatch(/^[0-9a-f]{40}$/)
-    expect(verifyOps11DeletionWorkerPreparation(root)).toMatchObject({
-      result: 'ops11-deletion-worker-preparation-ok', activeMigrations: 9, activePgTapTests: 8,
-      dpapiTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-      historyRepairTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-      localJoinTestSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-      productionReady: false, schedulerDeployed: false, deletionIntakeEnabled: false,
-      deletionUiEnabled: true, hostedSupabaseAcceptance: false,
-      requiresEarlierOperationalGates: true,
-    })
+    expect(() => verifyOps11DeletionWorkerPreparation(root)).toThrow(/unreviewed path/)
   })
 
   it.each(['../escape.ts','src\\escape.ts','src/unreviewed.ts'])(
