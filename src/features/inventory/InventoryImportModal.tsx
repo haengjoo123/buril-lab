@@ -70,7 +70,7 @@ function ImportSession({ items, locations, cabinets, onClose, onImported, labId 
   const locationGroups = useMemo(() => [...new Set((job?.rows || []).map(row => row.fields.storage_location || ''))].sort(), [job?.rows])
   const filtered = useMemo(() => validated.filter(row => (filter === 'all' || row.status === filter)
     && (!issueFilter || row.issues.some(issue => issue.code === issueFilter))
-    && (!locationFilter || (row.row.fields.storage_location || blankLabel) === locationFilter)), [validated, filter, issueFilter, locationFilter])
+    && (!locationFilter || (row.row.fields.storage_location || blankLabel) === locationFilter)), [validated, filter, issueFilter, locationFilter, blankLabel])
   useEffect(() => { setScrollTop(0); if (listRef.current) listRef.current.scrollTop = 0 }, [filter, issueFilter, locationFilter, filtered.length])
   const currentRow = job?.rows.find(row => row.id === selectedRow)
   const table = job?.tables.find(table => table.id === selectedTable)
@@ -86,7 +86,7 @@ function ImportSession({ items, locations, cabinets, onClose, onImported, labId 
     if (grid?.imageData) setSourceUrl(grid.imageData)
     if (grid?.imagePath) void service.signedUrl(grid.imagePath).then(url => { if (!stale) setSourceUrl(url) }).catch(() => { if (!stale) setError(t('inv_err_preview_load')) })
     return () => { stale = true }
-  }, [grid?.imagePath, grid?.imageData])
+  }, [grid?.imagePath, grid?.imageData, t])
   const update = (next: ImportJob, changed?: string[], metadata = false) => {
     jobRef.current = next
     if (alive.current) { setJob(next); setDirty(true); setConfirmCommit(false) }

@@ -336,7 +336,7 @@ export function SafetyCenterWorkspace() {
     } finally {
       setIsLoading(false);
     }
-  }, [loadCenters]);
+  }, [loadCenters, t]);
 
   useEffect(() => {
     void reloadAll();
@@ -351,7 +351,7 @@ export function SafetyCenterWorkspace() {
         setError(t('sc_err_load_data'));
       })
       .finally(() => setIsLoading(false));
-  }, [activeCenter, loadCenterData]);
+  }, [activeCenter, loadCenterData, t]);
 
   const dashboardSummary = useMemo(() => (
     buildSafetyCenterDashboardSummary({ candidates, riskItems, requests, wasteLogs })
@@ -389,7 +389,7 @@ export function SafetyCenterWorkspace() {
     } finally {
       setIsActionLoading(false);
     }
-  }, [activeCenter, loadCenterData, navigate, requestDraft]);
+  }, [activeCenter, loadCenterData, navigate, requestDraft, t]);
 
   const buildExportRows = useCallback((datasets: DatasetKey[], options: ExportOptions = {}) => {
     const rows: Array<Record<string, unknown>> = [];
@@ -524,7 +524,7 @@ export function SafetyCenterWorkspace() {
     } finally {
       setIsActionLoading(false);
     }
-  }, [activeCenter, activeSection, approvedLabs, buildExportRows, loadCenterData]);
+  }, [activeCenter, activeSection, approvedLabs, buildExportRows, loadCenterData, t]);
 
   if (isLoading && centers.length === 0) {
     return (
