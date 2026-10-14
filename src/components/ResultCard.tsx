@@ -276,25 +276,29 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     </div>
                 )}
 
-                <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-                    <button
-                        type="button"
-                        onClick={onReset}
-                        className="min-h-11 py-2.5 px-3 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl transition-colors whitespace-nowrap"
-                    >
-                        {secondaryBtnText || t('btn_reset')}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleAddClick}
-                        data-onboarding-target="add-to-list-button"
-                        className="min-h-11 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 whitespace-nowrap"
-                    >
-                        <Plus className="w-4 h-4" aria-hidden="true" />
-                        {t(hasActiveBatch
-                            ? 'result_add_to_current_batch_cta' as any
-                            : 'result_start_waste_batch_cta' as any)}
-                    </button>
+                {/* Container query: the card is also rendered inside narrow modals (e.g. cabinet disposal guide),
+                    so split into two columns based on the card's own width, not the viewport. */}
+                <div className="@container w-full">
+                    <div className="grid w-full grid-cols-1 gap-3 @md:grid-cols-2">
+                        <button
+                            type="button"
+                            onClick={onReset}
+                            className="min-h-11 py-2.5 px-3 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl transition-colors text-center leading-snug"
+                        >
+                            {secondaryBtnText || t('btn_reset')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleAddClick}
+                            data-onboarding-target="add-to-list-button"
+                            className="min-h-11 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 min-w-0 text-center leading-snug"
+                        >
+                            <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+                            {t(hasActiveBatch
+                                ? 'result_add_to_current_batch_cta' as any
+                                : 'result_start_waste_batch_cta' as any)}
+                        </button>
+                    </div>
                 </div>
             </div>
 
