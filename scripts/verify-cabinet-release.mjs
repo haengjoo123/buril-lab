@@ -137,7 +137,7 @@ export function verifyCabinetRelease(root = fileURLToPath(new URL('../', import.
     labService: read('src/services/labService.ts'), labModal: read('src/components/LabManagementModal.tsx'),
   })
   verifyOps11WorkerSources({ scheduler: read('workers/deletion-scheduler/src/scheduler.ts'), index: read('workers/deletion-scheduler/src/index.ts'), stagingConfig: read('workers/deletion-scheduler/wrangler.staging.jsonc'), productionConfig: read('workers/deletion-scheduler/wrangler.production.jsonc'), generatedTypes: read('workers/deletion-scheduler/worker-configuration.d.ts') })
-  if (createHash('sha256').update(read('package-lock.json').replace(/\r\n/g, '\n')).digest('hex') !== '25204bff4b2f1d00fcede83273b5732f36f4727e503797a8331f5e02078353fc') fail('reviewed dependency lock changed')
+  if (createHash('sha256').update(read('package-lock.json').replace(/\r\n/g, '\n')).digest('hex') !== '48eaf08d3ed9e2d4f7bafbe7ed820a86d4682ac7ac2fcf80af1086d7e6075095') fail('reviewed dependency lock changed')
   const database = verifyDatabaseReleaseSafety(root)
   if (!read('functions/api/internal/deletions/_processor.ts').includes('purge_expired_cabinet_trash_v2')) fail('trash purge is not connected to maintenance')
   const workflow = read('.github/workflows/quality.yml')
