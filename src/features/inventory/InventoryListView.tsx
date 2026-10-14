@@ -972,7 +972,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             );
         } catch (error) {
             console.error('Failed to resolve bulk CAS suggestions:', error);
-            setCasReviewError('CAS 후보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+            setCasReviewError(t('inv_cas_err_load'));
         } finally {
             setIsCasReviewLoading(false);
         }
@@ -1043,11 +1043,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             await loadData();
 
             if (successCount > 0) {
-                setBulkMoveInfo(`CAS ${successCount}건을 적용했어요.`);
+                setBulkMoveInfo(t('inv_cas_applied_count', { count: successCount }));
             }
 
             if (failedCount > 0) {
-                setCasReviewError(`${failedCount}개 항목은 적용하지 못했어요. 다시 시도해 주세요.`);
+                setCasReviewError(t('inv_cas_failed_count', { count: failedCount }));
                 setCasReviewEntries((prev) => prev.filter((entry) => !successfulIds.has(entry.item.id)));
                 setSelectedCasReviewIds((prev) => prev.filter((id) => !successfulIds.has(id)));
                 return;
@@ -1964,11 +1964,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             onClick={handleOpenCasReview}
                             disabled={blankCasItems.length === 0 || isCasReviewLoading}
-                            title="빈 CAS 보완"
+                            title={t('inv_cas_fill_blank')}
                             className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 flex items-center gap-1.5 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Search className={`w-4 h-4 lg:w-3.5 lg:h-3.5 ${isCasReviewLoading ? 'animate-pulse' : ''}`} />
-                            <span className="hidden lg:inline whitespace-nowrap">빈 CAS 보완</span>
+                            <span className="hidden lg:inline whitespace-nowrap">{t('inv_cas_fill_blank')}</span>
                         </button>
                         */}
                         <button
@@ -2553,7 +2553,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             </div>
                         </div>
 
-                        {readableImportAttributes(selectedDesktopItem.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">가져온 원본 추가정보</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(selectedDesktopItem.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
+                        {readableImportAttributes(selectedDesktopItem.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">{t('inv_imported_source_info')}</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(selectedDesktopItem.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <button
                                 type="button"
@@ -2889,9 +2889,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     <div className="relative z-10 w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-2xl">
                         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
                             <div>
-                                <h2 className="text-xl font-bold text-slate-900">빈 CAS 보완</h2>
+                                <h2 className="text-xl font-bold text-slate-900">{t('inv_cas_fill_blank')}</h2>
                                 <p className="mt-1 text-sm text-slate-600">
-                                    빈 CAS {blankCasItems.length}개 중 {casReviewSuggestedEntries.length}개 제안 가능
+                                    {t('inv_cas_blank_summary', { blank: blankCasItems.length, suggested: casReviewSuggestedEntries.length })}
                                 </p>
                             </div>
                             <button
@@ -2907,7 +2907,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             {isCasReviewLoading ? (
                                 <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-slate-500">
                                     <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-                                    <p>정확히 확인된 CAS 후보를 찾고 있어요.</p>
+                                    <p>{t('inv_cas_searching')}</p>
                                 </div>
                             ) : (
                                 <>
@@ -2933,7 +2933,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                                 onChange={() => toggleCasReviewSelection(entry.item.id)}
                                                                 className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                                             />
-                                                            적용
+                                                            {t('inv_apply')}
                                                         </label>
                                                     )}
                                                 />
@@ -2941,14 +2941,14 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                         </div>
                                     ) : !casReviewError ? (
                                         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-600">
-                                            정확히 확인된 CAS 후보를 찾지 못했어요.
+                                            {t('inv_cas_none_found')}
                                         </div>
                                     ) : null}
 
                                     {casReviewBlockedEntries.length > 0 && (
                                         <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                             <summary className="cursor-pointer text-sm font-semibold text-slate-700">
-                                                자동 적용에서 제외된 항목 {casReviewBlockedEntries.length}개
+                                                {t('inv_cas_blocked_count', { count: casReviewBlockedEntries.length })}
                                             </summary>
                                             <div className="mt-3 space-y-3">
                                                 {casReviewBlockedEntries.map((entry) => (
@@ -2968,7 +2968,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
                         <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
                             <p className="text-sm text-slate-500">
-                                선택한 항목만 CAS를 채우고, 시약명은 바꾸지 않아요.
+                                {t('inv_cas_only_selected')}
                             </p>
                             <div className="flex items-center gap-2">
                                 <button
@@ -2984,7 +2984,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isApplyingCasReview && <Loader2 className="h-4 w-4 animate-spin" />}
-                                    선택한 {selectedCasReviewCount}개 적용
+                                    {t('inv_apply_selected_count', { count: selectedCasReviewCount })}
                                 </button>
                             </div>
                         </div>

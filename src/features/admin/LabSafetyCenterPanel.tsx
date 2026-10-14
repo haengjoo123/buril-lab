@@ -10,6 +10,8 @@ import {
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { safetyCenterService } from '../../services/safetyCenterService';
 import { useLabStore } from '../../store/useLabStore';
 import type {
@@ -35,11 +37,11 @@ function formatDateTime(value?: string | null): string {
   });
 }
 
-function linkStatusLabel(status: LabSafetyCenterLinkRequest['link_status']): string {
-  if (status === 'approved') return '승인됨';
-  if (status === 'requested') return '승인 요청';
-  if (status === 'rejected') return '거절됨';
-  return '철회됨';
+function linkStatusLabel(status: LabSafetyCenterLinkRequest['link_status'], t: TFunction): string {
+  if (status === 'approved') return t('cmp_lsc_status_approved', '승인됨');
+  if (status === 'requested') return t('cmp_lsc_status_requested', '승인 요청');
+  if (status === 'rejected') return t('cmp_lsc_status_rejected', '거절됨');
+  return t('cmp_lsc_status_revoked', '철회됨');
 }
 
 function linkStatusTone(status: LabSafetyCenterLinkRequest['link_status']): string {
@@ -64,6 +66,7 @@ function priorityTone(priority: LabSafetyCenterRequest['priority']): string {
 }
 
 export function LabSafetyCenterPanel() {
+  const { t } = useTranslation();
   const currentLabId = useLabStore((state) => state.currentLabId);
   const myLabs = useLabStore((state) => state.myLabs);
   const currentLab = myLabs.find((lab) => lab.lab_id === currentLabId);
@@ -95,11 +98,11 @@ export function LabSafetyCenterPanel() {
       setRequests(nextRequests);
     } catch (err) {
       console.error(err);
-      setError('통합센터 요청을 불러오지 못했습니다.');
+      setError(t('cmp_lsc_load_error', '통합센터 요청을 불러오지 못했습니다.'));
     } finally {
       setIsLoading(false);
     }
-  }, [currentLabId, isAdmin]);
+  }, [currentLabId, isAdmin, t]);
 
   useEffect(() => {
     void load();
@@ -116,7 +119,7 @@ export function LabSafetyCenterPanel() {
       await load();
     } catch (err) {
       console.error(err);
-      setError('센터 연결 상태를 변경하지 못했습니다.');
+      setError(t('cmp_lsc_link_update_error', '센터 연결 상태를 변경하지 못했습니다.'));
     } finally {
       setUpdating(null);
     }
@@ -132,7 +135,7 @@ export function LabSafetyCenterPanel() {
       await load();
     } catch (err) {
       console.error(err);
-      setError('점검 요청 회신을 저장하지 못했습니다.');
+      setError(t('cmp_lsc_reply_save_error', '점검 요청 회신을 저장하지 못했습니다.'));
     } finally {
       setUpdating(null);
     }
@@ -159,21 +162,21 @@ export function LabSafetyCenterPanel() {
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
             <Building2 className="h-4 w-4 text-blue-500" />
-            센터 연결 요청
+            {t('cmp_lsc_center_link_requests', '센터 연결 요청')}
           </div>
           <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{pendingLinks.length}</div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
             <ShieldCheck className="h-4 w-4 text-emerald-500" />
-            연결된 센터
+            {t('cmp_lsc_linked_centers', '연결된 센터')}
           </div>
           <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{links.filter((link) => link.link_status === 'approved').length}</div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
             <MessageSquare className="h-4 w-4 text-violet-500" />
-            미완료 점검 요청
+            {t('cmp_lsc_open_check_requests', '미완료 점검 요청')}
           </div>
           <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{openRequests.length}</div>
         </div>
@@ -181,16 +184,16 @@ export function LabSafetyCenterPanel() {
 
       <section className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">센터 연결 요청함</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('cmp_lsc_center_link_inbox', '센터 연결 요청함')}</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            연구실 admin이 승인한 센터만 이 연구실의 단계형 공개 데이터에 접근할 수 있습니다.
+            {t('cmp_lsc_center_link_inbox_desc', '연구실 admin이 승인한 센터만 이 연구실의 단계형 공개 데이터에 접근할 수 있습니다.')}
           </p>
         </div>
 
         {!isAdmin ? (
-          <div className="p-5 text-sm text-slate-500">센터 연결 승인/철회는 연구실 admin만 할 수 있습니다.</div>
+          <div className="p-5 text-sm text-slate-500">{t('cmp_lsc_admin_only', '센터 연결 승인/철회는 연구실 admin만 할 수 있습니다.')}</div>
         ) : links.length === 0 ? (
-          <div className="p-5 text-sm text-slate-500">받은 센터 연결 요청이 없습니다.</div>
+          <div className="p-5 text-sm text-slate-500">{t('cmp_lsc_no_link_requests', '받은 센터 연결 요청이 없습니다.')}</div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
             {links.map((link) => {
@@ -201,13 +204,13 @@ export function LabSafetyCenterPanel() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-bold text-slate-900 dark:text-white">{link.center_name}</h3>
                       <span className={`rounded border px-2 py-0.5 text-xs font-bold ${linkStatusTone(link.link_status)}`}>
-                        {linkStatusLabel(link.link_status)}
+                        {linkStatusLabel(link.link_status, t)}
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-slate-500">
-                      {link.institution_name} · {link.institution_domain} · 요청 {formatDateTime(link.requested_at)}
+                      {link.institution_name} · {link.institution_domain} · {t('cmp_lsc_requested_at', { date: formatDateTime(link.requested_at), defaultValue: '요청 {{date}}' })}
                     </p>
-                    <p className="mt-2 text-xs font-semibold text-slate-500">공개 범위: {link.link_scope.join(', ')}</p>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">{t('cmp_lsc_link_scope', { scope: link.link_scope.join(', '), defaultValue: '공개 범위: {{scope}}' })}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {link.link_status === 'requested' && (
@@ -219,7 +222,7 @@ export function LabSafetyCenterPanel() {
                           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                         >
                           {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          승인
+                          {t('cmp_lsc_approve', '승인')}
                         </button>
                         <button
                           type="button"
@@ -228,7 +231,7 @@ export function LabSafetyCenterPanel() {
                           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
                         >
                           <XCircle className="h-3.5 w-3.5" />
-                          거절
+                          {t('cmp_lsc_reject', '거절')}
                         </button>
                       </>
                     )}
@@ -240,7 +243,7 @@ export function LabSafetyCenterPanel() {
                         className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                       >
                         {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
-                        연결 철회
+                        {t('cmp_lsc_revoke_link', '연결 철회')}
                       </button>
                     )}
                   </div>
@@ -253,14 +256,14 @@ export function LabSafetyCenterPanel() {
 
       <section className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">센터 점검 요청</h2>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('cmp_lsc_center_check_requests', '센터 점검 요청')}</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            센터가 보낸 확인 요청에 처리 상태와 회신 내용을 남깁니다.
+            {t('cmp_lsc_center_requests_desc', '센터가 보낸 확인 요청에 처리 상태와 회신 내용을 남깁니다.')}
           </p>
         </div>
 
         {requests.length === 0 ? (
-          <div className="p-5 text-sm text-slate-500">센터 점검 요청이 없습니다.</div>
+          <div className="p-5 text-sm text-slate-500">{t('cmp_lsc_no_check_requests', '센터 점검 요청이 없습니다.')}</div>
         ) : (
           <div className="grid gap-3 p-4 lg:grid-cols-2">
             {requests.map((request) => {
@@ -292,7 +295,7 @@ export function LabSafetyCenterPanel() {
                     </span>
                     <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                       <Clock className="h-3.5 w-3.5" />
-                      마감 {request.due_date || '-'}
+                      {t('cmp_lsc_due', { date: request.due_date || '-', defaultValue: '마감 {{date}}' })}
                     </span>
                   </div>
                   {request.status !== 'resolved' && (
@@ -304,7 +307,7 @@ export function LabSafetyCenterPanel() {
                           [request.id]: event.target.value,
                         }))}
                         rows={3}
-                        placeholder="처리 내용 또는 회신 메모를 입력하세요."
+                        placeholder={t('cmp_lsc_reply_placeholder', '처리 내용 또는 회신 메모를 입력하세요.')}
                         className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-slate-600 dark:bg-slate-900"
                       />
                       <button
@@ -314,7 +317,7 @@ export function LabSafetyCenterPanel() {
                         className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
                       >
                         {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                        {nextStatus === 'in_progress' ? '처리 시작' : nextStatus === 'submitted' ? '회신 제출' : '완료 처리'}
+                        {nextStatus === 'in_progress' ? t('cmp_lsc_start', '처리 시작') : nextStatus === 'submitted' ? t('cmp_lsc_submit_reply', '회신 제출') : t('cmp_lsc_complete', '완료 처리')}
                       </button>
                     </div>
                   )}

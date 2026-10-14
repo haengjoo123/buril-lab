@@ -6,6 +6,7 @@ import type {
   WastePolicySourceRef,
 } from '../../services/wastePolicyService';
 import type { WasteHazardFlag, WasteStreamCode } from '../../types';
+import i18n from '../../locales/i18n';
 
 export const WASTE_POLICY_STREAMS: ReadonlyArray<{
   streamCode: WasteStreamCode;
@@ -26,25 +27,25 @@ export const WASTE_POLICY_STREAMS: ReadonlyArray<{
 
 export const WASTE_POLICY_HAZARDS: ReadonlyArray<{
   flag: WasteHazardFlag;
-  label: string;
+  labelKey: string;
 }> = [
-  { flag: 'FLAMMABLE', label: '인화성' },
-  { flag: 'OXIDIZER', label: '산화성' },
-  { flag: 'EXPLOSIVE', label: '폭발성' },
-  { flag: 'SELF_REACTIVE', label: '자기반응성' },
-  { flag: 'WATER_REACTIVE', label: '수반응성' },
-  { flag: 'PYROPHORIC', label: '자연발화성' },
-  { flag: 'CORROSIVE', label: '부식성' },
-  { flag: 'ACUTE_TOXIC', label: '급성독성' },
-  { flag: 'CMR', label: '발암성·생식독성' },
-  { flag: 'ENVIRONMENTAL_HAZARD', label: '환경유해성' },
-  { flag: 'CYANIDE', label: '시안' },
-  { flag: 'SULFIDE', label: '황화물' },
-  { flag: 'HEAVY_METAL', label: '중금속' },
-  { flag: 'HYDROFLUORIC_ACID', label: '불산(HF)' },
-  { flag: 'FLUORIDE', label: '불화물' },
-  { flag: 'REACTIVE', label: '반응성' },
-  { flag: 'UNKNOWN_COMPONENT', label: '미상 성분' },
+  { flag: 'FLAMMABLE', labelKey: 'wl_hazard_flammable' },
+  { flag: 'OXIDIZER', labelKey: 'wl_hazard_oxidizer' },
+  { flag: 'EXPLOSIVE', labelKey: 'wl_hazard_explosive' },
+  { flag: 'SELF_REACTIVE', labelKey: 'wl_hazard_self_reactive' },
+  { flag: 'WATER_REACTIVE', labelKey: 'wl_hazard_water_reactive' },
+  { flag: 'PYROPHORIC', labelKey: 'wl_hazard_pyrophoric' },
+  { flag: 'CORROSIVE', labelKey: 'wl_hazard_corrosive' },
+  { flag: 'ACUTE_TOXIC', labelKey: 'wl_hazard_acute_toxic' },
+  { flag: 'CMR', labelKey: 'wl_hazard_cmr' },
+  { flag: 'ENVIRONMENTAL_HAZARD', labelKey: 'wl_hazard_environmental_hazard' },
+  { flag: 'CYANIDE', labelKey: 'wl_hazard_cyanide' },
+  { flag: 'SULFIDE', labelKey: 'wl_hazard_sulfide' },
+  { flag: 'HEAVY_METAL', labelKey: 'wl_hazard_heavy_metal' },
+  { flag: 'HYDROFLUORIC_ACID', labelKey: 'wl_hazard_hydrofluoric_acid' },
+  { flag: 'FLUORIDE', labelKey: 'wl_hazard_fluoride' },
+  { flag: 'REACTIVE', labelKey: 'wl_hazard_reactive' },
+  { flag: 'UNKNOWN_COMPONENT', labelKey: 'wl_hazard_unknown_component' },
 ];
 
 export interface WastePolicyEditorDraft {
@@ -96,7 +97,7 @@ export function createWastePolicyEditorDraft(
 
   return {
     versionLabel: `institution-${timestamp}`,
-    name: latestVersion?.name || '기관 폐액 분류·처리 정책',
+    name: latestVersion?.name || i18n.t('wl_policy_default_name'),
     sourceRefs: (latestVersion?.sourceRefs ?? sourceStreams.flatMap((stream) => stream.sourceRefs))
       .filter((reference, index, values) => values.findIndex((value) =>
         value.title === reference.title && value.url === reference.url
@@ -126,38 +127,38 @@ export function validateWastePolicyEditorDraft(
 ): WastePolicyValidationResult {
   const errors: string[] = [];
   const fieldErrors: Record<string, string> = {};
-  if (!draft.versionLabel.trim()) fieldErrors.versionLabel = '버전 라벨을 입력해 주세요.';
-  if (!draft.name.trim()) fieldErrors.name = '정책 이름을 입력해 주세요.';
+  if (!draft.versionLabel.trim()) fieldErrors.versionLabel = i18n.t('wl_err_version_label');
+  if (!draft.name.trim()) fieldErrors.name = i18n.t('wl_err_policy_name');
 
   draft.sourceRefs.forEach((reference, index) => {
     if (!reference.title.trim() && reference.url?.trim()) {
-      fieldErrors[`sourceRefs.${index}.title`] = '근거 제목을 입력해 주세요.';
+      fieldErrors[`sourceRefs.${index}.title`] = i18n.t('wl_err_ref_title');
     }
     if (reference.url?.trim() && !isHttpsUrl(reference.url.trim())) {
-      fieldErrors[`sourceRefs.${index}.url`] = '근거 링크는 https:// 주소만 사용할 수 있습니다.';
+      fieldErrors[`sourceRefs.${index}.url`] = i18n.t('wl_err_ref_url');
     }
   });
 
   const enabledStreams = draft.streams.filter((stream) => stream.isEnabled);
-  if (enabledStreams.length === 0) errors.push('사용할 폐액 분류를 하나 이상 활성화해 주세요.');
+  if (enabledStreams.length === 0) errors.push(i18n.t('wl_err_no_stream'));
 
   draft.streams.forEach((stream) => {
     const label = stream.displayNameKo || stream.streamCode;
     if (!stream.displayNameKo.trim()) {
-      fieldErrors[`streams.${stream.streamCode}.displayNameKo`] = `${stream.streamCode}: 한국어 표시명을 입력해 주세요.`;
+      fieldErrors[`streams.${stream.streamCode}.displayNameKo`] = i18n.t('wl_err_name_ko', { code: stream.streamCode });
     }
     if (!stream.displayNameEn.trim()) {
-      fieldErrors[`streams.${stream.streamCode}.displayNameEn`] = `${label}: 영어 표시명을 입력해 주세요.`;
+      fieldErrors[`streams.${stream.streamCode}.displayNameEn`] = i18n.t('wl_err_name_en', { label });
     }
     if (stream.sopUrl?.trim() && !isHttpsUrl(stream.sopUrl.trim())) {
-      fieldErrors[`streams.${stream.streamCode}.sopUrl`] = `${label}: SOP 링크는 https:// 주소만 사용할 수 있습니다.`;
+      fieldErrors[`streams.${stream.streamCode}.sopUrl`] = i18n.t('wl_err_stream_sop', { label });
     }
   });
 
   const streamCodes = new Set(draft.streams.map((stream) => stream.streamCode));
   if (streamCodes.size !== WASTE_POLICY_STREAMS.length ||
       WASTE_POLICY_STREAMS.some(({ streamCode }) => !streamCodes.has(streamCode))) {
-    errors.push('지원하는 폐액 분류 10개가 모두 포함되어야 합니다.');
+    errors.push(i18n.t('wl_err_all_streams'));
   }
 
   errors.push(...Object.values(fieldErrors));

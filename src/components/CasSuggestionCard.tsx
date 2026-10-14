@@ -23,19 +23,19 @@ function getUnavailableText(
 ): string | null {
     if (!suggestion) return null;
     if (suggestion.status === 'no_match') {
-        return t('cas_suggestion_unavailable_no_match', '정확히 확인된 CAS 후보를 찾지 못했어요.');
+        return t('cmp_cas_suggestion_unavailable_no_match', '정확히 확인된 CAS 후보를 찾지 못했어요.');
     }
     if (suggestion.status === 'ambiguous' && (!suggestion.alternatives || suggestion.alternatives.length === 0)) {
-        return t('cas_suggestion_unavailable_ambiguous', '비슷한 물질이 여러 개라 자동 제안하지 않았어요.');
+        return t('cmp_cas_suggestion_unavailable_ambiguous', '비슷한 물질이 여러 개라 자동 제안하지 않았어요.');
     }
     if (suggestion.status === 'conflict') {
-        return t('cas_suggestion_unavailable_conflict', '서로 다른 물질로 확인되어 자동 제안하지 않았어요.');
+        return t('cmp_cas_suggestion_unavailable_conflict', '서로 다른 물질로 확인되어 자동 제안하지 않았어요.');
     }
     if (suggestion.status === 'match' && suggestion.confidence === 'low') {
-        return t('cas_suggestion_unavailable_low_confidence', '근거가 충분하지 않아 자동 제안하지 않았어요.');
+        return t('cmp_cas_suggestion_unavailable_low_confidence', '근거가 충분하지 않아 자동 제안하지 않았어요.');
     }
     if (suggestion.status === 'unavailable') {
-        return t('cas_suggestion_unavailable_upstream', '조회 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+        return t('cmp_cas_suggestion_unavailable_upstream', '조회 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.');
     }
     return null;
 }
@@ -66,7 +66,7 @@ function renderTopActionGroup(
                     className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700 sm:w-auto sm:py-1"
                 >
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    {t('cas_suggestion_apply', '이 후보 적용')}
+                    {t('cmp_cas_suggestion_apply', '이 후보 적용')}
                 </button>
             )}
         </div>
@@ -90,7 +90,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
             <div className={`mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600 ${className || ''}`}>
                 <div className="flex items-center gap-2">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-500" />
-                    <span>{t('cas_suggestion_loading', '이름과 맞는 CAS 후보를 확인하고 있어요.')}</span>
+                    <span>{t('cmp_cas_suggestion_loading', '이름과 맞는 CAS 후보를 확인하고 있어요.')}</span>
                 </div>
             </div>
         );
@@ -103,7 +103,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 font-semibold">
                             <CheckCircle2 className="h-4 w-4 shrink-0" />
-                            <span>{t('cas_suggestion_applied', 'CAS 적용됨')}</span>
+                            <span>{t('cmp_cas_suggestion_applied', 'CAS 적용됨')}</span>
                         </div>
                         <p className="mt-1 break-keep break-words text-sm font-semibold leading-5 text-slate-800">
                             {suggestion.canonicalName || inputName}
@@ -124,7 +124,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                             className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100 sm:w-auto sm:shrink-0 sm:justify-start sm:py-1"
                         >
                             <RotateCcw className="h-3.5 w-3.5" />
-                            {t('cas_suggestion_undo', '되돌리기')}
+                            {t('cmp_cas_suggestion_undo', '되돌리기')}
                         </button>
                     )}
                 </div>
@@ -157,8 +157,8 @@ export const CasSuggestionCard: React.FC<Props> = ({
     }
 
     const confidenceLabel = suggestion?.confidence === 'high'
-        ? t('cas_suggestion_confidence_high', '신뢰 높음')
-        : t('cas_suggestion_confidence_medium', '검토 필요');
+        ? t('cmp_cas_suggestion_confidence_high', '신뢰 높음')
+        : t('cmp_cas_suggestion_confidence_medium', '검토 필요');
     const confidenceStyle = suggestion?.confidence === 'high'
         ? 'bg-emerald-100 text-emerald-700'
         : 'bg-amber-100 text-amber-700';
@@ -171,7 +171,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700">
                                 <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
-                                {t('cas_suggestion_title', 'CAS 제안')}
+                                {t('cmp_cas_suggestion_title', 'CAS 제안')}
                             </span>
                             {!isAlternativeSuggestion && (
                                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${confidenceStyle}`}>
@@ -186,7 +186,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                 {isAlternativeSuggestion ? (
                     <div className="space-y-2">
                         <p className="text-xs leading-5 text-slate-600">
-                            {t('cas_suggestion_ambiguous_intro', '비슷한 후보가 있어요. 맞는 물질을 직접 골라주세요.')}
+                            {t('cmp_cas_suggestion_ambiguous_intro', '비슷한 후보가 있어요. 맞는 물질을 직접 골라주세요.')}
                         </p>
                         {alternativeCandidates.map((candidate) => (
                             <div
@@ -214,7 +214,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                                             className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700 sm:w-auto sm:shrink-0 sm:py-1"
                                         >
                                             <CheckCircle2 className="h-3.5 w-3.5" />
-                                            {t('cas_suggestion_apply', '이 후보 적용')}
+                                            {t('cmp_cas_suggestion_apply', '이 후보 적용')}
                                         </button>
                                     )}
                                 </div>

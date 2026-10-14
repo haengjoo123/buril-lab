@@ -131,7 +131,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
             case 'update':
                 return {
                     icon: <FileEdit size={14} className="text-blue-500" />,
-                    label: '업데이트',
+                    label: t('msc_activity_action_update'),
                     chipStyle: 'bg-blue-100 text-blue-700',
                     rowStyle: 'border-l-2 border-blue-400',
                 };
@@ -149,7 +149,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
         { key: 'all', label: t('activity_log_filter_all') },
         { key: 'add', label: t('activity_log_action_add') },
         { key: 'remove', label: t('activity_log_action_remove') },
-        { key: 'update', label: '업데이트' },
+        { key: 'update', label: t('msc_activity_action_update') },
         { key: 'clear_all', label: t('activity_log_action_clear_all') },
     ];
 
@@ -256,7 +256,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                                         {/* Diff Rendering */}
                                         {hasDiff && (
                                             <div className="mt-2 text-xs bg-slate-100 dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700">
-                                                <div className="font-semibold text-slate-600 dark:text-slate-400 mb-1">변경 내용</div>
+                                                <div className="font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('msc_activity_changes')}</div>
                                                 {Object.entries(log.diff_data!).map(([k, v]) => (
                                                     <div key={k} className="flex flex-col gap-0.5 mb-1 last:mb-0">
                                                         <span className="text-slate-500 font-medium">{k}:</span>

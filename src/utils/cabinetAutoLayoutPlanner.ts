@@ -1,3 +1,4 @@
+import { isCabinetLayoutValid } from './cabinetPlacementValidation';
 import type {
     CompatibilityPlanIssue,
     CompatibilityPlanPreview,
@@ -336,7 +337,7 @@ export function buildCabinetAutoLayoutPlan(
         movedItemIds,
         reviewItems,
         unplacedItems,
-        canApply: originalItems.length > 0
+        canApply: isCabinetLayoutValid(plannedShelves, { cabinetWidth, cabinetHeight, cabinetDepth }) && originalItems.length > 0
             && afterWarningCount === 0
             && reviewItems.length === 0
             && unplacedItems.length === 0,

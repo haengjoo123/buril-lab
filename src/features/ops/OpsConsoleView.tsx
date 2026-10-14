@@ -1,4 +1,5 @@
 import { Suspense, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, BarChart3, Building2, Inbox, LayoutDashboard, Loader2, LogOut, UserCircle } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -15,11 +16,11 @@ interface OpsConsoleViewProps {
   onExitToApp: () => void
 }
 
-const OPS_NAV_ITEMS: Array<{ section: OpsSection; label: string; path: string; Icon: LucideIcon }> = [
-  { section: 'overview', label: '운영 홈', path: '/ops', Icon: LayoutDashboard },
-  { section: 'analytics', label: '검색·배치 분석', path: '/ops/analytics', Icon: BarChart3 },
-  { section: 'centers', label: '센터 승인', path: '/ops/centers', Icon: Building2 },
-  { section: 'feedback', label: '개선 제안', path: '/ops/feedback', Icon: Inbox },
+const OPS_NAV_ITEMS: Array<{ section: OpsSection; labelKey: string; path: string; Icon: LucideIcon }> = [
+  { section: 'overview', labelKey: 'ops_console_nav_overview', path: '/ops', Icon: LayoutDashboard },
+  { section: 'analytics', labelKey: 'ops_console_nav_analytics', path: '/ops/analytics', Icon: BarChart3 },
+  { section: 'centers', labelKey: 'ops_console_nav_centers', path: '/ops/centers', Icon: Building2 },
+  { section: 'feedback', labelKey: 'ops_console_nav_feedback', path: '/ops/feedback', Icon: Inbox },
 ]
 
 function getOpsSection(pathname: string): OpsSection {
@@ -29,18 +30,18 @@ function getOpsSection(pathname: string): OpsSection {
   return 'overview'
 }
 
-function getTitle(section: OpsSection): string {
-  if (section === 'analytics') return '검색·최종 배치 분석'
-  if (section === 'centers') return '센터 승인'
-  if (section === 'feedback') return '개선 제안'
-  return '운영 홈'
+function getTitleKey(section: OpsSection): string {
+  if (section === 'analytics') return 'ops_console_title_analytics'
+  if (section === 'centers') return 'ops_console_nav_centers'
+  if (section === 'feedback') return 'ops_console_nav_feedback'
+  return 'ops_console_nav_overview'
 }
 
-function getDescription(section: OpsSection): string {
-  if (section === 'analytics') return '검색 흐름과 폐액 배치 현황을 살펴봅니다.'
-  if (section === 'centers') return '기관 안전관리센터의 신청 내용을 확인합니다.'
-  if (section === 'feedback') return '사용자가 남긴 개선 제안을 확인합니다.'
-  return '운영자가 직접 처리해야 하는 업무를 관리합니다.'
+function getDescriptionKey(section: OpsSection): string {
+  if (section === 'analytics') return 'ops_console_desc_analytics'
+  if (section === 'centers') return 'ops_console_desc_centers'
+  if (section === 'feedback') return 'ops_console_desc_feedback'
+  return 'ops_console_desc_overview'
 }
 
 function OpsFallback() {
@@ -78,31 +79,32 @@ function WorkCard({
 }
 
 function OpsOverview({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-5 p-5">
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-medium text-blue-700">Buril Lab Operations</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-950">운영자가 처리할 일을 한곳에 모읍니다</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-950">{t('ops_console_overview_heading')}</h1>
         <p className="mt-3 max-w-2xl text-sm font-normal leading-6 text-slate-600">
-          기관 안전관리센터 승인, 앱 개선 제안 확인처럼 버릴랩 운영자가 직접 판단해야 하는 업무를 이 콘솔에서 처리합니다.
+          {t('ops_console_overview_body')}
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <WorkCard
-          title="검색·최종 배치 분석"
-          body="제출 검색의 수요·혼동과 실제 혼합 배치를 확인하고 개선 후보를 검토합니다."
+          title={t('ops_console_title_analytics')}
+          body={t('ops_console_card_analytics_body')}
           Icon={BarChart3}
           onClick={() => navigate('/ops/analytics')}
         />
         <WorkCard
-          title="기관 센터 승인"
-          body="기관 안전관리센터 개설 요청을 확인하고 승인 또는 거절합니다."
+          title={t('ops_console_card_centers_title')}
+          body={t('ops_console_card_centers_body')}
           Icon={Building2}
           onClick={() => navigate('/ops/centers')}
         />
         <WorkCard
-          title="개선 제안 Inbox"
-          body="사용자가 남긴 버그 제보와 개선 아이디어를 확인하고 처리 상태를 바꿉니다."
+          title={t('ops_console_card_feedback_title')}
+          body={t('ops_console_card_feedback_body')}
           Icon={Inbox}
           onClick={() => navigate('/ops/feedback')}
         />
@@ -119,6 +121,7 @@ function renderSection(section: OpsSection, navigate: (path: string) => void): R
 }
 
 export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsoleViewProps) {
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const activeSection = getOpsSection(location.pathname)
@@ -129,11 +132,11 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
         <aside className="hidden h-full w-64 shrink-0 flex-col bg-slate-950 text-white lg:flex">
           <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1 shadow-sm">
-              <img src={logo} alt="버릴랩" className="h-full w-full object-contain" />
+              <img src={logo} alt={t('ops_console_logo_alt')} className="h-full w-full object-contain" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold">운영자 콘솔</p>
-              <p className="text-xs font-normal text-slate-300">버릴랩 운영 도구</p>
+              <p className="truncate text-base font-semibold">{t('ops_console_name')}</p>
+              <p className="text-xs font-normal text-slate-300">{t('ops_console_tagline')}</p>
             </div>
           </div>
 
@@ -156,7 +159,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
                   aria-current={isActive ? 'page' : undefined}
                 >
                   <Icon className="h-5 w-5 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{t(item.labelKey)}</span>
                 </button>
               )
             })}
@@ -169,15 +172,15 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
               className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
             >
               <ArrowLeft className="h-5 w-5" />
-              버릴랩으로 이동
+              {t('ops_console_exit_to_app')}
             </button>
             <div className="mt-4 rounded-lg bg-white/8 p-3 ring-1 ring-white/10">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <UserCircle className="h-4 w-4" />
-                운영자
+                {t('ops_console_operator')}
               </div>
               <p className="mt-2 truncate text-xs font-normal text-slate-300">
-                {userEmail ?? '운영자 계정'}
+                {userEmail ?? t('ops_console_operator_account')}
               </p>
             </div>
           </div>
@@ -186,16 +189,16 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-6">
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold text-slate-950">{getTitle(activeSection)}</h1>
+              <h1 className="truncate text-xl font-semibold text-slate-950">{t(getTitleKey(activeSection))}</h1>
               <p className="hidden truncate text-xs font-normal text-slate-500 sm:block">
-                {getDescription(activeSection)}
+                {t(getDescriptionKey(activeSection))}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <div className="hidden min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 sm:flex">
                 <UserCircle className="h-4 w-4 shrink-0 text-slate-500" />
                 <span className="max-w-[13rem] truncate text-xs font-medium text-slate-600">
-                  {userEmail ?? '운영자'}
+                  {userEmail ?? t('ops_console_operator')}
                 </span>
               </div>
               {onSignOut && (
@@ -203,7 +206,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
                   type="button"
                   onClick={onSignOut}
                   className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600"
-                  aria-label="로그아웃"
+                  aria-label={t('ops_console_sign_out')}
                 >
                   <LogOut className="h-5 w-5" />
                 </button>
@@ -227,7 +230,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
                   ].join(' ')}
                 >
                   <Icon className="h-4 w-4" />
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               )
             })}

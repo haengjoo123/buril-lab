@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { ArrowLeft, Bell, Building2, LogOut, Menu, UserCircle } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../locales/i18n';
 import logo from '../../assets/burillab_app_icon.png';
 import {
   getSafetyCenterSectionFromPath,
@@ -15,8 +17,8 @@ interface SafetyCenterShellProps {
 }
 
 function getHeaderTitle(section: ReturnType<typeof getSafetyCenterSectionFromPath>): string {
-  if (section === 'dashboard') return '기관 통합 대시보드';
-  return SAFETY_CENTER_NAV_ITEMS.find((item) => item.section === section)?.label ?? '통합 안전관리센터';
+  if (section === 'dashboard') return i18n.t('sc_integrated_dashboard');
+  return SAFETY_CENTER_NAV_ITEMS.find((item) => item.section === section)?.label ?? i18n.t('sc_center_title');
 }
 
 export function SafetyCenterShell({
@@ -25,6 +27,7 @@ export function SafetyCenterShell({
   onSignOut,
   onExitToLab,
 }: SafetyCenterShellProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const activeSection = getSafetyCenterSectionFromPath(location.pathname);
@@ -36,10 +39,10 @@ export function SafetyCenterShell({
         <aside className="hidden h-full w-64 shrink-0 flex-col bg-[linear-gradient(180deg,#064e3b_0%,#022c22_100%)] text-white lg:flex">
           <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1 shadow-sm ring-1 ring-white/20">
-              <img src={logo} alt="버릴랩" className="h-full w-full object-contain" />
+              <img src={logo} alt={t('sc_brand_alt')} className="h-full w-full object-contain" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-base font-medium">통합 안전관리센터</p>
+              <p className="truncate text-base font-medium">{t('sc_center_title')}</p>
               <p className="text-xs font-normal text-emerald-100/75">Buril Lab Center</p>
             </div>
           </div>
@@ -76,12 +79,12 @@ export function SafetyCenterShell({
               className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-emerald-50/85 transition-colors hover:bg-white/10 hover:text-white"
             >
               <ArrowLeft className="h-5 w-5" />
-              버릴랩으로 이동
+              {t('sc_go_to_burillab')}
             </button>
             <div className="mt-4 rounded-lg bg-white/8 p-3 ring-1 ring-white/10">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Building2 className="h-4 w-4" />
-                기관 담당자
+                {t('sc_institution_manager')}
               </div>
               <p className="mt-2 truncate text-xs font-normal text-emerald-100/75">
                 {userEmail ?? 'safety@burillab.local'}
@@ -101,7 +104,7 @@ export function SafetyCenterShell({
                   {headerTitle}
                 </h1>
                 <p className="hidden truncate text-xs font-normal text-slate-500 sm:block">
-                  승인된 연구실 데이터만 연결해 기관 위험 흐름을 관리합니다.
+                  {t('sc_shell_tagline')}
                 </p>
               </div>
             </div>
@@ -111,14 +114,14 @@ export function SafetyCenterShell({
                 type="button"
                 disabled
                 className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500"
-                aria-label="알림"
+                aria-label={t('sc_notifications')}
               >
                 <Bell className="h-4 w-4" />
               </button>
               <div className="hidden min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900 sm:flex">
                 <UserCircle className="h-4 w-4 shrink-0 text-slate-500" />
                 <span className="max-w-[13rem] truncate text-xs font-medium text-slate-600 dark:text-slate-300">
-                  {userEmail ?? '기관 담당자'}
+                  {userEmail ?? t('sc_institution_manager')}
                 </span>
               </div>
               {onSignOut && (
@@ -126,7 +129,7 @@ export function SafetyCenterShell({
                   type="button"
                   onClick={onSignOut}
                   className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
-                  aria-label="로그아웃"
+                  aria-label={t('sc_logout')}
                 >
                   <LogOut className="h-5 w-5" />
                 </button>

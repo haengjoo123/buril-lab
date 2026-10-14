@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useLabStore } from '../store/useLabStore';
 import { optimizeCabinetImage } from '../utils/cabinetImageOptimization';
 import { postBytes, postJson } from './internalApi';
+import i18n from '../locales/i18n';
 
 export interface Cabinet {
     id: string;
@@ -27,6 +28,9 @@ export interface CabinetDimensions {
     depth: number;
 }
 
+export interface CabinetTrashEntry { id: string; deleted_at: string; expires_at: string; payload: { shelves: unknown[]; items: { name: string }[] } }
+const loadedSnapshots = new Map<string, { revision: number; shelves: Set<string>; items: Set<string> }>();
+const readRequests = new Map<string, number>();
 const serializeCabinetShelves = (shelves: ShelfData[]) => shelves.map((shelf) => ({
     id: shelf.id,
     level: shelf.level,
@@ -101,42 +105,12 @@ export const cabinetService = {
     },
 
     async createCabinet(name: string, location?: string, width = 5, height = 9, depth = 2): Promise<Cabinet> {
-        const { data: userData } = await supabase.auth.getUser();
         const { currentLabId } = useLabStore.getState();
-        const insertData: any = {
-            name,
-            width,
-            height,
-            depth,
-            user_id: userData.user?.id,
-            lab_id: currentLabId || null
-        };
-        if (location !== undefined) {
-            insertData.location = location;
-        }
-
-        const { data, error } = await supabase
-            .from('cabinets')
-            .insert(insertData)
-            .select()
-            .single();
-
-        if (error) {
-            console.error('Error creating cabinet:', error);
-            throw error;
-        }
-
-        // Create default shelves
-        const defaultShelves = [
-            { id: uuidv4(), cabinet_id: data.id, level: 0, dividers: [] },
-            { id: uuidv4(), cabinet_id: data.id, level: 1, dividers: [] },
-            { id: uuidv4(), cabinet_id: data.id, level: 2, dividers: [] },
-            { id: uuidv4(), cabinet_id: data.id, level: 3, dividers: [] },
-        ];
-
-        await supabase.from('cabinet_shelves').insert(defaultShelves);
-
-        return data;
+        const { data, error } = await supabase.rpc('create_cabinet_v2', {
+            p_name: name, p_location: location ?? null, p_width: width, p_height: height, p_depth: depth, p_lab_id: currentLabId ?? null,
+        });
+        if (error) throw error;
+        return data as Cabinet;
     },
 
     async updateCabinet(id: string, updates: { name?: string; location?: string; width?: number; height?: number; depth?: number; }): Promise<void> {
@@ -194,31 +168,14 @@ export const cabinetService = {
     },
 
     async getCabinetDetails(cabinetId: string): Promise<{ shelves: ShelfData[], cabinetName: string, width: number, height: number, depth: number }> {
-        // Fetch cabinet details for name
-        const { data: cabinetData, error: cabinetError } = await supabase
-            .from('cabinets')
-            .select('name, width, height, depth')
-            .eq('id', cabinetId)
-            .single();
-
-        if (cabinetError) throw cabinetError;
-
-        // Fetch shelves
-        const { data: shelvesData, error: shelvesError } = await supabase
-            .from('cabinet_shelves')
-            .select('*')
-            .eq('cabinet_id', cabinetId)
-            .order('level', { ascending: true });
-
-        if (shelvesError) throw shelvesError;
-
-        // Fetch items
-        const { data: itemsData, error: itemsError } = await supabase
-            .from('cabinet_items')
-            .select('*')
-            .eq('cabinet_id', cabinetId);
-
-        if (itemsError) throw itemsError;
+        const request = (readRequests.get(cabinetId) ?? 0) + 1;
+        readRequests.set(cabinetId, request);
+        const { data, error } = await supabase.rpc('get_cabinet_state_v2', { p_cabinet_id: cabinetId });
+        if (error) throw error;
+        const cabinetData = data.cabinet;
+        const shelvesData: any[] = data.shelves;
+        const itemsData: any[] = data.items;
+        if (readRequests.get(cabinetId) === request) loadedSnapshots.set(cabinetId, { revision: cabinetData.layout_revision, shelves: new Set(shelvesData.map(s => s.id)), items: new Set(itemsData.map(i => i.id)) });
 
         // Build ShelfData structure
         const shelves: ShelfData[] = (shelvesData || []).map(shelf => {
@@ -233,7 +190,7 @@ export const cabinetService = {
                     name: item.name,
                     width: Number(item.width),
                     position: Number(item.position),
-                    depthPosition: Number(item.depth_position),
+                    depthPosition: Number(item.depth_position ?? 50),
                     expiryDate: item.expiry_date || undefined,
                     manufacturerDateType: item.manufacturer_date_type || 'unlabeled',
                     receivedDate: item.received_date || undefined,
@@ -275,17 +232,46 @@ export const cabinetService = {
         shelves: ShelfData[],
         dimensions: CabinetDimensions
     ): Promise<void> {
-        const { error } = await supabase.rpc('save_cabinet_state_with_dates', {
-            p_cabinet_id: cabinetId,
-            p_shelves: serializeCabinetShelves(shelves),
-            p_width: dimensions.width,
-            p_height: dimensions.height,
-            p_depth: dimensions.depth,
+        const snapshot = loadedSnapshots.get(cabinetId);
+        if (!snapshot) throw new Error(i18n.t('msc_cabinet_reload_before_save'));
+        const currentShelves = new Set(shelves.map(s => s.id));
+        const currentItems = new Set(shelves.flatMap(s => s.items.map(i => i.id)));
+        const { data, error } = await supabase.rpc('save_cabinet_state_v2', {
+            p_cabinet_id: cabinetId, p_shelves: serializeCabinetShelves(shelves),
+            p_width: dimensions.width, p_height: dimensions.height, p_depth: dimensions.depth,
+            p_expected_revision: snapshot.revision,
+            p_removed_shelf_ids: [...snapshot.shelves].filter(id => !currentShelves.has(id)),
+            p_removed_item_ids: [...snapshot.items].filter(id => !currentItems.has(id)),
         });
+        if (error) throw error;
+        loadedSnapshots.set(cabinetId, { revision: data, shelves: currentShelves, items: currentItems });
+    },
 
+    async saveReagentGHS(cabinetId: string, item: ReagentPlacement, expectedCas: string | undefined, expectedName: string): Promise<void> {
+        const { error } = await supabase.rpc('update_cabinet_item_ghs_v2', {
+            p_cabinet_id: cabinetId, p_item_id: item.id, p_expected_cas: expectedCas ?? null, p_expected_name: expectedName,
+            p_h_codes: item.hCodes, p_status: item.ghsStatus, p_checked_at: item.ghsCheckedAt,
+        });
+        if (error) throw error;
+    },
+
+    async getTrash(cabinetId: string): Promise<CabinetTrashEntry[]> {
+        const { data, error } = await supabase.rpc('get_cabinet_trash_v2', { p_cabinet_id: cabinetId });
+        if (error) throw error;
+        return data || [];
+    },
+
+    async restoreTrash(cabinetId: string, trashId: string): Promise<void> {
+        const snapshot = loadedSnapshots.get(cabinetId);
+        if (!snapshot) throw new Error(i18n.t('msc_cabinet_load_first'));
+        const { error } = await supabase.rpc('restore_cabinet_trash_v2', { p_cabinet_id: cabinetId, p_trash_id: trashId, p_expected_revision: snapshot.revision });
         if (error) {
-            console.error('Error saving cabinet state atomically:', error);
-            throw error;
+            const message = error.message || '';
+            const key = message.startsWith('CABINET_RESTORE_SPACE_REQUIRED') ? 'cabinet_trash_no_space'
+                : message.startsWith('CABINET_VERSION_CONFLICT') ? 'cabinet_trash_changed'
+                    : message.startsWith('CABINET_TRASH_EXPIRED') ? 'cabinet_trash_expired'
+                        : 'cabinet_trash_restore_failed';
+            throw new Error(i18n.t(key), { cause: error });
         }
     },
 

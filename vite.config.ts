@@ -577,7 +577,7 @@ export default defineConfig(({ mode }) => {
           /^\/sw\.js$/,
           /^\/cdn-cgi(?:\/|$)/,
         ],
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,hdr}'],
         // 현재 메인 번들이 기본 precache 한도(2 MiB)를 넘어서므로 배포 빌드를 위해 상향합니다.
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [

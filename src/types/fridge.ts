@@ -189,7 +189,7 @@ export interface FridgeState {
     highlightedItemId: string | string[] | null;
     setSelectedReagentId: (id: string | null) => void;
     setHighlightedItemId: (id: string | string[] | null) => void;
-    updateReagent: (id: string, updates: Partial<ReagentPlacement>) => void;
+    updateReagent: (id: string, updates: Partial<ReagentPlacement>) => boolean;
 
     // Auto-placement
     autoPlaceReagent: (itemData: Omit<ReagentPlacement, 'shelfId' | 'position' | 'depthPosition'>) => { itemId: string; shelfLevel: number; reagentName: string } | null;

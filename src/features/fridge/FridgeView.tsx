@@ -1,3 +1,5 @@
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { CabinetTrash } from './components/CabinetTrash';
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
@@ -12,7 +14,7 @@ import {
 } from '../../services/aiReagentScanService';
 import { analyticsService } from '../../services/analyticsService';
 import { cabinetService } from '../../services/cabinetService';
-import { inventoryService, type InventoryItem } from '../../services/inventoryService';
+import type { InventoryItem } from '../../services/inventoryService';
 import { StorageCompatBanner } from './components/StorageCompatBanner';
 import { CabinetAutoLayoutPreviewModal } from './components/CabinetAutoLayoutPreviewModal';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
@@ -289,7 +291,22 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
         void runReload();
 
-        const handleChange = () => {
+        const handleChange = (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+            if (payload.table === 'cabinet_items' && payload.eventType === 'UPDATE') {
+                const row = payload.new;
+                const item = useFridgeStore.getState().shelves.flatMap(s => s.items).find(i => i.id === row.id);
+                // Enrichment only updates GHS columns. Reloading for it would
+                // cancel the remaining lookups and clear the user's shelf focus.
+                if (item && item.shelfId === row.shelf_id && item.position === Number(row.position)
+                    && item.width === Number(row.width) && (item.depthPosition ?? 50) === Number(row.depth_position)
+                    && item.template === row.template && item.name === row.name
+                    && (item.casNo ?? null) === row.cas_no && (item.linkedInventoryItemId ?? null) === row.inventory_item_id
+                    && (item.brand ?? null) === row.brand && (item.capacity ?? null) === row.capacity
+                    && (item.productNumber ?? null) === row.product_number && (item.notes ?? null) === row.notes
+                    && (item.expiryDate ?? null) === row.expiry_date && (item.receivedDate ?? null) === row.received_date
+                    && (item.openedDate ?? null) === row.opened_date && (item.manufacturerDateType ?? 'unlabeled') === row.manufacturer_date_type
+                    && (item.remaining_percent ?? null) === row.remaining_percent) return;
+            }
             const currentMode = useFridgeStore.getState().mode;
             // 편집 모드나 배치 모드 중일 때는 사용자 작업을 방해하지 않기 위해 자동 새로고침을 건너뜁니다.
             if (currentMode === 'EDIT' || currentMode === 'PLACE') return;
@@ -462,7 +479,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
             try {
                 // 연결된 재고 항목 삭제 및 폐기 로그 기록 (allItems가 없어도 DB에서 cabinet_id로 삭제함)
-                await inventoryService.clearCabinetInventory(currentCabinetId, allItems);
+                setToastMessage(t('msc_fridge_trash_moved'));
 
                 if (allItems.length > 0) {
                     const names = allItems.map(i => i.name).join(', ');
@@ -576,7 +593,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const handleConfirmPlacement = async () => {
         if (!pendingPlacement) return;
 
-        const finalName = placementName.trim() || '이름 없음';
+        const finalName = placementName.trim() || t('msc_fridge_unnamed');
         const memo = placementMemo;
         const placementCasInputMethod = getSuggestedCasInputMethod(
             placementCasSuggestion.isSuggestedCasApplied,
@@ -584,7 +601,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             placementCasSuggestion.appliedSuggestion?.confidence,
         );
         const existingItemIds = new Set(useFridgeStore.getState().shelves.flatMap((shelf) => shelf.items.map((item) => item.id)));
-        placeReagent(pendingPlacement.shelfId, {
+        const placed = placeReagent(pendingPlacement.shelfId, {
             id: '',
             reagentId: 'custom-' + Date.now(),
             name: finalName,
@@ -606,6 +623,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             casNo: placementCas || undefined,
             remaining_percent: placementRemainingPercent,
         });
+        if (!placed) { setToastMessage(t('msc_fridge_no_space_overlap')); return; }
         const newlyPlacedItemId = useFridgeStore.getState().shelves
             .flatMap((shelf) => shelf.items)
             .find((item) => !existingItemIds.has(item.id))?.id || null;
@@ -1031,10 +1049,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     ];
 
     return (
-        <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-hidden dark:bg-slate-950">
+        <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-clip dark:bg-slate-950">
             {/* Header Toolbar */}
             <div className="flex justify-between items-center px-4 py-3 bg-white shadow-sm z-30 relative shrink-0 dark:border-b dark:border-slate-800 dark:bg-slate-950">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                     {onBack && (
                         <button
                             onClick={onBack}
@@ -1043,7 +1061,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                     )}
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                    <h2 className="min-w-0 truncate text-lg font-semibold text-slate-800 dark:text-slate-100">
                         {isLoadingCabinet ? (
                             <span className="flex items-center gap-2">
                                 <Loader2 className="w-4 h-4 animate-spin" /> {t('cabinet_loading')}
@@ -1051,7 +1069,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                         ) : cabinetName || t('cabinet_manage')}
                     </h2>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                     {/* 저장 상태 인디케이터 */}
                     <button
                         type="button"
@@ -1105,6 +1123,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             <Save className="w-4 h-4" />
                         </button>
                     )}
+                    <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+                    <CabinetTrash />
                 </div>
             </div>
 
@@ -1268,7 +1288,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                     {/* 버튼 행 - 4개의 버튼이 모바일에서 한 줄에 들어가도록 최적화 */}
                                     <div className="flex justify-between sm:justify-center items-end gap-x-2 sm:gap-x-6 w-full px-1">
                                         <button
-                                            onClick={() => { addShelf(); autoSave(); }}
+                                            onClick={() => { const before = useFridgeStore.getState().shelves.length; addShelf(); if (useFridgeStore.getState().shelves.length === before) setToastMessage(t('msc_fridge_shelf_no_height')); else void autoSave(); }}
                                             className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-blue-600 transition-colors group shrink-0"
                                         >
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-blue-500 group-hover:bg-blue-50 transition-all">
@@ -1277,8 +1297,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_add_shelf')}</span>
                                         </button>
                                         <button
-                                            onClick={() => { if (shelves.length > 0) { removeShelf(shelves[shelves.length - 1].id); autoSave(); } }}
-                                            disabled={shelves.length === 0}
+                                            onClick={() => { if (shelves.length > 0) { removeShelf(shelves[shelves.length - 1].id); void autoSave().then(saved => { if (saved) setToastMessage(t('msc_fridge_trash_moved_shelf')); }); } }}
+                                            disabled={shelves.length <= 1}
                                             className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-red-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
                                         >
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-red-500 group-hover:bg-red-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">

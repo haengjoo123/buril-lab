@@ -172,7 +172,7 @@ export const MemberManagementPanel: React.FC = () => {
             <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-indigo-500" />
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('admin_members_title')}</h2>
-                <span className="ml-auto text-xs text-slate-400">{members.length}명</span>
+                <span className="ml-auto text-xs text-slate-400">{t('cmp_member_count', { count: members.length, defaultValue: '{{count}}명' })}</span>
             </div>
 
             {/* Member List */}

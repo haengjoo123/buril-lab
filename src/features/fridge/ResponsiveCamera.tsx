@@ -15,7 +15,7 @@ interface ResponsiveCameraProps {
     cameraStateId: number;
 }
 
-const LERP_FACTOR = 0.06;
+
 const ARRIVAL_THRESHOLD = 0.05;
 
 /** 시약장 크기 변경 시 OrbitControls 동기화, 부드러운 전환. 줌/팬 시 즉시 보간 중단 */
@@ -28,6 +28,7 @@ export function ResponsiveCamera({ config, cameraStateId }: ResponsiveCameraProp
     useEffect(() => {
         targetPos.current.set(...config.position);
         targetLookAt.current.set(...config.target);
+        isAnimating.current = true;
     }, [config.position[0], config.position[1], config.position[2], config.target[0], config.target[1], config.target[2]]);
 
     useEffect(() => {
@@ -46,7 +47,8 @@ export function ResponsiveCamera({ config, cameraStateId }: ResponsiveCameraProp
         };
     }, [gl]);
 
-    useFrame(() => {
+    useFrame((_, delta) => {
+        const LERP_FACTOR = 1 - Math.exp(-3.7125 * delta);
         const orbit = controls as { target: THREE.Vector3; update?: () => void } | null;
         if (!orbit?.target) return;
 

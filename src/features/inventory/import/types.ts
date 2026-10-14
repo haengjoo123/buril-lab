@@ -1,3 +1,4 @@
+import i18n from '../../../locales/i18n'
 import type { ManufacturerDateType } from '../../../utils/manufacturerDate'
 
 export const IMPORT_LIMITS = { fileBytes: 20 * 1024 * 1024, totalBytes: 100 * 1024 * 1024, rows: 10_000, pages: 50, cells: 1_000_000, batch: 100 } as const
@@ -5,11 +6,8 @@ export const IMPORT_FIELDS = ['name', 'brand', 'product_number', 'cas_number', '
 export type ImportField = typeof IMPORT_FIELDS[number]
 export type ImportValues = Partial<Record<ImportField, string>>
 export type ImportMapping = Partial<Record<ImportField, string[]>>
-export const FIELD_LABELS: Record<ImportField, string> = {
-  name: '시약명', brand: '제조사', product_number: '제품번호', cas_number: 'CAS 번호', quantity: '수량(개)', capacity: '용량(단위 포함)',
-  storage_location: '보관위치', storage_type: '보관유형', manufacturer_date_type: '제조사 날짜 유형', manufacturer_date: '제조사 날짜',
-  received_date: '입고일', opened_date: '개봉일', expiry_date: '유효기간', memo: '메모', remaining_percent: '잔량(%)',
-}
+export const FIELD_LABELS = Object.fromEntries(IMPORT_FIELDS.map(field => [field, undefined])) as unknown as Record<ImportField, string>
+for (const field of IMPORT_FIELDS) Object.defineProperty(FIELD_LABELS, field, { enumerable: true, get: () => i18n.t(`inv_field_${field}`) })
 export interface ImportCell {
   address: string
   raw: string | number | boolean | null

@@ -312,7 +312,7 @@ export function SearchTabView({
 
     if (names.length === 0) return log.disposal_category;
     if (names.length === 1) return names[0];
-    return `${names[0]} 외 ${names.length - 1}개`;
+    return t('cmp_search_log_title_more', { name: names[0], count: names.length - 1, defaultValue: '{{name}} 외 {{count}}개' });
   };
 
   return (

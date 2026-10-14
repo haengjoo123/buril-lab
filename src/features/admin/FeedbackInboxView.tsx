@@ -68,7 +68,7 @@ export const FeedbackInboxView: React.FC = () => {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : t('feedback_admin_load_error', '개선 제안 목록을 불러오지 못했습니다.'),
+          : t('cmp_feedback_admin_load_error', '개선 제안 목록을 불러오지 못했습니다.'),
       )
     } finally {
       if (mode === 'initial') {
@@ -121,14 +121,14 @@ export const FeedbackInboxView: React.FC = () => {
   }), [items])
 
   const statusOptions = useMemo(() => ([
-    { value: 'all', label: t('feedback_admin_filter_all_status', '전체 상태') },
-    { value: 'new', label: t('feedback_admin_status_new', '신규') },
-    { value: 'in_progress', label: t('feedback_admin_status_in_progress', '진행 중') },
-    { value: 'resolved', label: t('feedback_admin_status_resolved', '해결됨') },
+    { value: 'all', label: t('cmp_feedback_admin_filter_all_status', '전체 상태') },
+    { value: 'new', label: t('cmp_feedback_admin_status_new', '신규') },
+    { value: 'in_progress', label: t('cmp_feedback_admin_status_in_progress', '진행 중') },
+    { value: 'resolved', label: t('cmp_feedback_admin_status_resolved', '해결됨') },
   ]), [t])
 
   const typeOptions = useMemo(() => ([
-    { value: 'all', label: t('feedback_admin_filter_all_types', '전체 유형') },
+    { value: 'all', label: t('cmp_feedback_admin_filter_all_types', '전체 유형') },
     { value: 'bug', label: t('feedback_type_bug') },
     { value: 'improvement', label: t('feedback_type_improvement') },
     { value: 'general', label: t('feedback_type_general') },
@@ -153,7 +153,7 @@ export const FeedbackInboxView: React.FC = () => {
       setError(
         updateError instanceof Error
           ? updateError.message
-          : t('feedback_admin_update_error', '상태를 변경하지 못했습니다.'),
+          : t('cmp_feedback_admin_update_error', '상태를 변경하지 못했습니다.'),
       )
     } finally {
       setUpdatingState(null)
@@ -176,11 +176,11 @@ export const FeedbackInboxView: React.FC = () => {
             <ShieldAlert className="w-7 h-7" />
           </div>
           <h2 className="text-lg font-medium text-slate-900 dark:text-slate-100">
-            {t('feedback_admin_access_denied_title', '운영자 전용 페이지')}
+            {t('cmp_feedback_admin_access_denied_title', '운영자 전용 페이지')}
           </h2>
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-600 dark:text-slate-300">
             {t(
-              'feedback_admin_access_denied_desc',
+              'cmp_feedback_admin_access_denied_desc',
               '이 페이지는 allowlist에 등록된 운영자 계정만 접근할 수 있습니다.',
             )}
           </p>
@@ -195,10 +195,10 @@ export const FeedbackInboxView: React.FC = () => {
         <div>
           <h1 className="flex items-center gap-2 text-xl font-medium text-slate-900 dark:text-white">
             <Inbox className="w-6 h-6 text-blue-500" />
-            {t('feedback_admin_title', '개선 제안 Inbox')}
+            {t('cmp_feedback_admin_title', '개선 제안 Inbox')}
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {t('feedback_admin_subtitle', '앱 전체에서 들어온 제안을 최신순으로 확인하고 상태를 관리합니다.')}
+            {t('cmp_feedback_admin_subtitle', '앱 전체에서 들어온 제안을 최신순으로 확인하고 상태를 관리합니다.')}
           </p>
         </div>
 
@@ -213,25 +213,25 @@ export const FeedbackInboxView: React.FC = () => {
           ) : (
             <RefreshCw className="w-4 h-4" />
           )}
-          {t('feedback_admin_refresh', '새로고침')}
+          {t('cmp_feedback_admin_refresh', '새로고침')}
         </button>
       </div>
 
       <div className="grid grid-cols-4 gap-2">
         <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400">{t('feedback_admin_summary_total', '전체')}</div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">{t('cmp_feedback_admin_summary_total', '전체')}</div>
           <div className="text-lg font-medium text-slate-900 dark:text-white">{summary.total}</div>
         </div>
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
-          <div className="text-[11px] text-blue-700 dark:text-blue-300">{t('feedback_admin_status_new', '신규')}</div>
+          <div className="text-[11px] text-blue-700 dark:text-blue-300">{t('cmp_feedback_admin_status_new', '신규')}</div>
           <div className="text-lg font-medium text-blue-700 dark:text-blue-300">{summary.newCount}</div>
         </div>
         <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <div className="text-[11px] text-amber-700 dark:text-amber-300">{t('feedback_admin_status_in_progress', '진행 중')}</div>
+          <div className="text-[11px] text-amber-700 dark:text-amber-300">{t('cmp_feedback_admin_status_in_progress', '진행 중')}</div>
           <div className="text-lg font-medium text-amber-700 dark:text-amber-300">{summary.inProgressCount}</div>
         </div>
         <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-          <div className="text-[11px] text-emerald-700 dark:text-emerald-300">{t('feedback_admin_status_resolved', '해결됨')}</div>
+          <div className="text-[11px] text-emerald-700 dark:text-emerald-300">{t('cmp_feedback_admin_status_resolved', '해결됨')}</div>
           <div className="text-lg font-medium text-emerald-700 dark:text-emerald-300">{summary.resolvedCount}</div>
         </div>
       </div>
@@ -253,7 +253,7 @@ export const FeedbackInboxView: React.FC = () => {
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder={t('feedback_admin_search_placeholder', '내용, 연락처, 이메일로 검색')}
+            placeholder={t('cmp_feedback_admin_search_placeholder', '내용, 연락처, 이메일로 검색')}
             className="min-h-[42px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
         </div>
@@ -270,7 +270,7 @@ export const FeedbackInboxView: React.FC = () => {
           const isUpdating = updatingState?.id === item.id
           const createdAt = formatDateTime(item.created_at)
           const resolvedAt = formatDateTime(item.resolved_at)
-          const reporter = item.user_email || item.contact || t('feedback_admin_unknown_reporter', '알 수 없음')
+          const reporter = item.user_email || item.contact || t('cmp_feedback_admin_unknown_reporter', '알 수 없음')
 
           return (
             <article
@@ -289,10 +289,10 @@ export const FeedbackInboxView: React.FC = () => {
                     </span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-normal ${getStatusBadgeClass(item.status)}`}>
                       {item.status === 'new'
-                        ? t('feedback_admin_status_new', '신규')
+                        ? t('cmp_feedback_admin_status_new', '신규')
                         : item.status === 'in_progress'
-                          ? t('feedback_admin_status_in_progress', '진행 중')
-                          : t('feedback_admin_status_resolved', '해결됨')}
+                          ? t('cmp_feedback_admin_status_in_progress', '진행 중')
+                          : t('cmp_feedback_admin_status_resolved', '해결됨')}
                     </span>
                   </div>
                   <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-slate-100">
@@ -308,7 +308,7 @@ export const FeedbackInboxView: React.FC = () => {
               <div className="mt-4 grid grid-cols-1 gap-2 text-xs text-slate-600 dark:text-slate-300">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-normal text-slate-500 dark:text-slate-400">
-                    {t('feedback_admin_reporter', '보낸 사람')}
+                    {t('cmp_feedback_admin_reporter', '보낸 사람')}
                   </span>
                   <span className="break-all">{reporter}</span>
                 </div>
@@ -325,12 +325,12 @@ export const FeedbackInboxView: React.FC = () => {
                 {resolvedAt && (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-normal text-slate-500 dark:text-slate-400">
-                      {t('feedback_admin_resolved_at', '처리 시각')}
+                      {t('cmp_feedback_admin_resolved_at', '처리 시각')}
                     </span>
                     <span>{resolvedAt}</span>
                     {item.resolved_by && (
                       <span className="break-all text-slate-500 dark:text-slate-400">
-                        ({t('feedback_admin_resolved_by', '처리자')}: {item.resolved_by})
+                        ({t('cmp_feedback_admin_resolved_by', '처리자')}: {item.resolved_by})
                       </span>
                     )}
                   </div>
@@ -355,10 +355,10 @@ export const FeedbackInboxView: React.FC = () => {
                         <CheckCheck className="w-3.5 h-3.5" />
                       ) : null}
                       {status === 'new'
-                        ? t('feedback_admin_status_new', '신규')
+                        ? t('cmp_feedback_admin_status_new', '신규')
                         : status === 'in_progress'
-                          ? t('feedback_admin_status_in_progress', '진행 중')
-                          : t('feedback_admin_status_resolved', '해결됨')}
+                          ? t('cmp_feedback_admin_status_in_progress', '진행 중')
+                          : t('cmp_feedback_admin_status_resolved', '해결됨')}
                     </button>
                   )
                 })}
@@ -371,8 +371,8 @@ export const FeedbackInboxView: React.FC = () => {
           <EmptyState
             variant="audit"
             subtitle={items.length === 0
-              ? t('feedback_admin_empty', '아직 들어온 개선 제안이 없습니다.')
-              : t('feedback_admin_empty_filtered', '현재 필터에 맞는 제안이 없습니다.')}
+              ? t('cmp_feedback_admin_empty', '아직 들어온 개선 제안이 없습니다.')
+              : t('cmp_feedback_admin_empty_filtered', '현재 필터에 맞는 제안이 없습니다.')}
           />
         )}
       </div>

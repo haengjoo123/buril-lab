@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import i18n from '../locales/i18n';
 
 interface ExportFileOptions {
     fileName: string;
@@ -47,7 +48,7 @@ async function saveFileInNativeApp(blob: Blob, options: ExportFileOptions) {
         recursive: true,
     });
 
-    window.alert(`파일을 저장했습니다.\n${savedLocation}`);
+    window.alert(i18n.t('msc_file_saved', { location: savedLocation }));
     return uri;
 }
 

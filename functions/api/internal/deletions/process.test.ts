@@ -18,6 +18,7 @@ const ACCOUNT: ClaimedDeletionJob = {
 
 function gateway(overrides: Partial<DeletionProcessorGateway> = {}): DeletionProcessorGateway {
   return {
+    purgeCabinetTrash: vi.fn().mockResolvedValue(undefined),
     acquireRun: vi.fn().mockResolvedValue(true),
     releaseRun: vi.fn().mockResolvedValue(undefined),
     claimJobs: vi.fn().mockResolvedValue([ACCOUNT]),
@@ -59,6 +60,19 @@ function request(secret = 'purpose-specific-secret-at-least-32-characters'): Req
 }
 
 describe('Ops11 deletion processor', () => {
+  it('purges expired cabinet trash even when no account or lab deletion is queued', async () => {
+    const testGateway = gateway({ claimJobs: vi.fn().mockResolvedValue([]) })
+    await runDeletionProcessor(testGateway)
+    expect(testGateway.purgeCabinetTrash).toHaveBeenCalledOnce()
+    expect(testGateway.releaseRun).toHaveBeenCalledOnce()
+  })
+
+  it('releases the lease and surfaces a purge failure for the next scheduled retry', async () => {
+    const testGateway = gateway({ purgeCabinetTrash: vi.fn().mockRejectedValue(new Error('offline')) })
+    await expect(runDeletionProcessor(testGateway)).rejects.toThrow('offline')
+    expect(testGateway.claimJobs).not.toHaveBeenCalled()
+    expect(testGateway.releaseRun).toHaveBeenCalledOnce()
+  })
   it('runs database, Storage, Auth, and finalize in order for one account job', async () => {
     const testGateway = gateway()
     await expect(runDeletionProcessor(testGateway)).resolves.toEqual({

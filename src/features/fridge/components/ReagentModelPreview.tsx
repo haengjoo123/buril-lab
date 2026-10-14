@@ -4,10 +4,11 @@
  * 작은 Canvas 안에 GLB 모델을 로드하여 보여줍니다.
  * bounding box 기반으로 자동 센터링 & 스케일링하여 모든 모델이 프레임을 꽉 채웁니다.
  */
-import React, { Suspense, useMemo } from 'react';
+import React, { Suspense, useMemo, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { ModelLoadBoundary } from '../ModelLoadBoundary';
 
 type ContainerType = 'A' | 'B' | 'C' | 'D';
 
@@ -36,6 +37,7 @@ const ModelScene: React.FC<{ type: ContainerType }> = ({ type }) => {
         clone.traverse((node) => {
             if ((node as THREE.Mesh).isMesh) {
                 const mesh = node as THREE.Mesh;
+                mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => m.clone()) : mesh.material.clone();
                 const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
                 materials.forEach((mat) => {
                     if (mat instanceof THREE.MeshStandardMaterial) {
@@ -63,6 +65,14 @@ const ModelScene: React.FC<{ type: ContainerType }> = ({ type }) => {
         };
     }, [scene]);
 
+    useEffect(() => () => {
+        clonedScene.traverse(node => {
+            if ((node as THREE.Mesh).isMesh) {
+                const mat = (node as THREE.Mesh).material;
+                (Array.isArray(mat) ? mat : [mat]).forEach(m => m.dispose());
+            }
+        });
+    }, [clonedScene]);
     return (
         <group position={centerOffset}>
             <primitive object={clonedScene} scale={fitScale} />
@@ -98,7 +108,9 @@ const ReagentModelPreview: React.FC<ReagentModelPreviewProps> = ({
                 <directionalLight position={[3, 4, 2]} intensity={1.5} />
                 <directionalLight position={[-2, 3, -1]} intensity={0.6} />
                 <Suspense fallback={<LoadingFallback />}>
+                    <ModelLoadBoundary path={GLB_MAP[type]} key={type}>
                     <ModelScene type={type} />
+                    </ModelLoadBoundary>
                 </Suspense>
             </Canvas>
         </div>

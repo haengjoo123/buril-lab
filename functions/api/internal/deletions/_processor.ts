@@ -27,6 +27,7 @@ export interface DeletionProcessorSummary {
 }
 
 export interface DeletionProcessorGateway {
+  purgeCabinetTrash?: () => Promise<void>
   acquireRun: (runToken: string) => Promise<boolean>
   releaseRun: (runToken: string) => Promise<void>
   claimJobs: () => Promise<ClaimedDeletionJob[]>
@@ -119,6 +120,10 @@ async function rpc(admin: AdminClient, name: string, args: Record<string, unknow
 
 export function createDeletionProcessorGateway(admin: AdminClient): DeletionProcessorGateway {
   return {
+    purgeCabinetTrash: async () => {
+      const { error } = await admin.rpc('purge_expired_cabinet_trash_v2')
+      if (error) throw new Error('CABINET_TRASH_PURGE_FAILED')
+    },
     acquireRun: async (runToken) => {
       const result = requireSuccess(await rpc(admin, 'acquire_deletion_worker_run_v1', {
         p_lease_token: runToken, p_lease_seconds: 55,
@@ -227,6 +232,7 @@ export async function runDeletionProcessor(gateway: DeletionProcessorGateway): P
   const runToken = crypto.randomUUID()
   if (!await gateway.acquireRun(runToken)) return summary
   try {
+    await gateway.purgeCabinetTrash?.()
     const jobs = await gateway.claimJobs()
     summary.claimed = jobs.length
     for (const job of jobs) {

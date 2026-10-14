@@ -1457,17 +1457,17 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             container.style.color = '#000';
 
             let html = `
-                <h2 style="text-align: center; margin-bottom: 20px;">폐기 기록 목록</h2>
+                <h2 style="text-align: center; margin-bottom: 20px;">${t('wl_pdf_title')}</h2>
                 <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
                     <thead>
                         <tr style="background-color: #f3f4f6;">
-                            <th style="border: 1px solid #e5e7eb; padding: 8px;">폐기일시</th>
-                            <th style="border: 1px solid #e5e7eb; padding: 8px;">폐기구분</th>
-                            <th style="border: 1px solid #e5e7eb; padding: 8px;">시약명</th>
-                            <th style="border: 1px solid #e5e7eb; padding: 8px;">용량</th>
-                            <th style="border: 1px solid #e5e7eb; padding: 8px;">삭제 위치</th>
-                            <th style="border: 1px solid #e5e7eb; padding: 8px;">처리자</th>
-                            <th style="border: 1px solid #e5e7eb; padding: 8px;">사유</th>
+                            <th style="border: 1px solid #e5e7eb; padding: 8px;">${t('wl_pdf_col_date')}</th>
+                            <th style="border: 1px solid #e5e7eb; padding: 8px;">${t('wl_pdf_col_category')}</th>
+                            <th style="border: 1px solid #e5e7eb; padding: 8px;">${t('wl_pdf_col_reagent')}</th>
+                            <th style="border: 1px solid #e5e7eb; padding: 8px;">${t('wl_pdf_col_volume')}</th>
+                            <th style="border: 1px solid #e5e7eb; padding: 8px;">${t('wl_pdf_col_location')}</th>
+                            <th style="border: 1px solid #e5e7eb; padding: 8px;">${t('wl_pdf_col_handler')}</th>
+                            <th style="border: 1px solid #e5e7eb; padding: 8px;">${t('wl_pdf_col_reason')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1491,7 +1491,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
             const opt = {
                 margin: 10,
-                filename: `폐기기록_${getExportFilenameSuffix(scope)}_${new Date().toISOString().slice(0, 10)}.pdf`,
+                filename: `${t('wl_pdf_filename_prefix')}_${getExportFilenameSuffix(scope)}_${new Date().toISOString().slice(0, 10)}.pdf`,
                 image: { type: 'jpeg' as const, quality: 0.98 },
                 html2canvas: { scale: 2 },
                 jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'landscape' as const }
