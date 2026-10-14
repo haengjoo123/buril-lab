@@ -64,7 +64,7 @@ function openAIResponse(text: string) {
     id: 'resp_test',
     object: 'response',
     status: 'completed',
-    model: 'gpt-5.6-luna',
+    model: 'gpt-6-luna',
     output: [{
       id: 'msg_test',
       type: 'message',

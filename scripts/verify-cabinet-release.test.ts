@@ -10,7 +10,7 @@ describe('reviewed cabinet successor release', () => {
       deletionRuntimeDefaultEnabled: false })
     expect(new Set(CABINET_RELEASE_PATHS).size).toBe(CABINET_RELEASE_PATHS.length)
   })
-  it.each(['../escape.ts', 'src\\escape.ts', '/src/x.ts', 'docs/operations/../escape.md', 'scripts/apply-ops12-cleanup.mjs', 'functions/api/ai/_openai.ts', 'wrangler.jsonc', '6. 버릴랩/기획.md', 'package.json'])(
+  it.each(['../escape.ts', 'src\\escape.ts', '/src/x.ts', 'docs/operations/../escape.md', 'scripts/apply-ops12-cleanup.mjs', 'functions/api/ai/classify.ts', 'workers/storage-backup/wrangler.production.jsonc', '6. 버릴랩/기획.md', 'package.json'])(
     'rejects paths outside the reviewed successor scope: %s', candidate => {
       expect(() => verifyCabinetChangedPaths([candidate])).toThrow()
     })

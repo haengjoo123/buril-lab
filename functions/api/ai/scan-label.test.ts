@@ -165,7 +165,7 @@ describe('reagent label scan validation', () => {
       id: 'resp_scan',
       object: 'response',
       status: 'completed',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       output: [{
         id: 'msg_scan',
         type: 'message',

@@ -10,6 +10,7 @@ import { filterOps11GeneratedUntrackedPaths, verifyOps11ApplicationSources, veri
 export const CABINET_RELEASE_BASE_SHA = 'd99fe93c4ae09674cda01bd24b2a463ac23686c2'
 export const CABINET_RELEASE_POLICY = 'config/cabinet-release-20261002.json'
 export const CABINET_RELEASE_PATHS = Object.freeze([
+  '.env.example',
   '.gitleaksignore',
   '.github/workflows/quality.yml',
   CABINET_RELEASE_POLICY,
@@ -17,6 +18,13 @@ export const CABINET_RELEASE_PATHS = Object.freeze([
   'docs/operations/cabinet-trash-rollout.md',
   'docs/operations/ops-observation-recheck-2026-10-02.md',
   'docs/operations/operations-safety-rollout.md',
+  'functions/api/ai/_openai.ts',
+  'functions/api/ai/_openai.test.ts',
+  'functions/api/ai/classify.test.ts',
+  'functions/api/ai/disposal-guide.test.ts',
+  'functions/api/ai/scan-label.test.ts',
+  'functions/api/voice/_reagentAliases.test.ts',
+  'functions/api/voice/query.test.ts',
   'functions/api/internal/deletions/_processor.ts',
   'functions/api/internal/deletions/process.test.ts',
   'public/environments/README.md',
@@ -65,6 +73,8 @@ export const CABINET_RELEASE_PATHS = Object.freeze([
   'src/utils/cabinetPlacementValidation.test.ts',
   'src/utils/cabinetPlacementValidation.ts',
   'src/utils/reagentPlacementMetrics.ts',
+  'src/utils/storageCompatibilityChecker.ts',
+  'src/utils/storageCompatibilityChecker.test.ts',
   'supabase/legacy_tests/baseline_permissions_ops11.sql',
   'supabase/legacy_tests/ops5_expand_permissions.sql',
   'supabase/tests/ops5_expand_permissions.sql',
@@ -76,6 +86,8 @@ export const CABINET_RELEASE_PATHS = Object.freeze([
   'supabase/tests/inventory_import_behavior.sql',
   'supabase/security-advisors/staging.json',
   'vite.config.ts',
+  'wrangler.jsonc',
+  'wrangler.staging.jsonc',
 ])
 
 function fail(message) { throw new Error(`[cabinet-release] ${message}`) }

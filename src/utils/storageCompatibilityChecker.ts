@@ -15,6 +15,7 @@
  * - UC Davis Chemical Safety Guidelines
  */
 
+import { normalizeShelfDividers } from './shelfSections';
 import type {
     ReagentPlacement,
     StorageClassification,
@@ -477,23 +478,24 @@ const STORAGE_RULES: StorageRule[] = [
 interface ClassifiedItem {
     item: ReagentPlacement;
     groups: StorageGroup[];
+    compartment: number;
 }
 
 /**
- * Check storage compatibility for all items on a shelf.
- * Visual shelf dividers do not prove chemical segregation, so they never
- * suppress a compatibility warning.
+ * Check storage compatibility within each separate shelf compartment.
+ * Dividers model physical compartment walls in the 3D cabinet.
  * Returns deduplicated warnings sorted by severity.
  */
-export function checkShelfCompatibility(items: ReagentPlacement[], _dividers: number[] = []): StorageWarning[] {
-    // Keep the parameter for existing callers; visual dividers do not prove segregation.
-    void _dividers;
+export function checkShelfCompatibility(items: ReagentPlacement[], dividers: number[] = []): StorageWarning[] {
     if (items.length < 2) return [];
+    const boundaries = normalizeShelfDividers(dividers);
 
     // Pre-classify all items
     const classified: ClassifiedItem[] = items.map(item => ({
         item,
         groups: classifyStorageGroups(item),
+        // Placement positions are left edges; use the rendered container center.
+        compartment: boundaries.filter((boundary) => item.position + item.width / 2 >= boundary).length,
     }));
 
     const warnings: StorageWarning[] = [];
@@ -504,6 +506,7 @@ export function checkShelfCompatibility(items: ReagentPlacement[], _dividers: nu
         for (let j = i + 1; j < classified.length; j++) {
             const a = classified[i];
             const b = classified[j];
+            if (a.compartment !== b.compartment) continue;
 
             // Check each rule
             for (const rule of STORAGE_RULES) {

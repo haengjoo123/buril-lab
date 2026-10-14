@@ -1084,7 +1084,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                 const storageGroups = storageClassification.groups;
                                 const groupLabels = getStorageGroupLabels(storageGroups);
                                 const currentShelf = shelves.find(s => s.items.some(i => i.id === selectedReagentId));
-                                const shelfWarnings = currentShelf ? checkShelfCompatibility(currentShelf.items).filter(
+                                const shelfWarnings = currentShelf ? checkShelfCompatibility(currentShelf.items, currentShelf.dividers).filter(
                                     w => w.itemA === selectedItem.name || w.itemB === selectedItem.name
                                 ) : [];
                                 const visibleShelfWarnings = isStorageWarningsExpanded
