@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import i18n from '../../locales/i18n';
+
+// These assertions deliberately verify Korean UI copy, independent of host locale.
+beforeEach(async () => { await i18n.changeLanguage('ko'); });
+
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   MATRIX_LABELS,
   canonicalComponentDisplayKey,
@@ -8,6 +13,15 @@ import {
 } from './opsAnalyticsLabels'
 
 describe('opsAnalyticsLabels', () => {
+  it('updates translated labels when the language changes after import', async () => {
+    expect(opsAnalyticsLabel('aqueous', MATRIX_LABELS)).toBe('물·수용액')
+    await i18n.changeLanguage('en')
+    expect(opsAnalyticsLabel('aqueous', MATRIX_LABELS)).toBe('Water / aqueous solution')
+    expect(canonicalComponentDisplayKey('name:sample')).toBe('Name sample')
+    await i18n.changeLanguage('ko')
+    expect(canonicalComponentDisplayKey('name:sample')).toBe('명칭 sample')
+  })
+
   it('removes a redundant English chemical name from a Korean display name', () => {
     expect(koreanChemicalDisplayName('수산화나트륨 (Sodium Hydroxide)')).toBe('수산화나트륨')
     expect(koreanChemicalDisplayName('벤조일아세톤 (Benzoylacetone)')).toBe('벤조일아세톤')

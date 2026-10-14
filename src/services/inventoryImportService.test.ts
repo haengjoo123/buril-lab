@@ -1,3 +1,8 @@
+import i18n from '../locales/i18n';
+
+// These assertions deliberately verify Korean UI copy, independent of host locale.
+beforeEach(async () => { await i18n.changeLanguage('ko'); });
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildImportRows, detectTables } from '../features/inventory/import/tables'
 import { gridFromText } from '../features/inventory/import/readers'
