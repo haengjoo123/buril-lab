@@ -6,9 +6,8 @@ import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 
 export const ADVISOR_CLI_VERSION = '2.115.0'
 export const BASELINE_ENVIRONMENTS = ['production', 'staging']
-// production.json preserves the last actual production observation. The
-// candidate's post-migration expectation is derived separately below.
-export const EXPECTED_COUNTS = Object.freeze({ production: 60, staging: 68 })
+// Both environments were observed after the waste-container migration.
+export const EXPECTED_COUNTS = Object.freeze({ production: 73, staging: 73 })
 export const CABINET_ADVISOR_ADDITIONS = Object.freeze([
   ['commit_inventory_import_batch_v1', 'p_job_id uuid, p_revision integer, p_rows jsonb'],
   ['create_cabinet_v2', 'p_name text, p_location text, p_width integer, p_height integer, p_depth integer, p_lab_id uuid'],
@@ -581,35 +580,8 @@ export function compareObservedWithBaseline(baseline, observedEntries, { include
 export function buildProductionCabinetExpectation(production, staging, options) {
   validateBaseline(production, 'production', options)
   validateBaseline(staging, 'staging', options)
-  const previousKeys = new Set(production.entries.map(entry => entry.cache_key))
-  // Existing findings, including their role evidence, cannot be silently
-  // replaced or removed when the new RPC findings are reviewed.
-  compareObservedWithBaseline(production, staging.entries.filter(entry => previousKeys.has(entry.cache_key)))
-  const additions = staging.entries.filter(entry => !previousKeys.has(entry.cache_key))
-  const expectedKeys = CABINET_ADVISOR_ADDITIONS.map(([name, args]) =>
-    `authenticated_security_definer_function_executable_public_${name}_${args}`)
-  if (JSON.stringify(additions.map(entry => entry.cache_key)) !== JSON.stringify(expectedKeys)) {
-    fail('cabinet advisor additions differ from the eight reviewed RPC signatures')
-  }
-  for (const entry of additions) {
-    if (entry.rule !== 'authenticated_security_definer_function_executable' || entry.level !== 'WARN'
-      || entry.object.kind !== 'function' || entry.object.schema !== 'public'
-      || entry.object.language !== 'plpgsql' || entry.object.security_definer !== true
-      || entry.evidence.kind !== 'function_execute' || entry.evidence.anon_execute !== false
-      || entry.evidence.authenticated_execute !== true || entry.evidence.service_role_execute !== false
-      || entry.disposition !== 'temporary_open') {
-      fail('cabinet advisor additions differ from reviewed RPC permissions')
-    }
-    const [name, args] = CABINET_ADVISOR_ADDITIONS.find(([name]) => name === entry.object.name) || []
-    if (!name || entry.object.identity_arguments !== args) fail('cabinet advisor RPC identity differs from its cache key')
-  }
-  // This is an expectation, not a fabricated production observation. Hosted
-  // production verification must see all 68 entries after the SQL migration.
-  return {
-    environment: 'production', expected_count: 68,
-    observation_source: { environment: 'staging', observed_on: staging.observed_on },
-    entries: [...production.entries, ...additions].sort((left, right) => compareText(left.cache_key, right.cache_key)),
-  }
+  compareObservedWithBaseline(production, staging.entries)
+  return production
 }
 
 export function assertHostedEnvironment(environment, env = process.env) {

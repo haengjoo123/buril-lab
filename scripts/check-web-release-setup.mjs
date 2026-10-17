@@ -41,7 +41,7 @@ try {
     }
     const variables = names(`environments/${environment}/variables`, 'variables')
     for (const name of ['SUPABASE_PROJECT_REF', 'VITE_ENABLE_WASTE_V2', 'VITE_ENABLE_PH_PREDICTION',
-      'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS']) {
+      'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS', 'VITE_ENABLE_WASTE_CONTAINERS']) {
       if (!variables.has(name)) issue(`${environment}: missing variable ${name}`)
     }
     for (const name of ['EPHEMERAL_PROVIDER_CREATION_PENDING', 'EPHEMERAL_LEASE_GRANT']) {

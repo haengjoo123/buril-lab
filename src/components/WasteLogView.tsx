@@ -9,7 +9,7 @@ import {
     type WasteLogItemRecord,
     type WasteLogRecord,
 } from '../services/wasteLogService';
-import type { DisposalCategory, WasteStreamCode } from '../types';
+import type { DisposalCategory } from '../types';
 import { useTranslation } from 'react-i18next';
 import { PencilLine, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download, CheckCircle2 } from 'lucide-react';
 import { useLabStore } from '../store/useLabStore';
@@ -28,6 +28,10 @@ import {
     getAuditDetailSections,
 } from '../utils/auditLogFormatting';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
+import { HAZARD_FLAG_LABELS, WASTE_STREAM_LABELS, getCategoryColor } from '../utils/wasteLabels';
+import { isWasteContainersEnabled } from '../config/featureFlags';
+import { WasteContainersPanel } from '../features/wasteContainers/WasteContainersPanel';
+import { containerCopy } from '../features/wasteContainers/copy';
 import { useAuth } from '../hooks/useAuth';
 import { formatGhsStatementList } from '../data/ghsCodes';
 import {
@@ -69,18 +73,6 @@ const DISPOSAL_CATEGORY_VALUES = new Set<string>([
     'UNKNOWN',
 ]);
 
-const WASTE_STREAM_LABELS: Record<WasteStreamCode, { ko: string; en: string }> = {
-    ACID_AQUEOUS: { ko: '산성 수계 폐액', en: 'Acidic aqueous waste' },
-    ALKALI_AQUEOUS: { ko: '알칼리성 수계 폐액', en: 'Alkaline aqueous waste' },
-    ORGANIC_HALOGENATED: { ko: '할로겐 유기 폐액', en: 'Halogenated organic waste' },
-    ORGANIC_NON_HALOGENATED: { ko: '비할로겐 유기 폐액', en: 'Non-halogenated organic waste' },
-    HEAVY_METAL: { ko: '중금속 함유 폐기물', en: 'Heavy-metal waste' },
-    CYANIDE_SULFIDE: { ko: '시안·황화물 계열', en: 'Cyanide or sulfide waste' },
-    REACTIVE_OXIDIZER: { ko: '반응성·산화성 폐기물', en: 'Reactive or oxidizing waste' },
-    SOLID_CONTAMINATED: { ko: '오염 고체·슬러리', en: 'Contaminated solid or slurry' },
-    AQUEOUS_OTHER: { ko: '기타 수계 폐액', en: 'Other aqueous waste' },
-    SPECIAL_REVIEW: { ko: '분리 보관·특별 검토', en: 'Isolate and review' },
-};
 
 function formatWasteStream(code: WasteLogRecord['stream_code'], language: string): string | null {
     if (!code) return null;
@@ -194,25 +186,6 @@ function getWasteChemicalConcentration(value: unknown): string | null {
     return [legacyVolume, legacyMolarity].filter(Boolean).join(' • ');
 }
 
-const HAZARD_FLAG_LABELS: Record<string, { ko: string; en: string }> = {
-    FLAMMABLE: { ko: '인화성', en: 'Flammable' },
-    OXIDIZER: { ko: '산화성', en: 'Oxidizer' },
-    EXPLOSIVE: { ko: '폭발성', en: 'Explosive' },
-    SELF_REACTIVE: { ko: '자기반응성', en: 'Self-reactive' },
-    WATER_REACTIVE: { ko: '수반응성', en: 'Water-reactive' },
-    PYROPHORIC: { ko: '자연발화성', en: 'Pyrophoric' },
-    CORROSIVE: { ko: '부식성', en: 'Corrosive' },
-    ACUTE_TOXIC: { ko: '급성독성', en: 'Acute toxicity' },
-    CMR: { ko: '발암성·생식독성', en: 'CMR hazard' },
-    ENVIRONMENTAL_HAZARD: { ko: '환경유해성', en: 'Environmental hazard' },
-    CYANIDE: { ko: '시안', en: 'Cyanide' },
-    SULFIDE: { ko: '황화물', en: 'Sulfide' },
-    HEAVY_METAL: { ko: '중금속', en: 'Heavy metal' },
-    HYDROFLUORIC_ACID: { ko: '불산(HF)', en: 'Hydrofluoric acid (HF)' },
-    FLUORIDE: { ko: '불화물', en: 'Fluoride' },
-    REACTIVE: { ko: '반응성', en: 'Reactive' },
-    UNKNOWN_COMPONENT: { ko: '미상 성분', en: 'Unknown component' },
-};
 
 function formatHazardFlag(flag: string, language: string): string {
     const label = HAZARD_FLAG_LABELS[flag];
@@ -585,6 +558,8 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [searchInput, setSearchInput] = useState('');
     const [activeTab, setActiveTab] = useState<LogViewTab>('recent');
+    const [showContainers, setShowContainers] = useState(false);
+    const containersVisible = isWasteContainersEnabled && showContainers;
     const [dateRange, setDateRange] = useState<LogDateRange>('30d');
     const [sortBy, setSortBy] = useState<WasteLogSortBy>('created_at');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -1539,7 +1514,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
     return (
         <div className="p-5 lg:p-8" style={{ paddingBottom: '100px' }}>
-            <div className="mx-auto grid w-full max-w-[1320px] grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
+            <div className={`mx-auto grid w-full max-w-[1320px] grid-cols-1 gap-6 lg:items-start lg:gap-8 ${containersVisible ? '' : 'lg:grid-cols-[minmax(0,1fr)_360px]'}`}>
                 <div className="flex min-w-0 flex-col gap-4">
             {showOnboardingGuide && (
                 <OnboardingGuideCard
@@ -1625,12 +1600,15 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                     ['recent', t('log_tab_recent')],
                     ['archive', t('log_tab_archive')],
                 ] as Array<[LogViewTab, string]>).map(([value, label]) => {
-                    const isActive = activeTab === value;
+                    const isActive = !containersVisible && activeTab === value;
                     return (
                         <button
                             key={value}
                             type="button"
-                            onClick={() => setActiveTab(value)}
+                            onClick={() => {
+                                setShowContainers(false);
+                                setActiveTab(value);
+                            }}
                             className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${isActive
                                     ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
                                     : 'bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700'
@@ -1640,8 +1618,29 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         </button>
                     );
                 })}
+                {isWasteContainersEnabled && (
+                    <button
+                        type="button"
+                        onClick={() => setShowContainers(true)}
+                        className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${containersVisible
+                                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                                : 'bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700'
+                            }`}
+                    >
+                        {containerCopy(i18n.language).tab}
+                    </button>
+                )}
             </div>
 
+            {containersVisible ? (
+                <WasteContainersPanel
+                    key={currentLabId ?? 'personal'}
+                    labId={currentLabId}
+                    labName={myLabs.find((membership) => membership.lab_id === currentLabId)?.lab?.name ?? null}
+                    canCollect={!currentLabId || myLabs.find((membership) => membership.lab_id === currentLabId)?.role === 'admin'}
+                    language={i18n.language}
+                />
+            ) : (<>
             <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-slate-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-slate-200">
                 <div className="font-medium">{t('log_management_policy_title')}</div>
                 <div className="mt-1 text-slate-600 dark:text-slate-300">
@@ -1821,9 +1820,10 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                     <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
                 </div>
             )}
+            </>)}
                 </div>
 
-                <aside className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
+                <aside className={`hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${containersVisible ? '' : 'lg:block'}`}>
                     <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-slate-800">
                         <div>
                             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('log_title')}</h3>
@@ -2252,16 +2252,6 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 };
 
 /** Map disposal category label to a color dot */
-function getCategoryColor(category: string): string {
-    const lower = category.toLowerCase();
-    if (lower.includes('할로겐') || lower.includes('halogen')) return 'bg-purple-500';
-    if (lower.includes('유기') || lower.includes('organic')) return 'bg-orange-500';
-    if (lower.includes('산') || lower.includes('acid')) return 'bg-red-500';
-    if (lower.includes('알칼리') || lower.includes('alkali')) return 'bg-blue-500';
-    if (lower.includes('주의') || lower.includes('warn')) return 'bg-yellow-500';
-    return 'bg-gray-400';
-}
-
 function getLocationBadgeClass(location?: string | null): string {
     const lower = (location || '').toLowerCase();
     if (lower.includes('시약장') || lower.includes('cabinet')) {

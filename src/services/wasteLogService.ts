@@ -52,6 +52,8 @@ export interface WasteLogRecord extends WasteLog {
     voided_at?: string | null;
     voided_by?: string | null;
     void_reason?: string | null;
+    /** Physical container this deposit went into, when the lab tracks containers. */
+    container_id?: string | null;
 }
 
 export interface WasteLogItemDataSource {
@@ -113,6 +115,12 @@ export interface RecordWasteHandlingV2Params {
     phPredictionSnapshot?: PhPredictionSnapshot;
     /** Reuse this UUID when retrying the same user action. */
     requestId?: string;
+    /**
+     * Physical container receiving a ready container_deposit. The database
+     * records the deposit and the link in one transaction and rejects a
+     * container from another scope, another stream, or one that is not active.
+     */
+    containerId?: string;
 }
 
 export interface WasteHandlingReceipt {
@@ -130,6 +138,8 @@ export interface WasteHandlingReceipt {
         containerLabel: string | null;
         location: string | null;
     };
+    /** Present only when the deposit was attached to a physical container. */
+    containerId: string | null;
 }
 
 export interface VoidWasteLogReceipt {
@@ -784,6 +794,14 @@ export async function recordWasteHandlingV2(
     const requestId = params.requestId || createRequestId();
     assertUuid(requestId, 'requestId');
 
+    const containerId = params.containerId || null;
+    if (containerId) {
+        assertUuid(containerId, 'containerId');
+        if (params.handlingAction !== 'container_deposit' || params.decision.decisionStatus !== 'ready') {
+            throw new Error('Only a ready container deposit can be attached to a waste container.');
+        }
+    }
+
     const pBatch = buildWasteHandlingRpcPayload(params);
     const currentLabId = useLabStore.getState().currentLabId;
     const labId = params.batch.labId || null;
@@ -852,18 +870,34 @@ export async function recordWasteHandlingV2(
     }
 
     const { data, error } = inventoryItems.length > 0
-        ? await supabase.rpc('record_inventory_disposal_v2', {
-            p_request_id: requestId,
-            p_items: inventoryItems,
-            p_batch: pBatch,
-            p_lab_id: labId,
-            p_actor_name: null,
-        })
-        : await supabase.rpc('record_waste_handling_v2', {
-            p_request_id: requestId,
-            p_batch: pBatch,
-            p_lab_id: labId,
-        });
+        ? containerId
+            ? await supabase.rpc('record_inventory_disposal_to_container_v1', {
+                p_request_id: requestId,
+                p_items: inventoryItems,
+                p_batch: pBatch,
+                p_lab_id: labId,
+                p_actor_name: null,
+                p_container_id: containerId,
+            })
+            : await supabase.rpc('record_inventory_disposal_v2', {
+                p_request_id: requestId,
+                p_items: inventoryItems,
+                p_batch: pBatch,
+                p_lab_id: labId,
+                p_actor_name: null,
+            })
+        : containerId
+            ? await supabase.rpc('record_waste_deposit_to_container_v1', {
+                p_request_id: requestId,
+                p_batch: pBatch,
+                p_lab_id: labId,
+                p_container_id: containerId,
+            })
+            : await supabase.rpc('record_waste_handling_v2', {
+                p_request_id: requestId,
+                p_batch: pBatch,
+                p_lab_id: labId,
+            });
 
     if (error) {
         console.error('Failed to record V2 waste handling:', error);
@@ -904,6 +938,10 @@ export async function recordWasteHandlingV2(
     if (inventoryItems.length > 0) {
         validateInventoryDisposalReceipt(row, inventoryItems);
     }
+    const returnedContainerId = row.container_id ?? row.containerId ?? null;
+    if (containerId && returnedContainerId !== containerId) {
+        throw new Error('The waste handling RPC did not confirm the selected container.');
+    }
 
     const validatedHandlingAction = returnedHandlingAction as HandlingAction;
     const validatedDecisionStatus = returnedDecisionStatus as WasteDecision['decisionStatus'];
@@ -931,6 +969,7 @@ export async function recordWasteHandlingV2(
                 : null,
             location: typeof streamSnapshot.location === 'string' ? streamSnapshot.location : null,
         },
+        containerId: containerId ? containerId : null,
     };
 }
 

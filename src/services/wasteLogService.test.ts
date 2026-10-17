@@ -437,6 +437,62 @@ describe('wasteLogService V2 mutations', () => {
         expect(mocks.from).not.toHaveBeenCalled();
     });
 
+    it('records a container deposit through the container RPC and checks the returned container', async () => {
+        const containerId = '77777777-7777-4777-8777-777777777777';
+        const receipt = {
+            id: LOG_ID,
+            created_at: '2026-10-17T01:00:00.000Z',
+            request_id: REQUEST_ID,
+            schema_version: 2,
+            record_origin: 'waste_batch',
+            handling_action: 'container_deposit',
+            decision_status: 'ready',
+            stream_code: 'ORGANIC_NON_HALOGENATED',
+            stream_snapshot: {
+                streamCode: 'ORGANIC_NON_HALOGENATED',
+                displayNameKo: '비할로겐 유기용매 폐액',
+                displayNameEn: 'Non-halogenated organic waste',
+            },
+        };
+        mocks.rpc.mockResolvedValueOnce({ data: { ...receipt, container_id: containerId }, error: null });
+
+        const result = await recordWasteHandlingV2({
+            batch: createBatch(),
+            decision: createDecision(),
+            handlingAction: 'container_deposit',
+            requestId: REQUEST_ID,
+            containerId,
+        });
+
+        expect(result.containerId).toBe(containerId);
+        expect(mocks.rpc).toHaveBeenCalledWith('record_waste_deposit_to_container_v1', {
+            p_request_id: REQUEST_ID,
+            p_batch: expect.objectContaining({ handlingAction: 'container_deposit' }),
+            p_lab_id: mocks.labState.currentLabId,
+            p_container_id: containerId,
+        });
+
+        mocks.rpc.mockResolvedValueOnce({ data: { ...receipt, container_id: '88888888-8888-4888-8888-888888888888' }, error: null });
+        await expect(recordWasteHandlingV2({
+            batch: createBatch(),
+            decision: createDecision(),
+            handlingAction: 'container_deposit',
+            requestId: REQUEST_ID,
+            containerId,
+        })).rejects.toThrow('did not confirm the selected container');
+    });
+
+    it('refuses to attach a container to anything but a ready container deposit', async () => {
+        await expect(recordWasteHandlingV2({
+            batch: createBatch(),
+            decision: { ...createDecision(), decisionStatus: 'blocked', allowedActions: ['isolated', 'handover'] },
+            handlingAction: 'isolated',
+            requestId: REQUEST_ID,
+            containerId: '77777777-7777-4777-8777-777777777777',
+        })).rejects.toThrow('Only a ready container deposit');
+        expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+
     it('rejects a container deposit when the deterministic decision is blocked', async () => {
         const blocked: WasteDecision = {
             ...createDecision(),
