@@ -96,6 +96,7 @@ jobs:
       VITE_INTERNAL_API_BASE_URL: ${{ needs.select.outputs.environment == 'staging' && 'https://staging.burillab.com' || 'https://burillab.com' }}
       VITE_AUTH_REDIRECT_URL: ${{ needs.select.outputs.environment == 'staging' && 'https://staging.burillab.com/auth/callback' || 'https://burillab.com/auth/callback' }}
       VITE_ENABLE_WASTE_V2: ${{ vars.VITE_ENABLE_WASTE_V2 }}
+      VITE_ENABLE_WASTE_CONTAINERS: ${{ vars.VITE_ENABLE_WASTE_CONTAINERS }}
       VITE_ENABLE_PH_PREDICTION: ${{ vars.VITE_ENABLE_PH_PREDICTION }}
       VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
       VITE_ENABLE_SEARCH_ANALYTICS: ${{ vars.VITE_ENABLE_SEARCH_ANALYTICS }}
@@ -159,6 +160,7 @@ jobs:
       BURILLAB_RUNTIME_CONFIG_KV_ID: ${{ secrets.BURILLAB_RUNTIME_CONFIG_KV_ID }}
       STAGING_KOSHA_CONTENT_MODE: link_only
       VITE_ENABLE_WASTE_V2: ${{ vars.VITE_ENABLE_WASTE_V2 }}
+      VITE_ENABLE_WASTE_CONTAINERS: ${{ vars.VITE_ENABLE_WASTE_CONTAINERS }}
       VITE_ENABLE_PH_PREDICTION: ${{ vars.VITE_ENABLE_PH_PREDICTION }}
       VITE_ENABLE_CHEMICAL_ENRICHMENT: ${{ vars.VITE_ENABLE_CHEMICAL_ENRICHMENT }}
       VITE_ENABLE_SEARCH_ANALYTICS: ${{ vars.VITE_ENABLE_SEARCH_ANALYTICS }}

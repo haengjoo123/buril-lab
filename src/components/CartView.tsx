@@ -34,7 +34,11 @@ import { getAIDisposalGuide, type DisposalGuideResult } from '../services/aiDisp
 import { getActiveWastePolicyV2, type ActiveWastePolicy } from '../services/wastePolicyService';
 import { recordWasteHandlingV2, type WasteHandlingReceipt } from '../services/wasteLogService';
 import { translateGHS } from '../data/ghsCodes';
-import { isPhPredictionEnabled } from '../config/featureFlags';
+import { isPhPredictionEnabled, isWasteContainersEnabled } from '../config/featureFlags';
+import { useContainerSelection } from '../features/wasteContainers/useContainerSelection';
+import { ContainerDepositPicker } from '../features/wasteContainers/ContainerDepositPicker';
+import { containerCopy, containerErrorMessage } from '../features/wasteContainers/copy';
+import { toWasteContainerError } from '../services/wasteContainerService';
 import {
     getPredictedPhForRouting,
     hashPredictionInput,
@@ -287,6 +291,7 @@ export const CartView: React.FC<CartViewProps> = ({
     const [saveError, setSaveError] = useState<string | null>(null);
     const [policyGuardMessage, setPolicyGuardMessage] = useState<string | null>(null);
     const [receipt, setReceipt] = useState<WasteHandlingReceipt | null>(null);
+    const [receiptContainerLabel, setReceiptContainerLabel] = useState<string | null>(null);
     const [policy, setPolicy] = useState<ActiveWastePolicy | null>(null);
     const [policyLoading, setPolicyLoading] = useState(true);
     const [aiResult, setAiResult] = useState<DisposalGuideResult | null>(null);
@@ -472,6 +477,11 @@ export const CartView: React.FC<CartViewProps> = ({
     const requiresFluorideCompatibleContainer =
         decision.hazardFlags.includes('HYDROFLUORIC_ACID') ||
         decision.hazardFlags.includes('FLUORIDE');
+    const containerSelection = useContainerSelection(
+        isWasteContainersEnabled && decision.decisionStatus === 'ready',
+        decision.decisionStatus === 'ready' ? decision.streamCode : null,
+        currentLabId ?? 'personal',
+    );
     const isKorean = i18n.language.toLowerCase().startsWith('ko');
     const streamName = matchedStream
         ? (isKorean ? matchedStream.displayNameKo : matchedStream.displayNameEn)
@@ -986,6 +996,17 @@ export const CartView: React.FC<CartViewProps> = ({
                 return;
             }
 
+            const containerIdForRecord = handlingAction === 'container_deposit'
+                ? containerSelection.selectedId
+                : null;
+            if (handlingAction === 'container_deposit' && containerSelection.needsChoice) {
+                setPolicyGuardMessage(containerCopy(i18n.language).pickerChoose);
+                return;
+            }
+            const containerLabelForRecord = containerIdForRecord ? containerSelection.selected?.label ?? null : null;
+            // The container is deliberately not part of the fingerprint: if a first attempt
+            // committed but its response was lost, retrying with the same request id cannot
+            // create a second deposit; the server rejects moving it into another container.
             const attemptFingerprint = `${handlingAction}:${requestPayloadFingerprint}`;
             if (requestFingerprintRef.current !== attemptFingerprint) {
                 requestIdRef.current = createRequestId();
@@ -1000,6 +1021,7 @@ export const CartView: React.FC<CartViewProps> = ({
                 handlingAction,
                 memo,
                 requestId,
+                ...(containerIdForRecord ? { containerId: containerIdForRecord } : {}),
                 ...(predictionForAudit ? {
                     phPredictionSnapshot: createPhPredictionAuditSnapshot(
                         predictionForAudit,
@@ -1017,13 +1039,20 @@ export const CartView: React.FC<CartViewProps> = ({
                 },
             });
             setReceipt(result);
+            setReceiptContainerLabel(result.containerId ? containerLabelForRecord : null);
             rememberCurrentMatrix();
             clearCart();
             requestIdRef.current = null;
             requestFingerprintRef.current = null;
             onDisposed?.();
         } catch (error) {
-            setSaveError(error instanceof Error ? error.message : t('waste_record_failed'));
+            const containerError = toWasteContainerError(error);
+            if (containerError.code !== 'unknown') {
+                setSaveError(containerErrorMessage(containerError.code, i18n.language));
+                containerSelection.refresh();
+            } else {
+                setSaveError(error instanceof Error ? error.message : t('waste_record_failed'));
+            }
         } finally {
             setIsSaving(false);
         }
@@ -1142,6 +1171,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                 )}
                             </dd>
                         </div>
+                        {receipt.containerId && receiptContainerLabel && (
+                            <div className="mt-2 flex justify-between gap-4">
+                                <dt className="text-slate-500">{containerCopy(i18n.language).receiptContainer}</dt>
+                                <dd className="text-right font-semibold text-slate-900 dark:text-white">{receiptContainerLabel}</dd>
+                            </div>
+                        )}
                     </dl>
                     <div aria-live="polite" className="sr-only">{t('waste_record_success')}</div>
                     <div className="mt-5 grid grid-cols-2 gap-3">
@@ -2436,6 +2471,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                         <span>{matchedStream.location}</span>
                                     </div>
                                 )}
+                                <ContainerDepositPicker selection={containerSelection} language={i18n.language} disabled={isSaving} />
                                 <div className="rounded-xl bg-white/60 p-3 dark:bg-slate-900/30">
                                     <dl className="grid gap-2 sm:grid-cols-[auto_1fr] sm:gap-x-4">
                                         <dt className="font-semibold text-slate-600 dark:text-slate-300">{t('waste_label_component_names')}</dt>
@@ -2754,7 +2790,8 @@ export const CartView: React.FC<CartViewProps> = ({
                     {decision.decisionStatus === 'ready' ? (
                         <button
                             onClick={() => recordAction('container_deposit')}
-                            disabled={!isOnline || isSaving || policyLoading || hasInvalidNumericInput}
+                            disabled={!isOnline || isSaving || policyLoading || hasInvalidNumericInput
+                                || containerSelection.loading || containerSelection.needsChoice}
                             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-12"
                         >
                             {isSaving && <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />}

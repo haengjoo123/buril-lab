@@ -12,8 +12,8 @@ select is(
     where n.nspname = 'public'
       and c.relkind in ('r', 'p')
   ),
-  53::bigint,
-  'reviewed baseline exposes exactly 53 public tables through cabinet trash'
+  54::bigint,
+  'reviewed baseline exposes exactly 54 public tables through waste containers'
 );
 
 select is(
@@ -105,7 +105,7 @@ select is(
       and c.relkind in ('r', 'p')
       and r.rolname = 'authenticated'
   ),
-  36::bigint,
+  37::bigint,
   'authenticated has the reviewed explicit table GRANT set'
 );
 
@@ -120,7 +120,7 @@ select is(
       and c.relkind in ('r', 'p')
       and r.rolname = 'service_role'
   ),
-  53::bigint,
+  54::bigint,
   'service_role has an explicit GRANT on all public tables'
 );
 

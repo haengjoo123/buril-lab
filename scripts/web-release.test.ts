@@ -11,7 +11,7 @@ import { verifyCabinetRelease } from './verify-cabinet-release.mjs'
 const commit = 'a'.repeat(40)
 const newer = 'b'.repeat(40)
 const now = Date.parse('2026-10-13T20:00:00Z')
-const features = { VITE_ENABLE_WASTE_V2: 'true', VITE_ENABLE_PH_PREDICTION: 'true', VITE_ENABLE_CHEMICAL_ENRICHMENT: 'true', VITE_ENABLE_SEARCH_ANALYTICS: 'false' }
+const features = { VITE_ENABLE_WASTE_V2: 'true', VITE_ENABLE_PH_PREDICTION: 'true', VITE_ENABLE_CHEMICAL_ENRICHMENT: 'true', VITE_ENABLE_SEARCH_ANALYTICS: 'false', VITE_ENABLE_WASTE_CONTAINERS: 'true' }
 function run(overrides = {}) {
   return { id: 100, run_attempt: 1, path: WORKFLOW, event: 'workflow_run', head_branch: 'main', head_sha: commit,
     repository: { full_name: REPOSITORY }, head_repository: { full_name: REPOSITORY },

@@ -17,6 +17,11 @@ export function isExplicitlyDisabled(value: string | undefined): boolean {
 export const isWasteV2Enabled = !isExplicitlyDisabled(import.meta.env.VITE_ENABLE_WASTE_V2)
 /** Enable only after the additive import migration and AI endpoint are deployed. */
 export const isInventoryImportV2Enabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INVENTORY_IMPORT_V2)
+/**
+ * Physical waste containers (폐액통 단위 기록·표지). Enable only after the
+ * 20261017090000_waste_containers migration is applied to that environment.
+ */
+export const isWasteContainersEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_WASTE_CONTAINERS)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

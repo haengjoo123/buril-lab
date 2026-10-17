@@ -37,6 +37,7 @@ const ENTITY_KEY: Record<string, string> = {
     cabinet_activity: 'audit_entity_cabinet_activity',
     cabinet: 'audit_entity_cabinet',
     waste_log: 'audit_entity_waste_log',
+    waste_container: 'audit_entity_waste_container',
 };
 
 const FIELD_KEY: Record<string, string> = {
@@ -58,6 +59,9 @@ const FIELD_KEY: Record<string, string> = {
     storage_type: 'audit_field_storage_type',
     cabinet_id: 'audit_field_cabinet_id',
     storage_location_id: 'audit_field_storage_location_id',
+    status: 'audit_field_waste_container_status',
+    location: 'audit_field_waste_container_location',
+    stream_code: 'audit_field_waste_container_stream',
 };
 
 const FIELD_ORDER = [

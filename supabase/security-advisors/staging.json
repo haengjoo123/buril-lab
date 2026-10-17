@@ -2,8 +2,8 @@
   "schema_version": 1,
   "environment": "staging",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 68,
-  "observed_on": "2026-10-02",
+  "expected_count": 73,
+  "observed_on": "2026-10-18",
   "entries": [
     {
       "cache_key": "authenticated_security_definer_function_executable_public_activate_waste_policy_v2_p_policy_version_id uuid",
@@ -264,6 +264,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_waste_container_v1_p_lab_id uuid, p_stream_code text, p_label text, p_location text, p_capacity_ml numeric",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_waste_container_v1",
+        "identity_arguments": "p_lab_id uuid, p_stream_code text, p_label text, p_location text, p_capacity_ml numeric",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "create_waste_container_v1: authenticated callers are intentionally allowed through this RPC. Reviewed fixed search_path, caller scope checks before locking, admin-only collection and transactional deposit validation; anon execution and direct client DML remain denied. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-10-18",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_delete_inventory_item_atomic_p_item_id uuid, p_item_source text, p_item_name text, p_lab_id uuid, p_cabinet_id uuid, p_cabinet_name text, p_storage_location_name text, p_disposal_reason text, p_actor_name text",
@@ -864,6 +890,32 @@
       "target_gate": "운영 7 구 감사 RPC Contract와 함수 권한 재검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_inventory_disposal_to_container_v1_p_request_id uuid, p_items jsonb, p_batch jsonb, p_lab_id uuid, p_actor_name text, p_container_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_inventory_disposal_to_container_v1",
+        "identity_arguments": "p_request_id uuid, p_items jsonb, p_batch jsonb, p_lab_id uuid, p_actor_name text, p_container_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "record_inventory_disposal_to_container_v1: authenticated callers are intentionally allowed through this RPC. Reviewed fixed search_path, caller scope checks before locking, admin-only collection and transactional deposit validation; anon execution and direct client DML remain denied. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-10-18",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_record_inventory_disposal_v2_p_request_id uuid, p_items jsonb, p_batch jsonb, p_lab_id uuid, p_actor_name text",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -914,6 +966,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_waste_deposit_to_container_v1_p_request_id uuid, p_batch jsonb, p_lab_id uuid, p_container_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_waste_deposit_to_container_v1",
+        "identity_arguments": "p_request_id uuid, p_batch jsonb, p_lab_id uuid, p_container_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "record_waste_deposit_to_container_v1: authenticated callers are intentionally allowed through this RPC. Reviewed fixed search_path, caller scope checks before locking, admin-only collection and transactional deposit validation; anon execution and direct client DML remain denied. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-10-18",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_record_waste_handling_v2_p_request_id uuid, p_batch jsonb, p_lab_id uuid",
@@ -1202,6 +1280,32 @@
       "target_gate": "운영 7 연구실 비밀번호 권한 강화"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_set_waste_container_status_v1_p_container_id uuid, p_status text, p_note text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "set_waste_container_status_v1",
+        "identity_arguments": "p_container_id uuid, p_status text, p_note text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "set_waste_container_status_v1: authenticated callers are intentionally allowed through this RPC. Reviewed fixed search_path, caller scope checks before locking, admin-only collection and transactional deposit validation; anon execution and direct client DML remain denied. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-10-18",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_transfer_admin_target_lab_id uuid, new_admin_user_id uuid",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -1330,6 +1434,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_update_waste_container_v1_p_container_id uuid, p_label text, p_location text, p_capacity_ml numeric",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "update_waste_container_v1",
+        "identity_arguments": "p_container_id uuid, p_label text, p_location text, p_capacity_ml numeric",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "update_waste_container_v1: authenticated callers are intentionally allowed through this RPC. Reviewed fixed search_path, caller scope checks before locking, admin-only collection and transactional deposit validation; anon execution and direct client DML remain denied. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-10-18",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_upsert_lab_waste_stream_override_v2_p_lab_id uuid, p_stream_code text, p_container_label text, p_container_color text, p_location text, p_handler_contact text, p_replacement_location text, p_is_disabled boolean",

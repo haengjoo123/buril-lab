@@ -300,9 +300,9 @@ describe('Supabase hosted Security Advisor contract', () => {
       schema_version: 1,
       environment: 'production',
       advisor_cli_version: '2.115.0',
-      expected_count: 60,
+      expected_count: 73,
       observed_on: '2026-08-24',
-      entries: Array.from({ length: 60 }, (_, index) => ({
+      entries: Array.from({ length: 73 }, (_, index) => ({
         ...structuredClone(entries[index % entries.length]),
         cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
       })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1),
@@ -310,7 +310,7 @@ describe('Supabase hosted Security Advisor contract', () => {
     baseline.entries[1].cache_key = baseline.entries[0].cache_key
     expect(() => validateBaseline(baseline, 'production', { today: '2026-08-24' })).toThrow()
 
-    baseline.entries = Array.from({ length: 60 }, (_, index) => ({
+    baseline.entries = Array.from({ length: 73 }, (_, index) => ({
       ...structuredClone(entries[index % entries.length]),
       cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
     })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1)
@@ -353,8 +353,8 @@ describe('Supabase hosted Security Advisor contract', () => {
 
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
-      { environment: 'production', findings: 60 },
-      { environment: 'staging', findings: 68 },
+      { environment: 'production', findings: 73 },
+      { environment: 'staging', findings: 73 },
     ])
 
     const production = loadBaseline('production', { today: '2026-08-24' })
@@ -370,21 +370,21 @@ describe('Supabase hosted Security Advisor contract', () => {
     })
     expect(staging.entries.filter((entry) => productionKeys.has(entry.cache_key)).map(technicalProjection))
       .toEqual(production.entries.map(technicalProjection))
-    expect([...stagingKeys].filter((key) => !productionKeys.has(key))).toEqual(
-      CABINET_ADVISOR_ADDITIONS.map(([name, args]) =>
-        `authenticated_security_definer_function_executable_public_${name}_${args}`),
-    )
+    expect([...stagingKeys]).toEqual([...productionKeys])
+    for (const [name, args] of CABINET_ADVISOR_ADDITIONS) {
+      expect(stagingKeys.has(`authenticated_security_definer_function_executable_public_${name}_${args}`)).toBe(true)
+    }
   })
 
-  it('requires the migrated production catalog while preserving the actual prior observation', () => {
+  it('requires the exact converged production and staging catalogs', () => {
     const production = loadBaseline('production', { today: '2026-10-02' })
     const staging = loadBaseline('staging', { today: '2026-10-02' })
     const expected = buildProductionCabinetExpectation(production, staging, { today: '2026-10-02' })
-    expect(production.expected_count).toBe(60)
-    expect(production.observed_on).toBe('2026-09-05')
-    expect(expected).toMatchObject({ environment: 'production', expected_count: 68,
-      observation_source: { environment: 'staging', observed_on: '2026-10-02' } })
-    expect(() => compareObservedWithBaseline(expected, production.entries)).toThrow('missing=8')
+    expect(production.expected_count).toBe(73)
+    expect(production.observed_on).toBe('2026-10-18')
+    expect(expected).toMatchObject({ environment: 'production', expected_count: 73 })
+    expect(() => compareObservedWithBaseline(expected, production.entries)).not.toThrow()
+    expect(() => compareObservedWithBaseline(expected, production.entries.filter(entry => entry.object.name !== 'create_waste_container_v1'))).toThrow('missing=1')
     expect(() => compareObservedWithBaseline(expected, staging.entries)).not.toThrow()
 
     const anonymousGrant = structuredClone(staging.entries)
@@ -404,7 +404,7 @@ describe('Supabase hosted Security Advisor contract', () => {
     const newRpc = newGrant.entries.find((entry) => entry.object.name === 'get_cabinet_trash_v2')
     if (!newRpc) throw new Error('missing trash RPC')
     newRpc.evidence.service_role_execute = true
-    expect(() => buildProductionCabinetExpectation(production, newGrant)).toThrow('reviewed RPC permissions')
+    expect(() => buildProductionCabinetExpectation(production, newGrant)).toThrow('changed=1')
 
     const substitution = structuredClone(staging)
     const entry = substitution.entries.find((entry) => entry.object.name === 'get_cabinet_trash_v2')
