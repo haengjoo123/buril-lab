@@ -41,6 +41,7 @@ const POST_ROUTES = [
 ] as const
 
 const GET_ROUTES = [
+  '/api/chemicals/regulations',
   '/api/chemicals/suggest',
   '/api/kosha/msds',
 ] as const
