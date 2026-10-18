@@ -1,3 +1,4 @@
+import { AuditChangeList } from '../../../components/AuditChangeList';
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react';
 import { X, History, Loader2, User, PackagePlus, Trash2, AlertTriangle, FileEdit } from 'lucide-react';
@@ -209,7 +210,6 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                             const config = getActionConfig(log.action_type);
                             const reasonLabel = getReasonLabel(log.reason);
                             const displayName = log.performed_by_name;
-                            const hasDiff = log.diff_data && Object.keys(log.diff_data).length > 0;
                             return (
                                 <div
                                     key={log.id}
@@ -254,25 +254,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                                         )}
 
                                         {/* Diff Rendering */}
-                                        {hasDiff && (
-                                            <div className="mt-2 text-xs bg-slate-100 dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700">
-                                                <div className="font-semibold text-slate-600 dark:text-slate-400 mb-1">{t('msc_activity_changes')}</div>
-                                                {Object.entries(log.diff_data!).map(([k, v]) => (
-                                                    <div key={k} className="flex flex-col gap-0.5 mb-1 last:mb-0">
-                                                        <span className="text-slate-500 font-medium">{k}:</span>
-                                                        <div className="flex items-center gap-1 text-[10px]">
-                                                            <span className="bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-1 py-0.5 rounded break-all line-through">
-                                                                {JSON.stringify(v.from)}
-                                                            </span>
-                                                            <span className="text-slate-400">→</span>
-                                                            <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 px-1 py-0.5 rounded break-all">
-                                                                {JSON.stringify(v.to)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                        <AuditChangeList diff={log.diff_data} />
                                     </div>
 
                                     {/* Date */}

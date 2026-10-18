@@ -423,7 +423,7 @@ export const GlobalAuditLogsView: React.FC = () => {
                                                     </td>
                                                     <td className="px-3 py-3">{renderActionChip(log)}</td>
                                                     <td className="max-w-[12rem] truncate px-3 py-3 text-xs text-slate-500">
-                                                        {log.location_context || '-'}
+                                                        {formatAuditValue('location_context', log.location_context, t, i18n.language)}
                                                     </td>
                                                     <td className="px-3 py-3 text-right text-xs text-slate-500">
                                                         {new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}
@@ -459,8 +459,8 @@ export const GlobalAuditLogsView: React.FC = () => {
                                     <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
                                         {[
                                             [t('audit_actor_label'), selectedAuditLog.actor_name || t('audit_unknown')],
-                                            [t('audit_location_label'), selectedAuditLog.location_context || '-'],
-                                            [t('audit_entity_type_label'), selectedAuditLog.entity_id],
+                                            [t('audit_location_label'), formatAuditValue('location_context', selectedAuditLog.location_context, t, i18n.language)],
+                                            [t('audit_entity_type_label'), formatAuditEntityName(selectedAuditLog.entity_type, t)],
                                             [t('audit_filter_all_period'), new Date(selectedAuditLog.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')],
                                         ].map(([label, value]) => (
                                             <div key={label} className="flex items-start justify-between gap-3 py-2">
