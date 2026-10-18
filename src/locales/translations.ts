@@ -1529,6 +1529,15 @@ export const translations = {
         msds_incomplete: "일부 MSDS 항목({{sections}})을 불러오지 못했습니다. KOSHA 원문과 제조사 SDS를 확인한 뒤 다시 시도하세요.",
         msds_no_content: "내용 없음",
         msds_view: "MSDS 확인",
+        sds_links_title: "SDS (물질안전보건자료)",
+        sds_tier_manufacturer_product: "제조사 제품 페이지",
+        sds_tier_manufacturer_search: "제조사 SDS 검색",
+        sds_tier_public_reference: "KOSHA 공공 MSDS (참고용)",
+        sds_query_product_number: "제품번호 {{value}}",
+        sds_query_cas: "CAS {{value}}",
+        sds_reference_only_notice: "제조사 SDS 링크를 찾지 못해 공공 자료만 표시합니다. 정확한 제품의 SDS는 제조사에서 확인하세요.",
+        sds_no_links: "브랜드, 제품번호, CAS 번호를 입력하면 SDS 링크를 찾아드려요.",
+        sds_compact_label: "SDS",
 
         // Lab Management Tab (formerly Audit Log)
         tab_audit: "Lab 관리",
@@ -4106,6 +4115,15 @@ export const translations = {
         msds_incomplete: "Some MSDS sections ({{sections}}) could not be loaded. Check the KOSHA record and the manufacturer SDS, then retry.",
         msds_no_content: "No content",
         msds_view: "View MSDS",
+        sds_links_title: "SDS (Safety Data Sheet)",
+        sds_tier_manufacturer_product: "Manufacturer product page",
+        sds_tier_manufacturer_search: "Manufacturer SDS search",
+        sds_tier_public_reference: "KOSHA public MSDS (reference)",
+        sds_query_product_number: "Product no. {{value}}",
+        sds_query_cas: "CAS {{value}}",
+        sds_reference_only_notice: "No manufacturer SDS link was found, so only public reference data is shown. Check the manufacturer for the exact product SDS.",
+        sds_no_links: "Add a brand, product number, or CAS number to find SDS links.",
+        sds_compact_label: "SDS",
 
         // Lab Management Tab
         tab_audit: "Lab Mgmt",
