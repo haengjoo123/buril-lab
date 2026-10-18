@@ -6,6 +6,7 @@ import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { translateGHS } from '../data/ghsCodes';
 import { MsdsModal } from './MsdsModal';
+import { ChemicalRegulationPanel } from './ChemicalRegulationPanel';
 import { isValidCasNumber } from '../utils/casNumber';
 import { scanIdentityMatchesChemical } from '../utils/scanIdentity';
 import type { ScannerSelectionMeta } from './Scanner';
@@ -265,6 +266,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                         )}
                     </div>
                 )}
+
+                <ChemicalRegulationPanel casNumber={chemical.casNumber} className="mb-4 w-full" />
 
                 {/* Safety Warning if needed */}
                 {!isSafe && (

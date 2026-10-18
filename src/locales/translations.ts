@@ -1538,6 +1538,12 @@ export const translations = {
         sds_reference_only_notice: "제조사 SDS 링크를 찾지 못해 공공 자료만 표시합니다. 정확한 제품의 SDS는 제조사에서 확인하세요.",
         sds_no_links: "브랜드, 제품번호, CAS 번호를 입력하면 SDS 링크를 찾아드려요.",
         sds_compact_label: "SDS",
+        regulation_title: "법적 분류 (화학물질관리법)",
+        regulation_loading: "법적 분류를 확인하는 중입니다...",
+        regulation_none_hazardous: "유해화학물질(인체등유해성·허가·제한·금지·사고대비물질)로 분류되어 있지 않습니다.",
+        regulation_not_found: "한국환경공단 화학물질 정보에서 이 CAS 번호를 찾지 못했습니다.",
+        regulation_ke_number: "기존화학물질 번호 {{value}}",
+        regulation_source_note: "출처: 한국환경공단 화학물질 정보. 물질 단위 분류이며, 혼합물은 함량 기준을 함께 확인하세요.",
 
         // Lab Management Tab (formerly Audit Log)
         tab_audit: "Lab 관리",
@@ -4124,6 +4130,12 @@ export const translations = {
         sds_reference_only_notice: "No manufacturer SDS link was found, so only public reference data is shown. Check the manufacturer for the exact product SDS.",
         sds_no_links: "Add a brand, product number, or CAS number to find SDS links.",
         sds_compact_label: "SDS",
+        regulation_title: "Legal classification (Korea Chemicals Control Act)",
+        regulation_loading: "Checking legal classification...",
+        regulation_none_hazardous: "Not classified as a hazardous chemical (human/environmental hazard, permitted, restricted, banned, or accident-preparedness substance).",
+        regulation_not_found: "This CAS number was not found in the Korea Environment Corporation chemical database.",
+        regulation_ke_number: "Existing chemical no. {{value}}",
+        regulation_source_note: "Source: Korea Environment Corporation chemical information. This is a substance-level classification; for mixtures, also check the concentration thresholds.",
 
         // Lab Management Tab
         tab_audit: "Lab Mgmt",
