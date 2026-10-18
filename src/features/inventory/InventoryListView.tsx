@@ -38,6 +38,7 @@ import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/compo
 import { CustomDialog } from '../../components/CustomDialog';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
+import { SdsLinkList } from '../../components/SdsLinkList';
 import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
 import { getManufacturerDateLabelKey, hasManufacturerDate } from '../../utils/manufacturerDate';
 import { useFridgeStore } from '../../store/fridgeStore';
@@ -1711,6 +1712,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
                             {item.brand && <span>{item.brand}</span>}
                             {item.product_number && <span>{t('inventory_meta_pn')}: {item.product_number}</span>}
+                            <SdsLinkList
+                                variant="compact"
+                                brand={item.brand}
+                                productNumber={item.product_number}
+                                casNumber={item.cas_number}
+                            />
                         </div>
                         {(() => {
                             const hazard = classifyInventoryItemHazard(item);
@@ -2552,6 +2559,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 })()}
                             </div>
                         </div>
+
+                        <SdsLinkList
+                            brand={selectedDesktopItem.brand}
+                            productNumber={selectedDesktopItem.product_number}
+                            casNumber={selectedDesktopItem.cas_number}
+                        />
 
                         {readableImportAttributes(selectedDesktopItem.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">{t('inv_imported_source_info')}</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(selectedDesktopItem.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
