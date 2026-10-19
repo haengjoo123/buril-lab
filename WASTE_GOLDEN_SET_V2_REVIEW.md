@@ -190,9 +190,9 @@
 - 황산(H330), 질산(H271, H330), 포름알데하이드·글루타르알데하이드(H330), 에티디움 브로마이드(H330), 2-머캅토에탄올(H330), 브롬(H330)은 KOSHA 원물질 분류 때문에 blocked다. 묽은 실험 폐액에는 과도할 수 있어 사람 정책 결정이 필요하다(정책 질문 2).
 - 7647-01-0의 KOSHA 기록은 염산 용액이 아니라 무수 염화수소 기체여서 기존 상태 충돌 규칙에 따라 needs_input이다.
 - 탄산나트륨·탄산수소나트륨: PubChem SMILES가 있으면 탄산 이온이 "이온성 유기염"으로 판정되어 알칼리 정체가 사라지는 **분석기 버그**를 찾았다. 탄산·시안 같은 무기 탄소 이온은 이온성 유기염 판정에서 제외하도록 고쳤고(강화 방향), 단위 테스트를 추가했다. 기존 1,000행 결과는 변하지 않았다.
-- Tris-HCl·구아니딘 염산염은 염산염의 Cl 때문에 앱이 할로겐 유기 폐액으로 보낸다. 과보수이며 안전 문제는 아니지만, 빌드 게이트(ready stream mismatch 0) 때문에 정답은 현재 앱 답을 따르고 메모로 후속 과제를 표시했다.
-- EDTA는 한글 이름의 "아세트산" 부분 문자열로 산 정체가 잡힌다(Tween 20의 "모노로레인산"도 "인산"에 걸린다). 산 정체는 산+시안 차단 규칙과 연결되어 있어 이번에는 완화하지 않았다.
-- 구아니딘 티오시아네이트(RNA 추출 시약)는 유기 양이온 티오시아네이트라 앱이 시안 계열로 보지 않고 AQUEOUS_OTHER로 안내한다. 산·차아염소산과 섞이면 유독가스가 나오므로 사람 검토가 필요하다.
+- Tris-HCl·구아니딘 염산염은 염산염의 Cl 때문에 앱이 할로겐 유기 폐액으로 보냈다. **후속 수정:** 이름이 분자식의 할로겐 전부를 염산염(hydrohalide) 짝이온으로 밝히고 질소 염기가 있으면 이온성 유기염으로 보아 수용액 폐액은 AQUEOUS_OTHER로 보낸다. 짝이온 외 할로겐이 남으면(예: 2-클로로에틸아민 염산염) 할로겐 유기 경로를 유지한다. 정답도 AQUEOUS_OTHER로 바로잡았다(스크립트 역할 `hydrohalide`).
+- EDTA는 한글 이름의 "아세트산" 부분 문자열로 산 정체가 잡혔다(Tween 20의 "모노로레인산"도 "인산"에, "염산 구아니딘"도 "염산"에 걸렸다). **후속 수정:** 한글 산 이름은 독립된 단어일 때만 산 정체로 본다. "진한 황산", "염산 수용액", "황산 98%"처럼 농도·용액 표현은 그대로 산이므로 이름만 있는 실제 산의 산+시안/황화물 차단 규칙은 유지되고 단위 테스트로 고정했다. EDTA 유리산은 CAS(60-00-4)로 산 정체를 유지해 정답 ACID_AQUEOUS는 바뀌지 않았다.
+- 구아니딘 티오시아네이트(RNA 추출 시약)는 유기 양이온 티오시아네이트라 앱이 시안 계열로 보지 않고 AQUEOUS_OTHER로 안내했다. **후속 수정(강화 방향):** 유기 양이온 티오시아네이트 염(이름 "<양이온> thiocyanate" 또는 PubChem SMILES의 분리된 SCN⁻ 조각)에 CYANIDE 플래그를 붙여 CYANIDE_SULFIDE 스트림으로 보내고 산과 섞으면 차단한다. 공유결합 R-SCN 에스터와 금속 티오시아나토 착물은 기존 경로를 유지한다. 정답도 CYANIDE_SULFIDE로 바꿨다(스크립트 역할 `cyanide`).
 - 붕산·KH2PO4(산), Na2HPO4·NaHCO3(알칼리)는 앱 정책대로 산/알칼리 스트림이다(정책 질문 3).
 
 | 행 | CAS | 물질 | 시나리오 | 정답 | 앱 결과 |
@@ -254,14 +254,14 @@
 | 1055 | 111-30-8 | Glutaraldehyde | aqueous_solution | blocked | 일치 |
 | 1056 | 1239-45-8 | Ethidium Bromide | aqueous_solution | blocked | 일치 |
 | 1057 | 60-24-2 | 2-Mercaptoethanol | aqueous_solution | blocked | 일치 |
-| 1058 | 593-84-0 | Guanidine thiocyanate | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
-| 1059 | 50-01-1 | Guanidine Hydrochloride | aqueous_solution | ready:ORGANIC_HALOGENATED | 일치 |
+| 1058 | 593-84-0 | Guanidine thiocyanate | aqueous_solution | ready:CYANIDE_SULFIDE | 일치 |
+| 1059 | 50-01-1 | Guanidine Hydrochloride | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
 | 1060 | 57-13-6 | Urea | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
 | 1061 | 288-32-4 | Imidazole | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
 | 1062 | 60-00-4 | Ethylenediaminetetraacetic Acid | aqueous_solution | ready:ACID_AQUEOUS | 일치 |
 | 1063 | 6381-92-6 | Edta disodium | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
 | 1064 | 77-86-1 | Tris | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
-| 1065 | 1185-53-1 | Tromethamine hydrochloride | aqueous_solution | ready:ORGANIC_HALOGENATED | 일치 |
+| 1065 | 1185-53-1 | Tromethamine hydrochloride | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
 | 1066 | 7365-45-9 | HEPES | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
 | 1067 | 56-81-5 | Glycerol | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
 | 1068 | 127-09-3 | Sodium Acetate | aqueous_solution | ready:AQUEOUS_OTHER | 일치 |
