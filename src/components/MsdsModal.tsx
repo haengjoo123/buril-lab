@@ -123,12 +123,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                 <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-900">
                     {chemical.koshaId && (
                         <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100">
-                            <p>
-                                {i18n.language === 'en'
-                                    ? 'KOSHA is a reference. The exact product manufacturer SDS and your institution rules take priority.'
-                                    : 'KOSHA는 참고자료입니다. 정확한 제품의 제조사 SDS와 소속 기관 규칙을 우선 확인하세요.'}
-                            </p>
-                            <a href={koshaReferenceUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex font-semibold underline">
+                            <a href={koshaReferenceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex font-semibold underline">
                                 {i18n.language === 'en' ? 'Open official KOSHA page' : 'KOSHA 공식 페이지 열기'}
                             </a>
                         </div>

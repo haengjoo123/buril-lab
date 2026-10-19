@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeProductNumber, resolveSdsLinks } from './sdsLinks'
+import { normalizeProductNumber, resolveManufacturerCasLinks, resolveSdsLinks } from './sdsLinks'
 
 const tiers = (links: ReturnType<typeof resolveSdsLinks>) => links.map((link) => link.tier)
 
@@ -73,5 +73,30 @@ describe('resolveSdsLinks', () => {
   it('encodes query values', () => {
     const [link] = resolveSdsLinks({ brand: 'Thermo', productNumber: 'A11S 4' })
     expect(link.url).toContain('query=A11S4')
+  })
+})
+
+describe('resolveManufacturerCasLinks', () => {
+  it('links every CAS-searchable manufacturer in a fixed order', () => {
+    const links = resolveManufacturerCasLinks(' 67-64-1 ')
+
+    expect(links.map((link) => link.source)).toEqual(['sigma_aldrich', 'duksan', 'daejung', 'samchun'])
+    expect(links.map((link) => link.sourceName)).toEqual(['Sigma-Aldrich', '덕산약품', '대정화금', '삼전순약'])
+    expect(links.every((link) => link.tier === 'manufacturer_search' && link.query === '67-64-1')).toBe(true)
+    expect(links[0].url).toContain('type=cas_number')
+    expect(links[1].url).toBe('https://duksan.kr/page/03/msds.php?keyword=67-64-1')
+  })
+
+  it('reuses the same URLs as the per-brand CAS search', () => {
+    for (const link of resolveManufacturerCasLinks('67-64-1')) {
+      const [brandLink] = resolveSdsLinks({ brand: link.sourceName, casNumber: '67-64-1' })
+      expect(brandLink.url).toBe(link.url)
+    }
+  })
+
+  it('returns nothing for a missing or invalid CAS number', () => {
+    expect(resolveManufacturerCasLinks(null)).toEqual([])
+    expect(resolveManufacturerCasLinks('')).toEqual([])
+    expect(resolveManufacturerCasLinks('67-64-2')).toEqual([])
   })
 })

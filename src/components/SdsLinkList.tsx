@@ -1,11 +1,16 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, FileText } from 'lucide-react';
-import { resolveSdsLinks, type SdsLink, type SdsLinkInput } from '../utils/sdsLinks';
+import { ExternalLink, FileText, Search } from 'lucide-react';
+import { resolveManufacturerCasLinks, resolveSdsLinks, type SdsLink, type SdsLinkInput } from '../utils/sdsLinks';
 
 interface SdsLinkListProps extends SdsLinkInput {
-    /** 'detail' lists every tier; 'compact' shows one link to the best match. */
-    variant?: 'detail' | 'compact';
+    /**
+     * 'detail' lists every tier; 'compact' shows one link to the best match;
+     * 'manufacturers' links the CAS search of every manufacturer that has one
+     * (ignores brand and product number).
+     */
+    variant?: 'detail' | 'compact' | 'manufacturers';
+    className?: string;
 }
 
 const TIER_LABEL_KEYS: Record<SdsLink['tier'], string> = {
@@ -14,12 +19,45 @@ const TIER_LABEL_KEYS: Record<SdsLink['tier'], string> = {
     public_reference: 'sds_tier_public_reference',
 };
 
-export const SdsLinkList: React.FC<SdsLinkListProps> = ({ brand, productNumber, casNumber, variant = 'detail' }) => {
+export const SdsLinkList: React.FC<SdsLinkListProps> = ({ brand, productNumber, casNumber, variant = 'detail', className = '' }) => {
     const { t } = useTranslation();
     const links = useMemo(
-        () => resolveSdsLinks({ brand, productNumber, casNumber }),
-        [brand, productNumber, casNumber],
+        () => variant === 'manufacturers'
+            ? resolveManufacturerCasLinks(casNumber)
+            : resolveSdsLinks({ brand, productNumber, casNumber }),
+        [variant, brand, productNumber, casNumber],
     );
+
+    if (variant === 'manufacturers') {
+        if (links.length === 0) return null;
+        return (
+            <section className={`rounded-lg border border-slate-200 p-3 text-left dark:border-slate-800 ${className}`}>
+                <h4 className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-slate-100">
+                    <Search className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                    {t('sds_manufacturers_title')}
+                </h4>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {t('sds_manufacturers_hint', { value: links[0].query })}
+                </p>
+                <ul className="mt-2 flex flex-wrap gap-2">
+                    {links.map((link) => (
+                        <li key={link.source}>
+                            <a
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={t(TIER_LABEL_KEYS[link.tier])}
+                                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-blue-800 dark:hover:bg-blue-950/30"
+                            >
+                                {link.sourceName}
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            </section>
+        );
+    }
 
     if (variant === 'compact') {
         const best = links[0];

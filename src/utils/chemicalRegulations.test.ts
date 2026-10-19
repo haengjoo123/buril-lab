@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   categorizeRegulationType,
+  evaluateRegulationApplicability,
   hazardousRegulationEntries,
   parseKecoChemicalResponse,
+  parseRegulationThresholds,
   readKecoResultCode,
 } from './chemicalRegulations'
 
@@ -105,5 +107,49 @@ describe('readKecoResultCode', () => {
     expect(readKecoResultCode({ header: { resultCode: '200' } })).toBe('200')
     expect(readKecoResultCode({ response: { header: { resultCode: '03' } } })).toBe('03')
     expect(readKecoResultCode('not json')).toBeUndefined()
+  })
+})
+
+describe('parseRegulationThresholds', () => {
+  it('reads a single mixture threshold', () => {
+    expect(parseRegulationThresholds('염화 수소 및 이를 10% 이상 함유한 혼합물')).toEqual([{ percent: 10 }])
+  })
+
+  it('reads labelled 인체등유해성 thresholds', () => {
+    expect(parseRegulationThresholds('인체급성유해성 : 1%, 인체만성유해성 : 0.1%, 생태유해성 : 1%')).toEqual([
+      { label: '인체급성유해성', percent: 1 },
+      { label: '인체만성유해성', percent: 0.1 },
+      { label: '생태유해성', percent: 1 },
+    ])
+  })
+
+  it('returns nothing without a percentage', () => {
+    expect(parseRegulationThresholds(undefined)).toEqual([])
+    expect(parseRegulationThresholds('금속 장신구 용도 금지')).toEqual([])
+  })
+})
+
+describe('evaluateRegulationApplicability', () => {
+  const accident = { category: 'accident_preparedness' as const, typeName: '사고대비물질', contentThreshold: '염화 수소 및 이를 10% 이상 함유한 혼합물' }
+  const human = { category: 'human_eco_hazard' as const, typeName: '인체등유해성물질', contentThreshold: '인체급성유해성 : 1%, 인체만성유해성 : 0.1%' }
+
+  it('applies at or above the threshold and not below it', () => {
+    expect(evaluateRegulationApplicability(accident, 35).status).toBe('applies')
+    expect(evaluateRegulationApplicability(accident, 10).status).toBe('applies')
+    expect(evaluateRegulationApplicability(accident, 3.6).status).toBe('below')
+  })
+
+  it('reports which labelled sub-classes match', () => {
+    const result = evaluateRegulationApplicability(human, 0.5)
+    expect(result).toMatchObject({ status: 'applies', matched: [{ label: '인체만성유해성', percent: 0.1 }] })
+  })
+
+  it('is undecided without a concentration', () => {
+    expect(evaluateRegulationApplicability(accident, null)).toEqual({ status: 'unknown', thresholds: [{ percent: 10 }] })
+    expect(evaluateRegulationApplicability(accident, Number.NaN).status).toBe('unknown')
+  })
+
+  it('always applies when no concentration rule is published', () => {
+    expect(evaluateRegulationApplicability({ category: 'banned', typeName: '금지물질' }, 0.01)).toEqual({ status: 'always' })
   })
 })
