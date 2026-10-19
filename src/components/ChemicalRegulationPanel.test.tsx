@@ -33,7 +33,7 @@ async function render(casNumber: string | null) {
 describe('ChemicalRegulationPanel', () => {
     afterEach(() => fetchChemicalRegulations.mockReset());
 
-    it('lists hazardous classes with thresholds and exceptions, hiding inventory-only classes', async () => {
+    it('shows only hazardous class names, descriptions and status, dropping low-value detail', async () => {
         fetchChemicalRegulations.mockResolvedValue({
             status: 'found',
             record: {
@@ -52,12 +52,14 @@ describe('ChemicalRegulationPanel', () => {
 
         expect(fetchChemicalRegulations).toHaveBeenCalledWith('50-00-0');
         expect(text).toContain('법적 분류 (화학물질관리법)');
-        expect(text).toContain('제한물질06-5-5');
-        expect(text).toContain('가구용 무늬목 용도 금지');
-        expect(text).toContain('인체등유해성물질97-1-345');
-        expect(text).toContain('인체급성유해성 : 1%');
-        expect(text).not.toContain('기존화학물질KE');
-        expect(text).toContain('기존화학물질 번호 KE-17074');
+        expect(text).toContain('제한물질');
+        expect(text).toContain('특정 용도로는 쓸 수 없도록 제한된 물질이에요.');
+        expect(text).toContain('인체등유해성물질');
+        expect(text).toContain('인체급성유해성 1% 이상이면 해당');
+        // Unique numbers, raw content rules, restricted uses, KE number and the source line are dropped.
+        for (const dropped of ['06-5-5', '97-1-345', '함유한 혼합물', '가구용 무늬목', 'KE-17074', '기존화학물질', '출처']) {
+            expect(text).not.toContain(dropped);
+        }
         unmount();
     });
 
@@ -77,7 +79,7 @@ describe('ChemicalRegulationPanel', () => {
         expect(container.textContent).toContain('화학사고 위험이 커서 보관·취급을 특별히 관리해야 하는 물질이에요.');
         expect(container.textContent).toContain('10% 이상이면 해당');
         expect(container.textContent).toContain('인체급성유해성 10% 이상이면 해당');
-        expect(container.textContent).toContain('기준 미만이라고 하수구에 버려도 된다는 뜻은 아니에요.');
+        expect(container.textContent).toContain('기준 미만이어도 하수구 배출이 가능하다는 뜻은 아니에요.');
 
         const input = container.querySelector('input[type="number"]') as HTMLInputElement;
         const setValue = (value: string) => act(() => {
@@ -106,14 +108,23 @@ describe('ChemicalRegulationPanel', () => {
         unmount();
     });
 
-    it('says when a known substance has no hazardous class', async () => {
+    it('renders nothing for a substance without a hazardous class', async () => {
         fetchChemicalRegulations.mockResolvedValue({
             status: 'found',
             record: { casNumber: '67-64-1', keNumber: 'KE-29367', entries: [{ category: 'existing', typeName: '기존화학물질' }] },
         });
 
         const { container, unmount } = await render('67-64-1');
-        expect(container.textContent).toContain('유해화학물질(인체등유해성·허가·제한·금지·사고대비물질)로 분류되어 있지 않습니다.');
+        expect(fetchChemicalRegulations).toHaveBeenCalledWith('67-64-1');
+        expect(container.innerHTML).toBe('');
+        unmount();
+    });
+
+    it('renders nothing for a CAS number the source does not know', async () => {
+        fetchChemicalRegulations.mockResolvedValue({ status: 'not_found' });
+
+        const { container, unmount } = await render('67-64-1');
+        expect(container.innerHTML).toBe('');
         unmount();
     });
 
