@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.3.0",
+  "schemaVersion": "2.4.0",
   "datasetId": "waste-golden-set-v2",
   "generatedAt": "2026-08-08T05:30:00.000Z",
   "sourcePolicy": {
@@ -12,7 +12,7 @@
     "networkRequiredForCi": false
   },
   "rowCount": 1000,
-  "datasetSha256": "db09644c2e6293dfa9edd36f1aec89a78913a7e8fd30a0058afecbd6c52aa853",
+  "datasetSha256": "d545dad881f05eb7e9a2df2a7dec45fabb9f9f33a8a850ec93b7357717dea4c3",
   "strata": {
     "organic_non_halogenated": 134,
     "organic_halogenated": 102,
@@ -71,5 +71,17 @@
     "reactiveUncertainty": 12,
     "reactiveNameFalsePositives": 3,
     "specialReviewRecommendationMigrations": 17
+  },
+  "aiAssistedReview": {
+    "method": "ai_assisted_evidence_review",
+    "reviewerId": "ai-assisted-label-review-v1",
+    "humanReviewed": false,
+    "assessedAt": "2026-10-19T00:00:00.000Z",
+    "fatalAcuteToxicityBlocks": 77,
+    "reactiveIdentityBlocks": 12,
+    "unresolvedOxideHolds": 2,
+    "structureResolvedHolds": 12,
+    "connectivitySmilesRows": 61,
+    "reviewDocument": "WASTE_GOLDEN_SET_V2_REVIEW.md"
   }
 }
