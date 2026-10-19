@@ -50,8 +50,12 @@ const hasApprovedPredictedBatchPh = (value: number | undefined): value is number
 export const componentHasSolutionConcentration = (component: WasteComponent): boolean =>
     component.concentration !== undefined;
 
-export const componentNeedsAmountInput = (component: WasteComponent): boolean =>
-    component.solutionVolume === undefined || component.concentration === undefined;
+export const componentNeedsAmountInput = (component: WasteComponent): boolean => {
+    // A solid is measured as the batch's total mass; a neat liquid has no solution concentration.
+    if (component.materialForm === 'solid') return false;
+    if (component.materialForm === 'neat') return component.solutionVolume === undefined;
+    return component.solutionVolume === undefined || component.concentration === undefined;
+};
 
 export const isSolutionContextAnswered = (component: WasteComponent): boolean => {
     if (!componentHasSolutionConcentration(component)) return true;

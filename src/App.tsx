@@ -24,6 +24,7 @@ import type { InventoryItem } from './services/inventoryService';
 import { searchChemical } from './services/searchService';
 import { analyzeChemical } from './utils/chemicalAnalyzer';
 import { normalizeCasNumber } from './utils/casNumber';
+import { isMassCapacity } from './utils/wasteBatch';
 import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
 import { useAppUiState, type AppTab } from './hooks/useAppUiState';
@@ -286,6 +287,9 @@ function App() {
           ? 'lookup_failed'
           : chemical ? 'not_checked' : 'lookup_failed',
       inventoryDisposalQuantity: isCabinetItem || item.quantity <= 1 ? 1 : undefined,
+      // An inventory container is discarded as supplied; broken or contaminated
+      // containers and mass-labelled products are handled as solids.
+      materialForm: requiresSolidMatrix || isMassCapacity(item.capacity) ? 'solid' : 'neat',
       inventorySnapshot: {
         brand: item.brand,
         productNumber: item.product_number,

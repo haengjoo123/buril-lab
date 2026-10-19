@@ -1060,3 +1060,20 @@ describe('waste amount validation', () => {
         }, 'aqueous')).toEqual({ valid: true });
     });
 });
+
+describe('component material form', () => {
+    it('treats a component marked solid as solid waste', () => {
+        const salt = createWasteComponentFromAnalysis(analysis('Sodium chloride', 'NaCl', 'NEUTRAL'), { materialForm: 'solid' });
+        expect(salt.materialForm).toBe('solid');
+        expect(inferWasteMatrixFromComponent(salt)).toBe('solid_slurry');
+    });
+
+    it('lets a solution override a mass-labelled inventory bottle', () => {
+        const fromBottle = createWasteComponentFromAnalysis(analysis('Sodium chloride', 'NaCl', 'NEUTRAL'), {
+            inventorySnapshot: { nominalCapacity: '500 g' },
+        });
+        expect(inferWasteMatrixFromComponent(fromBottle)).toBe('solid_slurry');
+        expect(inferWasteMatrixFromComponent({ ...fromBottle, materialForm: 'neat' })).toBe('solid_slurry');
+        expect(inferWasteMatrixFromComponent({ ...fromBottle, materialForm: 'solution' })).toBeNull();
+    });
+});

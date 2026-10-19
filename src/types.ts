@@ -357,6 +357,8 @@ export type WasteIdentityConfidence = 'verified' | 'review_required' | 'unknown'
 export type AdditionalComponentsStatus = 'none' | 'present' | 'unknown';
 export type FluorideContainerStatus = 'compatible' | 'incompatible' | 'unknown';
 export type WasteMixingState = 'unknown' | 'separate' | 'already_mixed';
+/** How a component enters the waste: a prepared solution, the product as supplied, or a solid. */
+export type WasteMaterialForm = 'solution' | 'neat' | 'solid';
 export type WasteIncidentContext = 'none' | 'broken' | 'leak';
 export type WasteMatrixSource = 'automatic' | 'user' | 'unresolved';
 export type ConcentrationUnit = 'M' | 'mM' | '%' | 'mg/mL';
@@ -438,6 +440,11 @@ export interface WasteComponent extends CartItem {
     scanSnapshot?: Record<string, unknown>;
     concentration?: WasteConcentration;
     solutionVolume?: WasteSolutionVolume;
+    /**
+     * Undefined for drafts made before the choice existed; treated as 'solution'.
+     * Independent of solutionContext.physicalForm, which is server routing evidence.
+     */
+    materialForm?: WasteMaterialForm;
     /** Stable identifier for the exact chemical form in the approved pH catalog. */
     phCatalogId?: string;
     phCatalogMatch?: ChemicalPhCatalogMatch;

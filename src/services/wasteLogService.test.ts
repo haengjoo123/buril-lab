@@ -239,6 +239,16 @@ describe('wasteLogService V2 mutations', () => {
         );
     });
 
+    it('records the component material form in the audit snapshot only when chosen', () => {
+        const batch = createBatch();
+        const without = buildWasteHandlingRpcPayload({ batch, decision: createDecision(), handlingAction: 'container_deposit' });
+        expect(without.components[0]?.analysisSnapshot).not.toHaveProperty('materialForm');
+
+        batch.components[0].materialForm = 'neat';
+        const payload = buildWasteHandlingRpcPayload({ batch, decision: createDecision(), handlingAction: 'container_deposit' });
+        expect(payload.components[0]?.analysisSnapshot).toMatchObject({ materialForm: 'neat' });
+    });
+
     it('preserves a user-confirmed solution context in the audit snapshot', () => {
         const batch = createBatch();
         batch.components[0].solutionContext = {

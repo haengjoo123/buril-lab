@@ -6,6 +6,7 @@ import type {
     WasteBatchDraft,
     WasteComponent,
     WasteConcentration,
+    WasteMaterialForm,
     WasteMatrix,
     WasteSolutionVolume,
     ChemicalEnrichmentResult,
@@ -174,6 +175,9 @@ const parseLegacyConcentration = (
     return { value: numericValue, unit };
 };
 
+const isWasteMaterialForm = (value: unknown): value is WasteMaterialForm =>
+    value === 'solution' || value === 'neat' || value === 'solid';
+
 const normalizeWasteComponent = (component: WasteComponent): WasteComponent => {
     const materialProfile = component.materialProfile ?? detectChemicalMaterial(component.chemical);
     const legacyHazardFlags = component.hazardFlags ?? [];
@@ -196,6 +200,7 @@ const normalizeWasteComponent = (component: WasteComponent): WasteComponent => {
         materialProfile,
         solutionVolume: component.solutionVolume ?? parseLegacySolutionVolume(component.volume),
         concentration: component.concentration ?? parseLegacyConcentration(component.molarity),
+        materialForm: isWasteMaterialForm(component.materialForm) ? component.materialForm : undefined,
         phCatalogId: component.phCatalogId ?? (phCatalogMatch.status === 'matched' ? phCatalogMatch.id : undefined),
         phCatalogMatch,
         automaticHazardFlags,
@@ -869,6 +874,7 @@ export type AddWasteComponentOptions = Partial<Pick<
     | 'inventorySnapshot'
     | 'scanSnapshot'
     | 'solutionContext'
+    | 'materialForm'
 >>;
 
 export interface WasteState {
@@ -899,6 +905,7 @@ export interface WasteState {
             | 'hazardDataConfirmedByUser'
             | 'phCatalogMatch'
             | 'solutionContext'
+            | 'materialForm'
         >>,
     ) => void;
     setMatrix: (matrix: WasteMatrix) => void;
@@ -1197,8 +1204,10 @@ export const useWasteStore = create<WasteState>((set, get) => ({
             component.cartLineId === cartLineId ? { ...component, ...patch } : component
         );
         const volumeChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionVolume');
-        const solutionContextChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionContext');
-        const wizardMatrix = solutionContextChanged
+        // A form change can turn a component solid or drop its solution, so it re-derives the matrix too.
+        const compositionChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionContext')
+            || Object.prototype.hasOwnProperty.call(patch, 'materialForm');
+        const wizardMatrix = compositionChanged
             ? deriveWizardMatrixFromComponents(components)
             : null;
         const nextMatrix = wizardMatrix
@@ -1215,9 +1224,9 @@ export const useWasteStore = create<WasteState>((set, get) => ({
                     ? 'unresolved'
                     : 'automatic'
                 : state.batch.matrixSource,
-            totalAmount: volumeChanged || solutionContextChanged
+            totalAmount: volumeChanged || compositionChanged
                 ? reconcileTotalAmountWithComponents(
-                    solutionContextChanged
+                    compositionChanged
                         ? amountAfterAutomaticMatrixChange(state.batch, nextMatrix)
                         : state.batch.totalAmount,
                     components,

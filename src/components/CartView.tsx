@@ -49,6 +49,7 @@ import {
     type PredictedPhAuthorization,
 } from '../services/wastePhAuthorizationService';
 import {
+    componentNeedsAmountInput,
     createUserSolutionContext,
     getNextWizardStep,
     getPreviousWizardStep,
@@ -73,12 +74,14 @@ import {
     shouldShowPhPredictionMatrixNotice,
 } from './cartPhPredictionUi';
 import { AppSelect } from './AppSelect';
+import { WasteComponentRegulationChips } from './WasteComponentRegulationChips';
 import type {
     AmountUnit,
     ConcentrationUnit,
     HandlingAction,
     PhPredictionResult,
     WasteConcentrationBasis,
+    WasteMaterialForm,
     WasteMatrix,
     WasteHazardFlag,
     WasteMissingField,
@@ -103,6 +106,7 @@ const MATRIX_OPTIONS: WasteMatrix[] = [
 
 const CONCENTRATION_UNITS: ConcentrationUnit[] = ['M', 'mM', '%', 'mg/mL'];
 const SOLUTION_VOLUME_UNITS: WasteSolutionVolumeUnit[] = ['uL', 'mL', 'L'];
+const MATERIAL_FORMS: WasteMaterialForm[] = ['solution', 'neat', 'solid'];
 const CONCENTRATION_BASES: WasteConcentrationBasis[] = ['w_w', 'w_v', 'v_v'];
 
 const MANUAL_HAZARD_OPTIONS: WasteHazardFlag[] = [
@@ -598,8 +602,7 @@ export const CartView: React.FC<CartViewProps> = ({
         const firstUnanswered = getSolutionQuestionComponents(currentBatch.components)
             .findIndex((component) => !isSolutionContextAnswered(component));
         setSolutionQuestionIndex(firstUnanswered >= 0 ? firstUnanswered : 0);
-        const firstMissingAmount = currentBatch.components.findIndex((component) =>
-            component.solutionVolume === undefined || component.concentration === undefined);
+        const firstMissingAmount = currentBatch.components.findIndex(componentNeedsAmountInput);
         setAmountQuestionIndex(firstMissingAmount >= 0 ? firstMissingAmount : 0);
         setShowAiDetail(false);
         setSolventSearchInputs({});
@@ -1382,9 +1385,10 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         ].filter(Boolean).join(' · ')}
                                                     </p>
                                                 )}
-                                                {activeStep === 'components' && (component.solutionVolume || component.concentration) && (
+                                                {activeStep === 'components' && (component.materialForm || component.solutionVolume || component.concentration) && (
                                                     <p className="mt-1 text-xs font-medium text-slate-600 dark:text-slate-300">
                                                         {[
+                                                            component.materialForm ? t(`waste_material_form_${component.materialForm}` as never) : null,
                                                             component.solutionVolume
                                                                 ? `${component.solutionVolume.value} ${component.solutionVolume.unit}`
                                                                 : null,
@@ -1395,6 +1399,9 @@ export const CartView: React.FC<CartViewProps> = ({
                                                                 : null,
                                                         ].filter(Boolean).join(' · ')}
                                                     </p>
+                                                )}
+                                                {(activeStep === 'components' || activeStep === 'amounts') && (
+                                                    <WasteComponentRegulationChips component={component} />
                                                 )}
                                                 {activeStep === 'components' && isPhPredictionEnabled && (
                                                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -1538,9 +1545,50 @@ export const CartView: React.FC<CartViewProps> = ({
                                             <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
                                                 {activeStep === 'amounts' && (
                                                 <>
+                                                <fieldset>
+                                                    <legend className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('waste_material_form_label')}</legend>
+                                                    <div className="mt-1 grid grid-cols-3 gap-1.5">
+                                                        {MATERIAL_FORMS.map((form) => {
+                                                            const selected = (component.materialForm ?? 'solution') === form;
+                                                            return (
+                                                                <button
+                                                                    key={form}
+                                                                    type="button"
+                                                                    aria-pressed={selected}
+                                                                    onClick={() => {
+                                                                        if (form === 'solid') {
+                                                                            // A solid has no solution volume, concentration or solvent.
+                                                                            setSolutionVolumeInputs((current) => ({ ...current, [component.cartLineId]: '' }));
+                                                                            setConcentrationInputs((current) => ({ ...current, [component.cartLineId]: '' }));
+                                                                            setDensityInputs((current) => ({ ...current, [component.cartLineId]: '' }));
+                                                                            updateComponent(component.cartLineId, {
+                                                                                materialForm: form,
+                                                                                solutionVolume: undefined,
+                                                                                concentration: undefined,
+                                                                                solutionContext: undefined,
+                                                                            });
+                                                                            return;
+                                                                        }
+                                                                        updateComponent(component.cartLineId, { materialForm: form });
+                                                                    }}
+                                                                    className={`min-h-11 rounded-xl border px-2 text-sm font-semibold transition-colors ${selected
+                                                                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200'
+                                                                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'}`}
+                                                                >
+                                                                    {t(`waste_material_form_${form}` as never)}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                                                        {t(`waste_material_form_${component.materialForm ?? 'solution'}_help` as never)}
+                                                    </p>
+                                                </fieldset>
+                                                {component.materialForm !== 'solid' && (
+                                                <>
                                                 <div className="grid grid-cols-[1fr_110px] gap-2">
                                                     <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                        {t('waste_component_solution_volume')}
+                                                        {t(component.materialForm === 'neat' ? 'waste_material_form_neat_volume' : 'waste_component_solution_volume')}
                                                         <input
                                                             type="number"
                                                             inputMode="decimal"
@@ -1608,7 +1656,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 )}
                                                 <div className="grid grid-cols-[1fr_110px] gap-2">
                                                 <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                                    {t('waste_component_concentration')}
+                                                    {t(component.materialForm === 'neat' ? 'waste_material_form_neat_concentration' : 'waste_component_concentration')}
                                                     <input
                                                         type="number"
                                                         min="0.000001"
@@ -1756,6 +1804,8 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             {t('waste_concentration_density_help')}
                                                         </p>
                                                     </div>
+                                                )}
+                                                </>
                                                 )}
                                                 </>
                                                 )}
