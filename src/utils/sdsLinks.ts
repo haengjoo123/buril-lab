@@ -1,5 +1,5 @@
 import { normalizeCasNumber } from './casNumber'
-import { normalizeReagentBrand, type ReagentBrandId } from './reagentBrands'
+import { getReagentBrand, normalizeReagentBrand, type ReagentBrandId } from './reagentBrands'
 
 /**
  * SDS links for an inventory item, best match first.
@@ -125,4 +125,29 @@ export function resolveSdsLinks(input: SdsLinkInput): SdsLink[] {
   }
 
   return links
+}
+
+// Manufacturers whose SDS search accepts a CAS number, in the order labs most
+// often stock them.
+const CAS_SEARCH_MANUFACTURERS: ReagentBrandId[] = ['sigma_aldrich', 'duksan', 'daejung', 'samchun']
+
+/**
+ * SDS search links at every manufacturer that can search by CAS, for a
+ * substance whose brand is not known (e.g. a search result).
+ */
+export function resolveManufacturerCasLinks(rawCasNumber: string | null | undefined): SdsLink[] {
+  const casNumber = normalizeCasNumber(rawCasNumber)
+  if (!casNumber) return []
+
+  return CAS_SEARCH_MANUFACTURERS.flatMap((id) => {
+    const byCas = MANUFACTURER_SDS_RULES[id]?.byCas
+    if (!byCas) return []
+    return [{
+      tier: 'manufacturer_search' as const,
+      source: id,
+      sourceName: getReagentBrand(id).displayName,
+      query: casNumber,
+      url: byCas(casNumber),
+    }]
+  })
 }

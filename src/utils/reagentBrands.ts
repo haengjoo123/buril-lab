@@ -135,3 +135,10 @@ export function normalizeReagentBrand(raw?: string | null): ReagentBrand | null 
   }
   return null
 }
+
+/** The canonical manufacturer for a known brand id. */
+export function getReagentBrand(id: ReagentBrandId): ReagentBrand {
+  const match = BRAND_DEFINITIONS.find((brand) => brand.id === id)
+  if (!match) throw new Error(`Unknown reagent brand: ${id}`)
+  return { id: match.id, displayName: match.displayName }
+}
