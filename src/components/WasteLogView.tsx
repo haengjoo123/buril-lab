@@ -1822,7 +1822,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                     [t('log_handler_label', '작업자'), selectedDesktopLog.handler_name || t('common_unknown')],
                                      [i18n.language.startsWith('ko') ? '폐액 전체량' : 'Total waste amount', computeTotalVolume(selectedDesktopLog) || '-'],
                                      ...(selectedDesktopLog.schema_version === 2 ? [
-                                         [i18n.language.startsWith('ko') ? '폐기 분류' : 'Waste classification', selectedDesktopLog.stream_code || '-'],
+                                         [i18n.language.startsWith('ko') ? '폐기 분류' : 'Waste classification', formatWasteStream(selectedDesktopLog.stream_code, i18n.language) || '-'],
                                          [i18n.language.startsWith('ko') ? '분류 결과' : 'Decision status', formatDecisionStatus(selectedDesktopLog.decision_status, i18n.language)],
                                          [i18n.language.startsWith('ko') ? '처리 방법' : 'Handling action', formatHandlingAction(selectedDesktopLog.handling_action, i18n.language)],
                                      ] : []),
