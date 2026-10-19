@@ -620,6 +620,7 @@ export function buildWasteHandlingComponents(
                 inventorySnapshot: component.inventorySnapshot ?? null,
                 inventoryDisposalQuantity: component.inventoryDisposalQuantity ?? null,
                 sourceSearchEventId: component.sourceSearchEventId ?? null,
+                ...(component.materialForm ? { materialForm: component.materialForm } : {}),
                 ...(solutionContextSnapshot ? { solutionContext: solutionContextSnapshot } : {}),
                 ...(phPredictionInput ? { phPredictionInput } : {}),
                 ...(index === 0 && phPredictionSnapshot

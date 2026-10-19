@@ -272,14 +272,21 @@ const getLegalWastePhClass = (batch: WasteBatchDraft): WasteLegalPhClass => {
     return 'none';
 };
 
+/** True when an inventory capacity such as "500 g" is a mass, i.e. the product is a solid. */
+export const isMassCapacity = (capacity: string | null | undefined): boolean =>
+    /(?:^|\s|\d)(?:kg|mg|g)\s*$/i.test(capacity?.trim() ?? '');
+
 /** Infer a batch matrix only from evidence that is strong enough to show as editable. */
 export function inferWasteMatrixFromComponent(component: WasteComponent): WasteMatrix | null {
-    const capacity = component.inventorySnapshot?.nominalCapacity?.trim() ?? '';
-    const hasMassCapacity = /(?:^|\s|\d)(?:kg|mg|g)\s*$/i.test(capacity);
+    const hasMassCapacity = isMassCapacity(component.inventorySnapshot?.nominalCapacity);
     const formula = component.chemical.molecularFormula?.replace(/\s+/g, '').toUpperCase();
     const name = component.chemical.name?.trim();
 
-    if (hasMassCapacity || component.category === 'SOLID_WASTE') return 'solid_slurry';
+    if (component.materialForm === 'solid') return 'solid_slurry';
+    // A mass-labelled bottle stays solid unless the user said it was made into a solution.
+    if ((hasMassCapacity && component.materialForm !== 'solution') || component.category === 'SOLID_WASTE') {
+        return 'solid_slurry';
+    }
     if (formula === 'H2O' || /^(?:water|distilled water|deionized water|물|증류수|탈이온수)$/i.test(name)) {
         return 'aqueous';
     }
@@ -384,6 +391,7 @@ export function createWasteComponentFromAnalysis(
         phCatalogMatch: overrides.phCatalogMatch,
         scanSnapshot: overrides.scanSnapshot,
         concentration: overrides.concentration,
+        materialForm: overrides.materialForm,
         inventorySnapshot: overrides.inventorySnapshot,
         volume: overrides.volume ?? legacyItem.volume,
         molarity: overrides.molarity ?? legacyItem.molarity,

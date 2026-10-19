@@ -153,3 +153,20 @@ describe('waste batch wizard resolver', () => {
         expect(resolveWasteBatchWizard(draft, { approvedPredictedBatchPh: 2.2 }).batchStepComplete).toBe(false);
     });
 });
+
+describe('component material form and amount questions', () => {
+    it('never asks a solid for a solution volume or concentration', () => {
+        expect(componentNeedsAmountInput({ ...component('Salt', false), materialForm: 'solid', solutionVolume: undefined })).toBe(false);
+    });
+
+    it('asks a neat component only for its amount', () => {
+        const neat = { ...component('Acetone', false), materialForm: 'neat' as const };
+        expect(componentNeedsAmountInput(neat)).toBe(false);
+        expect(componentNeedsAmountInput({ ...neat, solutionVolume: undefined })).toBe(true);
+    });
+
+    it('keeps asking a solution for both volume and concentration', () => {
+        expect(componentNeedsAmountInput({ ...component('Buffer', false), materialForm: 'solution' })).toBe(true);
+        expect(componentNeedsAmountInput(component('Buffer', false))).toBe(true);
+    });
+});

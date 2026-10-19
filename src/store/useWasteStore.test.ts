@@ -1204,3 +1204,64 @@ describe('useWasteStore V2 batch isolation', () => {
         expect(storage.getItem(LEGACY_KEY)).not.toBeNull();
     });
 });
+
+describe('useWasteStore component material form', () => {
+    beforeEach(() => {
+        vi.stubGlobal('localStorage', new MemoryStorage());
+        resetStore();
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('stores the form given when a component is added', () => {
+        useWasteStore.getState().addToCart(cartItem('acetone', 'Acetone'), { materialForm: 'neat' });
+        expect(useWasteStore.getState().cart[0].materialForm).toBe('neat');
+    });
+
+    it('re-derives an automatic matrix when a component becomes solid', () => {
+        const salt = cartItem('salt', 'Sodium chloride', 'NEUTRAL');
+        salt.chemical.casNumber = '7647-14-5';
+        salt.chemical.molecularFormula = 'NaCl';
+        useWasteStore.getState().addToCart(salt);
+        const { cartLineId } = useWasteStore.getState().cart[0];
+
+        useWasteStore.getState().updateComponent(cartLineId, {
+            materialForm: 'solid',
+            solutionVolume: undefined,
+            concentration: undefined,
+            solutionContext: undefined,
+        });
+
+        const { batch } = useWasteStore.getState();
+        expect(batch.components[0].materialForm).toBe('solid');
+        expect(batch.matrix).toBe('solid_slurry');
+        expect(batch.matrixSource).toBe('automatic');
+    });
+
+    it('drops an unrecognised stored form when a draft is normalised', () => {
+        const component = createWasteComponentFromAnalysis(cartItem('acetone', 'Acetone'), { cartLineId: 'line-1' });
+        const draft = {
+            ...createEmptyWasteBatch({ id: 'stored', scopeKey: 'user-a:lab-a', userId: 'user-a', labId: 'lab-a', now: '2026-08-02T00:00:00.000Z' }),
+            components: [
+                { ...component, materialForm: 'gas' as never },
+                { ...component, cartLineId: 'line-2', materialForm: 'neat' as const },
+            ],
+        };
+        localStorage.setItem(`${V2_PREFIX}user-a:lab-a`, JSON.stringify({
+            schemaVersion: 6,
+            ownerUserId: 'user-a',
+            scopeKey: 'user-a:lab-a',
+            draft,
+            parkedDrafts: [],
+        }));
+
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+
+        const { cart } = useWasteStore.getState();
+        expect(cart).toHaveLength(2);
+        expect(cart[0].materialForm).toBeUndefined();
+        expect(cart[1].materialForm).toBe('neat');
+    });
+});
