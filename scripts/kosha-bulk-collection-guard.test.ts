@@ -7,6 +7,7 @@ const guardedScripts = [
   'generate-waste-golden-v2.mjs',
   'rebalance-waste-golden-v2.mjs',
   'refresh-waste-golden-v2-evidence.mjs',
+  'add-waste-golden-v2-common-reagents.mjs',
 ]
 
 describe('KOSHA bulk collection freeze', () => {

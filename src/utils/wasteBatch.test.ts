@@ -826,6 +826,28 @@ describe('analyzeWasteBatch', () => {
         }
     });
 
+    it('keeps the alkali route for a carbonate even when PubChem supplies ionic structure', () => {
+        const sodiumCarbonate = analyzeChemical({
+            id: 'sodium-carbonate',
+            name: 'Sodium carbonate',
+            casNumber: '497-19-8',
+            molecularFormula: 'CNa2O3',
+            connectivitySmiles: 'C(=O)([O-])[O-].[Na+].[Na+]',
+            ghs: { signal: 'Warning', hazardStatements: ['H319'] },
+        });
+        expect(sodiumCarbonate).toMatchObject({
+            category: 'ALKALI',
+            materialProfile: { kind: 'inorganic_salt' },
+        });
+
+        const aqueous = batch([sodiumCarbonate], 'aqueous');
+        aqueous.additionalComponentsStatus = 'none';
+        expect(analyzeWasteBatch(aqueous)).toMatchObject({
+            decisionStatus: 'ready',
+            streamCode: 'ALKALI_AQUEOUS',
+        });
+    });
+
     it('routes a structurally verified sodium acetate solution by its confirmed matrix', () => {
         const sodiumAcetate = analyzeChemical({
             id: 'sodium-acetate',

@@ -58,6 +58,8 @@
     "golden:reconcile-scenario-evidence": "node scripts/reconcile-waste-golden-v2-scenario-evidence.mjs",
     "golden:reclassify": "node scripts/reclassify-waste-golden-v2.mjs",
     "golden:apply-baseline-corrections": "node scripts/apply-waste-golden-v2-baseline-corrections.mjs",
+    "golden:apply-ai-review": "node scripts/apply-waste-golden-v2-ai-review.mjs",
+    "golden:add-common-reagents": "node scripts/add-waste-golden-v2-common-reagents.mjs",
     "golden:verify": "vitest run scripts/waste-golden-v2.test.ts --reporter=dot",
     "golden:report": "node scripts/write-waste-golden-v2-report.mjs",
     "build:android": "npm run build && npx cap sync android",

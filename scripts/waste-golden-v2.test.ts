@@ -29,7 +29,11 @@ describe('CAS·SDS actual-substance golden set V2', () => {
     });
 
     it('withholds routing where product state and the former standard scenario conflict', () => {
-        const stateScenarioConflicts = rows.filter(({ scenario }) => scenario.stateScenarioConflict);
+        // The historic counts cover the original ten strata; the curated
+        // common-reagent rows are checked separately below.
+        const stateScenarioConflicts = rows.filter(({ scenario, stratum }) => (
+            scenario.stateScenarioConflict && stratum !== 'common_lab_reagent'
+        ));
         const gasToLiquid = stateScenarioConflicts.filter(({ scenario }) => (
             scenario.stateScenarioConflict === 'gas_to_liquid_waste'
         ));
@@ -60,6 +64,29 @@ describe('CAS·SDS actual-substance golden set V2', () => {
         expect(independentlyBlockedConflicts.every(({ expected, adjudication }) => (
             expected.status === 'blocked' && adjudication?.outcome === 'app_correct'
         ))).toBe(true);
+        const reagentConflicts = rows.filter(({ scenario, stratum }) => (
+            scenario.stateScenarioConflict && stratum === 'common_lab_reagent'
+        ));
+        expect(reagentConflicts.map(({ casNumber, expected }) => [casNumber, expected.status])).toEqual([
+            ['7647-01-0', 'needs_input'],
+            ['7664-39-3', 'blocked'],
+        ]);
+        expect(reagentConflicts.every(({ scenario }) => scenario.wasteScenario === 'unresolved')).toBe(true);
+    });
+
+    it('covers common laboratory reagents with hazard-specific answers', () => {
+        const reagents = rows.filter(({ stratum }) => stratum === 'common_lab_reagent');
+        const byCas = new Map(reagents.map((row) => [row.casNumber, row.expected]));
+
+        expect(reagents).toHaveLength(manifest.strata.common_lab_reagent);
+        expect(reagents.every(({ review }) => review.reviewerId === 'ai-assisted-label-review-v1')).toBe(true);
+        expect(byCas.get('64-17-5')).toMatchObject({ status: 'ready', streamCode: 'ORGANIC_NON_HALOGENATED' });
+        expect(byCas.get('75-09-2')).toMatchObject({ status: 'ready', streamCode: 'ORGANIC_HALOGENATED' });
+        expect(byCas.get('64-19-7')).toMatchObject({ status: 'ready', streamCode: 'ACID_AQUEOUS' });
+        expect(byCas.get('497-19-8')).toMatchObject({ status: 'ready', streamCode: 'ALKALI_AQUEOUS' });
+        for (const blocked of ['7697-37-2', '7681-52-9', '16940-66-2', '109-72-8', '88-89-1', '20816-12-0', '1313-82-2']) {
+            expect(byCas.get(blocked)?.status).toBe('blocked');
+        }
     });
 
     it('records special review as a non-authorizing recommendation, not a decision status', () => {

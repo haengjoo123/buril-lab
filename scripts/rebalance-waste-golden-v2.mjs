@@ -120,6 +120,10 @@ function scenarioFor(stratum, form, formula) {
 }
 
 function enrichExisting(row) {
+    // Re-reviewed labels and the curated common-reagent stratum carry their
+    // own evidence-linked answers; regenerating them from stratum keywords
+    // would silently undo that review.
+    if (row.stratum === 'common_lab_reagent' || row.labelRevisions?.length) return row;
     const form = row.scenario.physicalForm;
     const section2 = row.sds.sections.find((section) => section.section === 2)?.extract || '';
     const next = {
@@ -195,7 +199,7 @@ if (reclassOnly) {
     manifest.generatedAt = new Date().toISOString();
     manifest.rowCount = reclassified.length;
     manifest.datasetSha256 = sha(serialized);
-    manifest.strata = Object.fromEntries(strata.map((stratum) => [
+    manifest.strata = Object.fromEntries([...strata, 'common_lab_reagent'].map((stratum) => [
         stratum,
         reclassified.filter((row) => row.stratum === stratum).length,
     ]));
