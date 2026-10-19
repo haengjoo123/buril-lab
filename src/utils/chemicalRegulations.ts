@@ -198,3 +198,51 @@ export function parseKecoChemicalResponse(payload: unknown, casNumber: string): 
     entries,
   }
 }
+
+export interface RegulationThreshold {
+  /** Sub-class the threshold belongs to, e.g. "인체급성유해성"; absent for a single threshold. */
+  label?: string
+  percent: number
+}
+
+export type RegulationApplicability =
+  /** No concentration rule was published: the class applies at any concentration. */
+  | { status: 'always' }
+  /** A concentration was not given, so applicability cannot be decided. */
+  | { status: 'unknown'; thresholds: RegulationThreshold[] }
+  | { status: 'applies'; thresholds: RegulationThreshold[]; matched: RegulationThreshold[] }
+  | { status: 'below'; thresholds: RegulationThreshold[] }
+
+/**
+ * Read the percentages in a published concentration rule:
+ * "염화 수소 및 이를 10% 이상 함유한 혼합물" → [{ percent: 10 }]
+ * "인체급성유해성 : 1%, 인체만성유해성 : 0.1%" → two labelled thresholds.
+ */
+export function parseRegulationThresholds(contentThreshold?: string): RegulationThreshold[] {
+  if (!contentThreshold) return []
+  const labelled = Array.from(
+    contentThreshold.matchAll(/([가-힣A-Za-z]+유해성)\s*:\s*(\d+(?:\.\d+)?)\s*%/g),
+    (match) => ({ label: match[1], percent: Number(match[2]) }),
+  )
+  if (labelled.length > 0) return labelled
+  return Array.from(
+    contentThreshold.matchAll(/(\d+(?:\.\d+)?)\s*%/g),
+    (match) => ({ percent: Number(match[1]) }),
+  )
+}
+
+/** Whether a class applies to a solution of `concentrationPercent` (w/w %). Rules read "N% 이상", so equality applies. */
+export function evaluateRegulationApplicability(
+  entry: ChemicalRegulationEntry,
+  concentrationPercent?: number | null,
+): RegulationApplicability {
+  const thresholds = parseRegulationThresholds(entry.contentThreshold)
+  if (thresholds.length === 0) return { status: 'always' }
+  if (concentrationPercent === undefined || concentrationPercent === null || !Number.isFinite(concentrationPercent)) {
+    return { status: 'unknown', thresholds }
+  }
+  const matched = thresholds.filter((threshold) => concentrationPercent >= threshold.percent)
+  return matched.length > 0
+    ? { status: 'applies', thresholds, matched }
+    : { status: 'below', thresholds }
+}
