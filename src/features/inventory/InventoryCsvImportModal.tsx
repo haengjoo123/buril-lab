@@ -1120,7 +1120,7 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.rowNumber}</td>
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.name || '-'}</td>
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.quantity || '-'}</td>
-                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_type || '-'}</td>
+                                            <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{row.source.storage_type === 'cabinet' ? t('inventory_loc_cabinet') : row.source.storage_type === 'other' ? t('inventory_loc_other') : row.source.storage_type || '-'}</td>
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">{getRowStorageDisplay(row)}</td>
                                             <td className="px-2 py-2 border border-slate-200 dark:border-slate-700">
                                                 {row.status === 'imported' ? (

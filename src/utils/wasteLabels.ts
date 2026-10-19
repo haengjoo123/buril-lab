@@ -37,12 +37,14 @@ export const HAZARD_FLAG_LABELS: Record<string, { ko: string; en: string }> = {
 export function wasteStreamLabel(code: string | null | undefined, language: string): string {
     if (!code) return '';
     const labels = WASTE_STREAM_LABELS[code as WasteStreamCode];
-    return labels ? (language.startsWith('ko') ? labels.ko : labels.en) : code;
+    return labels ? (language.startsWith('ko') ? labels.ko : labels.en)
+        : (language.startsWith('ko') ? '분류 확인 필요' : 'Classification needs review');
 }
 
 export function hazardFlagLabel(flag: string, language: string): string {
     const label = HAZARD_FLAG_LABELS[flag];
-    return label ? (language.startsWith('ko') ? label.ko : label.en) : flag;
+    return label ? (language.startsWith('ko') ? label.ko : label.en)
+        : (language.startsWith('ko') ? '추가 위험 정보 확인 필요' : 'Additional hazard information needs review');
 }
 
 /** Dot color for a waste category or stream name, shared by waste logs and containers. */

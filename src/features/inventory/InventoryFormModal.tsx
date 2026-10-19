@@ -1,3 +1,5 @@
+import { formatAuditActionName } from '../../utils/auditLogFormatting';
+import { AuditChangeList } from '../../components/AuditChangeList';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Save, AlertCircle, CheckCircle2, History, Loader2 } from 'lucide-react';
@@ -604,28 +606,6 @@ export const InventoryFormModal: React.FC<Props> = ({
 
     if (!isOpen && !successToastMessage) return null;
 
-    const translateAuditKey = (key: string): string => {
-        const keyMap: Record<string, string> = {
-            'remaining_percent': t('inventory_remaining_amount', '잔량'),
-            'name': t('inventory_name', '이름'),
-            'brand': t('inventory_brand', '브랜드'),
-            'product_number': t('inventory_product_number', '카탈로그 번호'),
-            'cas_no': 'CAS',
-            'cas_number': 'CAS',
-            'capacity': t('inventory_capacity', '규격'),
-            'manufacturer_date_type': t('manufacturer_date_type_label'),
-            'expiry_date': t('manufacturer_date_label'),
-            'received_date': t('inventory_received_date'),
-            'opened_date': t('inventory_opened_date'),
-            'memo': t('inventory_memo', '메모'),
-            'notes': t('inventory_memo', '메모'),
-            'quantity': t('inventory_quantity', '수량'),
-            'storage_location_id': t('inventory_location', '보관 위치'),
-            'cabinet_id': t('inventory_cabinet', '보관함'),
-            'storage_type': t('inventory_storage_type', '보관 방식')
-        };
-        return keyMap[key] || key;
-    };
 
     return (
         <>
@@ -926,25 +906,14 @@ export const InventoryFormModal: React.FC<Props> = ({
                                                                     log.action === 'update' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
                                                                         'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
                                                                 }`}>
-                                                                {log.action === 'update' ? t('log_action_update', '수정') : log.action === 'create' ? t('log_action_create', '등록') : log.action}
+                                                                {formatAuditActionName(log.action, t, log)}
                                                             </span>
                                                             <span className="text-[10px] text-slate-400">
                                                                 {new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}
                                                             </span>
                                                         </div>
                                                         {log.actor_name && <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
-                                                        {log.diff_data && Object.keys(log.diff_data).length > 0 && (
-                                                            <div className="mt-1 flex flex-col gap-0.5">
-                                                                {Object.entries(log.diff_data).map(([k, v]: [string, { from: unknown; to: unknown }]) => (
-                                                                    <div key={k} className="flex gap-1 text-[10px] items-center">
-                                                                        <span className="text-slate-400 w-24 shrink-0 truncate">{translateAuditKey(k)}:</span>
-                                                                        <span className="line-through text-red-500/70 truncate break-all">{JSON.stringify(v.from)}</span>
-                                                                        <span className="text-slate-400 shrink-0">→</span>
-                                                                        <span className="text-emerald-600 dark:text-emerald-400 truncate break-all">{JSON.stringify(v.to)}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                                        <AuditChangeList diff={log.diff_data} />
                                                     </div>
                                                 ))}
                                             </div>
