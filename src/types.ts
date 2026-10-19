@@ -41,7 +41,7 @@ export type ChemicalMaterialKind =
 
 export interface ChemicalMaterialProfile {
     kind: ChemicalMaterialKind;
-    evidence: 'connectivity_smiles' | 'formula' | 'unresolved';
+    evidence: 'connectivity_smiles' | 'hydrohalide_name' | 'formula' | 'unresolved';
     /** True when a waste stream cannot be selected from identity alone. */
     requiresMatrixConfirmation: boolean;
 }

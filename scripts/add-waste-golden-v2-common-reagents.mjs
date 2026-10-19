@@ -38,8 +38,10 @@ const SOLID = 'solid_slurry';
  * The standard laboratory waste scenario for each reagent. `role` captures
  * identity facts the expected answer depends on: acid/base for aqueous
  * routing, `oxidizer` for oxidizing or energetic identities without an H27x
- * code, `fluoride` for HF-family container rules, and `hold` for identities
- * that need user confirmation. The optional note is appended to the reason.
+ * code, `fluoride` for HF-family container rules, `cyanide`/`sulfide` for
+ * the dedicated cyanide/sulfide stream, `hydrohalide` for amine salts whose
+ * only halogen is the HCl counter-ion (not an organic halogen), and `hold`
+ * for identities that need user confirmation. The optional note is appended to the reason.
  */
 const REAGENTS = [
     // Mineral and common organic acids
@@ -113,14 +115,14 @@ const REAGENTS = [
     ['60-24-2', '2-Mercaptoethanol', AQ],
     ['3483-12-3', 'Dithiothreitol', AQ],
     ['329-98-6', 'PMSF', ORG, 'fluoride'],
-    ['593-84-0', 'Guanidine thiocyanate', AQ, undefined, 'Human review: thiocyanate releases toxic gas with acids or bleach, but the app does not treat organic-cation thiocyanates as cyanide-family waste.'],
-    ['50-01-1', 'Guanidine hydrochloride', AQ, undefined, 'Over-conservative (human/follow-up): the hydrochloride counter-ion is not an organic halogen, but the app currently treats C+Cl formulas as halogenated.'],
+    ['593-84-0', 'Guanidine thiocyanate', AQ, 'cyanide', 'The SCN- anion releases HCN or cyanogen chloride with acids or bleach; the organic guanidinium cation does not make it an ordinary aqueous waste.'],
+    ['50-01-1', 'Guanidine hydrochloride', AQ, 'hydrohalide', 'The chloride is the hydrochloride counter-ion, not an organic halogen.'],
     ['57-13-6', 'Urea', AQ],
     ['288-32-4', 'Imidazole', AQ],
-    ['60-00-4', 'EDTA', AQ, 'acid', 'Free-acid EDTA is acidic in water; the acid stream is the more segregated choice. Human review: the app infers this from the Korean name fragment "아세트산".'],
+    ['60-00-4', 'EDTA', AQ, 'acid', 'Free-acid EDTA is acidic in water (pH ~2.5); the acid stream is the more segregated choice. The app takes this from the EDTA free-acid CAS, not from the "아세트산" fragment of its Korean name.'],
     ['6381-92-6', 'EDTA disodium dihydrate', AQ],
     ['77-86-1', 'Tris', AQ],
-    ['1185-53-1', 'Tris hydrochloride', AQ, undefined, 'Over-conservative (human/follow-up): the hydrochloride counter-ion is not an organic halogen, but the app currently treats C+Cl formulas as halogenated.'],
+    ['1185-53-1', 'Tris hydrochloride', AQ, 'hydrohalide', 'The chloride is the hydrochloride counter-ion, not an organic halogen.'],
     ['7365-45-9', 'HEPES', AQ],
     ['56-81-5', 'Glycerol', AQ],
     ['127-09-3', 'Sodium acetate', AQ],
@@ -352,6 +354,9 @@ function expectedDecision({ label, matrix, role, formula, hCodes, section10, sce
     if (role === 'sulfide') {
         return { status: 'ready', streamCode: 'CYANIDE_SULFIDE', reason: 'Inorganic sulfide solution: dedicated cyanide/sulfide stream, never with acids.' };
     }
+    if (role === 'cyanide') {
+        return { status: 'ready', streamCode: 'CYANIDE_SULFIDE', reason: `${label} is cyanide-family waste: dedicated cyanide/sulfide stream, never with acids or hypochlorite.` };
+    }
     if (HEAVY_METALS.some((metal) => hasElement(formula, metal))) {
         return { status: 'ready', streamCode: 'HEAVY_METAL', reason: `${label} contains a regulated heavy metal; use the heavy-metal common stream.` };
     }
@@ -361,7 +366,7 @@ function expectedDecision({ label, matrix, role, formula, hCodes, section10, sce
     if (matrix === AQ && role === 'acid' && hCodes.includes('H314')) {
         return { status: 'ready', streamCode: 'ACID_AQUEOUS', reason: `Aqueous ${label} is a corrosive acid (H314); aqueous acid stream.` };
     }
-    if (matrix === HAL || hasOrganicHalogen(formula)) {
+    if (matrix === HAL || (role !== 'hydrohalide' && hasOrganicHalogen(formula))) {
         return { status: 'ready', streamCode: 'ORGANIC_HALOGENATED', reason: `${label} carries organic halogen; the halogenated organic stream is required.` };
     }
     if (matrix === ORG) {
