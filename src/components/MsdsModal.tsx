@@ -123,12 +123,7 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                 <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-900">
                     {chemical.koshaId && (
                         <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-100">
-                            <p>
-                                {i18n.language === 'en'
-                                    ? 'KOSHA is a reference. The exact product manufacturer SDS and your institution rules take priority.'
-                                    : 'KOSHA는 참고자료입니다. 정확한 제품의 제조사 SDS와 소속 기관 규칙을 우선 확인하세요.'}
-                            </p>
-                            <a href={koshaReferenceUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex font-semibold underline">
+                            <a href={koshaReferenceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex font-semibold underline">
                                 {i18n.language === 'en' ? 'Open official KOSHA page' : 'KOSHA 공식 페이지 열기'}
                             </a>
                         </div>
@@ -170,10 +165,10 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
     );
 };
 
-import { getPictogramUrl } from '../data/ghsCodes';
+import { getPictogramCode, getPictogramUrl } from '../data/ghsCodes';
 
 const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const [isExpanded, setIsExpanded] = useState(false);
 
     const renderValue = (label: string, value: string) => {
@@ -185,7 +180,10 @@ const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
             // Map to URLs
             const images = codes.map(code => {
                 const url = getPictogramUrl(code);
-                return { code, url };
+                const label = t(`ghs_pictogram_${getPictogramCode(code)}`, {
+                    defaultValue: i18n.language.startsWith('ko') ? '위험 그림문자' : 'Hazard pictogram',
+                });
+                return { code, url, label };
             }).filter(item => item.url);
 
             if (images.length > 0) {
@@ -196,11 +194,11 @@ const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
                                 <div className="w-20 h-20 bg-white border border-gray-200 rounded-lg shadow-sm flex items-center justify-center p-2 transition-transform hover:scale-105">
                                     <img
                                         src={img.url}
-                                        alt={img.code}
+                                        alt={img.label}
                                         className="w-full h-full object-contain"
                                     />
                                 </div>
-                                <span className="text-xs text-slate-400 mt-1">{img.code.replace(/\.(gif|jpg|png|svg)$/i, '')}</span>
+                                <span className="text-xs text-slate-400 mt-1">{img.label}</span>
                             </div>
                         ))}
                     </div>

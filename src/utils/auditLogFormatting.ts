@@ -1,6 +1,8 @@
 import type { TFunction } from 'i18next';
 import type { AuditLog } from '../services/auditService';
 import { translateLocationName } from './i18nUtils';
+import { wasteStreamLabel } from './wasteLabels';
+import { containerStatusLabel } from '../features/wasteContainers/copy';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -108,11 +110,6 @@ const HIDDEN_FIELDS = new Set([
 const localeText = (locale: string, ko: string, en: string): string =>
     locale.startsWith('ko') ? ko : en;
 
-const titleCaseKey = (value: string): string =>
-    value
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, (char) => char.toUpperCase());
-
 const toRecord = (value: unknown): JsonRecord | null => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return null;
@@ -142,7 +139,8 @@ const getCabinetActivityActionType = (
 };
 
 const shouldHideField = (key: string, value: unknown): boolean => {
-    if (HIDDEN_FIELDS.has(key)) {
+    // Only fields with a user-facing label belong in an activity history.
+    if (HIDDEN_FIELDS.has(key) || (!Object.hasOwn(FIELD_KEY, key) && !FIELD_ORDER.some((field) => field === key))) {
         return true;
     }
 
@@ -180,7 +178,7 @@ const formatActivityAction = (value: string, t: TFunction): string => {
     if (value === 'remove') return t('activity_log_action_remove');
     if (value === 'clear_all') return t('activity_log_action_clear_all');
     if (value === 'update') return t('audit_action_update');
-    return value;
+    return t('audit_change_summary');
 };
 
 const formatArrayValue = (key: string, value: unknown[], t: TFunction, locale: string): string => {
@@ -231,7 +229,7 @@ export const formatAuditFieldName = (key: string, t: TFunction, locale: string):
         return localeText(locale, '\uC704\uCE58', 'Location');
     }
 
-    return titleCaseKey(key);
+    return t('audit_change_summary');
 };
 
 export const getAuditActionCategory = (
@@ -267,11 +265,11 @@ export const formatAuditActionName = (
         return t('activity_log_action_clear_all');
     }
 
-    return ACTION_KEY[action] ? t(ACTION_KEY[action]) : action;
+    return ACTION_KEY[action] ? t(ACTION_KEY[action]) : t('audit_change_summary');
 };
 
 export const formatAuditEntityName = (entityType: string, t: TFunction): string =>
-    ENTITY_KEY[entityType] ? t(ENTITY_KEY[entityType]) : entityType;
+    ENTITY_KEY[entityType] ? t(ENTITY_KEY[entityType]) : t('audit_field_item_name');
 
 export const formatAuditValue = (
     key: string,
@@ -295,9 +293,16 @@ export const formatAuditValue = (
     }
 
     if (typeof value === 'string') {
+        if (key === 'stream_code') return wasteStreamLabel(value, locale);
+        if (key === 'status') {
+            return value === 'active' || value === 'sealed' || value === 'collected'
+                ? containerStatusLabel(value, locale)
+                : t('common_unknown');
+        }
         if (key === 'storage_type') {
             if (value === 'cabinet') return t('inventory_loc_cabinet');
             if (value === 'other') return t('inventory_loc_other');
+            return t('common_unknown');
         }
 
         if (key === 'action_type') {
@@ -312,6 +317,11 @@ export const formatAuditValue = (
             if (value === 'expiry') return t('manufacturer_date_type_expiry');
             if (value === 'minimum_shelf_life') return t('manufacturer_date_type_minimum_shelf_life');
             if (value === 'unlabeled') return t('manufacturer_date_type_unlabeled');
+            return t('common_unknown');
+        }
+
+        if (key === 'reason' && ['used', 'expired', 'broken', 'other'].includes(value)) {
+            return t(`cabinet_dispose_reason_${value}`);
         }
 
         if (key === 'remaining_percent' && /^-?\d+(\.\d+)?$/.test(value)) {
@@ -397,6 +407,9 @@ export const getAuditChangeRows = (
 
     return sortAuditEntries(Object.entries(diffData)).reduce<AuditChangeRow[]>((rows, [key, rawValue]) => {
         const valueRecord = toRecord(rawValue);
+        if (shouldHideField(key, valueRecord?.from) && shouldHideField(key, valueRecord?.to)) {
+            return rows;
+        }
         const fromText = formatAuditValue(key, valueRecord?.from, t, locale);
         const toText = formatAuditValue(key, valueRecord?.to, t, locale);
 

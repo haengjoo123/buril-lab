@@ -43,4 +43,23 @@ describe('SdsLinkList', () => {
     it('renders nothing in compact mode without a link', () => {
         expect(render(<SdsLinkList variant="compact" brand="cmos" />)).toBe('');
     });
+
+    it('links every CAS-searchable manufacturer by name in manufacturers mode', () => {
+        const html = render(<SdsLinkList variant="manufacturers" brand="TCI" productNumber="A0001" casNumber="67-64-1" />);
+
+        expect(html).toContain('제조사에서 찾기');
+        expect(html).toContain('CAS 67-64-1');
+        expect(html.indexOf('Sigma-Aldrich')).toBeLessThan(html.indexOf('덕산약품'));
+        expect(html.indexOf('덕산약품')).toBeLessThan(html.indexOf('대정화금'));
+        expect(html.indexOf('대정화금')).toBeLessThan(html.indexOf('삼전순약'));
+        expect(html).not.toContain('tcichemicals');
+        expect(html.match(/<a /g)).toHaveLength(4);
+        expect(html.match(/target="_blank"/g)).toHaveLength(4);
+        expect(html.match(/rel="noopener noreferrer"/g)).toHaveLength(4);
+    });
+
+    it('renders nothing in manufacturers mode without a valid CAS number', () => {
+        expect(render(<SdsLinkList variant="manufacturers" />)).toBe('');
+        expect(render(<SdsLinkList variant="manufacturers" casNumber="not-a-cas" />)).toBe('');
+    });
 });

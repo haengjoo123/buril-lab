@@ -28,7 +28,7 @@ import {
     getAuditDetailSections,
 } from '../utils/auditLogFormatting';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
-import { HAZARD_FLAG_LABELS, WASTE_STREAM_LABELS, getCategoryColor } from '../utils/wasteLabels';
+import { hazardFlagLabel, wasteStreamLabel, getCategoryColor } from '../utils/wasteLabels';
 import { isWasteContainersEnabled } from '../config/featureFlags';
 import { WasteContainersPanel } from '../features/wasteContainers/WasteContainersPanel';
 import { containerCopy } from '../features/wasteContainers/copy';
@@ -76,8 +76,7 @@ const DISPOSAL_CATEGORY_VALUES = new Set<string>([
 
 function formatWasteStream(code: WasteLogRecord['stream_code'], language: string): string | null {
     if (!code) return null;
-    const labels = WASTE_STREAM_LABELS[code];
-    return labels ? (language.startsWith('ko') ? labels.ko : labels.en) : code;
+    return wasteStreamLabel(code, language);
 }
 
 function formatDecisionStatus(status: WasteLogRecord['decision_status'], language: string): string {
@@ -105,12 +104,14 @@ function asFiniteNumber(value: unknown): number | null {
     return null;
 }
 
-const PhPredictionAuditPanel: React.FC<{ log: WasteLogRecord }> = ({ log }) => {
-    const { i18n } = useTranslation();
+export const PhPredictionAuditPanel: React.FC<{ log: WasteLogRecord }> = ({ log }) => {
+    const { t, i18n } = useTranslation();
     const korean = i18n.language.startsWith('ko');
     const prediction = log.ph_prediction_snapshot;
     const status = typeof prediction?.status === 'string' ? prediction.status : null;
-    const predictedValue = asFiniteNumber(prediction?.displayValue ?? prediction?.value);
+    const predictedValue = status === 'available' || status === 'approximate'
+        ? asFiniteNumber(prediction?.displayValue ?? prediction?.value)
+        : null;
     const measuredValue = asFiniteNumber(
         log.confirmation_snapshot?.measuredBatchPh
         ?? log.confirmation_snapshot?.measuredPh
@@ -126,7 +127,7 @@ const PhPredictionAuditPanel: React.FC<{ log: WasteLogRecord }> = ({ log }) => {
     return (
         <section className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs dark:border-sky-900/60 dark:bg-sky-950/20">
             <div className="font-semibold text-sky-900 dark:text-sky-100">
-                {korean ? 'pH 기록 근거' : 'pH audit context'}
+                {korean ? 'pH 정보' : 'pH information'}
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <div>
@@ -140,20 +141,21 @@ const PhPredictionAuditPanel: React.FC<{ log: WasteLogRecord }> = ({ log }) => {
                         <div className="text-sky-700/80 dark:text-sky-300/80">{korean ? '계산 예측(측정값 아님)' : 'Prediction (not measured)'}</div>
                         <div className="mt-0.5 font-bold text-slate-900 dark:text-white">
                             {predictedValue === null
-                                ? (korean ? `계산 불가 · ${status}` : `Unavailable · ${status}`)
+                                ? (korean ? '계산 불가' : 'Unavailable')
                                 : `≈ ${predictedValue.toFixed(1)}`}
                         </div>
                     </div>
                 )}
             </div>
-            {issueCodes.length > 0 && (
+            {(issueCodes.length > 0 || (status && predictedValue === null)) && (
                 <div className="mt-2 break-words text-sky-800 dark:text-sky-200">
-                    {korean ? '사유' : 'Reasons'}: {issueCodes.join(', ')}
-                </div>
-            )}
-            {status && (
-                <div className="mt-1 break-all text-[11px] text-sky-700/75 dark:text-sky-300/75">
-                    {String(prediction?.modelVersion || '-')} · {String(prediction?.catalogVersion || '-')}
+                    {issueCodes.length > 0
+                        ? [...new Set(issueCodes.map((code) => t(`waste_ph_prediction_issue_${code}` as never, {
+                            defaultValue: t('waste_ph_prediction_no_detail'),
+                        })))].join(' ')
+                        : t(`waste_ph_prediction_status_${status}` as never, {
+                            defaultValue: t('waste_ph_prediction_no_detail'),
+                        })}
                 </div>
             )}
         </section>
@@ -188,8 +190,7 @@ function getWasteChemicalConcentration(value: unknown): string | null {
 
 
 function formatHazardFlag(flag: string, language: string): string {
-    const label = HAZARD_FLAG_LABELS[flag];
-    return label ? (language.startsWith('ko') ? label.ko : label.en) : flag;
+    return hazardFlagLabel(flag, language);
 }
 
 function formatGhsDataStatus(status: WasteLogItemRecord['ghsDataStatus'], language: string): string {
@@ -248,7 +249,7 @@ function getAnalysisSnapshotRows(
         const category = snapshot.category.trim();
         const categoryLabel = DISPOSAL_CATEGORY_VALUES.has(category)
             ? translate(getCategoryDetails(category as DisposalCategory).label)
-            : category;
+            : (korean ? '분류 확인 필요' : 'Classification needs review');
         rows.push({ label: korean ? '분류' : 'Category', value: categoryLabel });
     }
     if (typeof snapshot.reason === 'string' && snapshot.reason.trim()) {
@@ -256,7 +257,9 @@ function getAnalysisSnapshotRows(
         const translatedReason = translate(reason);
         rows.push({
             label: korean ? '판정 근거' : 'Decision reason',
-            value: translatedReason === reason ? reason : translatedReason,
+            value: translatedReason === reason && /^[a-z][a-z0-9_]+$/i.test(reason)
+                ? (korean ? '분류 근거를 확인할 수 없습니다.' : 'Classification details are unavailable.')
+                : translatedReason,
         });
     }
     addPrimitive('AI 추정', 'AI estimated', snapshot.isAiEstimated);
@@ -343,8 +346,8 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
         return (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
                 {korean
-                    ? 'V2 성분 상세 행이 없습니다. 배치 요약은 보존되어 있지만 성분별 근거는 확인할 수 없습니다.'
-                    : 'No V2 component rows were found. The batch summary remains available, but per-component evidence cannot be verified.'}
+                    ? '성분별 상세 정보가 없습니다. 폐기 요약은 확인할 수 있습니다.'
+                    : 'Component details are unavailable. The disposal summary is still available.'}
             </div>
         );
     }
@@ -365,15 +368,11 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
                         <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="min-w-0">
                                 <div className="font-semibold text-slate-800 dark:text-slate-100">
-                                    <span className="mr-1 text-xs font-normal text-slate-400">#{item.lineNumber}</span>
                                     {item.chemicalName || (korean ? '이름 미기록' : 'Name not recorded')}
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                     {item.casNumber && <span>CAS {item.casNumber}</span>}
                                     {item.formula && <span>{item.formula}</span>}
-                                    {item.molecularWeight !== null && <span>MW {item.molecularWeight}</span>}
-                                    {item.pubchemCid !== null && <span>PubChem CID {item.pubchemCid}</span>}
-                                    {item.koshaChemId && <span>KOSHA {item.koshaChemId}</span>}
                                 </div>
                             </div>
                             <div className="flex flex-wrap justify-end gap-1.5">
@@ -399,66 +398,36 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
                                 </span>
                             )) : (
                                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                                    {korean ? '기록된 위험 플래그 없음' : 'No recorded hazard flags'}
+                                    {korean ? '기록된 위험 정보 없음' : 'No recorded hazard information'}
                                 </span>
                             )}
                         </div>
 
                         <dl className="mt-3 grid gap-2 border-t border-slate-200 pt-3 text-xs dark:border-slate-700 sm:grid-cols-2">
                             <div>
-                                <dt className="text-slate-500 dark:text-slate-400">{korean ? '식별 신뢰도' : 'Identity confidence'}</dt>
-                                <dd className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">
-                                    {item.identityConfidence === null ? '-' : `${Math.round(item.identityConfidence * 100)}%`}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-slate-500 dark:text-slate-400">GHS</dt>
+                                <dt className="text-slate-500 dark:text-slate-400">{korean ? '위험 정보 확인' : 'Hazard information check'}</dt>
                                 <dd className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">{formatGhsDataStatus(item.ghsDataStatus, i18n.language)}</dd>
                             </div>
-                            <div className="sm:col-span-2">
-                                <dt className="text-slate-500 dark:text-slate-400">{korean ? '유입 경로' : 'Source'}</dt>
-                                <dd className="mt-0.5 break-all font-medium text-slate-700 dark:text-slate-200">
-                                    {item.sourceType}{item.sourceRef ? ` · ${item.sourceRef}` : ''}
-                                </dd>
-                            </div>
-                            {item.phCatalogId && (
-                                <div className="sm:col-span-2">
-                                    <dt className="text-slate-500 dark:text-slate-400">{korean ? 'pH 카탈로그 항목' : 'pH catalog entry'}</dt>
-                                    <dd className="mt-0.5 break-all font-mono font-medium text-slate-700 dark:text-slate-200">{item.phCatalogId}</dd>
-                                </div>
-                            )}
                             {item.densityValue !== null && item.densityUnit && (
                                 <div className="sm:col-span-2">
-                                    <dt className="text-slate-500 dark:text-slate-400">{korean ? '농도 환산 밀도' : 'Conversion density'}</dt>
+                                    <dt className="text-slate-500 dark:text-slate-400">{item.densityKind === 'solution'
+                                        ? (korean ? '용액 밀도' : 'Solution density')
+                                        : item.densityKind === 'solute'
+                                            ? (korean ? '용질 밀도' : 'Solute density')
+                                            : (korean ? '농도 환산 밀도' : 'Conversion density')}</dt>
                                     <dd className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">
-                                        {item.densityValue} {item.densityUnit} · {item.densityKind || '-'}
+                                        {item.densityValue} {item.densityUnit}
                                         {item.densityTemperatureC === null ? '' : ` · ${item.densityTemperatureC} °C`}
-                                        {item.densitySource ? ` · ${item.densitySource}` : ''}
                                         {item.densityIsEstimate ? (korean ? ' · 추정' : ' · estimated') : ''}
                                     </dd>
                                 </div>
                             )}
                         </dl>
 
-                        {item.dataSources.length > 0 && (
-                            <div className="mt-3 rounded-md bg-white p-2.5 text-xs dark:bg-slate-900/70">
-                                <div className="font-semibold text-slate-700 dark:text-slate-200">{korean ? '데이터 출처' : 'Data sources'}</div>
-                                <ul className="mt-1.5 space-y-1 text-slate-500 dark:text-slate-400">
-                                    {item.dataSources.map((source, index) => (
-                                        <li key={`${source.sourceType}-${source.capturedAt || index}`} className="break-all">
-                                            {source.sourceType}
-                                            {source.sourceRef ? ` · ${source.sourceRef}` : ''}
-                                            {source.capturedAt ? ` · ${new Date(source.capturedAt).toLocaleString(korean ? 'ko-KR' : 'en-US')}` : ''}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-
                         {snapshotRows.length > 0 && (
                             <details className="mt-3 rounded-md bg-white p-2.5 text-xs dark:bg-slate-900/70">
                                 <summary className="min-h-11 cursor-pointer py-2 font-semibold text-slate-700 dark:text-slate-200">
-                                    {korean ? '저장된 분석 근거 보기' : 'View stored analysis evidence'}
+                                    {korean ? '분류 근거와 안전 정보' : 'Classification and safety details'}
                                 </summary>
                                 <dl className="space-y-2 border-t border-slate-100 pt-2 dark:border-slate-800">
                                     {snapshotRows.map((row) => (
@@ -1258,11 +1227,11 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         {log.schema_version === 2 && (
                             <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/50 sm:grid-cols-2">
                                 <div>
-                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '처리 행동' : 'Handling action'}</div>
+                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '처리 방법' : 'Handling action'}</div>
                                     <div className="mt-0.5 font-semibold text-slate-800 dark:text-slate-100">{formatHandlingAction(log.handling_action, i18n.language)}</div>
                                 </div>
                                 <div>
-                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '판정 상태' : 'Decision status'}</div>
+                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '분류 결과' : 'Decision status'}</div>
                                     <div className="mt-0.5 font-semibold text-slate-800 dark:text-slate-100">{formatDecisionStatus(log.decision_status, i18n.language)}</div>
                                 </div>
                                 <div className="sm:col-span-2">
@@ -1641,15 +1610,6 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                     language={i18n.language}
                 />
             ) : (<>
-            <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-slate-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-slate-200">
-                <div className="font-medium">{t('log_management_policy_title')}</div>
-                <div className="mt-1 text-slate-600 dark:text-slate-300">
-                    {activeTab === 'recent'
-                        ? t('log_management_policy_desc_recent')
-                        : t('log_management_policy_desc_archive')}
-                </div>
-            </div>
-
             {/* 검색 & 정렬 */}
             <div className="flex flex-col gap-2">
                 {activeTab === 'recent' && (
@@ -1863,8 +1823,8 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                      [i18n.language.startsWith('ko') ? '폐액 전체량' : 'Total waste amount', computeTotalVolume(selectedDesktopLog) || '-'],
                                      ...(selectedDesktopLog.schema_version === 2 ? [
                                          [i18n.language.startsWith('ko') ? '폐기 분류' : 'Waste classification', selectedDesktopLog.stream_code || '-'],
-                                         [i18n.language.startsWith('ko') ? '판정 상태' : 'Decision status', formatDecisionStatus(selectedDesktopLog.decision_status, i18n.language)],
-                                         [i18n.language.startsWith('ko') ? '처리 행동' : 'Handling action', formatHandlingAction(selectedDesktopLog.handling_action, i18n.language)],
+                                         [i18n.language.startsWith('ko') ? '분류 결과' : 'Decision status', formatDecisionStatus(selectedDesktopLog.decision_status, i18n.language)],
+                                         [i18n.language.startsWith('ko') ? '처리 방법' : 'Handling action', formatHandlingAction(selectedDesktopLog.handling_action, i18n.language)],
                                      ] : []),
                                      [
                                          t('log_chemicals_count', {
