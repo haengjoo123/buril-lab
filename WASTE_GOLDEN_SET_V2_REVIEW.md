@@ -300,4 +300,3 @@
 | 1101 | 88-89-1 | Picric Acid | solid_residue | blocked | 일치 |
 | 1102 | 1313-82-2 | Sodium sulfide | aqueous_solution | blocked | 일치 |
 | 1103 | 7726-95-6 | Bromine | aqueous_solution | blocked | 일치 |
-
