@@ -1011,10 +1011,14 @@ function App() {
                 }
                 if (isAddingWasteComponent) {
                   setIsAddingWasteComponent(false);
-                  setIsCartOpen(true);
                 }
                 if (isWelcomeOpen) {
                   completeOnboardingMission('disposal', 'search');
+                }
+                // Show the batch right away, as starting one from inventory does.
+                // The onboarding tour keeps the search view in front instead.
+                if (isAddingWasteComponent || !isWelcomeOpen) {
+                  setIsCartOpen(true);
                 }
               }}
               onSuggestionClick={(term) => {
