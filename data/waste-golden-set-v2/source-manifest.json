@@ -1,7 +1,7 @@
 {
-  "schemaVersion": "2.3.0",
+  "schemaVersion": "2.4.0",
   "datasetId": "waste-golden-set-v2",
-  "generatedAt": "2026-08-08T05:30:00.000Z",
+  "generatedAt": "2026-10-19T00:00:00.000Z",
   "sourcePolicy": {
     "order": [
       "domestic_kosha",
@@ -11,8 +11,8 @@
     "sdsContentRedistributed": false,
     "networkRequiredForCi": false
   },
-  "rowCount": 1000,
-  "datasetSha256": "db09644c2e6293dfa9edd36f1aec89a78913a7e8fd30a0058afecbd6c52aa853",
+  "rowCount": 1103,
+  "datasetSha256": "881766aa4105fa67b4e17ef00e2ab5daebce29c20fd4a4af8531bdeda596c8f6",
   "strata": {
     "organic_non_halogenated": 134,
     "organic_halogenated": 102,
@@ -23,14 +23,15 @@
     "reactive_oxidizer": 69,
     "toxic_cmr": 68,
     "fluorine_organofluorine": 105,
-    "solid_other": 136
+    "solid_other": 136,
+    "common_lab_reagent": 103
   },
   "sources": {
     "primarySds": "https://msds.kosha.or.kr/MSDSInfo/kcic/msdsdetail.do",
     "regulatory": "https://msds.kosha.or.kr/MSDSInfo/kcic/msdssearchLaw.do",
     "supportingIdentity": "https://pubchem.ncbi.nlm.nih.gov/"
   },
-  "reviewDisclosure": "approved means two independent automated curation/review stages. A named human reviewer is required before this benchmark can be represented as a human-reviewed regulatory release.",
+  "reviewDisclosure": "approved means two independent automated stages (KOSHA source-curation bot plus a policy-rule review bot, or, for labelRevisions and the common_lab_reagent stratum, an AI-assisted evidence review). No row has been reviewed by a human. A named human reviewer is required before this benchmark can be represented as a human-reviewed regulatory release.",
   "evidenceRefresh": {
     "accessedAt": "2026-08-08T02:03:58.312Z",
     "requiredSections": [
@@ -71,5 +72,87 @@
     "reactiveUncertainty": 12,
     "reactiveNameFalsePositives": 3,
     "specialReviewRecommendationMigrations": 17
+  },
+  "aiAssistedReview": {
+    "method": "ai_assisted_evidence_review",
+    "reviewerId": "ai-assisted-label-review-v1",
+    "humanReviewed": false,
+    "assessedAt": "2026-10-19T00:00:00.000Z",
+    "fatalAcuteToxicityBlocks": 77,
+    "reactiveIdentityBlocks": 12,
+    "unresolvedOxideHolds": 2,
+    "structureResolvedHolds": 12,
+    "connectivitySmilesRows": 61,
+    "reviewDocument": "WASTE_GOLDEN_SET_V2_REVIEW.md"
+  },
+  "commonLabReagentStratum": {
+    "method": "kosha_cas_lookup_with_explicit_lab_scenario",
+    "accessedAt": "2026-10-19T09:23:48.710Z",
+    "candidates": 115,
+    "added": 103,
+    "skipped": [
+      {
+        "casNumber": "76-05-1",
+        "label": "Trifluoroacetic acid",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "1310-66-3",
+        "label": "Lithium hydroxide",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "1305-62-0",
+        "label": "Calcium hydroxide",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "71-23-8",
+        "label": "1-Propanol",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "108-90-7",
+        "label": "Chlorobenzene",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "127-18-4",
+        "label": "Tetrachloroethylene",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "30525-89-4",
+        "label": "Paraformaldehyde",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "3483-12-3",
+        "label": "Dithiothreitol",
+        "reason": "no KOSHA record"
+      },
+      {
+        "casNumber": "329-98-6",
+        "label": "PMSF",
+        "reason": "no KOSHA record"
+      },
+      {
+        "casNumber": "7487-88-9",
+        "label": "Magnesium sulfate",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "7631-86-9",
+        "label": "Silica gel",
+        "reason": "already in V2"
+      },
+      {
+        "casNumber": "7727-54-0",
+        "label": "Ammonium persulfate",
+        "reason": "already in V2"
+      }
+    ],
+    "labelReview": "ai_assisted_evidence_review",
+    "humanReviewed": false
   }
 }

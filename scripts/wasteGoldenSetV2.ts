@@ -79,6 +79,7 @@ const chemicalFor = (row: WasteGoldenSetV2Row): Chemical => ({
     name: row.substanceName,
     casNumber: row.casNumber,
     molecularFormula: row.molecularFormula,
+    connectivitySmiles: row.connectivitySmiles,
     ghs: {
         signal: row.ghs.signalWord === 'Danger' ? 'Danger' : 'Warning',
         hazardStatements: row.ghs.hCodes,

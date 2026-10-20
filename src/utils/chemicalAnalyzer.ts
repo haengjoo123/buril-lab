@@ -505,7 +505,12 @@ export const detectChemicalMaterial = (chemical: Chemical): ChemicalMaterialProf
     const name = chemical.name || '';
     const elements = parseFormula(formula);
 
-    if (isIonicOrganicSaltByStructure(chemical.connectivitySmiles)) {
+    // Carbonate, bicarbonate and cyanide ions contain carbon but are not
+    // organic ions. Without this guard PubChem's "C(=O)([O-])[O-].[Na+]..."
+    // turned sodium carbonate into a neutral organic salt and dropped its
+    // alkali identity.
+    if (!isInorganicCarbonFormula(formula, name) &&
+        isIonicOrganicSaltByStructure(chemical.connectivitySmiles)) {
         return {
             kind: 'ionic_organic_salt',
             evidence: 'connectivity_smiles',

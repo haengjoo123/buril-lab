@@ -5,7 +5,7 @@ import type { WasteMatrix, WasteStreamCode } from '../../types';
  * It records the evidence needed to audit a single-substance golden case and
  * lets the regression runner turn that record into the existing batch input.
  */
-export const GOLDEN_SET_V2_VERSION = '2.3.0' as const;
+export const GOLDEN_SET_V2_VERSION = '2.4.0' as const;
 
 export const GOLDEN_DECISION_STATUSES = [
     'ready',
@@ -26,6 +26,12 @@ export const GOLDEN_STRATA = [
     'toxic_cmr',
     'fluorine_organofluorine',
     'solid_other',
+    /**
+     * Everyday teaching/research-lab reagents (common acids, solvents, buffers
+     * and hazardous bench reagents).  This is a coverage stratum, so its rows
+     * keep their hazard-specific expected answers.
+     */
+    'common_lab_reagent',
 ] as const;
 
 export type GoldenStratum = typeof GOLDEN_STRATA[number];
@@ -159,6 +165,22 @@ export interface GoldenDecision {
     reason: string;
 }
 
+/**
+ * One expected-answer change made after the original automated approval.
+ * The current assistant-made revisions are AI-assisted: they cite the stored
+ * KOSHA sections, but they are not a human or legal review.
+ */
+export interface GoldenLabelRevision {
+    previous: GoldenDecision;
+    group: string;
+    reason: string;
+    evidenceSections: GoldenEvidenceSectionNumber[];
+    reviewerId: 'ai-assisted-label-review-v1';
+    reviewMethod: 'ai_assisted_evidence_review';
+    humanReviewed: false;
+    revisedAt: string;
+}
+
 export interface GoldenReview {
     curatorId: string;
     reviewerId: string;
@@ -178,6 +200,11 @@ export interface WasteGoldenSetV2Row {
     substanceName: string;
     /** Supporting public-DB identity field; the domestic SDS remains the primary source. */
     molecularFormula: string;
+    /**
+     * PubChem ConnectivitySMILES, stored only where the app's own enrichment
+     * supplies it and it changes analyzer input (ionic organic salts).
+     */
+    connectivitySmiles?: string;
     stratum: GoldenStratum;
     scenario: GoldenScenario;
     ghs: {
@@ -189,6 +216,8 @@ export interface WasteGoldenSetV2Row {
     expected: GoldenDecision;
     /** Present when the stored baseline exposed a non-strict app/golden result. */
     adjudication?: GoldenAdjudication;
+    /** Chronological expected-answer revisions after the original approval. */
+    labelRevisions?: GoldenLabelRevision[];
     review: GoldenReview;
 }
 
@@ -348,6 +377,18 @@ export const validateWasteGoldenSetV2 = (
             !isIsoDate(row.adjudication.assessedAt)
         )) {
             problems.push(`${prefix}: invalid automated adjudication.`);
+        }
+        for (const revision of row.labelRevisions ?? []) {
+            if (!GOLDEN_DECISION_STATUSES.includes(revision.previous?.status) ||
+                !revision.group.trim() ||
+                !revision.reason.trim() ||
+                revision.evidenceSections.length === 0 ||
+                revision.evidenceSections.some((section) => !sections.has(section)) ||
+                revision.reviewMethod !== 'ai_assisted_evidence_review' ||
+                revision.humanReviewed !== false ||
+                !isIsoDate(revision.revisedAt)) {
+                problems.push(`${prefix}: invalid label revision record.`);
+            }
         }
         if (row.review.status !== 'approved' || !row.review.curatorId || !row.review.reviewerId ||
             row.review.curatorId === row.review.reviewerId || !isIsoDate(row.review.approvedAt)) {
