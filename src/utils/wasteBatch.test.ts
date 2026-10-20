@@ -233,6 +233,43 @@ describe('analyzeWasteBatch', () => {
         });
     });
 
+    it.each([
+        'Cadmium sulfoselenide orange',
+        'Dicopper chloride trihydroxide',
+        'Strontium hexafluorosilicate(2-)',
+        '불화 유로퓸',
+    ])('keeps the classification hold for an unclassified solid named after a heavy metal or fluorine: %s', (name) => {
+        const draft = batch([analysis(name, '', 'UNKNOWN')], 'solid_slurry');
+        draft.components[0].ghsDataStatus = 'verified';
+        draft.components[0].identityConfidence = 'verified';
+
+        const decision = analyzeWasteBatch(draft);
+        expect(decision.decisionStatus).toBe('needs_input');
+        expect(decision.missingFields).toContain('classification');
+    });
+
+    it('blocks a REACTIVE flag even when the category stays UNKNOWN', () => {
+        const draft = batch([
+            analysis('Ester, reaction products with tert-butyl hydroperoxide', '', 'UNKNOWN'),
+        ], 'aqueous');
+        draft.components[0].hazardFlags = ['REACTIVE', 'UNKNOWN_COMPONENT'];
+
+        const decision = analyzeWasteBatch(draft);
+        expect(decision).toMatchObject({ decisionStatus: 'blocked', streamCode: 'REACTIVE_OXIDIZER' });
+        expect(decision.blockingReasons.map(({ code }) => code)).toContain('reactive_waste');
+    });
+
+    it('does not claim a matrix basis for a halogenated component in an unknown matrix', () => {
+        const draft = batch([
+            analysis('Chlorodifluoromethane', 'CHClF2', 'ORGANIC_HALOGEN'),
+        ], 'unknown');
+
+        expect(analyzeWasteBatch(draft)).toMatchObject({
+            streamCode: 'ORGANIC_HALOGENATED',
+            routingBasis: 'unresolved',
+        });
+    });
+
     it('does not let the solid fallback override a verified reactive hazard', () => {
         const draft = batch([
             analysis('Reactive solid', '', 'UNKNOWN', { hCodes: ['H250'] }),

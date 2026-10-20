@@ -23,11 +23,11 @@ const archivedVersions = snapshot.migrations
   .filter((version: string) => version && !EXPECTED_LOCAL_ONLY_WITHOUT_SQL.includes(version))
 
 describe('database release safety manifest through cabinet trash', () => {
-  it('locks the release to one baseline, seventeen incrementals, and the reviewed production history', () => {
+  it('locks the release to one baseline, eighteen incrementals, and the reviewed production history', () => {
     expect(verifyDatabaseReleaseSafety()).toEqual({
-      activeMigrations: 18,
+      activeMigrations: 19,
       legacySqlFiles: 50,
-      activePgTapTests: 15,
+      activePgTapTests: 17,
       legacySqlTests: 10,
       baseline: {
         publicTables: 49,

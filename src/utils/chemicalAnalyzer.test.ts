@@ -388,6 +388,28 @@ describe('analyzeChemical corrosive-acid and reactive-identity coverage', () => 
     });
 
     it.each([
+        ["di-tert-butyl α,α,α',α'-tetramethyl-(p-phenylenedimethylene) diperoxide", 'C20H34O4'],
+        ['tert-Butylperoxy 2-ethylhexyl carbonate', 'C13H26O4'],
+        ['1,2-Dimethylhydrazine', 'C2H8N2'],
+        ['Phenylhydrazine', 'C6H8N2'],
+    ])('treats an organic peroxide or substituted hydrazine as reactive without an H-code: %s', (name, molecularFormula) => {
+        const result = analyzeChemical({ id: name, name, casNumber: '67-64-1', molecularFormula });
+        expect(result.category).toBe('REACTIVE');
+    });
+
+    it.each([
+        ['Isonicotinic hydrazide (Isoniazid)', 'C6H7N3O'],
+        ['Hydrochlorothiazide', 'C7H8ClN3O4S2'],
+        ['Gliclazide', 'C15H21N3O3S'],
+        ['N-Methylhydrazinecarbothioamide', 'C2H7N3S'],
+        ["N,N'-diacetylhydrazine (Acetic acid, 2-acetylhydrazide)", 'C4H8N2O2'],
+        ['1,2-Dibenzoylhydrazine', 'C14H12N2O2'],
+    ])('does not read a hydrazide, thiazide or "-azide" drug name as reactive: %s', (name, molecularFormula) => {
+        const result = analyzeChemical({ id: name, name, casNumber: '67-64-1', molecularFormula });
+        expect(result.hazardProfile?.flags).not.toContain('REACTIVE');
+    });
+
+    it.each([
         ['TERBIUM PEROXIDE (Terbium oxide (Tb4O7))', 'H14O7Tb4'],
         ['Terbium oxide (alias: terbium peroxide)', 'OTb2'],
         ['Superoxide dismutase from human erythrocytes', ''],

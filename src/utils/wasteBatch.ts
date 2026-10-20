@@ -25,7 +25,7 @@ import {
 } from './chemicalAnalyzer';
 import { concentrationAwareCategory } from './fatalToxicityDilution';
 
-export const WASTE_RULE_VERSION = '2.8.0';
+export const WASTE_RULE_VERSION = '2.9.0';
 export const DEFAULT_WASTE_POLICY_VERSION = 'KR-2026.3';
 
 export interface NormalizedWasteAmount {
@@ -627,7 +627,11 @@ const selectRouting = (
             batch.matrix === 'aqueous' && hasAcidMixingRole && hasAlkaliMixingRole
         )
     )) {
-        return { streamCode: 'ORGANIC_HALOGENATED', routingBasis: 'matrix' };
+        // A halogenated category alone does not establish the matrix.
+        return {
+            streamCode: 'ORGANIC_HALOGENATED',
+            routingBasis: batch.matrix === 'unknown' ? 'unresolved' : 'matrix',
+        };
     }
     if (batch.matrix === 'organic_non_halogenated') {
         return { streamCode: 'ORGANIC_NON_HALOGENATED', routingBasis: 'matrix' };
@@ -686,6 +690,15 @@ const pushMissing = (
 };
 
 /**
+ * An UNKNOWN component usually has no formula, so its heavy-metal or fluorine
+ * content is visible only in the name ("cadmium sulfoselenide", "strontium
+ * hexafluorosilicate"). Such a name keeps the classification hold instead of
+ * the common contaminated-solid fallback. analyze_waste_batch_v2 uses the
+ * same pattern.
+ */
+export const SOLID_FALLBACK_EXCLUDED_NAME_PATTERN = /\b(?:lead|tin|gold|aur(?:ic|ous))\b|silver|argent|cadmium|plumb|mercur|chrom|arsen|nickel|copper|cupr|zinc|barium|beryllium|cobalt|mangan|osmium|antimon|stib|thallium|palladium|platin|rhodium|ruthenium|iridium|stann|selen|molybd|vanad|fluor|카드뮴|수은|크롬|비소|니켈|구리|아연|바륨|베릴륨|코발트|망간|오스뮴|안티몬|탈륨|팔라듐|백금|로듐|루테늄|이리듐|주석|셀레|셀렌|몰리브덴|바나듐|불소|불화|플루오/i;
+
+/**
  * A verified solid matrix is enough to use the common contaminated-solid
  * stream only after all hazardous precedence rules have run. This intentionally
  * applies to UNKNOWN components only: a known cyanide, metal, fluoride,
@@ -695,6 +708,7 @@ const isSafeVerifiedSolidFallback = (component: WasteComponent): boolean => (
     component.category === 'UNKNOWN' &&
     component.identityConfidence === 'verified' &&
     (component.ghsDataStatus === 'verified' || component.hazardDataConfirmedByUser === true) &&
+    !SOLID_FALLBACK_EXCLUDED_NAME_PATTERN.test(component.chemical.name ?? '') &&
     !component.hazardFlags.some((flag) => (
         flag === 'REACTIVE' ||
         flag === 'OXIDIZER' ||
@@ -826,7 +840,10 @@ export function analyzeWasteBatch(
             messageKey: 'waste_block_special_hazard',
         });
     }
-    if (batch.components.some(({ category }) => category === 'REACTIVE')) {
+    // A REACTIVE flag blocks even without the REACTIVE category, e.g. on a
+    // reaction-product UVCB (category UNKNOWN) or a manually added flag. The
+    // server blocks on the flag as well.
+    if (hazards.has('REACTIVE') || batch.components.some(({ category }) => category === 'REACTIVE')) {
         pushReason(blockingReasons, {
             code: 'reactive_waste',
             messageKey: 'waste_block_reactive',
