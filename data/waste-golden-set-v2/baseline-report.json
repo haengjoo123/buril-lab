@@ -1,7 +1,7 @@
 {
   "schemaVersion": "2.4.0",
-  "datasetSha256": "881766aa4105fa67b4e17ef00e2ab5daebce29c20fd4a4af8531bdeda596c8f6",
-  "generatedAt": "2026-10-19T09:30:38.094Z",
+  "datasetSha256": "f4c5dbad0502da98b92aa6d4588419f40a93a5a1112c0a8b4a3f78caeff1400a",
+  "generatedAt": "2026-10-20T07:52:37.548Z",
   "total": 1103,
   "strictMatches": 1100,
   "strictMatchRate": 0.9972801450589301,
@@ -198,7 +198,7 @@
       },
       "actual": {
         "status": "needs_input",
-        "streamCode": "ACID_AQUEOUS",
+        "streamCode": "AQUEOUS_OTHER",
         "reasons": [],
         "missingFields": [
           "classification"
@@ -219,5 +219,14 @@
         "assessedAt": "2026-08-08T00:00:00.000Z"
       }
     }
-  ]
+  ],
+  "concentrationScenarios": {
+    "total": 23,
+    "strictMatches": 23,
+    "strictMatchRate": 1,
+    "conservativeHolds": 0,
+    "unsafeAutomaticReady": 0,
+    "readyStreamMismatches": 0,
+    "mismatches": []
+  }
 }

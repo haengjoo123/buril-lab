@@ -75,6 +75,7 @@ import {
 } from './cartPhPredictionUi';
 import { AppSelect } from './AppSelect';
 import { WasteComponentRegulationChips } from './WasteComponentRegulationChips';
+import { FatalToxicityDilutionHint } from './FatalToxicityDilutionHint';
 import type {
     AmountUnit,
     ConcentrationUnit,
@@ -1724,6 +1725,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_concentration_positive')}
                                                     </p>
                                                 )}
+                                                <FatalToxicityDilutionHint component={component} />
                                                 {(concentrationUnits[component.cartLineId] ?? component.concentration?.unit) === '%' && component.concentration && (
                                                     <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-950/40">
                                                         <div className="block text-xs font-medium text-slate-600 dark:text-slate-300">

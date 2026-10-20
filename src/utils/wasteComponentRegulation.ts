@@ -6,6 +6,7 @@ import {
   type ChemicalRegulationRecord,
   type RegulationApplicability,
 } from './chemicalRegulations'
+import { fatalToxicityDilutionLimit } from './fatalToxicityDilutionLimits'
 
 export interface RegulationConcentration {
   percent: number
@@ -23,17 +24,26 @@ export interface ComponentRegulationResult {
 const validMolecularWeight = (value: number | undefined): value is number =>
   value !== undefined && Number.isFinite(value) && value > 0
 
-/** Convert an entered concentration to a mass percentage. M, mM and mg/mL become w/v and are marked approximate. */
+/**
+ * Convert an entered concentration to a mass percentage. M, mM and mg/mL
+ * become w/v and are marked approximate. With `worstCaseDensity`, a % that is
+ * not w/w or w/v (v/v, or no basis chosen) is scaled by that density so a
+ * dense liquid measured by volume is never under-counted.
+ */
 export function concentrationToPercent(
   concentration: WasteConcentration,
   molecularWeight?: number,
+  worstCaseDensity?: number,
 ): Omit<RegulationConcentration, 'source'> | null {
   const { value, unit } = concentration
   if (!Number.isFinite(value) || value <= 0) return null
   let percent: number | null
   let approximate = true
   if (unit === '%') {
-    percent = value
+    const isMassBasis = concentration.basis === 'w_w' || concentration.basis === 'w_v'
+    percent = worstCaseDensity !== undefined && !isMassBasis
+      ? value * Math.max(1, worstCaseDensity)
+      : value
     approximate = concentration.basis !== 'w_w'
   } else if (unit === 'mg/mL') {
     percent = value / 10
@@ -49,11 +59,17 @@ export function concentrationToPercent(
 /**
  * The concentration a component's legal classes are judged at. A solution
  * without a usable concentration cannot be judged; a neat product or solid
- * without a label concentration is judged as supplied (100%).
+ * without a label concentration is judged as supplied (100%). A substance with
+ * a fatal-toxicity dilution limit is converted with its vetted molecular
+ * weight and worst-case density, exactly as the waste decision and the server
+ * judge it.
  */
 export function regulationConcentrationForComponent(component: WasteComponent): RegulationConcentration | null {
   if (component.concentration) {
-    const converted = concentrationToPercent(component.concentration, component.chemical.molecularWeight)
+    const limit = fatalToxicityDilutionLimit(component.chemical.casNumber)
+    const converted = limit
+      ? concentrationToPercent(component.concentration, limit.molecularWeight, limit.worstCaseDensity)
+      : concentrationToPercent(component.concentration, component.chemical.molecularWeight)
     if (converted) return { ...converted, source: 'entered' }
   }
   const form = component.materialForm ?? 'solution'

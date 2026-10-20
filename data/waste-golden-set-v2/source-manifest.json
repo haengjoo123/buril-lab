@@ -154,5 +154,10 @@
     ],
     "labelReview": "ai_assisted_evidence_review",
     "humanReviewed": false
+  },
+  "concentrationScenarios": {
+    "file": "concentration-scenarios.json",
+    "count": 23,
+    "datasetSha256": "916d516a7a74763f13170753398dce6c9645ddbd5c44cfed6c29161b1c76f385"
   }
 }

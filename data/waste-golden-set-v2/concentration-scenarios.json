@@ -1,0 +1,808 @@
+[
+  {
+    "id": "v2-1002-7664-93-9-c1m",
+    "baseRowId": "v2-1002-7664-93-9",
+    "casNumber": "7664-93-9",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 1,
+      "unit": "M"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ready",
+      "streamCode": "ACID_AQUEOUS",
+      "reason": "1 M is about 9.8% w/v (w/w is lower), below the 10% KECO threshold of both 사고대비물질 and 인체급성유해성; a corrosive (H314) aqueous acid goes to the aqueous acid stream."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1002-7664-93-9-c5ww",
+    "baseRowId": "v2-1002-7664-93-9",
+    "casNumber": "7664-93-9",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 5,
+      "unit": "%",
+      "basis": "w_w"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ready",
+      "streamCode": "ACID_AQUEOUS",
+      "reason": "5% w/w is below the 10% KECO threshold; corrosive (H314) aqueous acid stream."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1002-7664-93-9-c2m",
+    "baseRowId": "v2-1002-7664-93-9",
+    "casNumber": "7664-93-9",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 2,
+      "unit": "M"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "2 M is about 19.6% w/v, above the 10% KECO threshold, so the fatal acute-toxicity (H330) hold stays. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1002-7664-93-9-c10ww",
+    "baseRowId": "v2-1002-7664-93-9",
+    "casNumber": "7664-93-9",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 10,
+      "unit": "%",
+      "basis": "w_w"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "The KECO rule reads \"10% 이상\", so exactly 10% w/w is still a hazardous mixture. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1002-7664-93-9-c6vv",
+    "baseRowId": "v2-1002-7664-93-9",
+    "casNumber": "7664-93-9",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 6,
+      "unit": "%",
+      "basis": "v_v"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "6% v/v of concentrated acid (1.84 g/mL) is about 11% by mass, above the 10% KECO threshold. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1002-7664-93-9-neat",
+    "baseRowId": "v2-1002-7664-93-9",
+    "casNumber": "7664-93-9",
+    "materialForm": "neat",
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "The neat product is judged as supplied (100%). Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1002-7664-93-9-unknown",
+    "baseRowId": "v2-1002-7664-93-9",
+    "casNumber": "7664-93-9",
+    "materialForm": "solution",
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "Without a concentration the solution cannot be shown to be below the KECO threshold. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1003-7697-37-2-c01m",
+    "baseRowId": "v2-1003-7697-37-2",
+    "casNumber": "7697-37-2",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 0.1,
+      "unit": "M"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "46",
+          "contentThreshold": "질산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-246",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "KOSHA Section 2 classifies nitric acid as an oxidizer (H271); the oxidizer hold is independent of the 10% KECO acute-toxicity threshold and is never relaxed by dilution here."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1003-7697-37-2-c1ww",
+    "baseRowId": "v2-1003-7697-37-2",
+    "casNumber": "7697-37-2",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 1,
+      "unit": "%",
+      "basis": "w_w"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "46",
+          "contentThreshold": "질산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-246",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "Below the 10% KECO threshold, but the H271 oxidizer hold still applies; keep it apart from organics and flammables."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1003-7697-37-2-neat",
+    "baseRowId": "v2-1003-7697-37-2",
+    "casNumber": "7697-37-2",
+    "materialForm": "neat",
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "46",
+          "contentThreshold": "질산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-246",
+          "contentThreshold": "인체급성유해성 : 10%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "Neat nitric acid is an oxidizer (H271) with fatal inhalation toxicity (H330)."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1054-50-00-0-c005ww",
+    "baseRowId": "v2-1054-50-00-0",
+    "casNumber": "50-00-0",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 0.05,
+      "unit": "%",
+      "basis": "w_w"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "제한물질",
+          "uniqueNumber": "06-5-5",
+          "contentThreshold": "폼알데하이드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "1",
+          "contentThreshold": "포르말린 또는 포름알데히드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-345",
+          "contentThreshold": "인체급성유해성 : 1%, 인체만성유해성 : 0.1%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ready",
+      "streamCode": "AQUEOUS_OTHER",
+      "reason": "0.05% w/w is below every KECO threshold (제한물질 1%, 사고대비물질 1%, 인체급성유해성 1%, 인체만성유해성 0.1%); a dilute non-halogenated aqueous solution goes to the ordinary aqueous stream."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1054-50-00-0-c05ww",
+    "baseRowId": "v2-1054-50-00-0",
+    "casNumber": "50-00-0",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 0.5,
+      "unit": "%",
+      "basis": "w_w"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "제한물질",
+          "uniqueNumber": "06-5-5",
+          "contentThreshold": "폼알데하이드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "1",
+          "contentThreshold": "포르말린 또는 포름알데히드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-345",
+          "contentThreshold": "인체급성유해성 : 1%, 인체만성유해성 : 0.1%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "0.5% is below the 1% acute threshold but above the 0.1% 인체만성유해성 threshold, so it is still a hazardous mixture. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1054-50-00-0-c4wv",
+    "baseRowId": "v2-1054-50-00-0",
+    "casNumber": "50-00-0",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 4,
+      "unit": "%",
+      "basis": "w_v"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "제한물질",
+          "uniqueNumber": "06-5-5",
+          "contentThreshold": "폼알데하이드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "1",
+          "contentThreshold": "포르말린 또는 포름알데히드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-345",
+          "contentThreshold": "인체급성유해성 : 1%, 인체만성유해성 : 0.1%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "4% formaldehyde (10% formalin fixative) is above every KECO threshold. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1054-50-00-0-neat",
+    "baseRowId": "v2-1054-50-00-0",
+    "casNumber": "50-00-0",
+    "materialForm": "neat",
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "제한물질",
+          "uniqueNumber": "06-5-5",
+          "contentThreshold": "폼알데하이드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "1",
+          "contentThreshold": "포르말린 또는 포름알데히드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-345",
+          "contentThreshold": "인체급성유해성 : 1%, 인체만성유해성 : 0.1%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "Formalin as supplied is judged at 100%. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1054-50-00-0-unknown",
+    "baseRowId": "v2-1054-50-00-0",
+    "casNumber": "50-00-0",
+    "materialForm": "solution",
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "제한물질",
+          "uniqueNumber": "06-5-5",
+          "contentThreshold": "폼알데하이드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "사고대비물질",
+          "uniqueNumber": "1",
+          "contentThreshold": "포르말린 또는 포름알데히드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-345",
+          "contentThreshold": "인체급성유해성 : 1%, 인체만성유해성 : 0.1%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "Without a concentration the solution cannot be shown to be below the KECO thresholds. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1055-111-30-8-c05wv",
+    "baseRowId": "v2-1055-111-30-8",
+    "casNumber": "111-30-8",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 0.5,
+      "unit": "%",
+      "basis": "w_v"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-5",
+          "contentThreshold": "인체급성유해성 : 1%, 생태유해성 : 25%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ready",
+      "streamCode": "AQUEOUS_OTHER",
+      "reason": "0.5% w/v is below the 1% 인체급성유해성 and 25% 생태유해성 KECO thresholds; ordinary aqueous stream."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1055-111-30-8-c25wv",
+    "baseRowId": "v2-1055-111-30-8",
+    "casNumber": "111-30-8",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 2.5,
+      "unit": "%",
+      "basis": "w_v"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-5",
+          "contentThreshold": "인체급성유해성 : 1%, 생태유해성 : 25%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "2.5% glutaraldehyde fixative is above the 1% KECO acute threshold. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1056-1239-45-8-c05ugml",
+    "baseRowId": "v2-1056-1239-45-8",
+    "casNumber": "1239-45-8",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 0.0005,
+      "unit": "mg/mL"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": []
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "KECO lists no hazardous class for ethidium bromide, so no legal threshold can lift the fatal acute-toxicity (H330) hold even for a 0.5 µg/mL gel buffer. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1056-1239-45-8-c10mgml",
+    "baseRowId": "v2-1056-1239-45-8",
+    "casNumber": "1239-45-8",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 10,
+      "unit": "mg/mL"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": []
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "A 10 mg/mL stock has fatal inhalation toxicity (H330) and no KECO threshold. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1056-1239-45-8-neat",
+    "baseRowId": "v2-1056-1239-45-8",
+    "casNumber": "1239-45-8",
+    "materialForm": "neat",
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": []
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "The neat product is judged as supplied. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1057-60-24-2-c01vv",
+    "baseRowId": "v2-1057-60-24-2",
+    "casNumber": "60-24-2",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 0.1,
+      "unit": "%",
+      "basis": "v_v"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "2023-1-1135",
+          "contentThreshold": "인체급성유해성 : 1%, 생태유해성 : 25%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "ready",
+      "streamCode": "AQUEOUS_OTHER",
+      "reason": "0.1% v/v (about 0.11% by mass) is below the 1% 인체급성유해성 and 25% 생태유해성 KECO thresholds; ordinary aqueous stream."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1057-60-24-2-c1vv",
+    "baseRowId": "v2-1057-60-24-2",
+    "casNumber": "60-24-2",
+    "materialForm": "solution",
+    "concentration": {
+      "value": 1,
+      "unit": "%",
+      "basis": "v_v"
+    },
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "2023-1-1135",
+          "contentThreshold": "인체급성유해성 : 1%, 생태유해성 : 25%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "1% v/v of the neat liquid (1.11 g/mL) is above the 1% KECO acute threshold. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  },
+  {
+    "id": "v2-1057-60-24-2-neat",
+    "baseRowId": "v2-1057-60-24-2",
+    "casNumber": "60-24-2",
+    "materialForm": "neat",
+    "thresholdEvidence": {
+      "authority": "KECO",
+      "service": "data.go.kr 15149420 chemSbstnList",
+      "accessedAt": "2026-10-20T00:00:00.000Z",
+      "entries": [
+        {
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "2023-1-1135",
+          "contentThreshold": "인체급성유해성 : 1%, 생태유해성 : 25%"
+        }
+      ]
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "The neat product is judged as supplied. Isolate for SPECIAL_REVIEW handover instead of a common container."
+    },
+    "review": {
+      "reviewerId": "ai-assisted-label-review-v1",
+      "reviewMethod": "ai_assisted_evidence_review",
+      "humanReviewed": false,
+      "reviewedAt": "2026-10-20T00:00:00.000Z"
+    }
+  }
+]

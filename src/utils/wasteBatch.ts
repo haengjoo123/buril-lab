@@ -22,8 +22,9 @@ import {
     isCorrosiveAcidByNameAndHCodes,
     parseFormula,
 } from './chemicalAnalyzer';
+import { concentrationAwareCategory } from './fatalToxicityDilution';
 
-export const WASTE_RULE_VERSION = '2.6.0';
+export const WASTE_RULE_VERSION = '2.7.0';
 export const DEFAULT_WASTE_POLICY_VERSION = 'KR-2026.3';
 
 export interface NormalizedWasteAmount {
@@ -696,13 +697,30 @@ const isSafeVerifiedSolidFallback = (component: WasteComponent): boolean => (
 );
 
 /**
+ * Route a solution diluted below its legal limit by its ordinary category
+ * instead of the fatal acute-toxicity hold. Neat, unknown and at-threshold
+ * components keep the hold; the server re-derives the same exemption.
+ */
+const withConcentrationAwareCategories = (batch: WasteBatchDraft): WasteBatchDraft => {
+    let changed = false;
+    const components = batch.components.map((component) => {
+        const category = concentrationAwareCategory(component);
+        if (category === component.category) return component;
+        changed = true;
+        return { ...component, category };
+    });
+    return changed ? { ...batch, components } : batch;
+};
+
+/**
  * Deterministic V2 decision engine. Compatibility DANGER rules always win,
  * while a GHS "Danger" signal word by itself never blocks a batch.
  */
 export function analyzeWasteBatch(
-    batch: WasteBatchDraft,
+    draft: WasteBatchDraft,
     options: AnalyzeWasteBatchOptions = {},
 ): WasteDecision {
+    const batch = withConcentrationAwareCategories(draft);
     const hazards = new Set<WasteHazardFlag>();
     for (const component of batch.components) {
         for (const flag of [...component.hazardFlags, ...deriveWasteHazardFlags(component)]) {
