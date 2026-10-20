@@ -505,7 +505,8 @@ export type WasteDecisionReasonCode =
     | 'acid_alkali_separate'
     | 'acid_alkali_non_aqueous_mixed'
     | 'unknown_matrix_review'
-    | 'unknown_component';
+    | 'unknown_component'
+    | 'cyanide_not_alkaline';
 
 export interface WasteDecisionReason {
     code: WasteDecisionReasonCode;

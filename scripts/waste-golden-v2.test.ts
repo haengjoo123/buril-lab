@@ -93,6 +93,28 @@ describe('CAS·SDS actual-substance golden set V2', () => {
         }
     });
 
+    it('routes HCN-releasing cyanide only after a measured alkaline pH, and keeps HCN and nitriles held', () => {
+        const byCas = new Map(rows.map((row) => [row.casNumber, row.expected]));
+        const cyanidePh = rows.filter(({ labelRevisions }) => labelRevisions?.some(({ group }) => (
+            group === 'cyanide_alkaline_ph' || group === 'cyanide_unification'
+        )));
+
+        expect(cyanidePh).toHaveLength(25);
+        expect(cyanidePh.every(({ expected }) => (
+            expected.status === 'needs_input' && expected.recommendedStreamCode === 'CYANIDE_SULFIDE'
+        ))).toBe(true);
+        for (const unified of ['12211-52-8', '557-21-1', '14402-89-2']) {
+            expect(byCas.get(unified)).toMatchObject({ status: 'needs_input', recommendedStreamCode: 'CYANIDE_SULFIDE' });
+        }
+        // Stable iron hexacyanides and thiocyanates need no pH; HCN and nitriles stay held.
+        for (const stable of ['13943-58-3', '13746-66-2', '593-84-0']) {
+            expect(byCas.get(stable)).toMatchObject({ status: 'ready', streamCode: 'CYANIDE_SULFIDE' });
+        }
+        for (const held of ['74-90-8', '107-13-1', '107-12-0', '75-86-5']) {
+            expect(byCas.get(held)?.status).toBe('blocked');
+        }
+    });
+
     it('records special review as a non-authorizing recommendation, not a decision status', () => {
         const specialReviewRecommendations = rows.filter(({ expected }) => (
             expected.status === 'needs_input' &&
@@ -106,7 +128,8 @@ describe('CAS·SDS actual-substance golden set V2', () => {
     it('records every post-approval label change as AI-assisted, never as human review', () => {
         const revised = rows.filter(({ labelRevisions }) => labelRevisions?.length);
 
-        expect(revised).toHaveLength(91);
+        // 91 earlier revisions plus 22 rows first revised by the 2.8.0 cyanide rule.
+        expect(revised).toHaveLength(113);
         expect(revised.every(({ labelRevisions }) => labelRevisions!.every((revision) => (
             revision.reviewMethod === 'ai_assisted_evidence_review' &&
             revision.humanReviewed === false &&

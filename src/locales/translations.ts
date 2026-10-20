@@ -392,6 +392,7 @@ export const translations = {
         waste_action_handover: "인계 기록",
         waste_blocking_reason: "차단 이유",
         waste_block_special_hazard: "폭발성·자기반응성 등 특수 위험 물질은 일반 폐액통에 넣을 수 없습니다.",
+        waste_block_cyanide_not_alkaline: "시안 폐액의 pH가 10 미만이에요. 산성·중성에서는 시안화수소(HCN) 가스가 나올 수 있어 폐액통에 넣지 말고 담당자에게 넘기세요.",
         waste_block_reactive: "반응성 물질은 일반 폐액통에 넣지 말고 분리 보관하거나 인계해야 합니다.",
         waste_block_explosive_self_reactive: "폭발성 또는 자기반응성 위험 때문에 일반 혼합·입고가 차단되었습니다.",
         waste_block_pyrophoric: "자연발화성 위험 때문에 일반 혼합·입고가 차단되었습니다.",
@@ -414,6 +415,7 @@ export const translations = {
         waste_legacy_separate_help: "이 배치는 이전 버전에서 서로 다른 용기의 시료로 기록되었습니다. 서로 다른 용기라면 혼합하지 말고 각각 별도 배치로 기록하세요. 이미 실제로 하나의 용기에 함께 들어 있는 경우에만 아래 버튼을 누르세요.",
         waste_confirm_single_container: "현재 한 용기의 폐액으로 확인",
         waste_ph_measured_only_help: "이 혼합액의 예상 pH는 서버 승인 조건을 충족하지 않았습니다. 현재 혼합액에서 직접 측정한 pH를 입력하세요.",
+        waste_ph_cyanide_help: "시안 폐액은 pH 10 이상(알칼리성)일 때만 시안 전용 폐액통에 넣을 수 있어요. 지금 폐액의 pH를 재서 입력하세요.",
         waste_ph_prediction_title: "예상 pH",
         waste_ph_prediction_value: "예상 pH ≈ {{value}}",
         waste_ph_prediction_safety: "검증된 양호 예상 pH는 서버 승인 후에만 수용액 산·알칼리 혼합물 분류에 사용할 수 있습니다. 근사값·경계값은 실측 pH가 필요합니다.",
@@ -767,6 +769,7 @@ export const translations = {
         reason_solid_waste: "고체 상태로 추정되는 물리적 형태의 물질입니다.",
         reason_us_rcra_p_list_match: "미국 EPA P-list CAS 일치 · 국내 폐기물 분류 별도 확인 필요",
         reason_fatal_acute_toxicity: "치명적 급성독성 정보가 확인되어 별도 검토가 필요합니다.",
+        reason_hydrogen_cyanide: "시안화수소(HCN)는 휘발성 맹독 가스라 폐액통에 넣지 않고 별도로 인계해야 합니다.",
         reason_unknown: "자동 분류할 수 없습니다. 안전관리자에게 문의하세요.",
 
         // Disposal Guides (Single Chemical)
@@ -3012,6 +3015,7 @@ export const translations = {
         waste_action_handover: "Record handover",
         waste_blocking_reason: "Why this is blocked",
         waste_block_special_hazard: "Explosive, self-reactive, or other special-hazard material cannot go into a general waste container.",
+        waste_block_cyanide_not_alkaline: "This cyanide waste is below pH 10. It can release hydrogen cyanide (HCN) gas, so do not use a container; hand it over instead.",
         waste_block_reactive: "Reactive material must be isolated or handed over instead of placed in a general waste container.",
         waste_block_explosive_self_reactive: "Explosive or self-reactive hazards block ordinary mixing and deposit.",
         waste_block_pyrophoric: "Pyrophoric hazards block ordinary mixing and deposit.",
@@ -3034,6 +3038,7 @@ export const translations = {
         waste_legacy_separate_help: "An earlier version recorded these samples as being in separate containers. If they are separate, do not mix them; record each container as its own batch. Use the button below only if they are already together in one physical container.",
         waste_confirm_single_container: "Confirm one physical container",
         waste_ph_measured_only_help: "The predicted pH for this mixture did not meet the server authorization conditions. Enter a pH measured directly from the current mixture.",
+        waste_ph_cyanide_help: "Cyanide waste goes into the cyanide container only at pH 10 or higher (alkaline). Measure this waste and enter its pH.",
         waste_ph_prediction_title: "Predicted pH",
         waste_ph_prediction_value: "Predicted pH ≈ {{value}}",
         waste_ph_prediction_safety: "A validated good predicted pH may route an aqueous acid/alkali mixture only after server authorization. Approximate and boundary results require measured pH.",
@@ -3387,6 +3392,7 @@ export const translations = {
         reason_solid_waste: "Physical state is estimated to be solid.",
         reason_us_rcra_p_list_match: "US EPA P-list CAS match; not a confirmed Korean legal classification.",
         reason_fatal_acute_toxicity: "Fatal acute-toxicity data requires separate review.",
+        reason_hydrogen_cyanide: "Hydrogen cyanide (HCN) is a volatile, highly toxic gas: hand it over separately instead of using a container.",
         reason_unknown: "Cannot classify automatically. Consult safety officer.",
 
         // Disposal Guides (Single Chemical)
