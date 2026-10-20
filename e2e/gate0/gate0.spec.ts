@@ -164,7 +164,7 @@ test('login → lab → inventory search → reviewed waste record → direct li
   await batchDialog.getByRole('button', { name: '다음' }).click()
 
   const containerDeposit = batchDialog.getByRole('button', { name: '폐액통 입고 기록' })
-  await expect(batchDialog.getByText('폐액통 안내 가능')).toBeVisible()
+  await expect(batchDialog.getByRole('heading', { name: '폐액통 안내 가능' })).toBeVisible()
   // Finalization is deliberately screen-only. No voice action is issued.
   await expect(containerDeposit).toBeVisible()
   await containerDeposit.click()

@@ -449,7 +449,7 @@ export default defineConfig(({ mode }) => {
     // Codex and local tooling may create ignored temporary worktrees that
     // contain third-party test fixtures. They are not application tests and
     // must not make the repository test command depend on their packages.
-    exclude: [...configDefaults.exclude, '**/.codex-tmp/**'],
+    exclude: [...configDefaults.exclude, '**/.codex-tmp/**', '**/.claude/worktrees/**'],
   },
   // Vite exposes every variable matching envPrefix through import.meta.env.
   // Automatic exposure is intentionally disabled; only the explicit public

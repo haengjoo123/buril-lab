@@ -59,7 +59,7 @@ export function DisposalLogModal({ isOpen, cabinetId, cabinetName, onClose }: Di
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center animate-in fade-in duration-200">
+        <div className="adaptive-overlay fixed inset-0 z-[100] flex items-end justify-center animate-in fade-in duration-200">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
             <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-xl w-full max-w-md max-h-[70vh] flex flex-col animate-in slide-in-from-bottom duration-300">
                 {/* Header */}

@@ -55,7 +55,8 @@ import {
     type InventoryHazardFilterCategory,
 } from '../../utils/inventoryHazardClassifier';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/aiReagentScanService';
-import { useIsDesktop } from '../../hooks/useIsDesktop';
+import { useAdaptiveLayout } from '../../hooks/useAdaptiveLayout';
+import { AdaptivePaneLayout } from '../../components/AdaptivePaneLayout';
 import { enrichChemicals } from '../../services/chemicalEnrichmentService';
 import {
     enrichInventoryHazardBatches,
@@ -197,7 +198,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.inventory);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const { currentLabId } = useLabStore();
-    const isDesktop = useIsDesktop();
+    const layout = useAdaptiveLayout();
+    const listLayout = useAdaptiveLayout();
+    const [activePane, setActivePane] = useState<'primary' | 'detail'>('primary');
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [locations, setLocations] = useState<StorageLocation[]>([]);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
@@ -302,6 +305,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         setLoadError(null);
         setIsLoading(true);
         setSelectedDesktopItemId(null);
+        setActivePane('primary');
         setItemActionMenuItem(null);
         setItemToDelete(null);
         setIsFormOpen(false);
@@ -1664,16 +1668,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         toggleItemSelection(item.id);
                         return;
                     }
-                    if (isDesktop) {
-                        setSelectedDesktopItemId(item.id);
-                        return;
-                    }
-                    handleEdit(item);
+                    setSelectedDesktopItemId(item.id);
+                    setActivePane('detail');
                 }}
                 className={`${nested
                     ? 'rounded-2xl border bg-slate-50/80 px-4 pb-2 pt-4 shadow-sm cursor-pointer hover:border-emerald-300 dark:bg-slate-900/30 dark:hover:border-emerald-600'
                     : 'bg-white dark:bg-slate-800 px-4 pb-2 pt-4 rounded-xl border shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
-                    } flex flex-col gap-3 transition-colors ${selectedDesktopItemId === item.id ? 'lg:border-emerald-400 lg:ring-2 lg:ring-emerald-500/30' : cardBorderClass || 'border-slate-200 dark:border-slate-700'}`}
+                    } flex flex-col gap-3 transition-colors ${selectedDesktopItemId === item.id ? 'table:border-emerald-400 table:ring-2 table:ring-emerald-500/30' : cardBorderClass || 'border-slate-200 dark:border-slate-700'}`}
             >
                 <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
@@ -1951,22 +1952,22 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     }
 
     return (
-        <div className="flex h-full flex-col bg-slate-50 dark:bg-slate-900 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)]">
+        <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={layout} activePane={activePane} onBack={() => setActivePane('primary')} data-inventory-table={listLayout.bounds.width >= 640} className="inventory-panes flex h-full flex-col bg-slate-50 dark:bg-slate-900">
             {/* Header */}
-            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-800 lg:col-start-1 lg:row-start-1 lg:overflow-y-auto lg:[scrollbar-gutter:stable] lg:border-b-0 lg:border-r lg:border-slate-200 lg:bg-slate-50 lg:px-6 lg:pb-3 lg:pt-6 dark:lg:border-slate-800 dark:lg:bg-slate-900">
-                <div className="flex items-center justify-between gap-2">
+            <div data-pane="primary" className="inventory-header flex-shrink-0 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-800 table:col-start-1 table:row-start-1 table:overflow-y-auto table:[scrollbar-gutter:stable] table:border-b-0 table:border-r table:border-slate-200 table:bg-slate-50 table:px-6 table:pb-3 table:pt-6 dark:table:border-slate-800 dark:table:bg-slate-900">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-3">
-                        <h1 className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xl font-bold text-slate-800 dark:text-slate-100 lg:text-2xl">
+                        <h1 className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xl font-bold text-slate-800 dark:text-slate-100 table:text-2xl">
                             <Package className="w-6 h-6 text-emerald-500" />
                             {t('inventory_list_title')}
                         </h1>
-                        <span className="hidden rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50 lg:inline-flex">
+                        <span className="hidden rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50 table:inline-flex">
                             {t('log_records_count', { count: items.length })}
                         </span>
                     </div>
                     <div
                         data-onboarding-target="inventory-tools"
-                        className="flex items-center gap-1.5 lg:gap-2"
+                        className="flex flex-wrap items-center gap-1.5 table:gap-2"
                     >
                         {/*
                         <button
@@ -1975,41 +1976,41 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             title={t('inv_cas_fill_blank')}
                             className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold border border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 flex items-center gap-1.5 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <Search className={`w-4 h-4 lg:w-3.5 lg:h-3.5 ${isCasReviewLoading ? 'animate-pulse' : ''}`} />
-                            <span className="hidden lg:inline whitespace-nowrap">{t('inv_cas_fill_blank')}</span>
+                            <Search className={`w-4 h-4 table:w-3.5 table:h-3.5 ${isCasReviewLoading ? 'animate-pulse' : ''}`} />
+                            <span className="hidden table:inline whitespace-nowrap">{t('inv_cas_fill_blank')}</span>
                         </button>
                         */}
                         <button
                             onClick={handleOpenScanRegistration}
                             title={t('inventory_add_menu_scan')}
-                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30 lg:inline-flex"
+                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30 wide:inline-flex"
                         >
                             <Camera className="h-3.5 w-3.5" />
-                            <span className="whitespace-nowrap">{t('inventory_add_menu_scan')}</span>
+                            <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_scan')}</span>
                         </button>
                         <button
                             onClick={handleOpenManualRegistration}
                             title={t('inventory_add_menu_manual')}
-                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 lg:inline-flex"
+                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 wide:inline-flex"
                         >
                             <Plus className="h-3.5 w-3.5" />
-                            <span className="whitespace-nowrap">{t('inventory_add_menu_manual')}</span>
+                            <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_manual')}</span>
                         </button>
                         <button
                             onClick={handleExportExcel}
                             title={t('inventory_excel_download_view')}
-                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 lg:h-9 lg:bg-white lg:px-3 lg:font-bold dark:lg:bg-slate-900"
+                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 table:h-9 table:bg-white table:px-3 table:font-bold dark:table:bg-slate-900"
                         >
-                            <Download className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
-                            <span className="hidden lg:inline whitespace-nowrap">{t('inventory_excel_download_view')}</span>
+                            <Download className="w-4 h-4 table:w-3.5 table:h-3.5" />
+                            <span className="hidden table:inline whitespace-nowrap">{t('inventory_excel_download_view')}</span>
                         </button>
                         <button
                             onClick={() => setIsCsvImportOpen(true)}
                             title={t('inventory_csv_manage_button')}
-                            className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40 sm:px-3 sm:py-1.5 lg:h-9 lg:px-3 lg:font-bold"
+                            className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40 sm:px-3 sm:py-1.5 table:h-9 table:px-3 table:font-bold"
                         >
-                            <Upload className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
-                            <span className="hidden lg:inline whitespace-nowrap">{t('inventory_csv_manage_button')}</span>
+                            <Upload className="w-4 h-4 table:w-3.5 table:h-3.5" />
+                            <span className="hidden table:inline whitespace-nowrap">{t('inventory_csv_manage_button')}</span>
                         </button>
                     </div>
                 </div>
@@ -2031,7 +2032,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 )}
 
                 {/* Search Bar */}
-                <div className="mt-4 relative lg:hidden">
+                <div className="mt-4 relative table:hidden">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                         type="text"
@@ -2041,7 +2042,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         className="w-full h-[42px] pl-9 pr-4 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
                     />
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-2 lg:hidden">
+                <div className="mt-3 flex items-center justify-end gap-2 table:hidden">
                     <div className="flex items-center gap-2 min-w-0">
                         <AppSelect
                             value={hazardFilter}
@@ -2065,7 +2066,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     </div>
                 </div>
                 {isSelectMode && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 lg:hidden">
+                    <div className="mt-3 flex flex-wrap items-center gap-2 table:hidden">
                         <button
                             onClick={toggleSelectMode}
                             className="px-3 py-1.5 rounded-lg text-xs font-semibold border bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200"
@@ -2152,29 +2153,29 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     </div>
                 )}
                 {isSelectMode && (
-                    <p className="mt-4 text-xs text-slate-500 dark:text-slate-400 lg:hidden">
+                    <p className="mt-4 text-xs text-slate-500 dark:text-slate-400 table:hidden">
                         {t('inventory_selected_count', { count: selectedItemIds.length })}
                     </p>
                 )}
                 {bulkDeleteError && (
-                    <p className="mt-4 text-xs text-red-600 dark:text-red-400 lg:hidden">
+                    <p className="mt-4 text-xs text-red-600 dark:text-red-400 table:hidden">
                         {bulkDeleteError}
                     </p>
                 )}
                 {bulkMoveError && (
-                    <p className="mt-4 text-xs text-red-600 dark:text-red-400 lg:hidden">
+                    <p className="mt-4 text-xs text-red-600 dark:text-red-400 table:hidden">
                         {bulkMoveError}
                     </p>
                 )}
                 {bulkMoveInfo && (
-                    <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300 lg:hidden">
+                    <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300 table:hidden">
                         {bulkMoveInfo}
                     </p>
                 )}
             </div>
 
             {/* List */}
-            <div className="min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto p-4 pb-24 lg:col-start-1 lg:row-start-2 lg:[scrollbar-gutter:stable] lg:border-r lg:border-slate-200 lg:px-6 lg:pb-6 lg:pt-0 dark:lg:border-slate-800">
+            <div ref={listLayout.attachContainer} data-pane="primary" className="inventory-list min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto p-4 pb-24 table:col-start-1 table:row-start-2 table:[scrollbar-gutter:stable] table:border-r table:border-slate-200 table:px-6 table:pb-6 table:pt-0 dark:table:border-slate-800">
                 {/* Expiry Summary Banner */}
                 {!isLoading && (expirySummary.expiredCount > 0 || expirySummary.warningCount > 0) && (
                     <div className="flex items-start gap-3 rounded-lg border border-red-200/60 bg-red-50 p-3.5 animate-in fade-in slide-in-from-top-2 duration-300 dark:border-red-900/40 dark:bg-red-950/30">
@@ -2205,7 +2206,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     </div>
                 ) : (
                     <>
-                        <div className="hidden min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
+                        <div className="hidden min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 table:block">
                             <div className="border-b border-slate-200 p-3 dark:border-slate-800">
                                 <div className="grid grid-cols-[minmax(280px,1fr)_auto_auto_auto] items-center gap-2">
                                     <div className="relative min-w-0">
@@ -2400,6 +2401,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                             return;
                                                         }
                                                         setSelectedDesktopItemId(item.id);
+                                                        setActivePane('detail');
                                                     }}
                                                     className={`cursor-pointer transition-colors ${
                                                         isSelected
@@ -2470,7 +2472,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             </div>
                         </div>
 
-                        <div className="space-y-3 lg:hidden">
+                        <div className="space-y-3 table:hidden">
                             {visibleGroups.length > 0 ? (
                                 visibleGroups.map((group) => (
                                     group.cardCount > 1
@@ -2486,7 +2488,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
             </div>
 
-            <aside className="hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block">
+            <aside data-pane="detail" className="min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
                     <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('inventory_group_detail_view')}</h2>
                 </div>
@@ -2622,15 +2624,15 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         type="button"
                         aria-label={t('inventory_add_menu_close')}
                         onClick={() => setIsAddMenuOpen(false)}
-                        className="absolute inset-0 z-10 cursor-default bg-slate-900/5 dark:bg-black/10 lg:hidden"
+                        className="absolute inset-0 z-10 cursor-default bg-slate-900/5 dark:bg-black/10 wide:hidden"
                     />
-                    <div className="absolute bottom-40 right-5 z-20 flex max-w-[calc(100vw-2.5rem)] flex-col items-end gap-3 lg:hidden">
+                    <div className="absolute bottom-40 right-5 z-20 flex max-w-[calc(100vw-2.5rem)] flex-col items-end gap-3 wide:hidden">
                         <button
                             type="button"
                             onClick={handleOpenScanRegistration}
                             className="animate-slide-up flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 active:translate-y-0 dark:border-blue-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-blue-700 dark:hover:text-blue-300"
                         >
-                            <span className="whitespace-nowrap">{t('inventory_add_menu_scan')}</span>
+                            <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_scan')}</span>
                             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/25">
                                 <Camera className="h-5 w-5" />
                             </span>
@@ -2641,7 +2643,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             className="animate-slide-up flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:text-emerald-700 active:translate-y-0 dark:border-emerald-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
                             style={{ animationDelay: '60ms' }}
                         >
-                            <span className="whitespace-nowrap">{t('inventory_add_menu_manual')}</span>
+                            <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_manual')}</span>
                             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
                                 <PackagePlus className="h-5 w-5" />
                             </span>
@@ -2654,7 +2656,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 aria-label={t('inventory_add_menu_open')}
                 aria-expanded={isAddMenuOpen}
                 onClick={() => setIsAddMenuOpen((open) => !open)}
-                className={`absolute bottom-24 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 lg:hidden ${isAddMenuOpen
+                className={`absolute bottom-24 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 wide:hidden ${isAddMenuOpen
                     ? 'rotate-45 bg-slate-800 shadow-slate-900/20 hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white'
                     : 'bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-600'
                     }`}
@@ -2674,7 +2676,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 <button
                     type="button"
                     onClick={() => setIsScanResultsOpen(true)}
-                    className="absolute bottom-24 left-5 z-30 flex h-14 items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 text-sm font-bold text-emerald-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-slate-800 dark:text-emerald-300 lg:hidden"
+                    className="absolute bottom-24 left-5 z-30 flex h-14 items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 text-sm font-bold text-emerald-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-slate-800 dark:text-emerald-300 table:hidden"
                 >
                     <CheckCircle2 className="h-5 w-5" />
                     {t('inventory_scan_result_count', { count: scanResults.length })}
@@ -2682,7 +2684,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             )}
 
             {isScanResultsOpen && (
-                <div className="fixed inset-0 z-[95] flex items-end justify-center p-0 pointer-events-none">
+                <div className="adaptive-overlay fixed inset-0 z-[95] flex items-end justify-center p-0 pointer-events-none">
                     <div className="absolute inset-0 bg-slate-900/30 pointer-events-auto" onClick={() => setIsScanResultsOpen(false)} />
                     <div className="relative w-full max-w-[430px] max-h-[62vh] overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl pointer-events-auto dark:border-slate-700 dark:bg-slate-900 animate-in slide-in-from-bottom-4 duration-300">
                         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
@@ -2770,7 +2772,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
             {itemActionMenuItem && (
                 <div
-                    className="fixed inset-0 z-[140] flex items-end justify-center lg:hidden"
+                    className="adaptive-overlay fixed inset-0 z-[140] flex items-end justify-center table:hidden"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="inventory-remove-menu-title"
@@ -2897,7 +2899,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             />
 
             {/*
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="adaptive-overlay fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div
                         className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm"
                         onClick={handleCloseCasReview}
@@ -3007,6 +3009,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     </div>
                 </div>
             */}
-        </div>
+        </AdaptivePaneLayout>
     );
 };

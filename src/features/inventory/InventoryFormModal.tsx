@@ -1,3 +1,4 @@
+import { useAdaptiveDialog } from '../../hooks/useAdaptiveDialog';
 import { formatAuditActionName } from '../../utils/auditLogFormatting';
 import { AuditChangeList } from '../../components/AuditChangeList';
 import React, { useState, useEffect, useRef } from 'react';
@@ -43,6 +44,8 @@ export const InventoryFormModal: React.FC<Props> = ({
     const [error, setError] = useState<string | null>(null);
     const [cabinets, setCabinets] = useState<Cabinet[]>([]);
     const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    useAdaptiveDialog(dialogRef, onClose, isOpen);
     const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [showQtyNotice, setShowQtyNotice] = useState(false);
 
@@ -619,20 +622,20 @@ export const InventoryFormModal: React.FC<Props> = ({
             )}
 
             {isOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                <div className="adaptive-overlay fixed inset-0 z-[200] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
 
-                    <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-800">
+                    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="inventory-form-title" tabIndex={-1} className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-800">
                         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
-                            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                            <h2 id="inventory-form-title" className="text-lg font-bold text-slate-800 dark:text-slate-100">
                                 {modalTitle}
                             </h2>
-                            <button onClick={onClose} className="p-1 -mr-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <button onClick={onClose} aria-label={t('btn_close')} className="min-h-11 min-w-11 p-1 -mr-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">
                             <form id="inventory-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
 
                                 {error && (

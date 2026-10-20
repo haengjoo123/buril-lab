@@ -5,6 +5,8 @@ import { SettingsModal } from './SettingsModal';
 import { useTranslation } from 'react-i18next';
 import { LabContextSwitcher } from './LabContextSwitcher';
 import { DesktopSideNav } from './DesktopSideNav';
+import { AdaptiveContentContext, useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
+import { intersectRegion, navigationMode, resolvePaneGeometry } from '../utils/adaptiveLayout';
 import type { AppTab } from '../hooks/useAppUiState';
 
 interface MainLayoutProps {
@@ -41,73 +43,26 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     const hasCartItems = cartCount > 0;
     const cartBadgeText = cartCount > 99 ? '99+' : String(cartCount);
 
+    const { viewport, visibleViewport, segments, activeRegion, bounds: contentBounds, attachContainer } = useAdaptiveLayout();
+    const navWidth = viewport.width < 600 ? 0 : viewport.width < 1200 ? 72 : 224;
+    const canSpan = resolvePaneGeometry({ ...viewport, x: navWidth, width: viewport.width - navWidth }, segments).twoPane;
+    const layoutRegion = segments.length > 1 && !canSpan ? activeRegion : viewport;
+    const region = intersectRegion(layoutRegion, visibleViewport);
+    const mode = navigationMode(layoutRegion.width);
+    const firstSegment = segments[0];
+    const headerWidth = segments.length > 1 && canSpan
+        ? firstSegment.width - navWidth : undefined;
+
     return (
-        <div className="fixed inset-0 bg-gray-100 font-sans text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
-            <div className="flex h-full justify-center lg:hidden">
-                <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-white shadow-xl transition-colors duration-300 dark:bg-slate-900">
-                    <header className="sticky top-0 z-50 flex items-center gap-2 border-b border-gray-100 bg-white px-3 py-4 transition-colors duration-300 dark:border-slate-800 dark:bg-slate-900 sm:px-5">
-                        <button
-                            onClick={onLogoClick}
-                            className="flex min-w-0 shrink-0 items-center gap-1.5 transition-opacity hover:opacity-80 sm:gap-2"
-                        >
-                            <div className="shrink-0 overflow-hidden rounded-lg">
-                                <img src={logo} alt={t('app_logo_alt')} className="h-9 w-9 object-contain" />
-                            </div>
-                            <h1 className="max-w-[104px] truncate text-xl font-bold tracking-tight text-slate-800 dark:text-white">{t('app_title')}</h1>
-                        </button>
-                        <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:gap-2">
-                            {!hideLabSwitcher && <LabContextSwitcher />}
-                            {onLoginClick && (
-                                <button
-                                    type="button"
-                                    onClick={onLoginClick}
-                                    className="px-1 text-sm font-semibold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                                >
-                                    {t('auth_login')}
-                                </button>
-                            )}
-                            <button
-                                onClick={() => setIsSettingsOpen(true)}
-                                className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                                title={t('btn_settings')}
-                            >
-                                <Settings className="h-5 w-5 transition-transform hover:rotate-45" />
-                            </button>
-                            {userEmail && onSignOut && (
-                                <button
-                                    onClick={onSignOut}
-                                    className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                                    title={t('auth_logout')}
-                                >
-                                    <LogOut className="h-5 w-5" />
-                                </button>
-                            )}
-                        </div>
-                    </header>
-
-                    <main className="min-h-0 w-full flex-1 overflow-y-auto pb-16">
-                        {children}
-                    </main>
-
-                    {bottomNav}
-                </div>
-            </div>
-
-            <div className="hidden h-full w-full bg-slate-50 dark:bg-slate-950 lg:flex">
-                {onTabClick && (
-                    <DesktopSideNav
-                        activeTab={activeTab}
-                        isAdmin={isAdmin}
-                        onTabClick={onTabClick}
-                        userEmail={userEmail}
-                        onSettingsClick={() => setIsSettingsOpen(true)}
-                        onLogoClick={onLogoClick}
-                    />
-                )}
-
-                <div className="flex min-w-0 flex-1 flex-col">
-                    <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-950">
-                        <div className="flex min-w-0 items-center gap-3">
+        <div className="adaptive-shell fixed bg-gray-100 font-sans text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+            data-navigation={mode} style={{ left: region.x, top: region.y, width: region.width || '100%', height: region.height || '100dvh' }}>
+            {onTabClick && <DesktopSideNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={onTabClick}
+                userEmail={userEmail} onSettingsClick={() => setIsSettingsOpen(true)} onLogoClick={onLogoClick} />}
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
+                <div style={{ width: headerWidth }} className="shrink-0 min-w-0">
+                    <header className="adaptive-header flex min-h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-950">
+                        <div className="flex min-w-0 items-center gap-2">
+                            {mode === 'bottom' && <button onClick={onLogoClick} aria-label={t('app_title')} className="shrink-0 min-h-11 min-w-11"><img src={logo} alt={t('app_logo_alt')} className="h-9 w-9 rounded-lg" /></button>}
                             {!hideLabSwitcher && <LabContextSwitcher />}
                         </div>
                         <div className="flex items-center gap-2">
@@ -115,7 +70,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                                 <button
                                     type="button"
                                     onClick={onCartClick}
-                                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                    className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-900/40"
                                     aria-label={`${t('cart_title')} ${cartBadgeText}`}
                                     title={t('cart_title')}
                                 >
@@ -139,7 +94,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                             )}
                             <button
                                 onClick={() => setIsSettingsOpen(true)}
-                                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                                className="rounded-lg min-h-11 min-w-11 p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                                 title={t('btn_settings')}
                             >
                                 <Settings className="h-5 w-5" />
@@ -147,7 +102,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                             {userEmail && onSignOut && (
                                 <button
                                     onClick={onSignOut}
-                                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+                                    className="rounded-lg min-h-11 min-w-11 p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
                                     title={t('auth_logout')}
                                 >
                                     <LogOut className="h-5 w-5" />
@@ -156,18 +111,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                         </div>
                     </header>
 
-                    <main className="min-h-0 flex-1 overflow-y-auto">
-                        {children}
-                    </main>
                 </div>
+                <div ref={attachContainer} className="adaptive-content relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                    <AdaptiveContentContext.Provider value={contentBounds}>
+                        <main className="h-full min-h-0 min-w-0 overflow-y-auto">{children}</main>
+                    </AdaptiveContentContext.Provider>
+                </div>
+                {bottomNav}
             </div>
-
-            {isSettingsOpen && (
-                <SettingsModal
-                    isAuthenticated={Boolean(userEmail)}
-                    onClose={() => setIsSettingsOpen(false)}
-                />
-            )}
+            {isSettingsOpen && <SettingsModal isAuthenticated={Boolean(userEmail)} onClose={() => setIsSettingsOpen(false)} />}
         </div>
     );
 };

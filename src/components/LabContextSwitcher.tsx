@@ -70,7 +70,7 @@ export const LabContextSwitcher: React.FC<LabContextSwitcherProps> = ({ variant 
                         aria-label={t('common_close_menu')}
                     />
 
-                    <div className={`${isSidebar ? 'absolute bottom-full left-0 mb-2 w-full min-w-56' : 'absolute top-full right-0 mt-1 w-56 lg:left-0 lg:right-auto lg:w-full lg:min-w-64'} bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 py-2 z-50`}>
+                    <div className={`${isSidebar ? 'absolute bottom-full left-0 mb-2 w-full min-w-56' : 'absolute top-full left-0 mt-1 w-56 lg:w-full'} max-w-[calc(var(--overlay-width,100vw)-2rem)] max-h-[calc(var(--overlay-height,100dvh)-6rem)] overflow-y-auto bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 py-2 z-50`}>
                         <div className="px-3 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                             {t('lab_my_space')}
                         </div>

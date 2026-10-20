@@ -1,3 +1,4 @@
+import { useAdaptiveLayout } from '../../hooks/useAdaptiveLayout';
 import { Camera, CheckCircle2, Eye, X } from 'lucide-react';
 import type { OnboardingMissionKey } from '../../store/useOnboardingStore';
 
@@ -34,20 +35,21 @@ export function MobileOnboardingSheet({
     onFinish,
     onSkip,
 }: MobileOnboardingSheetProps) {
+    const { activeRegion } = useAdaptiveLayout();
     const progressPercent = Math.round((completedCount / totalCount) * 100);
     const isKorean = document.documentElement.lang === 'ko';
     const SecondaryIcon = mission === 'search' ? Camera : Eye;
     const shouldDockAtTop = mission === 'disposal' && hasSearchResult;
 
     return (
-        <div className="pointer-events-none fixed inset-0 z-[45] lg:hidden">
+        <div hidden={activeRegion.width >= 1200} className="pointer-events-none adaptive-overlay fixed inset-0 z-[45]">
             <div
                 className={`absolute left-1/2 w-full max-w-[430px] -translate-x-1/2 px-3 ${shouldDockAtTop
                     ? 'top-[calc(4rem+env(safe-area-inset-top))] pt-2'
                     : 'bottom-[calc(4rem+env(safe-area-inset-bottom))] pb-2'
                     }`}
             >
-                <div className="pointer-events-auto max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-[1.4rem] border border-slate-200 bg-white shadow-xl shadow-slate-950/15 dark:border-slate-700 dark:bg-slate-900">
+                <div className="pointer-events-auto max-h-[calc(var(--overlay-height,100dvh)-7rem)] overflow-y-auto rounded-[1.4rem] border border-slate-200 bg-white shadow-xl shadow-slate-950/15 dark:border-slate-700 dark:bg-slate-900">
                     <div className="h-1 bg-slate-100 dark:bg-slate-800">
                         <div
                             className="h-full rounded-r-full bg-blue-600 transition-all duration-300 dark:bg-blue-400"

@@ -2,6 +2,13 @@ export type Language = 'ko' | 'en';
 
 export const translations = {
     ko: {
+        adaptive_back_to_list: "목록으로",
+        adaptive_fit_view: "화면 맞춤",
+        adaptive_back_to_input: "입력으로",
+        adaptive_waste_review: "현재 입력 검토",
+        adaptive_waste_review_hint: "현재 입력에 따른 요약입니다. 최종 처리는 기존 확인 단계를 완료해 주세요.",
+        adaptive_total_amount: "전체량",
+
         app_title: "버릴랩",
         app_subtitle_1: "실험실 폐시약,",
         app_subtitle_2: "안전하게",
@@ -2698,6 +2705,13 @@ export const translations = {
         wl_label_ph: "주요 성분명\n폐액 전체량\n배출 연구실",
     },
     en: {
+        adaptive_back_to_list: "Back to list",
+        adaptive_fit_view: "Fit view",
+        adaptive_back_to_input: "Back to input",
+        adaptive_waste_review: "Review current input",
+        adaptive_waste_review_hint: "Summary of the current input. Complete all confirmation steps before recording disposal.",
+        adaptive_total_amount: "Total amount",
+
         app_title: "Buril Lab",
         app_subtitle_1: "Lab Waste,",
         app_subtitle_2: "Dispose Safely",

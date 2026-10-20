@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "test:e2e:adaptive": "playwright test --config playwright.adaptive.config.ts",
     "deploy": "gh workflow run web-release.yml --ref main",
     "deploy:status": "gh run list --workflow web-release.yml --limit 5",
     "deploy:check": "node scripts/check-web-release-setup.mjs",

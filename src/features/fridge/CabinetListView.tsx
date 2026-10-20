@@ -17,7 +17,8 @@ import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
-import { useIsDesktop } from '../../hooks/useIsDesktop';
+import { useAdaptiveLayout } from '../../hooks/useAdaptiveLayout';
+import { AdaptivePaneLayout } from '../../components/AdaptivePaneLayout';
 import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
 import { cabinetImageUploadMessageKey } from '../../utils/cabinetImageOptimization';
 
@@ -58,7 +59,8 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     const [cabinetStats, setCabinetStats] = useState<Record<string, CabinetListStats>>({});
     const [activityFeed, setActivityFeed] = useState<Record<string, CabinetActivityFeedItem[]>>({});
     const [isActivityFeedLoading, setIsActivityFeedLoading] = useState(false);
-    const isDesktop = useIsDesktop();
+    const layout = useAdaptiveLayout();
+    const [activePane, setActivePane] = useState<'primary' | 'detail'>('primary');
 
     const { currentLabId, myLabs } = useLabStore();
     const currentRole = myLabs.find(m => m.lab_id === currentLabId)?.role;
@@ -359,6 +361,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         setCabinetStats({});
         setActivityFeed({});
         setSelectedCabinetId(null);
+        setActivePane('primary');
         setLoadedLabId(undefined);
         setError(null);
         setIsLoading(true);
@@ -647,15 +650,15 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
     }
 
     return (
-        <div className="h-full overflow-y-auto bg-slate-50 p-5 pb-32 dark:bg-slate-950 lg:p-8 lg:pb-8">
-            <div className="mx-auto flex max-w-md flex-col gap-6 lg:grid lg:max-w-[1320px] lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
-                <div className="flex min-w-0 flex-col gap-6">
+        <div className="h-full min-h-0 bg-slate-50 dark:bg-slate-950">
+            <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={layout} activePane={activePane} onBack={() => setActivePane('primary')} className="flex h-full flex-col">
+                <div data-pane="primary" className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
                 <header
                     data-onboarding-target="cabinet-list-header"
-                    className="mt-4 flex items-center justify-between gap-4 lg:mt-2"
+                    className="mt-4 flex items-center justify-between gap-4 wide:mt-2"
                 >
                     <div>
-                        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 lg:text-3xl lg:tracking-tight">
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 wide:text-3xl wide:tracking-tight">
                             {currentLabId ? `${myLabs.find(m => m.lab_id === currentLabId)?.lab?.name || t('cabinet_lab_fallback')}${t('cabinet_lab_suffix')}` : t('cabinet_my_cabinets')}
                         </h2>
                         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{t('cabinet_list_desc')}</p>
@@ -665,7 +668,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                             type="button"
                             onClick={handleCreate}
                             disabled={isCreating}
-                            className="hidden h-11 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50 lg:inline-flex"
+                            className="hidden h-11 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50 wide:inline-flex"
                         >
                             {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                             {t('cabinet_create_new')}
@@ -673,7 +676,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                     )}
                 </header>
 
-                <section className="hidden flex-col gap-4 lg:flex">
+                <section className="hidden flex-col gap-4 wide:flex">
                     <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-3">
                         <label className="relative">
                             <span className="sr-only">{t('cabinet_search_placeholder')}</span>
@@ -725,17 +728,14 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                         return (
                         <div
                             key={cabinet.id}
-                            className={`min-w-0 rounded-lg transition-all ${isSelected ? '' : 'lg:hover:-translate-y-0.5'}`}
+                            className={`min-w-0 rounded-lg transition-all ${isSelected ? '' : 'wide:hover:-translate-y-0.5'}`}
                         >
                             <CabinetCard
                                 cabinet={cabinet}
                                 isSelected={isSelected}
                                 onClick={() => {
-                                    if (isDesktop) {
-                                        setSelectedCabinetId(cabinet.id);
-                                        return;
-                                    }
-                                    onSelectCabinet(cabinet.id);
+                                    setSelectedCabinetId(cabinet.id);
+                                    setActivePane('detail');
                                 }}
                                 onEdit={(e) => handleEdit(e, cabinet)}
                                 onDelete={canCreateCabinet ? (e) => handleDelete(e, cabinet.id) : undefined}
@@ -772,7 +772,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 </div>
                 </div>
 
-                <aside className="hidden flex-col gap-5 lg:flex">
+                <aside data-pane="detail" className="min-h-0 overflow-y-auto flex flex-col gap-5 p-4">
                     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div className="flex items-start justify-between gap-4">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('tab_cabinet')}</h3>
@@ -910,7 +910,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                         )}
                     </section>
                 </aside>
-            </div>
+            </AdaptivePaneLayout>
 
             <CustomDialog
                 isOpen={dialogConfig.isOpen}
@@ -1002,7 +1002,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
 
             {/* Inventory Modal */}
             {inventoryModal.isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-end justify-center animate-in fade-in duration-200">
+                <div className="adaptive-overlay fixed inset-0 z-[100] flex items-end justify-center animate-in fade-in duration-200">
                     <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setInventoryModal(prev => ({ ...prev, isOpen: false }))} />
                     <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-xl w-full max-w-md max-h-[70vh] flex flex-col animate-in slide-in-from-bottom duration-300">
                         {/* Header */}

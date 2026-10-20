@@ -10,6 +10,8 @@ export default defineConfig([
     'dist',
     'android/**/build/**',
     '.codex-tmp/**',
+    '.claude/worktrees/**',
+    'output/playwright/**',
     '.wrangler/**',
     'workers/storage-backup/worker-configuration.d.ts',
     'workers/deletion-scheduler/worker-configuration.d.ts',

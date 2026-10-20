@@ -23,7 +23,8 @@ import { supabase } from '../../services/supabaseClient';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
-import { useIsDesktop } from '../../hooks/useIsDesktop';
+import { useAdaptiveLayout } from '../../hooks/useAdaptiveLayout';
+import { AdaptivePaneLayout } from '../../components/AdaptivePaneLayout';
 import type { WasteBatchDisposalReason } from './reagentDisposalFlow';
 import { resolveAutoPlacementStorageData } from '../../utils/storagePlacementGate';
 import type { ManufacturerDateType } from '../../utils/manufacturerDate';
@@ -117,7 +118,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const { t } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.cabinetDetail);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
-    const isDesktop = useIsDesktop();
+    const layout = useAdaptiveLayout();
     const [verticalPanelPos, setVerticalPanelPos] = useState(50);
     const [isEditPanelVisible, setIsEditPanelVisible] = useState(false);
     const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(false);
@@ -215,6 +216,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         applyCompatibilityPlan,
         clearCompatibilityPlan,
         selectedReagentId,
+        setSelectedReagentId,
         layoutUndoStack,
         layoutRedoStack,
         undoCabinetLayout,
@@ -1051,7 +1053,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     return (
         <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-clip dark:bg-slate-950">
             {/* Header Toolbar */}
-            <div className="flex justify-between items-center px-4 py-3 bg-white shadow-sm z-30 relative shrink-0 dark:border-b dark:border-slate-800 dark:bg-slate-950">
+            <div style={{ width: layout.columns ? layout.regions[0]?.width : undefined }} className="flex justify-between items-center px-4 py-3 bg-white shadow-sm z-30 relative shrink-0 dark:border-b dark:border-slate-800 dark:bg-slate-950">
                 <div className="flex min-w-0 items-center gap-3">
                     {onBack && (
                         <button
@@ -1129,8 +1131,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             </div>
 
             {/* Main 3D Viewport */}
-            <div className="relative h-full w-full flex-1 lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_380px] lg:bg-slate-100 dark:lg:bg-slate-950">
-                <div className="relative min-h-0 overflow-hidden">
+            <AdaptivePaneLayout layout={layout} activePane={selectedReagentId ? 'detail' : 'primary'} onBack={() => setSelectedReagentId(null)} className="fridge-panes relative flex min-h-0 w-full flex-1 flex-col bg-slate-100 dark:bg-slate-950">
+                <div data-pane="primary" className="relative min-h-0 flex-1 overflow-hidden">
                 {isLoadingCabinet && (
                     <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-20 dark:bg-slate-950/50">
                         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -1272,7 +1274,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 />
 
                 {/* Edit Mode Overlay */}
-                {!isDesktop && <ReagentEditPanel onStartWasteBatch={onStartWasteBatch} />}
+
                 {mode === 'EDIT' && (
                     <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20">
                         {isEditPanelVisible ? (
@@ -1419,7 +1421,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
                 {/* Place Mode Reagent Tray - 편집 패널처럼 열고 닫기 */}
                 {mode === 'PLACE' && (
-                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20 lg:bottom-0">
+                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20 wide:bottom-0">
                         {isReagentTrayVisible ? (
                             <div className="relative bg-white/90 backdrop-blur pointer-events-auto p-4 rounded-xl shadow-lg border flex flex-col gap-2 max-w-full w-full mx-4 z-20">
                                 <button
@@ -1512,7 +1514,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 )}
                 </div>
 
-                <aside className="hidden min-h-0 border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
+                <aside data-pane="detail" className="min-h-0 border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 wide:flex wide:flex-col">
                     {selectedReagentId ? (
                         <ReagentEditPanel variant="desktop-aside" onStartWasteBatch={onStartWasteBatch} />
                     ) : (
@@ -1531,7 +1533,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                         </div>
                     )}
                 </aside>
-            </div>
+            </AdaptivePaneLayout>
 
             <CustomDialog
                 isOpen={isClearConfirmOpen}
@@ -1559,7 +1561,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
             {/* Original manual placement dialog */}
             {(pendingPlacement && showModalContent) && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="adaptive-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div
                         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
                         onClick={(e) => {
@@ -1805,7 +1807,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
             {/* Scan Result Dialog */}
             {scanDialogOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="adaptive-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div
                         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
                         onClick={() => {

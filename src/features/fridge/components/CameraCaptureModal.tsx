@@ -2,6 +2,7 @@ import { useRef, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import { X, Check, RotateCcw, Camera, Upload, Loader2, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useAdaptiveDialog } from '../../../hooks/useAdaptiveDialog';
 
 const MAX_CAPTURE_DIMENSION = 1920;
 const JPEG_CAPTURE_QUALITY = 0.95;
@@ -56,6 +57,7 @@ export function CameraCaptureModal({
 }: CameraCaptureModalProps) {
     const { t } = useTranslation();
     const webcamRef = useRef<Webcam>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [showFlash, setShowFlash] = useState(false);
@@ -132,21 +134,23 @@ export function CameraCaptureModal({
         onClose();
         setTimeout(() => setCapturedImage(null), 300);
     };
+    useAdaptiveDialog(dialogRef, handleClose, isOpen);
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[110] bg-black flex flex-col justify-center items-center animate-in fade-in duration-200">
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t('scan_upload')} tabIndex={-1} className="adaptive-overlay fixed inset-0 z-[110] bg-black flex flex-col justify-center items-center animate-in fade-in duration-200">
             {showFlash && <div className="absolute inset-0 bg-white z-[120] animate-pulse" />}
 
             <button
                 onClick={handleClose}
-                className="absolute top-5 right-5 text-white/80 hover:text-white p-2 z-[115]"
+                aria-label={t('close')}
+                className="absolute top-[calc(1.25rem+env(safe-area-inset-top))] right-5 text-white/80 hover:text-white p-2 z-[115]"
             >
                 <X className="w-8 h-8" />
             </button>
 
-            <div className="absolute top-16 text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-[111]">
+            <div className="absolute top-[calc(4rem+env(safe-area-inset-top))] text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-[111]">
                 {capturedImage
                     ? t('cabinet_camera_check')
                     : isContinuous
@@ -200,7 +204,7 @@ export function CameraCaptureModal({
                 )}
             </div>
 
-            <div className="absolute bottom-10 flex items-center justify-center gap-6 w-full px-5 z-[111]">
+            <div className="absolute bottom-[calc(2.5rem+env(safe-area-inset-bottom))] flex items-center justify-center gap-6 w-full px-5 z-[111]">
                 {!capturedImage ? (
                     <>
                         {/* File Upload Button */}

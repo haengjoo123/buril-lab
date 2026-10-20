@@ -1,3 +1,4 @@
+import { useAdaptiveDialog } from '../hooks/useAdaptiveDialog';
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import {
@@ -80,6 +81,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         stopCamera();
         onClose();
     }, [onClose, stopCamera]);
+    useAdaptiveDialog(dialogRef, closeScanner, true, false);
 
     useEffect(() => {
         const dialog = dialogRef.current;
@@ -346,7 +348,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
             aria-modal="true"
             aria-labelledby="scanner-dialog-title"
             tabIndex={-1}
-            className="fixed inset-0 z-50 bg-black flex flex-col justify-center items-center"
+            className="adaptive-overlay fixed inset-0 z-50 bg-black flex flex-col justify-center items-center"
         >
             {/* Flash Effect */}
             {showFlash && (

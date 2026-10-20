@@ -891,7 +891,7 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+        <div className="adaptive-overlay fixed inset-0 z-[220] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={closeModal} />
             <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-5xl max-h-[92vh] border border-slate-200 dark:border-slate-800 flex flex-col overflow-y-auto">
                 <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">

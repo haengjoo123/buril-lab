@@ -1,3 +1,5 @@
+import { useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
+import { AdaptivePaneLayout } from './AdaptivePaneLayout';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight } from 'lucide-react';
@@ -138,6 +140,8 @@ export function SearchTabView({
   const [isWasteLogsLoading, setIsWasteLogsLoading] = useState(false);
   const [wasteLogsError, setWasteLogsError] = useState(false);
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
+  const layout = useAdaptiveLayout();
+  const [closedResultQuery, setClosedResultQuery] = useState<string | null>(null);
   const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
   const hasOtherResults = mediaProducts.length > 0 || cabinetResults.length > 0;
   const hasSearchResults = Boolean(result) || hasOtherResults;
@@ -162,11 +166,12 @@ export function SearchTabView({
     const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportTop = viewport?.offsetTop ?? 0;
     const formBottom = searchFormRef.current.getBoundingClientRect().bottom;
-    const availableHeight = viewportTop + viewportHeight - formBottom - 18;
-    const nextHeight = Math.max(144, Math.min(360, Math.floor(availableHeight)));
+    const panelBottom = searchFormRef.current.closest('[data-pane]')?.getBoundingClientRect().bottom ?? Infinity;
+    const availableHeight = Math.min(viewportTop + viewportHeight, layout.activeRegion.y + layout.activeRegion.height, panelBottom) - formBottom - 18;
+    const nextHeight = Math.max(0, Math.min(360, Math.floor(availableHeight)));
 
     setAutocompleteMaxHeight(nextHeight);
-  }, []);
+  }, [layout.activeRegion]);
 
   const handleInputFocus = useCallback(() => {
     if (blurTimeoutRef.current !== null) {
@@ -191,12 +196,14 @@ export function SearchTabView({
   const handleFormSubmit = useCallback((event?: FormEvent) => {
     searchInputRef.current?.blur();
     setSearchFocus(false);
+    setClosedResultQuery(null);
     onSearchSubmit(event);
   }, [onSearchSubmit, setSearchFocus]);
 
   const handleSuggestionSelect = useCallback((term: string) => {
     searchInputRef.current?.blur();
     setSearchFocus(false);
+    setClosedResultQuery(null);
     onSuggestionClick(term);
     onClearSuggestions?.();
   }, [onClearSuggestions, onSuggestionClick, setSearchFocus]);
@@ -317,7 +324,7 @@ export function SearchTabView({
 
   return (
     <div
-      className={`p-5 transition-[padding] duration-300 lg:p-8 ${isSearchFocused ? 'pt-3 pb-6' : cartCount > 0 ? 'pb-28 lg:pb-8' : ''}`}
+      className="h-full min-h-0"
       onPointerDown={(event) => {
         if (!isSearchFocused || !searchFormRef.current) return;
         if (event.target instanceof Node && searchFormRef.current.contains(event.target)) return;
@@ -325,10 +332,12 @@ export function SearchTabView({
         setSearchFocus(false);
       }}
     >
-      <div className="mx-auto flex w-full max-w-[1320px] flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
-        <div className="flex min-w-0 flex-col gap-6">
+      <AdaptivePaneLayout onActivePaneChange={pane => setClosedResultQuery(pane === 'primary' ? lastSearchQuery : null)} layout={layout} activePane={result && closedResultQuery !== lastSearchQuery ? 'detail' : 'primary'}
+        onBack={() => setClosedResultQuery(lastSearchQuery)} className="search-panes flex h-full flex-col">
+
+        <div data-pane="primary" className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4"><div className="flex flex-col gap-6">
       {showOnboardingGuide && (
-        <div className={isSearchFocused ? 'hidden lg:block' : ''}>
+        <div className={isSearchFocused ? 'hidden wide:block' : ''}>
           <OnboardingGuideCard
             icon={<Search className="h-5 w-5" />}
             title={t('onboarding_search_title')}
@@ -344,18 +353,18 @@ export function SearchTabView({
       )}
 
       {!result && !isSearchFocused && (
-        <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500 lg:hidden">
-          <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 lg:text-4xl lg:tracking-tight">
+        <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500 wide:hidden">
+          <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 wide:text-4xl wide:tracking-tight">
             {t('app_subtitle_1')}<br />
             <span className="text-blue-600 dark:text-blue-400">{t('app_subtitle_2')}</span> {t('app_subtitle_3')}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400 lg:text-base">
+          <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400 wide:text-base">
             {t('app_desc')}
           </p>
         </section>
       )}
 
-      <section className="hidden lg:block">
+      <section className="hidden wide:block">
         <h2 className="text-4xl font-bold tracking-tight text-slate-950 dark:text-slate-100">
           {t('tab_search')}
         </h2>
@@ -392,25 +401,25 @@ export function SearchTabView({
         ref={searchFormRef}
         onSubmit={handleFormSubmit}
         data-onboarding-target="search-box"
-        className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 lg:relative lg:top-auto' : ''}`}
+        className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 wide:relative wide:top-auto' : ''}`}
       >
         <div
-          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:group-focus-within:translate-y-0 lg:group-focus-within:shadow-none dark:lg:bg-transparent ${error
+          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 wide:rounded-none wide:border-0 wide:bg-transparent wide:p-0 wide:shadow-none wide:group-focus-within:translate-y-0 wide:group-focus-within:shadow-none dark:wide:bg-transparent ${error
             ? 'border-red-300 dark:border-red-900/50'
             : 'border-slate-100 dark:border-slate-700/70'
             }`}
         >
-          <div className={`flex items-center gap-2 transition-colors lg:min-h-[76px] lg:gap-3 lg:rounded-[24px] lg:border lg:px-3 lg:py-2 ${
+          <div className={`flex items-center gap-2 transition-colors wide:min-h-[76px] wide:gap-3 wide:rounded-[24px] wide:border wide:px-3 wide:py-2 ${
             error
-              ? 'lg:border-red-200 lg:bg-red-50 dark:lg:border-red-900/60 dark:lg:bg-red-950/30'
-              : 'lg:border-slate-200 lg:bg-slate-50/80 lg:ring-1 lg:ring-white lg:group-focus-within:border-blue-300 lg:group-focus-within:bg-white lg:group-focus-within:ring-blue-100 dark:lg:border-slate-700/70 dark:lg:bg-slate-900/70 dark:lg:ring-slate-700/50 dark:lg:group-focus-within:border-blue-500/60 dark:lg:group-focus-within:bg-slate-900 dark:lg:group-focus-within:ring-blue-500/20'
+              ? 'wide:border-red-200 wide:bg-red-50 dark:wide:border-red-900/60 dark:wide:bg-red-950/30'
+              : 'wide:border-slate-200 wide:bg-slate-50/80 wide:ring-1 wide:ring-white wide:group-focus-within:border-blue-300 wide:group-focus-within:bg-white wide:group-focus-within:ring-blue-100 dark:wide:border-slate-700/70 dark:wide:bg-slate-900/70 dark:wide:ring-slate-700/50 dark:wide:group-focus-within:border-blue-500/60 dark:wide:group-focus-within:bg-slate-900 dark:wide:group-focus-within:ring-blue-500/20'
           }`}>
             <button
               type="button"
               onClick={onOpenScanner}
               aria-label={t('btn_scan')}
               disabled={isLoading}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 lg:h-12 lg:w-12"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 wide:h-12 wide:w-12"
             >
               <Camera className="h-5 w-5 stroke-[2.2]" />
             </button>
@@ -424,7 +433,7 @@ export function SearchTabView({
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
                 data-onboarding-target="search-input"
-              className="block h-10 w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] lg:h-14 lg:text-lg lg:text-slate-900 lg:placeholder:text-slate-400 dark:lg:text-slate-100 dark:lg:placeholder:text-slate-500"
+              className="block h-10 w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] wide:h-14 wide:text-lg wide:text-slate-900 wide:placeholder:text-slate-400 dark:wide:text-slate-100 dark:wide:placeholder:text-slate-500"
               placeholder={t('search_placeholder')}
               disabled={isLoading}
             />
@@ -435,7 +444,7 @@ export function SearchTabView({
                 type="button"
                 onClick={onReset}
                 aria-label={t('search_reset')}
-                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200 lg:hover:bg-slate-200/70 lg:hover:text-slate-700"
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200 wide:hover:bg-slate-200/70 wide:hover:text-slate-700"
               >
                 <span className="sr-only">{t('search_reset')}</span>
                 <X className="h-4 w-4" />
@@ -446,7 +455,7 @@ export function SearchTabView({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-950/30 transition-all duration-300 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60 lg:h-12 lg:w-12"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-950/30 transition-all duration-300 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60 wide:h-12 wide:w-12"
                   aria-label={t('lab_mgmt_search_btn')}
                 >
                   {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5 stroke-[2.4]" />}
@@ -458,7 +467,7 @@ export function SearchTabView({
                   onClick={onOpenVoiceAgent}
                   disabled={isLoading}
                   aria-label={t('voice_agent_cta_speak')}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 lg:h-12 lg:w-12"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 wide:h-12 wide:w-12"
                 >
                   <Mic className="h-5 w-5 stroke-[2.3]" />
                 </button>
@@ -551,23 +560,10 @@ export function SearchTabView({
             </div>
           )}
 
-          {result && (
-            <div>
-              {(mediaProducts.length > 0 || cabinetResults.length > 0) && (
-                <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2 mt-2">
-                  {t('search_results_chemical')}
-                </h3>
-              )}
-              <ResultCard
-                result={result}
-                scanSelectionMeta={scanSelectionMeta}
-                sourceSearchEventId={sourceSearchEventId}
-                onReset={onReset}
-                onAddConfirmed={onResultAddConfirmed}
-                onRequireAuth={onRequireAuth}
-              />
-            </div>
-          )}
+          {result && <button type="button" onClick={() => setClosedResultQuery(null)}
+            className="min-h-11 rounded-xl border border-blue-200 p-4 text-left font-semibold text-blue-700 dark:text-blue-300">
+            {lastSearchQuery} · {t('search_results_chemical')}
+          </button>}
 
           {mediaProducts.length > 0 && (
             <div>
@@ -592,7 +588,7 @@ export function SearchTabView({
                   <MediaProductCard
                     key={product.id}
                     product={product}
-                    onSelected={onProductResultClick}
+                    onSelected={product => { setClosedResultQuery(null); onProductResultClick?.(product); }}
                     onNavigateToCabinet={onNavigateToCabinet}
                   />
                 ))}
@@ -620,7 +616,7 @@ export function SearchTabView({
         </div>
       ) : (
         <div className={`flex flex-col gap-6 transition-opacity duration-300 ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-          <section className="hidden lg:block">
+          <section className="hidden wide:block">
             <div className="mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('search_preview_title')}</h3>
             </div>
@@ -638,7 +634,7 @@ export function SearchTabView({
           </section>
 
           {recentSearches.length > 0 && !isSearchFocused && (
-            <section className="lg:hidden">
+            <section className="wide:hidden">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-slate-800 dark:text-slate-200">{t('guide_example')}</h3>
                 <button
@@ -681,7 +677,7 @@ export function SearchTabView({
       )}
         </div>
 
-        <aside className="hidden flex-col gap-5 lg:flex">
+        <aside className="mt-5 flex flex-col gap-5">
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('guide_example')}</h3>
@@ -826,7 +822,23 @@ export function SearchTabView({
             </section>
           )}
         </aside>
-      </div>
+        </div>
+        <section data-pane="detail" className="min-h-0 overflow-y-auto p-4">
+          {result ? <>
+              <ResultCard
+                result={result}
+                scanSelectionMeta={scanSelectionMeta}
+                sourceSearchEventId={sourceSearchEventId}
+                onReset={onReset}
+                onAddConfirmed={onResultAddConfirmed}
+                onRequireAuth={onRequireAuth}
+              />
+
+          </> : <div className="flex h-full min-h-48 items-center justify-center text-center text-slate-500">
+            {isLoading ? t('search_loading_suggestions') : t('search_preview_empty_desc')}
+          </div>}
+        </section>
+      </AdaptivePaneLayout>
     </div>
   );
 }
