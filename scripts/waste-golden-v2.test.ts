@@ -115,6 +115,26 @@ describe('CAS·SDS actual-substance golden set V2', () => {
         }
     });
 
+    it('holds organic peroxides, substituted hydrazines and metal- or fluorine-named solids (2.9.0)', () => {
+        const byCas = new Map(rows.map((row) => [row.casNumber, row.expected]));
+        const revisedIn = (group: string) => rows.filter(({ labelRevisions }) => (
+            labelRevisions?.some((revision) => revision.group === group)
+        ));
+
+        expect(revisedIn('organic_peroxide_reactive_block')).toHaveLength(2);
+        expect(revisedIn('substituted_hydrazine_reactive_block')).toHaveLength(3);
+        expect(revisedIn('named_metal_fluorine_solid_hold')).toHaveLength(4);
+        for (const blocked of ['2781-00-2', '129757-67-1', '1615-80-1', '57-14-7', '540-73-8', '122-66-7']) {
+            expect(byCas.get(blocked)?.status).toBe('blocked');
+        }
+        // An acyl hydrazine is a hydrazide, not a reactive hydrazine.
+        expect(byCas.get('3148-73-0')).toMatchObject({ status: 'ready', streamCode: 'ACID_AQUEOUS' });
+        for (const held of ['12656-57-4', '1332-65-6', '74912-23-5', '18943-30-1']) {
+            expect(byCas.get(held)).toEqual(expect.objectContaining({ status: 'needs_input' }));
+            expect(byCas.get(held)?.streamCode).toBeUndefined();
+        }
+    });
+
     it('records special review as a non-authorizing recommendation, not a decision status', () => {
         const specialReviewRecommendations = rows.filter(({ expected }) => (
             expected.status === 'needs_input' &&
@@ -128,8 +148,9 @@ describe('CAS·SDS actual-substance golden set V2', () => {
     it('records every post-approval label change as AI-assisted, never as human review', () => {
         const revised = rows.filter(({ labelRevisions }) => labelRevisions?.length);
 
-        // 91 earlier revisions plus 22 rows first revised by the 2.8.0 cyanide rule.
-        expect(revised).toHaveLength(113);
+        // 91 earlier revisions, 22 rows first revised by the 2.8.0 cyanide rule
+        // and 9 by the 2.9.0 name rule.
+        expect(revised).toHaveLength(122);
         expect(revised.every(({ labelRevisions }) => labelRevisions!.every((revision) => (
             revision.reviewMethod === 'ai_assisted_evidence_review' &&
             revision.humanReviewed === false &&
