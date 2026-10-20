@@ -5,7 +5,7 @@ import { filterOps11GeneratedUntrackedPaths } from './verify-ops11-deletion-work
 describe('reviewed cabinet successor release', () => {
   it('verifies the complete current candidate while retaining hosted gates', () => {
     expect(verifyCabinetRelease()).toMatchObject({ result: 'cabinet-release-candidate-ok',
-      baseSha: CABINET_RELEASE_BASE_SHA, activeMigrations: 18, activePgTapTests: 15,
+      baseSha: CABINET_RELEASE_BASE_SHA, activeMigrations: 19, activePgTapTests: 17,
       hostedAcceptance: false, productionReady: false, ops12Included: false,
       deletionRuntimeDefaultEnabled: false })
     expect(new Set(CABINET_RELEASE_PATHS).size).toBe(CABINET_RELEASE_PATHS.length)

@@ -82,8 +82,14 @@ const FLUORIDE_COMPOUND_FORMULAS = new Set([
     'NAHF2', 'KHF2', 'CSF', 'RBF', 'BAF2', 'ZNF2',
 ]);
 
+/**
+ * analyze_waste_batch_v2 re-derives REACTIVE from these same patterns, so a
+ * change here needs the same change in the server function.
+ */
 const REACTIVE_NAME_PATTERNS = [
-    /\bperoxide\b/i,
+    // No leading boundary: organic peroxides are named "...diperoxide" or
+    // "tert-butylperoxy..." and the domestic SDS often omits H242.
+    /peroxide\b/i,
     /\bsuperoxide\b/i,
     /\bhydroperoxide\b/i,
     /\bnitrate\b/i,
@@ -100,11 +106,12 @@ const REACTIVE_NAME_PATTERNS = [
     /\bperoxydisulfate\b/i,
     /\bperacetic\s+acid\b/i,
     /perbenzoic\s+acid/i,
-    /\bperoxy/i,
-    /\bperoxy\s*acid\b/i,
+    /peroxy/i,
     /\bazide\b/i,
     /\bdiazomethane\b/i,
-    /\bhydrazine\b/i,
+    // Alkyl and aryl hydrazines ("1,2-dimethylhydrazine") are strong
+    // reducers like hydrazine itself; hydrazides and hydrazones do not match.
+    /hydrazine\b/i,
     /\bpicric\b/i,
     /\bnitric\s+acid\b/i,
     /\bperchloric\s+acid\b/i,

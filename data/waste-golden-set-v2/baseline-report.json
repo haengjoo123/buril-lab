@@ -1,12 +1,12 @@
 {
   "schemaVersion": "2.4.0",
   "datasetSha256": "0c2ee6f72447ae86867411a95d884e21bce3e1cd08ffa2bddfd76b9daf18b958",
-  "generatedAt": "2026-10-20T09:55:26.185Z",
+  "generatedAt": "2026-10-20T10:35:49.250Z",
   "total": 1103,
-  "strictMatches": 1100,
-  "strictMatchRate": 0.9972801450589301,
-  "conservativeHolds": 3,
-  "conservativeHoldRate": 0.0027198549410698096,
+  "strictMatches": 1090,
+  "strictMatchRate": 0.9882139619220308,
+  "conservativeHolds": 12,
+  "conservativeHoldRate": 0.010879419764279238,
   "unsafeAutomaticReady": 0,
   "readyStreamMismatches": 0,
   "recommendedStreamMismatches": 0,
@@ -33,20 +33,20 @@
     },
     "organic_non_halogenated": {
       "total": 134,
-      "strictMatches": 134,
-      "strictMatchRate": 1,
-      "conservativeHolds": 0,
-      "conservativeHoldRate": 0,
+      "strictMatches": 133,
+      "strictMatchRate": 0.9925373134328358,
+      "conservativeHolds": 1,
+      "conservativeHoldRate": 0.007462686567164179,
       "unsafeAutomaticReady": 0,
       "readyStreamMismatches": 0,
       "recommendedStreamMismatches": 0
     },
     "toxic_cmr": {
       "total": 68,
-      "strictMatches": 68,
-      "strictMatchRate": 1,
-      "conservativeHolds": 0,
-      "conservativeHoldRate": 0,
+      "strictMatches": 65,
+      "strictMatchRate": 0.9558823529411765,
+      "conservativeHolds": 3,
+      "conservativeHoldRate": 0.04411764705882353,
       "unsafeAutomaticReady": 0,
       "readyStreamMismatches": 0,
       "recommendedStreamMismatches": 0
@@ -83,20 +83,20 @@
     },
     "solid_other": {
       "total": 136,
-      "strictMatches": 136,
-      "strictMatchRate": 1,
-      "conservativeHolds": 0,
-      "conservativeHoldRate": 0,
+      "strictMatches": 132,
+      "strictMatchRate": 0.9705882352941176,
+      "conservativeHolds": 4,
+      "conservativeHoldRate": 0.029411764705882353,
       "unsafeAutomaticReady": 0,
       "readyStreamMismatches": 0,
       "recommendedStreamMismatches": 0
     },
     "acid_alkali": {
       "total": 108,
-      "strictMatches": 108,
-      "strictMatchRate": 1,
-      "conservativeHolds": 0,
-      "conservativeHoldRate": 0,
+      "strictMatches": 106,
+      "strictMatchRate": 0.9814814814814815,
+      "conservativeHolds": 1,
+      "conservativeHoldRate": 0.009259259259259259,
       "unsafeAutomaticReady": 0,
       "readyStreamMismatches": 0,
       "recommendedStreamMismatches": 0
@@ -123,6 +123,316 @@
     }
   },
   "mismatches": [
+    {
+      "id": "v2-0154-12656-57-4",
+      "casNumber": "12656-57-4",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "needs_input",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reasons": [],
+        "missingFields": [
+          "classification"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "insufficient_evidence",
+        "reason": "The stored single-substance scenario does not establish enough material-form or routing evidence for automatic disposal classification.",
+        "evidenceSections": [
+          3,
+          9,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0250-2781-00-2",
+      "casNumber": "2781-00-2",
+      "stratum": "organic_non_halogenated",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0252-129757-67-1",
+      "casNumber": "129757-67-1",
+      "stratum": "acid_alkali",
+      "expected": {
+        "status": "needs_input",
+        "recommendedStreamCode": "REACTIVE_OXIDIZER",
+        "reason": "Identity/GHS are known, but the stored SDS scenario does not establish enough composition or material-form evidence for automatic routing."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": [
+          "classification"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0294-1615-80-1",
+      "casNumber": "1615-80-1",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0296-540-73-8",
+      "casNumber": "540-73-8",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0297-122-66-7",
+      "casNumber": "122-66-7",
+      "stratum": "toxic_cmr",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ORGANIC_NON_HALOGENATED",
+        "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0299-3148-73-0",
+      "casNumber": "3148-73-0",
+      "stratum": "acid_alkali",
+      "expected": {
+        "status": "ready",
+        "streamCode": "ACID_AQUEOUS",
+        "reason": "Single-substance standard scenario; evidence-specific ACID_AQUEOUS common stream."
+      },
+      "actual": {
+        "status": "blocked",
+        "streamCode": "REACTIVE_OXIDIZER",
+        "reasons": [
+          "reactive_waste"
+        ],
+        "missingFields": []
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "gold_correct",
+        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
+        "evidenceSections": [
+          2,
+          10
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0354-74912-23-5",
+      "casNumber": "74912-23-5",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "needs_input",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reasons": [],
+        "missingFields": [
+          "classification"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "insufficient_evidence",
+        "reason": "The stored single-substance scenario does not establish enough material-form or routing evidence for automatic disposal classification.",
+        "evidenceSections": [
+          3,
+          9,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0546-1332-65-6",
+      "casNumber": "1332-65-6",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "needs_input",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reasons": [],
+        "missingFields": [
+          "classification"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "insufficient_evidence",
+        "reason": "The stored single-substance scenario does not establish enough material-form or routing evidence for automatic disposal classification.",
+        "evidenceSections": [
+          3,
+          9,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
+    {
+      "id": "v2-0948-18943-30-1",
+      "casNumber": "18943-30-1",
+      "stratum": "solid_other",
+      "expected": {
+        "status": "ready",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      },
+      "actual": {
+        "status": "needs_input",
+        "streamCode": "SOLID_CONTAMINATED",
+        "reasons": [],
+        "missingFields": [
+          "classification"
+        ]
+      },
+      "unsafeAutomaticReady": false,
+      "readyStreamMismatch": false,
+      "recommendedStreamMismatch": false,
+      "adjudication": {
+        "outcome": "insufficient_evidence",
+        "reason": "The stored single-substance scenario does not establish enough material-form or routing evidence for automatic disposal classification.",
+        "evidenceSections": [
+          3,
+          9,
+          13,
+          15
+        ],
+        "assessedAt": "2026-08-08T00:00:00.000Z"
+      }
+    },
     {
       "id": "v2-1021-1330-20-7",
       "casNumber": "1330-20-7",
