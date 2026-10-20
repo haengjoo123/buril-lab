@@ -74,7 +74,7 @@ select is(
 );
 select is(
   (select r->'blockingCodes' from pg_temp.fatal_dilution_result('sulfuric_10pct') r),
-  '["reactive_waste", "special_hazard"]'::jsonb,
+  '["special_hazard"]'::jsonb,
   'the published "10% 이상" threshold itself stays held'
 );
 select is(
