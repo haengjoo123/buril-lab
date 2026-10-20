@@ -17091,9 +17091,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "SOLID_CONTAMINATED",
-      "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      "status": "needs_input",
+      "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -17102,7 +17101,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "SOLID_CONTAMINATED",
+          "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+        },
+        "group": "named_metal_fluorine_solid_hold",
+        "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing.",
+        "evidenceSections": [
+          2,
+          3,
+          9
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0155-12442-27-2",
@@ -27335,9 +27354,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "ORGANIC_NON_HALOGENATED",
-      "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      "status": "blocked",
+      "reason": "The Section 3 identity is an organic peroxide. KOSHA Section 2 has no H242, but Section 10 warns that the container can explode on heating, and reactive/oxidizer holds are never loosened (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -27346,7 +27364,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "ORGANIC_NON_HALOGENATED",
+          "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+        },
+        "group": "organic_peroxide_reactive_block",
+        "reason": "The Section 3 identity is an organic peroxide. KOSHA Section 2 has no H242, but Section 10 warns that the container can explode on heating, and reactive/oxidizer holds are never loosened (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste.",
+        "evidenceSections": [
+          2,
+          3,
+          10
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0251-1705-60-8",
@@ -27554,9 +27592,8 @@
       }
     ],
     "expected": {
-      "status": "needs_input",
-      "recommendedStreamCode": "REACTIVE_OXIDIZER",
-      "reason": "Identity/GHS are known, but the stored SDS scenario does not establish enough composition or material-form evidence for automatic routing."
+      "status": "blocked",
+      "reason": "The Section 3 identity is an organic peroxide. KOSHA Section 2 has no H242, but Section 10 warns that the container can explode on heating, and reactive/oxidizer holds are never loosened (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -27576,7 +27613,27 @@
         15
       ],
       "assessedAt": "2026-08-08T05:30:00.000Z"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "needs_input",
+          "recommendedStreamCode": "REACTIVE_OXIDIZER",
+          "reason": "Identity/GHS are known, but the stored SDS scenario does not establish enough composition or material-form evidence for automatic routing."
+        },
+        "group": "organic_peroxide_reactive_block",
+        "reason": "The Section 3 identity is an organic peroxide. KOSHA Section 2 has no H242, but Section 10 warns that the container can explode on heating, and reactive/oxidizer holds are never loosened (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste.",
+        "evidenceSections": [
+          2,
+          3,
+          10
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0253-139-94-6",
@@ -32056,9 +32113,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "ORGANIC_NON_HALOGENATED",
-      "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      "status": "blocked",
+      "reason": "The Section 3 identity is a substituted hydrazine, a strong reducer like hydrazine itself. Section 10 warns that the container can explode on heating, and the analyzer blocks alkyl and aryl hydrazines like hydrazine (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -32067,7 +32123,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "ORGANIC_NON_HALOGENATED",
+          "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+        },
+        "group": "substituted_hydrazine_reactive_block",
+        "reason": "The Section 3 identity is a substituted hydrazine, a strong reducer like hydrazine itself. Section 10 warns that the container can explode on heating, and the analyzer blocks alkyl and aryl hydrazines like hydrazine (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste.",
+        "evidenceSections": [
+          2,
+          3,
+          10
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0295-57-14-7",
@@ -32296,9 +32372,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "ORGANIC_NON_HALOGENATED",
-      "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      "status": "blocked",
+      "reason": "The Section 3 identity is a substituted hydrazine, a strong reducer like hydrazine itself. Section 10 warns that the container can explode on heating, and the analyzer blocks alkyl and aryl hydrazines like hydrazine (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -32307,7 +32382,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "ORGANIC_NON_HALOGENATED",
+          "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+        },
+        "group": "substituted_hydrazine_reactive_block",
+        "reason": "The Section 3 identity is a substituted hydrazine, a strong reducer like hydrazine itself. Section 10 warns that the container can explode on heating, and the analyzer blocks alkyl and aryl hydrazines like hydrazine (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste.",
+        "evidenceSections": [
+          2,
+          3,
+          10
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0297-122-66-7",
@@ -32403,9 +32498,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "ORGANIC_NON_HALOGENATED",
-      "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+      "status": "blocked",
+      "reason": "The Section 3 identity is a substituted hydrazine, a strong reducer like hydrazine itself. Section 10 warns that the container can explode on heating, and the analyzer blocks alkyl and aryl hydrazines like hydrazine (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -32414,7 +32508,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "ORGANIC_NON_HALOGENATED",
+          "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
+        },
+        "group": "substituted_hydrazine_reactive_block",
+        "reason": "The Section 3 identity is a substituted hydrazine, a strong reducer like hydrazine itself. Section 10 warns that the container can explode on heating, and the analyzer blocks alkyl and aryl hydrazines like hydrazine (rule 2.9.0). Keep it out of common containers and hand it over as REACTIVE_OXIDIZER waste.",
+        "evidenceSections": [
+          2,
+          3,
+          10
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0298-13775-80-9",
@@ -38629,9 +38743,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "SOLID_CONTAMINATED",
-      "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      "status": "needs_input",
+      "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -38640,7 +38753,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "SOLID_CONTAMINATED",
+          "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+        },
+        "group": "named_metal_fluorine_solid_hold",
+        "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing.",
+        "evidenceSections": [
+          2,
+          3,
+          9
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0355-335-57-9",
@@ -58732,9 +58865,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "SOLID_CONTAMINATED",
-      "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      "status": "needs_input",
+      "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -58743,7 +58875,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "SOLID_CONTAMINATED",
+          "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+        },
+        "group": "named_metal_fluorine_solid_hold",
+        "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing.",
+        "evidenceSections": [
+          2,
+          3,
+          9
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0547-18480-07-4",
@@ -100377,9 +100529,8 @@
       }
     ],
     "expected": {
-      "status": "ready",
-      "streamCode": "SOLID_CONTAMINATED",
-      "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+      "status": "needs_input",
+      "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -100388,7 +100539,27 @@
       "reviewMethod": "independent_policy_review",
       "approvedAt": "2026-08-07T18:23:31.383Z",
       "status": "approved"
-    }
+    },
+    "labelRevisions": [
+      {
+        "previous": {
+          "status": "ready",
+          "streamCode": "SOLID_CONTAMINATED",
+          "reason": "Single-substance standard scenario; evidence-specific SOLID_CONTAMINATED common stream."
+        },
+        "group": "named_metal_fluorine_solid_hold",
+        "reason": "The unclassified solid has no formula, and its Section 3 name shows a heavy metal or fluorine. The common contaminated-solid fallback is withheld (rule 2.9.0), so the user must confirm the classification before routing.",
+        "evidenceSections": [
+          2,
+          3,
+          9
+        ],
+        "reviewerId": "ai-assisted-label-review-v1",
+        "reviewMethod": "ai_assisted_evidence_review",
+        "humanReviewed": false,
+        "revisedAt": "2026-10-21T12:00:00.000Z"
+      }
+    ]
   },
   {
     "id": "v2-0949-25808-74-6",

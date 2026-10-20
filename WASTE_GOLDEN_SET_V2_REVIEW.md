@@ -334,3 +334,31 @@
 **골든셋:** 수용액 시안 22행은 `ready:CYANIDE_SULFIDE`에서, 통일 대상 3행은 `blocked`에서 `needs_input`(권고 `CYANIDE_SULFIDE`)으로 바꿨다. 행 목록은 `scripts/apply-waste-golden-v2-cyanide-policy.mjs`에 손으로 적었고, 모든 변경은 `labelRevisions`(`humanReviewed: false`)로 남겼다. 새 규칙을 옛 정답에 돌리면 1,075행 strict match(차이 25행은 모두 위 정책 변경)이고, 정답 갱신 후 1,100행, unsafe automatic ready 0이다.
 
 **서버 일치:** 서버 판정 함수는 시안·황화물을 이름 단어와 `CYANIDE` 분류(클라이언트는 황화물도 이 분류에 넣는다)로 판단해, 황화물 폐액·"…cyanide" 이름의 유기 니트릴·HCN 기록을 클라이언트와 다르게 판정했다(골든셋 기준 약 80행). 2.8.0 마이그레이션은 클라이언트가 보낸 플래그와 정확한 CAS·분자식만 근거로 삼고, 스트림 순서도 클라이언트와 같게(시안 → 중금속 → 황화물) 맞췄다. 골든셋 전체를 실제 클라이언트 전송값으로 서버 함수에 넣어 보면 시안·황화물 관련 불일치는 0건이다. 남은 불일치 183건은 고체 대체 경로·반응성 이름 규칙 등 다른 영역이며 별도 작업으로 다룬다.
+
+## 8. 이름 기반 보류 강화 (규칙 2.9.0, 2026-10-21, AI 보조)
+
+**정책(사용자 승인):** 클라이언트 분석기를 서버 함수와 맞추면서(#117) 다음 세 가지를 더 엄격하게 판정한다. 완화된 규칙은 없다.
+
+- **유기 과산화물:** 이름 앞 경계 없이 `peroxide`/`peroxy`를 찾아 "…diperoxide", "tert-butylperoxy…"도 반응성(`REACTIVE`)으로 본다. 국내 SDS가 H242를 빠뜨리는 경우가 많다. 반응 생성물(UVCB)처럼 분류가 `UNKNOWN`이어도 `REACTIVE` 플래그만으로 차단한다.
+- **치환 히드라진:** "1,2-dimethylhydrazine"처럼 알킬·아릴 치환체가 붙어도 히드라진과 같은 강환원제로 보고 차단한다. 아실기가 붙은 이름("N,N'-diacetylhydrazine", "dibenzoylhydrazine")은 히드라자이드이므로 제외한다(클라이언트와 서버 같은 패턴).
+- **중금속·불소 이름의 미분류 고체:** 분자식이 없는 `UNKNOWN` 고체의 이름에 중금속이나 불소가 보이면("cadmium sulfoselenide", "strontium hexafluorosilicate") 공통 오염 고체(`SOLID_CONTAMINATED`) 대체 경로를 쓰지 않고 분류 확인을 요구한다.
+
+**골든셋:** 아래 9행을 바꿨다. 행 목록은 `scripts/apply-waste-golden-v2-strict-name-policy.mjs`에 손으로 적었고, 모든 변경은 `labelRevisions`(`humanReviewed: false`)로 남겼다. 1,1-디메틸히드라진(57-14-7)은 이미 치명적 급성독성으로 `blocked`라 바꾸지 않았다. N,N'-디아세틸히드라진(3148-73-0)은 히드라자이드라 원래 정답(`ready:ACID_AQUEOUS`)을 그대로 둔다.
+
+| 행 | CAS | 물질 | 이전 정답 | 새 정답 | 그룹 |
+|---|---|---|---|---|---|
+| 0250 | 2781-00-2 | 1,4-비스(t-부틸디옥시이소프로필)벤젠 (diperoxide) | ready:ORGANIC_NON_HALOGENATED | blocked | `organic_peroxide_reactive_block` |
+| 0252 | 129757-67-1 | 세바케이트와 tert-부틸 히드로퍼옥사이드 반응 생성물 | needs_input(권고 REACTIVE_OXIDIZER) | blocked | `organic_peroxide_reactive_block` |
+| 0294 | 1615-80-1 | 1,2-Diethylhydrazine | ready:ORGANIC_NON_HALOGENATED | blocked | `substituted_hydrazine_reactive_block` |
+| 0296 | 540-73-8 | 1,2-Dimethylhydrazine | ready:ORGANIC_NON_HALOGENATED | blocked | `substituted_hydrazine_reactive_block` |
+| 0297 | 122-66-7 | 1,2-Diphenylhydrazine (Hydrazobenzene) | ready:ORGANIC_NON_HALOGENATED | blocked | `substituted_hydrazine_reactive_block` |
+| 0154 | 12656-57-4 | Cadmium sulfoselenide orange | ready:SOLID_CONTAMINATED | needs_input | `named_metal_fluorine_solid_hold` |
+| 0354 | 74912-23-5 | Europium fluoroborate | ready:SOLID_CONTAMINATED | needs_input | `named_metal_fluorine_solid_hold` |
+| 0546 | 1332-65-6 | Dicopper chloride trihydroxide | ready:SOLID_CONTAMINATED | needs_input | `named_metal_fluorine_solid_hold` |
+| 0948 | 18943-30-1 | Strontium hexafluorosilicate | ready:SOLID_CONTAMINATED | needs_input | `named_metal_fluorine_solid_hold` |
+
+근거 Section: 반응성 5행은 2(반응성 H코드 없음)·3(정체)·10("가열 시 용기가 폭발할 수 있음"), 고체 4행은 2·3·9. 저장된 adjudication 규칙으로는 반응성 5행이 `gold_correct`(Section 2/10이 반응성을 독립적으로 확정하지 않음)였지만, 반응성·산화성 보류는 완화하지 않는다는 원칙과 사용자 승인에 따라 정답을 앱 쪽으로 바꿨다.
+
+새 규칙을 옛 정답에 돌리면 1,091행 strict match(차이 9행은 모두 위 정책 변경, 모두 보수적 보류이고 unsafe automatic ready 0)이고, 정답 갱신 후 1,100행이다. 남은 불일치 3행(자일렌, Triton X-100, Polysorbate 20)은 이전과 같다.
+
+**사람이 다시 봐야 할 분류:** 129757-67-1은 과산화물 자체가 아니라 tert-부틸 히드로퍼옥사이드로 만든 반응 생성물이다. 원래 정답도 `REACTIVE_OXIDIZER` 권고 보류였으므로 인계 경로는 같고, 사용자 입력으로 풀 수 없게 된 점만 다르다. 사람 검토자가 원문 SDS로 확인할 수 있다.
