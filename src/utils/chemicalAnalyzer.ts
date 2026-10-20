@@ -806,7 +806,16 @@ const buildResult = (
     };
 };
 
-export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
+export interface AnalyzeChemicalOptions {
+    /**
+     * Classify as if the fatal acute-toxicity precedence did not exist. Used
+     * only to route a solution already proven to be below the substance's
+     * legal concentration threshold; every other precedence still applies.
+     */
+    ignoreFatalAcuteToxicity?: boolean;
+}
+
+export const analyzeChemical = (chemical: Chemical, options: AnalyzeChemicalOptions = {}): AnalysisResult => {
     const elements = parseFormula(chemical.molecularFormula || '');
     const formula = chemical.molecularFormula || '';
     const name = chemical.name || '';
@@ -819,7 +828,8 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
         return buildResult(chemical, 'UNKNOWN', 'reason_complex_reaction_product');
     }
     const hCodes = extractHCodes(chemical.ghs?.hazardStatements);
-    const hasFatalAcuteToxicityHCode = hCodes.some(code => FATAL_ACUTE_TOXICITY_H_CODES.has(code));
+    const hasFatalAcuteToxicityHCode = !options.ignoreFatalAcuteToxicity &&
+        hCodes.some(code => FATAL_ACUTE_TOXICITY_H_CODES.has(code));
     // A hydrohalide counter-ion is ionic chloride, not an organic halogen.
     const hasHalogen = hasAnyElement(elements, HALOGENS) && !isOrganicBaseHydrohalideSalt(chemical);
     const isOrganic = isLikelyOrganicByFormula(formula, name);

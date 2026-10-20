@@ -221,6 +221,40 @@ export interface WasteGoldenSetV2Row {
     review: GoldenReview;
 }
 
+/**
+ * A concentration variant of a stored single-substance row. The base row
+ * supplies identity, GHS and KOSHA evidence; the variant adds the material
+ * form and concentration the user entered, plus the KECO (Chemicals Control
+ * Act) thresholds the expected answer was judged against. Variants live in a
+ * companion file because the row file keeps one row per CAS.
+ */
+export interface GoldenConcentrationScenario {
+    id: string;
+    baseRowId: string;
+    casNumber: string;
+    materialForm: 'solution' | 'neat';
+    /** Absent means the user left the concentration empty. */
+    concentration?: {
+        value: number;
+        unit: 'M' | 'mM' | '%' | 'mg/mL';
+        basis?: 'w_w' | 'w_v' | 'v_v';
+    };
+    thresholdEvidence: {
+        authority: 'KECO';
+        service: string;
+        accessedAt: string;
+        /** Hazardous classes as published; empty when KECO lists none. */
+        entries: Array<{ typeName: string; uniqueNumber: string; contentThreshold?: string }>;
+    };
+    expected: GoldenDecision;
+    review: {
+        reviewerId: 'ai-assisted-label-review-v1';
+        reviewMethod: 'ai_assisted_evidence_review';
+        humanReviewed: false;
+        reviewedAt: string;
+    };
+}
+
 export interface WasteGoldenSetV2Manifest {
     schemaVersion: typeof GOLDEN_SET_V2_VERSION;
     datasetId: 'waste-golden-set-v2';
@@ -233,6 +267,12 @@ export interface WasteGoldenSetV2Manifest {
     rowCount: number;
     datasetSha256: string;
     strata: Record<GoldenStratum, number>;
+    /** Companion file of concentration variants; not counted in rowCount. */
+    concentrationScenarios?: {
+        file: 'concentration-scenarios.json';
+        count: number;
+        datasetSha256: string;
+    };
     scenarioEvidenceReconciliation?: {
         method: 'section_9_physical_state_and_ghs_compressed_gas_audit';
         assessedAt: string;
@@ -405,5 +445,43 @@ export const validateWasteGoldenSetV2 = (
         }
     }
 
+    return problems;
+};
+
+export const validateGoldenConcentrationScenarios = (
+    scenarios: readonly GoldenConcentrationScenario[],
+    rows: readonly WasteGoldenSetV2Row[],
+): string[] => {
+    const problems: string[] = [];
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+    const seen = new Set<string>();
+    for (const scenario of scenarios) {
+        const prefix = `concentration scenario ${scenario.id || 'unknown'}`;
+        if (!scenario.id || seen.has(scenario.id)) problems.push(`${prefix}: id must be present and unique.`);
+        seen.add(scenario.id);
+        const base = rowsById.get(scenario.baseRowId);
+        if (!base) problems.push(`${prefix}: unknown base row.`);
+        else if (base.casNumber !== scenario.casNumber) problems.push(`${prefix}: CAS differs from its base row.`);
+        if (!['solution', 'neat'].includes(scenario.materialForm)) problems.push(`${prefix}: invalid material form.`);
+        const concentration = scenario.concentration;
+        if (concentration && (
+            !Number.isFinite(concentration.value) || concentration.value <= 0 ||
+            !['M', 'mM', '%', 'mg/mL'].includes(concentration.unit) ||
+            (concentration.basis !== undefined && concentration.unit !== '%')
+        )) {
+            problems.push(`${prefix}: invalid concentration.`);
+        }
+        if (scenario.thresholdEvidence.authority !== 'KECO' || !isIsoDate(scenario.thresholdEvidence.accessedAt)) {
+            problems.push(`${prefix}: dated KECO threshold evidence is required.`);
+        }
+        if (!GOLDEN_DECISION_STATUSES.includes(scenario.expected.status) || !isStreamExpected(scenario.expected) ||
+            !scenario.expected.reason.trim()) {
+            problems.push(`${prefix}: invalid expected decision.`);
+        }
+        if (scenario.review.reviewMethod !== 'ai_assisted_evidence_review' || scenario.review.humanReviewed !== false ||
+            !isIsoDate(scenario.review.reviewedAt)) {
+            problems.push(`${prefix}: review must be disclosed as AI-assisted, not human.`);
+        }
+    }
     return problems;
 };

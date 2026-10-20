@@ -8,6 +8,7 @@ import {
 import { analyzeChemical } from '../src/utils/chemicalAnalyzer';
 import type {
     GoldenAdjudication,
+    GoldenConcentrationScenario,
     GoldenDecisionStatus,
     GoldenEvidenceSectionNumber,
     GoldenStratum,
@@ -86,7 +87,10 @@ const chemicalFor = (row: WasteGoldenSetV2Row): Chemical => ({
     },
 });
 
-export const batchForGoldenRow = (row: WasteGoldenSetV2Row): WasteBatchDraft => {
+export const batchForGoldenRow = (
+    row: WasteGoldenSetV2Row,
+    variant?: Pick<GoldenConcentrationScenario, 'materialForm' | 'concentration'>,
+): WasteBatchDraft => {
     const chemical = chemicalFor(row);
     return {
         ...createEmptyWasteBatch({ id: row.id, now: '2026-08-08T00:00:00.000Z' }),
@@ -94,6 +98,7 @@ export const batchForGoldenRow = (row: WasteGoldenSetV2Row): WasteBatchDraft => 
             cartLineId: row.id,
             identityConfidence: row.scenario.identityConfidence,
             ghsDataStatus: row.scenario.ghsDataStatus,
+            ...(variant ? { materialForm: variant.materialForm, concentration: variant.concentration } : {}),
         })],
         matrix: row.scenario.matrix,
         matrixSource: row.scenario.matrixSource,
@@ -291,6 +296,70 @@ export const runWasteGoldenSetV2 = (rows: readonly WasteGoldenSetV2Row[]): Golde
         byStratum: Object.fromEntries(
             Object.entries(byStratum).map(([stratum, report]) => [stratum, finalizeRates(report)]),
         ) as Record<GoldenStratum, GoldenSetStratumReport>,
+        mismatches,
+    };
+};
+
+export interface GoldenConcentrationScenarioMismatch {
+    id: string;
+    expected: GoldenConcentrationScenario['expected'];
+    actual: { status: GoldenDecisionStatus; streamCode: WasteStreamCode; reasons: string[]; missingFields: string[] };
+    unsafeAutomaticReady: boolean;
+    readyStreamMismatch: boolean;
+}
+
+export interface GoldenConcentrationScenarioReport {
+    total: number;
+    strictMatches: number;
+    strictMatchRate: number;
+    conservativeHolds: number;
+    unsafeAutomaticReady: number;
+    readyStreamMismatches: number;
+    mismatches: GoldenConcentrationScenarioMismatch[];
+}
+
+/** Replay concentration variants on their base rows' stored evidence. */
+export const runGoldenConcentrationScenarios = (
+    rows: readonly WasteGoldenSetV2Row[],
+    scenarios: readonly GoldenConcentrationScenario[],
+): GoldenConcentrationScenarioReport => {
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+    const mismatches: GoldenConcentrationScenarioMismatch[] = [];
+    let strictMatches = 0;
+    let conservativeHolds = 0;
+    for (const scenario of scenarios) {
+        const base = rowsById.get(scenario.baseRowId);
+        if (!base) throw new Error(`Unknown base row ${scenario.baseRowId}`);
+        const decision = analyzeWasteBatch(batchForGoldenRow(base, scenario));
+        const status = normalizedStatus(decision);
+        const strictMatch = status === scenario.expected.status &&
+            (status !== 'ready' || decision.streamCode === scenario.expected.streamCode);
+        if (strictMatch) {
+            strictMatches += 1;
+            continue;
+        }
+        if (scenario.expected.status === 'ready' && status !== 'ready') conservativeHolds += 1;
+        mismatches.push({
+            id: scenario.id,
+            expected: scenario.expected,
+            actual: {
+                status,
+                streamCode: decision.streamCode,
+                reasons: decision.blockingReasons.map(({ code }) => code),
+                missingFields: decision.missingFields,
+            },
+            unsafeAutomaticReady: status === 'ready' && scenario.expected.status !== 'ready',
+            readyStreamMismatch: status === 'ready' && scenario.expected.status === 'ready' &&
+                decision.streamCode !== scenario.expected.streamCode,
+        });
+    }
+    return {
+        total: scenarios.length,
+        strictMatches,
+        strictMatchRate: scenarios.length === 0 ? 0 : strictMatches / scenarios.length,
+        conservativeHolds,
+        unsafeAutomaticReady: mismatches.filter(({ unsafeAutomaticReady }) => unsafeAutomaticReady).length,
+        readyStreamMismatches: mismatches.filter(({ readyStreamMismatch }) => readyStreamMismatch).length,
         mismatches,
     };
 };

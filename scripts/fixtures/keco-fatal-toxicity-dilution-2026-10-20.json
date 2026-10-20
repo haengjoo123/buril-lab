@@ -1,0 +1,210 @@
+{
+  "source": {
+    "authority": "KECO",
+    "service": "data.go.kr 15149420 chemSbstnList",
+    "via": "https://burillab.com/api/chemicals/regulations",
+    "accessedAt": "2026-10-20"
+  },
+  "records": [
+    {
+      "casNumber": "7664-93-9",
+      "keNumber": "KE-32570",
+      "nameKo": "황산",
+      "nameEn": "Sulfuric acid",
+      "entries": [
+        {
+          "category": "accident_preparedness",
+          "typeName": "사고대비물질",
+          "uniqueNumber": "45",
+          "contentThreshold": "황산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "category": "human_eco_hazard",
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-405",
+          "contentThreshold": "인체급성유해성 : 10%",
+          "noticeDate": "2025-08-07",
+          "noticeInfo": "화학물질안전원고시 제2025-19호"
+        },
+        {
+          "category": "priority_control",
+          "typeName": "중점관리물질",
+          "uniqueNumber": "별표-258",
+          "exception": "CMR",
+          "noticeDate": "2022-04-27",
+          "noticeInfo": "환경부고시 제2022-79호"
+        },
+        {
+          "category": "existing",
+          "typeName": "기존화학물질",
+          "uniqueNumber": "KE-32570",
+          "noticeDate": "2014-12-30",
+          "noticeInfo": "환경부고시 제2014-237호"
+        },
+        {
+          "category": "existing",
+          "typeName": "등록대상기존화학물질",
+          "uniqueNumber": "321",
+          "noticeDate": "2015-07-01",
+          "noticeInfo": "고시일로부터 3년"
+        }
+      ]
+    },
+    {
+      "casNumber": "50-00-0",
+      "keNumber": "KE-17074",
+      "nameKo": "포르말린",
+      "nameEn": "Formaldehyde",
+      "entries": [
+        {
+          "category": "restricted",
+          "typeName": "제한물질",
+          "uniqueNumber": "06-5-5",
+          "contentThreshold": "폼알데하이드 및 이를 1% 이상 함유한 혼합물",
+          "exception": "가구용 무늬목, 직물, 3세이하 유아용제품, 도배용 풀, 피혁가공 유연제의 용도로 제조, 수입, 판매, 보관?저장, 운반, 사용을 금지",
+          "noticeDate": "2014-12-30",
+          "noticeInfo": "환경부고시 제2014-238호"
+        },
+        {
+          "category": "accident_preparedness",
+          "typeName": "사고대비물질",
+          "uniqueNumber": "1",
+          "contentThreshold": "포르말린 또는 포름알데히드 및 이를 1% 이상 함유한 혼합물"
+        },
+        {
+          "category": "human_eco_hazard",
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-345",
+          "contentThreshold": "인체급성유해성 : 1%, 인체만성유해성 : 0.1%",
+          "noticeDate": "2025-08-07",
+          "noticeInfo": "화학물질안전원고시 제2025-19호"
+        },
+        {
+          "category": "priority_control",
+          "typeName": "중점관리물질",
+          "uniqueNumber": "별표-1",
+          "exception": "CMR",
+          "noticeDate": "2022-04-27",
+          "noticeInfo": "환경부고시 제2022-79호"
+        },
+        {
+          "category": "existing",
+          "typeName": "기존화학물질",
+          "uniqueNumber": "KE-17074",
+          "noticeDate": "2014-12-30",
+          "noticeInfo": "환경부고시 제2014-237호"
+        },
+        {
+          "category": "existing",
+          "typeName": "등록대상기존화학물질",
+          "uniqueNumber": "1",
+          "noticeDate": "2015-07-01",
+          "noticeInfo": "고시일로부터 3년"
+        }
+      ]
+    },
+    {
+      "casNumber": "111-30-8",
+      "keNumber": "KE-27969",
+      "nameKo": "글루타르알데히드",
+      "nameEn": "Glutaraldehyde",
+      "entries": [
+        {
+          "category": "human_eco_hazard",
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-5",
+          "contentThreshold": "인체급성유해성 : 1%, 생태유해성 : 25%",
+          "noticeDate": "2025-08-07",
+          "noticeInfo": "화학물질안전원고시 제2025-19호"
+        },
+        {
+          "category": "existing",
+          "typeName": "기존화학물질",
+          "uniqueNumber": "KE-27969",
+          "noticeDate": "2014-12-30",
+          "noticeInfo": "환경부고시 제2014-237호"
+        },
+        {
+          "category": "existing",
+          "typeName": "등록대상기존화학물질",
+          "uniqueNumber": "141",
+          "noticeDate": "2015-07-01",
+          "noticeInfo": "고시일로부터 3년"
+        }
+      ]
+    },
+    {
+      "casNumber": "60-24-2",
+      "keNumber": "KE-23095",
+      "nameKo": "2-메르캅토에탄올",
+      "nameEn": "2-Mercaptoethanol; Mercaptoethanol",
+      "entries": [
+        {
+          "category": "human_eco_hazard",
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "2023-1-1135",
+          "contentThreshold": "인체급성유해성 : 1%, 생태유해성 : 25%",
+          "noticeDate": "2025-08-07",
+          "noticeInfo": "화학물질안전원고시 제2025-19호"
+        },
+        {
+          "category": "existing",
+          "typeName": "기존화학물질",
+          "uniqueNumber": "KE-23095",
+          "noticeDate": "2014-12-30",
+          "noticeInfo": "환경부고시 제2014-237호"
+        }
+      ]
+    },
+    {
+      "casNumber": "7697-37-2",
+      "keNumber": "KE-25911",
+      "nameKo": "질산",
+      "nameEn": "Nitric acid",
+      "entries": [
+        {
+          "category": "accident_preparedness",
+          "typeName": "사고대비물질",
+          "uniqueNumber": "46",
+          "contentThreshold": "질산 및 이를 10% 이상 함유한 혼합물"
+        },
+        {
+          "category": "human_eco_hazard",
+          "typeName": "인체등유해성물질",
+          "uniqueNumber": "97-1-246",
+          "contentThreshold": "인체급성유해성 : 10%",
+          "noticeDate": "2025-08-07",
+          "noticeInfo": "화학물질안전원고시 제2025-19호"
+        },
+        {
+          "category": "existing",
+          "typeName": "기존화학물질",
+          "uniqueNumber": "KE-25911",
+          "noticeDate": "2014-12-30",
+          "noticeInfo": "환경부고시 제2014-237호"
+        },
+        {
+          "category": "existing",
+          "typeName": "등록대상기존화학물질",
+          "uniqueNumber": "324",
+          "noticeDate": "2015-07-01",
+          "noticeInfo": "고시일로부터 3년"
+        }
+      ]
+    },
+    {
+      "casNumber": "1239-45-8",
+      "keNumber": "KE-09740",
+      "nameEn": "3,8-Diamino-5-ethyl-6-phenylphenanthridinium bromide; Ethidium bromide, Dromilac, 2,7-Diamino-9-phenyl-10-ethylphenanthridinium bromide",
+      "entries": [
+        {
+          "category": "existing",
+          "typeName": "기존화학물질",
+          "uniqueNumber": "KE-09740",
+          "noticeDate": "2014-12-30",
+          "noticeInfo": "환경부고시 제2014-237호"
+        }
+      ]
+    }
+  ]
+}

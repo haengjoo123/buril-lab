@@ -4,11 +4,13 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
     GOLDEN_SET_V2_VERSION,
+    type GoldenConcentrationScenario,
     type WasteGoldenSetV2Manifest,
     type WasteGoldenSetV2Row,
+    validateGoldenConcentrationScenarios,
     validateWasteGoldenSetV2,
 } from '../src/features/wasteGoldenSet/schema';
-import { runWasteGoldenSetV2 } from './wasteGoldenSetV2';
+import { runGoldenConcentrationScenarios, runWasteGoldenSetV2 } from './wasteGoldenSetV2';
 
 const dataDirectory = path.resolve(process.cwd(), 'data', 'waste-golden-set-v2');
 const datasetPath = path.join(dataDirectory, 'materials.json');
@@ -19,6 +21,8 @@ const datasetText = readFileSync(datasetPath, 'utf8');
 const canonicalDatasetText = datasetText.replace(/\r\n?/gu, '\n');
 const rows = JSON.parse(datasetText) as WasteGoldenSetV2Row[];
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as WasteGoldenSetV2Manifest;
+const scenariosText = readFileSync(path.join(dataDirectory, 'concentration-scenarios.json'), 'utf8');
+const concentrationScenarios = JSON.parse(scenariosText) as GoldenConcentrationScenario[];
 
 describe('CAS·SDS actual-substance golden set V2', () => {
     it('contains independently reviewed, evidence-complete unique CAS records', () => {
@@ -132,6 +136,7 @@ describe('CAS·SDS actual-substance golden set V2', () => {
 
     it('replays every stored standard scenario without a network dependency', () => {
         const report = runWasteGoldenSetV2(rows);
+        const concentrationReport = runGoldenConcentrationScenarios(rows, concentrationScenarios);
         // CI output is intentionally the report artifact: there is no live SDS
         // request here, and no source document is copied into the repository.
         const conciseMismatchExamples = report.mismatches.slice(0, 10).map(({ id, casNumber, stratum, expected, actual, unsafeAutomaticReady, readyStreamMismatch, recommendedStreamMismatch, adjudication }) => ({
@@ -160,6 +165,7 @@ describe('CAS·SDS actual-substance golden set V2', () => {
             recommendedStreamMismatches: report.recommendedStreamMismatches,
             byStratum: report.byStratum,
             mismatchExamples: conciseMismatchExamples,
+            concentrationScenarios: concentrationReport,
         }, null, 2));
 
         if (process.env.GOLDEN_SET_WRITE_REPORT === '1') {
@@ -168,6 +174,7 @@ describe('CAS·SDS actual-substance golden set V2', () => {
                 datasetSha256: manifest.datasetSha256,
                 generatedAt: new Date().toISOString(),
                 ...report,
+                concentrationScenarios: concentrationReport,
             }, null, 2)}\n`, 'utf8');
         }
 
@@ -180,5 +187,33 @@ describe('CAS·SDS actual-substance golden set V2', () => {
         // scenario to a different common stream, even if both sides say
         // "ready".  This gate is kept separate from conservative holds.
         expect(report.readyStreamMismatches).toBe(0);
+        // The same asymmetric gate covers the concentration variants.
+        expect(concentrationReport.unsafeAutomaticReady).toBe(0);
+        expect(concentrationReport.readyStreamMismatches).toBe(0);
+    });
+
+    it('lifts the fatal-toxicity hold only for a solution below its KECO threshold', () => {
+        // Same LF canonicalization as the row file: Windows checkouts may use CRLF.
+        const canonicalScenariosText = scenariosText.replace(/\r\n?/gu, '\n');
+        expect(manifest.concentrationScenarios).toEqual({
+            file: 'concentration-scenarios.json',
+            count: concentrationScenarios.length,
+            datasetSha256: createHash('sha256').update(canonicalScenariosText).digest('hex'),
+        });
+        expect(validateGoldenConcentrationScenarios(concentrationScenarios, rows)).toEqual([]);
+        const casCovered = new Set(concentrationScenarios.map(({ casNumber }) => casNumber));
+        for (const cas of ['7664-93-9', '7697-37-2', '50-00-0', '1239-45-8']) expect(casCovered.has(cas)).toBe(true);
+
+        const ready = concentrationScenarios.filter(({ expected }) => expected.status === 'ready');
+        expect(ready.every(({ materialForm, concentration }) => materialForm === 'solution' && concentration)).toBe(true);
+        // Neat products, empty concentrations, nitric acid (oxidizer) and
+        // ethidium bromide (no KECO class) are never relaxed.
+        expect(concentrationScenarios.filter(({ materialForm, concentration, casNumber }) => (
+            materialForm === 'neat' || !concentration || casNumber === '7697-37-2' || casNumber === '1239-45-8'
+        )).every(({ expected }) => expected.status === 'blocked')).toBe(true);
+
+        const report = runGoldenConcentrationScenarios(rows, concentrationScenarios);
+        expect(report.mismatches).toEqual([]);
+        expect(report.strictMatches).toBe(concentrationScenarios.length);
     });
 });
