@@ -1,3 +1,4 @@
+import { useAdaptiveLayout } from '../../hooks/useAdaptiveLayout';
 import { useEffect, useMemo, useRef } from 'react';
 import {
     ArrowRight,
@@ -182,6 +183,8 @@ export function OnboardingMissionPanel({
     onOpenScanner,
     onNavigateTab,
 }: OnboardingMissionPanelProps) {
+    const { activeRegion } = useAdaptiveLayout();
+    const desktopCoach = activeRegion.width >= 1200;
     const currentMission = useOnboardingStore((state) => state.currentMission);
     const completedMissions = useOnboardingStore((state) => state.completedMissions);
     const finishOnboarding = useOnboardingStore((state) => state.finishOnboarding);
@@ -225,7 +228,7 @@ export function OnboardingMissionPanel({
     }, [activeTab, cartCount, currentMission, platform]);
 
     useEffect(() => {
-        if (currentMission !== 'disposal' || !hasSearchResult || window.matchMedia('(min-width: 1024px)').matches) {
+        if (currentMission !== 'disposal' || !hasSearchResult || desktopCoach) {
             return;
         }
 
@@ -250,7 +253,7 @@ export function OnboardingMissionPanel({
             window.cancelAnimationFrame(measureFrame);
             window.cancelAnimationFrame(scrollFrame);
         };
-    }, [currentMission, hasSearchResult]);
+    }, [currentMission, desktopCoach, hasSearchResult]);
 
     const handlePrimaryAction = () => {
         if (isAllComplete) {
@@ -314,7 +317,7 @@ export function OnboardingMissionPanel({
                 description={missionCopy.description}
             />
 
-            <aside className="pointer-events-auto fixed bottom-6 right-6 top-20 z-[45] hidden w-[370px] flex-col rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15 dark:border-slate-800 dark:bg-slate-900 lg:flex">
+            <aside hidden={!desktopCoach} style={{ left: activeRegion.x + activeRegion.width - 394, top: activeRegion.y + 80, height: Math.max(0, activeRegion.height - 104) }} className="pointer-events-auto fixed z-[45] w-[370px] flex flex-col rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
                     <div>
                         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">

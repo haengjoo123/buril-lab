@@ -1,3 +1,6 @@
+import { isTopmostDialog } from '../hooks/useAdaptiveDialog';
+import { useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
+import { AdaptivePaneLayout } from './AdaptivePaneLayout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AlertOctagon,
@@ -283,6 +286,8 @@ export const CartView: React.FC<CartViewProps> = ({
     const requestIdRef = useRef<string | null>(null);
     const requestFingerprintRef = useRef<string | null>(null);
     const aiRequestSequenceRef = useRef(0);
+    const layout = useAdaptiveLayout();
+    const [activePane, setActivePane] = useState<'primary' | 'detail'>('primary');
     const wizardScrollRef = useRef<HTMLElement>(null);
     const wizardTitleRef = useRef<HTMLHeadingElement>(null);
     const [editingLineId, setEditingLineId] = useState<string | null>(null);
@@ -382,6 +387,16 @@ export const CartView: React.FC<CartViewProps> = ({
         if (hasInvalidConcentration && !window.confirm(t('waste_discard_invalid_concentration_confirm'))) return;
         onClose();
     }, [hasInvalidConcentration, onClose, t]);
+    useEffect(() => {
+        const back = (event: Event) => {
+            if (event.defaultPrevented || (dialogRef.current && !isTopmostDialog(dialogRef.current))) return;
+            event.preventDefault();
+            if (!layout.twoPane && activePane === 'detail') setActivePane('primary');
+            else requestClose();
+        };
+        window.addEventListener('buril:adaptive-back', back);
+        return () => window.removeEventListener('buril:adaptive-back', back);
+    }, [activePane, layout.twoPane, requestClose]);
     const inventoryAmountSuggestion = useMemo(() => {
         if (batch.matrix === 'unknown' || batch.components.length === 0) return null;
         const expectedDimension = batch.matrix === 'solid_slurry' ? 'mass' : 'volume';
@@ -1084,7 +1099,7 @@ export const CartView: React.FC<CartViewProps> = ({
 
     const phPredictionSummary = (phPrediction || shouldShowPhPredictionMatrixUnavailable) ? (
         <div
-            className="rounded-xl border border-cyan-200 bg-cyan-50/85 p-2.5 text-cyan-950 dark:border-cyan-900/70 dark:bg-cyan-950/35 dark:text-cyan-100 lg:p-3"
+            className="rounded-xl border border-cyan-200 bg-cyan-50/85 p-2.5 text-cyan-950 dark:border-cyan-900/70 dark:bg-cyan-950/35 dark:text-cyan-100 wide:p-3"
             aria-label={t('waste_ph_prediction_title')}
         >
             <div className="min-w-0">
@@ -1135,7 +1150,7 @@ export const CartView: React.FC<CartViewProps> = ({
 
     if (receipt) {
         return (
-            <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center">
+            <div className="adaptive-overlay fixed inset-0 z-50 flex items-end justify-center wide:items-center">
                 <button className="absolute inset-0 bg-black/50" onClick={onClose} aria-label={t('close')} />
                 <div
                     ref={dialogRef}
@@ -1143,7 +1158,7 @@ export const CartView: React.FC<CartViewProps> = ({
                     aria-modal="true"
                     aria-labelledby="waste-receipt-title"
                     tabIndex={-1}
-                    className="relative z-10 w-full max-w-lg rounded-t-3xl bg-white p-6 shadow-2xl dark:bg-slate-900 lg:rounded-3xl"
+                    className="relative z-10 w-full max-w-lg rounded-t-3xl bg-white p-6 shadow-2xl dark:bg-slate-900 wide:rounded-3xl"
                 >
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                         <Check className="h-7 w-7" aria-hidden="true" />
@@ -1221,7 +1236,7 @@ export const CartView: React.FC<CartViewProps> = ({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-stretch lg:justify-end">
+        <div className="adaptive-overlay fixed inset-0 z-50 flex items-end justify-center wide:items-stretch wide:justify-end">
             <button className="absolute inset-0 bg-black/50" onClick={requestClose} aria-label={t('close')} />
             <div
                 ref={dialogRef}
@@ -1229,11 +1244,11 @@ export const CartView: React.FC<CartViewProps> = ({
                 aria-modal="true"
                 aria-labelledby="waste-batch-title"
                 tabIndex={-1}
-                className="relative z-10 flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-950 lg:h-full lg:max-h-none lg:w-[min(760px,70vw)] lg:rounded-none lg:border-l lg:border-slate-200 dark:lg:border-slate-800"
+                className="relative z-10 flex h-full max-h-full w-full max-w-[1200px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-slate-950"
             >
-                <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] dark:border-slate-800 dark:bg-slate-950 lg:px-4 lg:pb-3 lg:pt-3">
+                <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] dark:border-slate-800 dark:bg-slate-950 wide:px-4 wide:pb-3 wide:pt-3">
                     <div>
-                        <h2 id="waste-batch-title" className="text-base font-bold text-slate-950 dark:text-white lg:text-lg">
+                        <h2 id="waste-batch-title" className="text-base font-bold text-slate-950 dark:text-white wide:text-lg">
                             {t('cart_title')} <span className="text-blue-600">({batch.components.length})</span>
                         </h2>
                         <p className="mt-0.5 text-xs text-slate-500">
@@ -1252,16 +1267,13 @@ export const CartView: React.FC<CartViewProps> = ({
                     </button>
                 </header>
 
-                <main
+                <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={layout} activePane={activePane} onBack={() => setActivePane('primary')} className="cart-panes flex min-h-0 flex-1 flex-col">
+                <main data-pane="primary"
                     ref={wizardScrollRef}
-                    className={`min-h-0 flex-1 overflow-y-auto bg-slate-100 p-2 dark:bg-slate-900 lg:p-6 ${
-                        activeStep === 'result' && decision.decisionStatus === 'blocked'
-                            ? 'pb-60 lg:pb-60'
-                            : 'pb-24 lg:pb-32'
-                    }`}
+                    className="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-3 dark:bg-slate-900"
                 >
-                    <div className="mx-auto w-full max-w-2xl space-y-4 rounded-xl bg-white p-3 shadow-sm dark:bg-slate-950 lg:space-y-5 lg:rounded-2xl lg:p-6">
-                        <div className="flex items-start justify-between gap-2 lg:gap-3">
+                    <div className="mx-auto w-full max-w-2xl space-y-4 rounded-xl bg-white p-3 shadow-sm dark:bg-slate-950 wide:space-y-5 wide:rounded-2xl wide:p-6">
+                        <div className="flex items-start justify-between gap-2 wide:gap-3">
                             <div>
                                 <p className="text-xs font-bold text-blue-600">
                                     {t('waste_wizard_progress', {
@@ -1272,7 +1284,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                 <h3
                                     ref={wizardTitleRef}
                                     tabIndex={-1}
-                                    className="mt-0.5 text-lg font-black text-slate-950 outline-none dark:text-white lg:mt-1 lg:text-xl"
+                                    className="mt-0.5 text-lg font-black text-slate-950 outline-none dark:text-white wide:mt-1 wide:text-xl"
                                 >
                                     {showAiDetail
                                         ? t('waste_wizard_ai_title')
@@ -1297,7 +1309,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 onClick={() => {
                                                     if (completed || current || prior) setActiveStep(step);
                                                 }}
-                                                className={`h-2 w-7 rounded-full lg:h-2.5 lg:w-8 ${current
+                                                className={`h-2 w-7 rounded-full wide:h-2.5 wide:w-8 ${current
                                                     ? 'bg-blue-600'
                                                     : prior && relevant
                                                         ? 'bg-blue-300 hover:bg-blue-400'
@@ -1361,7 +1373,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                     .filter((component) => activeStep === 'components'
                                         || component.cartLineId === activeAmountComponent?.cartLineId)
                                     .map((component) => (
-                                    <article key={component.cartLineId} className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-800 dark:bg-slate-900 lg:rounded-2xl lg:p-3">
+                                    <article key={component.cartLineId} className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-800 dark:bg-slate-900 wide:rounded-2xl wide:p-3">
                                         <div className="flex items-start gap-3">
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">
@@ -1987,8 +1999,8 @@ export const CartView: React.FC<CartViewProps> = ({
                     )}
 
                     {activeStep === 'solution' && !showAiDetail && activeSolutionComponent && (
-                        <section aria-labelledby="waste-solution-question-title" className="space-y-3 lg:space-y-4">
-                            <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900 lg:p-3">
+                        <section aria-labelledby="waste-solution-question-title" className="space-y-3 wide:space-y-4">
+                            <div className="rounded-xl bg-slate-50 p-2.5 dark:bg-slate-900 wide:p-3">
                                 <p className="text-xs font-bold text-blue-600">
                                     {t('waste_solution_question_progress', {
                                         current: safeSolutionQuestionIndex + 1,
@@ -2023,7 +2035,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                             type="button"
                                             aria-pressed={selected}
                                             onClick={() => selectSolutionClass(activeSolutionComponent.cartLineId, solventClass)}
-                                            className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-bold lg:min-h-14 ${selected
+                                            className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-bold wide:min-h-14 ${selected
                                                 ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600 dark:bg-blue-950/40 dark:text-blue-100'
                                                 : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
                                             }`}
@@ -2046,7 +2058,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                 const selectedClass = activeSolutionComponent.solutionContext!.solventClass as
                                     'organic_non_halogen' | 'organic_halogen';
                                 return (
-                                    <div className="space-y-2.5 rounded-xl border border-slate-200 p-2.5 dark:border-slate-700 lg:space-y-3 lg:rounded-2xl lg:p-3">
+                                    <div className="space-y-2.5 rounded-xl border border-slate-200 p-2.5 dark:border-slate-700 wide:space-y-3 wide:rounded-2xl wide:p-3">
                                         <div>
                                             <h5 className="text-sm font-bold text-slate-900 dark:text-white">
                                                 {t('waste_solution_exact_solvent_optional')}
@@ -2179,7 +2191,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </h3>
                                 </div>
                                 {batch.matrixSource === 'automatic' && !isMatrixEditing ? (
-                                    <div className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-950 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-100 lg:min-h-14 lg:gap-3 lg:px-4 lg:py-3">
+                                    <div className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-950 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-100 wide:min-h-14 wide:gap-3 wide:px-4 wide:py-3">
                                         <p className="font-semibold">
                                             {t('waste_matrix_auto', {
                                                 matrix: t(`waste_matrix_${batch.matrix}` as never),
@@ -2271,7 +2283,7 @@ export const CartView: React.FC<CartViewProps> = ({
                             {requiresFluorideCompatibleContainer && (
                                 <section
                                     aria-labelledby="fluoride-container-title"
-                                    className="rounded-xl border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30 lg:rounded-2xl lg:p-4"
+                                    className="rounded-xl border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30 wide:rounded-2xl wide:p-4"
                                 >
                                     <h3 id="fluoride-container-title" className="text-sm font-bold leading-5 text-red-950 dark:text-red-100">
                                         {t('waste_fluoride_container_question')}
@@ -2431,7 +2443,7 @@ export const CartView: React.FC<CartViewProps> = ({
                             {batch.components.length > 0 && batch.mixingState === 'separate' && (
                                 <section
                                     aria-labelledby="waste-legacy-separate-title"
-                                    className="rounded-xl border border-orange-300 bg-orange-50 p-3 text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100 lg:rounded-2xl lg:p-4"
+                                    className="rounded-xl border border-orange-300 bg-orange-50 p-3 text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100 wide:rounded-2xl wide:p-4"
                                 >
                                     <h3 id="waste-legacy-separate-title" className="font-bold">
                                         {t('waste_legacy_separate_title')}
@@ -2485,7 +2497,7 @@ export const CartView: React.FC<CartViewProps> = ({
 
                     {activeStep === 'result' && !showAiDetail && (
                         <>
-                    <section className={`rounded-xl border p-3 lg:rounded-2xl lg:p-4 ${statusConfig.classes}`} aria-live="polite">
+                    <section className={`rounded-xl border p-3 wide:rounded-2xl wide:p-4 ${statusConfig.classes}`} aria-live="polite">
                         <div className="flex items-center gap-2">
                             {statusConfig.icon}
                             <h3 className="font-bold">{statusConfig.title}</h3>
@@ -2663,7 +2675,7 @@ export const CartView: React.FC<CartViewProps> = ({
                     )}
 
                     {batch.components.length > 0 && (
-                        <section className="rounded-xl border border-purple-200 bg-purple-50 p-3 dark:border-purple-900/60 dark:bg-purple-950/30 lg:rounded-2xl lg:p-4">
+                        <section className="rounded-xl border border-purple-200 bg-purple-50 p-3 dark:border-purple-900/60 dark:bg-purple-950/30 wide:rounded-2xl wide:p-4">
                             <button
                                 onClick={() => {
                                     setShowAiDetail(true);
@@ -2746,7 +2758,7 @@ export const CartView: React.FC<CartViewProps> = ({
                     )}
 
                     {showAiDetail && (
-                        <section className="rounded-xl border border-purple-200 bg-purple-50 p-3 dark:border-purple-900/60 dark:bg-purple-950/30 lg:rounded-2xl lg:p-4">
+                        <section className="rounded-xl border border-purple-200 bg-purple-50 p-3 dark:border-purple-900/60 dark:bg-purple-950/30 wide:rounded-2xl wide:p-4">
                             <div className="flex items-center gap-2 text-purple-900 dark:text-purple-100">
                                 <Sparkles className="h-5 w-5" aria-hidden="true" />
                                 <h4 className="font-bold">{t('waste_ai_button')}</h4>
@@ -2797,8 +2809,27 @@ export const CartView: React.FC<CartViewProps> = ({
                     )}
                     </div>
                 </main>
+                <aside data-pane="detail" className="min-h-0 overflow-y-auto space-y-4 p-4">
+                    <h3 className="text-lg font-bold">{t('adaptive_waste_review')}</h3>
+                    <p className="text-sm text-slate-500">{t('adaptive_waste_review_hint')}</p>
+                    <div className={`rounded-xl border p-4 ${statusConfig.classes}`}>
+                        <div className="flex items-center gap-2 font-bold">{statusConfig.icon}{statusConfig.title}</div>
+                        <p className="mt-2 text-sm">{t('waste_wizard_progress', { current: WIZARD_STEP_NUMBER[activeStep], total: WASTE_BATCH_WIZARD_STEPS.length })}</p>
+                    </div>
+                    <ul className="space-y-2">
+                        {batch.components.map(component => <li key={component.cartLineId} className="rounded-lg border p-3 break-words">
+                            <p className="font-semibold">{component.chemical.name}</p>
+                            <p className="text-xs text-slate-500">{component.chemical.casNumber}</p>
+                        </li>)}
+                    </ul>
+                    <p className="text-sm">{t('adaptive_total_amount')}: {batch.totalAmount.isUnknown || batch.totalAmount.value === null
+                        ? t('common_unknown') : `${batch.totalAmount.value} ${batch.totalAmount.unit ?? ''}`}</p>
+                    {phPredictionSummary}
+                </aside>
+                </AdaptivePaneLayout>
 
-                <footer className="absolute inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:p-4">
+                <div className="flex shrink-0 justify-end border-t px-3" hidden={layout.twoPane}><button type="button" className="min-h-11 text-sm font-semibold text-blue-600" onClick={() => setActivePane(activePane === 'primary' ? 'detail' : 'primary')}>{activePane === 'primary' ? t('adaptive_waste_review') : t('adaptive_back_to_input')}</button></div>
+                <footer className="relative z-20 max-h-[45%] shrink-0 overflow-y-auto border-t border-slate-200 bg-white/95 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 wide:p-4">
                     {activeStep === 'result' && !showAiDetail ? (
                         <>
                     {!isOnline && (
@@ -2846,7 +2877,7 @@ export const CartView: React.FC<CartViewProps> = ({
                             onClick={() => recordAction('container_deposit')}
                             disabled={!isOnline || isSaving || policyLoading || hasInvalidNumericInput
                                 || containerSelection.loading || containerSelection.needsChoice}
-                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-12"
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 wide:min-h-12"
                         >
                             {isSaving && <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />}
                             {t('waste_action_container_deposit')}
@@ -2856,20 +2887,20 @@ export const CartView: React.FC<CartViewProps> = ({
                             <button
                                 onClick={() => recordAction('isolated')}
                                 disabled={!isOnline || isSaving || policyLoading || !hasAmountConfirmation || hasInvalidNumericInput}
-                                className="min-h-11 rounded-xl border border-red-300 bg-white px-3 font-bold text-red-700 disabled:opacity-50 dark:border-red-800 dark:bg-slate-950 dark:text-red-300 lg:min-h-12"
+                                className="min-h-11 rounded-xl border border-red-300 bg-white px-3 font-bold text-red-700 disabled:opacity-50 dark:border-red-800 dark:bg-slate-950 dark:text-red-300 wide:min-h-12"
                             >
                                 {t('waste_action_isolated')}
                             </button>
                             <button
                                 onClick={() => recordAction('handover')}
                                 disabled={!isOnline || isSaving || policyLoading || !hasAmountConfirmation || hasInvalidNumericInput}
-                                className="min-h-11 rounded-xl bg-red-600 px-3 font-bold text-white hover:bg-red-700 disabled:opacity-50 lg:min-h-12"
+                                className="min-h-11 rounded-xl bg-red-600 px-3 font-bold text-white hover:bg-red-700 disabled:opacity-50 wide:min-h-12"
                             >
                                 {t('waste_action_handover')}
                             </button>
                         </div>
                     ) : (
-                        <button disabled className="min-h-11 w-full rounded-xl bg-orange-100 px-4 font-bold text-orange-800 dark:bg-orange-950/60 dark:text-orange-200 lg:min-h-12">
+                        <button disabled className="min-h-11 w-full rounded-xl bg-orange-100 px-4 font-bold text-orange-800 dark:bg-orange-950/60 dark:text-orange-200 wide:min-h-12">
                             {statusConfig.title}
                         </button>
                     )}
@@ -2880,7 +2911,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                 type="button"
                                 onClick={moveWizardBack}
                                 disabled={!showAiDetail && activeStep === 'components'}
-                                className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 lg:min-h-12"
+                                className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 wide:min-h-12"
                             >
                                 {t('waste_wizard_previous')}
                             </button>
@@ -2888,7 +2919,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setShowAiDetail(false)}
-                                    className="min-h-11 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 lg:min-h-12"
+                                    className="min-h-11 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 wide:min-h-12"
                                 >
                                     {t('waste_ai_back_to_result')}
                                 </button>
@@ -2905,7 +2936,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                             : activeStep === 'batch'
                                                 ? !wizard.batchStepComplete
                                                 : false}
-                                    className="min-h-11 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 lg:min-h-12"
+                                    className="min-h-11 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 wide:min-h-12"
                                 >
                                     {activeStep === 'amounts' && safeAmountQuestionIndex < batch.components.length - 1
                                         ? t('waste_amount_next_component')

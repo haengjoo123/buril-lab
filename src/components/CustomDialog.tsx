@@ -1,3 +1,4 @@
+import { useAdaptiveDialog } from '../hooks/useAdaptiveDialog';
 import React, { useEffect, useRef } from 'react';
 import { AlertCircle, Check, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +40,8 @@ export function CustomDialog({
     preventCloseWhileLoading = false,
 }: DialogProps) {
     const { t } = useTranslation();
+    const dialogRef = useRef<HTMLDivElement>(null);
+    useAdaptiveDialog(dialogRef, () => { if (!(preventCloseWhileLoading && isConfirmLoading)) onClose(); }, isOpen);
     const inputRef = useRef<HTMLInputElement>(null);
     const resolvedConfirmText = confirmText ?? t('btn_confirm');
     const resolvedCancelText = cancelText ?? t('btn_cancel');
@@ -70,12 +73,13 @@ export function CustomDialog({
             e.preventDefault();
             handleConfirm();
         } else if (e.key === 'Escape') {
+            e.preventDefault();
             handleClose();
         }
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200 pointer-events-auto">
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="custom-dialog-title" tabIndex={-1} className="adaptive-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200 pointer-events-auto">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
@@ -100,7 +104,7 @@ export function CustomDialog({
                                 <Check className="w-6 h-6" />
                             </div>
                         )}
-                        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{title}</h3>
+                        <h3 id="custom-dialog-title" className="text-xl font-bold text-slate-800 dark:text-slate-100">{title}</h3>
                     </div>
 
                     {description && (

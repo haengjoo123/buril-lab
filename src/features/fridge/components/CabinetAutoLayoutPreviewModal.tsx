@@ -131,7 +131,7 @@ export const CabinetAutoLayoutPreviewModal: React.FC<CabinetAutoLayoutPreviewMod
     const isBlocked = !preview.canApply;
 
     return (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="adaptive-overlay fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-sm" onClick={onCancel} />
 
             <div

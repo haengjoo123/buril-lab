@@ -67,7 +67,7 @@ export function OnboardingWelcomeModal() {
     const isLastStep = stepIndex === steps.length - 1;
 
     return (
-        <div className="fixed inset-0 z-[110] flex flex-col items-center justify-center bg-slate-950/70 p-4 transition-all duration-300 backdrop-blur-sm overflow-y-auto cursor-default sm:p-6">
+        <div className="adaptive-overlay fixed inset-0 z-[110] flex flex-col items-center justify-center bg-slate-950/70 p-4 transition-all duration-300 backdrop-blur-sm overflow-y-auto cursor-default sm:p-6">
             <div className="relative my-auto w-full max-w-[420px] overflow-hidden rounded-[2rem] bg-white shadow-2xl transition-all dark:bg-slate-900 ring-1 ring-black/5 dark:ring-white/10 flex flex-col max-h-[90vh]">
                 <div className="shrink-0 border-b border-slate-100 bg-gradient-to-br from-blue-50 via-white to-emerald-50 p-5 dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 sm:p-6">
                     <div className="flex items-start justify-between gap-3">

@@ -65,6 +65,7 @@ tmp_results*.txt
 /supabase/.temp/
 /output/**/.playwright-cli/
 /output/playwright/**/internal/
+/output/playwright/adaptive/
 *.inspect.ndjson
 *.pid
 

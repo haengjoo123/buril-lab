@@ -94,7 +94,7 @@ export const SafetyDisclaimer: React.FC = () => {
     };
 
     return (
-        <div className={`fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/70 backdrop-blur-sm duration-300 ${isClosing ? 'animate-out fade-out opacity-0' : 'animate-in fade-in'}`}>
+        <div className={`adaptive-overlay fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/70 backdrop-blur-sm duration-300 ${isClosing ? 'animate-out fade-out opacity-0' : 'animate-in fade-in'}`}>
             <div className={`w-full max-w-[400px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden p-6 duration-300 ${isClosing ? 'animate-out zoom-out-95 scale-95 opacity-0' : 'animate-in zoom-in-95'}`}>
 
                 <div className="flex flex-col items-center text-center mb-6">

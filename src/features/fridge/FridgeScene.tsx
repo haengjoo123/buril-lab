@@ -1,28 +1,17 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, ContactShadows } from '@react-three/drei';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { ShelfUnit } from './ShelfUnit';
 import { CabinetFrame } from './CabinetFrame';
 import { ResponsiveCamera } from './ResponsiveCamera';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { CabinetEnvironment } from './CabinetEnvironment';
 import { CabinetModelReadyContext } from './cabinetModelReadyContext';
-
-/** OrbitControls target가 변경될 때 동기화 (prop만으로는 갱신이 안 될 수 있음) */
-function SyncOrbitTarget({ target }: { target: [number, number, number] }) {
-    const { controls } = useThree();
-    useEffect(() => {
-        const orbit = controls as { target: { set: (x: number, y: number, z: number) => void }; update?: () => void } | null;
-        if (orbit?.target) orbit.target.set(...target);
-        if (typeof orbit?.update === 'function') orbit.update();
-    }, [controls, target]);
-    return null;
-}
 
 /** CabinetFrame과 동일 */
 const SHELF_BOTTOM_Y = -0.25;
@@ -199,6 +188,7 @@ export const FridgeScene: React.FC = () => {
     }, [floatingShelves.length, cabinetHeight]);
 
     const cameraConfig = useCabinetCamera(cabinetWidth, cabinetHeight, mode, containerAspect);
+    const [initialCamera] = useState(() => ({ position: cameraConfig.position, fov: 52 }));
     const sceneTheme = useMemo(() => ({
         background: isDarkMode ? '#0f172a' : '#f3f4f6',
         ambientIntensity: isDarkMode ? 0.92 : 0.65,
@@ -360,14 +350,13 @@ export const FridgeScene: React.FC = () => {
         }
         return { ...cameraConfig, target: effectiveTarget };
     }, [shelfFocusTarget, effectiveTarget, cameraConfig, isPlaceMode, isTopDownView, cabinetWidth, cabinetDepth, containerAspect]);
-    const orbitTarget = effectiveCameraConfig.target;
 
     return (
-        <div ref={containerRef} className="w-full relative bg-gray-100 transition-colors dark:bg-slate-950" style={{ height: 'calc(100dvh - 7rem)' }}>
+        <div ref={containerRef} className="h-full min-h-0 w-full relative bg-gray-100 transition-colors dark:bg-slate-950">
             <Canvas
                 shadows="percentage"
                 dpr={isCoarsePointer ? 1 : [1, 1.5]}
-                camera={{ position: cameraConfig.position, fov: 52 }}
+                camera={initialCamera}
                 gl={{ antialias: true }}
             >
                 <CabinetModelReadyContext.Provider value={onModelReady}>
@@ -378,6 +367,7 @@ export const FridgeScene: React.FC = () => {
                         cabinetHeight={cabinetHeight}
                         config={effectiveCameraConfig}
                         cameraStateId={cameraStateId}
+                        layoutAspect={containerAspect}
                     />
 
                     <ambientLight intensity={sceneTheme.ambientIntensity} />
@@ -472,18 +462,23 @@ export const FridgeScene: React.FC = () => {
                         makeDefault
                         minPolarAngle={isTopDownView ? 0 : Math.PI / 6}
                         maxPolarAngle={Math.PI / 2}
-                        minDistance={cameraConfig.minDistance}
-                        maxDistance={cameraConfig.maxDistance}
-                        target={orbitTarget}
                         enableRotate={!isPlaceMode && !draggedItem}
                         enablePan={!draggedItem && !isTouchPlacementSelection}
                         enableZoom={!draggedItem && !isTouchPlacementSelection}
                         touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
                     />
-                    <SyncOrbitTarget target={orbitTarget} />
                 </Suspense>
                 </CabinetModelReadyContext.Provider>
             </Canvas>
+
+            <button type="button" onClick={() => {
+                setFocusedShelfId(null);
+                setShelfFocusTarget(null);
+                setIsTopDownView(false);
+                setCameraStateId(id => id + 1);
+            }} className="absolute top-4 right-4 z-20 flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 text-xs font-medium shadow dark:border-slate-700 dark:bg-slate-900/90">
+                <RotateCcw size={16} />{t('adaptive_fit_view')}
+            </button>
 
             {/* 탑뷰 토글 버튼 - 선반 포커스 시에만 표시 */}
             {shelfFocusTarget && (

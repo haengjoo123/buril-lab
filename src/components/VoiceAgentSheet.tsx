@@ -117,7 +117,7 @@ export function VoiceAgentSheet({ currentContext, onUiAction }: VoiceAgentSheetP
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/45 backdrop-blur-sm">
+    <div className="adaptive-overlay fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/45 backdrop-blur-sm">
       <button
         type="button"
         aria-label={t('voice_agent_close_overlay', 'Close AI voice agent')}

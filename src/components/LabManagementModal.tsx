@@ -329,7 +329,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="adaptive-overlay fixed inset-0 z-[100] flex items-center justify-center p-5 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div role="dialog" aria-modal="true" aria-labelledby="lab-management-title" className="w-full max-w-[380px] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
 
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center shrink-0">

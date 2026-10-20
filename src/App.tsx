@@ -2,6 +2,7 @@ import { useEffect, useCallback, lazy, Suspense, useRef, useState } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
+import { requestAdaptiveBack } from './utils/adaptiveLayout';
 import { MainLayout } from './components/MainLayout';
 import { SearchTabView } from './components/SearchTabView';
 import { BottomTabNav } from './components/BottomTabNav';
@@ -354,6 +355,7 @@ function App() {
     let disposed = false;
     let removeListener: (() => Promise<void>) | undefined;
     void CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (requestAdaptiveBack()) return;
       if (isScanning) {
         setIsScanning(false);
         return;
@@ -836,7 +838,7 @@ function App() {
 
       {isScanning && (
         <Suspense fallback={
-          <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+          <div className="adaptive-overlay fixed inset-0 z-50 bg-black flex items-center justify-center">
             <Loader2 className="w-10 h-10 text-white animate-spin" />
           </div>
         }>
@@ -1077,7 +1079,7 @@ function App() {
 
               setIsCartOpen(true);
             }}
-            className={`absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition-transform animate-in fade-in slide-in-from-bottom-4 active:scale-90 dark:bg-slate-100 dark:text-slate-900 lg:hidden`}
+            className={`adaptive-voice-button absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition-transform animate-in fade-in slide-in-from-bottom-4 active:scale-90 dark:bg-slate-100 dark:text-slate-900 lg:hidden`}
             aria-label={`${t('cart_title')} ${wasteDraftCount}`}
           >
             <ShoppingBag className="w-6 h-6" />

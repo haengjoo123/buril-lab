@@ -1,3 +1,4 @@
+import { useAdaptiveDialog } from '../hooks/useAdaptiveDialog';
 import React from 'react';
 import { Capacitor } from '@capacitor/core';
 import { RotateCcw, ShieldCheck, X, Globe, MessageSquarePlus, Bug, Lightbulb, MessageCircle, Send, CheckCircle2, UserMinus, KeyRound, Moon, Sun } from 'lucide-react';
@@ -28,6 +29,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
         const clearCart = useWasteStore((state) => state.clearCart);
         const clearSearchHistory = useWasteStore((state) => state.clearSearchHistory);
         const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
+    const dialogRef = React.useRef<HTMLDivElement>(null);
+    useAdaptiveDialog(dialogRef, onClose);
     const { t, i18n } = useTranslation();
     const deleteConfirmPhrase = t('settings_delete_account_confirm_phrase');
 
@@ -228,11 +231,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
     ];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm animate-in fade-in duration-200 sm:p-5">
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" tabIndex={-1} className="adaptive-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm animate-in fade-in duration-200 sm:p-5">
             <div className="flex w-full max-w-[360px] max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-xl bg-white shadow-2xl animate-in zoom-in-95 duration-200 dark:bg-slate-900 sm:max-w-[380px] sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-2xl">
 
                 <div className="flex shrink-0 items-center justify-between border-b border-gray-100 p-3.5 dark:border-slate-800 sm:p-4">
-                    <h3 className="text-base font-bold text-slate-800 dark:text-white sm:text-lg">
+                    <h3 id="settings-dialog-title" className="text-base font-bold text-slate-800 dark:text-white sm:text-lg">
                         {showFeedback ? t('feedback_title') : t('settings_title')}
                     </h3>
                     <button

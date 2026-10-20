@@ -2,7 +2,6 @@ import { Box, ClipboardList, Moon, Package, Search, Settings, ShieldCheck, Sun }
 import { useTranslation } from 'react-i18next';
 import logo from '../assets/burillab_app_icon.png';
 import type { AppTab } from '../hooks/useAppUiState';
-import { LabContextSwitcher } from './LabContextSwitcher';
 import { useThemeMode } from '../hooks/useThemeMode';
 
 interface DesktopSideNavProps {
@@ -22,7 +21,7 @@ const navItemClasses = (isActive: boolean, tone: 'blue' | 'emerald' | 'indigo' =
   }[tone];
 
   return [
-    'flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-all',
+    'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-all',
     isActive
       ? activeTone
       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
@@ -55,7 +54,7 @@ export function DesktopSideNav({
   ];
 
   return (
-    <aside className="hidden h-full w-56 shrink-0 border-r border-slate-200 bg-white text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 lg:flex lg:flex-col">
+    <aside className="adaptive-side-nav h-full w-56 shrink-0 border-r border-slate-200 bg-white text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 flex flex-col">
       <div className="flex h-16 shrink-0 items-center border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-950">
         <button
           type="button"
@@ -110,7 +109,7 @@ export function DesktopSideNav({
         </button>
         {userEmail && (
           <div className="mt-2">
-            <LabContextSwitcher variant="sidebar" userEmail={userEmail} />
+            <p className="truncate px-3 text-xs text-slate-500" title={userEmail}>{userEmail}</p>
           </div>
         )}
       </div>

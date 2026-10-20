@@ -12,7 +12,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
   const { t } = useTranslation();
 
   return (
-    <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 border-t border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:hidden">
+    <nav className="adaptive-bottom-nav z-30 flex w-full shrink-0 border-t border-gray-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <button
         onClick={() => onTabClick('search')}
         data-onboarding-target="nav-search"

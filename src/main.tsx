@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import './index.css'
 import App from './App.tsx'
+import { AdaptiveViewportProvider } from './components/AdaptiveViewportProvider'
 import { NativeLaunchSplash } from './components/NativeLaunchSplash.tsx'
 const ReloadPrompt = lazy(() => import('./components/ReloadPrompt'))
 
@@ -47,10 +48,12 @@ cleanupNativeServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <AdaptiveViewportProvider>
     <BrowserRouter>
       <App />
       {shouldShowLaunchSplash ? <NativeLaunchSplash /> : null}
     </BrowserRouter>
+    </AdaptiveViewportProvider>
     {shouldEnablePwaPrompt ? (
       <Suspense fallback={null}>
         <ReloadPrompt />

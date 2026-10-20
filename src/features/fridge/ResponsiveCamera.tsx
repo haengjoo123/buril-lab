@@ -13,32 +13,38 @@ interface ResponsiveCameraProps {
         target: [number, number, number];
     };
     cameraStateId: number;
+    layoutAspect: number;
 }
 
 
 const ARRIVAL_THRESHOLD = 0.05;
 
 /** 시약장 크기 변경 시 OrbitControls 동기화, 부드러운 전환. 줌/팬 시 즉시 보간 중단 */
-export function ResponsiveCamera({ config, cameraStateId }: ResponsiveCameraProps) {
+export function ResponsiveCamera({ config, cameraStateId, layoutAspect }: ResponsiveCameraProps) {
     const { camera, controls, gl } = useThree();
     const targetPos = useRef(new THREE.Vector3(...config.position));
     const targetLookAt = useRef(new THREE.Vector3(...config.target));
     const isAnimating = useRef(true);
+    const userAdjusted = useRef(false);
+    const previousAspect = useRef(layoutAspect);
 
     useEffect(() => {
         targetPos.current.set(...config.position);
         targetLookAt.current.set(...config.target);
-        isAnimating.current = true;
-    }, [config.position[0], config.position[1], config.position[2], config.target[0], config.target[1], config.target[2]]);
+        const resized = previousAspect.current !== layoutAspect;
+        previousAspect.current = layoutAspect;
+        isAnimating.current = !(resized && userAdjusted.current);
+    }, [layoutAspect, config.position[0], config.position[1], config.position[2], config.target[0], config.target[1], config.target[2]]);
 
     useEffect(() => {
         isAnimating.current = true;
+        userAdjusted.current = false;
     }, [cameraStateId]);
 
     // 줌/팬 시 보간 즉시 중단 → OrbitControls가 제어
     useEffect(() => {
         const el = gl.domElement;
-        const stopAnim = () => { isAnimating.current = false; };
+        const stopAnim = () => { isAnimating.current = false; userAdjusted.current = true; };
         el.addEventListener('wheel', stopAnim, { passive: true });
         el.addEventListener('pointerdown', stopAnim);
         return () => {
@@ -49,11 +55,14 @@ export function ResponsiveCamera({ config, cameraStateId }: ResponsiveCameraProp
 
     useFrame((_, delta) => {
         const LERP_FACTOR = 1 - Math.exp(-3.7125 * delta);
-        const orbit = controls as { target: THREE.Vector3; update?: () => void } | null;
+        const orbit = controls as { target: THREE.Vector3; minDistance: number; maxDistance: number; update?: () => void } | null;
         if (!orbit?.target) return;
 
         if (!isAnimating.current) return;
 
+        // Keep the user's pan and zoom limits during a resize; refit only on request.
+        orbit.minDistance = config.minDistance;
+        orbit.maxDistance = config.maxDistance;
         camera.position.lerp(targetPos.current, LERP_FACTOR);
         orbit.target.lerp(targetLookAt.current, LERP_FACTOR);
         orbit.update?.();

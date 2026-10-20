@@ -233,7 +233,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                 return;
             }
 
-            if (event.key !== 'Tab' || !panel) return;
+            if (event.key !== 'Tab' || !panel || variant === 'desktop-aside') return;
             const focusable = Array.from(panel.querySelectorAll<HTMLElement>(
                 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
             ));
@@ -256,7 +256,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [analysisResult, selectedReagentId, setSelectedReagentId, showDisposalView, showModalContent]);
+    }, [analysisResult, selectedReagentId, setSelectedReagentId, showDisposalView, showModalContent, variant]);
 
     useEffect(() => {
         if (!analysisResult) return;
@@ -676,8 +676,8 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             <div
                 ref={panelRef}
                 className={panelClassName}
-                role="dialog"
-                aria-modal="true"
+                role={variant === 'desktop-aside' ? 'region' : 'dialog'}
+                aria-modal={variant === 'desktop-aside' ? undefined : true}
                 aria-labelledby="reagent-edit-panel-title"
                 tabIndex={-1}
             >
@@ -1258,7 +1258,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
 
             {/* Disposal Guide Modal overlay */}
             {analysisResult && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+                <div className="adaptive-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
                     <div
                         ref={analysisDialogRef}
                         role="dialog"

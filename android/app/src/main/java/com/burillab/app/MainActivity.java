@@ -26,7 +26,12 @@ public class MainActivity extends BridgeActivity {
                 new OnBackPressedCallback(true) {
                     @Override
                     public void handleOnBackPressed() {
-                        handleBackPress();
+                        WebView currentView = getBridge() != null ? getBridge().getWebView() : null;
+                        if (currentView == null) { handleBackPress(); return; }
+                        currentView.evaluateJavascript(
+                            "!window.dispatchEvent(new Event('buril:adaptive-back', {cancelable:true}))",
+                            handled -> { if (!"true".equals(handled)) handleBackPress(); }
+                        );
                     }
                 }
             );

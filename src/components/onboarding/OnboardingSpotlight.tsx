@@ -1,3 +1,4 @@
+import { useAdaptiveLayout } from '../../hooks/useAdaptiveLayout';
 import { useEffect, useState } from 'react';
 
 interface SpotlightRect {
@@ -14,6 +15,7 @@ interface OnboardingSpotlightProps {
 }
 
 export function OnboardingSpotlight({ selector, title, description }: OnboardingSpotlightProps) {
+    const { activeRegion } = useAdaptiveLayout();
     const [rect, setRect] = useState<SpotlightRect | null>(null);
 
     useEffect(() => {
@@ -80,10 +82,11 @@ export function OnboardingSpotlight({ selector, title, description }: Onboarding
     };
 
     const tooltipTop = rect.top + rect.height + 18;
-    const shouldPlaceAbove = tooltipTop > window.innerHeight - 150;
+    const shouldPlaceAbove = tooltipTop > activeRegion.y + activeRegion.height - 150;
     const tooltipStyle = {
-        top: shouldPlaceAbove ? Math.max(16, rect.top - 134) : tooltipTop,
-        left: Math.min(Math.max(16, rect.left), window.innerWidth - 344),
+        top: shouldPlaceAbove ? Math.max(activeRegion.y + 16, rect.top - 134) : tooltipTop,
+        left: Math.max(activeRegion.x + 8, Math.min(rect.left, activeRegion.x + activeRegion.width - 336)),
+        maxWidth: Math.max(0, activeRegion.width - 16),
     };
 
     return (

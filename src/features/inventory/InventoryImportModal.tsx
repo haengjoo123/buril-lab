@@ -235,7 +235,7 @@ function ImportSession({ items, locations, cabinets, onClose, onImported, labId 
   const sourceRow = currentRow && pageRows.some(row => row.id === currentRow.id) ? currentRow : undefined
   const previewCells = grid ? orientedCells(grid, table?.orientation || 'rows') : []
   const previewStart = Math.max(0, sourceRow ? sourceRow.sourceRow - 3 : (table?.headerRow || 0) - 2)
-  return <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-950/50 p-2 sm:p-5" role="dialog" aria-modal="true" aria-label={t('inv_import_dialog_label')}>
+  return <div className="adaptive-overlay fixed inset-0 z-[220] flex items-center justify-center bg-slate-950/50 p-2 sm:p-5" role="dialog" aria-modal="true" aria-label={t('inv_import_dialog_label')}>
     <div className="flex max-h-[95vh] w-full max-w-7xl flex-col rounded-2xl bg-white text-slate-800 shadow-xl dark:bg-slate-900 dark:text-slate-100">
       <header className="flex items-center justify-between border-b p-4 dark:border-slate-700"><div><h2 className="text-lg font-bold">{t('inv_import_title')}</h2><p className="text-xs text-slate-500">{t('inv_import_subtitle')}</p></div><button onClick={close} aria-label={t('inv_close')} className="p-2"><X /></button></header>
       <div className="overflow-y-auto p-4">

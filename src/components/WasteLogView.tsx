@@ -20,7 +20,8 @@ import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../store/useOnboardingStore';
 import { AppSelect } from './AppSelect';
 import { translateLocationName } from '../utils/i18nUtils';
-import { useIsDesktop } from '../hooks/useIsDesktop';
+import { useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
+import { AdaptivePaneLayout } from './AdaptivePaneLayout';
 import {
     buildAuditEventDescription,
     formatAuditActionName,
@@ -500,7 +501,9 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 }) => {
     const { t, i18n } = useTranslation();
     const { user } = useAuth();
-    const isDesktop = useIsDesktop();
+    const layout = useAdaptiveLayout();
+    const isDesktop = layout.twoPane;
+    const [activePane, setActivePane] = useState<'primary' | 'detail'>('primary');
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.logs);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const currentLabId = useLabStore(state => state.currentLabId);
@@ -611,6 +614,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         setTotalCount(0);
         setExpandedId(null);
         setSelectedDesktopLogId(null);
+        setActivePane('primary');
         setViewingAuditLogForId(null);
         setAuditLogs([]);
         setError(null);
@@ -869,10 +873,10 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         if (expandedLog?.schema_version === 2) {
             void loadV2Items(expandedLog.id);
         }
-        if (isDesktop && selectedDesktopLog?.schema_version === 2) {
+        if ((isDesktop || activePane === 'detail') && selectedDesktopLog?.schema_version === 2) {
             void loadV2Items(selectedDesktopLog.id);
         }
-    }, [expandedId, filteredLogs, isDesktop, loadV2Items, selectedDesktopLog]);
+    }, [activePane, expandedId, filteredLogs, isDesktop, loadV2Items, selectedDesktopLog]);
 
     const sortOptions = useMemo(() => ([
         { value: 'created_at-desc', label: t('log_sort_date_desc') },
@@ -942,6 +946,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         initialRecordPresentedRef.current = true;
         setSelectedDesktopLogId(target.id);
         setExpandedId(target.id);
+        setActivePane('detail');
         const targetSection = groupedSections.find((section) => (
             section.logs.some((log) => log.id === target.id)
         ));
@@ -1078,25 +1083,15 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         const totalVol = computeTotalVolume(log);
         const primaryChemicalName = getPrimaryChemicalName(log);
         const deletedLocation = getDeletedLocation(log);
-        const deleteReason = getDeleteReason(log);
         const locationBadgeClass = getLocationBadgeClass(deletedLocation);
         const legacyRecord = isLegacyWasteLog(log);
         const streamLabel = formatWasteStream(log.stream_code, i18n.language);
         const displayTitle = streamLabel || (log.disposal_category.startsWith('기타')
             ? (primaryChemicalName || log.disposal_category)
             : formatDisposalCategory(log.disposal_category));
-        const canVoidThisLog = canVoidLog(log);
         const v2Items = log.schema_version === 2 ? v2ItemsByLogId[log.id] : undefined;
         const componentCount = v2Items?.length ?? log.chemicals.length;
-        const firstChemical = log.chemicals?.[0] as any;
-        const firstChemicalName = getWasteChemicalName(firstChemical);
-        const shouldCompactSingleDeleteLog = Boolean(
-            legacyRecord &&
-            deleteReason &&
-            log.chemicals.length === 1 &&
-            firstChemicalName &&
-            firstChemicalName === displayTitle
-        );
+
 
         return (
             <div
@@ -1109,10 +1104,9 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             >
                 <button
                     onClick={() => {
-                        if (isDesktop) {
-                            setSelectedDesktopLogId(log.id);
-                        }
-                        setExpandedId(isExpanded ? null : log.id);
+                        setSelectedDesktopLogId(log.id);
+                        setExpandedId(log.id);
+                        setActivePane('detail');
                     }}
                     className="w-full p-4 text-left flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-slate-750 transition-colors"
                 >
@@ -1157,142 +1151,18 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                     }
                 </button>
 
-                {isExpanded && (
-                    <div className="px-4 pb-4 border-t border-gray-100 dark:border-slate-700">
-                        {log.schema_version === 2 ? (
-                            <div className="mt-3">
-                                <WasteLogItemsPanel
-                                    items={v2Items}
-                                    isLoading={Boolean(v2ItemsLoading[log.id])}
-                                    error={v2ItemsError[log.id] || null}
-                                    onRetry={() => void loadV2Items(log.id, true)}
-                                    onViewAudit={setViewingAuditLogForId}
-                                />
-                            </div>
-                        ) : !shouldCompactSingleDeleteLog && (
-                            <div className="space-y-2 mt-3">
-                                {log.chemicals.map((chem, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="flex justify-between items-center p-2.5 bg-gray-50 dark:bg-slate-750 rounded-lg text-sm"
-                                    >
-                                        <div>
-                                            <div className="font-medium text-slate-700 dark:text-slate-300">
-                                                {getWasteChemicalName(chem) || 'Unknown'}
-                                            </div>
-                                            <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                                                {chem.label && t(chem.label as any)}
-                                            </div>
-                                        </div>
-                                        {getWasteChemicalConcentration(chem) && (
-                                            <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                                                {getWasteChemicalConcentration(chem)}
-                                            </div>
-                                        )}
-                                        {(chem as any).id && (
-                                            <button
-                                                onClick={() => setViewingAuditLogForId((chem as any).id)}
-                                                className="mt-1.5 flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
-                                            >
-                                                <History className="w-3 h-3" /> {t('log_view_diff')}
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
 
-                        {log.schema_version === 2 && (
-                            <div className="mt-3">
-                                <PhPredictionAuditPanel log={log} />
-                            </div>
-                        )}
-
-                        {deleteReason && (
-                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 p-2.5 bg-slate-50 dark:bg-slate-700/30 rounded-lg text-sm text-slate-700 dark:text-slate-300">
-                                <div className="min-w-0">
-                                    <span className="font-medium">{t('log_disposal_reason')}:</span> {deleteReason}
-                                </div>
-                                {shouldCompactSingleDeleteLog && firstChemical?.id && (
-                                    <button
-                                        onClick={() => setViewingAuditLogForId(firstChemical.id)}
-                                        className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
-                                    >
-                                        <History className="w-3 h-3" /> {t('log_view_diff')}
-                                    </button>
-                                )}
-                            </div>
-                        )}
-
-                        {log.schema_version === 2 && (
-                            <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900/50 sm:grid-cols-2">
-                                <div>
-                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '처리 방법' : 'Handling action'}</div>
-                                    <div className="mt-0.5 font-semibold text-slate-800 dark:text-slate-100">{formatHandlingAction(log.handling_action, i18n.language)}</div>
-                                </div>
-                                <div>
-                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '분류 결과' : 'Decision status'}</div>
-                                    <div className="mt-0.5 font-semibold text-slate-800 dark:text-slate-100">{formatDecisionStatus(log.decision_status, i18n.language)}</div>
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <div className="text-slate-500 dark:text-slate-400">{i18n.language.startsWith('ko') ? '폐기 분류' : 'Waste classification'}</div>
-                                    <div className="mt-0.5 break-all font-semibold text-slate-800 dark:text-slate-100">
-                                        {streamLabel || '-'}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {log.voided_at && (
-                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
-                                <div className="flex items-center gap-1.5 font-semibold">
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    {i18n.language.startsWith('ko') ? '원본을 보존하고 정정 처리한 기록입니다.' : 'The original record is preserved and marked as corrected.'}
-                                </div>
-                                {log.void_reason && <p className="mt-1.5 break-words">{log.void_reason}</p>}
-                                <p className="mt-1 text-xs opacity-75">{formatDate(log.voided_at)}</p>
-                            </div>
-                        )}
-
-                        {!deleteReason && shouldCompactSingleDeleteLog && firstChemical?.id && (
-                            <div className="mt-3 flex justify-end">
-                                <button
-                                    onClick={() => setViewingAuditLogForId(firstChemical.id)}
-                                    className="flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-600 transition-colors"
-                                >
-                                    <History className="w-3 h-3" /> {t('log_view_diff')}
-                                </button>
-                            </div>
-                        )}
-
-                        {canVoidThisLog && (
-                            <button
-                                onClick={() => openVoidDialog(log)}
-                                className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/20"
-                            >
-                                <PencilLine className="w-4 h-4" />
-                                {i18n.language.startsWith('ko') ? '기록 정정' : 'Correct record'}
-                            </button>
-                        )}
-                    </div>
-                )}
             </div>
         );
     }, [
-        canVoidLog,
         computeTotalVolume,
         expandedId,
         formatDate,
         formatDisposalCategory,
         getDeletedLocation,
         i18n.language,
-        isDesktop,
-        loadV2Items,
-        openVoidDialog,
         t,
         v2ItemsByLogId,
-        v2ItemsError,
-        v2ItemsLoading,
     ]);
     const openExportDialog = (format: ExportFormat) => {
         setIsExportMenuOpen(false);
@@ -1482,9 +1352,9 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     }
 
     return (
-        <div className="p-5 lg:p-8" style={{ paddingBottom: '100px' }}>
-            <div className={`mx-auto grid w-full max-w-[1320px] grid-cols-1 gap-6 lg:items-start lg:gap-8 ${containersVisible ? '' : 'lg:grid-cols-[minmax(0,1fr)_360px]'}`}>
-                <div className="flex min-w-0 flex-col gap-4">
+        <div className="h-full min-h-0">
+            <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={containersVisible ? { ...layout, twoPane: false, columns: undefined } : layout} activePane={containersVisible ? 'primary' : activePane} onBack={() => { setActivePane('primary'); setExpandedId(null); }} className="logs-panes flex h-full flex-col">
+                <div data-pane="primary" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
             {showOnboardingGuide && (
                 <OnboardingGuideCard
                     icon={<History className="h-5 w-5" />}
@@ -1531,7 +1401,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         {isExportMenuOpen && (
                             <>
                                 <div
-                                    className="fixed inset-0 z-40"
+                                    className="adaptive-overlay fixed inset-0 z-40"
                                     onClick={() => setIsExportMenuOpen(false)}
                                 />
                                 <div className="absolute right-0 top-full mt-2 w-44 bg-white dark:bg-slate-800 rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.3)] border border-gray-100 dark:border-slate-700 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
@@ -1684,9 +1554,9 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             )}
 
             {/* Log Cards */}
-            <div className="lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-5">
+            <div className="">
                 {sortBy === 'created_at' && groupedSections.length > 0 && (
-                    <aside className="hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block">
+                    <aside className="hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('log_tab_recent')}</div>
                         <div className="relative mt-4 space-y-1 border-l border-slate-200 pl-4 dark:border-slate-700">
                             {groupedSections.slice(0, 8).map((section) => {
@@ -1783,7 +1653,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             </>)}
                 </div>
 
-                <aside className={`hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${containersVisible ? '' : 'lg:block'}`}>
+                <aside data-pane="detail" className="min-h-0 overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-slate-800">
                         <div>
                             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('log_title')}</h3>
@@ -1845,6 +1715,13 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                 ))}
                             </div>
 
+                            {canVoidLog(selectedDesktopLog) && <button type="button" onClick={() => openVoidDialog(selectedDesktopLog)}
+                                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-amber-300 p-3 text-amber-700 dark:text-amber-300">
+                                <PencilLine size={18} />{i18n.language.startsWith('ko') ? '기록 정정' : 'Correct record'}
+                            </button>}
+                            {selectedDesktopLog.voided_at && <p className="rounded-lg border border-amber-200 p-3 text-sm">
+                                {selectedDesktopLog.void_reason} · {formatDate(selectedDesktopLog.voided_at)}
+                            </p>}
                             {selectedDesktopLog.schema_version === 2 && (
                                 <PhPredictionAuditPanel log={selectedDesktopLog} />
                             )}
@@ -1876,6 +1753,10 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                                     {getWasteChemicalConcentration(chemical)}
                                                 </div>
                                             )}
+                                            {'id' in chemical && typeof chemical.id === 'string' && <button type="button" onClick={() => setViewingAuditLogForId(String(chemical.id))}
+                                                className="mt-2 flex min-h-11 items-center gap-2 text-xs text-blue-600 dark:text-blue-300">
+                                                <History size={14} />{t('log_view_diff')}
+                                            </button>}
                                         </div>
                                     ))}
                                 </div>
@@ -1898,10 +1779,10 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         </div>
                     )}
                 </aside>
-            </div>
+            </AdaptivePaneLayout>
 
             {voidId && (
-                <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
+                <div className="adaptive-overlay fixed inset-0 z-[95] flex items-center justify-center p-4">
                     <button
                         type="button"
                         aria-label={i18n.language.startsWith('ko') ? '정정 창 닫기' : 'Close correction dialog'}
@@ -1994,7 +1875,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             )}
 
             {isExportDialogOpen && (
-                <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+                <div className="adaptive-overlay fixed inset-0 z-[90] flex items-center justify-center p-4">
                     <div
                         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
                         onClick={() => setIsExportDialogOpen(false)}
@@ -2107,7 +1988,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
             {/* Audit Log Modal */}
             {viewingAuditLogForId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div className="adaptive-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewingAuditLogForId(null)} />
                     <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
