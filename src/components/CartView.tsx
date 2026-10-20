@@ -22,6 +22,7 @@ import {
     deriveWasteAmountFromComponentVolumes,
     getAllowedAmountUnits,
     getWasteAcidBasePresence,
+    needsAlkalineCyanideCheck,
 } from '../utils/wasteBatch';
 import {
     getWastePolicyEscalationDetails,
@@ -470,8 +471,9 @@ export const CartView: React.FC<CartViewProps> = ({
         [policyStream],
     );
     const hasAmountConfirmation = !decision.missingFields.includes('total_amount');
-    const needsMeasuredPh = requiresMixingState && batch.matrix === 'aqueous' &&
-        batch.mixingState === 'already_mixed' && approvedPredictedBatchPh === undefined;
+    const needsCyanidePh = needsAlkalineCyanideCheck(batch) && batch.mixingState === 'already_mixed';
+    const needsMeasuredPh = needsCyanidePh || (requiresMixingState && batch.matrix === 'aqueous' &&
+        batch.mixingState === 'already_mixed' && approvedPredictedBatchPh === undefined);
     const shouldAskAdditionalComponents = batch.matrix === 'mixed_biphasic' ||
         batch.matrix === 'unknown' || batch.components.length > 1 ||
         shouldAskPhPredictionCompleteness(
@@ -2453,7 +2455,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                         {t('waste_ph_title')}
                                     </h3>
                                     <p className="mb-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
-                                        {t('waste_ph_measured_only_help')}
+                                        {t(needsCyanidePh ? 'waste_ph_cyanide_help' : 'waste_ph_measured_only_help')}
                                     </p>
                                     <div className="grid grid-cols-[1fr_auto] gap-3">
                                         <input

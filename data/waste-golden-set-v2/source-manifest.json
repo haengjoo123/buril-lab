@@ -12,7 +12,7 @@
     "networkRequiredForCi": false
   },
   "rowCount": 1103,
-  "datasetSha256": "f4c5dbad0502da98b92aa6d4588419f40a93a5a1112c0a8b4a3f78caeff1400a",
+  "datasetSha256": "0c2ee6f72447ae86867411a95d884e21bce3e1cd08ffa2bddfd76b9daf18b958",
   "strata": {
     "organic_non_halogenated": 134,
     "organic_halogenated": 102,
@@ -83,7 +83,10 @@
     "unresolvedOxideHolds": 2,
     "structureResolvedHolds": 12,
     "connectivitySmilesRows": 61,
-    "reviewDocument": "WASTE_GOLDEN_SET_V2_REVIEW.md"
+    "reviewDocument": "WASTE_GOLDEN_SET_V2_REVIEW.md",
+    "cyanideAlkalinePhHolds": 22,
+    "cyanideUnificationRows": 3,
+    "cyanidePolicyAssessedAt": "2026-10-21T00:00:00.000Z"
   },
   "commonLabReagentStratum": {
     "method": "kosha_cas_lookup_with_explicit_lab_scenario",

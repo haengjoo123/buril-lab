@@ -21,10 +21,11 @@ import {
     extractHCodes,
     isCorrosiveAcidByNameAndHCodes,
     parseFormula,
+    requiresAlkalineCyanideWaste,
 } from './chemicalAnalyzer';
 import { concentrationAwareCategory } from './fatalToxicityDilution';
 
-export const WASTE_RULE_VERSION = '2.7.0';
+export const WASTE_RULE_VERSION = '2.8.0';
 export const DEFAULT_WASTE_POLICY_VERSION = 'KR-2026.3';
 
 export interface NormalizedWasteAmount {
@@ -274,7 +275,17 @@ const hasValidMeasuredBatchPh = (batch: WasteBatchDraft): boolean => {
         measuredBatchPh <= 14;
 };
 
-const hasApprovedPredictedBatchPh = (value: number | undefined): value is number =>
+/** Cyanide waste kept at this pH or above does not release HCN. */
+export const CYANIDE_MIN_WASTE_PH = 10;
+
+/** True when an aqueous batch holds a cyanide that can release HCN, so its measured pH is required. */
+export const needsAlkalineCyanideCheck = (batch: WasteBatchDraft): boolean =>
+    batch.matrix === 'aqueous' && batch.components.some((component) => (
+        [...component.hazardFlags, ...deriveWasteHazardFlags(component)].includes('CYANIDE') &&
+        requiresAlkalineCyanideWaste(component.chemical.name)
+    ));
+
+const hasApprovedPredictedBatchPh =(value: number | undefined): value is number =>
     value !== undefined && Number.isFinite(value) && value > 2.2 && value < 12.3;
 
 const getLegalWastePhClass = (batch: WasteBatchDraft): WasteLegalPhClass => {
@@ -771,6 +782,18 @@ export function analyzeWasteBatch(
             messageKey: 'compat_acid_sulfide',
             ruleId: 'acid_sulfide',
         });
+    }
+    // Aqueous cyanide that can release HCN goes to the cyanide container only
+    // when a measured batch pH shows it is alkaline. A predicted pH is not enough.
+    if (needsAlkalineCyanideCheck(batch)) {
+        if (!hasValidMeasuredBatchPh(batch)) {
+            pushMissing(missingFields, 'measured_ph');
+        } else if (getMeasuredBatchPh(batch)! < CYANIDE_MIN_WASTE_PH) {
+            pushReason(blockingReasons, {
+                code: 'cyanide_not_alkaline',
+                messageKey: 'waste_block_cyanide_not_alkaline',
+            });
+        }
     }
 
     const approvedPredictedBatchPh = hasApprovedPredictedBatchPh(options.approvedPredictedBatchPh)

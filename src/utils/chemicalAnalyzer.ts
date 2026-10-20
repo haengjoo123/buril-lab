@@ -149,15 +149,49 @@ const REACTIVE_NAME_FALSE_POSITIVE_CONTEXTS = [
     /(?:과산화물|수퍼옥사이드|슈퍼옥사이드)[\s\S]*(?:산화물|산화\s*[가-힣]+)|(?:산화물|산화\s*[가-힣]+)[\s\S]*(?:과산화물|수퍼옥사이드|슈퍼옥사이드)/i,
 ];
 
+const NITROPRUSSIDE_NAME_PATTERN = /nitroprusside|nitroferricyanide|니트로프루시드|나이트로프루시드|나이트로프루씨드/i;
+
 const CYANIDE_NAME_PATTERNS = [
     /\bcyanide\b/i,
     /\bcyanid\b/i,
+    /\b(?:di|tri|tetra|hexa)cyanide\b/i,
     /\bcyanogen\b/i,
     /\bferricyanide\b/i,
     /\bferrocyanide\b/i,
     /\bthiocyanate\b/i,
-    /시안화|시안|청산/i,
+    NITROPRUSSIDE_NAME_PATTERN,
+    /시안화|시안|청산|시아니드|시아나이드|사이안화/i,
 ];
+
+/**
+ * Inorganic cyanides identified by CAS. Ammonium cyanide (CH4N2) looks organic
+ * by formula and zinc cyanide is often listed without one; both are still
+ * cyanide salts. The server keeps the same list in analyze_waste_batch_v2.
+ */
+export const INORGANIC_CYANIDE_CAS: ReadonlySet<string> = new Set([
+    '143-33-9', // sodium cyanide
+    '151-50-8', // potassium cyanide
+    '592-01-8', // calcium cyanide
+    '12211-52-8', // ammonium cyanide
+    '557-21-1', // zinc cyanide
+    '14402-89-2', // sodium nitroprusside
+    '13755-38-9', // sodium nitroprusside dihydrate
+]);
+const HYDROGEN_CYANIDE_CAS = '74-90-8';
+const AMMONIUM_CYANIDE_NAME_PATTERN = /\bammonium\s+cyanide\b|시안화\s*암모늄/i;
+
+/**
+ * Iron hexacyanide complexes (ferro-/ferricyanide, Prussian blue) and
+ * thiocyanates are stable near neutral pH, so their waste is not required to
+ * be alkaline. Nitroprusside releases cyanide readily and is not exempt.
+ */
+const STABLE_CYANIDE_NAME_PATTERN = /ferrocyan|ferricyan|hexacyanofer|prussian|페로시안|페리시안|시안화제[12]철|사이아노페레이트|thiocyan|티오시아/i;
+
+/** A cyanide that can release HCN, so its aqueous waste must be kept at pH 10 or higher. */
+export const requiresAlkalineCyanideWaste = (name: string | undefined): boolean => {
+    const value = name ?? '';
+    return NITROPRUSSIDE_NAME_PATTERN.test(value) || !STABLE_CYANIDE_NAME_PATTERN.test(value);
+};
 
 const SULFIDE_NAME_PATTERNS = [
     /\bsulfide\b/i,
@@ -364,6 +398,11 @@ const isFormulaExactly = (formula: string, candidates: readonly string[]): boole
     const normalized = normalizedFormula(formula).toUpperCase();
     return candidates.some(candidate => normalized === candidate.toUpperCase());
 };
+
+/** Hydrogen cyanide is cyanide, but a volatile toxic gas is never a container waste. */
+export const isHydrogenCyanide = (chemical: Pick<Chemical, 'casNumber' | 'molecularFormula'>): boolean =>
+    chemical.casNumber?.trim() === HYDROGEN_CYANIDE_CAS ||
+    isFormulaExactly(chemical.molecularFormula ?? '', ['HCN', 'CHN']);
 
 const INORGANIC_ACID_FORMULAS = [
     'HCL', 'HBR', 'HI', 'HF', 'H2SO4', 'HNO3', 'H3PO4', 'HCLO4',
@@ -704,6 +743,15 @@ export const detectChemicalHazards = (chemical: Chemical): ChemicalHazardProfile
             : ['name_pattern', name] as const;
         addEvidence('CYANIDE', source, value, source === 'formula_pattern' ? 'confirmed' : 'inferred');
     }
+    if (INORGANIC_CYANIDE_CAS.has(casNumber) || casNumber === HYDROGEN_CYANIDE_CAS) {
+        addEvidence('CYANIDE', 'cas_registry', casNumber, 'confirmed');
+    }
+    if (isHydrogenCyanide(chemical)) {
+        addEvidence('CYANIDE', 'formula_pattern', formula || casNumber, 'confirmed');
+    }
+    if (AMMONIUM_CYANIDE_NAME_PATTERN.test(name)) {
+        addEvidence('CYANIDE', 'name_pattern', name, 'inferred');
+    }
 
     if (!isOrganic && matchesAny(name, SULFIDE_NAME_PATTERNS)) {
         addEvidence('SULFIDE', 'name_pattern', name, 'inferred');
@@ -854,6 +902,9 @@ export const analyzeChemical = (chemical: Chemical, options: AnalyzeChemicalOpti
     if (isReactive) {
         category = 'REACTIVE';
         reason = 'reason_reactive';
+    } else if (hasCyanide && isHydrogenCyanide(chemical)) {
+        category = 'SPECIAL_HAZARD';
+        reason = 'reason_hydrogen_cyanide';
     } else if (hasCyanide) {
         category = 'CYANIDE';
         reason = 'reason_cyanide';
