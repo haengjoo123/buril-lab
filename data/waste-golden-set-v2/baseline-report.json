@@ -1,12 +1,12 @@
 {
   "schemaVersion": "2.4.0",
   "datasetSha256": "0c2ee6f72447ae86867411a95d884e21bce3e1cd08ffa2bddfd76b9daf18b958",
-  "generatedAt": "2026-10-20T10:35:49.250Z",
+  "generatedAt": "2026-10-20T10:46:45.159Z",
   "total": 1103,
-  "strictMatches": 1090,
-  "strictMatchRate": 0.9882139619220308,
-  "conservativeHolds": 12,
-  "conservativeHoldRate": 0.010879419764279238,
+  "strictMatches": 1091,
+  "strictMatchRate": 0.9891205802357208,
+  "conservativeHolds": 11,
+  "conservativeHoldRate": 0.009972801450589302,
   "unsafeAutomaticReady": 0,
   "readyStreamMismatches": 0,
   "recommendedStreamMismatches": 0,
@@ -93,10 +93,10 @@
     },
     "acid_alkali": {
       "total": 108,
-      "strictMatches": 106,
-      "strictMatchRate": 0.9814814814814815,
-      "conservativeHolds": 1,
-      "conservativeHoldRate": 0.009259259259259259,
+      "strictMatches": 107,
+      "strictMatchRate": 0.9907407407407407,
+      "conservativeHolds": 0,
+      "conservativeHoldRate": 0,
       "unsafeAutomaticReady": 0,
       "readyStreamMismatches": 0,
       "recommendedStreamMismatches": 0
@@ -285,36 +285,6 @@
         "status": "ready",
         "streamCode": "ORGANIC_NON_HALOGENATED",
         "reason": "Single-substance standard scenario; evidence-specific ORGANIC_NON_HALOGENATED common stream."
-      },
-      "actual": {
-        "status": "blocked",
-        "streamCode": "REACTIVE_OXIDIZER",
-        "reasons": [
-          "reactive_waste"
-        ],
-        "missingFields": []
-      },
-      "unsafeAutomaticReady": false,
-      "readyStreamMismatch": false,
-      "recommendedStreamMismatch": false,
-      "adjudication": {
-        "outcome": "gold_correct",
-        "reason": "The app blocked on a name pattern, but the stored KOSHA Section 2 and 10 evidence does not establish reactivity.",
-        "evidenceSections": [
-          2,
-          10
-        ],
-        "assessedAt": "2026-08-08T00:00:00.000Z"
-      }
-    },
-    {
-      "id": "v2-0299-3148-73-0",
-      "casNumber": "3148-73-0",
-      "stratum": "acid_alkali",
-      "expected": {
-        "status": "ready",
-        "streamCode": "ACID_AQUEOUS",
-        "reason": "Single-substance standard scenario; evidence-specific ACID_AQUEOUS common stream."
       },
       "actual": {
         "status": "blocked",

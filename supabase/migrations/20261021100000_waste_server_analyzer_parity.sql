@@ -14,7 +14,8 @@
 -- 2. Reactive names use the client's word-bounded patterns and its oxide-alias
 --    and enzyme exclusions. "azide" no longer matches hydrazides, thiazides or
 --    gliclazide. Organic peroxides ("...diperoxide", "tert-butylperoxy") and
---    alkyl/aryl hydrazines are reactive on both sides (stricter client rule).
+--    alkyl/aryl hydrazines are reactive on both sides (stricter client rule);
+--    acyl hydrazines (hydrazides such as N,N'-diacetylhydrazine) are not.
 -- 3. Acid identity ignores acid names in a metal salt's alias ("sulfuric acid,
 --    magnesium salt") and reads a Korean acid name only as a standalone word
 --    (not in 싸이오황산, 아세트산 나트륨 or the EDTA name). Alkali identity uses the
@@ -546,7 +547,8 @@ begin
             -- for JavaScript's ASCII \b.
             or (
                 v_name ~* concat(
-                    'peroxide(?![A-Za-z0-9_])|peroxy|perbenzoic\s+acid|hydrazine(?![A-Za-z0-9_])',
+                    'peroxide(?![A-Za-z0-9_])|peroxy|perbenzoic\s+acid',
+                    '|(?<!acetyl|acyl|formyl|propionyl|butyryl|oyl|carbonyl|sulfonyl)hydrazine(?![A-Za-z0-9_])',
                     '|(?<![A-Za-z0-9_])(',
                         'superoxide|hydroperoxide|nitrate|nitrite|hypochlorite|chlorite|chlorate|bromate',
                         '|perchlorate|periodate|iodate|permanganate|persulfate|peroxydisulfate',

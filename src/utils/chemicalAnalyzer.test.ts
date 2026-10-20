@@ -402,6 +402,8 @@ describe('analyzeChemical corrosive-acid and reactive-identity coverage', () => 
         ['Hydrochlorothiazide', 'C7H8ClN3O4S2'],
         ['Gliclazide', 'C15H21N3O3S'],
         ['N-Methylhydrazinecarbothioamide', 'C2H7N3S'],
+        ["N,N'-diacetylhydrazine (Acetic acid, 2-acetylhydrazide)", 'C4H8N2O2'],
+        ['1,2-Dibenzoylhydrazine', 'C14H12N2O2'],
     ])('does not read a hydrazide, thiazide or "-azide" drug name as reactive: %s', (name, molecularFormula) => {
         const result = analyzeChemical({ id: name, name, casNumber: '67-64-1', molecularFormula });
         expect(result.hazardProfile?.flags).not.toContain('REACTIVE');

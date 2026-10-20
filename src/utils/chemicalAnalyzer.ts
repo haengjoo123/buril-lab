@@ -110,8 +110,9 @@ const REACTIVE_NAME_PATTERNS = [
     /\bazide\b/i,
     /\bdiazomethane\b/i,
     // Alkyl and aryl hydrazines ("1,2-dimethylhydrazine") are strong
-    // reducers like hydrazine itself; hydrazides and hydrazones do not match.
-    /hydrazine\b/i,
+    // reducers like hydrazine itself; hydrazides and hydrazones do not match,
+    // nor do acyl hydrazines ("N,N'-diacetylhydrazine"), which are hydrazides.
+    /(?<!acetyl|acyl|formyl|propionyl|butyryl|oyl|carbonyl|sulfonyl)hydrazine\b/i,
     /\bpicric\b/i,
     /\bnitric\s+acid\b/i,
     /\bperchloric\s+acid\b/i,
