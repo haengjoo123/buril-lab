@@ -433,3 +433,69 @@ describe('analyzeChemical corrosive-acid and reactive-identity coverage', () => 
         }).category).toBe('REACTIVE');
     });
 });
+
+describe('analyzeChemical hydrohalide counter-ions', () => {
+    it.each([
+        ['Tris hydrochloride', '1185-53-1', 'C4H12ClNO3'],
+        ['염산 구아니딘 (Guanidine Hydrochloride)', '50-01-1', 'CH6ClN3'],
+        ['Putrescine dihydrochloride', '333-93-7', 'C4H14Cl2N2'],
+        ['에틸아민 염산염', '557-66-4', 'C2H8ClN'],
+    ])('treats %s as an ionic salt, not an organic halogen', (name, casNumber, molecularFormula) => {
+        const result = analyzeChemical({ id: casNumber, name, casNumber, molecularFormula });
+        expect(result).toMatchObject({
+            category: 'NEUTRAL',
+            materialProfile: { kind: 'ionic_organic_salt', evidence: 'hydrohalide_name' },
+        });
+        expect(result.chemical.properties?.isHalogenated).toBe(false);
+    });
+
+    it.each([
+        // A C-Cl bond remains beside the declared counter-ion.
+        ['2-Chloroethylamine hydrochloride', '870-24-6', 'C2H7Cl2N'],
+        // One declared HCl cannot account for two chlorine atoms.
+        ['Putrescine hydrochloride', '333-93-7', 'C4H14Cl2N2'],
+        // No nitrogen base to carry the hydrochloride.
+        ['Chlorobutanol hydrochloride', '57-15-8', 'C4H7Cl3O'],
+    ])('keeps %s on the organic-halogen route', (name, casNumber, molecularFormula) => {
+        const result = analyzeChemical({ id: casNumber, name, casNumber, molecularFormula });
+        expect(result.category).toBe('ORGANIC_HALOGEN');
+        expect(result.chemical.properties?.isHalogenated).toBe(true);
+    });
+});
+
+describe('analyzeChemical organic-cation thiocyanates', () => {
+    it.each([
+        ['과니딘 티오시아네이트(GUANIDINE THIOCYANATE) (Guanidine thiocyanate)', 'C2H6N4S', undefined],
+        ['Tetrabutylammonium thiocyanate', 'C17H36N2S', 'CCCC[N+](CCCC)(CCCC)CCCC.C(#N)[S-]'],
+    ])('flags %s as cyanide-family waste', (name, molecularFormula, connectivitySmiles) => {
+        const result = analyzeChemical({ id: name, name, casNumber: '593-84-0', molecularFormula, connectivitySmiles });
+        expect(result.category).toBe('CYANIDE');
+        expect(result.hazardProfile?.flags).toContain('CYANIDE');
+    });
+
+    it('confirms the thiocyanate from a disconnected PubChem fragment without a salt name', () => {
+        const result = analyzeChemical({
+            id: 'tbatc', name: 'TBA SCN', casNumber: '3674-54-1',
+            molecularFormula: 'C17H36N2S', connectivitySmiles: 'CCCC[N+](CCCC)(CCCC)CCCC.C(#N)[S-]',
+        });
+        expect(result.hazardProfile?.evidence).toContainEqual(expect.objectContaining({
+            flag: 'CYANIDE', confidence: 'confirmed',
+        }));
+    });
+
+    it.each([
+        ['Methyl thiocyanate', 'C2H3NS', 'CSC#N'],
+        ['Allyl isothiocyanate', 'C4H5NS', 'C=CCN=C=S'],
+    ])('does not flag the covalent organic %s', (name, molecularFormula, connectivitySmiles) => {
+        const result = analyzeChemical({ id: name, name, casNumber: '556-64-9', molecularFormula, connectivitySmiles });
+        expect(result.hazardProfile?.flags ?? []).not.toContain('CYANIDE');
+    });
+
+    it('leaves metal thiocyanato complexes on their existing metal route', () => {
+        const result = analyzeChemical({
+            id: 'hg-co-scn', name: 'Mercury tetrathiocyanatocobaltate(II)', casNumber: '27685-51-4',
+            molecularFormula: 'C4CoHgN4S4', connectivitySmiles: 'C(#N)[S-].C(#N)[S-].C(#N)[S-].C(#N)[S-].[Co+2].[Hg+2]',
+        });
+        expect(result.category).toBe('HEAVY_METAL');
+    });
+});

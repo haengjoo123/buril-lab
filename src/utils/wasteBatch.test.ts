@@ -1099,3 +1099,75 @@ describe('component material form', () => {
         expect(inferWasteMatrixFromComponent({ ...fromBottle, materialForm: 'solution' })).toBeNull();
     });
 });
+
+describe('acid identity from Korean names', () => {
+    const nameOnly = (name: string): AnalysisResult => ({
+        ...analysis(name, '', 'UNKNOWN'),
+        chemical: { id: name, name, casNumber: '', molecularFormula: '' },
+    });
+    const sodiumCyanide = analysis('Sodium cyanide', 'NaCN', 'CYANIDE');
+    const sodiumSulfide = analysis('Sodium sulfide', 'Na2S', 'CYANIDE');
+
+    it.each(['염산', '진한 황산', '묽은황산', '황산 98%', '염산 수용액', '질산(65%)', '아세트산', '인산 용액'])(
+        'keeps the acid + cyanide/sulfide danger rules for the free acid "%s"',
+        (name) => {
+            for (const [partner, ruleId] of [[sodiumCyanide, 'acid_cyanide'], [sodiumSulfide, 'acid_sulfide']] as const) {
+                const draft = batch([nameOnly(name), partner], 'aqueous');
+                expect(analyzeWasteBatch(draft).blockingReasons).toEqual(expect.arrayContaining([
+                    expect.objectContaining({ code: 'dangerous_compatibility', ruleId }),
+                ]));
+            }
+        },
+    );
+
+    it.each([
+        '에틸렌다이아민테트라아세트산',
+        '폴리옥시에틸렌 (20) 소르비탄 모노로레인산',
+        '염산 구아니딘',
+        '황산암모늄',
+        '아세트산 에틸',
+    ])('does not read an acid fragment of "%s" as a free acid', (name) => {
+        const draft = batch([nameOnly(name), sodiumCyanide], 'aqueous');
+        expect(analyzeWasteBatch(draft).blockingReasons.some(({ ruleId }) => ruleId === 'acid_cyanide')).toBe(false);
+    });
+
+    it('keeps EDTA free acid on the acid stream by its CAS', () => {
+        const edta = analyzeChemical({
+            id: 'edta', name: '에틸렌다이아민테트라아세트산 (Ethylenediaminetetraacetic Acid)',
+            casNumber: '60-00-4', molecularFormula: 'C10H16N2O8', ghs: { signal: 'Warning', hazardStatements: ['H319'] },
+        });
+        const draft = batch([edta], 'aqueous');
+        draft.additionalComponentsStatus = 'none';
+        expect(analyzeWasteBatch(draft)).toMatchObject({ decisionStatus: 'ready', streamCode: 'ACID_AQUEOUS' });
+        expect(analyzeWasteBatch(batch([edta, sodiumCyanide], 'aqueous')).decisionStatus).toBe('blocked');
+    });
+});
+
+describe('common lab reagent salts', () => {
+    it.each([
+        ['염산 구아니딘 (Guanidine Hydrochloride)', '50-01-1', 'CH6ClN3'],
+        ['트리스(하이드록시메틸)아미노메탄 수화염화물 (Tromethamine hydrochloride)', '1185-53-1', 'C4H12ClNO3'],
+    ])('routes aqueous %s as ordinary aqueous waste', (name, casNumber, molecularFormula) => {
+        const draft = batch([analyzeChemical({
+            id: casNumber, name, casNumber, molecularFormula, ghs: { signal: 'Warning', hazardStatements: [] },
+        })], 'aqueous');
+        draft.additionalComponentsStatus = 'none';
+        expect(analyzeWasteBatch(draft)).toMatchObject({ decisionStatus: 'ready', streamCode: 'AQUEOUS_OTHER' });
+    });
+
+    it('sends guanidine thiocyanate to the cyanide stream and blocks it with acid', () => {
+        const thiocyanate = analyzeChemical({
+            id: 'gitc', name: 'Guanidine thiocyanate', casNumber: '593-84-0', molecularFormula: 'C2H6N4S',
+            ghs: { signal: 'Warning', hazardStatements: ['H302'] },
+        });
+        const alone = batch([thiocyanate], 'aqueous');
+        alone.additionalComponentsStatus = 'none';
+        expect(analyzeWasteBatch(alone)).toMatchObject({ decisionStatus: 'ready', streamCode: 'CYANIDE_SULFIDE' });
+
+        const withAcid = analyzeWasteBatch(batch([thiocyanate, analysis('Hydrochloric acid', 'HCl', 'ACID')], 'aqueous'));
+        expect(withAcid.decisionStatus).toBe('blocked');
+        expect(withAcid.blockingReasons).toEqual(expect.arrayContaining([
+            expect.objectContaining({ ruleId: 'acid_cyanide' }),
+        ]));
+    });
+});

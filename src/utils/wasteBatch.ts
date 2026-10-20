@@ -149,6 +149,7 @@ const ACID_IDENTITY_CAS = new Set([
     '7601-90-3', // perchloric acid
     '64-19-7', // acetic acid
     '64-18-6', // formic acid
+    '60-00-4', // EDTA free acid (pH ~2.5 in water)
     HYDROFLUORIC_ACID_CAS,
 ]);
 const ALKALI_IDENTITY_CAS = new Set([
@@ -170,6 +171,16 @@ const ROUTING_SALT_CATIONS = new Set([
     'In', 'Tl', 'Zr', 'Hf', 'La', 'Ce', 'Y', 'Sc', 'Ag', 'Cd', 'Pb', 'Hg',
     'Cr', 'As', 'Ni', 'Cu', 'Zn', 'Be', 'Co', 'Mn', 'Sn', 'Sb', 'Mo', 'V',
 ]);
+/**
+ * A Korean acid name counts only as a standalone word. Korean compounds have
+ * no spaces, so a plain substring test read "아세트산" inside the EDTA name
+ * (...테트라아세트산), "인산" inside polysorbate's "모노로레인산" and "염산"
+ * in the salt name "염산 구아니딘" as free acids. Strength or solution words
+ * ("진한 황산", "염산 수용액", "황산 98%") still name the free acid; a
+ * following cation or ester word ("황산암모늄", "아세트산 에틸") does not.
+ */
+const KOREAN_FREE_ACID_NAME_PATTERN = /(?:^|[^가-힣])(?:진한|묽은|농|희|발연)?\s*(?:과염소산|아세트산|개미산|염산|황산|질산|인산|불산)(?=\s*(?:$|[^가-힣\s])|\s*(?:수용액|용액|표준\s*용액|희석액))/;
+
 const normalizedFormula = (formula: string | undefined): string =>
     (formula ?? '')
         .replace(/\s+/g, '')
@@ -221,7 +232,8 @@ const hasAcidRoutingIdentity = (analysis: AnalysisResult): boolean => {
             name,
             extractHCodes(analysis.chemical.ghs?.hazardStatements),
         ) ||
-        /\b(?:hydrochloric|sulfuric|sulphuric|nitric|phosphoric|perchloric|hydrofluoric|acetic|formic)\s+acid\b|염산|황산|질산|인산|과염소산|불산|아세트산|개미산/i.test(name);
+        /\b(?:hydrochloric|sulfuric|sulphuric|nitric|phosphoric|perchloric|hydrofluoric|acetic|formic)\s+acid\b/i.test(name) ||
+        KOREAN_FREE_ACID_NAME_PATTERN.test(name);
 };
 
 const hasAlkaliRoutingIdentity = (analysis: AnalysisResult): boolean => {

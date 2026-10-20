@@ -111172,8 +111172,8 @@
     ],
     "expected": {
       "status": "ready",
-      "streamCode": "AQUEOUS_OTHER",
-      "reason": "Aqueous Guanidine thiocyanate without acid/alkali, metal, reactive or fatal-toxicity evidence; aqueous common stream. Human review: thiocyanate releases toxic gas with acids or bleach, but the app does not treat organic-cation thiocyanates as cyanide-family waste."
+      "streamCode": "CYANIDE_SULFIDE",
+      "reason": "Guanidine thiocyanate is cyanide-family waste: dedicated cyanide/sulfide stream, never with acids or hypochlorite. The SCN- anion releases HCN or cyanogen chloride with acids or bleach; the organic guanidinium cation does not make it an ordinary aqueous waste."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -111275,8 +111275,8 @@
     ],
     "expected": {
       "status": "ready",
-      "streamCode": "ORGANIC_HALOGENATED",
-      "reason": "Guanidine hydrochloride carries organic halogen; the halogenated organic stream is required. Over-conservative (human/follow-up): the hydrochloride counter-ion is not an organic halogen, but the app currently treats C+Cl formulas as halogenated."
+      "streamCode": "AQUEOUS_OTHER",
+      "reason": "Aqueous Guanidine hydrochloride without acid/alkali, metal, reactive or fatal-toxicity evidence; aqueous common stream. The chloride is the hydrochloride counter-ion, not an organic halogen."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -111581,7 +111581,7 @@
     "expected": {
       "status": "ready",
       "streamCode": "ACID_AQUEOUS",
-      "reason": "Aqueous EDTA; acid identity routes to the aqueous acid stream. Free-acid EDTA is acidic in water; the acid stream is the more segregated choice. Human review: the app infers this from the Korean name fragment \"아세트산\"."
+      "reason": "Aqueous EDTA; acid identity routes to the aqueous acid stream. Free-acid EDTA is acidic in water (pH ~2.5); the acid stream is the more segregated choice. The app takes this from the EDTA free-acid CAS, not from the \"아세트산\" fragment of its Korean name."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",
@@ -111879,8 +111879,8 @@
     ],
     "expected": {
       "status": "ready",
-      "streamCode": "ORGANIC_HALOGENATED",
-      "reason": "Tris hydrochloride carries organic halogen; the halogenated organic stream is required. Over-conservative (human/follow-up): the hydrochloride counter-ion is not an organic halogen, but the app currently treats C+Cl formulas as halogenated."
+      "streamCode": "AQUEOUS_OTHER",
+      "reason": "Aqueous Tris hydrochloride without acid/alkali, metal, reactive or fatal-toxicity evidence; aqueous common stream. The chloride is the hydrochloride counter-ion, not an organic halogen."
     },
     "review": {
       "curatorId": "kosha-source-curation-bot-v1",

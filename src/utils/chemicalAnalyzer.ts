@@ -312,6 +312,31 @@ const isLikelyCyanideFormula = (formula: string): boolean => {
         /SCN(?:\)|\d|$)/i.test(normalized);
 };
 
+const ORGANIC_CATION_THIOCYANATE_NAME_PATTERNS = [
+    /\b(?:guanidin(?:e|ium)|[a-z]*ammonium|pyridin(?:e|ium)|[a-z]*imidazolium|[a-z]*phosphonium|[a-z]*pyrrolidinium)\s+thiocyanate\b/i,
+    /(?:구아니딘|과니딘|구아니디늄|암모늄|피리디늄|이미다졸륨)\s*티오시아네이트|티오시안산\s*(?:구아니딘|과니딘|암모늄)/,
+];
+const THIOCYANATE_SMILES_FRAGMENTS = new Set([
+    'SC#N', 'N#CS', 'C(#N)S', '[S-]C#N', 'N#C[S-]', 'C(#N)[S-]', '[SH]C#N',
+]);
+
+const hasDisconnectedThiocyanateFragment = (connectivitySmiles = ''): boolean => {
+    const fragments = connectivitySmiles.split('.').map(fragment => fragment.trim()).filter(Boolean);
+    return fragments.length >= 2 && fragments.some(fragment => THIOCYANATE_SMILES_FRAGMENTS.has(fragment));
+};
+
+/**
+ * A thiocyanate salt of an organic cation. The SCN- anion is identified by
+ * a disconnected PubChem fragment or by "<cation> thiocyanate" salt naming;
+ * ester names such as "methyl thiocyanate" are covalent and not matched.
+ */
+const isOrganicCationThiocyanateSalt = (chemical: Chemical, elements: ElementCounts): boolean => (
+    Boolean(elements.S && elements.N && elements.C) && (
+        hasDisconnectedThiocyanateFragment(chemical.connectivitySmiles) ||
+        matchesAny(chemical.name || '', ORGANIC_CATION_THIOCYANATE_NAME_PATTERNS)
+    )
+);
+
 const isLikelySulfideFormula = (elements: ElementCounts): boolean => {
     const sulfideCounterions = ['H', 'Li', 'Na', 'K', 'Mg', 'Ca', 'Ba', 'Fe', 'Zn', 'Cd', 'Pb', 'Hg', 'Cu', 'Sn'];
     return Boolean(elements.S) &&
@@ -460,6 +485,50 @@ export const isIonicOrganicSaltByStructure = (connectivitySmiles = ''): boolean 
     return [...positiveFragments, ...negativeFragments].some(smilesFragmentHasCarbon);
 };
 
+const HYDROHALIDE_SALT_NAME_PATTERN = /\b(mono|di|tri|tetra)?hydro(chloride|bromide|iodide)\b/gi;
+const KOREAN_HYDROHALIDE_SALT_NAME_PATTERN = /(이|삼)?(염산|브로민화수소산|브롬화수소산|아이오딘화수소산|요오드화수소산)염/g;
+const HYDROHALIDE_MULTIPLIERS: Record<string, number> = {
+    mono: 1, di: 2, tri: 3, tetra: 4, 이: 2, 삼: 3,
+};
+const HYDROHALIDE_HALOGENS: Record<string, 'Cl' | 'Br' | 'I'> = {
+    chloride: 'Cl', bromide: 'Br', iodide: 'I',
+    염산: 'Cl', 브로민화수소산: 'Br', 브롬화수소산: 'Br', 아이오딘화수소산: 'I', 요오드화수소산: 'I',
+};
+
+/**
+ * Halide equivalents a name declares as hydrohalide counter-ions. A KOSHA
+ * name repeats the identity in Korean and English, so the largest count per
+ * halogen is used rather than a sum.
+ */
+const getNamedHydrohalideCounterions = (name: string): Partial<Record<'Cl' | 'Br' | 'I', number>> => {
+    const counts: Partial<Record<'Cl' | 'Br' | 'I', number>> = {};
+    for (const pattern of [HYDROHALIDE_SALT_NAME_PATTERN, KOREAN_HYDROHALIDE_SALT_NAME_PATTERN]) {
+        for (const [, prefix, acid] of name.matchAll(pattern)) {
+            const halogen = HYDROHALIDE_HALOGENS[acid.toLowerCase()];
+            const count = HYDROHALIDE_MULTIPLIERS[prefix?.toLowerCase() ?? 'mono'] ?? 1;
+            counts[halogen] = Math.max(counts[halogen] ?? 0, count);
+        }
+    }
+    return counts;
+};
+
+/**
+ * Amine hydrohalide salts such as Tris-HCl or guanidine hydrochloride carry
+ * their halogen as a chloride/bromide/iodide counter-ion, not as a
+ * carbon-halogen bond. The name must declare exactly every halogen atom in
+ * the formula; any extra halogen (for example 2-chloroethylamine
+ * hydrochloride) or a missing nitrogen base keeps the organic-halogen route.
+ */
+export const isOrganicBaseHydrohalideSalt = (chemical: Chemical): boolean => {
+    const formula = chemical.molecularFormula || '';
+    const name = chemical.name || '';
+    const elements = parseFormula(formula);
+    if (!elements.N || !isLikelyOrganicByFormula(formula, name)) return false;
+    const counterions = getNamedHydrohalideCounterions(name);
+    if (Object.keys(counterions).length === 0) return false;
+    return HALOGENS.every(halogen => (elements[halogen] || 0) === ((counterions as Record<string, number>)[halogen] || 0));
+};
+
 /**
  * This is deliberately narrower than "not organic". It recognizes an ionic
  * inorganic salt only when the formula contains a counter-ion and a familiar
@@ -514,6 +583,13 @@ export const detectChemicalMaterial = (chemical: Chemical): ChemicalMaterialProf
         return {
             kind: 'ionic_organic_salt',
             evidence: 'connectivity_smiles',
+            requiresMatrixConfirmation: true,
+        };
+    }
+    if (isOrganicBaseHydrohalideSalt(chemical)) {
+        return {
+            kind: 'ionic_organic_salt',
+            evidence: 'hydrohalide_name',
             requiresMatrixConfirmation: true,
         };
     }
@@ -618,6 +694,15 @@ export const detectChemicalHazards = (chemical: Chemical): ChemicalHazardProfile
     if ((!isOrganic || hasMetalCounterion || isCyanogenHalideFormula(elements)) &&
         isLikelyCyanideFormula(formula)) {
         addEvidence('CYANIDE', 'formula_pattern', formula, 'confirmed');
+    }
+    // Guanidinium thiocyanate (RNA lysis buffers) has an organic cation but a
+    // free SCN- anion: it gives HCN/cyanogen chloride with acid or bleach,
+    // exactly like sodium thiocyanate. Covalent R-SCN esters stay excluded.
+    if (!hasMetalCounterion && isOrganicCationThiocyanateSalt(chemical, elements)) {
+        const [source, value] = hasDisconnectedThiocyanateFragment(chemical.connectivitySmiles)
+            ? ['formula_pattern', chemical.connectivitySmiles ?? ''] as const
+            : ['name_pattern', name] as const;
+        addEvidence('CYANIDE', source, value, source === 'formula_pattern' ? 'confirmed' : 'inferred');
     }
 
     if (!isOrganic && matchesAny(name, SULFIDE_NAME_PATTERNS)) {
@@ -735,7 +820,8 @@ export const analyzeChemical = (chemical: Chemical): AnalysisResult => {
     }
     const hCodes = extractHCodes(chemical.ghs?.hazardStatements);
     const hasFatalAcuteToxicityHCode = hCodes.some(code => FATAL_ACUTE_TOXICITY_H_CODES.has(code));
-    const hasHalogen = hasAnyElement(elements, HALOGENS);
+    // A hydrohalide counter-ion is ionic chloride, not an organic halogen.
+    const hasHalogen = hasAnyElement(elements, HALOGENS) && !isOrganicBaseHydrohalideSalt(chemical);
     const isOrganic = isLikelyOrganicByFormula(formula, name);
     const hazardProfile = detectChemicalHazards(chemical);
     const materialProfile = detectChemicalMaterial(chemical);
