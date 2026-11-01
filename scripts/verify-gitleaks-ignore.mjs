@@ -9,8 +9,8 @@ const EXACT_FINGERPRINT = /^[0-9a-f]{40}:[^:\r\n]+:[a-z0-9][a-z0-9_-]*:[1-9][0-9
 // Fixed dates deliberately cannot be renewed by rerunning CI.
 export const TEMPORARY_KOSHA_EXCEPTION = Object.freeze({
   fingerprint: 'eef817db81060fb07dd83a97754be4376b102f60:.env:generic-api-key:1',
-  approvedAt: '2026-10-14T03:44:00Z',
-  expiresAt: '2026-10-21T03:44:00Z',
+  approvedAt: '2026-11-01T14:30:00Z',
+  expiresAt: '2026-11-08T14:30:00Z',
 })
 
 export function verifyFingerprints(source, now = Date.now()) {

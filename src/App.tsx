@@ -20,6 +20,8 @@ import { AuthView } from './components/AuthView';
 import { ResetPasswordView } from './components/ResetPasswordView';
 import { SafetyDisclaimer, hasCurrentSafetyAcknowledgement } from './components/SafetyDisclaimer';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
+import { LegalDocumentView } from './components/LegalDocumentView';
+import { applyDocumentMeta, getDocumentMeta, getLegalDocumentKind } from './utils/seo';
 import type { CabinetSearchResult } from './services/cabinetService';
 import type { InventoryItem } from './services/inventoryService';
 import { searchChemical } from './services/searchService';
@@ -329,6 +331,7 @@ function App() {
   const isLoginRoute = location.pathname === '/login';
   const isResetPasswordRoute = location.pathname === '/reset-password';
   const isPrivacyRoute = location.pathname === '/privacy';
+  const legalDocumentKind = getLegalDocumentKind(location.pathname);
   const isFeedbackAdminRoute = location.pathname === '/feedback-admin';
   const isGatewayRoute = location.pathname === '/';
   const isLabRoute = isLabAppPath(location.pathname);
@@ -411,7 +414,7 @@ function App() {
 
   useEffect(() => {
     if (isAuthLoading || labAppRedirectTarget || legacyOpsRedirect) return;
-    if (isGatewayRoute || isLoginRoute || isResetPasswordRoute || isPrivacyRoute || isFeedbackAdminRoute || isCenterRoute || isOpsRoute || isLabRoute) return;
+    if (isGatewayRoute || isLoginRoute || isResetPasswordRoute || isPrivacyRoute || legalDocumentKind || isFeedbackAdminRoute || isCenterRoute || isOpsRoute || isLabRoute) return;
     navigate(labAppRoute(), { replace: true });
   }, [
     isAuthLoading,
@@ -421,6 +424,7 @@ function App() {
     isLoginRoute,
     isResetPasswordRoute,
     isPrivacyRoute,
+    legalDocumentKind,
     isFeedbackAdminRoute,
     isCenterRoute,
     isOpsRoute,
@@ -481,8 +485,9 @@ function App() {
   }, [i18n.language]);
 
   useEffect(() => {
-    document.title = t('app_title');
-  }, [i18n.language, t]);
+    const language = i18n.language.startsWith('ko') ? 'ko' : 'en';
+    applyDocumentMeta(getDocumentMeta(location.pathname, language, t('app_title')));
+  }, [i18n.language, location.pathname, t]);
 
   useEffect(() => {
     const handleSafetyAcknowledged = () => setIsSafetyAcknowledged(true);
@@ -723,6 +728,10 @@ function App() {
 
   if (isPrivacyRoute) {
     return <PrivacyPolicyView onBack={() => navigate(-1)} />;
+  }
+
+  if (legalDocumentKind) {
+    return <LegalDocumentView kind={legalDocumentKind} onBack={() => navigate(-1)} />;
   }
 
   if (isResetPasswordRoute) {

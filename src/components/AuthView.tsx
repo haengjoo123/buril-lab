@@ -278,12 +278,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     </div>
                 </div>
 
-                <div className="mt-4 text-center">
+                <div className="mt-4 flex justify-center gap-4">
                     <a
                         href="/privacy"
-                        className="text-xs text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2"
+                        className="text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2"
                     >
                         {t('auth_privacy_policy', 'Privacy Policy')}
+                    </a>
+                    <a
+                        href="/terms"
+                        className="text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2"
+                    >
+                        {t('auth_terms_of_service', 'Terms of Service')}
                     </a>
                 </div>
             </div>

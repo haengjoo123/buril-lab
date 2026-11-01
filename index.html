@@ -4,18 +4,185 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-    <meta name="description" content="랩실 폐시약 안전 관리 솔루션 — 사진을 찍거나 시약명을 검색하여 올바른 폐기 방법을 확인하세요." />
+    <title>버릴랩 | 연구실 폐시약 폐기 기준 검색·시약 재고 관리</title>
+    <meta name="description" content="시약명이나 CAS 번호로 폐시약 폐기 기준과 GHS 주의사항을 확인하고, 3D 시약장·재고·폐기 기록을 한곳에서 관리하는 연구실 안전 관리 서비스입니다." />
+    <meta name="application-name" content="버릴랩" />
     <meta name="theme-color" content="#0f172a" />
     <link rel="apple-touch-icon" href="/pwa-512.png" />
+    <!-- Social sharing previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="버릴랩" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:url" content="https://burillab.com/" />
+    <meta property="og:title" content="버릴랩 | 연구실 폐시약 폐기 기준 검색·시약 재고 관리" />
+    <meta property="og:description" content="시약명이나 CAS 번호로 폐시약 폐기 기준과 GHS 주의사항을 확인하고, 3D 시약장·재고·폐기 기록을 한곳에서 관리하는 연구실 안전 관리 서비스입니다." />
+    <meta property="og:image" content="https://burillab.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="버릴랩 — 연구실 폐시약 폐기 기준 검색과 3D 시약장 관리" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="버릴랩 | 연구실 폐시약 폐기 기준 검색·시약 재고 관리" />
+    <meta name="twitter:description" content="시약명이나 CAS 번호로 폐시약 폐기 기준과 GHS 주의사항을 확인하고, 3D 시약장·재고·폐기 기록을 한곳에서 관리하는 연구실 안전 관리 서비스입니다." />
+    <meta name="twitter:image" content="https://burillab.com/og-image.png" />
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
+    <!-- Structured data. Keep the FAQ in sync with src/components/gatewayFaq.ts (scripts/crawler-files.test.ts checks it). -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://burillab.com/#organization",
+            "name": "버릴랩",
+            "alternateName": [
+              "Buril Lab",
+              "BurilLab"
+            ],
+            "url": "https://burillab.com/",
+            "logo": "https://burillab.com/pwa-512.png",
+            "email": "gudwns999999@gmail.com"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://burillab.com/#website",
+            "name": "버릴랩",
+            "alternateName": "Buril Lab",
+            "url": "https://burillab.com/",
+            "inLanguage": [
+              "ko-KR",
+              "en"
+            ],
+            "publisher": {
+              "@id": "https://burillab.com/#organization"
+            }
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://burillab.com/#app",
+            "name": "버릴랩",
+            "alternateName": "Buril Lab",
+            "url": "https://burillab.com/",
+            "description": "시약명이나 CAS 번호로 폐시약 폐기 기준과 GHS 주의사항을 확인하고, 3D 시약장·재고·폐기 기록을 한곳에서 관리하는 연구실 안전 관리 서비스입니다.",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "inLanguage": [
+              "ko-KR",
+              "en"
+            ],
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "KRW"
+            },
+            "featureList": [
+              "시약명·CAS 번호·제품명으로 폐시약 폐기 기준 검색",
+              "KOSHA MSDS·PubChem 기반 GHS 주의사항 확인",
+              "시약병 라벨 사진 인식과 음성 질문",
+              "3D 시약장 보관 위치 관리",
+              "시약 재고와 폐기 기록 관리 및 내보내기",
+              "기관 안전관리자를 위한 통합안전관리센터"
+            ],
+            "screenshot": "https://burillab.com/og-image.png",
+            "publisher": {
+              "@id": "https://burillab.com/#organization"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://burillab.com/#faq",
+            "inLanguage": "ko-KR",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "버릴랩은 어떤 서비스인가요?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "버릴랩은 연구실에서 쓰고 남은 시약(폐시약)을 어떻게 폐기해야 하는지 찾아보고, 시약 재고와 시약장 보관 위치, 폐기 기록을 함께 관리하는 연구실 안전 관리 서비스입니다."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "시약은 어떻게 검색하나요?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "시약명(국문·영문), CAS 번호, 제품명으로 검색할 수 있습니다. 시약병 라벨을 카메라로 찍어 인식하거나 음성으로 질문할 수도 있습니다."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "폐기 기준과 GHS 정보는 어디에서 가져오나요?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "한국산업안전보건공단(KOSHA) MSDS와 PubChem 같은 공개 자료를 바탕으로 GHS 주의사항과 폐액 분류 방향을 보여줍니다. 참고 정보이므로 실제 폐기 전에는 최신 MSDS와 소속 기관의 폐기물 처리 규정을 함께 확인해야 합니다."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "이용 요금이 있나요?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "현재 모든 기능을 무료로 제공하며 결제를 받지 않습니다. 유료 기능을 도입하게 되면 결제 전에 가격과 환불 조건을 먼저 안내합니다."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "통합안전관리센터는 누가 사용하나요?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "대학·기관의 안전관리 담당자가 승인된 여러 연구실의 만료 임박 시약, 고위험 재고, 확인 요청 응답 현황을 한 화면에서 보고 점검 자료를 내보낼 때 사용합니다."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
     <!-- Google Fonts: Outfit (English) + Pretendard (Korean) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
-    <title>버릴랩</title>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Readable summary for crawlers and AI agents that do not run JavaScript. -->
+    <noscript>
+      <main>
+        <h1>버릴랩 — 연구실 폐시약 폐기 기준 검색·시약 재고 관리</h1>
+        <p>시약명이나 CAS 번호로 폐시약 폐기 기준과 GHS 주의사항을 확인하고, 3D 시약장·재고·폐기 기록을 한곳에서 관리하는 연구실 안전 관리 서비스입니다.</p>
+        <h2>주요 기능</h2>
+        <ul>
+          <li>시약명·CAS 번호·제품명으로 폐시약 폐기 기준 검색</li>
+          <li>KOSHA MSDS·PubChem 기반 GHS 주의사항 확인</li>
+          <li>시약병 라벨 사진 인식과 음성 질문</li>
+          <li>3D 시약장 보관 위치 관리</li>
+          <li>시약 재고와 폐기 기록 관리 및 내보내기</li>
+          <li>기관 안전관리자를 위한 통합안전관리센터</li>
+        </ul>
+        <h2>자주 묻는 질문</h2>
+        <dl>
+          <dt>버릴랩은 어떤 서비스인가요?</dt>
+          <dd>버릴랩은 연구실에서 쓰고 남은 시약(폐시약)을 어떻게 폐기해야 하는지 찾아보고, 시약 재고와 시약장 보관 위치, 폐기 기록을 함께 관리하는 연구실 안전 관리 서비스입니다.</dd>
+          <dt>시약은 어떻게 검색하나요?</dt>
+          <dd>시약명(국문·영문), CAS 번호, 제품명으로 검색할 수 있습니다. 시약병 라벨을 카메라로 찍어 인식하거나 음성으로 질문할 수도 있습니다.</dd>
+          <dt>폐기 기준과 GHS 정보는 어디에서 가져오나요?</dt>
+          <dd>한국산업안전보건공단(KOSHA) MSDS와 PubChem 같은 공개 자료를 바탕으로 GHS 주의사항과 폐액 분류 방향을 보여줍니다. 참고 정보이므로 실제 폐기 전에는 최신 MSDS와 소속 기관의 폐기물 처리 규정을 함께 확인해야 합니다.</dd>
+          <dt>이용 요금이 있나요?</dt>
+          <dd>현재 모든 기능을 무료로 제공하며 결제를 받지 않습니다. 유료 기능을 도입하게 되면 결제 전에 가격과 환불 조건을 먼저 안내합니다.</dd>
+          <dt>통합안전관리센터는 누가 사용하나요?</dt>
+          <dd>대학·기관의 안전관리 담당자가 승인된 여러 연구실의 만료 임박 시약, 고위험 재고, 확인 요청 응답 현황을 한 화면에서 보고 점검 자료를 내보낼 때 사용합니다.</dd>
+        </dl>
+        <p>버릴랩은 JavaScript를 켜야 사용할 수 있습니다.</p>
+        <nav>
+          <a href="/privacy">개인정보처리방침</a> ·
+          <a href="/terms">이용약관</a> ·
+          <a href="/cookies">쿠키 및 저장소 안내</a>
+        </nav>
+        <p>운영: 버릴랩 (사업자 등록 전 개인 운영 서비스) · 문의: gudwns999999@gmail.com</p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

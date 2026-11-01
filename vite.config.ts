@@ -578,6 +578,8 @@ export default defineConfig(({ mode }) => {
           /^\/release\.json$/,
           /^\/sw\.js$/,
           /^\/cdn-cgi(?:\/|$)/,
+          // Crawler files must reach the network, not the SPA shell.
+          /^\/(?:robots\.txt|sitemap\.xml|llms\.txt)$/,
         ],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,hdr}'],
         // 현재 메인 번들이 기본 precache 한도(2 MiB)를 넘어서므로 배포 빌드를 위해 상향합니다.

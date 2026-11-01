@@ -43,6 +43,10 @@
 .fridge-panes[data-adaptive-wide="true"] { grid-template-rows: minmax(0, 1fr); }
 .fridge-panes > [data-pane="detail"] { overflow: hidden; }
 [hidden] { display: none !important; }
+/* Visible keyboard focus everywhere; components with their own focus ring override this in the utilities layer. */
+@layer base {
+  :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+}
 [data-navigation]:not([data-navigation="bottom"]) .adaptive-voice-button { display: none; }
 @media (any-pointer: coarse) {
   .adaptive-shell button, .adaptive-overlay button { min-height: 44px; min-width: 44px; }
