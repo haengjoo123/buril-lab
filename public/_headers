@@ -9,6 +9,16 @@
 https://burillab.com/*
   Strict-Transport-Security: max-age=86400
 
+# Only production may be indexed; staging and Pages preview hosts stay out of search results.
+https://staging.burillab.com/*
+  X-Robots-Tag: noindex
+
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex
+
 /release.json
   Cache-Control: no-store
 

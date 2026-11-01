@@ -554,13 +554,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
                     </div>
                 )}
 
-                <div className="flex shrink-0 flex-col items-center gap-1.5 bg-gray-50 p-3 text-xs text-gray-400 dark:bg-slate-950/50 dark:text-gray-600 sm:gap-2 sm:p-4">
-                    <a
-                        href="/privacy"
-                        className="hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2 transition-colors"
-                    >
-                        {t('settings_privacy_policy', '개인정보처리방침')}
-                    </a>
+                <div className="flex shrink-0 flex-col items-center gap-1.5 bg-gray-50 p-3 text-xs text-gray-600 dark:bg-slate-950/50 dark:text-gray-400 sm:gap-2 sm:p-4">
+                    <div className="flex gap-4">
+                        <a
+                            href="/privacy"
+                            className="font-semibold hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2 transition-colors"
+                        >
+                            {t('settings_privacy_policy', '개인정보처리방침')}
+                        </a>
+                        <a
+                            href="/terms"
+                            className="hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2 transition-colors"
+                        >
+                            {t('settings_terms_of_service', '이용약관')}
+                        </a>
+                    </div>
                     <span>{t('app_title')} v1.0.0</span>
                 </div>
             </div>

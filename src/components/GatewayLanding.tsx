@@ -18,6 +18,8 @@ import searchScreenshot from '../assets/gateway/buril-search-history.png';
 import resultScreenshot from '../assets/gateway/buril-result-guide.png';
 import logsScreenshot from '../assets/gateway/buril-waste-logs.png';
 import cabinet3dScreenshot from '../assets/gateway/buril-3d-cabinet.png';
+import { gatewayFaq } from './gatewayFaq';
+import { SiteFooter } from './SiteFooter';
 
 interface GatewayLandingProps {
   isAuthenticated: boolean;
@@ -34,6 +36,7 @@ type GatewayCopy = {
     strengths: string;
     flow: string;
     center: string;
+    faq: string;
   };
   actions: {
     login: string;
@@ -58,7 +61,9 @@ type GatewayCopy = {
     body: string;
     items: Array<{ title: string; body: string; image: string; alt: string }>;
   };
+  faqHeading: string;
   center: {
+    demoNotice: string;
     eyebrow: string;
     heading: string;
     body: string;
@@ -96,6 +101,7 @@ const copyByLanguage: Record<'ko' | 'en', GatewayCopy> = {
       strengths: '버릴랩의 강점',
       flow: '실제 사용 화면',
       center: '통합센터',
+      faq: '자주 묻는 질문',
     },
     actions: {
       login: '로그인',
@@ -166,7 +172,9 @@ const copyByLanguage: Record<'ko' | 'en', GatewayCopy> = {
         },
       ],
     },
+    faqHeading: '자주 묻는 질문',
     center: {
+      demoNotice: '아래 화면은 기능 설명을 위한 예시이며, 기관명과 수치는 가상 데이터입니다.',
       eyebrow: '통합 안전관리센터',
       heading: '센터 담당자는 놓치기 쉬운 위험 신호를 먼저 봅니다',
       body: '연결된 연구실의 만료 임박, 고위험 재고, 미응답 요청을 모아 보여줍니다. 어떤 연구실에 먼저 연락해야 할지 빠르게 판단할 수 있습니다.',
@@ -220,6 +228,7 @@ const copyByLanguage: Record<'ko' | 'en', GatewayCopy> = {
       strengths: 'Why Buril Lab',
       flow: 'Product Screens',
       center: 'Safety Center',
+      faq: 'FAQ',
     },
     actions: {
       login: 'Log in',
@@ -290,7 +299,9 @@ const copyByLanguage: Record<'ko' | 'en', GatewayCopy> = {
         },
       ],
     },
+    faqHeading: 'Frequently asked questions',
     center: {
+      demoNotice: 'The screens below are illustrative examples; the institution and numbers are fictional.',
       eyebrow: 'Integrated Safety Center',
       heading: 'Safety managers see hidden risk signals first',
       body: 'Bring together expiring reagents, high-risk inventory, and unanswered requests across connected labs. Decide which lab needs attention first, faster.',
@@ -362,7 +373,7 @@ function GatewayButton({
       className={`inline-flex h-12 max-w-full items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium shadow-lg transition-colors ${classes}`}
     >
       <span className="truncate">{children}</span>
-      <ArrowRight className="h-4 w-4 shrink-0" />
+      <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
     </button>
   );
 }
@@ -395,7 +406,7 @@ function StrengthCard({ item }: { item: GatewayCopy['strengths'][number] }) {
     <article className="min-w-0 border-l border-slate-200 pl-4">
       <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-          <Icon className="h-4 w-4" />
+          <Icon className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold leading-5 text-slate-950">{item.title}</h3>
@@ -535,7 +546,7 @@ function CenterDashboardPreview({ copy }: { copy: GatewayCopy }) {
                   <div key={item.name} className="rounded-lg border border-slate-100 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <p className="min-w-0 truncate text-sm font-semibold text-slate-950">{item.name}</p>
-                      <span className="shrink-0 text-xs font-semibold text-red-500">{item.due}</span>
+                      <span className="shrink-0 text-xs font-semibold text-red-600">{item.due}</span>
                     </div>
                     <p className="mt-1 truncate text-sm font-medium text-slate-500">{item.lab}</p>
                     <span className={`mt-2 inline-flex rounded-md px-2 py-1 text-xs font-semibold ${item.tone}`}>
@@ -604,13 +615,14 @@ export function GatewayLanding({
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 lg:px-8">
           <button type="button" onClick={onNavigateToApp} className="flex min-w-0 items-center gap-3">
-            <img src={logo} alt={copy.brand} className="h-10 w-10 shrink-0 rounded-lg object-contain" />
+            <img src={logo} alt="" className="h-10 w-10 shrink-0 rounded-lg object-contain" />
             <span className="truncate text-xl font-semibold tracking-tight">{copy.brand}</span>
           </button>
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 md:flex">
             <a href="#buril" className="transition-colors hover:text-blue-700">{copy.nav.strengths}</a>
             <a href="#flow" className="transition-colors hover:text-blue-700">{copy.nav.flow}</a>
             <a href="#center" className="transition-colors hover:text-emerald-700">{copy.nav.center}</a>
+            <a href="#faq" className="transition-colors hover:text-blue-700">{copy.nav.faq}</a>
           </nav>
           <div className="flex min-w-0 items-center gap-2">
             {isAuthenticated ? (
@@ -721,6 +733,7 @@ export function GatewayLanding({
             </div>
 
             <div className="grid min-w-0 gap-5">
+              <p className="text-xs font-medium text-slate-600">{copy.center.demoNotice}</p>
               <CenterDashboardPreview copy={copy} />
               <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,0.78fr)]">
                 <CenterRiskPreview copy={copy} />
@@ -739,7 +752,24 @@ export function GatewayLanding({
             </div>
           </div>
         </section>
+
+        <section id="faq" className="border-t border-slate-200 bg-white">
+          <div className="mx-auto max-w-3xl px-5 py-14 lg:px-8 lg:py-16">
+            <h2 className="text-3xl font-semibold leading-tight tracking-normal text-slate-950 [word-break:keep-all]">
+              {copy.faqHeading}
+            </h2>
+            <dl className="mt-8 divide-y divide-slate-200 border-y border-slate-200">
+              {gatewayFaq[language].map((item) => (
+                <div key={item.question} className="py-5">
+                  <dt className="text-base font-semibold text-slate-950 [word-break:keep-all]">{item.question}</dt>
+                  <dd className="mt-2 text-sm font-normal leading-6 text-slate-600 [word-break:keep-all]">{item.answer}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
       </main>
+      <SiteFooter language={language} />
     </div>
   );
 }

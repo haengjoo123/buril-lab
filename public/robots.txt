@@ -1,0 +1,12 @@
+# Search engines and AI search/answer crawlers may read the public pages.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /app
+Disallow: /center
+Disallow: /ops
+Disallow: /login
+Disallow: /reset-password
+Disallow: /feedback-admin
+
+Sitemap: https://burillab.com/sitemap.xml
