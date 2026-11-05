@@ -823,7 +823,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                         type="button"
                                         onClick={handleCheckDisposalGuide}
                                         disabled={isAnalyzing}
-                                        className="text-[11px] px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium flex items-center gap-1 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                                        className="text-2xs px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium flex items-center gap-1 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
                                         {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <BookOpen size={12} />}
                                         {isAnalyzing ? t('analyzing_guide', '가이드 불러오는 중...') : t('btn_check_disposal_guide', '폐기가이드 확인')}
@@ -941,7 +941,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                     />
                                 )}
                                 {casNo && (
-                                    <p className="mt-1 pl-1 text-[10px] text-slate-400 dark:text-slate-500">
+                                    <p className="mt-1 pl-1 text-3xs text-slate-400 dark:text-slate-500">
                                         {t('cabinet_pubchem_auto_enrich')}
                                     </p>
                                 )}
@@ -985,14 +985,14 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                                         style={{ width: `${item.percent}%` }}
                                                     />
                                                 </div>
-                                                <span className={`text-[9px] font-bold whitespace-nowrap ${isSelected ? 'text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                                                <span className={`text-3xs font-bold whitespace-nowrap ${isSelected ? 'text-white' : 'text-slate-600 dark:text-slate-300'}`}>
                                                     {t(`inventory_remaining_stage_${item.stage}_label`)}
                                                 </span>
                                             </button>
                                         )
                                     })}
                                 </div>
-                                <p className="text-[10px] text-slate-500 dark:text-slate-400 h-3">
+                                <p className="text-3xs text-slate-500 dark:text-slate-400 h-3">
                                     {(remainingPercent !== undefined) && (
                                         <>
                                             {remainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
@@ -1020,7 +1020,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                                     setWidth(CONTAINER_BASE_WIDTHS[ct.type] || 8);
                                                 }
                                             }}
-                                            className={`flex flex-col items-center justify-center gap-1 px-1.5 py-2 rounded-lg border text-[11px] font-medium transition-all min-h-[44px] ${template === ct.type
+                                            className={`flex flex-col items-center justify-center gap-1 px-1.5 py-2 rounded-lg border text-2xs font-medium transition-all min-h-[44px] ${template === ct.type
                                                 ? 'border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-300 dark:border-blue-500 dark:bg-blue-500/20 dark:text-blue-200 dark:ring-blue-500/40'
                                                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-700'
                                                 }`}
@@ -1076,7 +1076,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                 columnsClassName="grid grid-cols-1 gap-3"
                             />
                             {expiryStatus && (
-                                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md w-fit ${getExpiryBadgeClasses(expiryStatus.level)}`}>
+                                <span className={`text-2xs font-medium px-2 py-0.5 rounded-md w-fit ${getExpiryBadgeClasses(expiryStatus.level)}`}>
                                     {t(expiryStatus.labelKey, expiryStatus.labelParams)}
                                 </span>
                             )}
@@ -1114,12 +1114,12 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                         {/* Storage Group Tags */}
                                         {groupLabels.length > 0 && (
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                                <label className="text-3xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                                                     {t('cabinet_storage_group')}
                                                 </label>
                                                 <div className="flex flex-wrap gap-1">
                                                     {groupLabels.map(key => (
-                                                        <span key={key} className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                                        <span key={key} className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-3xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                                                             {t(key)}
                                                         </span>
                                                     ))}
@@ -1136,7 +1136,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                                     return (
                                                         <div
                                                             key={`${w.ruleId}-${i}`}
-                                                            className={`flex items-start gap-1.5 p-2 rounded-lg text-[11px] leading-relaxed ${isDanger
+                                                            className={`flex items-start gap-1.5 p-2 rounded-lg text-2xs leading-relaxed ${isDanger
                                                                 ? 'bg-red-50 text-red-700 border border-red-200 dark:border-red-500/40 dark:bg-red-950/35 dark:text-red-200'
                                                                 : 'bg-amber-50 text-amber-700 border border-amber-200 dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-200'
                                                                 }`}
@@ -1157,7 +1157,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                                     <button
                                                         type="button"
                                                         onClick={() => setIsStorageWarningsExpanded(current => !current)}
-                                                        className="mt-0.5 flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                                                        className="mt-0.5 flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-2xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                                                     >
                                                         {isStorageWarningsExpanded ? (
                                                             <ChevronUp className="h-3.5 w-3.5" />
@@ -1173,7 +1173,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                         )}
 
                                         {storageClassification.needsReview && (
-                                            <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-700 dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-200">
+                                            <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-2xs leading-relaxed text-amber-700 dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-200">
                                                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
                                                 <span>{t('cabinet_storage_review_required')}</span>
                                             </div>
@@ -1192,25 +1192,25 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                         <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                                     </div>
                                 ) : auditLogs.length === 0 ? (
-                                    <p className="text-[10px] text-slate-500 text-center py-1">{t('log_empty', '기록이 없습니다.')}</p>
+                                    <p className="text-3xs text-slate-500 text-center py-1">{t('log_empty', '기록이 없습니다.')}</p>
                                 ) : (
                                     <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 scrollbar-thin">
                                         {auditLogs.map(log => (
-                                            <div key={log.id} className="bg-slate-50 dark:bg-slate-800/80 p-2 rounded border border-slate-100 dark:border-slate-700 text-[10px] text-slate-600 dark:text-slate-300">
+                                            <div key={log.id} className="bg-slate-50 dark:bg-slate-800/80 p-2 rounded border border-slate-100 dark:border-slate-700 text-3xs text-slate-600 dark:text-slate-300">
                                                 <div className="flex justify-between items-center mb-1">
-                                                    <span className={`font-semibold px-1 py-0.5 rounded text-[9px] ${log.action === 'create' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
+                                                    <span className={`font-semibold px-1 py-0.5 rounded text-3xs ${log.action === 'create' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
                                                         log.action === 'update' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
                                                             'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
                                                         }`}>
                                                         {formatAuditActionName(log.action, t, log)}
                                                     </span>
-                                                    <span className="text-[9px] text-slate-400">
+                                                    <span className="text-3xs text-slate-400">
                                                         {new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US', {
                                                             month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                                                         })}
                                                     </span>
                                                 </div>
-                                                {log.actor_name && <div className="text-[9px] text-slate-400 mt-0.5">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
+                                                {log.actor_name && <div className="text-3xs text-slate-400 mt-0.5">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
                                                 <AuditChangeList diff={log.diff_data} />
                                             </div>
                                         ))}

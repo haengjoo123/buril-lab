@@ -219,19 +219,19 @@ export const FeedbackInboxView: React.FC = () => {
 
       <div className="grid grid-cols-4 gap-2">
         <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400">{t('cmp_feedback_admin_summary_total', '전체')}</div>
+          <div className="text-2xs text-slate-500 dark:text-slate-400">{t('cmp_feedback_admin_summary_total', '전체')}</div>
           <div className="text-lg font-medium text-slate-900 dark:text-white">{summary.total}</div>
         </div>
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
-          <div className="text-[11px] text-blue-700 dark:text-blue-300">{t('cmp_feedback_admin_status_new', '신규')}</div>
+          <div className="text-2xs text-blue-700 dark:text-blue-300">{t('cmp_feedback_admin_status_new', '신규')}</div>
           <div className="text-lg font-medium text-blue-700 dark:text-blue-300">{summary.newCount}</div>
         </div>
         <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <div className="text-[11px] text-amber-700 dark:text-amber-300">{t('cmp_feedback_admin_status_in_progress', '진행 중')}</div>
+          <div className="text-2xs text-amber-700 dark:text-amber-300">{t('cmp_feedback_admin_status_in_progress', '진행 중')}</div>
           <div className="text-lg font-medium text-amber-700 dark:text-amber-300">{summary.inProgressCount}</div>
         </div>
         <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-          <div className="text-[11px] text-emerald-700 dark:text-emerald-300">{t('cmp_feedback_admin_status_resolved', '해결됨')}</div>
+          <div className="text-2xs text-emerald-700 dark:text-emerald-300">{t('cmp_feedback_admin_status_resolved', '해결됨')}</div>
           <div className="text-lg font-medium text-emerald-700 dark:text-emerald-300">{summary.resolvedCount}</div>
         </div>
       </div>

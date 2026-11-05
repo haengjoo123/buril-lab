@@ -3,7 +3,8 @@ import { CabinetTrash } from './components/CabinetTrash';
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, Camera, ChevronDown, ChevronUp, Layers, Minus, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X, Undo2, Redo2 } from 'lucide-react';
+import { Box, Camera, ChevronDown, ChevronUp, Layers, Minus, PencilRuler, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X, Undo2, Redo2 } from 'lucide-react';
+import { SegmentedControl } from '../../components/SegmentedControl';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from './components/CameraCaptureModal';
@@ -435,6 +436,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const isLayoutHistoryBusy = isSaving || isLoadingCabinet || saveStatus === 'saving';
     const canUndoLayout = layoutUndoStack.length > 0 && !isLayoutHistoryBusy;
     const canRedoLayout = layoutRedoStack.length > 0 && !isLayoutHistoryBusy;
+    // Layout edits only happen in EDIT/PLACE; in VIEW keep undo/redo only while there is something to act on.
+    const showLayoutHistory = mode !== 'VIEW' || layoutUndoStack.length > 0 || layoutRedoStack.length > 0;
 
     const handleUndoLayout = async () => {
         if (!canUndoLayout) return;
@@ -1053,11 +1056,14 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     return (
         <div className="w-full h-full relative flex flex-col bg-gray-50 overflow-clip dark:bg-slate-950">
             {/* Header Toolbar */}
-            <div style={{ width: layout.columns ? layout.regions[0]?.width : undefined }} className="flex justify-between items-center px-4 py-3 bg-white shadow-sm z-30 relative shrink-0 dark:border-b dark:border-slate-800 dark:bg-slate-950">
+            <div style={{ width: layout.columns ? layout.regions[0]?.width : undefined }} className="flex justify-between items-center px-4 py-1.5 sm:py-3 bg-white shadow-sm z-30 relative shrink-0 dark:border-b dark:border-slate-800 dark:bg-slate-950">
                 <div className="flex min-w-0 items-center gap-3">
                     {onBack && (
                         <button
+                            type="button"
                             onClick={onBack}
+                            aria-label={t('cabinet_back_to_list')}
+                            title={t('cabinet_back_to_list')}
                             className="p-2 -ml-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800"
                         >
                             <ArrowLeft className="w-5 h-5" />
@@ -1072,27 +1078,31 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     </h2>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                    {/* 저장 상태 인디케이터 */}
-                    <button
-                        type="button"
-                        onClick={() => void handleUndoLayout()}
-                        disabled={!canUndoLayout}
-                        title={t('cabinet_undo_layout')}
-                        aria-label={t('cabinet_undo_layout')}
-                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                    >
-                        <Undo2 className="h-4 w-4" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => void handleRedoLayout()}
-                        disabled={!canRedoLayout}
-                        title={t('cabinet_redo_layout')}
-                        aria-label={t('cabinet_redo_layout')}
-                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                    >
-                        <Redo2 className="h-4 w-4" />
-                    </button>
+                    {/* View mode cannot change the layout, so undo/redo show there only when there is history to act on. */}
+                    {showLayoutHistory && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => void handleUndoLayout()}
+                                disabled={!canUndoLayout}
+                                title={t('cabinet_undo_layout')}
+                                aria-label={t('cabinet_undo_layout')}
+                                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                            >
+                                <Undo2 className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleRedoLayout()}
+                                disabled={!canRedoLayout}
+                                title={t('cabinet_redo_layout')}
+                                aria-label={t('cabinet_redo_layout')}
+                                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                            >
+                                <Redo2 className="h-4 w-4" />
+                            </button>
+                        </>
+                    )}
 
                     {saveStatus === 'saving' ? (
                         <span className="flex items-center gap-1.5 text-sm text-slate-400">
@@ -1115,17 +1125,22 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             <ShieldAlert className="h-4 w-4" />
                             <span className="hidden sm:inline">{t('cabinet_save_retry')}</span>
                         </button>
-                    ) : (
+                    ) : mode !== 'VIEW' ? (
+                        // 변경은 자동 저장되므로, 수동 저장은 편집·배치 모드에서만 둔다. 오류 시 재시도 버튼은 모드와 무관하게 위에서 보인다.
                         <button
+                            type="button"
                             onClick={handleSave}
                             disabled={isSaving || isLoadingCabinet}
                             title={t('cabinet_save_manual')}
+                            aria-label={t('cabinet_save_manual')}
                             className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40 dark:hover:text-slate-100 dark:hover:bg-slate-800"
                         >
                             <Save className="w-4 h-4" />
                         </button>
+                    ) : null}
+                    {(showLayoutHistory || saveStatus !== 'idle' || mode !== 'VIEW') && (
+                        <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
                     )}
-                    <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700" />
                     <CabinetTrash />
                 </div>
             </div>
@@ -1140,34 +1155,20 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 )}
                 <Suspense fallback={<SceneLoadingFallback />}>
                     <FridgeScene>
-                        <div
-                            data-onboarding-target="cabinet-mode-switcher"
-                            className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border border-slate-200 rounded-full p-1 flex items-center gap-1 dark:border-slate-700 dark:bg-slate-900/90"
-                        >
-                            <button
-                                onClick={() => setMode('VIEW')}
-                                className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-                                    }`}
-                            >
-                                <Layers size={14} /> {t('cabinet_mode_view')}
-                            </button>
-                            <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
-                            <button
-                                onClick={() => setMode('EDIT')}
-                                className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-                                    }`}
-                            >
-                                <Box size={14} /> {t('cabinet_mode_edit')}
-                            </button>
-                            <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
-                            <button
-                                onClick={() => setMode('PLACE')}
-                                className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700 dark:bg-emerald-500/20 dark:text-emerald-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-                                    }`}
-                            >
-                                <Plus size={14} /> {t('cabinet_mode_place')}
-                            </button>
-                        </div>
+                        <SegmentedControl
+                            semantics="radio"
+                            appearance="floating"
+                            size="sm"
+                            onboardingTarget="cabinet-mode-switcher"
+                            ariaLabel={t('cabinet_mode_label')}
+                            value={mode}
+                            onChange={setMode}
+                            options={[
+                                { value: 'VIEW', label: t('cabinet_mode_view'), icon: <Layers size={14} /> },
+                                { value: 'EDIT', label: t('cabinet_mode_edit'), icon: <PencilRuler size={14} /> },
+                                { value: 'PLACE', label: t('cabinet_mode_place'), icon: <Plus size={14} />, tone: 'success' },
+                            ]}
+                        />
                     </FridgeScene>
                     <CabinetTrash />
                 </Suspense>
@@ -1210,7 +1211,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         <p className="truncate text-sm font-semibold text-slate-800">
                                             {t('cabinet_auto_place_collapsed_title')}
                                         </p>
-                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-2xs text-slate-500">
                                             <span>
                                                 {t('cabinet_auto_place_after')}: {compatibilityPlanPreview.afterWarningCount}
                                             </span>
@@ -1294,7 +1295,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-blue-500 group-hover:bg-blue-50 transition-all">
                                                 <Plus size={20} />
                                             </div>
-                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_add_shelf')}</span>
+                                            <span className="whitespace-nowrap text-3xs sm:text-xs font-medium">{t('cabinet_add_shelf')}</span>
                                         </button>
                                         <button
                                             onClick={() => { if (shelves.length > 0) { removeShelf(shelves[shelves.length - 1].id); void autoSave().then(saved => { if (saved) setToastMessage(t('msc_fridge_trash_moved_shelf')); }); } }}
@@ -1304,7 +1305,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-red-500 group-hover:bg-red-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">
                                                 <Minus size={20} />
                                             </div>
-                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_remove_shelf')}</span>
+                                            <span className="whitespace-nowrap text-3xs sm:text-xs font-medium">{t('cabinet_remove_shelf')}</span>
                                         </button>
                                         <button
                                             onClick={() => { if (verticalPanelPos >= 1 && verticalPanelPos <= 99) { addVerticalPanel(verticalPanelPos); autoSave(); } }}
@@ -1314,7 +1315,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-indigo-500 group-hover:bg-indigo-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">
                                                 <SplitSquareVertical size={20} className="rotate-90" />
                                             </div>
-                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_add_vertical_panel')}</span>
+                                            <span className="whitespace-nowrap text-3xs sm:text-xs font-medium">{t('cabinet_add_vertical_panel')}</span>
                                         </button>
                                         <button
                                             onClick={() => { removeVerticalPanel(); autoSave(); }}
@@ -1324,7 +1325,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-orange-500 group-hover:bg-orange-50 transition-all group-disabled:hover:border-gray-300 group-disabled:hover:bg-gray-100">
                                                 <SplitSquareVertical size={20} className="rotate-90" />
                                             </div>
-                                            <span className="whitespace-nowrap text-[10px] sm:text-xs font-medium">{t('cabinet_remove_vertical_panel')}</span>
+                                            <span className="whitespace-nowrap text-3xs sm:text-xs font-medium">{t('cabinet_remove_vertical_panel')}</span>
                                         </button>
                                     </div>
 
@@ -1339,7 +1340,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         </button>
                                         <div className="w-px h-5 bg-gray-200 mx-0.5" />
                                         <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg">
-                                            <span className="text-[10px] sm:text-xs text-gray-500 font-medium whitespace-nowrap">{t('cabinet_vertical_panel')}</span>
+                                            <span className="text-3xs sm:text-xs text-gray-500 font-medium whitespace-nowrap">{t('cabinet_vertical_panel')}</span>
                                             <div className="flex items-center gap-0.5 bg-white border border-gray-200 px-1.5 py-0.5 rounded">
                                                 <NumberInput
                                                     min={1}
@@ -1348,7 +1349,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                                     onChange={(v) => setVerticalPanelPos(v)}
                                                     className="w-8 text-xs text-center border-none focus:ring-0 p-0"
                                                 />
-                                                <span className="text-[10px] text-gray-400">%</span>
+                                                <span className="text-3xs text-gray-400">%</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1434,7 +1435,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         <button
                                             onClick={() => void handleBuildCompatibilityPreview()}
                                             disabled={shelves.every(s => s.items.length === 0) || isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}
-                                            className="px-2 py-1 text-[10px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
+                                            className="px-2 py-1 text-3xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
                                         >
                                             {isBuildingCompatibilityPlan ? <Loader2 size={10} className="animate-spin" /> : <Layers size={10} />}
                                             {isBuildingCompatibilityPlan ? t('cabinet_auto_place_loading') : t('cabinet_auto_place_button')}
@@ -1442,7 +1443,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         <button
                                             onClick={handleOpenStorageCompatBanner}
                                             disabled={storageCompatWarningCount === 0}
-                                            className="px-2 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 hover:text-amber-800 hover:border-amber-300 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50 disabled:hover:text-amber-700 disabled:hover:border-amber-200"
+                                            className="px-2 py-1 text-3xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 hover:text-amber-800 hover:border-amber-300 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50 disabled:hover:text-amber-700 disabled:hover:border-amber-200"
                                         >
                                             <ShieldAlert size={10} />
                                             {t('btn_check_storage_compat')}
@@ -1450,7 +1451,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         <button
                                             onClick={() => setIsClearConfirmOpen(true)}
                                             disabled={shelves.every(s => s.items.length === 0)}
-                                            className="ml-auto text-[11px] sm:text-xs text-red-600 hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+                                            className="ml-auto text-2xs sm:text-xs text-red-600 hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
                                         >
                                             {t('cabinet_clear_all')}
                                         </button>
@@ -1745,17 +1746,17 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                                 isSelected ? item.active : `${item.color} opacity-60`
                                             }`}
                                         >
-                                            <span className="text-[10px] font-bold uppercase mb-0.5">
+                                            <span className="text-3xs font-bold uppercase mb-0.5">
                                                 {t(`inventory_remaining_stage_${item.stage}`)}
                                             </span>
-                                            <span className="text-[11px] font-bold leading-tight text-center">
+                                            <span className="text-2xs font-bold leading-tight text-center">
                                                 {t(`inventory_remaining_stage_${item.stage}_label`)}
                                             </span>
                                         </button>
                                     )
                                 })}
                             </div>
-                            <p className="text-[11px] text-slate-500 ml-1 h-4">
+                            <p className="text-2xs text-slate-500 ml-1 h-4">
                                 {placementRemainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
                                 {placementRemainingPercent > 10 && placementRemainingPercent <= 30 && t('inventory_remaining_stage_2_desc')}
                                 {placementRemainingPercent > 30 && placementRemainingPercent <= 70 && t('inventory_remaining_stage_3_desc')}
@@ -1953,7 +1954,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <button
                                                 key={opt.type}
                                                 onClick={() => setScanContainerType(opt.type)}
-                                                className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-[10px] font-medium transition-all ${scanContainerType === opt.type
+                                                className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-3xs font-medium transition-all ${scanContainerType === opt.type
                                                     ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200'
                                                     : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                                                     }`}
@@ -2055,17 +2056,17 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                                         isSelected ? item.active : `${item.color} opacity-60`
                                                     }`}
                                                 >
-                                                    <span className="text-[10px] font-bold uppercase mb-0.5">
+                                                    <span className="text-3xs font-bold uppercase mb-0.5">
                                                         {t(`inventory_remaining_stage_${item.stage}`)}
                                                     </span>
-                                                    <span className="text-[11px] font-bold leading-tight text-center">
+                                                    <span className="text-2xs font-bold leading-tight text-center">
                                                         {t(`inventory_remaining_stage_${item.stage}_label`)}
                                                     </span>
                                                 </button>
                                             )
                                         })}
                                     </div>
-                                    <p className="text-[11px] text-slate-500 ml-1 h-4">
+                                    <p className="text-2xs text-slate-500 ml-1 h-4">
                                         {scanRemainingPercent <= 10 && t('inventory_remaining_stage_1_desc')}
                                         {scanRemainingPercent > 10 && scanRemainingPercent <= 30 && t('inventory_remaining_stage_2_desc')}
                                         {scanRemainingPercent > 30 && scanRemainingPercent <= 70 && t('inventory_remaining_stage_3_desc')}

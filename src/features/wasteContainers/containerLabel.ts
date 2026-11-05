@@ -268,7 +268,7 @@ export function renderContainerLabelElement(model: ContainerLabelModel): HTMLEle
         padding: '8mm',
         border: `2px solid ${INK}`,
         borderRadius: '4px',
-        fontFamily: "'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+        fontFamily: "'Pretendard Variable', 'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
         color: INK,
         background: '#ffffff',
         // Korean wraps at word boundaries; long tokens (CAS, names) may still break.

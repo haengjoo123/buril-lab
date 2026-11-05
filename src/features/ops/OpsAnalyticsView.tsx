@@ -95,7 +95,7 @@ function MetricCard({
 function SmallSampleBadge() {
   const { t } = useTranslation()
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-2xs font-medium text-amber-700 ring-1 ring-amber-200">
       <AlertTriangle className="h-3 w-3" /> {t('ops_an_small_sample')}
     </span>
   )
@@ -180,7 +180,7 @@ function OverviewPanel({ summary, days }: { summary: AnalyticsSummary; days: num
                         style={{ height: `${Math.max(6, (point.searches / maxSearches) * 128)}px` }}
                       />
                     </div>
-                    <time dateTime={point.date} className="mt-2 text-[11px] font-medium tabular-nums text-slate-600">{date.short}</time>
+                    <time dateTime={point.date} className="mt-2 text-2xs font-medium tabular-nums text-slate-600">{date.short}</time>
                   </div>
                 )
               })}
@@ -201,7 +201,7 @@ function ConfusionComponents({ item }: { item: AnalyticsSearchItem }) {
     ['ops_an_conf_unresolved', item.components.unresolvedRate],
   ] as const
   return (
-    <div className="grid gap-1 text-[11px] text-slate-600">
+    <div className="grid gap-1 text-2xs text-slate-600">
       {components.map(([label, value]) => (
         <div key={label} className="flex justify-between gap-3"><span>{t(label)}</span><span className="font-medium text-slate-900">{asPercent(value)}</span></div>
       ))}
@@ -429,7 +429,7 @@ function ReviewPanel({
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-semibold text-slate-950">{koreanReviewDisplayText(item.title)}</h2>
-                  <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">{REVIEW_TYPE_LABELS[item.candidate_type]}</span>
+                  <span className="rounded-full bg-blue-50 px-2 py-1 text-2xs font-medium text-blue-700">{REVIEW_TYPE_LABELS[item.candidate_type]}</span>
                   <span className="text-xs text-slate-500">{t('ops_an_related_records', { count: item.sample_count })}</span>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{koreanReviewDisplayText(item.summary)}</p>

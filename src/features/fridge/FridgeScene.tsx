@@ -7,7 +7,7 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import { ShelfUnit } from './ShelfUnit';
 import { CabinetFrame } from './CabinetFrame';
 import { ResponsiveCamera } from './ResponsiveCamera';
-import { Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, Scan } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { CabinetEnvironment } from './CabinetEnvironment';
@@ -214,10 +214,20 @@ export const FridgeScene: React.FC<{ children?: React.ReactNode }> = ({ children
     /** 탑뷰 (90° 위에서 보기) 상태 */
     const [isTopDownView, setIsTopDownView] = useState(false);
 
+    /**
+     * The cameraStateId at which the user last rotated, panned or zoomed by hand.
+     * Every programmatic reset (fit, mode change, shelf focus) bumps cameraStateId,
+     * so this stops matching on its own and the fit button hides again.
+     */
+    const [manualCameraStateId, setManualCameraStateId] = useState<number | null>(null);
+    const isUserControllingCameraRef = useRef(false);
+
     useEffect(() => {
         setCameraStateId(id => id + 1);
     }, [mode, isTopDownView]);
 
+    // Show "fit view" only when there is something to fit back from: a hand-moved camera or a focused shelf.
+    const isCameraOffFit = manualCameraStateId === cameraStateId || shelfFocusTarget != null;
     const effectiveTarget = shelfFocusTarget ?? cameraConfig.target;
     const isPlaceMode = mode === 'PLACE';
     const isTouchPlacementSelection = isPlaceMode && isCoarsePointer && !!draggedTemplate;
@@ -466,38 +476,62 @@ export const FridgeScene: React.FC<{ children?: React.ReactNode }> = ({ children
                         enablePan={!draggedItem && !isTouchPlacementSelection}
                         enableZoom={!draggedItem && !isTouchPlacementSelection}
                         touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
+                        // Only camera changes between start and end come from the user; damping and
+                        // programmatic resets update the camera outside that window.
+                        onStart={() => { isUserControllingCameraRef.current = true; }}
+                        onChange={() => {
+                            if (isUserControllingCameraRef.current) setManualCameraStateId(cameraStateId);
+                        }}
+                        onEnd={() => { isUserControllingCameraRef.current = false; }}
                     />
                 </Suspense>
                 </CabinetModelReadyContext.Provider>
             </Canvas>
 
-            {/* Keep all camera/mode controls in one wrapping row, including narrow split panes. */}
-            <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex flex-wrap items-center justify-center gap-2">
+            {/* 모드 세그먼트(보기·편집·배치)는 상단 가운데에 단독으로 둔다. */}
+            <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex justify-center">
                 {children}
-                <button type="button" onClick={() => {
-                    setFocusedShelfId(null);
-                    setShelfFocusTarget(null);
-                    setIsTopDownView(false);
-                    setCameraStateId(id => id + 1);
-                }} className="pointer-events-auto flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-slate-200 bg-white/90 px-3 text-xs font-medium shadow dark:border-slate-700 dark:bg-slate-900/90">
-                    <RotateCcw size={16} />{t('adaptive_fit_view')}
-                </button>
-
-                {/* 탑뷰 토글 버튼 - 선반 포커스 시에만 표시 */}
-                {shelfFocusTarget && (
-                    <button
-                        onClick={() => setIsTopDownView(prev => !prev)}
-                        className={`pointer-events-auto flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-full shadow-lg border text-xs font-medium transition-all ${isTopDownView
-                            ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700'
-                            : 'bg-white/90 text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:bg-slate-900/90 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 dark:hover:border-blue-500/70'
-                            }`}
-                        title={t('topdown_view')}
-                    >
-                        {isTopDownView ? <EyeOff size={16} /> : <Eye size={16} />}
-                        <span>{t('topdown_view')}</span>
-                    </button>
-                )}
             </div>
+
+            {/*
+              카메라 조작은 지도 앱처럼 오른쪽 세로 열에 둔다. 하단은 편집 패널·배치 트레이가
+              올라오는 자리라 비워 두고, 세그먼트 줄(top-4 + 44px) 바로 아래에서 시작한다.
+            */}
+            {isCameraOffFit && (
+                <div className="pointer-events-none absolute right-3 top-[4.5rem] z-20 flex flex-col items-end gap-2">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setFocusedShelfId(null);
+                            setShelfFocusTarget(null);
+                            setIsTopDownView(false);
+                            setCameraStateId(id => id + 1);
+                        }}
+                        aria-label={t('adaptive_fit_view')}
+                        title={t('adaptive_fit_view')}
+                        className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-md backdrop-blur transition-colors hover:bg-white hover:text-blue-600 animate-in fade-in zoom-in-90 duration-150 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300"
+                    >
+                        <Scan size={18} aria-hidden="true" />
+                    </button>
+
+                    {/* 탑뷰 토글 - 선반 포커스 시에만 표시. 아이콘만으로는 뜻이 약해 글자를 함께 둔다. */}
+                    {shelfFocusTarget && (
+                        <button
+                            type="button"
+                            onClick={() => setIsTopDownView(prev => !prev)}
+                            aria-pressed={isTopDownView}
+                            title={t('topdown_view')}
+                            className={`pointer-events-auto flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold shadow-md backdrop-blur transition-colors ${isTopDownView
+                                ? 'border-blue-700 bg-blue-600 text-white hover:bg-blue-700'
+                                : 'border-slate-200 bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300'
+                                }`}
+                        >
+                            {isTopDownView ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                            <span>{t('topdown_view')}</span>
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

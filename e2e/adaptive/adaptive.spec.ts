@@ -44,7 +44,20 @@ test('cabinet editor draft and Canvas identity survive repeated resizing', async
   await page.setViewportSize({ width: 360, height: 750 });
   await page.getByRole('button', { name: '목록으로', exact: true }).click();
   await expect(page.locator('canvas')).toBeVisible();
-  await expect(page.getByRole('button', { name: '화면 맞춤', exact: true })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: '시약장 모드' })).toBeVisible();
+  // "Fit view" only appears once the camera has been moved by hand, and hides again after fitting.
+  const fitView = page.getByRole('button', { name: '화면 맞춤', exact: true });
+  await expect(fitView).toHaveCount(0);
+  const canvasBox = (await page.locator('canvas').boundingBox())!;
+  const startX = canvasBox.x + 24;
+  const startY = canvasBox.y + canvasBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 60, startY + 10, { steps: 6 });
+  await page.mouse.up();
+  await expect(fitView).toBeVisible();
+  await fitView.click();
+  await expect(fitView).toHaveCount(0);
 });
 
 test('waste log auto selection stays on the list until explicitly opened', async ({ page }) => {

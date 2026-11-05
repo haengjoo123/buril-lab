@@ -444,7 +444,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
                                                 >
                                                     <div className="flex items-center gap-2 min-w-0">
                                                         {isActive && (
-                                                            <span className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">
+                                                            <span className="flex-shrink-0 flex items-center gap-0.5 text-3xs font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">
                                                                 <span className="w-1.5 h-1.5 bg-blue-500 rounded-full inline-block" />
                                                                 {t('lab_mgmt_current_session')}
                                                             </span>
@@ -636,7 +636,7 @@ export const LabManagementModal: React.FC<LabManagementModalProps> = ({ onClose 
 
                             {selectedLabId && (
                                 <div className="animate-in fade-in slide-in-from-bottom-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                    <p className="text-[10px] text-slate-500 mb-4 px-1 italic">
+                                    <p className="text-3xs text-slate-500 mb-4 px-1 italic">
                                         * {t('lab_mgmt_role_approval_info', { defaultValue: '가입 후 관리자가 최종적인 역할을 지정합니다.' })}
                                     </p>
                                     <div className="mb-4">

@@ -320,7 +320,7 @@ export function OnboardingMissionPanel({
             <aside hidden={!desktopCoach} style={{ left: activeRegion.x + activeRegion.width - 394, top: activeRegion.y + 80, height: Math.max(0, activeRegion.height - 104) }} className="pointer-events-auto fixed z-[45] w-[370px] flex flex-col rounded-[1.75rem] border border-slate-200 bg-white shadow-2xl shadow-slate-950/15 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
                     <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
+                        <p className="text-2xs font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
                             Live onboarding
                         </p>
                         <h2 className="mt-1 text-2xl font-black leading-tight text-slate-950 dark:text-white">
@@ -428,7 +428,7 @@ export function OnboardingMissionPanel({
                             </>
                         ) : (
                             <>
-                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
+                                <p className="text-2xs font-black uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
                                     {missionCopy.eyebrow}
                                 </p>
                                 <h3 className="mt-1 text-lg font-black leading-tight text-slate-950 dark:text-white">

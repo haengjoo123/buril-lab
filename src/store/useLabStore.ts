@@ -23,6 +23,8 @@ export interface LabMember {
 
 interface LabState {
     currentLabId: string | null;
+    /** Most recently selected lab, so switching back from personal space returns to it. */
+    lastLabId: string | null;
     myLabs: LabMember[];
     setCurrentLabId: (labId: string | null) => void;
     setMyLabs: (labs: LabMember[]) => void;
@@ -33,14 +35,19 @@ export const useLabStore = create<LabState>()(
     persist(
         (set) => ({
             currentLabId: null,
+            lastLabId: null,
             myLabs: [],
-            setCurrentLabId: (labId) => set({ currentLabId: labId }),
+            // Leaving a lab also records it, which covers users persisted before lastLabId existed.
+            setCurrentLabId: (labId) => set((state) => ({
+                currentLabId: labId,
+                lastLabId: labId ?? state.currentLabId ?? state.lastLabId,
+            })),
             setMyLabs: (labs) => set({ myLabs: labs }),
-            clearLabState: () => set({ currentLabId: null, myLabs: [] })
+            clearLabState: () => set({ currentLabId: null, lastLabId: null, myLabs: [] })
         }),
         {
             name: 'lab-storage',
-            partialize: (state) => ({ currentLabId: state.currentLabId }),
+            partialize: (state) => ({ currentLabId: state.currentLabId, lastLabId: state.lastLabId }),
         }
     )
 );

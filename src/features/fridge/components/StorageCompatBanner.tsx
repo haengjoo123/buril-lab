@@ -78,7 +78,7 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopen
                                 {t('storage_compat_banner_title')}
                             </span>
                             <span className={`
-                                text-[10px] font-bold px-1.5 py-0.5 rounded-full
+                                text-3xs font-bold px-1.5 py-0.5 rounded-full
                                 ${hasDanger
                                     ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200'
                                     : 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200'
@@ -87,7 +87,7 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopen
                                 {totalWarnings}
                             </span>
                         </div>
-                        <p className={`text-[11px] mt-0.5 ${hasDanger ? 'text-red-600/80 dark:text-red-400/80' : 'text-amber-600/80 dark:text-amber-400/80'}`}>
+                        <p className={`text-2xs mt-0.5 ${hasDanger ? 'text-red-600/80 dark:text-red-400/80' : 'text-amber-600/80 dark:text-amber-400/80'}`}>
                             {t('storage_compat_banner_desc')}
                         </p>
                     </div>
@@ -118,7 +118,7 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopen
 
                             return (
                                 <div key={shelf.id} className="mt-2.5">
-                                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                                    <div className="text-2xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
                                         {t('storage_compat_shelf', { level: shelf.level + 1 })}
                                     </div>
                                     <div className="flex flex-col gap-1.5">
@@ -161,7 +161,7 @@ const WarningRow: React.FC<{ warning: StorageWarning }> = ({ warning }) => {
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                     <span className={`
-                        text-[10px] font-bold px-1.5 py-px rounded shrink-0
+                        text-3xs font-bold px-1.5 py-px rounded shrink-0
                         ${isDanger
                             ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200'
                             : 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200'

@@ -489,7 +489,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                                                         {candidate.value}
                                                     </span>
                                                 </span>
-                                                <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-medium ${needsConfirmation
+                                                <span className={`shrink-0 rounded-full border px-2 py-1 text-2xs font-medium ${needsConfirmation
                                                     ? 'border-amber-400/30 bg-amber-400/10 text-amber-100'
                                                     : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'}`}
                                                 >
@@ -521,7 +521,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                                         >
                                             <div className="flex items-start justify-between gap-3">
                                                 <dt className="text-xs font-medium text-slate-400">{label}</dt>
-                                                <dd className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${validationClasses(snapshot?.validation, snapshot?.confidence)}`}>
+                                                <dd className={`shrink-0 rounded-full border px-2 py-0.5 text-2xs font-medium ${validationClasses(snapshot?.validation, snapshot?.confidence)}`}>
                                                     {validationLabel(snapshot?.validation, snapshot?.confidence)}
                                                 </dd>
                                             </div>
@@ -529,7 +529,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                                                 {snapshot?.value || t('scanner_value_not_detected')}
                                             </dd>
                                             {snapshot && snapshot.validation !== 'missing' && (
-                                                <dd className="mt-1 text-[11px] text-slate-400">
+                                                <dd className="mt-1 text-2xs text-slate-400">
                                                     {t('scanner_confidence', {
                                                         value: confidencePercent(snapshot.confidence),
                                                     })}

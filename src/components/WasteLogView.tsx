@@ -11,14 +11,15 @@ import {
 } from '../services/wasteLogService';
 import type { DisposalCategory } from '../types';
 import { useTranslation } from 'react-i18next';
-import { PencilLine, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download, CheckCircle2 } from 'lucide-react';
+import { PencilLine, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download, CheckCircle2, Cylinder } from 'lucide-react';
 import { useLabStore } from '../store/useLabStore';
 import type { WasteLogSortBy } from '../services/wasteLogService';
 import { auditService, type AuditLog } from '../services/auditService';
 import { EmptyState } from './EmptyState';
 import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
 import { useOnboardingStore } from '../store/useOnboardingStore';
-import { AppSelect } from './AppSelect';
+import { SegmentedControl, type SegmentedControlOption } from './SegmentedControl';
+import { LogFilterMenu } from './LogFilterMenu';
 import { translateLocationName } from '../utils/i18nUtils';
 import { useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
 import { AdaptivePaneLayout } from './AdaptivePaneLayout';
@@ -43,6 +44,7 @@ import {
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogGroupMode = 'day' | 'week' | 'month';
 type LogViewTab = 'recent' | 'archive';
+type LogViewSegment = LogViewTab | 'containers';
 type ExportFormat = 'pdf' | 'excel';
 type ExportScope = 'today' | '7d' | '30d' | '90d' | 'archive' | 'all' | 'custom';
 
@@ -394,7 +396,7 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
 
                         <div className="mt-2 flex flex-wrap gap-1.5">
                             {item.hazardFlags.length > 0 ? item.hazardFlags.map((flag) => (
-                                <span key={flag} className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+                                <span key={flag} className="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
                                     {formatHazardFlag(flag, i18n.language)}
                                 </span>
                             )) : (
@@ -887,6 +889,24 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         { value: 'handler_name-desc', label: t('log_sort_handler_desc') },
     ]), [t]);
 
+    const rangeOptions = useMemo<Array<SegmentedControlOption<LogDateRange> & { label: string }>>(() => ([
+        { value: '7d', label: t('log_range_7d_short'), title: t('log_range_7d') },
+        { value: '30d', label: t('log_range_30d_short'), title: t('log_range_30d') },
+        { value: '90d', label: t('log_range_90d_short'), title: t('log_range_90d') },
+    ]), [t]);
+
+    const logViewOptions = useMemo<Array<SegmentedControlOption<LogViewSegment>>>(() => {
+        const options: Array<SegmentedControlOption<LogViewSegment>> = [
+            { value: 'recent', label: t('log_tab_recent'), title: t('log_tab_recent') },
+            { value: 'archive', label: t('log_tab_archive'), title: t('log_tab_archive') },
+        ];
+        if (isWasteContainersEnabled) {
+            const label = containerCopy(i18n.language).tab;
+            options.push({ value: 'containers', label, title: label, icon: <Cylinder className="h-4 w-4" /> });
+        }
+        return options;
+    }, [i18n.language, t]);
+
     const canVoidLog = useCallback((log: WasteLogRecord) => {
         if (log.voided_at) return false;
 
@@ -1119,17 +1139,17 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                     {displayTitle}
                                 </span>
                                 {legacyRecord && (
-                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600">
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-3xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600">
                                         {i18n.language.startsWith('ko') ? '기존 기록 · 분류 확인 불가' : 'Legacy record · classification unavailable'}
                                     </span>
                                 )}
                                 {log.voided_at && (
-                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/60">
+                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-3xs font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/60">
                                         {i18n.language.startsWith('ko') ? '기록 정정됨' : 'Corrected record'}
                                     </span>
                                 )}
                                 {deletedLocation && (
-                                    <span className={`text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap ${locationBadgeClass}`}>
+                                    <span className={`text-2xs px-1.5 py-0.5 rounded whitespace-nowrap ${locationBadgeClass}`}>
                                         {deletedLocation}
                                     </span>
                                 )}
@@ -1267,7 +1287,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
             const container = document.createElement('div');
             container.style.padding = '20px';
-            container.style.fontFamily = 'sans-serif';
+            container.style.fontFamily = 'var(--font-sans)';
             container.style.color = '#000';
 
             let html = `
@@ -1387,7 +1407,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         <button
                             onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                             disabled={isExporting}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-slate-700 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 shadow-sm whitespace-nowrap shrink-0"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 shadow-sm whitespace-nowrap shrink-0"
                         >
                             {isExporting ? (
                                 <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
@@ -1409,7 +1429,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                         onClick={() => {
                                             openExportDialog('pdf');
                                         }}
-                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
                                     >
                                         <div className="w-6 h-6 rounded-md flex items-center justify-center bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 shrink-0">
                                             <FileText className="w-3.5 h-3.5" />
@@ -1420,7 +1440,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                         onClick={() => {
                                             openExportDialog('excel');
                                         }}
-                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors mt-0.5"
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors mt-0.5"
                                     >
                                         <div className="w-6 h-6 rounded-md flex items-center justify-center bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 shrink-0">
                                             <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -1434,40 +1454,58 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                 )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-                {([
-                    ['recent', t('log_tab_recent')],
-                    ['archive', t('log_tab_archive')],
-                ] as Array<[LogViewTab, string]>).map(([value, label]) => {
-                    const isActive = !containersVisible && activeTab === value;
-                    return (
-                        <button
-                            key={value}
-                            type="button"
-                            onClick={() => {
-                                setShowContainers(false);
-                                setActiveTab(value);
+            {/* 보기 전환 + 검색·필터: 모바일에서 두 줄로 묶어 목록이 더 위에서 시작하도록 한다. */}
+            <div className="flex flex-col gap-3">
+                <SegmentedControl<LogViewSegment>
+                    semantics="tabs"
+                    fullWidth
+                    ariaLabel={t('log_title')}
+                    value={containersVisible ? 'containers' : activeTab}
+                    onChange={(value) => {
+                        if (value === 'containers') {
+                            setShowContainers(true);
+                            return;
+                        }
+                        setShowContainers(false);
+                        setActiveTab(value);
+                    }}
+                    options={logViewOptions}
+                />
+
+                {!containersVisible && (
+                    <div className="flex items-center gap-2">
+                        <form onSubmit={handleSearchSubmit} className="relative min-w-0 flex-1">
+                            <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                enterKeyHint="search"
+                                value={searchInput}
+                                onChange={e => setSearchInput(e.target.value)}
+                                placeholder={t('log_search_placeholder')}
+                                aria-label={t('log_search_placeholder')}
+                                title={t('log_search_placeholder')}
+                                className="h-11 w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-600 dark:bg-slate-800"
+                            />
+                        </form>
+                        <LogFilterMenu<LogDateRange>
+                            range={activeTab === 'recent' ? {
+                                value: dateRange,
+                                options: rangeOptions,
+                                onChange: setDateRange,
+                                buttonLabel: rangeOptions.find((option) => option.value === dateRange)?.label ?? '',
+                            } : undefined}
+                            sort={{
+                                value: `${sortBy}-${sortOrder}`,
+                                options: sortOptions,
+                                defaultValue: 'created_at-desc',
+                                onChange: (value) => {
+                                    const [by, order] = value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
+                                    setSortBy(by);
+                                    setSortOrder(order);
+                                },
                             }}
-                            className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${isActive
-                                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                                    : 'bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700'
-                                }`}
-                        >
-                            {label}
-                        </button>
-                    );
-                })}
-                {isWasteContainersEnabled && (
-                    <button
-                        type="button"
-                        onClick={() => setShowContainers(true)}
-                        className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${containersVisible
-                                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                                : 'bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700'
-                            }`}
-                    >
-                        {containerCopy(i18n.language).tab}
-                    </button>
+                        />
+                    </div>
                 )}
             </div>
 
@@ -1480,59 +1518,6 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                     language={i18n.language}
                 />
             ) : (<>
-            {/* 검색 & 정렬 */}
-            <div className="flex flex-col gap-2">
-                {activeTab === 'recent' && (
-                    <div className="flex flex-wrap gap-2">
-                        {([
-                            ['7d', t('log_range_7d')],
-                            ['30d', t('log_range_30d')],
-                            ['90d', t('log_range_90d')],
-                        ] as Array<[LogDateRange, string]>).map(([value, label]) => {
-                            const isActive = dateRange === value;
-                            return (
-                                <button
-                                    key={value}
-                                    type="button"
-                                    onClick={() => setDateRange(value)}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${isActive
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-white text-slate-600 border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600 dark:hover:bg-slate-700'
-                                        }`}
-                                >
-                                    {label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                    <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-0">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
-                            value={searchInput}
-                            onChange={e => setSearchInput(e.target.value)}
-                            placeholder={t('log_search_placeholder')}
-                            className="w-full h-[42px] pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                        />
-                    </form>
-                    <AppSelect
-                        value={`${sortBy}-${sortOrder}`}
-                        onChange={(value) => {
-                            const [by, order] = value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
-                            setSortBy(by);
-                            setSortOrder(order);
-                        }}
-                        options={sortOptions}
-                        className="flex-shrink-0 min-w-[148px]"
-                        buttonClassName="flex-shrink-0 min-w-[148px] bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600"
-                        align="right"
-                    />
-                </div>
-            </div>
-
             {/* Error */}
             {error && (
                 <div role="alert" className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm border border-red-100 dark:border-red-900/30">
@@ -1674,12 +1659,12 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                  </div>
                                  <div className="mt-2 flex flex-wrap gap-1.5">
                                      {isLegacyWasteLog(selectedDesktopLog) && (
-                                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-3xs font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
                                              {i18n.language.startsWith('ko') ? '기존 기록 · 분류 확인 불가' : 'Legacy record · classification unavailable'}
                                          </span>
                                      )}
                                      {selectedDesktopLog.voided_at && (
-                                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-3xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                                              {i18n.language.startsWith('ko') ? '기록 정정됨' : 'Corrected record'}
                                          </span>
                                      )}

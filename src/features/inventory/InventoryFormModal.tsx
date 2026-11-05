@@ -709,7 +709,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                                             className={`w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-900 dark:text-slate-100 ${isEditingCabinetItem ? 'opacity-70 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50' : ''}`}
                                         />
                                         {isEditingCabinetItem && showQtyNotice && (
-                                            <span className="text-[11px] text-red-500 dark:text-red-400 font-medium animate-in fade-in slide-in-from-top-1">
+                                            <span className="text-2xs text-red-500 dark:text-red-400 font-medium animate-in fade-in slide-in-from-top-1">
                                                 {t('inventory_qty_notice')}
                                             </span>
                                         )}
@@ -790,17 +790,17 @@ export const InventoryFormModal: React.FC<Props> = ({
                                                         isSelected ? item.active : `${item.color} opacity-60`
                                                     }`}
                                                 >
-                                                    <span className="text-[10px] font-bold uppercase mb-0.5">
+                                                    <span className="text-3xs font-bold uppercase mb-0.5">
                                                         {t(`inventory_remaining_stage_${item.stage}`)}
                                                     </span>
-                                                    <span className="text-[11px] font-bold leading-tight text-center">
+                                                    <span className="text-2xs font-bold leading-tight text-center">
                                                         {t(`inventory_remaining_stage_${item.stage}_label`)}
                                                     </span>
                                                 </button>
                                             )
                                         })}
                                     </div>
-                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 ml-1 h-4">
+                                    <p className="text-2xs text-slate-500 dark:text-slate-400 ml-1 h-4">
                                         {formData.remaining_percent !== undefined && (
                                             <>
                                                 {formData.remaining_percent <= 10 && t('inventory_remaining_stage_1_desc')}
@@ -825,7 +825,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                                         </button>
                                     </div>
                                     {isEditingCabinetItem && (
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        <p className="text-2xs text-slate-500 dark:text-slate-400">
                                             {t('inventory_move_notice')}
                                         </p>
                                     )}
@@ -905,17 +905,17 @@ export const InventoryFormModal: React.FC<Props> = ({
                                                 {auditLogs.map(log => (
                                                     <div key={log.id} className="bg-slate-50 dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300">
                                                         <div className="flex justify-between items-center mb-1">
-                                                             <span className={`font-semibold px-1.5 py-0.5 rounded text-[10px] ${log.action === 'create' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
+                                                             <span className={`font-semibold px-1.5 py-0.5 rounded text-3xs ${log.action === 'create' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' :
                                                                     log.action === 'update' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' :
                                                                         'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
                                                                 }`}>
                                                                 {formatAuditActionName(log.action, t, log)}
                                                             </span>
-                                                            <span className="text-[10px] text-slate-400">
+                                                            <span className="text-3xs text-slate-400">
                                                                 {new Date(log.created_at).toLocaleString(i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US')}
                                                             </span>
                                                         </div>
-                                                        {log.actor_name && <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
+                                                        {log.actor_name && <div className="text-3xs text-slate-500 dark:text-slate-400 mt-1">{t('log_handler_label', '작업자')}: {log.actor_name}</div>}
                                                         <AuditChangeList diff={log.diff_data} />
                                                     </div>
                                                 ))}

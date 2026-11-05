@@ -808,7 +808,7 @@ export function SearchTabView({
                           {log.disposal_category}
                         </span>
                       </span>
-                      <span className="shrink-0 text-[11px] font-semibold text-slate-400">
+                      <span className="shrink-0 text-2xs font-semibold text-slate-400">
                         {formatWasteLogDate(log.created_at)}
                       </span>
                     </button>

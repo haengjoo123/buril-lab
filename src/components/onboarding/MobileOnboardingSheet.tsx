@@ -82,7 +82,7 @@ export function MobileOnboardingSheet({
                             <>
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-600 dark:text-blue-300 sm:text-[11px] sm:tracking-[0.16em]">
+                                        <p className="text-3xs font-black uppercase tracking-[0.14em] text-blue-600 dark:text-blue-300 sm:text-2xs sm:tracking-[0.16em]">
                                             {copy.eyebrow}
                                             <span className="text-slate-400 dark:text-slate-500"> · 3 min setup</span>
                                         </p>

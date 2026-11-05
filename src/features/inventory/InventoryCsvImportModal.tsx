@@ -1039,7 +1039,7 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                 {OPTIONAL_MAPPING_KEYS.map((key) => (
                                 <label key={key} className="flex flex-col gap-1">
-                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">{key}</span>
+                                    <span className="text-2xs text-slate-500 dark:text-slate-400">{key}</span>
                                     <AppSelect
                                         value={mapping[key] || ''}
                                         onChange={(value) => setMapping((prev) => ({ ...prev, [key]: value }))}
