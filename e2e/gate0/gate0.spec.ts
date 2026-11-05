@@ -124,11 +124,16 @@ test('login → lab → inventory search → reviewed waste record → direct li
   await expect(page).toHaveURL(/\/app\/inventory/)
   expectExactStagingTargetOrigin(page.url(), 'The inventory navigation must remain on the exact Staging target origin.')
 
-  const labSwitcher = page.getByRole('banner').getByTitle('연구실 / 개인공간 전환')
-  await expect(labSwitcher).toBeVisible()
-  await labSwitcher.click()
-  await page.getByRole('button', { name: new RegExp(LAB_NAME) }).click()
-  await expect(labSwitcher).toContainText(LAB_NAME)
+  // The lab segment switches straight to the last lab from personal space,
+  // and opens the lab list once a lab is active.
+  const labSegment = page.getByRole('banner').getByTestId('lab-context-lab-segment')
+  await expect(labSegment).toBeVisible()
+  await expect(labSegment).not.toHaveAttribute('aria-busy', 'true')
+  if ((await labSegment.getAttribute('aria-pressed')) !== 'true') await labSegment.click()
+  await expect(labSegment).toHaveAttribute('aria-pressed', 'true')
+  await labSegment.click()
+  await page.getByRole('menuitemradio', { name: new RegExp(LAB_NAME) }).click()
+  await expect(labSegment).toContainText(LAB_NAME)
 
   // A fresh synthetic user may show onboarding. Dismiss it through the real
   // UI rather than adding non-Gate0 onboarding fixtures to the seed.

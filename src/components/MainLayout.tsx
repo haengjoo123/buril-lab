@@ -61,11 +61,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
                 <div style={{ width: headerWidth }} className="shrink-0 min-w-0">
                     <header className="adaptive-header flex min-h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-950">
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
                             {mode === 'bottom' && <button onClick={onLogoClick} aria-label={t('app_title')} className="shrink-0 min-h-11 min-w-11"><img src={logo} alt={t('app_logo_alt')} className="h-9 w-9 rounded-lg" /></button>}
                             {!hideLabSwitcher && <LabContextSwitcher />}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2 pl-2">
                             {hasCartItems && onCartClick && (
                                 <button
                                     type="button"
@@ -99,7 +99,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                             >
                                 <Settings className="h-5 w-5" />
                             </button>
-                            {userEmail && onSignOut && (
+                            {/* On phones logout lives in Settings: it frees header room for the lab switcher and keeps it away from the settings button. */}
+                            {userEmail && onSignOut && mode !== 'bottom' && (
                                 <button
                                     onClick={onSignOut}
                                     className="rounded-lg min-h-11 min-w-11 p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
@@ -119,7 +120,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 </div>
                 {bottomNav}
             </div>
-            {isSettingsOpen && <SettingsModal isAuthenticated={Boolean(userEmail)} onClose={() => setIsSettingsOpen(false)} />}
+            {isSettingsOpen && (
+                <SettingsModal
+                    isAuthenticated={Boolean(userEmail)}
+                    userEmail={userEmail}
+                    onSignOut={onSignOut}
+                    onClose={() => setIsSettingsOpen(false)}
+                />
+            )}
         </div>
     );
 };
