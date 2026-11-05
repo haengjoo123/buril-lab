@@ -92,7 +92,7 @@ function useCabinetCamera(
     }, [cabinetWidth, cabinetHeight, mode, aspect]);
 }
 
-export const FridgeScene: React.FC = () => {
+export const FridgeScene: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
     const [shadowRevision, setShadowRevision] = useState(0);
     const onModelReady = useCallback(() => setShadowRevision(revision => revision + 1), []);
     const { t } = useTranslation();
@@ -471,29 +471,33 @@ export const FridgeScene: React.FC = () => {
                 </CabinetModelReadyContext.Provider>
             </Canvas>
 
-            <button type="button" onClick={() => {
-                setFocusedShelfId(null);
-                setShelfFocusTarget(null);
-                setIsTopDownView(false);
-                setCameraStateId(id => id + 1);
-            }} className="absolute top-4 right-4 z-20 flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 text-xs font-medium shadow dark:border-slate-700 dark:bg-slate-900/90">
-                <RotateCcw size={16} />{t('adaptive_fit_view')}
-            </button>
-
-            {/* 탑뷰 토글 버튼 - 선반 포커스 시에만 표시 */}
-            {shelfFocusTarget && (
-                <button
-                    onClick={() => setIsTopDownView(prev => !prev)}
-                    className={`absolute top-16 right-4 z-20 flex items-center gap-1.5 px-3 py-2 rounded-full shadow-lg border text-xs font-medium transition-all ${isTopDownView
-                        ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700'
-                        : 'bg-white/90 text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:bg-slate-900/90 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 dark:hover:border-blue-500/70'
-                        }`}
-                    title={t('topdown_view')}
-                >
-                    {isTopDownView ? <EyeOff size={16} /> : <Eye size={16} />}
-                    <span>{t('topdown_view')}</span>
+            {/* Keep all camera/mode controls in one wrapping row, including narrow split panes. */}
+            <div className="pointer-events-none absolute inset-x-4 top-4 z-20 flex flex-wrap items-center justify-center gap-2">
+                {children}
+                <button type="button" onClick={() => {
+                    setFocusedShelfId(null);
+                    setShelfFocusTarget(null);
+                    setIsTopDownView(false);
+                    setCameraStateId(id => id + 1);
+                }} className="pointer-events-auto flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-slate-200 bg-white/90 px-3 text-xs font-medium shadow dark:border-slate-700 dark:bg-slate-900/90">
+                    <RotateCcw size={16} />{t('adaptive_fit_view')}
                 </button>
-            )}
+
+                {/* 탑뷰 토글 버튼 - 선반 포커스 시에만 표시 */}
+                {shelfFocusTarget && (
+                    <button
+                        onClick={() => setIsTopDownView(prev => !prev)}
+                        className={`pointer-events-auto flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-full shadow-lg border text-xs font-medium transition-all ${isTopDownView
+                            ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700'
+                            : 'bg-white/90 text-gray-600 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 dark:bg-slate-900/90 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-blue-300 dark:hover:border-blue-500/70'
+                            }`}
+                        title={t('topdown_view')}
+                    >
+                        {isTopDownView ? <EyeOff size={16} /> : <Eye size={16} />}
+                        <span>{t('topdown_view')}</span>
+                    </button>
+                )}
+            </div>
         </div>
     );
 };

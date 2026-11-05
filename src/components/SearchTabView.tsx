@@ -678,7 +678,7 @@ export function SearchTabView({
         </div>
 
         <aside className="mt-5 flex flex-col gap-5">
-          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <section className="hidden rounded-lg border wide:block border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('guide_example')}</h3>
               {recentSearches.length > 0 && (
@@ -710,7 +710,7 @@ export function SearchTabView({
             </div>
           </section>
 
-          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <section className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm wide:block dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="h-4 w-4 text-blue-600 dark:text-blue-400" />

@@ -1139,12 +1139,41 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     </div>
                 )}
                 <Suspense fallback={<SceneLoadingFallback />}>
-                    <FridgeScene />
+                    <FridgeScene>
+                        <div
+                            data-onboarding-target="cabinet-mode-switcher"
+                            className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border border-slate-200 rounded-full p-1 flex items-center gap-1 dark:border-slate-700 dark:bg-slate-900/90"
+                        >
+                            <button
+                                onClick={() => setMode('VIEW')}
+                                className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+                                    }`}
+                            >
+                                <Layers size={14} /> {t('cabinet_mode_view')}
+                            </button>
+                            <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
+                            <button
+                                onClick={() => setMode('EDIT')}
+                                className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+                                    }`}
+                            >
+                                <Box size={14} /> {t('cabinet_mode_edit')}
+                            </button>
+                            <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
+                            <button
+                                onClick={() => setMode('PLACE')}
+                                className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700 dark:bg-emerald-500/20 dark:text-emerald-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+                                    }`}
+                            >
+                                <Plus size={14} /> {t('cabinet_mode_place')}
+                            </button>
+                        </div>
+                    </FridgeScene>
                     <CabinetTrash />
                 </Suspense>
 
                 {showOnboardingGuide && (
-                    <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+                    <div className="pointer-events-none absolute inset-x-0 top-32 z-20 flex justify-center px-4">
                         <div className="pointer-events-auto w-full max-w-md">
                             <OnboardingGuideCard
                                 icon={<Box className="h-5 w-5" />}
@@ -1161,40 +1190,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     </div>
                 )}
 
-                {/* Mode Switcher - Floating Pill */}
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
-                    <div
-                        data-onboarding-target="cabinet-mode-switcher"
-                        className="bg-white/90 backdrop-blur pointer-events-auto shadow-md border border-slate-200 rounded-full p-1 flex items-center gap-1 dark:border-slate-700 dark:bg-slate-900/90"
-                    >
-                        <button
-                            onClick={() => setMode('VIEW')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'VIEW' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-                                }`}
-                        >
-                            <Layers size={14} /> {t('cabinet_mode_view')}
-                        </button>
-                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
-                        <button
-                            onClick={() => setMode('EDIT')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'EDIT' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-                                }`}
-                        >
-                            <Box size={14} /> {t('cabinet_mode_edit')}
-                        </button>
-                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-700" />
-                        <button
-                            onClick={() => setMode('PLACE')}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 whitespace-nowrap text-xs font-medium transition-colors ${mode === 'PLACE' ? 'bg-green-100 text-green-700 dark:bg-emerald-500/20 dark:text-emerald-200' : 'text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-                                }`}
-                        >
-                            <Plus size={14} /> {t('cabinet_mode_place')}
-                        </button>
-                    </div>
-                </div>
-
                 {compatibilityPlanPreview && !isCompatibilityPreviewVisible && (
-                    <div className="pointer-events-none absolute inset-x-0 top-[4.8rem] z-20 flex justify-center px-4">
+                    <div className="pointer-events-none absolute inset-x-0 top-32 z-20 flex justify-center px-4">
                         <div className="pointer-events-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur">
                             <div className="flex items-center gap-3 px-4 py-3">
                                 <button
@@ -1243,7 +1240,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 )}
 
                 {mode === 'PLACE' && draggedTemplate && !pendingPlacement && (
-                    <div className="pointer-events-none absolute inset-x-0 top-[4rem] z-20 flex justify-center px-4">
+                    <div className="pointer-events-none absolute inset-x-0 top-32 z-20 flex justify-center px-4">
                         <div className="pointer-events-auto flex w-full max-w-sm items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
                             <div className="min-w-0">
                                 <p className="text-xs font-medium text-emerald-700">
