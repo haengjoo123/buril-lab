@@ -33,7 +33,7 @@ export const WasteComponentRegulationChips: React.FC<{ component: WasteComponent
     const concentration = regulationConcentrationForComponent(component);
 
     return (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-2xs">
             <Landmark className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label={t('regulation_title')} />
             {evaluations.map(({ entry, applicability }) => {
                 const applies = applicability.status === 'applies' || applicability.status === 'always';

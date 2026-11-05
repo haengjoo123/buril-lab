@@ -13,7 +13,7 @@
 [data-navigation="rail"] .adaptive-side-nav > div:first-child span,
 [data-navigation="rail"] .adaptive-side-nav > div:last-child { display: none; }
 [data-navigation="rail"] .adaptive-side-nav nav { padding-inline: 4px; }
-[data-navigation="rail"] .adaptive-side-nav nav button { flex-direction: column; gap: 4px; padding: 8px 2px; font-size: 10px; }
+[data-navigation="rail"] .adaptive-side-nav nav button { flex-direction: column; gap: 4px; padding: 8px 2px; font-size: 11px; line-height: 1rem; }
 [data-navigation="rail"] .adaptive-side-nav nav button span { max-width: 64px; }
 [data-navigation]:not([data-navigation="bottom"]) .adaptive-bottom-nav { display: none; }
 .adaptive-bottom-nav { padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -50,27 +50,36 @@
 [data-navigation]:not([data-navigation="bottom"]) .adaptive-voice-button { display: none; }
 @media (any-pointer: coarse) {
   .adaptive-shell button, .adaptive-overlay button { min-height: 44px; min-width: 44px; }
+  /* iOS Safari/WKWebView zooms into text fields under 16px on focus; keep touch input text at 16px. */
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea, select):not([class*="text-lg"], [class*="text-xl"], [class*="text-2xl"], [class*="text-3xl"]) { font-size: 16px; }
 }
 
-/* Custom Fonts */
-:root {
-  --font-sans: "Pretendard Variable", "Pretendard", "Outfit", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", sans-serif;
+/*
+ * Typography tokens.
+ * Pretendard covers both Hangul and Latin, so it is the single UI typeface.
+ * Defining the stacks in @theme (instead of a `* { font-family }` rule) keeps
+ * Tailwind's font-mono utility working for codes such as CAS numbers, while
+ * Hangul inside mono text still falls back to Pretendard.
+ */
+@theme {
+  --font-sans: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Malgun Gothic", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Pretendard Variable", "Pretendard", monospace;
+  /* Smallest sizes for dense badges and meta text (below text-xs = 12px). */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.875rem;
 }
 
-* {
-  font-family: var(--font-sans);
-}
-
-/* Smooth font rendering */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
-
-/* Form elements */
-input, select, button, textarea {
-  font-family: inherit;
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Korean wraps at word boundaries (no "하세/요" orphans); long tokens such as CAS numbers or URLs still break. */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
 }
 
 /* PWA Toast Animation */

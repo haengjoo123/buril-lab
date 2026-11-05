@@ -126,7 +126,7 @@ export const ChemicalRegulationPanel: React.FC<ChemicalRegulationPanelProps> = (
                                 <span className={`font-bold ${below ? 'text-slate-600 dark:text-slate-300' : 'text-red-700 dark:text-red-300'}`}>
                                     {entry.typeName}
                                 </span>
-                                <span className={`text-[11px] font-semibold ${below ? 'text-slate-500 dark:text-slate-400' : 'text-red-700 dark:text-red-200'}`}>
+                                <span className={`text-2xs font-semibold ${below ? 'text-slate-500 dark:text-slate-400' : 'text-red-700 dark:text-red-200'}`}>
                                     {statusLabel(applicability)}
                                 </span>
                             </div>
@@ -138,7 +138,7 @@ export const ChemicalRegulationPanel: React.FC<ChemicalRegulationPanelProps> = (
                 })}
             </ul>
 
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">{t('regulation_disposal_note')}</p>
+            <p className="mt-2 text-2xs text-slate-500 dark:text-slate-400">{t('regulation_disposal_note')}</p>
         </div>
     );
 };

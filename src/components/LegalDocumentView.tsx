@@ -168,7 +168,7 @@ const KoreanTerms: React.FC = () => (
 
         <Section title="11. 제3자 자산과 라이선스">
             <List items={[
-                'Pretendard, Outfit, Noto Sans KR 글꼴: SIL Open Font License 1.1',
+                'Pretendard, Noto Sans KR 글꼴: SIL Open Font License 1.1',
                 'Lucide 아이콘: ISC License',
                 'GHS 그림문자: UN GHS(화학물질의 분류 및 표시에 관한 세계조화시스템) 공개 표준 그림문자',
                 '3D 시약장 배경 HDRI(Potsdamer Platz, Greg Zaal / Poly Haven): CC0',
@@ -267,7 +267,7 @@ const EnglishTerms: React.FC = () => (
 
         <Section title="11. Third-Party Assets and Licenses">
             <List items={[
-                'Pretendard, Outfit, and Noto Sans KR fonts: SIL Open Font License 1.1',
+                'Pretendard and Noto Sans KR fonts: SIL Open Font License 1.1',
                 'Lucide icons: ISC License',
                 'GHS pictograms: public pictograms of the UN Globally Harmonized System',
                 '3D cabinet HDRI (Potsdamer Platz by Greg Zaal, Poly Haven): CC0',

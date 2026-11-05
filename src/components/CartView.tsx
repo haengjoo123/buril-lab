@@ -1113,7 +1113,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                         value: (phPrediction.displayValue ?? phPrediction.value)?.toFixed(1),
                                     })}
                                 </p>
-                                <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[11px] font-bold text-cyan-800 dark:bg-cyan-900/70 dark:text-cyan-100">
+                                <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-2xs font-bold text-cyan-800 dark:bg-cyan-900/70 dark:text-cyan-100">
                                     {t(`waste_ph_prediction_confidence_${phPrediction.confidence}` as never)}
                                 </span>
                             </div>
@@ -1381,7 +1381,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <h4 className="font-semibold text-slate-900 dark:text-white">{component.chemical.name}</h4>
                                                     {component.identityConfidence === 'verified' && component.identityConfirmedByUser && (
-                                                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                                                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-2xs font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                                                             {t('waste_component_user_verified')}
                                                         </span>
                                                     )}

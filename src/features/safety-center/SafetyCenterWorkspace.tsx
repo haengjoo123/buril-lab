@@ -488,7 +488,7 @@ export function SafetyCenterWorkspace() {
         const html2pdf = (await import('html2pdf.js')).default;
         const container = document.createElement('div');
         container.style.padding = '24px';
-        container.style.fontFamily = 'system-ui, sans-serif';
+        container.style.fontFamily = 'var(--font-sans)';
         container.innerHTML = `
           <h1 style="font-size:20px;margin:0 0 8px;">${escapeHtml(activeCenter.center_name)} ${t('sc_safety_report_suffix')}</h1>
           <p style="font-size:12px;color:#64748b;margin:0 0 20px;">${escapeHtml(formatDateTime(new Date().toISOString()))}</p>
@@ -926,7 +926,7 @@ function DashboardPage({
                         ) : (
                           <>
                             <div className="text-xs text-slate-500">{t('sc_burden_value', { value: lab.riskBurden })}</div>
-                            <div className="text-[11px] text-slate-400">{t('sc_avg_top5', { avg: lab.averageRiskScore, top: lab.topFiveAverage })}</div>
+                            <div className="text-2xs text-slate-400">{t('sc_avg_top5', { avg: lab.averageRiskScore, top: lab.topFiveAverage })}</div>
                           </>
                         )}
                       </td>
@@ -977,7 +977,7 @@ function DashboardPage({
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {assessment.flags.filter((flag) => flag !== 'hazard').map((flag) => (
-                      <span key={flag} className={`rounded border px-2 py-0.5 text-[11px] font-medium ${riskFlagTone(flag)}`}>
+                      <span key={flag} className={`rounded border px-2 py-0.5 text-2xs font-medium ${riskFlagTone(flag)}`}>
                         {getRiskFlagLabel(flag)}
                       </span>
                     ))}
@@ -1310,7 +1310,7 @@ function RisksPage({
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-1">
                           {assessment.flags.map((flag) => (
-                            <span key={flag} className={`rounded border px-2 py-0.5 text-[11px] font-medium ${riskFlagTone(flag)}`}>{getRiskFlagLabel(flag)}</span>
+                            <span key={flag} className={`rounded border px-2 py-0.5 text-2xs font-medium ${riskFlagTone(flag)}`}>{getRiskFlagLabel(flag)}</span>
                           ))}
                           {assessment.flags.length === 0 && <span className="text-xs text-slate-400">{t('sc_priority_low')}</span>}
                         </div>
@@ -1394,7 +1394,7 @@ function RiskDetailPanel({
           </span>
         ))}
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px]">
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-2xs">
         <div className="rounded-lg bg-red-50 p-2 text-red-700"><div>{t('sc_hazard_score')}</div><strong>{assessment.hazardScore}</strong></div>
         <div className="rounded-lg bg-amber-50 p-2 text-amber-700"><div>{t('sc_operational_score')}</div><strong>{assessment.operationalScore}</strong></div>
         <div className="rounded-lg bg-violet-50 p-2 text-violet-700"><div>{t('sc_data_quality_score')}</div><strong>{assessment.dataQualityScore}</strong></div>
@@ -1578,7 +1578,7 @@ function RequestCard({
           <p className="text-sm font-medium text-slate-950 dark:text-white">{request.title}</p>
           <p className="mt-1 text-xs text-slate-500">{request.lab_name} · {formatDateTime(request.created_at)}</p>
         </div>
-        <span className={`rounded border px-2 py-0.5 text-[11px] font-medium ${priorityTone(request.priority)}`}>{getPriorityLabel(request.priority)}</span>
+        <span className={`rounded border px-2 py-0.5 text-2xs font-medium ${priorityTone(request.priority)}`}>{getPriorityLabel(request.priority)}</span>
       </div>
       {request.description && <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{request.description}</p>}
       <div className="mt-4 flex items-center justify-between gap-3">

@@ -218,7 +218,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                                     <div className="flex-1 min-w-0">
                                         {/* Action type + Item name */}
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md shrink-0 ${config.chipStyle}`}>
+                                            <span className={`inline-flex items-center gap-1 text-3xs font-semibold px-1.5 py-0.5 rounded-md shrink-0 ${config.chipStyle}`}>
                                                 {config.icon}
                                                 {config.label}
                                             </span>
@@ -233,7 +233,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
 
                                         {/* Reason badge (삭제 사유) */}
                                         {reasonLabel && (
-                                            <span className="inline-block mt-1 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-600 px-1.5 py-0.5 rounded">
+                                            <span className="inline-block mt-1 text-3xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-600 px-1.5 py-0.5 rounded">
                                                 {reasonLabel}
                                             </span>
                                         )}
@@ -258,7 +258,7 @@ export function ActivityLogModal({ isOpen, cabinetId, cabinetName, onClose }: Ac
                                     </div>
 
                                     {/* Date */}
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 mt-0.5">
+                                    <span className="text-3xs text-slate-400 dark:text-slate-500 shrink-0 mt-0.5">
                                         {formatDate(log.performed_at)}
                                     </span>
                                 </div>

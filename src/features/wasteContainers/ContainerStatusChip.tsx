@@ -10,7 +10,7 @@ const STATUS_CHIP: Record<WasteContainerStatus, string> = {
 };
 
 export const ContainerStatusChip: React.FC<{ status: WasteContainerStatus; language: string }> = ({ status, language }) => (
-    <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${STATUS_CHIP[status]}`}>
+    <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold ring-1 ${STATUS_CHIP[status]}`}>
         {containerStatusLabel(status, language)}
     </span>
 );

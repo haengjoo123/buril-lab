@@ -194,7 +194,7 @@ export const WasteContainerDetail: React.FC<WasteContainerDetailProps> = ({
                             {summary.hazardFlags.length > 0 && (
                                 <ul className="mt-3 flex flex-wrap gap-1.5">
                                     {summary.hazardFlags.map((flag) => (
-                                        <li key={flag} className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:ring-orange-900/60">
+                                        <li key={flag} className="rounded-full bg-orange-50 px-2 py-0.5 text-2xs font-semibold text-orange-700 ring-1 ring-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:ring-orange-900/60">
                                             {hazardFlagLabel(flag, language)}
                                         </li>
                                     ))}
@@ -330,7 +330,7 @@ export const WasteContainerDetail: React.FC<WasteContainerDetailProps> = ({
                                                 </span>
                                                 {deposit.handlerName && <span className="min-w-0 break-words">• {deposit.handlerName}</span>}
                                                 {deposit.voidedAt && (
-                                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/60">
+                                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-3xs font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/60">
                                                         {copy.voided}
                                                     </span>
                                                 )}

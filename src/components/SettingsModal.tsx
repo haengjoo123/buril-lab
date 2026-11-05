@@ -288,7 +288,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
                                                 key={opt.value}
                                                 type="button"
                                                 onClick={() => setFeedbackType(opt.value)}
-                                                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl text-[11px] font-medium border transition-all ${feedbackType === opt.value
+                                                className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl text-2xs font-medium border transition-all ${feedbackType === opt.value
                                                         ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 dark:border-blue-500 text-blue-700 dark:text-blue-300'
                                                         : 'bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-slate-600'
                                                     }`}

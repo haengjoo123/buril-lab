@@ -101,7 +101,7 @@ export const MfaSettingsPanel: React.FC = () => {
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('settings_mfa_title')}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${isAal2 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+            <span className={`rounded-full px-2 py-0.5 text-2xs font-semibold ${isAal2 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
               {isAal2 ? t('settings_mfa_aal2') : hasVerifiedFactor ? t('settings_mfa_step_up_needed') : t('settings_mfa_not_enrolled')}
             </span>
           </div>
@@ -138,9 +138,9 @@ export const MfaSettingsPanel: React.FC = () => {
               <img src={enrollment.qrCode} alt={t('settings_mfa_qr_alt')} className="h-44 w-44" />
             </div>
             <div className="rounded-lg bg-slate-100 p-2.5 dark:bg-slate-900">
-              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('settings_mfa_manual_secret')}</p>
+              <p className="text-2xs font-medium text-slate-500 dark:text-slate-400">{t('settings_mfa_manual_secret')}</p>
               <code className="mt-1 block break-all text-xs font-semibold tracking-wide text-slate-800 dark:text-slate-200">{enrollment.secret}</code>
-              <p className="mt-1 text-[11px] text-red-500">{t('settings_mfa_secret_warning')}</p>
+              <p className="mt-1 text-2xs text-red-500">{t('settings_mfa_secret_warning')}</p>
             </div>
             <TotpCodeInput value={code} onChange={setCode} disabled={isBusy} label={t('settings_mfa_code_label')} />
             <div className="grid grid-cols-2 gap-2">

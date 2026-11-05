@@ -1050,7 +1050,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                                             const expiry = getExpiryStatus(hasManufacturerDate(item.manufacturerDateType) ? item.expiryDate : null);
                                                             if (!expiry || expiry.level === 'ok') return null;
                                                             return (
-                                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${getExpiryBadgeClasses(expiry.level)}`}>
+                                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-3xs font-semibold ${getExpiryBadgeClasses(expiry.level)}`}>
                                                                     {t(expiry.labelKey, expiry.labelParams)}
                                                                 </span>
                                                             );

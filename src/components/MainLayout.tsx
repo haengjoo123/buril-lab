@@ -76,7 +76,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                                 >
                                     <span className="relative flex h-5 w-5 items-center justify-center">
                                         <ShoppingBag className="h-5 w-5" />
-                                        <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-blue-50 dark:ring-blue-950">
+                                        <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-3xs font-bold leading-none text-white ring-2 ring-blue-50 dark:ring-blue-950">
                                             {cartBadgeText}
                                         </span>
                                     </span>

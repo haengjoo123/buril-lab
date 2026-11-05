@@ -639,7 +639,7 @@ function WasteStreamEditor({
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${stream.isEnabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`} aria-hidden="true" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">{stream.displayNameKo || streamDefinition?.displayNameKo}</span>
-            <span className="block truncate font-mono text-[11px] text-slate-500">{stream.streamCode}</span>
+            <span className="block truncate font-mono text-2xs text-slate-500">{stream.streamCode}</span>
           </span>
           {expanded ? <ChevronUp className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" /> : <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />}
         </button>

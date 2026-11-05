@@ -48,7 +48,7 @@ const illustrations: Record<EmptyVariant, React.ReactNode> = {
             <circle cx="90" cy="70" r="30" strokeWidth="4" className="stroke-slate-300 dark:stroke-slate-600" fill="none" />
             <line x1="112" y1="92" x2="135" y2="115" strokeWidth="5" strokeLinecap="round" className="stroke-slate-300 dark:stroke-slate-600" />
             {/* Question mark inside */}
-            <text x="82" y="80" fontSize="28" fontWeight="bold" className="fill-slate-300 dark:fill-slate-600" fontFamily="sans-serif">?</text>
+            <text x="82" y="80" fontSize="28" fontWeight="bold" className="fill-slate-300 dark:fill-slate-600" fontFamily="inherit">?</text>
             {/* Small x marks */}
             <g className="stroke-red-300 dark:stroke-red-700" strokeWidth="1.5" strokeLinecap="round" opacity="0.6">
                 <line x1="148" y1="45" x2="154" y2="51" />
@@ -93,7 +93,7 @@ const illustrations: Record<EmptyVariant, React.ReactNode> = {
             {/* Magnifier overlay */}
             <circle cx="135" cy="95" r="20" strokeWidth="3" className="stroke-slate-300 dark:stroke-slate-600" fill="none" />
             <line x1="149" y1="109" x2="162" y2="122" strokeWidth="4" strokeLinecap="round" className="stroke-slate-300 dark:stroke-slate-600" />
-            <text x="128" y="102" fontSize="18" fontWeight="bold" className="fill-slate-300 dark:fill-slate-600" fontFamily="sans-serif">?</text>
+            <text x="128" y="102" fontSize="18" fontWeight="bold" className="fill-slate-300 dark:fill-slate-600" fontFamily="inherit">?</text>
         </svg>
     ),
 

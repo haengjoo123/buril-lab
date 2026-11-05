@@ -394,7 +394,7 @@ export const WasteLogItemsPanel: React.FC<WasteLogItemsPanelProps> = ({
 
                         <div className="mt-2 flex flex-wrap gap-1.5">
                             {item.hazardFlags.length > 0 ? item.hazardFlags.map((flag) => (
-                                <span key={flag} className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+                                <span key={flag} className="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
                                     {formatHazardFlag(flag, i18n.language)}
                                 </span>
                             )) : (
@@ -1119,17 +1119,17 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                     {displayTitle}
                                 </span>
                                 {legacyRecord && (
-                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600">
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-3xs font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600">
                                         {i18n.language.startsWith('ko') ? '기존 기록 · 분류 확인 불가' : 'Legacy record · classification unavailable'}
                                     </span>
                                 )}
                                 {log.voided_at && (
-                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/60">
+                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-3xs font-semibold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/60">
                                         {i18n.language.startsWith('ko') ? '기록 정정됨' : 'Corrected record'}
                                     </span>
                                 )}
                                 {deletedLocation && (
-                                    <span className={`text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap ${locationBadgeClass}`}>
+                                    <span className={`text-2xs px-1.5 py-0.5 rounded whitespace-nowrap ${locationBadgeClass}`}>
                                         {deletedLocation}
                                     </span>
                                 )}
@@ -1267,7 +1267,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
             const container = document.createElement('div');
             container.style.padding = '20px';
-            container.style.fontFamily = 'sans-serif';
+            container.style.fontFamily = 'var(--font-sans)';
             container.style.color = '#000';
 
             let html = `
@@ -1387,7 +1387,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         <button
                             onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                             disabled={isExporting}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-slate-700 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 shadow-sm whitespace-nowrap shrink-0"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 shadow-sm whitespace-nowrap shrink-0"
                         >
                             {isExporting ? (
                                 <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
@@ -1409,7 +1409,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                         onClick={() => {
                                             openExportDialog('pdf');
                                         }}
-                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
                                     >
                                         <div className="w-6 h-6 rounded-md flex items-center justify-center bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 shrink-0">
                                             <FileText className="w-3.5 h-3.5" />
@@ -1420,7 +1420,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                         onClick={() => {
                                             openExportDialog('excel');
                                         }}
-                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors mt-0.5"
+                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors mt-0.5"
                                     >
                                         <div className="w-6 h-6 rounded-md flex items-center justify-center bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 shrink-0">
                                             <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -1674,12 +1674,12 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                  </div>
                                  <div className="mt-2 flex flex-wrap gap-1.5">
                                      {isLegacyWasteLog(selectedDesktopLog) && (
-                                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-3xs font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
                                              {i18n.language.startsWith('ko') ? '기존 기록 · 분류 확인 불가' : 'Legacy record · classification unavailable'}
                                          </span>
                                      )}
                                      {selectedDesktopLog.voided_at && (
-                                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-3xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                                              {i18n.language.startsWith('ko') ? '기록 정정됨' : 'Corrected record'}
                                          </span>
                                      )}

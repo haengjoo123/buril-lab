@@ -99,7 +99,7 @@ export function DisposalLogModal({ isOpen, cabinetId, cabinetName, onClose }: Di
                                         <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
                                             {log.item_name}
                                         </span>
-                                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md shrink-0 ${getReasonColor(log.reason)}`}>
+                                        <span className={`text-3xs font-medium px-1.5 py-0.5 rounded-md shrink-0 ${getReasonColor(log.reason)}`}>
                                             {getReasonLabel(log.reason)}
                                         </span>
                                     </div>

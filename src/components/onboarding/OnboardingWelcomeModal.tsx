@@ -72,7 +72,7 @@ export function OnboardingWelcomeModal() {
                 <div className="shrink-0 border-b border-slate-100 bg-gradient-to-br from-blue-50 via-white to-emerald-50 p-5 dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 sm:p-6">
                     <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
+                            <p className="text-3xs font-bold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
                                 {t('onboarding_welcome_badge')}
                             </p>
                             <h2 className="mt-1.5 text-xl font-bold leading-tight text-slate-900 dark:text-white sm:text-2xl">
@@ -98,7 +98,7 @@ export function OnboardingWelcomeModal() {
                             <StepIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                         </div>
                         <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                            <p className="text-3xs font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
                                 {t('onboarding_step_counter', {
                                     current: stepIndex + 1,
                                     total: steps.length,

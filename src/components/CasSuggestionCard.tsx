@@ -53,7 +53,7 @@ function renderTopActionGroup(
                 <button
                     type="button"
                     onClick={onDismiss}
-                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-100 sm:w-auto sm:py-1"
+                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-2xs font-medium text-slate-600 transition-colors hover:bg-slate-100 sm:w-auto sm:py-1"
                 >
                     <X className="h-3.5 w-3.5" />
                     {t('btn_close', '닫기')}
@@ -63,7 +63,7 @@ function renderTopActionGroup(
                 <button
                     type="button"
                     onClick={() => onApply()}
-                    className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700 sm:w-auto sm:py-1"
+                    className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-2xs font-semibold text-white transition-colors hover:bg-emerald-700 sm:w-auto sm:py-1"
                 >
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     {t('cmp_cas_suggestion_apply', '이 후보 적용')}
@@ -113,7 +113,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                                 {suggestion.localizedName}
                             </p>
                         )}
-                        <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-white px-2 py-0.5 font-mono text-[11px] text-emerald-700">
+                        <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-white px-2 py-0.5 font-mono text-2xs text-emerald-700">
                             CAS {suggestion.casNumber}
                         </div>
                     </div>
@@ -121,7 +121,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                         <button
                             type="button"
                             onClick={onUndo}
-                            className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100 sm:w-auto sm:shrink-0 sm:justify-start sm:py-1"
+                            className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-2xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 sm:w-auto sm:shrink-0 sm:justify-start sm:py-1"
                         >
                             <RotateCcw className="h-3.5 w-3.5" />
                             {t('cmp_cas_suggestion_undo', '되돌리기')}
@@ -174,7 +174,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                                 {t('cmp_cas_suggestion_title', 'CAS 제안')}
                             </span>
                             {!isAlternativeSuggestion && (
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${confidenceStyle}`}>
+                                <span className={`rounded-full px-2 py-0.5 text-3xs font-semibold ${confidenceStyle}`}>
                                     {confidenceLabel}
                                 </span>
                             )}
@@ -203,7 +203,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                                                 {candidate.localizedName}
                                             </p>
                                         )}
-                                        <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] text-slate-700">
+                                        <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-2xs text-slate-700">
                                             CAS {candidate.casNumber}
                                         </div>
                                     </div>
@@ -211,7 +211,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                                         <button
                                             type="button"
                                             onClick={() => onApply(candidate)}
-                                            className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700 sm:w-auto sm:shrink-0 sm:py-1"
+                                            className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-2 text-2xs font-semibold text-white transition-colors hover:bg-emerald-700 sm:w-auto sm:shrink-0 sm:py-1"
                                         >
                                             <CheckCircle2 className="h-3.5 w-3.5" />
                                             {t('cmp_cas_suggestion_apply', '이 후보 적용')}
@@ -225,7 +225,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                                 <button
                                     type="button"
                                     onClick={onDismiss}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-2xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
                                 >
                                     <X className="h-3.5 w-3.5" />
                                     {t('btn_close', '닫기')}
@@ -243,7 +243,7 @@ export const CasSuggestionCard: React.FC<Props> = ({
                                 {suggestion.localizedName}
                             </p>
                         )}
-                        <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] text-slate-700">
+                        <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-2xs text-slate-700">
                             CAS {suggestion?.casNumber}
                         </div>
                     </div>
