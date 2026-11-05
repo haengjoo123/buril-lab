@@ -486,6 +486,8 @@ export const CartView: React.FC<CartViewProps> = ({
         [policyStream],
     );
     const hasAmountConfirmation = !decision.missingFields.includes('total_amount');
+    const isSingleAsSuppliedProduct = batch.components.length === 1
+        && batch.components[0].materialForm === 'neat';
     const needsCyanidePh = needsAlkalineCyanideCheck(batch) && batch.mixingState === 'already_mixed';
     const needsMeasuredPh = needsCyanidePh || (requiresMixingState && batch.matrix === 'aqueous' &&
         batch.mixingState === 'already_mixed' && approvedPredictedBatchPh === undefined);
@@ -2008,8 +2010,15 @@ export const CartView: React.FC<CartViewProps> = ({
                                     })}
                                 </p>
                                 <h4 id="waste-solution-question-title" className="mt-1 text-lg font-bold text-slate-950 dark:text-white">
-                                    {t('waste_solution_question', { name: activeSolutionComponent.chemical.name })}
+                                    {t(activeSolutionComponent.materialForm === 'neat'
+                                        ? 'waste_solution_as_supplied_question'
+                                        : 'waste_solution_question', { name: activeSolutionComponent.chemical.name })}
                                 </h4>
+                                {activeSolutionComponent.materialForm === 'neat' && (
+                                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                                        {t('waste_as_supplied_matrix_help')}
+                                    </p>
+                                )}
                                 <p className="mt-1 text-sm text-slate-500">
                                     {[activeSolutionComponent.chemical.casNumber
                                         ? `CAS ${activeSolutionComponent.chemical.casNumber}`
@@ -2187,9 +2196,14 @@ export const CartView: React.FC<CartViewProps> = ({
                             <section aria-labelledby="waste-matrix-title">
                                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                     <h3 id="waste-matrix-title" className="font-bold text-slate-900 dark:text-white">
-                                        {t('waste_matrix_title')}
+                                        {t(isSingleAsSuppliedProduct ? 'waste_as_supplied_matrix_title' : 'waste_matrix_title')}
                                     </h3>
                                 </div>
+                                {isSingleAsSuppliedProduct && (
+                                    <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+                                        {t('waste_as_supplied_matrix_help')}
+                                    </p>
+                                )}
                                 {batch.matrixSource === 'automatic' && !isMatrixEditing ? (
                                     <div className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-950 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-100 wide:min-h-14 wide:gap-3 wide:px-4 wide:py-3">
                                         <p className="font-semibold">
@@ -2378,7 +2392,9 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 {componentVolumeTotal.value} {componentVolumeTotal.unit}
                                             </p>
                                             <p className="mt-1 text-xs leading-5 text-blue-800 dark:text-blue-200">
-                                                {t('waste_total_amount_auto_help')}
+                                                {t(isSingleAsSuppliedProduct
+                                                    ? 'waste_as_supplied_amount_help'
+                                                    : 'waste_total_amount_auto_help')}
                                             </p>
                                         </div>
                                     )}

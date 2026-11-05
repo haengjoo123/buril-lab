@@ -1999,7 +1999,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             onClick={handleExportExcel}
                             title={t('inventory_excel_download_view')}
-                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 table:h-9 table:bg-white table:px-3 table:font-bold dark:table:bg-slate-900"
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 table:h-9 table:bg-white table:px-3 table:font-bold dark:table:bg-slate-900"
                         >
                             <Download className="w-4 h-4 table:w-3.5 table:h-3.5" />
                             <span className="hidden table:inline whitespace-nowrap">{t('inventory_excel_download_view')}</span>
@@ -2007,7 +2007,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             onClick={() => setIsCsvImportOpen(true)}
                             title={t('inventory_csv_manage_button')}
-                            className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40 sm:px-3 sm:py-1.5 table:h-9 table:px-3 table:font-bold"
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40 sm:px-3 sm:py-1.5 table:h-9 table:px-3 table:font-bold"
                         >
                             <Upload className="w-4 h-4 table:w-3.5 table:h-3.5" />
                             <span className="hidden table:inline whitespace-nowrap">{t('inventory_csv_manage_button')}</span>
