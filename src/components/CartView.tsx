@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     AlertOctagon,
     AlertTriangle,
+    Archive,
     Check,
     ChevronDown,
     Edit3,
@@ -1294,7 +1295,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                 </h3>
                             </div>
                             {!showAiDetail && (
-                                <div className="flex gap-1" aria-label={t('waste_wizard_steps')}>
+                                <div role="group" className="flex shrink-0 gap-1" aria-label={t('waste_wizard_steps')}>
                                     {WASTE_BATCH_WIZARD_STEPS.map((step) => {
                                         const current = step === activeStep;
                                         const completed = wizard.completedSteps.includes(step)
@@ -1311,13 +1312,21 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 onClick={() => {
                                                     if (completed || current || prior) setActiveStep(step);
                                                 }}
-                                                className={`h-2 w-7 rounded-full wide:h-2.5 wide:w-8 ${current
-                                                    ? 'bg-blue-600'
-                                                    : prior && relevant
-                                                        ? 'bg-blue-300 hover:bg-blue-400'
-                                                        : 'bg-slate-200 dark:bg-slate-700'
-                                                } disabled:cursor-not-allowed`}
-                                            />
+                                                // The button keeps a 44px-tall hit area while the visible step stays a thin bar.
+                                                // `!min-w-0` opts out of the global 44px touch width, which turned five bars into
+                                                // 44px circles and squeezed the step title on phones.
+                                                className="group flex h-11 w-7 !min-w-0 items-center disabled:cursor-not-allowed wide:w-8"
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={`h-2 w-full rounded-full wide:h-2.5 ${current
+                                                        ? 'bg-blue-600'
+                                                        : prior && relevant
+                                                            ? 'bg-blue-300 group-hover:bg-blue-400'
+                                                            : 'bg-slate-200 dark:bg-slate-700'
+                                                    }`}
+                                                />
+                                            </button>
                                         );
                                     })}
                                 </div>
@@ -1337,15 +1346,18 @@ export const CartView: React.FC<CartViewProps> = ({
                                     <button
                                         type="button"
                                         onClick={parkBatchAndStartNew}
-                                        className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
+                                        className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:px-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                                     >
+                                        <Archive aria-hidden="true" className="hidden h-4 w-4 shrink-0 text-blue-600 sm:block dark:text-blue-300" />
                                         {t('waste_park_batch')}
                                     </button>
+                                    {/* Discards the current batch (after a confirm), so it reads as an action, not as the other half of a toggle. */}
                                     <button
                                         type="button"
                                         onClick={discardAndStartNew}
-                                        className="min-h-11 rounded-lg px-3 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+                                        className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600 sm:px-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-red-900 dark:hover:bg-red-950/30 dark:hover:text-red-300"
                                     >
+                                        <RotateCcw aria-hidden="true" className="hidden h-4 w-4 shrink-0 sm:block" />
                                         {t('waste_clear_batch')}
                                     </button>
                                 </div>

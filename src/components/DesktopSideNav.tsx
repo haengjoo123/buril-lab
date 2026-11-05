@@ -1,4 +1,4 @@
-import { Box, ClipboardList, Moon, Package, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { ClipboardList, Moon, Package, Rows3, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import logo from '../assets/burillab_app_icon.png';
 import type { AppTab } from '../hooks/useAppUiState';
@@ -48,7 +48,7 @@ export function DesktopSideNav({
   }> = [
     { tab: 'search', label: t('tab_search'), icon: Search },
     { tab: 'logs', label: t('tab_logs'), icon: ClipboardList },
-    { tab: 'cabinet', label: t('tab_cabinet'), icon: Box },
+    { tab: 'cabinet', label: t('tab_cabinet'), icon: Rows3 },
     { tab: 'inventory', label: t('tab_inventory'), icon: Package, tone: 'emerald' },
     { tab: 'admin', label: t('tab_audit'), icon: ShieldCheck, tone: 'indigo', visible: isAdmin },
   ];
