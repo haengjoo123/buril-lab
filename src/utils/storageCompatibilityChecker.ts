@@ -756,6 +756,17 @@ export function buildCabinetCompatMarks(
 }
 
 /**
+ * The two group label keys a storage rule pairs (e.g. store_flam_oxid → 인화성, 산화제), or null for
+ * an id that is not in STORAGE_RULES. Used where only a rule id is stored (operator KPIs).
+ */
+export function getStorageRuleGroupLabelKeys(ruleId: string): [string, string] | null {
+    const rule = STORAGE_RULES.find((candidate) => candidate.ruleId === ruleId);
+    if (!rule) return null;
+    const [first, second] = getStorageGroupLabels([rule.groupA, rule.groupB]);
+    return first && second ? [first, second] : null;
+}
+
+/**
  * Get the classification summary for a single reagent.
  * Useful for displaying on the reagent edit panel.
  */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     generateDisposalGuideClientCacheKey,
+    hashDisposalGuideCacheKey,
     type DisposalGuideChemicalInput,
 } from './aiDisposalGuideService'
 
@@ -43,5 +44,19 @@ describe('AI disposal guide service cache context', () => {
 
         expect(blocked).not.toBe(ready)
         expect(newerRules).not.toBe(ready)
+    })
+})
+
+describe('AI disposal guide analytics identifier', () => {
+    it('stores a stable SHA-256 hex digest instead of the request itself', async () => {
+        const key = generateDisposalGuideClientCacheKey(chemicals, {
+            policy: { version: 'policy-1', handlerContact: '02-000-0000' } as never,
+        })
+        const hash = await hashDisposalGuideCacheKey(key)
+
+        expect(hash).toMatch(/^[0-9a-f]{64}$/)
+        expect(await hashDisposalGuideCacheKey(key)).toBe(hash)
+        expect(hash).not.toContain('02-000-0000')
+        expect(await hashDisposalGuideCacheKey(`${key} `)).not.toBe(hash)
     })
 })

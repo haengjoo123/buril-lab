@@ -1,16 +1,6 @@
-import { supabase } from './supabaseClient'
-import { getInternalApiUrl } from './apiUrl'
+import { postJson } from './internalApi'
 import type { SafetyCenterStatus } from '../features/safety-center/types'
-
-export class OpsAdminApiError extends Error {
-  status: number
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'OpsAdminApiError'
-    this.status = status
-  }
-}
+import type { SafetyCenterReviewReason } from '../features/ops/safetyCenterReviewReasons'
 
 export interface SafetyCenterApprovalItem {
   id: string
@@ -28,10 +18,28 @@ export interface SafetyCenterApprovalItem {
   verification_document_uploaded_at: string | null
   created_at: string
   updated_at: string
+  /**
+   * Lowercased part of the requester's email after '@' (never the full address). The list API
+   * fills it for at most the 20 oldest pending requests; other rows, and failed lookups, get null.
+   */
+  requester_email_domain?: string | null
+  /**
+   * Whether that domain equals the institution domain or is a subdomain of it. Null when it was
+   * not checked. Status updates return rows without it.
+   */
+  domain_matches?: boolean | null
+  /**
+   * Operator rejection reason and optional note, shown to the applicant while the center is
+   * rejected. Approving keeps the stored pair (an approval undone back to rejected shows it again).
+   */
+  review_reason?: SafetyCenterReviewReason | null
+  review_note?: string | null
 }
 
-interface ApiErrorPayload {
-  error?: string
+/** Sent only with a rejection. A rejection without it keeps the stored reason (approval undo). */
+export interface SafetyCenterRejectReview {
+  reasonPreset: SafetyCenterReviewReason
+  note: string | null
 }
 
 interface SafetyCenterListResponse {
@@ -48,67 +56,27 @@ interface SafetyCenterDocumentUrlResponse {
   fileName: string | null
 }
 
-async function createAuthHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession()
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`
-  }
-
-  return headers
-}
-
-async function parseApiError(response: Response): Promise<OpsAdminApiError> {
-  const contentType = response.headers.get('content-type') || ''
-
-  if (contentType.includes('application/json')) {
-    const payload = await response.json() as ApiErrorPayload
-    return new OpsAdminApiError(
-      payload.error || `Request failed with status ${response.status}`,
-      response.status,
-    )
-  }
-
-  const text = await response.text()
-  return new OpsAdminApiError(text || `Request failed with status ${response.status}`, response.status)
-}
-
-async function postOpsAdminJson<TResponse>(path: string, body: unknown): Promise<TResponse> {
-  const response = await fetch(getInternalApiUrl(path), {
-    method: 'POST',
-    headers: await createAuthHeaders(),
-    body: JSON.stringify(body),
-  })
-
-  if (!response.ok) {
-    throw await parseApiError(response)
-  }
-
-  return await response.json() as TResponse
-}
-
 export async function listSafetyCenterApprovals(): Promise<SafetyCenterApprovalItem[]> {
-  const payload = await postOpsAdminJson<SafetyCenterListResponse>('/api/admin/safety-centers/list', {})
+  const payload = await postJson<SafetyCenterListResponse>('/api/admin/safety-centers/list', {})
   return payload.items
 }
 
 export async function updateSafetyCenterApprovalStatus(
   centerId: string,
   status: SafetyCenterStatus,
+  review?: SafetyCenterRejectReview,
 ): Promise<SafetyCenterApprovalItem> {
-  const payload = await postOpsAdminJson<SafetyCenterStatusResponse>('/api/admin/safety-centers/status', {
+  const payload = await postJson<SafetyCenterStatusResponse>('/api/admin/safety-centers/status', {
     centerId,
     status,
+    ...(status === 'rejected' && review ? { reasonPreset: review.reasonPreset, note: review.note } : {}),
   })
 
   return payload.item
 }
 
 export async function getSafetyCenterVerificationDocumentUrl(centerId: string): Promise<SafetyCenterDocumentUrlResponse> {
-  return await postOpsAdminJson<SafetyCenterDocumentUrlResponse>('/api/admin/safety-centers/document-url', {
+  return await postJson<SafetyCenterDocumentUrlResponse>('/api/admin/safety-centers/document-url', {
     centerId,
   })
 }

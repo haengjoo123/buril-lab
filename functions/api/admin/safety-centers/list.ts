@@ -6,6 +6,7 @@ import {
   type SafetyCenterAdminEnv,
   type SafetyCenterAdminRow,
 } from './_shared'
+import { withRequesterDomains } from './_requesterDomain'
 
 export const onRequestPost = async (context: {
   request: Request
@@ -29,7 +30,8 @@ export const onRequestPost = async (context: {
   }
 
   return json({
-    items: (data || []) as SafetyCenterAdminRow[],
+    // Pending rows (oldest 20) carry the requester's email domain and whether it matches the
+    // institution domain, so the operator can spot a personal address before approving.
+    items: await withRequesterDomains(adminClient, (data || []) as SafetyCenterAdminRow[]),
   })
 }
-

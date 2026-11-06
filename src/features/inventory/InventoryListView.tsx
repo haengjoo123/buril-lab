@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Package,
     Plus,
@@ -36,6 +37,12 @@ import { InventoryFormModal, type InventoryFormSaveResult } from './InventoryFor
 import { QuantityStepper } from './QuantityStepper';
 import { INVENTORY_REMAINING_LEVELS, getInventoryRemainingStage, isInventoryRemainingLow } from './remainingLevels';
 import { createInventorySearchMatcher } from './inventorySearch';
+import {
+    INVENTORY_EXPIRY_FILTER_LABEL_KEYS,
+    INVENTORY_FILTER_PARAM,
+    matchesInventoryExpiryFilter,
+    parseInventoryExpiryFilter,
+} from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
 import { exportImportAttributes, readableImportAttributes } from './import/sourceAttributes';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
@@ -247,6 +254,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<InventorySortOption>('expiry_asc');
     const [hazardFilter, setHazardFilter] = useState<InventoryHazardFilter>('all');
+    // ?filter=expired|expiring|attention (from the lab admin overview) narrows the list until the chip is removed.
+    const [searchParams, setSearchParams] = useSearchParams();
+    const expiryFilter = parseInventoryExpiryFilter(searchParams.get(INVENTORY_FILTER_PARAM));
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -531,8 +541,15 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             ));
         }
 
+        if (expiryFilter) {
+            result = result.filter(item => matchesInventoryExpiryFilter(
+                getExpiryStatus(getTrackedManufacturerDate(item))?.level,
+                expiryFilter,
+            ));
+        }
+
         return result;
-    }, [items, searchMatcher, hazardFilter, classifyInventoryItemHazard]);
+    }, [items, searchMatcher, hazardFilter, classifyInventoryItemHazard, expiryFilter]);
 
     const hazardFilterCounts = useMemo(() => {
         const counts: Record<InventoryHazardFilterCategory, number> = {
@@ -948,9 +965,20 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             const hiddenBySearch = Boolean(searchMatcher && !searchMatcher(created));
             const hiddenByHazard = hazardFilter !== 'all'
                 && !classifyInventoryItemHazard(created).filterCategories.includes(hazardFilter);
-            if (hiddenBySearch || hiddenByHazard) {
+            const hiddenByExpiry = expiryFilter !== null && !matchesInventoryExpiryFilter(
+                getExpiryStatus(getTrackedManufacturerDate(created))?.level,
+                expiryFilter,
+            );
+            if (hiddenBySearch || hiddenByHazard || hiddenByExpiry) {
                 setSearchQuery('');
                 setHazardFilter('all');
+                if (expiryFilter) {
+                    setSearchParams((current) => {
+                        const next = new URLSearchParams(current);
+                        next.delete(INVENTORY_FILTER_PARAM);
+                        return next;
+                    }, { replace: true });
+                }
             }
         } else if (kind === 'updated') {
             setItems((prev) => prev.map((candidate) => {
@@ -2209,11 +2237,20 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         );
     };
 
-    const hasActiveFilters = Boolean(searchQuery.trim()) || hazardFilter !== 'all';
+    const clearExpiryFilter = () => {
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete(INVENTORY_FILTER_PARAM);
+            return next;
+        }, { replace: true });
+    };
+    const hasActiveFilters = Boolean(searchQuery.trim()) || hazardFilter !== 'all' || expiryFilter !== null;
     const clearFilters = () => {
         setSearchQuery('');
         setHazardFilter('all');
+        if (expiryFilter) clearExpiryFilter();
     };
+    const expiryFilterLabel = expiryFilter ? t(INVENTORY_EXPIRY_FILTER_LABEL_KEYS[expiryFilter]) : '';
     const renderEmptyState = () => {
         if (items.length === 0) {
             return (
@@ -2530,6 +2567,26 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
             {/* List */}
             <div ref={listLayout.attachContainer} data-pane="primary" className="inventory-list min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto p-4 pb-24 table:col-start-1 table:row-start-2 table:[scrollbar-gutter:stable] table:border-r table:border-slate-200 table:px-6 table:pb-6 table:pt-0 dark:table:border-slate-800">
+                {expiryFilter && (
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={clearExpiryFilter}
+                            aria-label={t('inventory_filter_remove', { label: expiryFilterLabel })}
+                            className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border border-red-200 bg-red-50 pl-3 pr-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                        >
+                            <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{expiryFilterLabel}</span>
+                            <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        </button>
+                        {!isLoading && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {t('inventory_filter_count', { count: visibleItems.length })}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 {/* Expiry Summary Banner */}
                 {!isLoading && (expirySummary.expiredCount > 0 || expirySummary.warningCount > 0) && (
                     <div className="flex items-start gap-3 rounded-lg border border-red-200/60 bg-red-50 p-3.5 animate-in fade-in slide-in-from-top-2 duration-300 dark:border-red-900/40 dark:bg-red-950/30">

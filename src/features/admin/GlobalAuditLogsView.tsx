@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
+import { labService } from '../../services/labService';
 import { useTranslation } from 'react-i18next';
-import { Building2, Container, RefreshCw, ShieldAlert, Loader2, Users } from 'lucide-react';
+import { RefreshCw, ShieldAlert, Loader2 } from 'lucide-react';
 import { EmptyState } from '../../components/EmptyState';
 import { AppSelect } from '../../components/AppSelect';
-import { WastePolicySettingsPanel } from '../../components/WastePolicySettingsPanel';
-import { isWasteV2Enabled } from '../../config/featureFlags';
-import { MemberManagementPanel } from './MemberManagementPanel';
-import { LabSafetyCenterPanel } from './LabSafetyCenterPanel';
 import { formatAuditRelativeTime } from './auditRelativeTime';
 import { useIsDesktop } from '../../hooks/useIsDesktop';
 import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
@@ -28,7 +25,6 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 /** Below this many logs, counters and filters are noise: everything fits on screen. */
 const AUDIT_FILTER_MIN_LOGS = 5;
 
-type AdminTab = 'members' | 'center' | 'audit' | 'waste_settings';
 type AuditActionTone = 'delete' | 'clear' | 'update' | 'create' | 'other';
 
 const ACTION_CHIP_CLASSES: Record<AuditActionTone, string> = {
@@ -59,22 +55,20 @@ const getAuditActionTone = (log: AuditLog): AuditActionTone => {
     if (activityActionType === 'clear_all') return 'clear';
     if (activityActionType === 'update' || log.action === 'update') return 'update';
     if (activityActionType === 'add' || log.action === 'create') return 'create';
+    // Lab admin actions (join, role change, link approval...) use the same colors as their counter.
+    const category = getAuditActionCategory(log);
+    if (category === 'delete' || category === 'update' || category === 'create') return category;
     return 'other';
 };
 
-// One accent for the whole admin area, matching the mobile bottom-nav admin tab.
-const adminTabClassName = (isActive: boolean) => `flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 border-b-2 px-1.5 py-2.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm lg:min-w-28 lg:flex-none lg:px-4 ${
-    isActive
-        ? 'border-red-500 text-red-600 dark:text-red-400'
-        : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-}`;
+/** Current members as user_id -> nickname (or email), for member records. Only admins read those rows. */
+type MemberNames = { labId: string; names: Readonly<Record<string, string>> };
 
+/** The lab's activity log ("활동 기록" tab of the lab admin area). */
 export const GlobalAuditLogsView: React.FC = () => {
     const { t, i18n } = useTranslation();
     const isDesktop = useIsDesktop();
     const currentLabId = useLabStore(state => state.currentLabId);
-    const showWasteSettingsTab = isWasteV2Enabled && Boolean(currentLabId);
-    const [activeTab, setActiveTab] = useState<AdminTab>('members');
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -87,21 +81,41 @@ export const GlobalAuditLogsView: React.FC = () => {
     const [keyword, setKeyword] = useState('');
     const [expandedLogIds, setExpandedLogIds] = useState<Record<string, boolean>>({});
     const [selectedAuditLogId, setSelectedAuditLogId] = useState<string | null>(null);
+    const [memberNames, setMemberNames] = useState<MemberNames | null>(null);
     const loadRequestRef = useRef(0);
+    // The lab whose member names were requested: loaded once per lab, errors ignored.
+    const memberNamesLabRef = useRef<string | null>(null);
     const dateLocale = i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US';
     const showFilters = logs.length >= AUDIT_FILTER_MIN_LOGS;
+    const hasMemberLogs = useMemo(() => logs.some((log) => log.entity_type === 'lab_member'), [logs]);
+    const descriptionContext = useMemo(
+        () => ({ memberNames: memberNames && memberNames.labId === currentLabId ? memberNames.names : undefined }),
+        [currentLabId, memberNames]
+    );
 
     useEffect(() => {
-        if (isDesktop) {
-            setActiveTab('audit');
-        }
-    }, [isDesktop]);
-
-    useEffect(() => {
-        if (activeTab === 'waste_settings' && !showWasteSettingsTab) {
-            setActiveTab(isDesktop ? 'audit' : 'members');
-        }
-    }, [activeTab, isDesktop, showWasteSettingsTab]);
+        if (!hasMemberLogs || !currentLabId || memberNamesLabRef.current === currentLabId) return;
+        const labId = currentLabId;
+        memberNamesLabRef.current = labId;
+        labService.getLabMembers(labId)
+            .then((members) => {
+                if (useLabStore.getState().currentLabId !== labId) {
+                    // Another lab is shown now: ask again if the admin comes back to this one.
+                    if (memberNamesLabRef.current === labId) memberNamesLabRef.current = null;
+                    return;
+                }
+                const names: Record<string, string> = {};
+                for (const member of members) {
+                    const name = member.nickname?.trim() || member.email;
+                    if (member.user_id && name) names[member.user_id] = name;
+                }
+                setMemberNames({ labId, names });
+            })
+            .catch((error) => {
+                // Names are a nicety: records still read "이전 멤버" without them.
+                console.error(error);
+            });
+    }, [currentLabId, hasMemberLogs]);
 
     useLayoutEffect(() => {
         loadRequestRef.current += 1;
@@ -127,7 +141,7 @@ export const GlobalAuditLogsView: React.FC = () => {
         setLogs([]);
         setSelectedAuditLogId(null);
         setLoadError(null);
-        if (!currentLabId || activeTab !== 'audit') {
+        if (!currentLabId) {
             setLoadedLabId(currentLabId);
             setIsLoading(false);
             return;
@@ -154,7 +168,7 @@ export const GlobalAuditLogsView: React.FC = () => {
         return () => {
             if (loadRequestRef.current === token.generation) loadRequestRef.current += 1;
         };
-    }, [currentLabId, limit, activeTab, reloadKey, t]);
+    }, [currentLabId, limit, reloadKey, t]);
 
     const filteredLogs = useMemo(() => {
         // Filters are hidden for short lists, so they must not silently apply either.
@@ -182,13 +196,13 @@ export const GlobalAuditLogsView: React.FC = () => {
                 log.entity_type,
                 log.entity_id,
                 formatAuditActionName(log.action, t, log),
-                buildAuditEventDescription(log, t, i18n.language),
+                buildAuditEventDescription(log, t, i18n.language, descriptionContext),
                 log.location_context || '',
             ].join(' ').toLowerCase();
 
             return searchable.includes(trimmedKeyword);
         });
-    }, [actionFilter, entityFilter, i18n.language, keyword, logs, periodFilter, showFilters, t]);
+    }, [actionFilter, descriptionContext, entityFilter, i18n.language, keyword, logs, periodFilter, showFilters, t]);
 
     const summary = useMemo(() => {
         const actors = new Set(filteredLogs.map(log => log.actor_name).filter(Boolean));
@@ -364,7 +378,7 @@ export const GlobalAuditLogsView: React.FC = () => {
                                                         {formatAuditEntityName(log.entity_type, t)}
                                                     </div>
                                                     <div className="mt-0.5 max-w-[18rem] truncate text-xs text-slate-500">
-                                                        {buildAuditEventDescription(log, t, i18n.language)}
+                                                        {buildAuditEventDescription(log, t, i18n.language, descriptionContext)}
                                                     </div>
                                                 </td>
                                                 <td className="px-3 py-3 text-xs text-slate-600 dark:text-slate-300">
@@ -395,7 +409,7 @@ export const GlobalAuditLogsView: React.FC = () => {
                             <div className="mt-4 space-y-4">
                                 <div>
                                     <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                        {buildAuditEventDescription(selectedAuditLog, t, i18n.language)}
+                                        {buildAuditEventDescription(selectedAuditLog, t, i18n.language, descriptionContext)}
                                     </div>
                                     <div className="mt-2 flex flex-wrap items-center gap-2">
                                         {renderActionChip(selectedAuditLog)}
@@ -473,7 +487,7 @@ export const GlobalAuditLogsView: React.FC = () => {
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <p className="min-w-0 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                                        {buildAuditEventDescription(log, t, i18n.language)}
+                                        {buildAuditEventDescription(log, t, i18n.language, descriptionContext)}
                                     </p>
                                     <time
                                         dateTime={log.created_at}
@@ -552,84 +566,12 @@ export const GlobalAuditLogsView: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col">
-            {/* Tab header */}
-            <div
-                role="tablist"
-                aria-label={t('tab_audit')}
-                className="sticky top-0 z-10 flex w-full border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
-            >
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'members'}
-                    onClick={() => setActiveTab('members')}
-                    className={adminTabClassName(activeTab === 'members')}
-                >
-                    <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="truncate whitespace-nowrap">{t('admin_tab_members')}</span>
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'audit'}
-                    onClick={() => setActiveTab('audit')}
-                    className={adminTabClassName(activeTab === 'audit')}
-                >
-                    <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="truncate whitespace-nowrap">{t('admin_tab_audit')}</span>
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'center'}
-                    onClick={() => setActiveTab('center')}
-                    className={adminTabClassName(activeTab === 'center')}
-                >
-                    <Building2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="truncate whitespace-nowrap">{t('admin_tab_center')}</span>
-                </button>
-                {showWasteSettingsTab && (
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeTab === 'waste_settings'}
-                        onClick={() => setActiveTab('waste_settings')}
-                        className={adminTabClassName(activeTab === 'waste_settings')}
-                    >
-                        <Container className="h-4 w-4 shrink-0" aria-hidden="true" />
-                        <span className="truncate whitespace-nowrap">{t('admin_tab_waste_settings')}</span>
-                    </button>
-                )}
-            </div>
-
-            {/* Tab content */}
-            {activeTab === 'members' ? (
-                <MemberManagementPanel />
-            ) : activeTab === 'center' ? (
-                <LabSafetyCenterPanel />
-            ) : activeTab === 'waste_settings' && currentLabId ? (
-                <section className="space-y-4 p-4 pb-28 sm:p-5" aria-labelledby="waste-settings-heading">
-                    <div>
-                        <h2 id="waste-settings-heading" className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
-                            <Container className="h-5 w-5 text-red-500" aria-hidden="true" />
-                            {t('waste_policy_settings_title')}
-                        </h2>
-                        <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                            {t('waste_policy_settings_desc')}
-                        </p>
-                    </div>
-                    <WastePolicySettingsPanel labId={currentLabId} />
-                </section>
-            ) : (
-                <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <ShieldAlert className="w-6 h-6 text-red-500" />
-                        {t('audit_title')}
-                    </h2>
-                    {renderAuditContent()}
-                </div>
-            )}
+        <div className="p-5 flex flex-col gap-4" style={{ paddingBottom: '100px' }}>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ShieldAlert className="w-6 h-6 text-red-500" aria-hidden="true" />
+                {t('admin_tab_audit')}
+            </h2>
+            {renderAuditContent()}
         </div>
     );
 };

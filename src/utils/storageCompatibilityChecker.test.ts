@@ -9,7 +9,16 @@ import {
     checkShelfReviewConflicts,
     classifyStoragePlacement,
     classifyStorageGroups,
+    getStorageRuleGroupLabelKeys,
 } from './storageCompatibilityChecker';
+
+describe('storage rule group labels', () => {
+    it('names the two groups a rule pairs and refuses unknown ids', () => {
+        expect(getStorageRuleGroupLabelKeys('store_flam_oxid')).toEqual(['storage_group_flammable', 'storage_group_oxidizer']);
+        expect(getStorageRuleGroupLabelKeys('store_acid_cyanide')).toEqual(['storage_group_inorganic_acid', 'storage_group_cyanide']);
+        expect(getStorageRuleGroupLabelKeys('not_a_rule')).toBeNull();
+    });
+});
 
 function createPlacement(overrides: Partial<ReagentPlacement> = {}): ReagentPlacement {
     return {

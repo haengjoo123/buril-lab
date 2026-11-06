@@ -6,6 +6,13 @@ interface BottomTabNavProps {
   activeTab: AppTab;
   isAdmin: boolean;
   onTabClick: (tab: AppTab) => void;
+  /** Red "확인할 일" count shown on the admin tab (admins only). */
+  adminAttentionCount?: number;
+}
+
+/** Badge text on the admin tab: two characters at most so it never widens the tab. */
+function formatAdminAttentionBadge(count: number): string {
+  return count > 9 ? '9+' : String(count);
 }
 
 interface NavItem {
@@ -16,8 +23,9 @@ interface NavItem {
   onboardingTarget?: string;
 }
 
-export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavProps) {
+export function BottomTabNav({ activeTab, isAdmin, onTabClick, adminAttentionCount = 0 }: BottomTabNavProps) {
   const { t } = useTranslation();
+  const attentionCount = isAdmin && adminAttentionCount > 0 ? adminAttentionCount : 0;
 
   const items: NavItem[] = [
     { tab: 'search', label: t('tab_search'), icon: Search, onboardingTarget: 'nav-search' },
@@ -34,6 +42,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
         const isActive = activeTab === tab;
         const activeText = tone === 'red' ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400';
         const activePill = tone === 'red' ? 'bg-red-50 dark:bg-red-500/15' : 'bg-blue-50 dark:bg-blue-500/15';
+        const badgeCount = tab === 'admin' ? attentionCount : 0;
         return (
           <button
             key={tab}
@@ -50,9 +59,17 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick }: BottomTabNavPro
               aria-hidden="true"
               className={`flex h-7 w-12 items-center justify-center rounded-full transition-colors ${isActive ? activePill : 'group-hover:bg-slate-100 dark:group-hover:bg-slate-800'}`}
             >
-              <Icon className="h-5 w-5" strokeWidth={isActive ? 2.25 : 2} />
+              <span className="relative flex">
+                <Icon className="h-5 w-5" strokeWidth={isActive ? 2.25 : 2} />
+                {badgeCount > 0 && (
+                  <span aria-hidden="true" className="absolute -right-2 -top-1.5 h-4 min-w-4 rounded-full bg-red-600 px-1 text-center text-3xs font-bold leading-4 text-white ring-2 ring-white dark:bg-red-500 dark:ring-slate-900">
+                    {formatAdminAttentionBadge(badgeCount)}
+                  </span>
+                )}
+              </span>
             </span>
             <span className="max-w-full truncate px-1">{label}</span>
+            {badgeCount > 0 && <span className="sr-only">{t('nav_admin_attention', { count: badgeCount })}</span>}
           </button>
         );
       })}

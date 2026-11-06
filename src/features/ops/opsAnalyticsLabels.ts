@@ -1,5 +1,5 @@
 import i18n from '../../locales/i18n'
-import type { AnalyticsReviewType } from '../../services/opsAnalyticsService'
+import type { AnalyticsReviewType, AnalyticsSummary } from '../../services/opsAnalyticsService'
 import type { HandlingAction, WasteHazardFlag, WasteMatrix, WasteStreamCode } from '../../types'
 
 export type OpsAnalyticsLabelMap = Readonly<Record<string, string>>
@@ -105,4 +105,66 @@ export function canonicalComponentDisplayKey(value: string): string {
   if (nameMatch) return `${i18n.t('ops_label_name_prefix')} ${koreanChemicalDisplayName(nameMatch[1])}`
 
   return i18n.t('ops_label_id_needs_check')
+}
+
+/**
+ * Event-count windows in the search table. The search SQL only reads events inside the selected
+ * period (BL:2526-2534), so a window longer than the period would just repeat the period total.
+ */
+export const SEARCH_EVENT_WINDOWS = [7, 30, 90] as const
+export type SearchEventWindow = (typeof SEARCH_EVENT_WINDOWS)[number]
+
+export function searchEventWindows(periodDays: number): SearchEventWindow[] {
+  return SEARCH_EVENT_WINDOWS.filter((window) => window <= periodDays)
+}
+
+/** Operating baseline for the estimated ingestion failure rate (SEARCH_BATCH_ANALYTICS_RUNBOOK.md, 운영 기준). */
+export const INGESTION_FAILURE_BASELINE_PERCENT = 1
+
+export type IngestionFailureStatus = 'normal' | 'attention' | 'unknown'
+
+export function ingestionFailureStatus(ratePercent: number | undefined): IngestionFailureStatus {
+  if (typeof ratePercent !== 'number' || !Number.isFinite(ratePercent) || ratePercent < 0) return 'unknown'
+  return ratePercent < INGESTION_FAILURE_BASELINE_PERCENT ? 'normal' : 'attention'
+}
+
+const DAY_MS = 86_400_000
+// Asia/Seoul is a fixed UTC+9 offset (no daylight saving time since 1988).
+const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1_000
+
+/** Calendar date (YYYY-MM-DD) in Asia/Seoul, the day boundary the analytics SQL groups by. */
+export function seoulDateString(date: Date): string {
+  return new Date(date.getTime() + SEOUL_OFFSET_MS).toISOString().slice(0, 10)
+}
+
+export type DailyTrendPoint = AnalyticsSummary['dailyTrend'][number]
+
+/**
+ * The summary SQL returns only the dates that had searches (BL:2665-2673). This fills every
+ * Asia/Seoul date the selected window touches, from the date of (now - periodDays) through today,
+ * with zero rows so quiet days stay visible. Dates the server sent outside that range are kept.
+ */
+export function fillDailyTrend(
+  points: readonly DailyTrendPoint[],
+  periodDays: number,
+  now: Date = new Date(),
+): DailyTrendPoint[] {
+  const days = Number.isFinite(periodDays) ? Math.min(Math.max(Math.trunc(periodDays), 1), 365) : 30
+  const byDate = new Map<string, DailyTrendPoint>()
+  for (const point of points) {
+    const existing = byDate.get(point.date)
+    byDate.set(point.date, existing
+      ? { date: point.date, searches: existing.searches + point.searches, noResults: existing.noResults + point.noResults }
+      : { date: point.date, searches: point.searches, noResults: point.noResults })
+  }
+  const nowMs = now.getTime()
+  if (Number.isFinite(nowMs)) {
+    const first = Date.parse(`${seoulDateString(new Date(nowMs - days * DAY_MS))}T00:00:00Z`)
+    const last = Date.parse(`${seoulDateString(now)}T00:00:00Z`)
+    for (let day = first; day <= last; day += DAY_MS) {
+      const date = new Date(day).toISOString().slice(0, 10)
+      if (!byDate.has(date)) byDate.set(date, { date, searches: 0, noResults: 0 })
+    }
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
 }

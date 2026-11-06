@@ -32,6 +32,7 @@ import { useWasteStore } from './store/useWasteStore';
 import { useAuth } from './hooks/useAuth';
 import { useAppUiState, type AppTab } from './hooks/useAppUiState';
 import { useSearchFlow } from './hooks/useSearchFlow';
+import { useLabAdminAttentionCount } from './hooks/useLabAdminAttentionCount';
 import { useLabStore } from './store/useLabStore';
 import { useOnboardingStore, type OnboardingMissionKey } from './store/useOnboardingStore';
 import { useTranslation } from 'react-i18next';
@@ -47,6 +48,7 @@ import {
   labAppRoute,
 } from './utils/appRoutes';
 import { focusCabinetItem } from './services/cabinetFocusService';
+import { useActionToast } from './components/admin/ActionToast';
 import { analyticsService } from './services/analyticsService';
 import { recordSearchAction } from './services/searchAnalyticsService';
 import type { VoiceQueryResponse, VoiceUiAction } from './utils/voiceAgent';
@@ -67,8 +69,8 @@ const CabinetListView = lazy(() =>
 const InventoryListView = lazy(() =>
   import('./features/inventory/InventoryListView').then((module) => ({ default: module.InventoryListView }))
 );
-const GlobalAuditLogsView = lazy(() =>
-  import('./features/admin/GlobalAuditLogsView').then((module) => ({ default: module.GlobalAuditLogsView }))
+const LabAdminView = lazy(() =>
+  import('./features/admin/LabAdminView').then((module) => ({ default: module.LabAdminView }))
 );
 const SafetyCenterWorkspace = lazy(() =>
   import('./features/safety-center/SafetyCenterWorkspace').then((module) => ({ default: module.SafetyCenterWorkspace }))
@@ -134,6 +136,9 @@ function App() {
   const labsLoaded = useLabStore((state) => state.labsLoaded);
   // Whether we know if the admin tab exists: personal space never has it; a lab needs its role.
   const isLabRoleResolved = !currentLabId || Boolean(currentRole) || labsLoaded;
+  const { showToast: showAppToast, toastElement: appToastElement } = useActionToast();
+  // Lab the admin tab was last shown for (as admin), so leaving it can say why.
+  const adminTabLabIdRef = useRef<string | null>(null);
   const isWelcomeOpen = useOnboardingStore((state) => state.isWelcomeOpen);
   const hasCompletedWelcome = useOnboardingStore((state) => state.hasCompletedWelcome);
   const hasSkippedOnboarding = useOnboardingStore((state) => state.hasSkippedOnboarding);
@@ -216,6 +221,13 @@ function App() {
     lastSearchQuery,
     navigate,
     isAuthenticated,
+  });
+  // Red "확인할 일" count on the admin tab: cached per lab, never reloaded on a mere tab switch,
+  // and only loaded inside the lab app (not on the gateway, legal or center pages).
+  const adminAttentionCount = useLabAdminAttentionCount({
+    labId: currentLabId,
+    isAdmin: isAdmin && isLabAppPath(location.pathname),
+    activeTab,
   });
 
   const handleStartInventoryWasteBatch = useCallback(async (
@@ -412,10 +424,26 @@ function App() {
 
   // Lost admin rights (personal space, another lab, transfer) while on the admin route: leave it.
   useEffect(() => {
-    if (isAuthLoading || !session || activeTab !== 'admin') return;
-    if (!isLabRoleResolved || isAdmin) return;
+    if (!session || activeTab !== 'admin') {
+      adminTabLabIdRef.current = null;
+      return;
+    }
+    if (isAuthLoading || !isLabRoleResolved) return;
+    if (isAdmin) {
+      adminTabLabIdRef.current = currentLabId;
+      return;
+    }
+    const shownForLabId = adminTabLabIdRef.current;
+    adminTabLabIdRef.current = null;
+    // Explain only when the open tab was taken away; a non-admin opening the URL just lands on search.
+    if (shownForLabId) {
+      showAppToast(
+        t(shownForLabId === currentLabId ? 'admin_rights_lost_toast' : 'admin_tab_closed_other_space_toast'),
+        { tone: 'info' },
+      );
+    }
     navigate(labAppRoute(), { replace: true });
-  }, [isAuthLoading, session, activeTab, isLabRoleResolved, isAdmin, navigate]);
+  }, [isAuthLoading, session, activeTab, isLabRoleResolved, isAdmin, currentLabId, navigate, showAppToast, t]);
 
   useEffect(() => {
     if (!labAppRedirectTarget) return;
@@ -570,7 +598,8 @@ function App() {
         sourceScreen,
         platform: onboardingPlatform,
         metadata: {
-          query: lastSearchQuery || query,
+          // Length only: the raw search text is not stored with onboarding events.
+          query_length: (lastSearchQuery || query).trim().length,
         },
       });
     }
@@ -845,6 +874,8 @@ function App() {
     <>
       <SafetyDisclaimer />
 
+      {appToastElement}
+
       {isWelcomeOpen && isOnboardingRemoteChecked && !isScanning && (
         <OnboardingMissionPanel
           activeTab={activeTab}
@@ -915,6 +946,7 @@ function App() {
         activeTab={activeTab}
         isAdmin={isAdmin}
         onTabClick={handleTabClick}
+        adminAttentionCount={adminAttentionCount}
         cartCount={wasteDraftCount}
         onCartClick={() => {
           if (!isAuthenticated) {
@@ -926,7 +958,7 @@ function App() {
         }}
         bottomNav={
           shouldHideMobileSearchChrome ? null : (
-            <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} />
+            <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} adminAttentionCount={adminAttentionCount} />
           )
         }
       >
@@ -957,7 +989,7 @@ function App() {
               onStartWasteBatch={isWasteV2Enabled ? handleStartInventoryWasteBatch : undefined}
             />
           ) : activeTab === 'admin' && isAdmin ? (
-            <GlobalAuditLogsView />
+            <LabAdminView refreshKey={logRefreshKey} onStartWasteBatch={isWasteV2Enabled ? handleStartInventoryWasteBatch : undefined} />
           ) : activeTab === 'admin' && !isLabRoleResolved ? (
             <TabContentFallback />
           ) : (

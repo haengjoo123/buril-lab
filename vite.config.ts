@@ -16,6 +16,9 @@ import { onRequestPost as getAnalyticsSearches } from './functions/api/admin/ana
 import { onRequestPost as getAnalyticsMixtures } from './functions/api/admin/analytics/mixtures'
 import { onRequestPost as manageAnalyticsReviews } from './functions/api/admin/analytics/reviews'
 import { onRequestPost as exportAnalyticsCsv } from './functions/api/admin/analytics/export'
+import { withRequesterDomains } from './functions/api/admin/safety-centers/_requesterDomain'
+import type { SafetyCenterAdminRow } from './functions/api/admin/safety-centers/_shared'
+import { parseSafetyCenterReview } from './functions/api/admin/safety-centers/status'
 import { createLocalLabJoinApi } from './scripts/ops5-local-join-api'
 import { onRequestPost as analyzeInventoryImport } from './functions/api/ai/inventory-import'
 import { pdfJsAssets } from './scripts/vite-pdfjs-assets'
@@ -64,6 +67,8 @@ const localPagesPostHandlers: Record<string, LocalPagesPostHandler> = {
   '/api/admin/analytics/export': exportAnalyticsCsv,
 }
 
+// The feedback and safety-center fields below need the lab admin action audit migration
+// (20261106100000_lab_admin_action_audit_v1.sql) on the database the dev server points at.
 const feedbackSelectFields = [
   'id',
   'type',
@@ -76,7 +81,17 @@ const feedbackSelectFields = [
   'status',
   'resolved_at',
   'resolved_by',
+  'lab_id',
+  'source_screen',
+  'lab:labs(name)',
 ].join(', ')
+
+/** Same shape as functions/api/admin/feedback/list.ts: the labs(name) embed becomes lab_name. */
+function withFeedbackLabName(row: Record<string, unknown>): Record<string, unknown> {
+  const { lab, ...rest } = row
+  const name = lab && typeof lab === 'object' ? (lab as { name?: unknown }).name : null
+  return { ...rest, lab_name: typeof name === 'string' ? name : null }
+}
 
 const safetyCenterSelectFields = [
   'id',
@@ -94,6 +109,8 @@ const safetyCenterSelectFields = [
   'verification_document_uploaded_at',
   'created_at',
   'updated_at',
+  'review_reason',
+  'review_note',
 ].join(', ')
 
 function sendJson(response: ServerResponse, status: number, data: unknown) {
@@ -166,10 +183,47 @@ async function runLocalPagesPostHandler(
   response.end(Buffer.from(await webResponse.arrayBuffer()))
 }
 
+type LocalOperatorRole = 'reader' | 'approver' | 'raw_exporter'
+
+type LocalAdminFailure = { ok: false; status: number; error: string; code?: string }
+
+// Mirrors OPERATOR_ACTIONS in functions/api/admin/feedback/_shared.ts so the
+// dev mock refuses the same actions the deployed functions refuse.
+const localAdminRouteRoles: Record<string, LocalOperatorRole> = {
+  '/api/admin/feedback/list': 'reader',
+  '/api/admin/feedback/status': 'approver',
+  '/api/admin/safety-centers/list': 'reader',
+  '/api/admin/safety-centers/status': 'approver',
+  '/api/admin/safety-centers/document-url': 'raw_exporter',
+}
+
+function localOperatorRoleRequired(error: string): LocalAdminFailure {
+  return { ok: false, status: 403, error, code: 'OPERATOR_ROLE_REQUIRED' }
+}
+
+// Same body shape as internalErrorResponse in functions/api/_shared/json.ts.
+// The message stays descriptive because this mock only runs in `npm run dev`.
+function sendLocalInternalError(response: ServerResponse, error: string, status = 500) {
+  sendJson(response, status, { error, code: 'INTERNAL_ERROR' })
+}
+
+function sendLocalSupabaseError(
+  response: ServerResponse,
+  error: { code?: string; message: string },
+  notFoundMessage?: string,
+) {
+  if (notFoundMessage && error.code === 'PGRST116') {
+    sendJson(response, 404, { error: notFoundMessage })
+    return
+  }
+  sendLocalInternalError(response, error.message)
+}
+
 async function requireLocalAdmin(
   request: IncomingMessage,
   env: Record<string, string>,
-): Promise<{ ok: true; context: LocalAdminContext } | { ok: false; status: number; error: string }> {
+  pathname: string,
+): Promise<{ ok: true; context: LocalAdminContext } | LocalAdminFailure> {
   const authHeader = getHeaderValue(request.headers.authorization)
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, status: 401, error: 'Authentication is required.' }
@@ -177,11 +231,11 @@ async function requireLocalAdmin(
 
   const { url, anonKey, serviceRoleKey } = getSupabaseConfig(env)
   if (!url || !anonKey) {
-    return { ok: false, status: 500, error: 'Supabase URL or anon key is not configured.' }
+    return { ok: false, status: 503, error: 'Supabase URL or anon key is not configured.', code: 'INTERNAL_ERROR' }
   }
 
   if (!serviceRoleKey) {
-    return { ok: false, status: 500, error: 'Supabase service role key is not configured.' }
+    return { ok: false, status: 503, error: 'Supabase service role key is not configured.', code: 'INTERNAL_ERROR' }
   }
 
   const userClient = createClient(url, anonKey, {
@@ -201,14 +255,20 @@ async function requireLocalAdmin(
     return { ok: false, status: 401, error: 'Authentication is required.' }
   }
 
+  // The deployed functions refuse a missing or unmatched allowlist the same way
+  // as an unassigned server role: 403 with OPERATOR_ROLE_REQUIRED.
   const allowlist = parseAdminEmails(env.OPS_ADMIN_EMAILS, env.FEEDBACK_ADMIN_EMAILS)
   if (allowlist.size === 0) {
-    return { ok: false, status: 500, error: 'Operator admin allowlist is not configured.' }
+    return localOperatorRoleRequired('Operator admin allowlist is not configured (set OPS_ADMIN_EMAILS).')
   }
 
   const email = data.user.email?.trim().toLowerCase()
   if (!email || !allowlist.has(email)) {
-    return { ok: false, status: 403, error: 'This page is only available to allowlisted operators.' }
+    return localOperatorRoleRequired('The required operator role is not assigned.')
+  }
+
+  if (localAdminRouteRoles[pathname] === 'raw_exporter' && !parseAdminEmails(env.OPS_ANALYTICS_EXPORT_EMAILS).has(email)) {
+    return localOperatorRoleRequired('The raw_exporter operator role is not assigned (set OPS_ANALYTICS_EXPORT_EMAILS).')
   }
 
   return {
@@ -266,9 +326,9 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
           return
         }
 
-        const auth = await requireLocalAdmin(request, env)
+        const auth = await requireLocalAdmin(request, env, pathname)
         if (!auth.ok) {
-          sendJson(response, auth.status, { error: auth.error })
+          sendJson(response, auth.status, auth.code ? { error: auth.error, code: auth.code } : { error: auth.error })
           return
         }
 
@@ -280,7 +340,13 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
               .order('created_at', { ascending: false })
               .limit(200)
 
-            sendJson(response, error ? 500 : 200, error ? { error: error.message } : { items: data || [] })
+            if (error) {
+              sendLocalSupabaseError(response, error)
+              return
+            }
+            sendJson(response, 200, {
+              items: ((data || []) as unknown as Array<Record<string, unknown>>).map(withFeedbackLabName),
+            })
             return
           }
 
@@ -307,7 +373,11 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
               .select(feedbackSelectFields)
               .single()
 
-            sendJson(response, error ? (error.code === 'PGRST116' ? 404 : 500) : 200, error ? { error: error.message } : { item: data })
+            if (error) {
+              sendLocalSupabaseError(response, error, 'Feedback was not found.')
+              return
+            }
+            sendJson(response, 200, { item: withFeedbackLabName(data as unknown as Record<string, unknown>) })
             return
           }
 
@@ -318,17 +388,31 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
               .order('created_at', { ascending: false })
               .limit(200)
 
-            sendJson(response, error ? 500 : 200, error ? { error: error.message } : { items: data || [] })
+            if (error) {
+              sendLocalSupabaseError(response, error)
+              return
+            }
+            // Same requester_email_domain / domain_matches fields as functions/api/admin/safety-centers/list.ts.
+            sendJson(response, 200, {
+              items: await withRequesterDomains(auth.context.adminClient, (data || []) as unknown as SafetyCenterAdminRow[]),
+            })
             return
           }
 
           if (pathname === '/api/admin/safety-centers/status') {
-            const body = await readJsonBody<{ centerId?: string; status?: string }>(request)
+            const body = await readJsonBody<{ centerId?: string; status?: string; reasonPreset?: unknown; note?: unknown }>(request)
             const centerId = body.centerId?.trim()
             const status = body.status?.trim()
 
             if (!centerId || !status || !['pending', 'approved', 'rejected'].includes(status)) {
               sendJson(response, 400, { error: 'centerId and a valid status are required.' })
+              return
+            }
+
+            // Same checks as the deployed status function, before any write.
+            const review = parseSafetyCenterReview(status, body.reasonPreset, body.note)
+            if (!review.ok) {
+              sendJson(response, 400, { error: review.error })
               return
             }
 
@@ -342,7 +426,7 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
                 .single()
 
               if (fetchError) {
-                sendJson(response, fetchError.code === 'PGRST116' ? 404 : 500, { error: fetchError.message })
+                sendLocalSupabaseError(response, fetchError, 'Safety center was not found.')
                 return
               }
 
@@ -359,12 +443,21 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
                 approved_by: status === 'approved' ? auth.context.identity.id : null,
                 approved_at: status === 'approved' ? nowIso : null,
                 updated_at: nowIso,
+                // Like operator_safety_center_status_v2: a rejection with a reason replaces the pair
+                // (the note may become null); anything else keeps the stored reason and note.
+                ...(status === 'rejected' && review.reasonPreset
+                  ? { review_reason: review.reasonPreset, review_note: review.note }
+                  : {}),
               })
               .eq('id', centerId)
               .select(safetyCenterSelectFields)
               .single()
 
-            sendJson(response, error ? (error.code === 'PGRST116' ? 404 : 500) : 200, error ? { error: error.message } : { item: data })
+            if (error) {
+              sendLocalSupabaseError(response, error, 'Safety center was not found.')
+              return
+            }
+            sendJson(response, 200, { item: data })
             return
           }
 
@@ -384,7 +477,7 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
               .single()
 
             if (fetchError) {
-              sendJson(response, fetchError.code === 'PGRST116' ? 404 : 500, { error: fetchError.message })
+              sendLocalSupabaseError(response, fetchError, 'Safety center was not found.')
               return
             }
 
@@ -399,19 +492,21 @@ function localAdminApiPlugin(env: Record<string, string>): Plugin {
                 download: center.verification_document_name || undefined,
               })
 
-            sendJson(
-              response,
-              signedUrlError ? 500 : 200,
-              signedUrlError
-                ? { error: signedUrlError.message }
-                : { url: signedUrl.signedUrl, expiresIn: 60, fileName: center.verification_document_name },
-            )
+            if (signedUrlError) {
+              sendLocalInternalError(response, signedUrlError.message)
+              return
+            }
+            sendJson(response, 200, {
+              url: signedUrl.signedUrl,
+              expiresIn: 60,
+              fileName: center.verification_document_name,
+            })
             return
           }
 
           sendJson(response, 404, { error: 'Admin API route was not found.' })
         } catch (error) {
-          sendJson(response, 500, { error: error instanceof Error ? error.message : 'Admin API request failed.' })
+          sendLocalInternalError(response, error instanceof Error ? error.message : 'Admin API request failed.')
         }
       })
     },

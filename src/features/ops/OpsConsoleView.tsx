@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from 'react'
+import { Suspense, useLayoutEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, BarChart3, Building2, Inbox, LayoutDashboard, Loader2, LogOut, UserCircle } from 'lucide-react'
@@ -6,9 +6,12 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import logo from '../../assets/burillab_app_icon.png'
 import { FeedbackInboxView } from '../admin/FeedbackInboxView'
 import { OpsAnalyticsView } from './OpsAnalyticsView'
+import { OpsHomeView } from './OpsHomeView'
+import { buildOpsNavCounts, formatBadgeCount } from './opsHomeTasks'
 import { SafetyCenterApprovalsView } from './SafetyCenterApprovalsView'
+import { useOpsConsoleData, type OpsConsoleData, type OpsConsoleSection } from './useOpsConsoleData'
 
-type OpsSection = 'overview' | 'analytics' | 'centers' | 'feedback'
+type OpsSection = OpsConsoleSection
 
 interface OpsConsoleViewProps {
   userEmail?: string
@@ -16,11 +19,26 @@ interface OpsConsoleViewProps {
   onExitToApp: () => void
 }
 
-const OPS_NAV_ITEMS: Array<{ section: OpsSection; labelKey: string; path: string; Icon: LucideIcon }> = [
+type OpsBadgeSource = 'centers' | 'feedback'
+
+const OPS_NAV_ITEMS: Array<{
+  section: OpsSection
+  labelKey: string
+  path: string
+  Icon: LucideIcon
+  /** Count shown on the item: pending center requests or new feedback. */
+  badge?: { source: OpsBadgeSource; srKey: string }
+}> = [
   { section: 'overview', labelKey: 'ops_console_nav_overview', path: '/ops', Icon: LayoutDashboard },
   { section: 'analytics', labelKey: 'ops_console_nav_analytics', path: '/ops/analytics', Icon: BarChart3 },
-  { section: 'centers', labelKey: 'ops_console_nav_centers', path: '/ops/centers', Icon: Building2 },
-  { section: 'feedback', labelKey: 'ops_console_nav_feedback', path: '/ops/feedback', Icon: Inbox },
+  {
+    section: 'centers', labelKey: 'ops_console_nav_centers', path: '/ops/centers', Icon: Building2,
+    badge: { source: 'centers', srKey: 'ops_console_nav_badge_centers' },
+  },
+  {
+    section: 'feedback', labelKey: 'ops_console_nav_feedback', path: '/ops/feedback', Icon: Inbox,
+    badge: { source: 'feedback', srKey: 'ops_console_nav_badge_feedback' },
+  },
 ]
 
 function getOpsSection(pathname: string): OpsSection {
@@ -52,72 +70,32 @@ function OpsFallback() {
   )
 }
 
-function WorkCard({
-  title,
-  body,
-  Icon,
-  onClick,
-}: {
-  title: string
-  body: string
-  Icon: LucideIcon
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/40"
-    >
-      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-        <Icon className="h-5 w-5" />
-      </div>
-      <h2 className="mt-4 text-lg font-semibold text-slate-950">{title}</h2>
-      <p className="mt-2 text-sm font-normal leading-6 text-slate-600">{body}</p>
-    </button>
-  )
-}
-
-function OpsOverview({ navigate }: { navigate: (path: string) => void }) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex flex-col gap-5 p-5">
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-medium text-blue-700">Buril Lab Operations</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-950">{t('ops_console_overview_heading')}</h1>
-        <p className="mt-3 max-w-2xl text-sm font-normal leading-6 text-slate-600">
-          {t('ops_console_overview_body')}
-        </p>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <WorkCard
-          title={t('ops_console_title_analytics')}
-          body={t('ops_console_card_analytics_body')}
-          Icon={BarChart3}
-          onClick={() => navigate('/ops/analytics')}
-        />
-        <WorkCard
-          title={t('ops_console_card_centers_title')}
-          body={t('ops_console_card_centers_body')}
-          Icon={Building2}
-          onClick={() => navigate('/ops/centers')}
-        />
-        <WorkCard
-          title={t('ops_console_card_feedback_title')}
-          body={t('ops_console_card_feedback_body')}
-          Icon={Inbox}
-          onClick={() => navigate('/ops/feedback')}
-        />
-      </div>
-    </div>
-  )
-}
-
-function renderSection(section: OpsSection, navigate: (path: string) => void): ReactNode {
+function renderSection(
+  section: OpsSection,
+  navigate: (path: string) => void,
+  consoleData: OpsConsoleData,
+): ReactNode {
   if (section === 'analytics') return <OpsAnalyticsView />
-  if (section === 'centers') return <SafetyCenterApprovalsView />
-  if (section === 'feedback') return <FeedbackInboxView />
-  return <OpsOverview navigate={navigate} />
+  // Both screens hand their list to the console, so the badges follow each approval or status change.
+  if (section === 'centers') return <SafetyCenterApprovalsView onItemsChange={consoleData.replaceCenters} />
+  if (section === 'feedback') return <FeedbackInboxView onItemsChange={consoleData.replaceFeedback} />
+  return <OpsHomeView data={consoleData} onNavigate={navigate} />
+}
+
+/**
+ * The console is light only: its screens carry no dark: classes, and shared components (dialogs,
+ * selects, toasts) would otherwise turn dark under the app's `html.dark`. The class is lifted while
+ * the console is open and put back on the way out, where the app's theme hook takes over again.
+ */
+function useLightOnlyDocument() {
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const wasDark = root.classList.contains('dark')
+    root.classList.remove('dark')
+    return () => {
+      if (wasDark) root.classList.add('dark')
+    }
+  }, [])
 }
 
 export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsoleViewProps) {
@@ -125,6 +103,27 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
   const location = useLocation()
   const navigate = useNavigate()
   const activeSection = getOpsSection(location.pathname)
+  useLightOnlyDocument()
+  // Loaded once here so the home and the navigation badges share three calls per reload.
+  const consoleData = useOpsConsoleData(activeSection, {
+    reviewsOpen: activeSection === 'analytics' && new URLSearchParams(location.search).get('tab') === 'reviews',
+  })
+  const navCounts = buildOpsNavCounts({ centers: consoleData.centers.data, feedback: consoleData.feedback.data })
+  const badgeLabels: Record<OpsBadgeSource, string | null> = {
+    centers: formatBadgeCount(navCounts.centers),
+    feedback: formatBadgeCount(navCounts.feedback),
+  }
+  const navItems = OPS_NAV_ITEMS.map((item) => {
+    const label = t(item.labelKey)
+    const badgeLabel = item.badge ? badgeLabels[item.badge.source] : null
+    return {
+      ...item,
+      label,
+      badgeLabel,
+      // The badge itself is hidden from screen readers; the count is part of the button's name.
+      accessibleName: item.badge && badgeLabel ? `${label}, ${t(item.badge.srKey, { value: badgeLabel })}` : undefined,
+    }
+  })
 
   return (
     <div className="fixed inset-0 bg-slate-100 text-slate-950">
@@ -141,7 +140,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
           </div>
 
           <nav className="flex flex-1 flex-col gap-1.5 px-3 py-5">
-            {OPS_NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const Icon = item.Icon
               const isActive = activeSection === item.section
 
@@ -157,9 +156,18 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
                       : 'text-slate-300 hover:bg-white/10 hover:text-white',
                   ].join(' ')}
                   aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.accessibleName}
                 >
                   <Icon className="h-5 w-5 shrink-0" />
-                  <span className="truncate">{t(item.labelKey)}</span>
+                  <span className="truncate">{item.label}</span>
+                  {item.badgeLabel && (
+                    <span
+                      aria-hidden="true"
+                      className="ml-auto shrink-0 rounded-full bg-amber-400 px-2 py-0.5 text-2xs font-semibold tabular-nums text-slate-950"
+                    >
+                      {item.badgeLabel}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -215,7 +223,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
           </header>
 
           <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden">
-            {OPS_NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const Icon = item.Icon
               const isActive = activeSection === item.section
 
@@ -228,9 +236,19 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
                     'flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-medium transition-colors',
                     isActive ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100',
                   ].join(' ')}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={item.accessibleName}
                 >
                   <Icon className="h-4 w-4" />
-                  {t(item.labelKey)}
+                  {item.label}
+                  {item.badgeLabel && (
+                    <span
+                      aria-hidden="true"
+                      className="rounded-full bg-amber-400 px-1.5 text-2xs font-semibold tabular-nums text-slate-950"
+                    >
+                      {item.badgeLabel}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -238,7 +256,7 @@ export function OpsConsoleView({ userEmail, onSignOut, onExitToApp }: OpsConsole
 
           <main className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
             <Suspense fallback={<OpsFallback />}>
-              {renderSection(activeSection, navigate)}
+              {renderSection(activeSection, navigate, consoleData)}
             </Suspense>
           </main>
         </div>

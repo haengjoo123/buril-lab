@@ -179,7 +179,9 @@ export const onRequestPost = async (context: {
       global: { fetch: oneRequestFetch(controller.signal, LAB_JOIN_RPC_RESPONSE_BYTES) },
       auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
     })
-    const { data, error } = await adminClient.rpc('join_lab_server_v1', {
+    // v2 runs v1 unchanged and, on success, writes the lab_member/join audit row (actor = the joining
+    // user) in the same transaction. Same result shape; never fall back to v1 (the database ships first).
+    const { data, error } = await adminClient.rpc('join_lab_server_v2', {
       p_user_id: userData.user.id, p_lab_id: input.labId, p_password: input.password,
       p_user_hash: userHash, p_ip_hash: ipHash, p_nickname: input.nickname,
     })

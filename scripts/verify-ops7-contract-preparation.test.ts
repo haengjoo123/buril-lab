@@ -72,4 +72,12 @@ describe('Ops7 Contract preparation boundary', () => {
       cabinetService: `${application.cabinetService}\nsupabase.rpc('insert_audit_log_rpc', {})`,
     })).toThrow(/generic audit/)
   })
+
+  it('requires the audited server join RPC (v2, which wraps the bounded v1)', () => {
+    expect(verifyOps7ApplicationSources(application)).toMatchObject({ legacyClientCalls: 0 })
+    expect(() => verifyOps7ApplicationSources({
+      ...application,
+      joinHandler: application.joinHandler.replace("adminClient.rpc('join_lab_server_v2'", "adminClient.rpc('join_lab_server_v1'"),
+    })).toThrow(/bounded RPC/)
+  })
 })

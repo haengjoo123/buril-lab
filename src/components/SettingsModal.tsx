@@ -10,6 +10,9 @@ import { useOnboardingStore } from '../store/useOnboardingStore';
 import { useAuth } from '../hooks/useAuth';
 import { useThemeMode } from '../hooks/useThemeMode';
 import type { FeedbackType } from '../types/feedback';
+import type { AppTab } from '../hooks/useAppUiState';
+import { useLabStore } from '../store/useLabStore';
+import { buildFeedbackInsert } from '../utils/feedbackPayload';
 import { analyticsService } from '../services/analyticsService';
 import {
     LEGACY_SAFETY_ACKNOWLEDGEMENT_STORAGE_KEY,
@@ -26,9 +29,11 @@ interface SettingsModalProps {
     userEmail?: string;
     onSignOut?: () => void;
     onClose: () => void;
+    /** The app tab the settings were opened from, recorded with feedback. */
+    feedbackSourceScreen?: AppTab;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: authenticatedFromLayout, userEmail, onSignOut, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: authenticatedFromLayout, userEmail, onSignOut, onClose, feedbackSourceScreen }) => {
         const clearCart = useWasteStore((state) => state.clearCart);
         const clearSearchHistory = useWasteStore((state) => state.clearSearchHistory);
         const resetOnboarding = useOnboardingStore((state) => state.resetOnboarding);
@@ -197,14 +202,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
 
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            const { error } = await supabase.from('feedback').insert({
+            const row = buildFeedbackInsert({
                 type: feedbackType,
-                message: feedbackMessage.trim(),
-                contact: feedbackContact.trim() || null,
-                user_email: user?.email ?? null,
-                user_id: user?.id ?? null,
-                user_agent: navigator.userAgent,
-            });
+                message: feedbackMessage,
+                contact: feedbackContact,
+                user: user ? { id: user.id, email: user.email } : null,
+                // Read at send time: the lab space may have changed while the form was open.
+                currentLabId: useLabStore.getState().currentLabId,
+                sourceScreen: feedbackSourceScreen,
+            }, navigator.userAgent);
+            let { error } = await supabase.from('feedback').insert(row);
+            // The insert policy accepts only the sender's own lab: if the membership just ended,
+            // send the feedback without the lab rather than losing it.
+            if (error?.code === '42501' && row.lab_id !== null) {
+                ({ error } = await supabase.from('feedback').insert({ ...row, lab_id: null }));
+            }
 
             if (error) throw error;
 
@@ -336,6 +348,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
                                         className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-slate-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700 transition-colors"
                                     />
                                 </div>
+
+                                {/* What is recorded with the feedback, said before sending. */}
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {t('feedback_context_notice')}
+                                </p>
 
                                 {/* Submit */}
                                 <button
