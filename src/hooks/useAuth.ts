@@ -8,6 +8,12 @@ import { supabase } from '../services/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
 import { postJson } from '../services/internalApi';
 import { useInventoryHazardStore } from '../store/useInventoryHazardStore';
+import {
+    toAuthActionResult,
+    toSignUpResult,
+    type AuthActionResult,
+    type SignUpResult,
+} from '../utils/authOutcome';
 
 interface AuthState {
     session: Session | null;
@@ -16,10 +22,11 @@ interface AuthState {
 }
 
 interface UseAuthReturn extends AuthState {
-    signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-    signUp: (email: string, password: string) => Promise<{ error: string | null }>;
-    requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
-    updatePassword: (password: string) => Promise<{ error: string | null }>;
+    signIn: (email: string, password: string) => Promise<AuthActionResult>;
+    signUp: (email: string, password: string) => Promise<SignUpResult>;
+    resendSignupEmail: (email: string) => Promise<AuthActionResult>;
+    requestPasswordReset: (email: string) => Promise<AuthActionResult>;
+    updatePassword: (password: string) => Promise<AuthActionResult>;
     signOut: () => Promise<void>;
     deleteAccount: () => Promise<{ error: string | null; jobId?: string }>;
 }
@@ -28,6 +35,12 @@ function getPasswordResetRedirectUrl(): string {
     const configuredUrl = import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined;
     const baseUrl = configuredUrl?.trim() || window.location.origin;
     return new URL('/reset-password', baseUrl).toString();
+}
+
+/** Sends the sign-up confirmation email again. Usable outside the hook. */
+export async function resendSignupConfirmation(email: string): Promise<AuthActionResult> {
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
+    return toAuthActionResult(error);
 }
 
 export function useAuth(): UseAuthReturn {
@@ -65,24 +78,25 @@ export function useAuth(): UseAuthReturn {
 
     const signIn = useCallback(async (email: string, password: string) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        return { error: error?.message ?? null };
+        return toAuthActionResult(error);
     }, []);
 
     const signUp = useCallback(async (email: string, password: string) => {
-        const { error } = await supabase.auth.signUp({ email, password });
-        return { error: error?.message ?? null };
+        return toSignUpResult(await supabase.auth.signUp({ email, password }));
     }, []);
+
+    const resendSignupEmail = useCallback((email: string) => resendSignupConfirmation(email), []);
 
     const requestPasswordReset = useCallback(async (email: string) => {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: getPasswordResetRedirectUrl(),
         });
-        return { error: error?.message ?? null };
+        return toAuthActionResult(error);
     }, []);
 
     const updatePassword = useCallback(async (password: string) => {
         const { error } = await supabase.auth.updateUser({ password });
-        return { error: error?.message ?? null };
+        return toAuthActionResult(error);
     }, []);
 
     const currentUserId = state.user?.id;
@@ -114,6 +128,7 @@ export function useAuth(): UseAuthReturn {
         ...state,
         signIn,
         signUp,
+        resendSignupEmail,
         requestPasswordReset,
         updatePassword,
         signOut,

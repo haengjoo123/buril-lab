@@ -152,10 +152,28 @@ export const cabinetService = {
         }
     },
 
-    async deleteCabinet(id: string): Promise<void> {
+    async deleteCabinet(id: string, options: { hasImage?: boolean } = {}): Promise<void> {
         // The database refuses deletion while a private image is still live.
         // Detaching first preserves its ownership and seven-day retention row.
-        await this.removeCabinetImage(id);
+        // Only a cabinet that has a photo needs it, and a failed cleanup must not
+        // block deletion: the database delete below is the authority either way.
+        let hasImage = options.hasImage;
+        if (hasImage === undefined) {
+            const { data, error: lookupError } = await supabase
+                .from('cabinets')
+                .select('image_path, image_url')
+                .eq('id', id)
+                .maybeSingle();
+            // If the photo state cannot be read, try the cleanup anyway.
+            hasImage = lookupError ? true : Boolean(data?.image_path || data?.image_url);
+        }
+        if (hasImage) {
+            try {
+                await this.removeCabinetImage(id);
+            } catch {
+                console.warn('Cabinet photo cleanup failed before deletion; deleting the cabinet anyway');
+            }
+        }
         const { error } = await supabase
             .from('cabinets')
             .delete()
@@ -245,6 +263,11 @@ export const cabinetService = {
         });
         if (error) throw error;
         loadedSnapshots.set(cabinetId, { revision: data, shelves: currentShelves, items: currentItems });
+    },
+
+    /** Layout revision of the last load or save of this cabinet in this session. */
+    getLoadedRevision(cabinetId: string): number | undefined {
+        return loadedSnapshots.get(cabinetId)?.revision;
     },
 
     async saveReagentGHS(cabinetId: string, item: ReagentPlacement, expectedCas: string | undefined, expectedName: string): Promise<void> {

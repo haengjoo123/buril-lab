@@ -247,6 +247,16 @@ export const labService = {
         return (data ?? []) as (Lab & { has_password?: boolean })[];
     },
 
+    /**
+     * Whether a lab currently requires a join password, read through the same lab search
+     * teammates use (the password itself is never readable). `null` when it cannot be told.
+     */
+    async getLabHasPassword(labId: string, labName: string): Promise<boolean | null> {
+        const results = await labService.searchLabs(labName);
+        const match = results.find(lab => lab.id?.toLowerCase() === labId.toLowerCase());
+        return typeof match?.has_password === 'boolean' ? match.has_password : null;
+    },
+
     async getLabMembers(labId: string): Promise<{ user_id: string; role: string; joined_at: string; email: string; nickname?: string }[]> {
         const { data, error } = await supabase.rpc('get_lab_members', { target_lab_id: labId });
         if (error) throw error;

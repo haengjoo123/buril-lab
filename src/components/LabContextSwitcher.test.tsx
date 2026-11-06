@@ -15,6 +15,7 @@ vi.mock('../store/useLabStore', () => ({
 }))
 
 vi.mock('../services/labService', () => ({
+  LAB_MEMBERSHIP_LIMIT: 3,
   labService: { getMyLabs: vi.fn(() => Promise.resolve([])) },
 }))
 
@@ -108,5 +109,31 @@ describe('useLabStore lastLabId', () => {
     useLabStore.getState().clearLabState()
     expect(useLabStore.getState()).toMatchObject({ currentLabId: null, lastLabId: null })
     warn.mockRestore()
+  })
+
+  it('persists memberships so the first render already knows the role, and tracks loading', async () => {
+    const items = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => { items.set(key, value) },
+      removeItem: (key: string) => { items.delete(key) },
+    })
+    vi.resetModules()
+    const { useLabStore } = await vi.importActual<typeof import('../store/useLabStore')>('../store/useLabStore')
+    expect(useLabStore.getState().labsLoaded).toBe(false)
+
+    const admin = { ...member('lab-a', 'Kim Lab'), role: 'admin' as const }
+    useLabStore.getState().setCurrentLabId('lab-a')
+    useLabStore.getState().setMyLabs([admin])
+    expect(useLabStore.getState().labsLoaded).toBe(true)
+
+    const persisted = JSON.parse(items.get('lab-storage') ?? '{}').state
+    expect(persisted).toMatchObject({ currentLabId: 'lab-a', myLabs: [admin] })
+    expect(persisted).not.toHaveProperty('labsLoaded')
+
+    useLabStore.getState().clearLabState()
+    expect(useLabStore.getState()).toMatchObject({ myLabs: [], labsLoaded: false })
+    expect(JSON.parse(items.get('lab-storage') ?? '{}').state.myLabs).toEqual([])
+    vi.unstubAllGlobals()
   })
 })

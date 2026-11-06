@@ -8,12 +8,15 @@ import {
     Archive,
     Check,
     ChevronDown,
+    ChevronRight,
     Edit3,
     ExternalLink,
     Info,
     Loader2,
     MapPin,
+    MoreHorizontal,
     PackageCheck,
+    Plus,
     RotateCcw,
     Sparkles,
     Trash2,
@@ -26,6 +29,7 @@ import {
     deriveWasteAmountFromComponentVolumes,
     getAllowedAmountUnits,
     getWasteAcidBasePresence,
+    matrixContradictsComponentEvidence,
     needsAlkalineCyanideCheck,
 } from '../utils/wasteBatch';
 import {
@@ -39,7 +43,11 @@ import { getAIDisposalGuide, type DisposalGuideResult } from '../services/aiDisp
 import { getActiveWastePolicyV2, type ActiveWastePolicy } from '../services/wastePolicyService';
 import { recordWasteHandlingV2, type WasteHandlingReceipt } from '../services/wasteLogService';
 import { translateGHS } from '../data/ghsCodes';
-import { isPhPredictionEnabled, isWasteContainersEnabled } from '../config/featureFlags';
+import {
+    isChemicalEnrichmentEnabled,
+    isPhPredictionEnabled,
+    isWasteContainersEnabled,
+} from '../config/featureFlags';
 import { useContainerSelection } from '../features/wasteContainers/useContainerSelection';
 import { ContainerDepositPicker } from '../features/wasteContainers/ContainerDepositPicker';
 import { containerCopy, containerErrorMessage } from '../features/wasteContainers/copy';
@@ -56,6 +64,8 @@ import {
 import {
     componentNeedsAmountInput,
     createUserSolutionContext,
+    getFirstIncompleteWizardTarget,
+    getMissingFieldTarget,
     getNextWizardStep,
     getPreviousWizardStep,
     getSolutionQuestionComponents,
@@ -64,6 +74,7 @@ import {
     resolveWasteBatchWizard,
     WASTE_BATCH_WIZARD_STEPS,
     type WasteBatchWizardStep,
+    type WizardFocusTarget,
 } from '../utils/wasteBatchWizard';
 import {
     REPRESENTATIVE_SOLVENT_PRESETS,
@@ -75,10 +86,13 @@ import {
     canDisplayPhPredictionNumber,
     createPhPredictionAuditSnapshot,
     getApprovedPhCatalogOptions,
+    getPhCatalogFormLabel,
     shouldAskPhPredictionCompleteness,
+    shouldOfferPhCatalogForm,
     shouldShowPhPredictionMatrixNotice,
 } from './cartPhPredictionUi';
 import { AppSelect } from './AppSelect';
+import { CustomDialog } from './CustomDialog';
 import { WasteComponentRegulationChips } from './WasteComponentRegulationChips';
 import { FatalToxicityDilutionHint } from './FatalToxicityDilutionHint';
 import type {
@@ -86,6 +100,8 @@ import type {
     ConcentrationUnit,
     HandlingAction,
     PhPredictionResult,
+    WasteBatchDraft,
+    WasteComponent,
     WasteConcentrationBasis,
     WasteMaterialForm,
     WasteMatrix,
@@ -99,7 +115,63 @@ interface CartViewProps {
     onClose: () => void;
     onDisposed?: () => void;
     onOpenLogs?: (wasteLogId?: string, openCorrection?: boolean) => void;
+    /** Search for another component of the current batch. */
     onAddComponent?: () => void;
+    /** Plain search after a record; the recorded batch is already cleared. */
+    onContinueSearch?: () => void;
+}
+
+/**
+ * Component lines the view last showed, kept across close/reopen so a line
+ * added from search can be highlighted when the batch opens again.
+ */
+let lastSeenBatchLines: { batchId: string; lineIds: ReadonlySet<string> } | null = null;
+
+type FlashTone = 'attention' | 'success';
+
+interface ConfirmRequest {
+    title: string;
+    description: string;
+    confirmText: string;
+    onConfirm: () => void;
+}
+
+const BATCH_SECTION_IDS = {
+    matrix: 'waste-section-matrix',
+    additional_components: 'waste-section-additional',
+    fluoride_container: 'waste-section-fluoride',
+    total_amount: 'waste-section-amount',
+    mixing_state: 'waste-section-separate',
+    measured_ph: 'waste-section-ph',
+} as const;
+
+const componentLineElementId = (cartLineId: string): string => `waste-line-${cartLineId}`;
+
+/** The automatic hazard lookup has not answered yet, so there is nothing to confirm. */
+const isHazardLookupPending = (component: WasteComponent): boolean =>
+    isChemicalEnrichmentEnabled && !component.chemical.hazardLookup && !component.hazardDataConfirmedByUser;
+
+/** Hazard data must be checked on the label or SDS before the batch can be recorded. */
+const needsHazardLabelCheck = (component: WasteComponent): boolean =>
+    component.ghsDataStatus === 'lookup_failed'
+    && !component.hazardDataConfirmedByUser
+    && !isHazardLookupPending(component);
+
+const getHazardLookupMessageKey = (component: WasteComponent): string | null => {
+    const status = component.chemical.hazardLookup?.status;
+    if (!status) return null;
+    if (status === 'identity_ambiguous') {
+        // Once the user matched the component to its label, the form is no longer ambiguous to them.
+        return component.identityConfirmedByUser ? null : 'waste_component_hazard_identity_ambiguous';
+    }
+    return status === 'source_absent'
+        ? 'waste_component_hazard_source_absent'
+        : 'waste_component_hazard_lookup_failed';
+};
+
+interface ReceiptSummary {
+    componentNames: string;
+    amount: WasteBatchDraft['totalAmount'];
 }
 
 const MATRIX_OPTIONS: WasteMatrix[] = [
@@ -255,6 +327,7 @@ export const CartView: React.FC<CartViewProps> = ({
     onDisposed,
     onOpenLogs,
     onAddComponent,
+    onContinueSearch,
 }) => {
     const { t, i18n } = useTranslation();
     const currentLabId = useLabStore((state) => state.currentLabId);
@@ -291,6 +364,8 @@ export const CartView: React.FC<CartViewProps> = ({
     const [activePane, setActivePane] = useState<'primary' | 'detail'>('primary');
     const wizardScrollRef = useRef<HTMLElement>(null);
     const wizardTitleRef = useRef<HTMLHeadingElement>(null);
+    const batchMenuButtonRef = useRef<HTMLButtonElement>(null);
+    const batchMenuRef = useRef<HTMLDivElement>(null);
     const [editingLineId, setEditingLineId] = useState<string | null>(null);
     const [isMatrixEditing, setIsMatrixEditing] = useState(false);
     const [concentrationInputs, setConcentrationInputs] = useState<Record<string, string>>({});
@@ -325,6 +400,63 @@ export const CartView: React.FC<CartViewProps> = ({
         inputHash: string;
         authorization: PredictedPhAuthorization;
     } | null>(null);
+    const [receiptSummary, setReceiptSummary] = useState<ReceiptSummary | null>(null);
+    const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+    const [isBatchMenuOpen, setIsBatchMenuOpen] = useState(false);
+    const [flash, setFlash] = useState<{ id: string; tone: FlashTone } | null>(null);
+    // A line that was not there when this view last closed was just added from search.
+    const [addedLineId] = useState<string | null>(() => {
+        const seen = lastSeenBatchLines;
+        if (!seen || seen.batchId !== batch.id) return null;
+        return batch.components.find(({ cartLineId }) => !seen.lineIds.has(cartLineId))?.cartLineId ?? null;
+    });
+
+    const flashElement = useCallback((id: string, tone: FlashTone = 'attention') => {
+        setFlash({ id, tone });
+    }, []);
+
+    useEffect(() => {
+        if (!flash) return;
+        // Runs after a step change has scrolled the wizard back to its title.
+        const scrollTimer = window.setTimeout(() => {
+            const element = document.getElementById(flash.id);
+            if (!element) return;
+            if (flash.tone === 'success') {
+                // In-place feedback: move only when the highlighted element is out of view.
+                const bounds = wizardScrollRef.current?.getBoundingClientRect();
+                const rect = element.getBoundingClientRect();
+                if (bounds && rect.top >= bounds.top && rect.bottom <= bounds.bottom) return;
+            }
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 120);
+        const clearTimer = window.setTimeout(() => setFlash(null), 1800);
+        return () => {
+            window.clearTimeout(scrollTimer);
+            window.clearTimeout(clearTimer);
+        };
+    }, [flash]);
+
+    const flashClass = (id: string): string => {
+        if (flash?.id !== id) return '';
+        return flash.tone === 'success'
+            ? ' ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-950'
+            : ' ring-2 ring-orange-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950';
+    };
+
+    useEffect(() => {
+        lastSeenBatchLines = {
+            batchId: batch.id,
+            lineIds: new Set(batch.components.map(({ cartLineId }) => cartLineId)),
+        };
+    }, [batch.id, batch.components]);
+
+    useEffect(() => {
+        if (addedLineId) flashElement(componentLineElementId(addedLineId), 'success');
+    }, [addedLineId, flashElement]);
+
+    useEffect(() => {
+        if (isBatchMenuOpen) batchMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    }, [isBatchMenuOpen]);
 
     const activeBatchHasContent = batch.components.length > 0
         || batch.matrix !== 'unknown'
@@ -346,9 +478,15 @@ export const CartView: React.FC<CartViewProps> = ({
     };
 
     const discardAndStartNew = () => {
-        if (!window.confirm(t('cart_confirm_clear'))) return;
-        clearCart();
-        setBatchMessage(null);
+        setConfirmRequest({
+            title: t('waste_clear_batch'),
+            description: t('cart_confirm_clear'),
+            confirmText: t('waste_clear_batch'),
+            onConfirm: () => {
+                clearCart();
+                setBatchMessage(null);
+            },
+        });
     };
 
     const restoreDraft = (id: string) => {
@@ -357,8 +495,14 @@ export const CartView: React.FC<CartViewProps> = ({
     };
 
     const removeParkedDraft = (id: string) => {
-        if (!window.confirm(t('waste_delete_parked_confirm'))) return;
-        if (deleteParkedBatch(id)) setBatchMessage(t('waste_delete_parked_done'));
+        setConfirmRequest({
+            title: t('waste_delete_parked'),
+            description: t('waste_delete_parked_confirm'),
+            confirmText: t('waste_delete_parked'),
+            onConfirm: () => {
+                if (deleteParkedBatch(id)) setBatchMessage(t('waste_delete_parked_done'));
+            },
+        });
     };
 
     const compatibilityWarnings = useMemo(
@@ -551,6 +695,20 @@ export const CartView: React.FC<CartViewProps> = ({
         ? (isKorean ? receipt.streamSnapshot.displayNameKo : receipt.streamSnapshot.displayNameEn)
             || (isKorean ? STREAM_NAMES_KO[receipt.streamCode] : STREAM_NAMES_EN[receipt.streamCode])
         : streamName;
+    const receiptComponentNames = receiptSummary?.componentNames ?? '';
+    const receiptAmount = receiptSummary?.amount;
+    const receiptAmountText = !receiptAmount
+        ? null
+        : receiptAmount.isUnknown
+            ? t('waste_amount_unknown')
+            : receiptAmount.value !== null && receiptAmount.unit
+                ? receiptAmount.isApproximate
+                    ? t('waste_label_amount_approximate_value', {
+                        value: receiptAmount.value,
+                        unit: receiptAmount.unit,
+                    })
+                    : `${receiptAmount.value} ${receiptAmount.unit}`
+                : null;
     const requestPayloadFingerprint = useMemo(() => JSON.stringify({
         batch,
         decision,
@@ -694,7 +852,10 @@ export const CartView: React.FC<CartViewProps> = ({
         (initial ?? dialog).focus();
 
         const handleKeyDown = (event: KeyboardEvent) => {
+            // A confirm or container dialog opened on top handles its own keys.
+            if (!isTopmostDialog(dialog)) return;
             if (event.key === 'Escape') {
+                if (event.defaultPrevented) return;
                 event.preventDefault();
                 onCloseRef.current();
                 return;
@@ -819,19 +980,119 @@ export const CartView: React.FC<CartViewProps> = ({
         setActiveStep(getPreviousWizardStep(activeStep, wizard));
     };
 
-    const moveWizardNext = () => {
-        if (activeStep === 'components') {
-            if (!wizard.componentStepComplete || hasInvalidNumericInput) return;
-        }
-        if (activeStep === 'amounts') {
-            if (!activeAmountComponent || hasInvalidNumericInput) return;
-            if (safeAmountQuestionIndex < batch.components.length - 1) {
-                setAmountQuestionIndex((index) => index + 1);
+    const openComponentEditor = (component: WasteComponent) => {
+        setEditingLineId(component.cartLineId);
+        setConcentrationInputs((current) => ({
+            ...current,
+            [component.cartLineId]: component.concentration?.value.toString() ?? '',
+        }));
+        setConcentrationUnits((current) => ({
+            ...current,
+            [component.cartLineId]: component.concentration?.unit ?? 'M',
+        }));
+        setSolutionVolumeInputs((current) => ({
+            ...current,
+            [component.cartLineId]: component.solutionVolume?.value.toString() ?? '',
+        }));
+        setSolutionVolumeUnits((current) => ({
+            ...current,
+            [component.cartLineId]: component.solutionVolume?.unit ?? 'mL',
+        }));
+        setDensityInputs((current) => ({
+            ...current,
+            [component.cartLineId]: component.concentration?.density?.value.toString() ?? '',
+        }));
+    };
+
+    const shouldShowManualHazardPanel = (component: WasteComponent): boolean =>
+        component.ghsDataStatus === 'lookup_failed' || Boolean(component.hazardDataConfirmedByUser);
+
+    /** Bring the user to where a question is answered and highlight it. Never answers it. */
+    const focusWizardTarget = (target: WizardFocusTarget) => {
+        setShowAiDetail(false);
+        if (target.step === 'components') {
+            setActiveStep('components');
+            const component = target.cartLineId
+                ? batch.components.find(({ cartLineId }) => cartLineId === target.cartLineId)
+                : undefined;
+            if (!component) {
+                flashElement(batch.components.length === 0 ? 'waste-add-component' : 'waste-components-title');
                 return;
             }
+            if (target.openPanel) {
+                if (editingLineId !== component.cartLineId) openComponentEditor(component);
+                if (shouldShowManualHazardPanel(component)) {
+                    flashElement(`waste-hazard-${component.cartLineId}`);
+                    return;
+                }
+            }
+            flashElement(componentLineElementId(component.cartLineId));
+            return;
+        }
+        if (target.step === 'amounts') {
+            const index = batch.components.findIndex(({ cartLineId }) => cartLineId === target.cartLineId);
+            if (index >= 0) setAmountQuestionIndex(index);
+            setActiveStep('amounts');
+            flashElement(componentLineElementId(target.cartLineId));
+            return;
+        }
+        if (target.step === 'solution') {
+            const index = solutionQuestionComponents.findIndex(({ cartLineId }) => cartLineId === target.cartLineId);
+            if (index >= 0) setSolutionQuestionIndex(index);
+            setActiveStep('solution');
+            flashElement('waste-solution-options');
+            return;
+        }
+        setActiveStep('batch');
+        flashElement(BATCH_SECTION_IDS[target.section]);
+    };
+
+    const firstMissingFieldTarget = decision.decisionStatus === 'needs_input'
+        ? decision.missingFields
+            .map((field) => getMissingFieldTarget(field, batch))
+            .find((target): target is WizardFocusTarget => target !== null) ?? null
+        : null;
+
+    const invalidInputComponent = batch.components.find((component) =>
+        isInvalidConcentrationText(concentrationInputs[component.cartLineId])
+        || isInvalidConcentrationText(solutionVolumeInputs[component.cartLineId])
+    );
+    const isNextBlocked = activeStep === 'components'
+        ? !wizard.componentStepComplete || hasInvalidNumericInput
+        : activeStep === 'amounts'
+            ? !activeAmountComponent || hasInvalidNumericInput
+            : activeStep === 'solution'
+                ? !activeSolutionComponent || !isSolutionContextAnswered(activeSolutionComponent)
+                : activeStep === 'batch'
+                    ? !wizard.batchStepComplete
+                    : false;
+
+    /** A blocked "Next" shows what is still unanswered instead of doing nothing. */
+    const pointAtBlockingQuestion = () => {
+        if (invalidInputComponent && (activeStep === 'components' || activeStep === 'amounts')) {
+            focusWizardTarget(activeStep === 'amounts'
+                ? { step: 'amounts', cartLineId: invalidInputComponent.cartLineId }
+                : { step: 'components', cartLineId: invalidInputComponent.cartLineId });
+            return;
         }
         if (activeStep === 'solution') {
-            if (!activeSolutionComponent || !isSolutionContextAnswered(activeSolutionComponent)) return;
+            flashElement('waste-solution-options');
+            return;
+        }
+        const target = getFirstIncompleteWizardTarget(batch, { approvedPredictedBatchPh });
+        if (target) focusWizardTarget(target);
+    };
+
+    const moveWizardNext = () => {
+        if (isNextBlocked) {
+            pointAtBlockingQuestion();
+            return;
+        }
+        if (activeStep === 'amounts' && safeAmountQuestionIndex < batch.components.length - 1) {
+            setAmountQuestionIndex((index) => index + 1);
+            return;
+        }
+        if (activeStep === 'solution') {
             if (safeSolutionQuestionIndex < solutionQuestionComponents.length - 1) {
                 setSolutionQuestionIndex((index) => index + 1);
                 return;
@@ -840,11 +1101,13 @@ export const CartView: React.FC<CartViewProps> = ({
                 const firstUnanswered = solutionQuestionComponents.findIndex(
                     (component) => !isSolutionContextAnswered(component),
                 );
-                if (firstUnanswered >= 0) setSolutionQuestionIndex(firstUnanswered);
+                if (firstUnanswered >= 0) {
+                    setSolutionQuestionIndex(firstUnanswered);
+                    flashElement('waste-solution-options');
+                }
                 return;
             }
         }
-        if (activeStep === 'batch' && !wizard.batchStepComplete) return;
         setActiveStep(getNextWizardStep(activeStep, wizard));
     };
 
@@ -1062,6 +1325,14 @@ export const CartView: React.FC<CartViewProps> = ({
                         : {}),
                 },
             });
+            setReceiptSummary({
+                componentNames: Array.from(new Set(
+                    batchSnapshot.components
+                        .map((component) => component.chemical.name.trim())
+                        .filter(Boolean),
+                )).join(' + '),
+                amount: batchSnapshot.totalAmount,
+            });
             setReceipt(result);
             setReceiptContainerLabel(result.containerId ? containerLabelForRecord : null);
             rememberCurrentMatrix();
@@ -1138,14 +1409,9 @@ export const CartView: React.FC<CartViewProps> = ({
                                 })}
                         </p>
                     ) : (
-                        <>
-                            <p className="text-xs font-semibold leading-5">
-                                {t('waste_ph_prediction_issue_matrix_not_aqueous')}
-                            </p>
-                            <p className="mt-1 text-xs leading-5 opacity-75">
-                                {t('waste_ph_prediction_matrix_notice_help')}
-                            </p>
-                        </>
+                        <p className="text-xs font-semibold leading-5">
+                            {t('waste_ph_prediction_issue_matrix_not_aqueous')}
+                        </p>
                     )}
             </div>
         </div>
@@ -1159,16 +1425,31 @@ export const CartView: React.FC<CartViewProps> = ({
                     ref={dialogRef}
                     role="dialog"
                     aria-modal="true"
-                    aria-labelledby="waste-receipt-title"
+                    aria-labelledby="waste-receipt-success waste-receipt-title"
                     tabIndex={-1}
                     className="relative z-10 w-full max-w-lg rounded-t-3xl bg-white p-6 shadow-2xl dark:bg-slate-900 wide:rounded-3xl"
                 >
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                    <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                         <Check className="h-7 w-7" aria-hidden="true" />
                     </div>
-                    <h2 id="waste-receipt-title" className="text-center text-xl font-bold text-slate-950 dark:text-white">
-                        {t('waste_record_success')}
+                    {receiptComponentNames && (
+                        <p id="waste-receipt-success" className="text-center text-sm font-semibold text-blue-700 dark:text-blue-300">
+                            {t('waste_record_success')}
+                        </p>
+                    )}
+                    {/* What was recorded is the headline: components, amount, and where it went. */}
+                    <h2 id="waste-receipt-title" className="mt-1 break-words text-center text-xl font-bold text-slate-950 dark:text-white">
+                        {receiptComponentNames || t('waste_record_success')}
                     </h2>
+                    <p className="mt-1.5 flex flex-wrap items-center justify-center gap-x-1.5 text-center text-base font-semibold text-slate-700 dark:text-slate-200">
+                        {receiptAmountText && (
+                            <>
+                                <span>{receiptAmountText}</span>
+                                <span aria-hidden="true" className="text-slate-400">→</span>
+                            </>
+                        )}
+                        <span className="text-blue-700 dark:text-blue-300">{receiptStreamClassification}</span>
+                    </p>
                     <dl className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm dark:bg-slate-800">
                         <div className="flex justify-between gap-4">
                             <dt className="text-slate-500">{t('waste_receipt_handling_action')}</dt>
@@ -1176,25 +1457,25 @@ export const CartView: React.FC<CartViewProps> = ({
                                 {t(`waste_action_${receipt.handlingAction}` as never)}
                             </dd>
                         </div>
-                        <div className="mt-2 flex justify-between gap-4">
-                            <dt className="text-slate-500">
-                                {receipt.handlingAction === 'container_deposit'
-                                    ? t('waste_destination')
-                                    : t('waste_receipt_stream_classification')}
-                            </dt>
-                            <dd className="text-right font-semibold text-slate-900 dark:text-white">
-                                <span className="block">
-                                    {receipt.handlingAction === 'container_deposit'
-                                        ? receiptStreamName
-                                        : receiptStreamClassification}
-                                </span>
-                                {receipt.handlingAction === 'container_deposit' && receipt.streamSnapshot.location && (
-                                    <span className="mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400">
-                                        {receipt.streamSnapshot.location}
-                                    </span>
-                                )}
-                            </dd>
-                        </div>
+                        {receipt.handlingAction === 'container_deposit'
+                            && (receipt.streamSnapshot.containerLabel || receipt.streamSnapshot.location) && (
+                            <div className="mt-2 flex justify-between gap-4">
+                                <dt className="text-slate-500">{t('waste_destination')}</dt>
+                                <dd className="text-right font-semibold text-slate-900 dark:text-white">
+                                    {receipt.streamSnapshot.containerLabel && (
+                                        <span className="block">{receiptStreamName}</span>
+                                    )}
+                                    {receipt.streamSnapshot.location && (
+                                        <span className={`block ${receipt.streamSnapshot.containerLabel
+                                            ? 'mt-0.5 text-xs font-normal text-slate-500 dark:text-slate-400'
+                                            : ''}`}
+                                        >
+                                            {receipt.streamSnapshot.location}
+                                        </span>
+                                    )}
+                                </dd>
+                            </div>
+                        )}
                         {receipt.containerId && receiptContainerLabel && (
                             <div className="mt-2 flex justify-between gap-4">
                                 <dt className="text-slate-500">{containerCopy(i18n.language).receiptContainer}</dt>
@@ -1205,9 +1486,8 @@ export const CartView: React.FC<CartViewProps> = ({
                     <div aria-live="polite" className="sr-only">{t('waste_record_success')}</div>
                     <div className="mt-5 grid grid-cols-2 gap-3">
                         <button
-                            data-dialog-initial-focus
                             onClick={() => {
-                                if (onAddComponent) onAddComponent();
+                                if (onContinueSearch) onContinueSearch();
                                 else onClose();
                             }}
                             className="min-h-11 rounded-xl border border-slate-200 px-4 font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200"
@@ -1215,6 +1495,7 @@ export const CartView: React.FC<CartViewProps> = ({
                             {t('waste_receipt_continue')}
                         </button>
                         <button
+                            data-dialog-initial-focus
                             onClick={() => {
                                 onClose();
                                 onOpenLogs?.(receipt.id, false);
@@ -1338,28 +1619,73 @@ export const CartView: React.FC<CartViewProps> = ({
                     <section aria-labelledby="waste-components-title">
                         {activeStep === 'components' && (
                         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <h3 id="waste-components-title" className="font-bold text-slate-900 dark:text-white">
+                            <h3 id="waste-components-title" className={`rounded-md font-bold text-slate-900 dark:text-white${flashClass('waste-components-title')}`}>
                                 {t('waste_components_title', { defaultValue: '성분' })}
                             </h3>
                             {batch.components.length > 0 && (
-                                <div className="flex flex-wrap justify-end gap-2">
+                                <div
+                                    className="relative"
+                                    onKeyDown={(event) => {
+                                        if (event.key !== 'Escape' || !isBatchMenuOpen) return;
+                                        // Close only the menu, not the whole batch dialog.
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        setIsBatchMenuOpen(false);
+                                        batchMenuButtonRef.current?.focus();
+                                    }}
+                                >
                                     <button
+                                        ref={batchMenuButtonRef}
                                         type="button"
-                                        onClick={parkBatchAndStartNew}
-                                        className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:px-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                                        onClick={() => setIsBatchMenuOpen((open) => !open)}
+                                        aria-haspopup="menu"
+                                        aria-expanded={isBatchMenuOpen}
+                                        aria-label={t('waste_batch_menu')}
+                                        className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                                     >
-                                        <Archive aria-hidden="true" className="hidden h-4 w-4 shrink-0 text-blue-600 sm:block dark:text-blue-300" />
-                                        {t('waste_park_batch')}
+                                        <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
                                     </button>
-                                    {/* Discards the current batch (after a confirm), so it reads as an action, not as the other half of a toggle. */}
-                                    <button
-                                        type="button"
-                                        onClick={discardAndStartNew}
-                                        className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600 sm:px-3 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-red-900 dark:hover:bg-red-950/30 dark:hover:text-red-300"
-                                    >
-                                        <RotateCcw aria-hidden="true" className="hidden h-4 w-4 shrink-0 sm:block" />
-                                        {t('waste_clear_batch')}
-                                    </button>
+                                    {isBatchMenuOpen && (
+                                        <>
+                                            <div
+                                                aria-hidden="true"
+                                                className="fixed inset-0 z-10"
+                                                onClick={() => setIsBatchMenuOpen(false)}
+                                            />
+                                            <div
+                                                ref={batchMenuRef}
+                                                role="menu"
+                                                aria-label={t('waste_batch_menu')}
+                                                className="absolute right-0 top-full z-20 mt-1 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    onClick={() => {
+                                                        setIsBatchMenuOpen(false);
+                                                        parkBatchAndStartNew();
+                                                    }}
+                                                    className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                                                >
+                                                    <Archive aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
+                                                    {t('waste_park_batch')}
+                                                </button>
+                                                {/* Discards the current batch after a confirm. */}
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    onClick={() => {
+                                                        setIsBatchMenuOpen(false);
+                                                        discardAndStartNew();
+                                                    }}
+                                                    className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+                                                >
+                                                    <RotateCcw aria-hidden="true" className="h-4 w-4 shrink-0" />
+                                                    {t('waste_clear_batch')}
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1387,7 +1713,11 @@ export const CartView: React.FC<CartViewProps> = ({
                                     .filter((component) => activeStep === 'components'
                                         || component.cartLineId === activeAmountComponent?.cartLineId)
                                     .map((component) => (
-                                    <article key={component.cartLineId} className="rounded-xl border border-slate-200 bg-white p-2.5 dark:border-slate-800 dark:bg-slate-900 wide:rounded-2xl wide:p-3">
+                                    <article
+                                        key={component.cartLineId}
+                                        id={componentLineElementId(component.cartLineId)}
+                                        className={`rounded-xl border border-slate-200 bg-white p-2.5 transition-shadow dark:border-slate-800 dark:bg-slate-900 wide:rounded-2xl wide:p-3${flashClass(componentLineElementId(component.cartLineId))}`}
+                                    >
                                         <div className="flex items-start gap-3">
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">
@@ -1432,10 +1762,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 {(activeStep === 'components' || activeStep === 'amounts') && (
                                                     <WasteComponentRegulationChips component={component} />
                                                 )}
-                                                {activeStep === 'components' && isPhPredictionEnabled && (
+                                                {activeStep === 'components'
+                                                    && shouldOfferPhCatalogForm(isPhPredictionEnabled, batch.matrix, component)
+                                                    && getPhCatalogFormLabel(component.phCatalogId, i18n.language) && (
                                                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                                         {t('waste_component_ph_form_summary', {
-                                                            value: component.phCatalogId ?? t('waste_ph_catalog_form_unmatched'),
+                                                            value: getPhCatalogFormLabel(component.phCatalogId, i18n.language),
                                                         })}
                                                     </p>
                                                 )}
@@ -1461,10 +1793,13 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 {activeStep === 'components' && component.identityConfidence !== 'verified' && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => updateComponent(component.cartLineId, {
-                                                            identityConfidence: 'verified',
-                                                            identityConfirmedByUser: true,
-                                                        })}
+                                                        onClick={() => {
+                                                            updateComponent(component.cartLineId, {
+                                                                identityConfidence: 'verified',
+                                                                identityConfirmedByUser: true,
+                                                            });
+                                                            flashElement(componentLineElementId(component.cartLineId), 'success');
+                                                        }}
                                                         className="mt-2 min-h-11 rounded-lg border border-orange-300 bg-orange-50 px-3 text-xs font-bold text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-200"
                                                     >
                                                         {t('waste_confirm_component_identity')}
@@ -1475,49 +1810,42 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_component_hazard_pending')}
                                                     </p>
                                                 )}
-                                                {activeStep === 'components' && !component.chemical.hazardLookup && !component.hazardDataConfirmedByUser && (
+                                                {activeStep === 'components' && isHazardLookupPending(component) && (
                                                     <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-100" role="status">
                                                         {t('waste_component_hazard_pending')}
                                                     </p>
                                                 )}
-                                                {activeStep === 'components' && component.ghsDataStatus === 'lookup_failed' && Boolean(component.chemical.hazardLookup) && !component.hazardDataConfirmedByUser && (
-                                                    <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
-                                                        {component.chemical.hazardLookup?.status === 'identity_ambiguous'
-                                                            ? t('waste_component_hazard_identity_ambiguous')
-                                                            : component.chemical.hazardLookup?.status === 'source_absent'
-                                                                ? t('waste_component_hazard_source_absent')
-                                                                : t('waste_component_hazard_lookup_failed')}
-                                                    </p>
+                                                {activeStep === 'components' && needsHazardLabelCheck(component) && (
+                                                    <div className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
+                                                        {getHazardLookupMessageKey(component) && (
+                                                            <p className="mb-2">{t(getHazardLookupMessageKey(component) as never)}</p>
+                                                        )}
+                                                        {/* Same confirmation as the button in the edit panel, one tap closer.
+                                                            Hidden while that panel is open so only one confirm button shows. */}
+                                                        {editingLineId !== component.cartLineId && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                updateComponent(component.cartLineId, {
+                                                                    hazardDataConfirmedByUser: true,
+                                                                });
+                                                                flashElement(componentLineElementId(component.cartLineId), 'success');
+                                                            }}
+                                                            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-orange-300 bg-white px-3 text-xs font-bold text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:bg-slate-950 dark:text-orange-200 dark:hover:bg-orange-950/60"
+                                                        >
+                                                            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                                            {t('waste_manual_hazard_confirm')}
+                                                        </button>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                             {activeStep === 'components' && (
                                             <>
                                             <button
                                                 onClick={() => {
-                                                    const isClosing = editingLineId === component.cartLineId;
-                                                    setEditingLineId(isClosing ? null : component.cartLineId);
-                                                    if (!isClosing) {
-                                                        setConcentrationInputs((current) => ({
-                                                            ...current,
-                                                            [component.cartLineId]: component.concentration?.value.toString() ?? '',
-                                                        }));
-                                                        setConcentrationUnits((current) => ({
-                                                            ...current,
-                                                            [component.cartLineId]: component.concentration?.unit ?? 'M',
-                                                        }));
-                                                        setSolutionVolumeInputs((current) => ({
-                                                            ...current,
-                                                            [component.cartLineId]: component.solutionVolume?.value.toString() ?? '',
-                                                        }));
-                                                        setSolutionVolumeUnits((current) => ({
-                                                            ...current,
-                                                            [component.cartLineId]: component.solutionVolume?.unit ?? 'mL',
-                                                        }));
-                                                        setDensityInputs((current) => ({
-                                                            ...current,
-                                                            [component.cartLineId]: component.concentration?.density?.value.toString() ?? '',
-                                                        }));
-                                                    }
+                                                    if (editingLineId === component.cartLineId) setEditingLineId(null);
+                                                    else openComponentEditor(component);
                                                 }}
                                                 aria-label={`${component.chemical.name} ${t('waste_component_edit')}`}
                                                 aria-expanded={editingLineId === component.cartLineId}
@@ -1839,7 +2167,8 @@ export const CartView: React.FC<CartViewProps> = ({
                                                 )}
                                                 </>
                                                 )}
-                                                {activeStep === 'components' && isPhPredictionEnabled && (
+                                                {activeStep === 'components'
+                                                    && shouldOfferPhCatalogForm(isPhPredictionEnabled, batch.matrix, component) && (
                                                     <div className="block border-t border-slate-100 pt-3 text-xs font-medium text-slate-600 dark:border-slate-800 dark:text-slate-300">
                                                         <span>{t('waste_ph_catalog_form')}</span>
                                                         <AppSelect
@@ -1879,9 +2208,11 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         </span>
                                                     </div>
                                                 )}
-                                                {activeStep === 'components' &&
-                                                    (component.ghsDataStatus === 'lookup_failed' || component.hazardDataConfirmedByUser) && (
-                                                    <fieldset className="rounded-xl border border-orange-200 bg-orange-50/70 p-3 dark:border-orange-900 dark:bg-orange-950/30">
+                                                {activeStep === 'components' && shouldShowManualHazardPanel(component) && (
+                                                    <fieldset
+                                                        id={`waste-hazard-${component.cartLineId}`}
+                                                        className={`rounded-xl border border-orange-200 bg-orange-50/70 p-3 dark:border-orange-900 dark:bg-orange-950/30${flashClass(`waste-hazard-${component.cartLineId}`)}`}
+                                                    >
                                                         <legend className="px-1 text-xs font-bold text-orange-950 dark:text-orange-100">
                                                             {t('waste_manual_hazard_title')}
                                                         </legend>
@@ -1935,6 +2266,17 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </article>
                                 ))}
                             </div>
+                        )}
+                        {activeStep === 'components' && onAddComponent && (
+                            <button
+                                id="waste-add-component"
+                                type="button"
+                                onClick={onAddComponent}
+                                className={`mt-2 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-blue-300 bg-blue-50/50 px-3 text-sm font-bold text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300 dark:hover:bg-blue-950/40${flashClass('waste-add-component')}`}
+                            >
+                                <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                {t('waste_add_component')}
+                            </button>
                         )}
                     </section>
 
@@ -2042,7 +2384,10 @@ export const CartView: React.FC<CartViewProps> = ({
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            <div
+                                id="waste-solution-options"
+                                className={`grid grid-cols-2 gap-2 rounded-xl transition-shadow${flashClass('waste-solution-options')}`}
+                            >
                                 {([
                                     ['aqueous', 'waste_solution_water'],
                                     ['organic_non_halogen', 'waste_solution_non_halogen'],
@@ -2205,7 +2550,11 @@ export const CartView: React.FC<CartViewProps> = ({
 
                     {activeStep === 'batch' && !showAiDetail && batch.components.length > 0 && (
                         <>
-                            <section aria-labelledby="waste-matrix-title">
+                            <section
+                                id={BATCH_SECTION_IDS.matrix}
+                                aria-labelledby="waste-matrix-title"
+                                className={`rounded-xl transition-shadow${flashClass(BATCH_SECTION_IDS.matrix)}`}
+                            >
                                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                     <h3 id="waste-matrix-title" className="font-bold text-slate-900 dark:text-white">
                                         {t(isSingleAsSuppliedProduct ? 'waste_as_supplied_matrix_title' : 'waste_matrix_title')}
@@ -2233,7 +2582,8 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </div>
                                 ) : (
                                     <>
-                                        {batch.matrix === 'unknown' && previousMatrix && !wizard.matrixResolution.hasExplicitOrganic && (
+                                        {batch.matrix === 'unknown' && previousMatrix && !wizard.matrixResolution.hasExplicitOrganic
+                                            && !matrixContradictsComponentEvidence(previousMatrix, batch.components) && (
                                             <button
                                                 type="button"
                                                 onClick={applyPreviousMatrix}
@@ -2277,7 +2627,11 @@ export const CartView: React.FC<CartViewProps> = ({
                             </section>
 
                             {shouldAskAdditionalComponents && (
-                                <section aria-labelledby="additional-components-title">
+                                <section
+                                    id={BATCH_SECTION_IDS.additional_components}
+                                    aria-labelledby="additional-components-title"
+                                    className={`rounded-xl transition-shadow${flashClass(BATCH_SECTION_IDS.additional_components)}`}
+                                >
                                     <h3 id="additional-components-title" className="mb-2 text-sm font-bold leading-relaxed text-slate-900 dark:text-white">
                                         {t('waste_additional_components_question')}
                                     </h3>
@@ -2308,8 +2662,9 @@ export const CartView: React.FC<CartViewProps> = ({
 
                             {requiresFluorideCompatibleContainer && (
                                 <section
+                                    id={BATCH_SECTION_IDS.fluoride_container}
                                     aria-labelledby="fluoride-container-title"
-                                    className="rounded-xl border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30 wide:rounded-2xl wide:p-4"
+                                    className={`rounded-xl border border-red-200 bg-red-50/70 p-3 dark:border-red-900 dark:bg-red-950/30 wide:rounded-2xl wide:p-4${flashClass(BATCH_SECTION_IDS.fluoride_container)}`}
                                 >
                                     <h3 id="fluoride-container-title" className="text-sm font-bold leading-5 text-red-950 dark:text-red-100">
                                         {t('waste_fluoride_container_question')}
@@ -2338,7 +2693,11 @@ export const CartView: React.FC<CartViewProps> = ({
                                 </section>
                             )}
 
-                            <section aria-labelledby="waste-amount-title">
+                            <section
+                                id={BATCH_SECTION_IDS.total_amount}
+                                aria-labelledby="waste-amount-title"
+                                className={`rounded-xl transition-shadow${flashClass(BATCH_SECTION_IDS.total_amount)}`}
+                            >
                                     <div className="mb-2 flex items-center justify-between gap-3">
                                         <h3 id="waste-amount-title" className="font-bold text-slate-900 dark:text-white">
                                             {t('waste_total_amount')}
@@ -2470,8 +2829,9 @@ export const CartView: React.FC<CartViewProps> = ({
 
                             {batch.components.length > 0 && batch.mixingState === 'separate' && (
                                 <section
+                                    id={BATCH_SECTION_IDS.mixing_state}
                                     aria-labelledby="waste-legacy-separate-title"
-                                    className="rounded-xl border border-orange-300 bg-orange-50 p-3 text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100 wide:rounded-2xl wide:p-4"
+                                    className={`rounded-xl border border-orange-300 bg-orange-50 p-3 text-orange-950 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-100 wide:rounded-2xl wide:p-4${flashClass(BATCH_SECTION_IDS.mixing_state)}`}
                                 >
                                     <h3 id="waste-legacy-separate-title" className="font-bold">
                                         {t('waste_legacy_separate_title')}
@@ -2490,7 +2850,11 @@ export const CartView: React.FC<CartViewProps> = ({
                             )}
 
                             {needsMeasuredPh && (
-                                <section aria-labelledby="waste-ph-title">
+                                <section
+                                    id={BATCH_SECTION_IDS.measured_ph}
+                                    aria-labelledby="waste-ph-title"
+                                    className={`rounded-xl transition-shadow${flashClass(BATCH_SECTION_IDS.measured_ph)}`}
+                                >
                                     <h3 id="waste-ph-title" className="mb-2 font-bold text-slate-900 dark:text-white">
                                         {t('waste_ph_title')}
                                     </h3>
@@ -2629,12 +2993,29 @@ export const CartView: React.FC<CartViewProps> = ({
 
                         {decision.decisionStatus === 'needs_input' && (
                             <ul className="mt-3 space-y-2 text-sm">
-                                {decision.missingFields.map((field) => (
-                                    <li key={field} className="flex items-start gap-2">
-                                        <span aria-hidden="true">•</span>
-                                        <span>{t(MISSING_FIELD_KEYS[field] as never)}</span>
-                                    </li>
-                                ))}
+                                {decision.missingFields.map((field) => {
+                                    const target = getMissingFieldTarget(field, batch);
+                                    return (
+                                        <li key={field}>
+                                            {target ? (
+                                                // Each missing detail opens the place where it is answered.
+                                                <button
+                                                    type="button"
+                                                    onClick={() => focusWizardTarget(target)}
+                                                    className="flex min-h-11 w-full items-center gap-2 rounded-lg bg-white/75 px-3 py-2 text-left font-medium hover:bg-white dark:bg-slate-950/30 dark:hover:bg-slate-950/60"
+                                                >
+                                                    <span className="min-w-0 flex-1">{t(MISSING_FIELD_KEYS[field] as never)}</span>
+                                                    <ChevronRight className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
+                                                </button>
+                                            ) : (
+                                                <span className="flex items-start gap-2">
+                                                    <span aria-hidden="true">•</span>
+                                                    <span>{t(MISSING_FIELD_KEYS[field] as never)}</span>
+                                                </span>
+                                            )}
+                                        </li>
+                                    );
+                                })}
                             </ul>
                         )}
 
@@ -2928,8 +3309,17 @@ export const CartView: React.FC<CartViewProps> = ({
                             </button>
                         </div>
                     ) : (
-                        <button disabled className="min-h-11 w-full rounded-xl bg-orange-100 px-4 font-bold text-orange-800 dark:bg-orange-950/60 dark:text-orange-200 wide:min-h-12">
+                        // Takes the user to the first missing detail instead of sitting disabled.
+                        <button
+                            type="button"
+                            disabled={!firstMissingFieldTarget}
+                            onClick={() => {
+                                if (firstMissingFieldTarget) focusWizardTarget(firstMissingFieldTarget);
+                            }}
+                            className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-orange-100 px-4 font-bold text-orange-800 hover:bg-orange-200 disabled:hover:bg-orange-100 dark:bg-orange-950/60 dark:text-orange-200 dark:hover:bg-orange-900/60 wide:min-h-12"
+                        >
                             {statusConfig.title}
+                            {firstMissingFieldTarget && <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />}
                         </button>
                     )}
                         </>
@@ -2955,16 +3345,12 @@ export const CartView: React.FC<CartViewProps> = ({
                                 <button
                                     type="button"
                                     onClick={moveWizardNext}
-                                    disabled={activeStep === 'components'
-                                        ? !wizard.componentStepComplete || hasInvalidNumericInput
-                                        : activeStep === 'amounts'
-                                            ? !activeAmountComponent || hasInvalidNumericInput
-                                        : activeStep === 'solution'
-                                            ? !activeSolutionComponent || !isSolutionContextAnswered(activeSolutionComponent)
-                                            : activeStep === 'batch'
-                                                ? !wizard.batchStepComplete
-                                                : false}
-                                    className="min-h-11 rounded-xl bg-blue-600 px-4 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 dark:disabled:bg-slate-800 wide:min-h-12"
+                                    // Stays tappable while blocked so it can point at the unanswered question.
+                                    aria-disabled={isNextBlocked}
+                                    className={`min-h-11 rounded-xl px-4 font-bold wide:min-h-12 ${isNextBlocked
+                                        ? 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
                                 >
                                     {activeStep === 'amounts' && safeAmountQuestionIndex < batch.components.length - 1
                                         ? t('waste_amount_next_component')
@@ -2977,6 +3363,20 @@ export const CartView: React.FC<CartViewProps> = ({
                     )}
                 </footer>
             </div>
+            <CustomDialog
+                isOpen={confirmRequest !== null}
+                onClose={() => setConfirmRequest(null)}
+                type="confirm"
+                title={confirmRequest?.title ?? ''}
+                description={confirmRequest?.description}
+                confirmText={confirmRequest?.confirmText}
+                isDestructive
+                onConfirm={() => {
+                    const request = confirmRequest;
+                    setConfirmRequest(null);
+                    request?.onConfirm();
+                }}
+            />
         </div>
     );
 };

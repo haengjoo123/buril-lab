@@ -107,6 +107,40 @@ describe('cabinet async and placement safety', () => {
         expect(useFridgeStore.getState().shelves).toBe(previous);
     });
 
+    it('highlights a manually placed reagent, focuses its shelf and reports the level', async () => {
+        const shelfId = createShelves(4)[0].id;
+        const placed = useFridgeStore.getState().placeReagent(shelfId, {
+            ...createItem(60), id: '', reagentId: 'custom', name: 'Toluene', hCodes: ['H225'],
+        });
+        expect(placed).toBe(true);
+
+        const state = useFridgeStore.getState();
+        const newItem = state.shelves[0].items.find(item => item.name === 'Toluene')!;
+        expect(state.highlightedItemId).toBe(newItem.id);
+        expect(state.autoPlaceResult).toEqual({ itemId: newItem.id, shelfLevel: 1, reagentName: 'Toluene' });
+        expect(state.layoutUndoStack).toHaveLength(1);
+        await Promise.resolve();
+        expect(useFridgeStore.getState().focusedShelfId).toBe(shelfId);
+    });
+
+    it('opens another cabinet in view mode, keeps the mode on a reload, and honors an open intent', async () => {
+        getCabinetDetailsMock.mockResolvedValue({ shelves: createShelves(4), cabinetName: 'C', width: 5, height: 9, depth: 2 });
+        useFridgeStore.setState({ mode: 'PLACE' });
+        await useFridgeStore.getState().loadCabinet('44444444-4444-4444-8444-444444444444');
+        expect(useFridgeStore.getState().mode).toBe('VIEW');
+
+        useFridgeStore.setState({ mode: 'EDIT' });
+        await useFridgeStore.getState().loadCabinet('44444444-4444-4444-8444-444444444444');
+        expect(useFridgeStore.getState().mode).toBe('EDIT');
+        await useFridgeStore.getState().loadCabinet('44444444-4444-4444-8444-444444444444', { resetMode: true });
+        expect(useFridgeStore.getState().mode).toBe('VIEW');
+
+        useFridgeStore.getState().requestCabinetOpenMode('55555555-5555-4555-8555-555555555555', 'PLACE');
+        await useFridgeStore.getState().loadCabinet('55555555-5555-4555-8555-555555555555', { resetMode: true });
+        expect(useFridgeStore.getState().mode).toBe('PLACE');
+        expect(useFridgeStore.getState().cabinetOpenIntent).toBeNull();
+    });
+
     it('clears pending placement and drag state when returning to view mode', () => {
         useFridgeStore.setState({ draggedItem: { id: 'item', originalShelfId: 'shelf', originalPosition: 30 }, focusedShelfId: 'shelf' });
         useFridgeStore.getState().setMode('VIEW');

@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
@@ -9,7 +10,6 @@ import {
   Database,
   Download,
   Layers3,
-  LogOut,
   Search,
   ShieldCheck,
 } from 'lucide-react';
@@ -20,6 +20,7 @@ import logsScreenshot from '../assets/gateway/buril-waste-logs.png';
 import cabinet3dScreenshot from '../assets/gateway/buril-3d-cabinet.png';
 import { gatewayFaq } from './gatewayFaq';
 import { SiteFooter } from './SiteFooter';
+import { labAppRoute } from '../utils/appRoutes';
 
 interface GatewayLandingProps {
   isAuthenticated: boolean;
@@ -27,6 +28,7 @@ interface GatewayLandingProps {
   onNavigateToApp: () => void;
   onNavigateToCenter: () => void;
   onLoginClick: () => void;
+  /** Not rendered: signed-in users log out from the app settings. Kept for existing callers. */
   onSignOut?: () => void;
 }
 
@@ -40,7 +42,8 @@ type GatewayCopy = {
   };
   actions: {
     login: string;
-    signOut: string;
+    openApp: string;
+    search: string;
     startApp: string;
     viewCenter: string;
     goCenter: string;
@@ -105,7 +108,8 @@ const copyByLanguage: Record<'ko' | 'en', GatewayCopy> = {
     },
     actions: {
       login: '로그인',
-      signOut: '로그아웃',
+      openApp: '앱 열기',
+      search: '검색',
       startApp: '버릴랩 시작하기',
       viewCenter: '통합센터 보기',
       goCenter: '통합센터로 이동',
@@ -232,7 +236,8 @@ const copyByLanguage: Record<'ko' | 'en', GatewayCopy> = {
     },
     actions: {
       login: 'Log in',
-      signOut: 'Log out',
+      openApp: 'Open app',
+      search: 'Search',
       startApp: 'Start Buril Lab',
       viewCenter: 'View Safety Center',
       goCenter: 'Go to Safety Center',
@@ -604,11 +609,22 @@ export function GatewayLanding({
   onNavigateToApp,
   onNavigateToCenter,
   onLoginClick,
-  onSignOut,
 }: GatewayLandingProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const [heroQuery, setHeroQuery] = useState('');
   const language = (i18n.resolvedLanguage ?? i18n.language).startsWith('ko') ? 'ko' : 'en';
   const copy = copyByLanguage[language];
+
+  const handleHeroSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = heroQuery.trim();
+    if (!query) {
+      onNavigateToApp();
+      return;
+    }
+    navigate(`${labAppRoute()}?q=${encodeURIComponent(query)}`);
+  };
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-white text-slate-950">
@@ -628,16 +644,14 @@ export function GatewayLanding({
             {isAuthenticated ? (
               <>
                 <span className="hidden max-w-[12rem] truncate text-xs font-medium text-slate-500 sm:inline">{userEmail}</span>
-                {onSignOut && (
-                  <button
-                    type="button"
-                    onClick={onSignOut}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600"
-                    aria-label={copy.actions.signOut}
-                  >
-                    <LogOut className="h-5 w-5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={onNavigateToApp}
+                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-blue-700 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-800"
+                >
+                  {copy.actions.openApp}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
               </>
             ) : (
               <button
@@ -663,9 +677,44 @@ export function GatewayLanding({
               <p className="mt-6 max-w-xl text-lg font-normal leading-8 text-slate-600 [word-break:keep-all]">
                 {copy.hero.body}
               </p>
-              <div className="mt-8 flex max-w-full flex-col gap-3 sm:flex-row">
-                <GatewayButton tone="blue" onClick={onNavigateToApp}>{copy.actions.startApp}</GatewayButton>
-                <GatewayButton tone="light" onClick={onNavigateToCenter}>{copy.actions.viewCenter}</GatewayButton>
+              <form
+                role="search"
+                onSubmit={handleHeroSearch}
+                className="mt-8 flex max-w-xl items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 pl-4 shadow-lg shadow-slate-950/5 transition-shadow focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-100"
+              >
+                <Search className="hidden h-5 w-5 shrink-0 text-slate-400 sm:block" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={heroQuery}
+                  onChange={(event) => setHeroQuery(event.target.value)}
+                  placeholder={t('search_placeholder')}
+                  aria-label={copy.labels.search}
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="h-11 min-w-0 flex-1 bg-transparent text-base font-medium text-ellipsis text-slate-950 placeholder:text-slate-400 caret-blue-600 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  aria-label={copy.actions.search}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-700 text-sm font-medium text-white transition-colors hover:bg-blue-800 sm:w-auto sm:px-5"
+                >
+                  <Search className="h-5 w-5 sm:hidden" aria-hidden="true" />
+                  <span className="hidden sm:inline">{copy.actions.search}</span>
+                </button>
+              </form>
+              <div className="mt-4 flex max-w-full flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+                <GatewayButton tone="light" onClick={onNavigateToApp}>{copy.actions.startApp}</GatewayButton>
+                <button
+                  type="button"
+                  onClick={onNavigateToCenter}
+                  className="inline-flex items-center justify-center gap-1 self-center text-sm font-medium text-slate-600 underline-offset-4 transition-colors hover:text-emerald-700 hover:underline sm:self-auto"
+                >
+                  {copy.actions.viewCenter}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
               </div>
               <div className="mt-10 grid min-w-0 gap-5 sm:grid-cols-2">
                 {copy.strengths.map((item) => (

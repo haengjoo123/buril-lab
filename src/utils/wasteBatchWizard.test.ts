@@ -4,6 +4,8 @@ import {
     componentNeedsAmountInput,
     createUserSolutionContext,
     deriveWizardMatrixFromComponents,
+    getFirstIncompleteWizardTarget,
+    getMissingFieldTarget,
     getNextWizardStep,
     getWizardEntryStep,
     resolveWasteBatchWizard,
@@ -168,5 +170,56 @@ describe('component material form and amount questions', () => {
     it('keeps asking a solution for both volume and concentration', () => {
         expect(componentNeedsAmountInput({ ...component('Buffer', false), materialForm: 'solution' })).toBe(true);
         expect(componentNeedsAmountInput(component('Buffer', false))).toBe(true);
+    });
+});
+
+describe('pointing at the question that blocks the wizard', () => {
+    it('points at the first component that is not ready, then the solvent question, then batch questions in screen order', () => {
+        const unverified = component('Unverified');
+        unverified.identityConfidence = 'review_required';
+        expect(getFirstIncompleteWizardTarget(batch([component('Ready'), unverified])))
+            .toEqual({ step: 'components', cartLineId: 'Unverified' });
+
+        const unanswered = component('Needs solvent');
+        expect(getFirstIncompleteWizardTarget(batch([unanswered])))
+            .toEqual({ step: 'solution', cartLineId: 'Needs solvent' });
+
+        const first = component('First');
+        const second = component('Second');
+        first.solutionContext = createUserSolutionContext('aqueous');
+        second.solutionContext = createUserSolutionContext('aqueous');
+        const draft = { ...batch([first, second]), matrix: 'aqueous' as const, matrixSource: 'automatic' as const };
+        // Two components: the additional-components question comes before the amount.
+        expect(getFirstIncompleteWizardTarget(draft))
+            .toEqual({ step: 'batch', section: 'additional_components' });
+
+        draft.additionalComponentsStatus = 'none';
+        expect(getFirstIncompleteWizardTarget(draft)).toBeNull();
+        expect(getFirstIncompleteWizardTarget(batch([]))).toEqual({ step: 'components' });
+    });
+
+    it('does not pre-answer anything while pointing at it', () => {
+        const draft = batch([component('Only', false)]);
+        const before = JSON.stringify(draft);
+        expect(getFirstIncompleteWizardTarget(draft)).toEqual({ step: 'batch', section: 'matrix' });
+        expect(JSON.stringify(draft)).toBe(before);
+    });
+
+    it('maps each missing detail to the step and component that answers it', () => {
+        const hazardPending = component('Label only', false);
+        hazardPending.ghsDataStatus = 'lookup_failed';
+        const unclassified = component('Unclassified', false);
+        unclassified.category = 'UNKNOWN';
+        const draft = batch([component('Ready', false), hazardPending, unclassified]);
+
+        expect(getMissingFieldTarget('hazard_data', draft))
+            .toEqual({ step: 'components', cartLineId: 'Label only', openPanel: true });
+        expect(getMissingFieldTarget('classification', draft))
+            .toEqual({ step: 'amounts', cartLineId: 'Unclassified' });
+        expect(getMissingFieldTarget('additional_components', draft))
+            .toEqual({ step: 'batch', section: 'additional_components' });
+        expect(getMissingFieldTarget('measured_ph', draft))
+            .toEqual({ step: 'batch', section: 'measured_ph' });
+        expect(getMissingFieldTarget('policy_stream', draft)).toBeNull();
     });
 });

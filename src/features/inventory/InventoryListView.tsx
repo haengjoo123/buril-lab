@@ -17,7 +17,8 @@ import {
 	CheckCircle2,
 	X,
 	Trash2,
-	FlaskConical
+	FlaskConical,
+	MoreHorizontal
 } from 'lucide-react';
 import {
     createInventoryOperationRequestId,
@@ -31,7 +32,10 @@ import {
 } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
 import { canCommitLabRequest, type LabRequestToken } from '../../utils/labRequestScope';
-import { InventoryFormModal } from './InventoryFormModal';
+import { InventoryFormModal, type InventoryFormSaveResult } from './InventoryFormModal';
+import { QuantityStepper } from './QuantityStepper';
+import { INVENTORY_REMAINING_LEVELS, getInventoryRemainingStage, isInventoryRemainingLow } from './remainingLevels';
+import { createInventorySearchMatcher } from './inventorySearch';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
 import { exportImportAttributes, readableImportAttributes } from './import/sourceAttributes';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
@@ -66,6 +70,8 @@ import { getPictogramCode, getPictogramUrl } from '../../data/ghsCodes';
 import {
     buildInventoryHazardEntryKey,
     createInventoryHazardSnapshot,
+    formatInventoryHazardCount,
+    getInventoryHazardResolution,
     isInventoryHazardSnapshotFresh,
     useInventoryHazardStore,
     type InventoryHazardSnapshot,
@@ -118,9 +124,40 @@ export interface InventoryListViewProps {
 const normalizeGhsCas = (value?: string | null) => (value || '').replace(/\s+/g, '').trim();
 const INVENTORY_GHS_RETRY_DELAY_MS = 10_000;
 const INVENTORY_GHS_FAILURE_COOLDOWN_MS = 5 * 60 * 1_000;
+const INVENTORY_HIGHLIGHT_MS = 1_600;
+const QUICK_QUANTITY_SAVE_DELAY_MS = 600;
 const getTrackedManufacturerDate = (item: InventoryItem) => (
     hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date : null
 );
+
+type InventoryToast = { message: string; tone: 'success' | 'error' };
+type QuickUsagePatch = { quantity?: number; remaining_percent?: number };
+type QuickUsageOverride = { patch: QuickUsagePatch; confirmedAt: number | null };
+
+/** "2027-03-31" -> "~27.03": short enough for every card's meta line. */
+function formatShortExpiry(date?: string | null): string | null {
+    const match = /^(\d{4})-(\d{2})/.exec(date || '');
+    return match ? `~${match[1].slice(2)}.${match[2]}` : null;
+}
+
+/**
+ * Re-apply quick usage edits that a refetch may not reflect yet: unsaved ones,
+ * and saved ones confirmed after this fetch started.
+ */
+function applyQuickUsageOverrides(
+    fetched: InventoryItem[],
+    overrides: Map<string, QuickUsageOverride>,
+    requestStartedAt: number,
+): InventoryItem[] {
+    for (const [itemId, override] of overrides) {
+        if (override.confirmedAt !== null && override.confirmedAt <= requestStartedAt) overrides.delete(itemId);
+    }
+    if (overrides.size === 0) return fetched;
+    return fetched.map((item) => {
+        const override = overrides.get(item.id);
+        return override ? { ...item, ...override.patch } : item;
+    });
+}
 
 function compareInventoryItems(a: InventoryItem, b: InventoryItem, sortBy: InventorySortOption): number {
     if (sortBy === 'expiry_asc') {
@@ -220,11 +257,20 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const [scanResults, setScanResults] = useState<InventoryScanResultItem[]>([]);
     const [isScanResultsOpen, setIsScanResultsOpen] = useState(false);
     const [activeScanResultId, setActiveScanResultId] = useState<string | null>(null);
-    const [scanToastMessage, setScanToastMessage] = useState<string | null>(null);
+    const [toast, setToast] = useState<InventoryToast | null>(null);
+    const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
+    const [isDetailMenuOpen, setIsDetailMenuOpen] = useState(false);
+    const [quickSaveStatus, setQuickSaveStatus] = useState<Record<string, 'saving' | 'saved'>>({});
+    const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingScrollItemIdRef = useRef<string | null>(null);
+    const quickOverridesRef = useRef(new Map<string, QuickUsageOverride>());
+    const quickPendingRef = useRef(new Map<string, { item: InventoryItem; patch: QuickUsagePatch }>());
+    const quickTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+    const quickInFlightRef = useRef(new Map<string, Promise<void>>());
+    const loadedLabRef = useRef<string | null | undefined>(undefined);
     const scanPendingTasksRef = useRef<{ id: string; imageSrc: string }[]>([]);
     const scanActiveCountRef = useRef(0);
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
-    const [itemActionMenuItem, setItemActionMenuItem] = useState<InventoryItem | null>(null);
     const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [wasteBatchPendingKeys, setWasteBatchPendingKeys] = useState<string[]>([]);
@@ -256,11 +302,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const longPressTriggeredRef = useRef(false);
     const bulkMoveInfoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const inventoryIdentityInFlightRef = useRef<Set<string>>(new Set());
+    // Names already looked up in this lab; quick edits re-render the list often and must not re-query them.
+    const inventoryIdentityAttemptedRef = useRef<Set<string>>(new Set());
     const bulkErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const bulkMoveRequestRef = useRef<{ signature: string; requestId: string } | null>(null);
     const loadRequestRef = useRef(0);
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (options?: { background?: boolean }) => {
         const token: LabRequestToken = {
             generation: ++loadRequestRef.current,
             labId: currentLabId,
@@ -270,8 +318,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             loadRequestRef.current,
             useLabStore.getState().currentLabId,
         );
-        setIsLoading(true);
-        setLoadError(null);
+        // A refresh after a save keeps the list on screen; only the first load blocks it.
+        const isBackground = Boolean(options?.background) && loadedLabRef.current === token.labId;
+        const requestStartedAt = Date.now();
+        if (!isBackground) {
+            setIsLoading(true);
+            setLoadError(null);
+        }
         try {
             const [fetchedItems, fetchedLocations, fetchedCabinets] = await Promise.all([
                 inventoryService.getItems(),
@@ -279,13 +332,19 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 cabinetService.getCabinets(),
             ]);
             if (!isCurrentRequest()) return;
-            setItems(fetchedItems);
+            setItems(applyQuickUsageOverrides(fetchedItems, quickOverridesRef.current, requestStartedAt));
             setLocations(fetchedLocations);
             setCabinets(fetchedCabinets);
             setLoadedLabId(token.labId);
+            setLoadError(null);
+            loadedLabRef.current = token.labId;
         } catch (error) {
             if (!isCurrentRequest()) return;
             console.error('Failed to load inventory data:', error);
+            if (isBackground) {
+                setToast({ message: t('search_error'), tone: 'error' });
+                return;
+            }
             setItems([]);
             setLocations([]);
             setCabinets([]);
@@ -298,6 +357,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
     useLayoutEffect(() => {
         loadRequestRef.current += 1;
+        loadedLabRef.current = undefined;
+        inventoryIdentityAttemptedRef.current.clear();
+        quickOverridesRef.current.clear();
+        quickPendingRef.current.clear();
+        quickTimersRef.current.forEach((timer) => clearTimeout(timer));
+        quickTimersRef.current.clear();
+        pendingScrollItemIdRef.current = null;
         setItems([]);
         setLocations([]);
         setCabinets([]);
@@ -306,7 +372,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         setIsLoading(true);
         setSelectedDesktopItemId(null);
         setActivePane('primary');
-        setItemActionMenuItem(null);
+        setHighlightItemId(null);
+        setIsDetailMenuOpen(false);
+        setQuickSaveStatus({});
         setItemToDelete(null);
         setIsFormOpen(false);
         setIsCameraOpen(false);
@@ -355,12 +423,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     }, [bulkDeleteError, bulkMoveError]);
 
     useEffect(() => {
-        if (!scanToastMessage) return;
-        const timer = setTimeout(() => setScanToastMessage(null), 3200);
+        if (!toast) return;
+        const timer = setTimeout(() => setToast(null), toast.tone === 'error' ? 3600 : 2400);
         return () => clearTimeout(timer);
-    }, [scanToastMessage]);
+    }, [toast]);
 
     useEffect(() => {
+        const quickTimers = quickTimersRef.current;
         return () => {
             if (bulkMoveInfoTimerRef.current) {
                 clearTimeout(bulkMoveInfoTimerRef.current);
@@ -368,6 +437,10 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             if (bulkErrorTimerRef.current) {
                 clearTimeout(bulkErrorTimerRef.current);
             }
+            if (highlightTimerRef.current) {
+                clearTimeout(highlightTimerRef.current);
+            }
+            quickTimers.forEach((timer) => clearTimeout(timer));
         };
     }, []);
 
@@ -443,17 +516,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         })
     ), [getInventoryGhsHCodes, getInventoryGhsStatus]);
 
+    const searchMatcher = useMemo(() => createInventorySearchMatcher(searchQuery), [searchQuery]);
+
     const filteredItems = useMemo(() => {
-        const normalizedQuery = searchQuery.trim().toLowerCase();
         let result = items;
 
-        if (normalizedQuery) {
-            result = result.filter(item =>
-                item.name.toLowerCase().includes(normalizedQuery) ||
-                (item.brand && item.brand.toLowerCase().includes(normalizedQuery)) ||
-                (item.product_number && item.product_number.toLowerCase().includes(normalizedQuery)) ||
-                (item.cas_number && item.cas_number.toLowerCase().includes(normalizedQuery))
-            );
+        if (searchMatcher) {
+            result = result.filter(searchMatcher);
         }
 
         if (hazardFilter !== 'all') {
@@ -463,7 +532,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         }
 
         return result;
-    }, [items, searchQuery, hazardFilter, classifyInventoryItemHazard]);
+    }, [items, searchMatcher, hazardFilter, classifyInventoryItemHazard]);
 
     const hazardFilterCounts = useMemo(() => {
         const counts: Record<InventoryHazardFilterCategory, number> = {
@@ -480,15 +549,27 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         }
         return counts;
     }, [items, classifyInventoryItemHazard]);
+    // Items whose GHS lookup has not succeeded: a zero count over them is unknown, not "none".
+    const unresolvedHazardCount = useMemo(() => items.filter((item) => {
+        const entryKey = buildInventoryHazardEntryKey(userId, currentLabId, item.cas_number);
+        if (!entryKey) return false;
+        return getInventoryHazardResolution(
+            inventoryHazardSnapshots[entryKey],
+            inventoryHazardRuntime[entryKey],
+        ) !== 'resolved';
+    }).length, [currentLabId, inventoryHazardRuntime, inventoryHazardSnapshots, items, userId]);
     const hazardSummary = hazardFilterCounts.special_high;
-    const hazardFilterOptions = useMemo(() => ([
-        { value: 'all', label: t('inventory_hazard_filter_all') },
-        { value: 'special_high', label: `${t('inventory_hazard_special_high')} (${hazardFilterCounts.special_high})` },
-        { value: 'flammable', label: `${t('inventory_hazard_flammable')} (${hazardFilterCounts.flammable})` },
-        { value: 'corrosive', label: `${t('inventory_hazard_corrosive')} (${hazardFilterCounts.corrosive})` },
-        { value: 'toxic', label: `${t('inventory_hazard_toxic')} (${hazardFilterCounts.toxic})` },
-        { value: 'other_managed', label: `${t('inventory_hazard_other_managed')} (${hazardFilterCounts.other_managed})` },
-    ]), [hazardFilterCounts, t]);
+    const hazardFilterOptions = useMemo(() => {
+        const label = (key: string, count: number) => `${t(key)} (${formatInventoryHazardCount(count, unresolvedHazardCount)})`;
+        return [
+            { value: 'all', label: t('inventory_hazard_filter_all') },
+            { value: 'special_high', label: label('inventory_hazard_special_high', hazardFilterCounts.special_high) },
+            { value: 'flammable', label: label('inventory_hazard_flammable', hazardFilterCounts.flammable) },
+            { value: 'corrosive', label: label('inventory_hazard_corrosive', hazardFilterCounts.corrosive) },
+            { value: 'toxic', label: label('inventory_hazard_toxic', hazardFilterCounts.toxic) },
+            { value: 'other_managed', label: label('inventory_hazard_other_managed', hazardFilterCounts.other_managed) },
+        ];
+    }, [hazardFilterCounts, t, unresolvedHazardCount]);
 
     // 만료/위치 우선으로 빠르게 확인할 수 있게 화면 전용 정렬 목록을 만든다.
     const visibleItems = useMemo(() => {
@@ -509,12 +590,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const selectedDesktopWasteBatchError = selectedDesktopWasteBatchKey
         ? wasteBatchErrors[selectedDesktopWasteBatchKey]
         : undefined;
-    const itemActionMenuWasteBatchKey = itemActionMenuItem
-        ? `${itemActionMenuItem._source || 'inventory'}:${itemActionMenuItem.id}`
-        : null;
-    const isStartingActionMenuWasteBatch = itemActionMenuWasteBatchKey
-        ? wasteBatchPendingKeys.includes(itemActionMenuWasteBatchKey)
-        : false;
 
     const sortOptions = useMemo(() => ([
         { value: 'expiry_asc', label: t('inventory_sort_expiry_asc') },
@@ -602,12 +677,17 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         }
     }, [selectedDesktopItemId, visibleItems]);
 
+    const selectedDesktopItemKey = selectedDesktopItem?.id ?? null;
+    useEffect(() => {
+        setIsDetailMenuOpen(false);
+    }, [selectedDesktopItemKey, activePane]);
+
     useEffect(() => {
         const grouped = new Map<string, InventoryItem[]>();
         for (const item of items) {
             if (item.cas_number?.trim() || !item.name.trim()) continue;
             const key = `${item.name.normalize('NFKC').trim().toLowerCase()}|${item.product_number || ''}`;
-            if (inventoryIdentityInFlightRef.current.has(key)) continue;
+            if (inventoryIdentityInFlightRef.current.has(key) || inventoryIdentityAttemptedRef.current.has(key)) continue;
             const matches = grouped.get(key) ?? [];
             matches.push(item);
             grouped.set(key, matches);
@@ -615,7 +695,10 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         if (grouped.size === 0) return;
 
         const entries = Array.from(grouped.entries());
-        entries.forEach(([key]) => inventoryIdentityInFlightRef.current.add(key));
+        entries.forEach(([key]) => {
+            inventoryIdentityInFlightRef.current.add(key);
+            inventoryIdentityAttemptedRef.current.add(key);
+        });
 
         const recoverMissingCasNumbers = async () => {
             try {
@@ -646,6 +729,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 }
             } catch (error) {
                 console.warn('[Inventory] Automatic CAS recovery failed:', error);
+                // A failed request may be retried on a later refresh.
+                entries.forEach(([key]) => inventoryIdentityAttemptedRef.current.delete(key));
             } finally {
                 entries.forEach(([key]) => inventoryIdentityInFlightRef.current.delete(key));
             }
@@ -801,13 +886,187 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         setActiveScanResultId(null);
     };
 
-    const handleFormSaved = () => {
-        loadData();
+    const highlightItem = useCallback((itemId: string) => {
+        pendingScrollItemIdRef.current = itemId;
+        setHighlightItemId(itemId);
+        setSelectedDesktopItemId(itemId);
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = setTimeout(() => {
+            setHighlightItemId(null);
+            pendingScrollItemIdRef.current = null;
+        }, INVENTORY_HIGHLIGHT_MS);
+    }, []);
+
+    // Bring a freshly saved item into view (expanding its group first) once it is rendered.
+    useEffect(() => {
+        const targetId = pendingScrollItemIdRef.current;
+        if (!targetId || !highlightItemId) return;
+        const collapsedGroup = visibleGroups.find((group) => (
+            group.cardCount > 1
+            && !expandedGroupIds.includes(group.id)
+            && group.items.some((groupItem) => groupItem.id === targetId)
+        ));
+        if (collapsedGroup) {
+            setExpandedGroupIds((prev) => [...prev, collapsedGroup.id]);
+            return;
+        }
+        const target = Array.from(document.querySelectorAll<HTMLElement>('[data-inventory-item-id]'))
+            .find((element) => element.dataset.inventoryItemId === targetId && element.getClientRects().length > 0);
+        if (!target) return;
+        pendingScrollItemIdRef.current = null;
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, [expandedGroupIds, highlightItemId, visibleGroups]);
+
+    const handleFormSaved = (result: InventoryFormSaveResult) => {
+        const { kind, itemId, values } = result;
+        const savedLabId = currentLabId;
+        const location = values.storage_type === 'other'
+            ? locations.find((candidate) => candidate.id === values.storage_location_id)
+            : undefined;
+        const cabinet = values.storage_type === 'cabinet'
+            ? cabinets.find((candidate) => candidate.id === values.cabinet_id)
+            : undefined;
+        const storageFields: Partial<InventoryItem> = {
+            storage_type: values.storage_type,
+            cabinet_id: values.storage_type === 'cabinet' ? (values.cabinet_id || null) : null,
+            storage_location_id: values.storage_type === 'other' ? (values.storage_location_id || null) : null,
+            cabinet_name: cabinet?.name ?? null,
+            storage_location_name: location?.name ?? null,
+            storage_location_icon: location?.icon ?? null,
+        };
+
+        if (kind === 'created' && result.item) {
+            const created: InventoryItem = {
+                ...result.item,
+                ...storageFields,
+                shelf_id: null,
+                shelf_level: null,
+                _source: 'inventory',
+            };
+            setItems((prev) => (prev.some((candidate) => candidate.id === created.id) ? prev : [created, ...prev]));
+            // A filter that hides the new item would make the save look like it did nothing.
+            const hiddenBySearch = Boolean(searchMatcher && !searchMatcher(created));
+            const hiddenByHazard = hazardFilter !== 'all'
+                && !classifyInventoryItemHazard(created).filterCategories.includes(hazardFilter);
+            if (hiddenBySearch || hiddenByHazard) {
+                setSearchQuery('');
+                setHazardFilter('all');
+            }
+        } else if (kind === 'updated') {
+            setItems((prev) => prev.map((candidate) => {
+                if (candidate.id !== itemId) return candidate;
+                const isInventoryRow = candidate._source !== 'cabinet_item';
+                const hasDate = hasManufacturerDate(values.manufacturer_date_type);
+                return {
+                    ...candidate,
+                    name: values.name,
+                    brand: values.brand || null,
+                    product_number: values.product_number || null,
+                    cas_number: values.cas_number || null,
+                    capacity: values.capacity || null,
+                    quantity: isInventoryRow ? (values.quantity ?? candidate.quantity) : candidate.quantity,
+                    expiry_date: hasDate ? (values.expiry_date || null) : null,
+                    manufacturer_date_type: values.manufacturer_date_type ?? candidate.manufacturer_date_type,
+                    received_date: values.received_date || null,
+                    opened_date: values.opened_date || null,
+                    memo: values.memo || null,
+                    remaining_percent: values.remaining_percent ?? candidate.remaining_percent,
+                    ...(isInventoryRow && values.storage_type === 'other' ? storageFields : {}),
+                };
+            }));
+        }
+
+        setToast({
+            message: t(kind === 'created' ? 'inventory_saved_created' : 'inventory_saved_updated', { name: values.name }),
+            tone: 'success',
+        });
+        highlightItem(itemId);
+        void loadData({ background: true });
+
+        if (result.placement) {
+            void result.placement.then((placed) => {
+                if (useLabStore.getState().currentLabId !== savedLabId) return;
+                // The item already exists either way; placement is reported on its own.
+                setToast({
+                    message: t(placed ? 'inventory_auto_placed' : 'inventory_auto_placed_fail'),
+                    tone: placed ? 'success' : 'error',
+                });
+                if (placed) void loadData({ background: true });
+            });
+        }
+
         if (activeScanResultId) {
             setScanResults((prev) => prev.filter((item) => item.id !== activeScanResultId));
             setScanQueueItems((prev) => prev.filter((item) => item.id !== activeScanResultId));
             setActiveScanResultId(null);
         }
+    };
+
+    const flushQuickUsageUpdate = async (itemId: string) => {
+        quickTimersRef.current.delete(itemId);
+        const pending = quickPendingRef.current.get(itemId);
+        if (!pending) return;
+        quickPendingRef.current.delete(itemId);
+        const savedLabId = currentLabId;
+        // Writes to one row stay in order even when taps outpace the network.
+        const previous = quickInFlightRef.current.get(itemId) ?? Promise.resolve();
+        const run = previous
+            .catch(() => undefined)
+            .then(() => inventoryService.updateItemUsage(pending.item, pending.patch));
+        quickInFlightRef.current.set(itemId, run);
+        try {
+            await run;
+            if (useLabStore.getState().currentLabId !== savedLabId) return;
+            if (quickPendingRef.current.has(itemId)) return;
+            const override = quickOverridesRef.current.get(itemId);
+            if (override) override.confirmedAt = Date.now();
+            setQuickSaveStatus((prev) => ({ ...prev, [itemId]: 'saved' }));
+            setTimeout(() => {
+                setQuickSaveStatus((prev) => {
+                    if (prev[itemId] !== 'saved') return prev;
+                    const next = { ...prev };
+                    delete next[itemId];
+                    return next;
+                });
+            }, 1_400);
+        } catch (error) {
+            console.error('Failed to save quick inventory update:', error);
+            if (useLabStore.getState().currentLabId !== savedLabId) return;
+            quickOverridesRef.current.delete(itemId);
+            setQuickSaveStatus((prev) => {
+                const next = { ...prev };
+                delete next[itemId];
+                return next;
+            });
+            setToast({ message: t('error_save_generic'), tone: 'error' });
+            void loadData({ background: true });
+        } finally {
+            if (quickInFlightRef.current.get(itemId) === run) quickInFlightRef.current.delete(itemId);
+        }
+    };
+
+    /** Quantity / remaining level straight from the detail bar: shown at once, saved right after. */
+    const applyQuickUsageUpdate = (item: InventoryItem, patch: QuickUsagePatch, delayMs = 0) => {
+        const itemId = item.id;
+        setItems((prev) => prev.map((candidate) => (
+            candidate.id === itemId ? { ...candidate, ...patch } : candidate
+        )));
+        const override = quickOverridesRef.current.get(itemId);
+        quickOverridesRef.current.set(itemId, {
+            patch: { ...(override?.patch ?? {}), ...patch },
+            confirmedAt: null,
+        });
+        const pending = quickPendingRef.current.get(itemId);
+        quickPendingRef.current.set(itemId, {
+            item: pending?.item ?? item,
+            patch: { ...(pending?.patch ?? {}), ...patch },
+        });
+        setQuickSaveStatus((prev) => ({ ...prev, [itemId]: 'saving' }));
+        const existingTimer = quickTimersRef.current.get(itemId);
+        if (existingTimer) clearTimeout(existingTimer);
+        quickTimersRef.current.set(itemId, setTimeout(() => {
+            void flushQuickUsageUpdate(itemId);
+        }, delayMs));
     };
 
     const handleOpenManualRegistration = () => {
@@ -841,12 +1100,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 ...prev,
                 { id: task.id, imageSrc: task.imageSrc, result, createdAt: Date.now() },
             ]);
-            setScanToastMessage(t('inventory_scan_result_ready', { name: result.name || t('scan_unknown_reagent') }));
+            setToast({ message: t('inventory_scan_result_ready', { name: result.name || t('scan_unknown_reagent') }), tone: 'success' });
         } catch (error) {
             console.error('Inventory scan registration failed:', error);
             const message = error instanceof Error ? error.message : t('inventory_scan_error_default');
             updateScanQueueItem(task.id, { status: 'error', label: t('scan_failed') });
-            setScanToastMessage(message);
+            setToast({ message, tone: 'error' });
         }
     };
 
@@ -871,7 +1130,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     };
 
     const handleOpenScanResultForm = (item: InventoryScanResultItem) => {
-        const defaultStorageType = locations.length > 0 ? 'other' : 'cabinet';
+        // Storage is left to the form, which starts at the last used location.
         setInitialDraft({
             name: item.result.name || '',
             brand: item.result.brand || '',
@@ -879,8 +1138,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             cas_number: item.result.casNumber || '',
             quantity: 1,
             capacity: item.result.capacity || '',
-            storage_type: defaultStorageType,
-            storage_location_id: defaultStorageType === 'other' ? (locations[0]?.id || '') : '',
             expiry_date: item.result.expiryDate || '',
             manufacturer_date_type: item.result.manufacturerDateType || 'unlabeled',
             remaining_percent: 100,
@@ -894,20 +1151,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
     const handleDeleteClick = (item: InventoryItem) => {
         setItemToDelete(item);
-    };
-
-    const handleActionMenuWasteBatch = () => {
-        if (!itemActionMenuItem) return;
-        const item = itemActionMenuItem;
-        setItemActionMenuItem(null);
-        void handleStartWasteBatch(item);
-    };
-
-    const handleActionMenuDelete = () => {
-        if (!itemActionMenuItem) return;
-        const item = itemActionMenuItem;
-        setItemActionMenuItem(null);
-        handleDeleteClick(item);
     };
 
     const getWasteBatchActionKey = (item: InventoryItem) =>
@@ -1071,6 +1314,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
     */
     const handleExportExcel = async () => {
+        if (visibleItems.length === 0) return;
         const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
         const rowsForExport = visibleItems.map((item) => {
 
@@ -1103,7 +1347,10 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         setIsDeleting(true);
         try {
             await inventoryService.deleteItem(itemToDelete);
-            setItems(items.filter(i => i.id !== itemToDelete.id));
+            const deletedId = itemToDelete.id;
+            quickOverridesRef.current.delete(deletedId);
+            setItems((prev) => prev.filter((item) => item.id !== deletedId));
+            if (selectedDesktopItemId === deletedId) setActivePane('primary');
         } catch (error) {
             console.error('Failed to delete item:', error);
         } finally {
@@ -1392,7 +1639,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 requestId,
             });
 
-            await loadData();
+            await loadData({ background: true });
             if (destination.storage_type === 'cabinet') {
                 await useFridgeStore.getState().loadCabinet(destination.cabinet_id);
             }
@@ -1453,8 +1700,31 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         );
     };
 
+    const renderShortExpiry = (item: InventoryItem) => {
+        const trackedDate = getTrackedManufacturerDate(item);
+        const label = formatShortExpiry(trackedDate);
+        if (!label) return null;
+        const level = getExpiryStatus(trackedDate)?.level;
+        const toneClass = level === 'expired' || level === 'critical'
+            ? 'font-bold text-red-600 dark:text-red-400'
+            : level === 'warning'
+                ? 'font-semibold text-amber-600 dark:text-amber-400'
+                : '';
+        return (
+            <span
+                className={`inline-flex items-center gap-0.5 tabular-nums ${toneClass}`}
+                title={`${t(getManufacturerDateLabelKey(item.manufacturer_date_type))}: ${trackedDate}`}
+            >
+                <Clock className="h-3 w-3" aria-hidden="true" />
+                {label}
+            </span>
+        );
+    };
+
     const renderRemainingBadge = (item: InventoryItem) => {
         const val = item.remaining_percent ?? 100;
+        // A full bottle is the default state; only a low level is worth a badge.
+        if (!isInventoryRemainingLow(val)) return null;
 
         let colorClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400';
         let barColor = 'bg-emerald-500';
@@ -1647,10 +1917,21 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         const wasteBatchActionKey = getWasteBatchActionKey(item);
         const isStartingWasteBatch = wasteBatchPendingKeys.includes(wasteBatchActionKey);
         const wasteBatchError = wasteBatchErrors[wasteBatchActionKey];
+        const isHighlighted = highlightItemId === item.id;
+        const surfaceClass = isHighlighted
+            ? 'bg-emerald-50 dark:bg-emerald-950/40'
+            : nested
+                ? 'bg-slate-50/80 dark:bg-slate-900/30'
+                : 'bg-white dark:bg-slate-800';
+        // The border colour must always be set outside table mode; otherwise it falls back to currentColor.
+        const borderClass = isHighlighted
+            ? 'border-emerald-400 ring-2 ring-emerald-500/50 dark:border-emerald-500'
+            : `${cardBorderClass || 'border-slate-200 dark:border-slate-700'} ${selectedDesktopItemId === item.id ? 'table:border-emerald-400 table:ring-2 table:ring-emerald-500/30' : ''}`;
 
         return (
             <div
                 key={item.id}
+                data-inventory-item-id={item.id}
                 onPointerDown={(event) => {
                     if (nested) event.stopPropagation();
                     startLongPress([item.id]);
@@ -1671,10 +1952,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     setSelectedDesktopItemId(item.id);
                     setActivePane('detail');
                 }}
-                className={`${nested
-                    ? 'rounded-2xl border bg-slate-50/80 px-4 pb-2 pt-4 shadow-sm cursor-pointer hover:border-emerald-300 dark:bg-slate-900/30 dark:hover:border-emerald-600'
-                    : 'bg-white dark:bg-slate-800 px-4 pb-2 pt-4 rounded-xl border shadow-sm cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-600'
-                    } flex flex-col gap-3 transition-colors ${selectedDesktopItemId === item.id ? 'table:border-emerald-400 table:ring-2 table:ring-emerald-500/30' : cardBorderClass || 'border-slate-200 dark:border-slate-700'}`}
+                className={`${nested ? 'rounded-2xl' : 'rounded-xl'} flex cursor-pointer flex-col gap-3 border px-4 pb-2 pt-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-500 hover:border-emerald-300 dark:hover:border-emerald-600 ${surfaceClass} ${borderClass}`}
             >
                 <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
@@ -1711,6 +1989,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             </span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            {renderShortExpiry(item)}
                             {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
                             {item.brand && <span>{item.brand}</span>}
                             {item.product_number && <span>{t('inventory_meta_pn')}: {item.product_number}</span>}
@@ -1758,22 +2037,22 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         {renderStorageBadge(item)}
                     </div>
 
-                    {!isSelectMode && (
+                    {!isSelectMode && onStartWasteBatch && (
                         <button
                             type="button"
                             onPointerDown={(event) => event.stopPropagation()}
                             onClick={(event) => {
                                 event.stopPropagation();
-                                setItemActionMenuItem(item);
+                                void handleStartWasteBatch(item);
                             }}
                             disabled={isDeleting || isBulkDeleting || isStartingWasteBatch}
-                            aria-label={t('inventory_remove_menu_open')}
-                            title={t('inventory_remove_menu_open')}
-                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-red-300"
+                            aria-label={`${t('inventory_dispose_short')}: ${item.name}`}
+                            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40"
                         >
                             {isStartingWasteBatch
-                                ? <Loader2 className="h-5 w-5 animate-spin" />
-                                : <Trash2 className="h-5 w-5" />}
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <FlaskConical className="h-3.5 w-3.5" />}
+                            {t('inventory_dispose_short')}
                         </button>
                     )}
                 </div>
@@ -1930,7 +2209,59 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         );
     };
 
-    if (loadedLabId !== currentLabId || isLoading) {
+    const hasActiveFilters = Boolean(searchQuery.trim()) || hazardFilter !== 'all';
+    const clearFilters = () => {
+        setSearchQuery('');
+        setHazardFilter('all');
+    };
+    const renderEmptyState = () => {
+        if (items.length === 0) {
+            return (
+                <EmptyState
+                    variant="inventory"
+                    hideDescription
+                    actions={(
+                        <>
+                            <button
+                                type="button"
+                                onClick={handleOpenManualRegistration}
+                                className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
+                            >
+                                <PackagePlus className="h-4 w-4" />
+                                {t('inventory_add_menu_manual')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleOpenScanRegistration}
+                                className="inline-flex h-11 items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:bg-slate-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                            >
+                                <Camera className="h-4 w-4" />
+                                {t('inventory_add_menu_scan')}
+                            </button>
+                        </>
+                    )}
+                />
+            );
+        }
+        return (
+            <EmptyState
+                variant="inventory_search"
+                hideDescription={hasActiveFilters}
+                actions={hasActiveFilters ? (
+                    <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                        <X className="h-4 w-4" />
+                        {t('inventory_clear_filters')}
+                    </button>
+                ) : undefined}
+            />
+        );
+    };
+
+    if (loadedLabId !== currentLabId) {
         return (
             <div className="flex h-full items-center justify-center p-8">
                 <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
@@ -1961,7 +2292,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             <Package className="w-6 h-6 text-emerald-500" />
                             {t('inventory_list_title')}
                         </h1>
-                        <span className="hidden rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50 table:inline-flex">
+                        <span
+                            key={items.length}
+                            aria-live="polite"
+                            className="inline-flex shrink-0 animate-[scan-queue-success_0.45s_ease-out] rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold tabular-nums text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50"
+                        >
                             {t('log_records_count', { count: items.length })}
                         </span>
                     </div>
@@ -1998,8 +2333,10 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         </button>
                         <button
                             onClick={handleExportExcel}
+                            disabled={visibleItems.length === 0}
                             title={t('inventory_excel_download_view')}
-                            className="flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 table:h-9 table:bg-white table:px-3 table:font-bold dark:table:bg-slate-900"
+                            aria-label={t('inventory_excel_download_view')}
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 table:h-9 table:bg-white table:px-3 table:font-bold dark:table:bg-slate-900"
                         >
                             <Download className="w-4 h-4 table:w-3.5 table:h-3.5" />
                             <span className="hidden table:inline whitespace-nowrap">{t('inventory_excel_download_view')}</span>
@@ -2007,6 +2344,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             onClick={() => setIsCsvImportOpen(true)}
                             title={t('inventory_csv_manage_button')}
+                            aria-label={t('inventory_csv_manage_button')}
                             className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40 sm:px-3 sm:py-1.5 table:h-9 table:px-3 table:font-bold"
                         >
                             <Upload className="w-4 h-4 table:w-3.5 table:h-3.5" />
@@ -2033,14 +2371,30 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
                 {/* Search Bar */}
                 <div className="mt-4 relative table:hidden">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
-                        type="text"
+                        type="search"
+                        enterKeyHint="search"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(event) => {
+                            // Enter only dismisses the keyboard; results are already live.
+                            if (event.key === 'Enter') event.currentTarget.blur();
+                        }}
                         placeholder={t('inventory_search_placeholder')}
-                        className="w-full h-[42px] pl-9 pr-4 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                        aria-label={t('inventory_search_placeholder')}
+                        className="w-full h-[42px] pl-9 pr-11 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all [&::-webkit-search-cancel-button]:appearance-none"
                     />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            aria-label={t('inventory_search_clear')}
+                            className="absolute right-0.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
                 </div>
                 <div className="mt-3 flex items-center justify-end gap-2 table:hidden">
                     <div className="flex items-center gap-2 min-w-0">
@@ -2210,14 +2564,26 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             <div className="border-b border-slate-200 p-3 dark:border-slate-800">
                                 <div className="grid grid-cols-[minmax(280px,1fr)_auto_auto_auto] items-center gap-2">
                                     <div className="relative min-w-0">
-                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                         <input
-                                            type="text"
+                                            type="search"
+                                            enterKeyHint="search"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder={t('inventory_search_placeholder')}
-                                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-900 shadow-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                            aria-label={t('inventory_search_placeholder')}
+                                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm text-slate-900 shadow-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 [&::-webkit-search-cancel-button]:appearance-none"
                                         />
+                                        {searchQuery && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSearchQuery('')}
+                                                aria-label={t('inventory_search_clear')}
+                                                className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        )}
                                     </div>
                                     <AppSelect
                                         value={hazardFilter}
@@ -2391,10 +2757,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                         {visibleItems.map((item) => {
                                             const hazard = classifyInventoryItemHazard(item);
                                             const isSelected = selectedDesktopItem?.id === item.id;
+                                            const isHighlighted = highlightItemId === item.id;
                                             const trackedManufacturerDate = getTrackedManufacturerDate(item);
                                             return (
                                                 <tr
                                                     key={item.id}
+                                                    data-inventory-item-id={item.id}
                                                     onClick={() => {
                                                         if (isSelectMode) {
                                                             toggleItemSelection(item.id);
@@ -2403,10 +2771,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                         setSelectedDesktopItemId(item.id);
                                                         setActivePane('detail');
                                                     }}
-                                                    className={`cursor-pointer transition-colors ${
-                                                        isSelected
-                                                            ? 'bg-emerald-50/80 dark:bg-emerald-950/20'
-                                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/70'
+                                                    className={`cursor-pointer transition-colors duration-500 ${
+                                                        isHighlighted
+                                                            ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                                                            : isSelected
+                                                                ? 'bg-emerald-50/80 dark:bg-emerald-950/20'
+                                                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/70'
                                                     }`}
                                                 >
                                                     <td className="px-2 py-3">
@@ -2426,7 +2796,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                         <div className="min-w-0">
                                                             <div className="truncate font-semibold text-slate-900 dark:text-slate-100" title={item.name}>{item.name}</div>
                                                             <div className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                                                                {[item.cas_number, item.brand, item.product_number].filter(Boolean).join(' · ') || t('common_unknown')}
+                                                                {[item.cas_number, item.brand, item.product_number].filter(Boolean).join(' · ') || '—'}
                                                             </div>
                                                             <div className="mt-1 flex items-center gap-1.5">
                                                                 {renderExpiryBadge(item)}
@@ -2444,7 +2814,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                             >
                                                                 {t(getManufacturerDateLabelKey(item.manufacturer_date_type))}: <span className="whitespace-nowrap">{trackedManufacturerDate}</span>
                                                             </span>
-                                                        ) : '-'}
+                                                        ) : '—'}
                                                     </td>
                                                     <td
                                                         className="truncate whitespace-nowrap px-2 py-3 text-xs font-semibold text-slate-600 dark:text-slate-300"
@@ -2462,7 +2832,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 </table>
                             ) : (
                                 <div className="p-8">
-                                    <EmptyState variant={searchQuery ? 'inventory_search' : 'inventory'} />
+                                    {renderEmptyState()}
                                 </div>
                             )}
                             </div>
@@ -2480,7 +2850,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                         : renderInventoryCard(group.primaryItem)
                                 ))
                             ) : (
-                                <EmptyState variant={searchQuery ? 'inventory_search' : 'inventory'} />
+                                renderEmptyState()
                             )}
                         </div>
                     </>
@@ -2488,35 +2858,48 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
             </div>
 
-            <aside data-pane="detail" className="min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <aside data-pane="detail" className="min-h-0 overflow-y-auto border-l border-slate-200 bg-white px-4 pt-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex min-h-full flex-col">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
                     <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('inventory_group_detail_view')}</h2>
                 </div>
 
                 {selectedDesktopItem ? (
-                    <div className="space-y-4 py-4">
+                    <>
+                    <div className="flex-1 space-y-4 py-4">
                         <div>
-                            <div className="inline-flex rounded-lg bg-emerald-50 px-2 py-1 text-2xs font-bold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-                                {t('inventory_select_item')}
-                            </div>
-                            <h3 className="mt-3 break-words text-lg font-bold leading-tight text-slate-900 dark:text-slate-100">
+                            <h3 className="break-words text-lg font-bold leading-tight text-slate-900 dark:text-slate-100">
                                 {selectedDesktopItem.name}
                             </h3>
-                            <p className="mt-2 font-mono text-xs text-slate-500 dark:text-slate-400">
-                                {selectedDesktopItem.cas_number ? `${t('inventory_meta_cas')}: ${selectedDesktopItem.cas_number}` : t('common_unknown')}
-                            </p>
+                            {selectedDesktopItem.cas_number ? (
+                                <p className="mt-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                                    {`${t('inventory_meta_cas')}: ${selectedDesktopItem.cas_number}`}
+                                </p>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => handleEdit(selectedDesktopItem)}
+                                    className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg border border-dashed border-slate-300 px-2.5 text-xs font-bold text-slate-600 transition-colors hover:border-emerald-400 hover:text-emerald-700 dark:border-slate-600 dark:text-slate-300 dark:hover:text-emerald-300"
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    {t('inventory_add_cas')}
+                                </button>
+                            )}
                         </div>
 
                         <div className="space-y-2.5 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
                             {[
-                                [t('inventory_brand'), selectedDesktopItem.brand || '-'],
-                                [t('inventory_product_number'), selectedDesktopItem.product_number || '-'],
-                                [t('inventory_capacity'), selectedDesktopItem.capacity || '-'],
-                                [t('inventory_quantity'), selectedDesktopItem.quantity],
-                                [t(getManufacturerDateLabelKey(selectedDesktopItem.manufacturer_date_type)), getTrackedManufacturerDate(selectedDesktopItem) || '-'],
-                                [t('inventory_received_date'), selectedDesktopItem.received_date || '-'],
-                                [t('inventory_opened_date'), selectedDesktopItem.opened_date || '-'],
-                                [t('inventory_remaining_amount'), `${selectedDesktopItem.remaining_percent ?? 100}%`],
+                                [t('inventory_brand'), selectedDesktopItem.brand || '—'],
+                                [t('inventory_product_number'), selectedDesktopItem.product_number || '—'],
+                                [t('inventory_capacity'), selectedDesktopItem.capacity || '—'],
+                                [
+                                    t(hasManufacturerDate(selectedDesktopItem.manufacturer_date_type)
+                                        ? getManufacturerDateLabelKey(selectedDesktopItem.manufacturer_date_type)
+                                        : 'manufacturer_date_type_expiry'),
+                                    getTrackedManufacturerDate(selectedDesktopItem) || '—',
+                                ],
+                                [t('inventory_received_date'), selectedDesktopItem.received_date || '—'],
+                                [t('inventory_opened_date'), selectedDesktopItem.opened_date || '—'],
                             ].map(([label, value]) => (
                                 <div key={String(label)} className="flex items-start justify-between gap-4">
                                     <span className="shrink-0 text-slate-500 dark:text-slate-400">{label}</span>
@@ -2524,7 +2907,6 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 </div>
                             ))}
                         </div>
-
                         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('inventory_csv_table_storage')}</h4>
                             <div className="mt-3">{renderStorageBadge(selectedDesktopItem)}</div>
@@ -2572,53 +2954,134 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <ChemicalRegulationPanel casNumber={selectedDesktopItem.cas_number} />
 
                         {readableImportAttributes(selectedDesktopItem.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">{t('inv_imported_source_info')}</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(selectedDesktopItem.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <button
-                                type="button"
-                                onClick={() => handleEdit(selectedDesktopItem)}
-                                className="rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-700"
+                    </div>
+
+                    {/* Quick usage bar: the everyday updates stay one tap away on a phone. */}
+                    <div className="sticky bottom-0 z-10 -mx-4 mt-auto border-t border-slate-200 bg-white/95 px-4 pb-3 pt-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+                        {quickSaveStatus[selectedDesktopItem.id] && (
+                            <span
+                                role="status"
+                                className={`absolute -top-3 right-4 inline-flex h-6 items-center gap-1 rounded-full px-2 text-2xs font-bold text-white shadow-sm ${quickSaveStatus[selectedDesktopItem.id] === 'saved' ? 'bg-emerald-600' : 'bg-slate-500'}`}
                             >
-                                {t('cabinet_card_edit')}
-                            </button>
+                                {quickSaveStatus[selectedDesktopItem.id] === 'saved' ? (
+                                    <>
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        {t('inventory_quick_saved')}
+                                    </>
+                                ) : (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label={t('msds_loading')} />
+                                )}
+                            </span>
+                        )}
+                        <div role="radiogroup" aria-label={t('inventory_remaining_amount')} className="grid grid-cols-4 gap-1.5">
+                            {INVENTORY_REMAINING_LEVELS.map((level) => {
+                                const isSelected = level.stage === getInventoryRemainingStage(selectedDesktopItem.remaining_percent);
+                                return (
+                                    <button
+                                        key={level.stage}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={isSelected}
+                                        onClick={() => {
+                                            if (!isSelected) applyQuickUsageUpdate(selectedDesktopItem, { remaining_percent: level.value });
+                                        }}
+                                        className={`min-h-10 rounded-lg border-2 px-1 py-1 text-2xs font-bold leading-tight transition-colors duration-200 ${isSelected ? level.active : `${level.color} opacity-70`}`}
+                                    >
+                                        {t(`inventory_remaining_stage_${level.stage}_label`)}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                            {selectedDesktopItem._source !== 'cabinet_item' && (
+                                <QuantityStepper
+                                    key={selectedDesktopItem.id}
+                                    value={selectedDesktopItem.quantity}
+                                    onChange={(quantity) => {
+                                        if (quantity !== selectedDesktopItem.quantity) {
+                                            applyQuickUsageUpdate(selectedDesktopItem, { quantity }, QUICK_QUANTITY_SAVE_DELAY_MS);
+                                        }
+                                    }}
+                                    className="h-11 w-[8.5rem] shrink-0 rounded-lg"
+                                />
+                            )}
                             {onStartWasteBatch && (
                                 <button
                                     type="button"
                                     onClick={() => void handleStartWasteBatch(selectedDesktopItem)}
                                     disabled={isStartingDesktopWasteBatch || isDeleting || isBulkDeleting}
-                                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+                                    aria-label={t('inventory_start_waste_batch')}
+                                    className="inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {isStartingDesktopWasteBatch
-                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                        : <FlaskConical className="h-4 w-4" />}
-                                    {isStartingDesktopWasteBatch
-                                        ? t('inventory_start_waste_batch_running')
-                                        : t('inventory_start_waste_batch')}
+                                        ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                                        : <FlaskConical className="h-4 w-4 shrink-0" />}
+                                    <span className="truncate">{t('inventory_dispose_short')}</span>
                                 </button>
                             )}
                             <button
                                 type="button"
-                                onClick={() => handleDeleteClick(selectedDesktopItem)}
-                                disabled={isDeleting || isBulkDeleting || isStartingDesktopWasteBatch}
-                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-bold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300 sm:col-span-2"
+                                onClick={() => handleEdit(selectedDesktopItem)}
+                                className={`inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 ${onStartWasteBatch ? 'shrink-0' : 'flex-1'}`}
                             >
-                                {t('inventory_btn_delete')}
+                                {t('cabinet_card_edit')}
                             </button>
+                            <div className="relative shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsDetailMenuOpen((open) => !open)}
+                                    aria-label={t('inventory_more_actions')}
+                                    aria-haspopup="menu"
+                                    aria-expanded={isDetailMenuOpen}
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                >
+                                    <MoreHorizontal className="h-5 w-5" />
+                                </button>
+                                {isDetailMenuOpen && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            tabIndex={-1}
+                                            aria-hidden="true"
+                                            onClick={() => setIsDetailMenuOpen(false)}
+                                            className="fixed inset-0 z-10 cursor-default"
+                                        />
+                                        <div role="menu" className="absolute bottom-full right-0 z-20 mb-2 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => {
+                                                    setIsDetailMenuOpen(false);
+                                                    handleDeleteClick(selectedDesktopItem);
+                                                }}
+                                                disabled={isDeleting || isBulkDeleting || isStartingDesktopWasteBatch}
+                                                className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                                {t('inventory_btn_delete')}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                         {selectedDesktopWasteBatchError && (
-                            <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+                            <p role="alert" className="mt-2 text-sm font-medium text-red-600 dark:text-red-400">
                                 {selectedDesktopWasteBatchError}
                             </p>
                         )}
                     </div>
+                    </>
                 ) : (
                     <div className="flex min-h-[20rem] items-center justify-center text-center text-sm text-slate-400">
                         {t('inventory_select_item')}
                     </div>
                 )}
+                </div>
             </aside>
 
-            {/* FAB */}
-            {isAddMenuOpen && (
+            {/* FAB (the first-run empty state carries its own register buttons) */}
+            {isAddMenuOpen && items.length > 0 && (
                 <>
                     <button
                         type="button"
@@ -2630,9 +3093,10 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             type="button"
                             onClick={handleOpenScanRegistration}
+                            aria-label={t('inventory_add_menu_scan')}
                             className="animate-slide-up flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 active:translate-y-0 dark:border-blue-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-blue-700 dark:hover:text-blue-300"
                         >
-                            <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_scan')}</span>
+                            <span className="whitespace-nowrap">{t('inventory_add_menu_scan')}</span>
                             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/25">
                                 <Camera className="h-5 w-5" />
                             </span>
@@ -2640,10 +3104,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             type="button"
                             onClick={handleOpenManualRegistration}
+                            aria-label={t('inventory_add_menu_manual')}
                             className="animate-slide-up flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:text-emerald-700 active:translate-y-0 dark:border-emerald-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
                             style={{ animationDelay: '60ms' }}
                         >
-                            <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_manual')}</span>
+                            <span className="whitespace-nowrap">{t('inventory_add_menu_manual')}</span>
                             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
                                 <PackagePlus className="h-5 w-5" />
                             </span>
@@ -2651,6 +3116,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     </div>
                 </>
             )}
+            {items.length > 0 && (
             <button
                 type="button"
                 aria-label={t('inventory_add_menu_open')}
@@ -2663,6 +3129,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             >
                 <Plus className="w-6 h-6" />
             </button>
+            )}
 
             <CameraCaptureModal
                 isOpen={isCameraOpen}
@@ -2742,10 +3209,16 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 </div>
             )}
 
-            {scanToastMessage && (
-                <div className="fixed top-20 left-1/2 z-[130] w-max max-w-[90vw] -translate-x-1/2 animate-in slide-in-from-top-4 fade-in duration-300">
-                    <div className="rounded-full bg-emerald-600 px-5 py-3 text-center text-sm font-medium text-white shadow-lg">
-                        {scanToastMessage}
+            {toast && (
+                <div
+                    role={toast.tone === 'error' ? 'alert' : 'status'}
+                    className="fixed top-20 left-1/2 z-[230] w-max max-w-[90vw] -translate-x-1/2 animate-slide-up"
+                >
+                    <div className={`flex items-center gap-2 rounded-full px-5 py-3 text-center text-sm font-semibold text-white shadow-lg ${toast.tone === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
+                        {toast.tone === 'error'
+                            ? <AlertTriangle className="h-4 w-4 shrink-0" />
+                            : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                        <span>{toast.message}</span>
                     </div>
                 </div>
             )}
@@ -2755,6 +3228,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 isOpen={isFormOpen}
                 onClose={handleCloseForm}
                 locations={locations}
+                cabinets={cabinets}
                 initialData={editingItem}
                 initialDraft={initialDraft}
                 entryMode={formEntryMode}
@@ -2767,94 +3241,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 locations={locations}
                 cabinets={cabinets}
                 onClose={() => setIsCsvImportOpen(false)}
-                onImported={loadData}
+                onImported={() => void loadData({ background: true })}
             />
-
-            {itemActionMenuItem && (
-                <div
-                    className="adaptive-overlay fixed inset-0 z-[140] flex items-end justify-center table:hidden"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="inventory-remove-menu-title"
-                >
-                    <button
-                        type="button"
-                        aria-label={t('btn_close')}
-                        onClick={() => setItemActionMenuItem(null)}
-                        className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
-                    />
-                    <div className="relative z-10 w-full max-w-lg animate-in slide-in-from-bottom-4 rounded-t-3xl bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl dark:bg-slate-900">
-                        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-slate-200 dark:bg-slate-700" />
-                        <div className="flex items-start gap-3 px-1 pb-4">
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
-                                <Trash2 className="h-5 w-5" />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                                <h2 id="inventory-remove-menu-title" className="truncate text-base font-bold text-slate-900 dark:text-slate-100">
-                                    {t('inventory_remove_menu_title', { name: itemActionMenuItem.name })}
-                                </h2>
-                                <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400">
-                                    {t('inventory_remove_menu_desc')}
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                autoFocus
-                                onClick={() => setItemActionMenuItem(null)}
-                                aria-label={t('btn_close')}
-                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-2">
-                            {onStartWasteBatch && (
-                                <button
-                                    type="button"
-                                    onClick={handleActionMenuWasteBatch}
-                                    disabled={isStartingActionMenuWasteBatch || isDeleting || isBulkDeleting}
-                                    className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50/70 p-3 text-left transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-900 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
-                                >
-                                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
-                                        {isStartingActionMenuWasteBatch
-                                            ? <Loader2 className="h-5 w-5 animate-spin" />
-                                            : <FlaskConical className="h-5 w-5" />}
-                                    </span>
-                                    <span className="min-w-0">
-                                        <span className="block text-sm font-bold text-blue-900 dark:text-blue-200">
-                                            {isStartingActionMenuWasteBatch
-                                                ? t('inventory_start_waste_batch_running')
-                                                : t('inventory_start_waste_batch')}
-                                        </span>
-                                        <span className="mt-0.5 block text-xs leading-4 text-blue-700/80 dark:text-blue-300/80">
-                                            {t('inventory_remove_menu_dispose_desc')}
-                                        </span>
-                                    </span>
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={handleActionMenuDelete}
-                                disabled={isDeleting || isBulkDeleting || isStartingActionMenuWasteBatch}
-                                className="flex min-h-[72px] w-full items-center gap-3 rounded-2xl border border-red-200 bg-red-50/70 p-3 text-left transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:bg-red-950/30 dark:hover:bg-red-950/50"
-                            >
-                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm shadow-red-600/20">
-                                    <Trash2 className="h-5 w-5" />
-                                </span>
-                                <span className="min-w-0">
-                                    <span className="block text-sm font-bold text-red-900 dark:text-red-200">
-                                        {t('inventory_btn_delete')}
-                                    </span>
-                                    <span className="mt-0.5 block text-xs leading-4 text-red-700/80 dark:text-red-300/80">
-                                        {t('inventory_remove_menu_delete_desc')}
-                                    </span>
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             <CustomDialog
                 isOpen={!!itemToDelete}

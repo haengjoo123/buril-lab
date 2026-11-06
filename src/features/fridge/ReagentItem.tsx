@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { useGLTF, Text } from '@react-three/drei';
 import { getExpiryStatus, type ExpiryLevel } from '../../utils/expiryStatus';
 import { hasManufacturerDate } from '../../utils/manufacturerDate';
-import { CONTAINER_BASE_WIDTHS } from '../../utils/reagentPlacementMetrics';
+import { CONTAINER_BASE_WIDTHS, MESH_BASE_WIDTHS, TEMPLATE_DEPTHS } from '../../utils/reagentPlacementMetrics';
+import type { StorageCompatMark } from '../../utils/storageCompatibilityChecker';
 
 interface ReagentItemProps {
     item: ReagentPlacement;
@@ -21,9 +22,79 @@ interface ReagentItemProps {
     /** PLACE 모드에서 비선택 선반의 시약 비활성화 시각 처리 */
     dimmed?: boolean;
     isDarkMode?: boolean;
+    /** 보관 호환성: danger/warning은 실선 링, review(확인 필요)는 점선 링 */
+    compatMark?: StorageCompatMark;
 }
 
 export { CONTAINER_BASE_WIDTHS } from '../../utils/reagentPlacementMetrics';
+
+/** 라벨 글자 크기와 줄 너비 (월드 유닛). 두 줄까지 감싼다. */
+const LABEL_FONT_SIZE = 0.16;
+const LABEL_MAX_WIDTH = 0.66;
+/** 두 줄에 들어가는 대략적인 폭 (한글 1, 그 외 0.58 단위) — 영문 약 12자, 한글 약 7자 */
+const LABEL_MAX_UNITS = 7.4;
+
+const isWideChar = (char: string) => {
+    const code = char.codePointAt(0) ?? 0;
+    // Hangul Jamo, CJK symbols/ideographs, Hangul syllables, full-width forms
+    return (code >= 0x1100 && code <= 0x11ff) || (code >= 0x3000 && code <= 0x9fff)
+        || (code >= 0xac00 && code <= 0xd7af) || (code >= 0xff00 && code <= 0xffef);
+};
+
+/** 긴 이름은 두 줄에 들어가는 만큼만 남기고 말줄임 */
+function formatBottleLabel(name: string): string {
+    const trimmed = name.trim();
+    const chars = [...trimmed];
+    const total = chars.reduce((sum, char) => sum + (isWideChar(char) ? 1 : 0.58), 0);
+    if (total <= LABEL_MAX_UNITS) return trimmed;
+
+    const budget = LABEL_MAX_UNITS - 0.6; // room for the ellipsis
+    let used = 0;
+    let result = '';
+    for (const char of chars) {
+        const width = isWideChar(char) ? 1 : 0.58;
+        if (used + width > budget) break;
+        used += width;
+        result += char;
+    }
+    return `${result.trimEnd()}…`;
+}
+
+const COMPAT_RING_COLORS: Record<StorageCompatMark, string> = {
+    danger: '#ef4444',
+    warning: '#f97316',
+    review: '#f59e0b',
+};
+const REVIEW_RING_DASHES = 12;
+
+/** 병 바닥 둘레의 링: 확정 충돌은 실선(빨강/주황), 확인 필요는 호박색 점선 */
+const CompatRing: React.FC<{ mark: StorageCompatMark; radius: number; dimmed: boolean }> = ({ mark, radius, dimmed }) => {
+    const color = COMPAT_RING_COLORS[mark];
+    const opacity = dimmed ? 0.35 : 0.95;
+    const inner = radius;
+    const outer = radius + 0.04;
+
+    if (mark !== 'review') {
+        return (
+            <mesh rotation-x={-Math.PI / 2} position-y={0.012} renderOrder={2}>
+                <ringGeometry args={[inner, outer, 48]} />
+                <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} />
+            </mesh>
+        );
+    }
+
+    const step = (Math.PI * 2) / REVIEW_RING_DASHES;
+    return (
+        <group rotation-x={-Math.PI / 2} position-y={0.012} renderOrder={2}>
+            {Array.from({ length: REVIEW_RING_DASHES }, (_, index) => (
+                <mesh key={index}>
+                    <ringGeometry args={[inner, outer, 6, 1, index * step, step * 0.55]} />
+                    <meshBasicMaterial color={color} transparent opacity={opacity} depthWrite={false} toneMapped={false} />
+                </mesh>
+            ))}
+        </group>
+    );
+};
 
 // --- Geometries are now loaded via GLB models ---
 
@@ -196,7 +267,7 @@ useGLTF.preload('/models/reagents/plastic bottle.glb');
 useGLTF.preload('/models/reagents/glass.glb');
 useGLTF.preload('/models/reagents/square bottle.glb');
 
-export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shelfDepth = 2, isGhost, isValid = true, dimmed = false, isDarkMode = false }) => {
+export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shelfDepth = 2, isGhost, isValid = true, dimmed = false, isDarkMode = false, compatMark }) => {
     const setDraggedItem = useFridgeStore(s => s.setDraggedItem);
     const draggedItem = useFridgeStore(s => s.draggedItem);
     const highlightedItemId = useFridgeStore(s => s.highlightedItemId);
@@ -288,11 +359,14 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
 
     const scale = item.width / (CONTAINER_BASE_WIDTHS[item.template] || 10);
 
-    // 라벨 표시 텍스트 — 최대 6자까지만 표시, 초과 시 말줄임
-    const labelText = useMemo(() => {
-        const name = item.name || '';
-        return name.length > 6 ? name.slice(0, 5) + '…' : name;
-    }, [item.name]);
+    // 라벨 표시 텍스트 — 두 줄(영문 약 12자)까지 표시, 초과 시 말줄임
+    const labelText = useMemo(() => formatBottleLabel(item.name || ''), [item.name]);
+
+    // 호환성 링 반지름: 병의 실제 폭/깊이 기준
+    const compatRingRadius = useMemo(() => {
+        const footprint = Math.max(MESH_BASE_WIDTHS[item.template] || 0.45, TEMPLATE_DEPTHS[item.template] || 0.45);
+        return (footprint * scale) / 2 + 0.05;
+    }, [item.template, scale]);
 
     // 병 높이에 따른 텍스트 Y 위치 (병 상단 약간 위)
     const labelY = useMemo(() => {
@@ -325,8 +399,8 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
             
             // 높이가 정상적으로 계산되었을 경우에만 적용
             if (height > 0 && height !== Infinity) {
-                // anchorY="middle"이고 폰트 크기를 고정(0.16)했으므로, 병 상단에서 띄울 고정 여백 설정
-                const margin = 0.13;
+                // anchorY="bottom"이므로 두 줄 라벨도 병 상단 바로 위에서 위로 쌓인다
+                const margin = 0.05;
                 measuredYRef.current = height + margin;
                 lastScale.current = scale;
                 lastTemplate.current = item.template;
@@ -377,9 +451,12 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
                     })()}
                 />
             </animated.group>
+            {compatMark && !isGhost && !isBeingDragged && (
+                <CompatRing mark={compatMark} radius={compatRingRadius} dimmed={dimmed} />
+            )}
             {/* 시약명 3D 텍스트 라벨 */}
             {isHighlighted && !isGhost && (
-                <mesh position={[0, labelY + 0.28, 0]}>
+                <mesh position={[0, labelY + 0.5, 0]}>
                     <sphereGeometry args={[0.08, 24, 24]} />
                     <meshBasicMaterial color="#a5f3fc" transparent opacity={0.95} toneMapped={false} />
                 </mesh>
@@ -387,11 +464,13 @@ export const ReagentItem: React.FC<ReagentItemProps> = ({ item, shelfWidth, shel
             {showLabel && labelText && (
                 <group ref={labelGroupRef} position={[0, labelY, 0]}>
                     <Text
-                        fontSize={0.16} // 사이즈 고정
+                        fontSize={LABEL_FONT_SIZE} // 사이즈 고정
                         color={labelColor}
                         anchorX="center"
-                        anchorY="middle"
-                        maxWidth={1.5}
+                        anchorY="bottom"
+                        maxWidth={LABEL_MAX_WIDTH}
+                        lineHeight={1.05}
+                        overflowWrap="break-word"
                         textAlign="center"
                         outlineWidth={0.02}
                         outlineColor={labelOutlineColor}

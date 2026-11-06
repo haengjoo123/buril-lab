@@ -353,6 +353,36 @@ export function getPriorityLabel(priority: SafetyCenterRequest['priority']): str
   }
 }
 
+const LINK_SCOPE_LABEL_KEYS: Record<string, string> = {
+  summary: 'sc_scope_summary',
+  risk_detail: 'sc_scope_risk_detail',
+  exports: 'sc_scope_exports',
+};
+
+/** Readable label for a `safety_center_lab_links.scope` value; unknown values pass through. */
+export function getLinkScopeLabel(scope: string): string {
+  const key = LINK_SCOPE_LABEL_KEYS[scope];
+  return key ? i18n.t(key) : scope;
+}
+
+/**
+ * Institution name to prefill the center application with: the current lab's,
+ * otherwise the first membership that has one.
+ */
+export function pickPrefillInstitutionName(
+  memberships: Array<{ lab_id: string; lab?: { institution_name?: string | null } | null }>,
+  currentLabId: string | null,
+): string {
+  const nameOf = (membership: (typeof memberships)[number] | undefined) => membership?.lab?.institution_name?.trim() ?? '';
+  const current = nameOf(memberships.find((membership) => membership.lab_id === currentLabId));
+  if (current) return current;
+  for (const membership of memberships) {
+    const name = nameOf(membership);
+    if (name) return name;
+  }
+  return '';
+}
+
 export function buildSafetyCenterDashboardSummary(input: {
   candidates: SafetyCenterLabCandidate[];
   riskItems: SafetyCenterRiskItem[];

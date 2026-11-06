@@ -9,6 +9,8 @@ import type { InventoryItem } from './inventoryService';
 const mocks = vi.hoisted(() => ({
     rpc: vi.fn(),
     from: vi.fn(),
+    getUser: vi.fn(),
+    getSession: vi.fn(),
     getCurrentUserDisplayName: vi.fn(),
     labState: { currentLabId: '11111111-1111-4111-8111-111111111111' as string | null },
 }));
@@ -17,7 +19,7 @@ vi.mock('./supabaseClient', () => ({
     supabase: {
         rpc: mocks.rpc,
         from: mocks.from,
-        auth: { getUser: vi.fn() },
+        auth: { getUser: mocks.getUser, getSession: mocks.getSession },
     },
 }));
 
@@ -31,7 +33,7 @@ vi.mock('../utils/userDisplayName', () => ({
     getCurrentUserDisplayName: mocks.getCurrentUserDisplayName,
 }));
 
-import { inventoryService } from './inventoryService';
+import { inventoryService, storageLocationService } from './inventoryService';
 
 function inventoryItem(
     id: string,
@@ -91,6 +93,9 @@ describe('inventoryService V2 record removal', () => {
         mocks.from.mockReset();
         mocks.getCurrentUserDisplayName.mockReset();
         mocks.getCurrentUserDisplayName.mockResolvedValue('Researcher Kim');
+        mocks.getUser.mockReset();
+        mocks.getSession.mockReset();
+        mocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'user-1' } } } });
         mocks.labState.currentLabId = '11111111-1111-4111-8111-111111111111';
     });
 
@@ -599,5 +604,127 @@ describe('inventoryService V2 record removal', () => {
         )).rejects.toThrow('100');
 
         expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+
+    it('creates an item with the session user and a cached actor name, without /auth/v1/user', async () => {
+        // A lab no other test used, so the actor cache starts cold.
+        mocks.labState.currentLabId = '99999999-9999-4999-8999-999999999999';
+        const created = { ...inventoryItem('cccccccc-cccc-4ccc-8ccc-cccccccccccc'), _source: undefined };
+        mocks.rpc.mockResolvedValue({ data: created, error: null });
+
+        await inventoryService.createItem({ name: 'Acetone', storage_type: 'other', storage_location_id: 'loc-1' });
+        await inventoryService.createItem({ name: 'Ethanol', storage_type: 'other', storage_location_id: 'loc-1' });
+
+        expect(mocks.getUser).not.toHaveBeenCalled();
+        expect(mocks.getCurrentUserDisplayName).toHaveBeenCalledTimes(1);
+        expect(mocks.rpc).toHaveBeenCalledWith('create_inventory_item_with_dates_atomic', expect.objectContaining({
+            p_name: 'Ethanol',
+            p_actor_user_id: 'user-1',
+            p_actor_name: 'Researcher Kim',
+        }));
+    });
+
+    it('quick-updates quantity and mirrors the remaining level to the linked cabinet bottle', async () => {
+        const item = {
+            ...inventoryItem('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+            storage_type: 'cabinet' as const,
+            cabinet_id: 'cabinet-a',
+        };
+        mocks.rpc.mockResolvedValue({ data: null, error: null });
+        mocks.from.mockImplementation(() => {
+            const chain = {
+                select: () => chain,
+                eq: () => chain,
+                limit: () => chain,
+                maybeSingle: () => Promise.resolve({ data: { id: 'bottle-1' }, error: null }),
+            };
+            return chain;
+        });
+
+        await inventoryService.updateItemUsage(item, { quantity: 0, remaining_percent: 30 });
+
+        expect(mocks.rpc).toHaveBeenNthCalledWith(1, 'update_inventory_item_with_dates_atomic', expect.objectContaining({
+            p_item_id: item.id,
+            p_item_source: 'inventory',
+            p_updates: { quantity: 1, remaining_percent: 30 },
+        }));
+        expect(mocks.rpc).toHaveBeenNthCalledWith(2, 'update_inventory_item_with_dates_atomic', expect.objectContaining({
+            p_item_id: 'bottle-1',
+            p_item_source: 'cabinet_item',
+            p_updates: { remaining_percent: 30 },
+        }));
+    });
+
+    it('never changes the quantity of a cabinet bottle from the quick bar', async () => {
+        mocks.rpc.mockResolvedValue({ data: null, error: null });
+
+        await inventoryService.updateItemUsage(inventoryItem('bottle-2', 'cabinet_item'), { quantity: 3 });
+
+        expect(mocks.rpc).not.toHaveBeenCalled();
+    });
+});
+
+describe('storageLocationService default seeding', () => {
+    const labId = '22222222-2222-4222-8222-222222222222';
+    const seeded = [
+        { id: 'loc-1', lab_id: labId, name: '냉장고', icon: '🧊', created_at: '2026-11-06T00:00:00.000Z' },
+        { id: 'loc-2', lab_id: labId, name: '냉동고', icon: '❄️', created_at: '2026-11-06T00:00:01.000Z' },
+    ];
+
+    function storageLocationsTable(selectResults: Array<{ data: unknown; error: unknown }>, insertResult: { data: unknown; error: unknown }) {
+        const inserts: unknown[] = [];
+        mocks.from.mockImplementation((table: string) => {
+            expect(table).toBe('storage_locations');
+            const chain = {
+                select: () => chain,
+                eq: () => chain,
+                is: () => chain,
+                order: () => Promise.resolve(selectResults.shift() ?? { data: seeded, error: null }),
+                insert: (rows: unknown) => {
+                    inserts.push(rows);
+                    return { select: () => Promise.resolve(insertResult) };
+                },
+            };
+            return chain;
+        });
+        return inserts;
+    }
+
+    beforeEach(() => {
+        mocks.from.mockReset();
+        mocks.getUser.mockReset();
+        mocks.getUser.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+        mocks.labState.currentLabId = labId;
+    });
+
+    it('returns the locations another session seeded when the insert hits the unique constraint', async () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const inserts = storageLocationsTable(
+            [{ data: [], error: null }, { data: [...seeded, { ...seeded[0], id: 'loc-dup' }], error: null }],
+            { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "storage_locations_lab_name_unique"' } },
+        );
+
+        const locations = await storageLocationService.getLocations();
+
+        expect(inserts).toHaveLength(1);
+        expect(locations.map((location) => location.id)).toEqual(['loc-1', 'loc-2']);
+        expect(error).not.toHaveBeenCalled();
+        error.mockRestore();
+    });
+
+    it('seeds a new lab once even when the list and the form load locations together', async () => {
+        const inserts = storageLocationsTable(
+            [{ data: [], error: null }, { data: [], error: null }],
+            { data: seeded, error: null },
+        );
+
+        const [fromList, fromForm] = await Promise.all([
+            storageLocationService.getLocations(),
+            storageLocationService.getLocations(),
+        ]);
+
+        expect(inserts).toHaveLength(1);
+        expect(fromList).toEqual(seeded);
+        expect(fromForm).toEqual(seeded);
     });
 });

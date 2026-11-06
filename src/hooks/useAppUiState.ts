@@ -23,6 +23,9 @@ interface UseAppUiStateResult {
   logRefreshKey: number;
   incrementLogRefreshKey: () => void;
   handleTabClick: (tab: AppTab) => void;
+  /** Bumps whenever the search input should take focus (e.g. re-tapping the active search tab). */
+  searchInputFocusKey: number;
+  requestSearchInputFocus: () => void;
 }
 
 function getActiveTab(pathname: string): AppTab {
@@ -45,10 +48,15 @@ export function useAppUiState({
   const [isScanning, setIsScanning] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [logRefreshKey, setLogRefreshKey] = useState(0);
+  const [searchInputFocusKey, setSearchInputFocusKey] = useState(0);
   const lastCabinetIdRef = useRef<string | null>(activeCabinetId);
   const previousLabIdRef = useRef<string | null | undefined>(currentLabId);
 
   const activeTab = useMemo(() => getActiveTab(pathname), [pathname]);
+
+  const requestSearchInputFocus = useCallback(() => {
+    setSearchInputFocusKey((key) => key + 1);
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'cabinet' && activeCabinetId) {
@@ -92,6 +100,10 @@ export function useAppUiState({
 
     switch (tab) {
       case 'search':
+        if (activeTab === 'search') {
+          requestSearchInputFocus();
+          break;
+        }
         navigate(lastSearchQuery ? `${labAppRoute()}?q=${encodeURIComponent(lastSearchQuery)}` : labAppRoute());
         break;
       case 'logs':
@@ -110,7 +122,7 @@ export function useAppUiState({
         navigate(labAppRoute());
         break;
     }
-  }, [isAuthenticated, lastSearchQuery, navigate]);
+  }, [activeTab, isAuthenticated, lastSearchQuery, navigate, requestSearchInputFocus]);
 
   const incrementLogRefreshKey = useCallback(() => {
     setLogRefreshKey((prev) => prev + 1);
@@ -125,5 +137,7 @@ export function useAppUiState({
     logRefreshKey,
     incrementLogRefreshKey,
     handleTabClick,
+    searchInputFocusKey,
+    requestSearchInputFocus,
   };
 }

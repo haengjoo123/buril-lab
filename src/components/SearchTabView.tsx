@@ -1,37 +1,92 @@
 import { useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
 import { AdaptivePaneLayout } from './AdaptivePaneLayout';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, ChevronRight, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight, RotateCcw } from 'lucide-react';
 import { ResultCard } from './ResultCard';
 import { MediaProductCard } from './MediaProductCard';
 import { MediaProductFilter } from './MediaProductFilter';
+import { InventoryRegistrationModal } from './InventoryRegistrationModal';
 import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
-import type { AnalysisResult, CartItem, WasteLog } from '../types';
+import type { AnalysisResult, CartItem, DisposalCategory } from '../types';
 import type { CabinetSearchResult } from '../services/cabinetService';
 import type { MediaProduct, SortOption } from '../services/mediaProductService';
 import { useOnboardingStore } from '../store/useOnboardingStore';
-import { fetchWasteLogs } from '../services/wasteLogService';
+import { useLabStore } from '../store/useLabStore';
+import { fetchWasteLogs, type WasteLogRecord } from '../services/wasteLogService';
+import { getCategoryDetails } from '../utils/chemicalAnalyzer';
+import { wasteStreamLabel } from '../utils/wasteLabels';
+import type { SearchErrorKind } from '../hooks/useSearchFlow';
 import type { ScannerSelectionMeta } from './Scanner';
 
 type WasteLogChemicalEntry = Partial<CartItem> & {
   chemical?: Partial<CartItem['chemical']> | null;
+  /** V2 waste logs store a flat component snapshot. */
+  chemicalName?: unknown;
   name?: unknown;
 };
 
 const getWasteLogChemicalName = (item: WasteLogChemicalEntry | null | undefined): string | null => {
-  const nestedName = item?.chemical?.name;
-  if (typeof nestedName === 'string' && nestedName.trim()) {
-    return nestedName.trim();
-  }
-
-  const directName = item?.name;
-  if (typeof directName === 'string' && directName.trim()) {
-    return directName.trim();
+  const candidates = [item?.chemical?.name, item?.chemicalName, item?.name];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
   }
 
   return null;
 };
+
+const DISPOSAL_CATEGORY_VALUES = new Set<string>([
+  'ACID',
+  'ALKALI',
+  'NEUTRAL',
+  'ORGANIC_HALOGEN',
+  'ORGANIC_NON_HALOGEN',
+  'HEAVY_METAL',
+  'CYANIDE',
+  'REACTIVE',
+  'SOLID_WASTE',
+  'SPECIAL_HAZARD',
+  'UNKNOWN',
+]);
+
+/** Volume a log contributes to the "today" summary; mass-only or unknown amounts are skipped. */
+const getWasteLogVolumeMl = (log: WasteLogRecord): number => {
+  if (log.voided_at) return 0;
+  if (log.schema_version === 2) {
+    if (log.amount_is_unknown) return 0;
+    if (log.normalized_amount_unit === 'mL' && typeof log.normalized_amount_value === 'number') {
+      return log.normalized_amount_value;
+    }
+    if (log.normalized_amount_unit) return 0;
+  }
+  return typeof log.total_volume_ml === 'number' ? log.total_volume_ml : 0;
+};
+
+interface TodayWasteSummary {
+  count: number;
+  volumeMl: number;
+}
+
+function ResultSkeleton() {
+  return (
+    <div aria-hidden="true" className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+      <div className="border-b border-gray-100 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-800">
+        <div className="h-6 w-2/3 animate-pulse rounded-md bg-slate-200 dark:bg-slate-700" />
+        <div className="mt-2 h-4 w-1/2 animate-pulse rounded-md bg-slate-200/70 dark:bg-slate-700/70" />
+        <div className="mt-2 h-3 w-1/3 animate-pulse rounded-md bg-slate-200/70 dark:bg-slate-700/70" />
+      </div>
+      <div className="flex flex-col items-center gap-3 p-5">
+        <div className="h-7 w-1/2 animate-pulse rounded-md bg-slate-200 dark:bg-slate-700" />
+        <div className="h-4 w-5/6 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
+        <div className="h-4 w-2/3 animate-pulse rounded-md bg-slate-100 dark:bg-slate-800" />
+        <div className="mt-2 h-12 w-full animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+        <div className="h-12 w-full animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+      </div>
+    </div>
+  );
+}
 
 interface SearchTabViewProps {
   cartCount: number;
@@ -40,6 +95,8 @@ interface SearchTabViewProps {
   isLoading: boolean;
   isAiAnalyzing: boolean;
   error: string | null;
+  errorKind?: SearchErrorKind | null;
+  onRetrySearch?: () => void;
   result: AnalysisResult | null;
   scanSelectionMeta?: ScannerSelectionMeta;
   sourceSearchEventId?: string;
@@ -79,6 +136,8 @@ interface SearchTabViewProps {
   onSearchFocusChange?: (isFocused: boolean) => void;
   wasteComponentSearchMode?: boolean;
   searchFocusRequestKey?: number;
+  /** Re-tap of the active search tab / "type it in" from the scanner; a value present at mount is ignored. */
+  inputFocusRequestKey?: number;
   onReturnToWasteBatch?: () => void;
 }
 
@@ -89,6 +148,8 @@ export function SearchTabView({
   isLoading,
   isAiAnalyzing,
   error,
+  errorKind = null,
+  onRetrySearch,
   result,
   scanSelectionMeta,
   sourceSearchEventId,
@@ -128,17 +189,23 @@ export function SearchTabView({
   onSearchFocusChange,
   wasteComponentSearchMode = false,
   searchFocusRequestKey = 0,
+  inputFocusRequestKey = 0,
   onReturnToWasteBatch,
 }: SearchTabViewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // fetchWasteLogs scopes by the current lab, so the home log summary must refetch on a switch.
+  const currentLabId = useLabStore((state) => state.currentLabId);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchFormRef = useRef<HTMLFormElement>(null);
+  const detailPaneRef = useRef<HTMLElement>(null);
   const blurTimeoutRef = useRef<number | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [autocompleteMaxHeight, setAutocompleteMaxHeight] = useState(240);
-  const [recentWasteLogs, setRecentWasteLogs] = useState<WasteLog[]>([]);
+  const [recentWasteLogs, setRecentWasteLogs] = useState<WasteLogRecord[]>([]);
+  const [todayWasteSummary, setTodayWasteSummary] = useState<TodayWasteSummary | null>(null);
   const [isWasteLogsLoading, setIsWasteLogsLoading] = useState(false);
   const [wasteLogsError, setWasteLogsError] = useState(false);
+  const [inventoryDraft, setInventoryDraft] = useState<{ product: MediaProduct; casNumber: string } | null>(null);
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
   const layout = useAdaptiveLayout();
   const [closedResultQuery, setClosedResultQuery] = useState<string | null>(null);
@@ -151,8 +218,39 @@ export function SearchTabView({
     normalizedQuery.length >= 2 &&
     normalizedQuery !== lastSearchQuery &&
     (suggestions.length > 0 || isSuggestionsLoading);
+  const shouldShowRecentDropdown = isSearchFocused && !normalizedQuery && recentSearches.length > 0;
+  const isSearchDropdownOpen = shouldShowAutocomplete || shouldShowRecentDropdown;
+  const isNotFound = Boolean(error) && errorKind === 'not_found';
+  // A miss is a normal outcome (neutral styling); only real failures get the red treatment.
+  const showErrorOutline = Boolean(error) && !isNotFound;
+  const notFoundSuggestions = useMemo(() => {
+    if (!isNotFound || normalizedQuery !== lastSearchQuery) return [];
+    const searched = lastSearchQuery.trim().toLowerCase();
+    return suggestions.filter((suggestion) => suggestion.trim().toLowerCase() !== searched);
+  }, [isNotFound, lastSearchQuery, normalizedQuery, suggestions]);
+  // Only the hero for first-time users; anyone with history sees their recents instead.
+  const showHero = !lastSearchQuery && !isLoading && !isSearchFocused && recentSearches.length === 0;
   const visibleCartItems = useMemo(() => cartItems.slice(0, 3), [cartItems]);
   const hiddenCartCount = Math.max(0, cartItems.length - visibleCartItems.length);
+
+  // Keep the detail pane (with a skeleton) while a new search loads from an open result,
+  // instead of flashing back to the list and then to the new result.
+  const isResultPaneOpen = Boolean(result) && closedResultQuery !== lastSearchQuery;
+  const [holdDetailPane, setHoldDetailPane] = useState(false);
+  const shouldShowDetailPane = isResultPaneOpen || (isLoading && holdDetailPane);
+  if (shouldShowDetailPane !== holdDetailPane) {
+    setHoldDetailPane(shouldShowDetailPane);
+  }
+  const resultIdentity = result ? `${lastSearchQuery}\u0000${result.chemical.id}` : null;
+
+  const closeDetailPane = useCallback(() => {
+    setClosedResultQuery(lastSearchQuery);
+    setHoldDetailPane(false);
+  }, [lastSearchQuery]);
+  const closeDetailPaneRef = useRef(closeDetailPane);
+  useEffect(() => {
+    closeDetailPaneRef.current = closeDetailPane;
+  }, [closeDetailPane]);
 
   const setSearchFocus = useCallback((isFocused: boolean) => {
     setIsSearchFocused(isFocused);
@@ -208,19 +306,74 @@ export function SearchTabView({
     onClearSuggestions?.();
   }, [onClearSuggestions, onSuggestionClick, setSearchFocus]);
 
+  const handleHistorySelect = useCallback((term: string) => {
+    searchInputRef.current?.blur();
+    setSearchFocus(false);
+    // Re-tapping the term of the current result reopens it instead of doing nothing.
+    setClosedResultQuery(null);
+    if (onHistoryClick) {
+      onHistoryClick(term);
+    } else {
+      onSuggestionClick(term);
+    }
+  }, [onHistoryClick, onSuggestionClick, setSearchFocus]);
+
+  const handleRegisterResultInventory = useCallback(() => {
+    if (!result) return;
+    if (onRequireAuth) {
+      onRequireAuth();
+      return;
+    }
+    setInventoryDraft({
+      product: {
+        id: '',
+        brand: null,
+        product_name: result.chemical.name,
+        product_numbers: null,
+        thumbnail_url: null,
+        url_slug: null,
+      },
+      casNumber: result.chemical.casNumber || '',
+    });
+  }, [onRequireAuth, result]);
+
+  // Focus requests (re-tapping the search tab, "type it in" from the scanner, adding a
+  // waste component) first bring the list pane forward, since the input lives there.
+  const [pendingFocusKey, setPendingFocusKey] = useState(0);
+  const queueSearchInputFocus = useCallback(() => {
+    closeDetailPaneRef.current();
+    setPendingFocusKey((key) => key + 1);
+  }, []);
+
   useEffect(() => {
     if (searchFocusRequestKey <= 0) return;
 
-    const animationFrame = window.requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-    });
-
+    const animationFrame = window.requestAnimationFrame(queueSearchInputFocus);
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [searchFocusRequestKey]);
+  }, [queueSearchInputFocus, searchFocusRequestKey]);
+
+  const mountedInputFocusKeyRef = useRef(inputFocusRequestKey);
+  useEffect(() => {
+    if (inputFocusRequestKey === mountedInputFocusKeyRef.current) return;
+
+    const animationFrame = window.requestAnimationFrame(queueSearchInputFocus);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [inputFocusRequestKey, queueSearchInputFocus]);
 
   useEffect(() => {
-    if (!isSearchFocused || !shouldShowAutocomplete) return;
+    if (pendingFocusKey <= 0) return;
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+  }, [pendingFocusKey]);
+
+  // A new result must open at its title, not at the previous result's scroll offset.
+  useLayoutEffect(() => {
+    const detailPane = detailPaneRef.current;
+    if (detailPane) detailPane.scrollTop = 0;
+  }, [resultIdentity]);
+
+  useEffect(() => {
+    if (!isSearchFocused || !isSearchDropdownOpen) return;
 
     updateAutocompleteMaxHeight();
     const viewport = window.visualViewport;
@@ -235,7 +388,7 @@ export function SearchTabView({
       window.removeEventListener('resize', updateAutocompleteMaxHeight);
       window.removeEventListener('scroll', updateAutocompleteMaxHeight, true);
     };
-  }, [isSearchFocused, shouldShowAutocomplete, updateAutocompleteMaxHeight]);
+  }, [isSearchFocused, isSearchDropdownOpen, updateAutocompleteMaxHeight]);
 
   useEffect(() => {
     return () => {
@@ -270,6 +423,7 @@ export function SearchTabView({
     const loadRecentWasteLogs = async () => {
       if (!showRecentWasteLogs) {
         setRecentWasteLogs([]);
+        setTodayWasteSummary(null);
         setWasteLogsError(false);
         setIsWasteLogsLoading(false);
         return;
@@ -279,12 +433,31 @@ export function SearchTabView({
       setWasteLogsError(false);
 
       try {
-        const { logs } = await fetchWasteLogs(3, 0, { sortBy: 'created_at', sortOrder: 'desc' });
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const [{ logs }, todayLogs] = await Promise.all([
+          fetchWasteLogs(3, 0, { sortBy: 'created_at', sortOrder: 'desc' }),
+          fetchWasteLogs(100, 0, {
+            sortBy: 'created_at',
+            sortOrder: 'desc',
+            createdAfter: startOfToday.toISOString(),
+          }).then(({ logs: rows }) => rows).catch(() => null),
+        ]);
         if (!isMounted) return;
         setRecentWasteLogs(logs);
+        if (todayLogs) {
+          const activeTodayLogs = todayLogs.filter((log) => !log.voided_at);
+          setTodayWasteSummary({
+            count: activeTodayLogs.length,
+            volumeMl: activeTodayLogs.reduce((sum, log) => sum + getWasteLogVolumeMl(log), 0),
+          });
+        } else {
+          setTodayWasteSummary(null);
+        }
       } catch {
         if (!isMounted) return;
         setRecentWasteLogs([]);
+        setTodayWasteSummary(null);
         setWasteLogsError(true);
       } finally {
         if (isMounted) {
@@ -298,7 +471,7 @@ export function SearchTabView({
     return () => {
       isMounted = false;
     };
-  }, [showRecentWasteLogs]);
+  }, [showRecentWasteLogs, currentLabId]);
 
   const formatWasteLogDate = (isoDate: string): string => {
     const date = new Date(isoDate);
@@ -312,15 +485,88 @@ export function SearchTabView({
     }).format(date);
   };
 
-  const getWasteLogTitle = (log: WasteLog): string => {
+  const getWasteLogCategoryLabel = (log: WasteLogRecord): string => {
+    if (log.stream_code) return wasteStreamLabel(log.stream_code, i18n.language);
+    if (DISPOSAL_CATEGORY_VALUES.has(log.disposal_category)) {
+      return t(getCategoryDetails(log.disposal_category as DisposalCategory).label);
+    }
+    return log.disposal_category;
+  };
+
+  const getWasteLogTitle = (log: WasteLogRecord): string => {
     const names = (log.chemicals ?? [])
       .map((item) => getWasteLogChemicalName(item))
       .filter((name): name is string => Boolean(name));
 
-    if (names.length === 0) return log.disposal_category;
+    if (names.length === 0) return getWasteLogCategoryLabel(log);
     if (names.length === 1) return names[0];
     return t('cmp_search_log_title_more', { name: names[0], count: names.length - 1, defaultValue: '{{name}} 외 {{count}}개' });
   };
+
+  const todaySummaryLabel = todayWasteSummary && todayWasteSummary.count > 0
+    ? [
+      t('search_logs_today', { count: todayWasteSummary.count }),
+      todayWasteSummary.volumeMl > 0 ? `${Math.round(todayWasteSummary.volumeMl).toLocaleString()} mL` : null,
+    ].filter(Boolean).join(' · ')
+    : t('tab_logs');
+  // A corrected (voided) record is not "what I just disposed" — point at the latest active one.
+  const latestWasteLog = recentWasteLogs.find((log) => !log.voided_at);
+  const showMobileWasteLogLine = showRecentWasteLogs && !isWasteLogsLoading && !wasteLogsError && Boolean(latestWasteLog);
+
+  const searchedTermKey = lastSearchQuery.trim().toLowerCase();
+  const ownedCabinetChips = result && cabinetResults.length > 0 ? (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {cabinetResults.slice(0, 2).map((item) => {
+        const shelfLabel = t('cabinet_shelf_level', { level: item.shelfLevel + 1 });
+        const showItemName = item.itemName.trim().toLowerCase() !== searchedTermKey;
+        return (
+          <button
+            key={item.itemId}
+            type="button"
+            onClick={() => { void onCabinetResultClick(item); }}
+            aria-label={`${item.itemName} · ${item.cabinetName} · ${shelfLabel}`}
+            className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+          >
+            <Box className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate">
+              {showItemName ? `${item.itemName} · ` : ''}{item.cabinetName} · {shelfLabel}
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden="true" />
+          </button>
+        );
+      })}
+      {cabinetResults.length > 2 && (
+        <button
+          type="button"
+          onClick={closeDetailPane}
+          className="inline-flex min-h-9 items-center rounded-full border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+        >
+          +{cabinetResults.length - 2}
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  const renderRecentSearchRows = () => recentSearches.map((term) => (
+    <li key={term} className="flex items-center">
+      <button
+        type="button"
+        onClick={() => handleHistorySelect(term)}
+        className="flex min-h-11 min-w-0 flex-1 items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:text-blue-600 active:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700/50 dark:hover:text-blue-300 dark:active:bg-slate-700"
+      >
+        <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">{term}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onRemoveSearchHistory(term)}
+        aria-label={`${t('search_remove_history')}: ${term}`}
+        className="mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-500 dark:text-slate-500 dark:hover:bg-slate-700"
+      >
+        <X className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </li>
+  ));
 
   return (
     <div
@@ -332,8 +578,8 @@ export function SearchTabView({
         setSearchFocus(false);
       }}
     >
-      <AdaptivePaneLayout onActivePaneChange={pane => setClosedResultQuery(pane === 'primary' ? lastSearchQuery : null)} layout={layout} activePane={result && closedResultQuery !== lastSearchQuery ? 'detail' : 'primary'}
-        onBack={() => setClosedResultQuery(lastSearchQuery)} className="search-panes flex h-full flex-col">
+      <AdaptivePaneLayout onActivePaneChange={pane => (pane === 'primary' ? closeDetailPane() : setClosedResultQuery(null))} layout={layout} activePane={shouldShowDetailPane ? 'detail' : 'primary'}
+        onBack={closeDetailPane} className="search-panes flex h-full flex-col">
 
         <div data-pane="primary" className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4"><div className="flex flex-col gap-6">
       {showOnboardingGuide && (
@@ -352,7 +598,7 @@ export function SearchTabView({
         </div>
       )}
 
-      {!result && !isSearchFocused && (
+      {showHero && (
         <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500 wide:hidden">
           <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 wide:text-4xl wide:tracking-tight">
             {t('app_subtitle_1')}<br />
@@ -404,13 +650,13 @@ export function SearchTabView({
         className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 wide:relative wide:top-auto' : ''}`}
       >
         <div
-          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 wide:rounded-none wide:border-0 wide:bg-transparent wide:p-0 wide:shadow-none wide:group-focus-within:translate-y-0 wide:group-focus-within:shadow-none dark:wide:bg-transparent ${error
+          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 wide:rounded-none wide:border-0 wide:bg-transparent wide:p-0 wide:shadow-none wide:group-focus-within:translate-y-0 wide:group-focus-within:shadow-none dark:wide:bg-transparent ${showErrorOutline
             ? 'border-red-300 dark:border-red-900/50'
             : 'border-slate-100 dark:border-slate-700/70'
             }`}
         >
           <div className={`flex items-center gap-2 transition-colors wide:min-h-[76px] wide:gap-3 wide:rounded-[24px] wide:border wide:px-3 wide:py-2 ${
-            error
+            showErrorOutline
               ? 'wide:border-red-200 wide:bg-red-50 dark:wide:border-red-900/60 dark:wide:bg-red-950/30'
               : 'wide:border-slate-200 wide:bg-slate-50/80 wide:ring-1 wide:ring-white wide:group-focus-within:border-blue-300 wide:group-focus-within:bg-white wide:group-focus-within:ring-blue-100 dark:wide:border-slate-700/70 dark:wide:bg-slate-900/70 dark:wide:ring-slate-700/50 dark:wide:group-focus-within:border-blue-500/60 dark:wide:group-focus-within:bg-slate-900 dark:wide:group-focus-within:ring-blue-500/20'
           }`}>
@@ -506,6 +752,30 @@ export function SearchTabView({
             )}
           </div>
         )}
+
+        {/* Recent searches while the input is focused and empty */}
+        {shouldShowRecentDropdown && (
+          <div
+            className="absolute top-full left-0 right-0 z-50 mt-3 flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg shadow-gray-200/50 animate-in fade-in slide-in-from-top-2 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/50"
+            style={{ maxHeight: `${autocompleteMaxHeight}px` }}
+            // Keep the input focused while removing entries.
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <div className="flex shrink-0 items-center justify-between px-4 pt-2.5 pb-1">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t('guide_example')}</span>
+              <button
+                type="button"
+                onClick={onClearSearchHistory}
+                className="text-xs text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                {t('recent_clear')}
+              </button>
+            </div>
+            <ul className="min-h-0 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-700/50">
+              {renderRecentSearchRows()}
+            </ul>
+          </div>
+        )}
       </form>
 
       {isAiAnalyzing && (
@@ -515,12 +785,44 @@ export function SearchTabView({
         </div>
       )}
 
-      {error && (
-        <div className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm animate-in fade-in slide-in-from-top-1 border border-red-100 dark:border-red-900/30">
-          <AlertCircle className="w-4 h-4" />
-          {error}
+      {error && isNotFound ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 animate-in fade-in slide-in-from-top-1 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-300">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+            <span className="min-w-0">{error}</span>
+          </div>
+          {notFoundSuggestions.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {notFoundSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => handleSuggestionSelect(suggestion)}
+                  className="inline-flex min-h-9 max-w-full items-center rounded-full border border-blue-200 bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 active:bg-blue-100 dark:border-blue-900/60 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                >
+                  <span className="truncate">{suggestion}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      ) : error ? (
+        <div role="alert" className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm animate-in fade-in slide-in-from-top-1 border border-red-100 dark:border-red-900/30">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="min-w-0 flex-1">{error}</span>
+          {errorKind === 'technical' && onRetrySearch && (
+            <button
+              type="button"
+              onClick={onRetrySearch}
+              disabled={isLoading}
+              className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60 dark:border-red-900/60 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-950/40"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              {t('search_retry')}
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {(result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
         <div className="flex flex-col gap-4">
@@ -537,10 +839,11 @@ export function SearchTabView({
               </h3>
               <div className="flex flex-col gap-3">
                 {cabinetResults.map((item) => (
-                  <div
+                  <button
+                    type="button"
                     key={item.itemId}
                     onClick={() => { void onCabinetResultClick(item); }}
-                    className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-emerald-100 dark:border-emerald-900/50 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex flex-col gap-1"
+                    className="w-full text-left bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-emerald-100 dark:border-emerald-900/50 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex flex-col gap-1"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-emerald-800 dark:text-emerald-300">
@@ -554,7 +857,7 @@ export function SearchTabView({
                       <Box className="w-3 h-3" />
                       {t('cabinet_shelf_level', { level: item.shelfLevel + 1 })}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -614,8 +917,14 @@ export function SearchTabView({
             </div>
           )}
         </div>
+      ) : isLoading ? (
+        <div aria-hidden="true" className="flex flex-col gap-3">
+          <div className="h-20 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
+          <div className="h-14 animate-pulse rounded-2xl bg-slate-100/70 dark:bg-slate-800/70" />
+          <div className="h-14 animate-pulse rounded-2xl bg-slate-100/50 dark:bg-slate-800/50" />
+        </div>
       ) : (
-        <div className={`flex flex-col gap-6 transition-opacity duration-300 ${isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+        <div className="flex flex-col gap-6">
           <section className="hidden wide:block">
             <div className="mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('search_preview_title')}</h3>
@@ -635,50 +944,44 @@ export function SearchTabView({
 
           {recentSearches.length > 0 && !isSearchFocused && (
             <section className="wide:hidden">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-slate-800 dark:text-slate-200">{t('guide_example')}</h3>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('guide_example')}</h3>
                 <button
+                  type="button"
                   onClick={onClearSearchHistory}
                   className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                 >
                   {t('recent_clear')}
                 </button>
               </div>
-              <div className="space-y-3">
-                {recentSearches.map((term) => (
-                  <div
-                    key={term}
-                    onClick={() => (onHistoryClick ? onHistoryClick(term) : onSuggestionClick(term))}
-                    className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/70 p-4 rounded-xl flex items-center justify-between shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] hover:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.15)] active:scale-[0.98] transition-all cursor-pointer group"
-                  >
-                    <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 flex items-center gap-2">
-                      <div className="bg-gray-100 dark:bg-slate-700 p-1 rounded-md">
-                        <Search className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                      </div>
-                      {term}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemoveSearchHistory(term);
-                      }}
-                      aria-label={t('search_remove_history')}
-                      className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <span className="sr-only">{t('search_remove_history')}</span>
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <ul className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] divide-y divide-slate-100 dark:divide-slate-700/70 dark:border-slate-700/70 dark:bg-slate-800">
+                {renderRecentSearchRows()}
+              </ul>
             </section>
+          )}
+
+          {showMobileWasteLogLine && latestWasteLog && !isSearchFocused && (
+            <button
+              type="button"
+              onClick={onOpenLogs}
+              className="flex min-h-12 w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-2.5 text-left shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-colors hover:border-emerald-200 active:bg-emerald-50 dark:border-slate-700/70 dark:bg-slate-800 dark:hover:border-emerald-900/60 dark:active:bg-emerald-950/20 wide:hidden"
+            >
+              <ClipboardList className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <span className="shrink-0 text-sm font-bold text-slate-800 dark:text-slate-100">{todaySummaryLabel}</span>
+              <span className="min-w-0 flex-1 text-right">
+                <span className="inline-block max-w-full truncate rounded-full bg-emerald-50 px-2.5 py-1 align-middle text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  {getWasteLogTitle(latestWasteLog)}
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-slate-600" aria-hidden="true" />
+            </button>
           )}
         </div>
       )}
         </div>
 
-        <aside className="mt-5 flex flex-col gap-5">
-          <section className="hidden rounded-lg border wide:block border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <aside className="mt-5 hidden flex-col gap-5 wide:flex">
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('guide_example')}</h3>
               {recentSearches.length > 0 && (
@@ -695,7 +998,7 @@ export function SearchTabView({
                 <button
                   key={term}
                   type="button"
-                  onClick={() => (onHistoryClick ? onHistoryClick(term) : onSuggestionClick(term))}
+                  onClick={() => handleHistorySelect(term)}
                   className="flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-3 text-left text-sm font-semibold text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-800 dark:text-slate-200 dark:hover:border-blue-900/60 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
                 >
                   <Search className="h-4 w-4 shrink-0 text-slate-400" />
@@ -710,7 +1013,7 @@ export function SearchTabView({
             </div>
           </section>
 
-          <section className="hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm wide:block dark:border-slate-800 dark:bg-slate-900">
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -792,7 +1095,10 @@ export function SearchTabView({
                 </div>
               ) : recentWasteLogs.length > 0 ? (
                 <div className="space-y-2">
-                  {recentWasteLogs.map((log) => (
+                  {recentWasteLogs.map((log) => {
+                    const logTitle = getWasteLogTitle(log);
+                    const logCategory = getWasteLogCategoryLabel(log);
+                    return (
                     <button
                       key={log.id}
                       type="button"
@@ -802,17 +1108,20 @@ export function SearchTabView({
                       <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-bold text-slate-800 dark:text-slate-100">
-                          {getWasteLogTitle(log)}
+                          {logTitle}
                         </span>
-                        <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">
-                          {log.disposal_category}
-                        </span>
+                        {logCategory !== logTitle && (
+                          <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">
+                            {logCategory}
+                          </span>
+                        )}
                       </span>
                       <span className="shrink-0 text-2xs font-semibold text-slate-400">
                         {formatWasteLogDate(log.created_at)}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
@@ -823,22 +1132,46 @@ export function SearchTabView({
           )}
         </aside>
         </div>
-        <section data-pane="detail" className="min-h-0 overflow-y-auto p-4">
-          {result ? <>
-              <ResultCard
-                result={result}
-                scanSelectionMeta={scanSelectionMeta}
-                sourceSearchEventId={sourceSearchEventId}
-                onReset={onReset}
-                onAddConfirmed={onResultAddConfirmed}
-                onRequireAuth={onRequireAuth}
-              />
-
-          </> : <div className="flex h-full min-h-48 items-center justify-center text-center text-slate-500">
-            {isLoading ? t('search_loading_suggestions') : t('search_preview_empty_desc')}
-          </div>}
+        <section ref={detailPaneRef} data-pane="detail" className="min-h-0 overflow-y-auto p-4">
+          {result ? (
+            <ResultCard
+              key={resultIdentity ?? undefined}
+              result={result}
+              scanSelectionMeta={scanSelectionMeta}
+              sourceSearchEventId={sourceSearchEventId}
+              onReset={onReset}
+              onAddConfirmed={onResultAddConfirmed}
+              onRequireAuth={onRequireAuth}
+              onRegisterInventory={wasteComponentSearchMode ? undefined : handleRegisterResultInventory}
+              headerAccessory={ownedCabinetChips}
+            />
+          ) : isLoading ? (
+            <div className="flex flex-col gap-3">
+              {isAiAnalyzing && (
+                <div className="flex items-center gap-3 rounded-xl border border-purple-100 bg-purple-50 p-4 text-sm text-purple-600 dark:border-purple-900/30 dark:bg-purple-900/20 dark:text-purple-400">
+                  <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                  <span className="font-medium">{t('app_ai_analyzing')}</span>
+                </div>
+              )}
+              <ResultSkeleton />
+            </div>
+          ) : (
+            <div className="flex h-full min-h-48 items-center justify-center text-center text-slate-500">
+              {t('search_preview_empty_desc')}
+            </div>
+          )}
         </section>
       </AdaptivePaneLayout>
+
+      {inventoryDraft && (
+        <InventoryRegistrationModal
+          product={inventoryDraft.product}
+          initialCasNumber={inventoryDraft.casNumber}
+          isOpen
+          onClose={() => setInventoryDraft(null)}
+          onNavigateToCabinet={onNavigateToCabinet}
+        />
+      )}
     </div>
   );
 }

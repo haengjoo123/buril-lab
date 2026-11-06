@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { ReagentPlacement } from '../types/fridge';
 import { getAutoPlacementBlockReason } from './storagePlacementGate';
-import { checkCabinetCompatibility, checkShelfCompatibility, classifyStoragePlacement, classifyStorageGroups } from './storageCompatibilityChecker';
+import {
+    buildCabinetCompatMarks,
+    checkCabinetCompatibility,
+    checkCabinetReviewConflicts,
+    checkShelfCompatibility,
+    checkShelfReviewConflicts,
+    classifyStoragePlacement,
+    classifyStorageGroups,
+} from './storageCompatibilityChecker';
 
 function createPlacement(overrides: Partial<ReagentPlacement> = {}): ReagentPlacement {
     return {
@@ -89,6 +97,136 @@ describe('authoritative storage classification', () => {
         expect(classification.groups).toEqual(['ORGANIC_PEROXIDE']);
         expect(classification.candidateGroups).toEqual(['OXIDIZER']);
         expect(classification.needsReview).toBe(false);
+    });
+});
+
+describe('corrosive (H314) acid/base resolution', () => {
+    const nitricAcid = createPlacement({
+        id: 'nitric', name: 'Nitric acid', casNo: '7697-37-2', ghsStatus: 'success',
+        hCodes: ['H272', 'H290', 'H314', 'H331'], isAcidic: true, position: 10,
+    });
+    const sodiumHydroxide = createPlacement({
+        id: 'naoh', name: 'Sodium hydroxide', casNo: '1310-73-2', ghsStatus: 'success',
+        hCodes: ['H290', 'H314'], isBasic: true, position: 30,
+    });
+    const toluene = createPlacement({
+        id: 'toluene', name: 'Toluene', casNo: '108-88-3', ghsStatus: 'success',
+        hCodes: ['H225', 'H304', 'H315', 'H336', 'H361d', 'H373'], position: 50,
+    });
+
+    it('classifies a hydroxide with H314 as a base, not an acid', () => {
+        const groups = classifyStorageGroups(sodiumHydroxide);
+        expect(groups).toContain('BASE');
+        expect(groups).not.toContain('INORGANIC_ACID');
+    });
+
+    it.each([
+        ['Ammonia solution 25%', false],
+        ['Triethylamine', false],
+        ['Calcium hydroxide Ca(OH)2', false],
+        ['Unlabeled corrosive', true],
+    ])('uses name or stored base signal for %s', (name, isBasic) => {
+        const groups = classifyStorageGroups(createPlacement({ name, hCodes: ['H314'], isBasic, ghsStatus: 'success' }));
+        expect(groups).toEqual(['BASE']);
+    });
+
+    it('keeps an H314 acid as an acid', () => {
+        expect(classifyStorageGroups(createPlacement({ name: 'Hydrochloric acid', hCodes: ['H290', 'H314', 'H335'] })))
+            .toEqual(['INORGANIC_ACID']);
+        expect(classifyStorageGroups(createPlacement({ name: 'Unknown corrosive', hCodes: ['H314'] })))
+            .toEqual(['INORGANIC_ACID']);
+    });
+
+    it('does not read 수산화 (hydroxide) as 수산 (oxalic acid) or trust the Korean acid flag', () => {
+        const classification = classifyStoragePlacement(createPlacement({
+            name: '수산화나트륨', hCodes: ['H290', 'H314'], isAcidic: true, isBasic: true, ghsStatus: 'success',
+        }));
+        expect(classification.groups).toEqual(['BASE']);
+        expect(classification.candidateGroups).not.toContain('ORGANIC_ACID');
+        expect(classification.candidateGroups).not.toContain('INORGANIC_ACID');
+    });
+
+    it('keeps both groups when acid and base evidence conflict', () => {
+        expect(classifyStorageGroups(createPlacement({ name: 'Triethylamine HCl', hCodes: ['H314'] })))
+            .toEqual(expect.arrayContaining(['INORGANIC_ACID', 'BASE']));
+    });
+
+    it('reports nitric acid next to NaOH as acid–base, not oxidizer–acid', () => {
+        const warnings = checkShelfCompatibility([nitricAcid, sodiumHydroxide]);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatchObject({ ruleId: 'store_acid_base', severity: 'WARNING', messageKey: 'storage_acid_base' });
+    });
+
+    it('reports toluene next to NaOH as flammable–base, not flammable–acid', () => {
+        const warnings = checkShelfCompatibility([toluene, sodiumHydroxide]);
+        expect(warnings.map(w => w.ruleId)).toEqual(['store_flam_base']);
+        expect(warnings[0].severity).toBe('WARNING');
+    });
+
+    it('reports one line per pair at its highest severity', () => {
+        const warnings = checkShelfCompatibility([toluene, nitricAcid]);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0].severity).toBe('DANGER');
+        expect(warnings[0].ruleIds).toEqual(expect.arrayContaining(['store_flam_oxid', 'store_flam_acid']));
+        expect(warnings[0].messageKeys).toEqual(expect.arrayContaining(['storage_flam_oxidizer', 'storage_flam_acid']));
+        expect(warnings[0].itemIds).toEqual(expect.arrayContaining(['toluene', 'nitric']));
+    });
+
+    it('merges same-named bottles into one line that still marks every bottle', () => {
+        const secondToluene = { ...toluene, id: 'toluene-2', position: 70 };
+        const warnings = checkShelfCompatibility([toluene, nitricAcid, secondToluene]);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0].itemIds).toEqual(expect.arrayContaining(['toluene', 'toluene-2', 'nitric']));
+    });
+
+    it('lists the three-bottle shelf without duplicate pairs, danger first', () => {
+        const warnings = checkShelfCompatibility([toluene, nitricAcid, sodiumHydroxide]);
+        expect(warnings.map(w => w.ruleId)).toEqual(['store_flam_oxid', 'store_acid_base', 'store_flam_base']);
+    });
+});
+
+describe('needs-review conflicts when GHS data is missing', () => {
+    const unverified = (id: string, name: string, position: number) => createPlacement({
+        id, name, position, ghsStatus: 'transient_error', hCodes: [],
+    });
+    const nitricAcid = unverified('nitric', 'Nitric acid', 10);
+    const sodiumHydroxide = unverified('naoh', 'Sodium hydroxide', 30);
+    const toluene = unverified('toluene', 'Toluene', 50);
+
+    it('never turns name candidates into confirmed warnings', () => {
+        expect(checkShelfCompatibility([nitricAcid, sodiumHydroxide, toluene])).toEqual([]);
+    });
+
+    it('keeps conflicting candidates visible for review', () => {
+        const conflicts = checkShelfReviewConflicts([nitricAcid, sodiumHydroxide, toluene]);
+        const pairs = conflicts.map(conflict => [...conflict.itemIds].sort().join('+'));
+        expect(pairs).toEqual(expect.arrayContaining(['naoh+nitric', 'nitric+toluene', 'naoh+toluene']));
+
+        const shelves = [{ id: 'shelf-1', items: [nitricAcid, sodiumHydroxide, toluene], dividers: [] }];
+        const marks = buildCabinetCompatMarks(checkCabinetCompatibility(shelves), checkCabinetReviewConflicts(shelves));
+        expect([...marks.values()]).toEqual(['review', 'review', 'review']);
+    });
+
+    it('respects compartment walls for review conflicts too', () => {
+        expect(checkShelfReviewConflicts([nitricAcid, { ...sodiumHydroxide, position: 70 }], [50])).toEqual([]);
+    });
+
+    it('leaves pairs with a confirmed warning to that warning', () => {
+        const verifiedToluene = createPlacement({ id: 'toluene', name: 'Toluene', hCodes: ['H225'], ghsStatus: 'success', position: 50 });
+        const verifiedNitric = createPlacement({ id: 'nitric', name: 'Nitric acid', hCodes: ['H272', 'H314'], ghsStatus: 'success', position: 10 });
+        expect(checkShelfReviewConflicts([verifiedToluene, verifiedNitric])).toEqual([]);
+
+        const shelves = [{ id: 'shelf-1', items: [verifiedToluene, verifiedNitric, sodiumHydroxide], dividers: [] }];
+        const marks = buildCabinetCompatMarks(checkCabinetCompatibility(shelves), checkCabinetReviewConflicts(shelves));
+        expect(marks.get('toluene')).toBe('danger');
+        expect(marks.get('nitric')).toBe('danger');
+        expect(marks.get('naoh')).toBe('review');
+    });
+
+    it('does not presume flammability for a solvent whose GHS data was verified', () => {
+        const dcm = createPlacement({ id: 'dcm', name: 'Dichloromethane', hCodes: ['H315', 'H351'], ghsStatus: 'success', position: 10 });
+        const hcl = createPlacement({ id: 'hcl', name: 'Hydrochloric acid', hCodes: ['H290', 'H314'], ghsStatus: 'success', position: 30 });
+        expect(checkShelfReviewConflicts([dcm, hcl])).toEqual([]);
     });
 });
 

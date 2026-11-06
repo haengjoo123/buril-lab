@@ -7,6 +7,12 @@ interface EmptyStateProps {
     variant: EmptyVariant;
     /** Optional subtitle override */
     subtitle?: string;
+    /** Optional title override */
+    title?: string;
+    /** Optional direct actions rendered under the title (e.g. register / clear filters). */
+    actions?: React.ReactNode;
+    /** Hide the description line, typically when `actions` already say what to do. */
+    hideDescription?: boolean;
 }
 
 /**
@@ -163,7 +169,7 @@ const descKeys: Record<EmptyVariant, string> = {
     audit: 'empty_audit_desc',
 };
 
-export const EmptyState: React.FC<EmptyStateProps> = ({ variant, subtitle }) => {
+export const EmptyState: React.FC<EmptyStateProps> = ({ variant, subtitle, title, actions, hideDescription = false }) => {
     const { t } = useTranslation();
 
     return (
@@ -172,11 +178,18 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ variant, subtitle }) => 
                 {illustrations[variant]}
             </div>
             <h3 className="text-base font-semibold text-slate-500 dark:text-slate-400 mb-1.5 text-center">
-                {t(titleKeys[variant])}
+                {title || t(titleKeys[variant])}
             </h3>
-            <p className="text-sm text-slate-400 dark:text-slate-500 text-center max-w-[260px] leading-relaxed">
-                {subtitle || t(descKeys[variant])}
-            </p>
+            {!hideDescription && (
+                <p className="text-sm text-slate-400 dark:text-slate-500 text-center max-w-[260px] leading-relaxed">
+                    {subtitle || t(descKeys[variant])}
+                </p>
+            )}
+            {actions && (
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    {actions}
+                </div>
+            )}
         </div>
     );
 };

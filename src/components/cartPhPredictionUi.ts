@@ -1,4 +1,4 @@
-import { APPROVED_PH_CATALOG_RECORDS } from '../features/phPrediction'
+import { APPROVED_PH_CATALOG_RECORDS, PH_CATALOG_BY_ID } from '../features/phPrediction'
 import type {
   PhPredictionResult,
   PhPredictionSnapshot,
@@ -24,6 +24,39 @@ export function getApprovedPhCatalogOptions(
   ))
 }
 
+/**
+ * The pH chemical form matters only where a batch can be (or may become) one
+ * aqueous solution, and only when there is an approved form to choose or one
+ * already chosen. Organic solvents and solids never show the picker.
+ */
+export function shouldOfferPhCatalogForm(
+  predictionEnabled: boolean,
+  matrix: WasteMatrix,
+  component: Pick<WasteComponent, 'chemical' | 'phCatalogId' | 'materialForm'>,
+): boolean {
+  if (!predictionEnabled) return false
+  if (matrix !== 'aqueous' && matrix !== 'unknown') return false
+  if (component.phCatalogId) return true
+  if (component.materialForm === 'solid') return false
+  return getApprovedPhCatalogOptions(component).length > 0
+}
+
+/** A readable name for a catalog form id, never the internal slug. */
+export function getPhCatalogFormLabel(
+  phCatalogId: string | undefined,
+  language: string,
+): string | null {
+  if (!phCatalogId) return null
+  const record = PH_CATALOG_BY_ID.get(phCatalogId)
+  if (!record) return null
+  if (language.toLowerCase().startsWith('ko')) {
+    const koreanName = record.names.find((name) => /[가-힣]/.test(name))
+    if (koreanName) return koreanName
+  }
+  const label = record.exactFormLabel.trim()
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : null
+}
+
 /** Blocked, unsupported, or failed results never expose a numeric value. */
 export function canDisplayPhPredictionNumber(result: PhPredictionResult): boolean {
   if (result.status !== 'available' && result.status !== 'approximate') return false
@@ -39,6 +72,11 @@ export function shouldAskPhPredictionCompleteness(
   return predictionEnabled && matrix === 'aqueous' && componentCount > 0
 }
 
+/**
+ * pH prediction says nothing about organic solvent or solid batches, so they
+ * get no pH block at all. Only a mixed phase, which still holds water, gets
+ * the one-line scope notice.
+ */
 export function shouldShowPhPredictionMatrixNotice(
   predictionEnabled: boolean,
   matrix: WasteMatrix,
@@ -46,8 +84,7 @@ export function shouldShowPhPredictionMatrixNotice(
 ): boolean {
   return predictionEnabled
     && componentCount > 0
-    && matrix !== 'aqueous'
-    && matrix !== 'unknown'
+    && matrix === 'mixed_biphasic'
 }
 
 export function createPhPredictionAuditSnapshot(

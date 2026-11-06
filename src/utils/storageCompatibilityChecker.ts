@@ -32,13 +32,37 @@ export type StorageSeverity = 'DANGER' | 'WARNING';
 
 export interface StorageWarning {
     severity: StorageSeverity;
+    /** Strongest rule for this pair. */
     ruleId: string;
     itemA: string;
     itemB: string;
     itemAId?: string;
     itemBId?: string;
     messageKey: string; // i18n translation key
+    /** Every rule this pair matched, strongest first. A pair is reported once. */
+    ruleIds: string[];
+    messageKeys: string[];
+    /** Every placement behind this line (same-named bottles share one line). */
+    itemIds: string[];
 }
+
+/**
+ * A pair that would conflict if unverified name-based candidates are right.
+ * Never a confirmed warning: it only asks the user to verify the data.
+ */
+export interface StorageReviewConflict {
+    ruleId: string;
+    itemA: string;
+    itemB: string;
+    itemAId?: string;
+    itemBId?: string;
+    messageKey: string;
+    ruleIds: string[];
+    messageKeys: string[];
+    itemIds: string[];
+}
+
+export type StorageCompatMark = 'danger' | 'warning' | 'review';
 
 /**
  * Storage Compatibility Group
@@ -70,9 +94,11 @@ const H_CODE_GROUPS: Record<string, StorageGroup[]> = {
     H280: ['COMPRESSED_GAS'], H281: ['COMPRESSED_GAS'],
     // Fatal acute toxicity
     H300: ['ACUTE_TOXIC'], H310: ['ACUTE_TOXIC'], H330: ['ACUTE_TOXIC'],
-    // Corrosive (need further context: acid or base)
-    H314: ['INORGANIC_ACID'], // Default to acid; overridden by name detection
+    // H314 (corrosive) is resolved to acid or base by resolveCorrosiveGroups.
 };
+
+/** Corrosive H-codes that need identity context to tell an acid from a base. */
+const CORROSIVE_H_CODES = new Set(['H314']);
 
 // ════════════════════════════════════════════
 // Name-based Chemical Detection (Korean + English)
@@ -97,7 +123,8 @@ const ORGANIC_ACID_PATTERNS = [
     /acetic\s*acid/i, /아세트산/i, /초산/i,
     /citric\s*acid/i, /구연산/i,
     /formic\s*acid/i, /포름산/i, /개미산/i,
-    /oxalic\s*acid/i, /옥살산/i, /수산/i,
+    // 수산 (oxalic acid) must not match 수산화 (hydroxide).
+    /oxalic\s*acid/i, /옥살산/i, /수산(?!화)/i,
     /trifluoroacetic/i, /트리플루오로아세트산/i, /\bTFA\b/,
     /lactic\s*acid/i, /젖산/i,
     /maleic\s*acid/i, /말레산/i,
@@ -121,6 +148,21 @@ const BASE_PATTERNS = [
     /triethylamine/i, /트리에틸아민/i, /\bTEA\b/,
     /pyridine/i, /피리딘/i,
     /base/i, /alkali/i, /염기/i, /알칼리/i,
+];
+
+/**
+ * Specific evidence that an H314 corrosive is a base. Deliberately narrower
+ * than BASE_PATTERNS (no bare "base"), because it changes an authoritative group.
+ */
+const BASE_EVIDENCE_PATTERNS = [
+    /hydroxide/i, /수산화/,
+    /ammonia/i, /암모니아/,
+    /amine/i, /아민/,
+    /hydrazine/i, /히드라진/, /하이드라진/,
+    /(?:piperid|pyrrolid|morphol)ine/i, /\bDBU\b/,
+    /caustic/i, /가성\s*소다/, /가성\s*칼리/,
+    /\b(?:NaOH|KOH|LiOH|CsOH|NH4OH|NH3)\b/,
+    /\(OH\)\d/, // Ca(OH)2, Ba(OH)2, ...
 ];
 
 /** Common organic solvents (identity hints only; not proof of flammability) */
@@ -270,6 +312,24 @@ export function getPrimaryStorageGroup(groups: StorageGroup[]): StorageGroup {
     return [...groups].sort((a, b) => getStorageGroupPriority(a) - getStorageGroupPriority(b))[0] || 'GENERAL';
 }
 
+function hasAcidNameEvidence(name: string): boolean {
+    return matchesAny(name, INORGANIC_ACID_PATTERNS) || matchesAny(name, ORGANIC_ACID_PATTERNS);
+}
+
+function hasBaseEvidence(item: ReagentPlacement): boolean {
+    return Boolean(item.isBasic) || matchesAny(item.name.trim(), BASE_EVIDENCE_PATTERNS);
+}
+
+/**
+ * H314 says "corrosive", not "acid". With base evidence (hydroxide, amine,
+ * ammonia, the stored isBasic signal) it is a base; without any it stays an
+ * acid as before. Conflicting evidence keeps both groups so no rule is lost.
+ */
+function resolveCorrosiveGroups(item: ReagentPlacement): StorageGroup[] {
+    if (!hasBaseEvidence(item)) return ['INORGANIC_ACID'];
+    return hasAcidNameEvidence(item.name.trim()) ? ['INORGANIC_ACID', 'BASE'] : ['BASE'];
+}
+
 /**
  * Classify a reagent into one or more storage groups.
  * H-codes are authoritative for compatibility groups. Name matching is kept
@@ -297,10 +357,13 @@ export function classifyStoragePlacement(item: ReagentPlacement): StorageClassif
 
     // 1. H-code classification (most reliable)
     if (item.hCodes && item.hCodes.length > 0) {
+        let isCorrosive = false;
         for (const code of item.hCodes) {
+            if (CORROSIVE_H_CODES.has(code)) isCorrosive = true;
             const hGroups = H_CODE_GROUPS[code];
             if (hGroups) hGroups.forEach(g => groups.add(g));
         }
+        if (isCorrosive) resolveCorrosiveGroups(item).forEach(g => groups.add(g));
         if (groups.size > 0) {
             evidence.add('h_codes');
             if (item.casNo) evidence.add('cas_number');
@@ -360,7 +423,9 @@ export function classifyStoragePlacement(item: ReagentPlacement): StorageClassif
 
     // 3. Legacy flags have no persisted provenance, so they are candidates as
     // well rather than authoritative storage groups.
-    if (item.isAcidic) {
+    // The stored acid flag also fires on Korean base names (수산화…), so a base
+    // with no acid name keeps only its base candidate.
+    if (item.isAcidic && (!hasBaseEvidence(item) || hasAcidNameEvidence(nameText))) {
         candidateGroups.add('INORGANIC_ACID');
         evidence.add('acid_base_flags');
     }
@@ -481,85 +546,128 @@ interface ClassifiedItem {
     compartment: number;
 }
 
+interface RuleMatch {
+    rule: StorageRule;
+    first: ReagentPlacement;
+    second: ReagentPlacement;
+}
+
+interface PairFinding {
+    matches: RuleMatch[];
+    itemIds: Set<string>;
+}
+
+type CabinetShelfInput = { id: string; items: ReagentPlacement[]; dividers?: number[] };
+
+const severityRank = (severity: StorageSeverity) => (severity === 'DANGER' ? 0 : 1);
+const ruleOrder = (match: RuleMatch) => severityRank(match.rule.severity) * STORAGE_RULES.length
+    + STORAGE_RULES.indexOf(match.rule);
+
+/** Same-named bottles share one line, so a pair is keyed by its two names. */
+const pairKey = (a: ReagentPlacement, b: ReagentPlacement) =>
+    [a.name.trim().toLowerCase(), b.name.trim().toLowerCase()].sort().join('|');
+
+function matchRules(a: ClassifiedItem, b: ClassifiedItem): RuleMatch[] {
+    const matches: RuleMatch[] = [];
+    for (const rule of STORAGE_RULES) {
+        // Special handling: EXPLOSIVE isolate rule — explosive + any non-explosive
+        if (rule.ruleId === 'store_explosive_any') {
+            const aExplosive = a.groups.includes('EXPLOSIVE');
+            const bExplosive = b.groups.includes('EXPLOSIVE');
+            if (aExplosive !== bExplosive) {
+                matches.push({
+                    rule,
+                    first: aExplosive ? a.item : b.item,
+                    second: aExplosive ? b.item : a.item,
+                });
+            }
+            continue;
+        }
+
+        const match =
+            (a.groups.includes(rule.groupA) && b.groups.includes(rule.groupB)) ||
+            (a.groups.includes(rule.groupB) && b.groups.includes(rule.groupA));
+        if (match) matches.push({ rule, first: a.item, second: b.item });
+    }
+    return matches;
+}
+
 /**
- * Check storage compatibility within each separate shelf compartment.
- * Dividers model physical compartment walls in the 3D cabinet.
- * Returns deduplicated warnings sorted by severity.
+ * Pair every item inside the same shelf compartment and collect matched rules
+ * per pair. Dividers model physical compartment walls in the 3D cabinet.
  */
-export function checkShelfCompatibility(items: ReagentPlacement[], dividers: number[] = []): StorageWarning[] {
+function collectPairFindings(
+    items: ReagentPlacement[],
+    dividers: number[],
+    resolveGroups: (item: ReagentPlacement) => StorageGroup[],
+    includePair: (a: ReagentPlacement, b: ReagentPlacement) => boolean = () => true,
+): PairFinding[] {
     if (items.length < 2) return [];
     const boundaries = normalizeShelfDividers(dividers);
 
-    // Pre-classify all items
     const classified: ClassifiedItem[] = items.map(item => ({
         item,
-        groups: classifyStorageGroups(item),
+        groups: resolveGroups(item),
         // Placement positions are left edges; use the rendered container center.
         compartment: boundaries.filter((boundary) => item.position + item.width / 2 >= boundary).length,
     }));
 
-    const warnings: StorageWarning[] = [];
-    const seen = new Set<string>();
-
-    // Check every pair
+    const findings = new Map<string, PairFinding>();
     for (let i = 0; i < classified.length; i++) {
         for (let j = i + 1; j < classified.length; j++) {
             const a = classified[i];
             const b = classified[j];
-            if (a.compartment !== b.compartment) continue;
+            if (a.compartment !== b.compartment || !includePair(a.item, b.item)) continue;
 
-            // Check each rule
-            for (const rule of STORAGE_RULES) {
-                const match =
-                    (a.groups.includes(rule.groupA) && b.groups.includes(rule.groupB)) ||
-                    (a.groups.includes(rule.groupB) && b.groups.includes(rule.groupA));
+            const matches = matchRules(a, b);
+            if (matches.length === 0) continue;
 
-                // Special handling: EXPLOSIVE isolate rule — explosive + any non-explosive
-                if (rule.ruleId === 'store_explosive_any') {
-                    const aExplosive = a.groups.includes('EXPLOSIVE');
-                    const bExplosive = b.groups.includes('EXPLOSIVE');
-                    if ((aExplosive && !bExplosive) || (!aExplosive && bExplosive)) {
-                        const key = [rule.ruleId, a.item.name, b.item.name].sort().join('|');
-                        if (!seen.has(key)) {
-                            seen.add(key);
-                            warnings.push({
-                                severity: rule.severity,
-                                ruleId: rule.ruleId,
-                                itemA: aExplosive ? a.item.name : b.item.name,
-                                itemB: aExplosive ? b.item.name : a.item.name,
-                                itemAId: aExplosive ? a.item.id : b.item.id,
-                                itemBId: aExplosive ? b.item.id : a.item.id,
-                                messageKey: rule.messageKey,
-                            });
-                        }
-                    }
-                    continue;
-                }
-
-                if (match) {
-                    const key = [rule.ruleId, a.item.name, b.item.name].sort().join('|');
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        warnings.push({
-                            severity: rule.severity,
-                            ruleId: rule.ruleId,
-                            itemA: a.item.name,
-                            itemB: b.item.name,
-                            itemAId: a.item.id,
-                            itemBId: b.item.id,
-                            messageKey: rule.messageKey,
-                        });
-                    }
-                }
+            const key = pairKey(a.item, b.item);
+            const finding = findings.get(key) ?? { matches: [], itemIds: new Set<string>() };
+            for (const match of matches) {
+                if (!finding.matches.some(existing => existing.rule === match.rule)) finding.matches.push(match);
             }
+            finding.itemIds.add(a.item.id);
+            finding.itemIds.add(b.item.id);
+            findings.set(key, finding);
         }
     }
 
-    // Sort: DANGER first, then WARNING
-    warnings.sort((a, b) => {
-        if (a.severity === b.severity) return 0;
-        return a.severity === 'DANGER' ? -1 : 1;
-    });
+    return [...findings.values()].map(finding => ({
+        ...finding,
+        matches: [...finding.matches].sort((x, y) => ruleOrder(x) - ruleOrder(y)),
+    }));
+}
+
+function summarizeFinding(finding: PairFinding) {
+    const [primary] = finding.matches;
+    return {
+        ruleId: primary.rule.ruleId,
+        itemA: primary.first.name,
+        itemB: primary.second.name,
+        itemAId: primary.first.id,
+        itemBId: primary.second.id,
+        messageKey: primary.rule.messageKey,
+        ruleIds: finding.matches.map(match => match.rule.ruleId),
+        messageKeys: [...new Set(finding.matches.map(match => match.rule.messageKey))],
+        itemIds: [...finding.itemIds],
+    };
+}
+
+/**
+ * Check storage compatibility within each separate shelf compartment.
+ * One line per pair at its highest severity, sorted DANGER first.
+ */
+export function checkShelfCompatibility(items: ReagentPlacement[], dividers: number[] = []): StorageWarning[] {
+    const warnings: StorageWarning[] = collectPairFindings(items, dividers, classifyStorageGroups)
+        .map(finding => ({
+            severity: finding.matches[0].rule.severity,
+            ...summarizeFinding(finding),
+        }));
+
+    // Sort: DANGER first, then WARNING, then by rule order for a stable list.
+    const ruleIndex = (ruleId: string) => STORAGE_RULES.findIndex(rule => rule.ruleId === ruleId);
+    warnings.sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || ruleIndex(a.ruleId) - ruleIndex(b.ruleId));
 
     return warnings;
 }
@@ -569,7 +677,7 @@ export function checkShelfCompatibility(items: ReagentPlacement[], dividers: num
  * Returns a map of shelf ID → warnings.
  */
 export function checkCabinetCompatibility(
-    shelves: { id: string; items: ReagentPlacement[]; dividers?: number[] }[]
+    shelves: CabinetShelfInput[]
 ): Map<string, StorageWarning[]> {
     const results = new Map<string, StorageWarning[]>();
     for (const shelf of shelves) {
@@ -579,6 +687,72 @@ export function checkCabinetCompatibility(
         }
     }
     return results;
+}
+
+/**
+ * Pairs that would conflict if the unverified name candidates of a reagent
+ * awaiting review (e.g. a failed GHS lookup) are right. These are never
+ * warnings; they keep the problem visible as "needs review" instead of silent.
+ * Pairs already covered by a confirmed warning are left to that warning.
+ */
+export function checkShelfReviewConflicts(items: ReagentPlacement[], dividers: number[] = []): StorageReviewConflict[] {
+    if (items.length < 2) return [];
+    const classifications = new Map(items.map(item => [item.id, classifyStoragePlacement(item)] as const));
+    const confirmedPairs = new Set(
+        collectPairFindings(items, dividers, classifyStorageGroups)
+            .map(finding => pairKey(finding.matches[0].first, finding.matches[0].second)),
+    );
+
+    const reviewGroups = (item: ReagentPlacement): StorageGroup[] => {
+        const classification = classifications.get(item.id)!;
+        const groups = new Set<StorageGroup>(classification.groups.filter(group => group !== 'GENERAL'));
+        if (!classification.needsReview) return [...groups];
+        classification.candidateGroups.forEach(group => groups.add(group));
+        // Without verified GHS data a common solvent may well be flammable.
+        if (classification.candidateGroups.includes('ORGANIC_SOLVENT') && item.ghsStatus !== 'success') {
+            groups.add('FLAMMABLE');
+        }
+        return [...groups];
+    };
+
+    return collectPairFindings(
+        items,
+        dividers,
+        reviewGroups,
+        (a, b) => (classifications.get(a.id)!.needsReview || classifications.get(b.id)!.needsReview)
+            && !confirmedPairs.has(pairKey(a, b)),
+    ).map(summarizeFinding);
+}
+
+export function checkCabinetReviewConflicts(
+    shelves: CabinetShelfInput[]
+): Map<string, StorageReviewConflict[]> {
+    const results = new Map<string, StorageReviewConflict[]>();
+    for (const shelf of shelves) {
+        const conflicts = checkShelfReviewConflicts(shelf.items, shelf.dividers || []);
+        if (conflicts.length > 0) results.set(shelf.id, conflicts);
+    }
+    return results;
+}
+
+/** Per-bottle marker for the 3D view: confirmed conflicts win over review. */
+export function buildCabinetCompatMarks(
+    warningMap: Map<string, StorageWarning[]>,
+    reviewMap: Map<string, StorageReviewConflict[]>,
+): Map<string, StorageCompatMark> {
+    const marks = new Map<string, StorageCompatMark>();
+    warningMap.forEach(warnings => warnings.forEach(warning => {
+        const mark: StorageCompatMark = warning.severity === 'DANGER' ? 'danger' : 'warning';
+        warning.itemIds.forEach(id => {
+            if (marks.get(id) !== 'danger') marks.set(id, mark);
+        });
+    }));
+    reviewMap.forEach(conflicts => conflicts.forEach(conflict => {
+        conflict.itemIds.forEach(id => {
+            if (!marks.has(id)) marks.set(id, 'review');
+        });
+    }));
+    return marks;
 }
 
 /**

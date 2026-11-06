@@ -19,6 +19,7 @@ import {
     inferWasteMatrixFromComponents,
     normalizeWasteAmount,
     deriveWasteHazardFlags,
+    reconcileUserMatrix,
 } from '../utils/wasteBatch';
 import { deriveWizardMatrixFromComponents } from '../utils/wasteBatchWizard';
 import { searchHistoryService } from '../services/searchHistoryService';
@@ -1127,11 +1128,14 @@ export const useWasteStore = create<WasteState>((set, get) => ({
             phCatalogId: options?.phCatalogId,
         });
         const components = [...state.batch.components, component];
-        const inferredMatrix = state.batch.matrixSource === 'user'
+        const userMatrix = state.batch.matrixSource === 'user'
+            ? reconcileUserMatrix(state.batch.matrix, state.batch.components, components)
+            : null;
+        const inferredMatrix = userMatrix
             ? null
             : inferWasteMatrixFromComponents(components);
-        const nextMatrix = state.batch.matrixSource === 'user'
-            ? state.batch.matrix
+        const nextMatrix = userMatrix
+            ? userMatrix.matrix
             : inferredMatrix ?? 'unknown';
         const batch = touchBatch({
             ...state.batch,
@@ -1144,8 +1148,8 @@ export const useWasteStore = create<WasteState>((set, get) => ({
                 ? 'none'
                 : state.batch.additionalComponentsStatus,
             matrix: nextMatrix,
-            matrixSource: state.batch.matrixSource === 'user'
-                ? 'user'
+            matrixSource: userMatrix
+                ? userMatrix.matrixSource
                 : inferredMatrix ? 'automatic' : 'unresolved',
             totalAmount: reconcileTotalAmountWithComponents(
                 amountAfterAutomaticMatrixChange(state.batch, nextMatrix),
@@ -1207,26 +1211,36 @@ export const useWasteStore = create<WasteState>((set, get) => ({
         // A form change can turn a component solid or drop its solution, so it re-derives the matrix too.
         const compositionChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionContext')
             || Object.prototype.hasOwnProperty.call(patch, 'materialForm');
-        const wizardMatrix = compositionChanged
+        // A matrix the user chose is never re-derived from components; only
+        // newly added halogen evidence can raise it or reopen the question.
+        const userMatrix = state.batch.matrixSource === 'user'
+            ? reconcileUserMatrix(state.batch.matrix, state.batch.components, components)
+            : null;
+        const wizardMatrix = compositionChanged && !userMatrix
             ? deriveWizardMatrixFromComponents(components)
             : null;
-        const nextMatrix = wizardMatrix
-            ? wizardMatrix.requiresBatchConfirmation
-                ? 'unknown'
-                : wizardMatrix.matrix ?? 'unknown'
-            : state.batch.matrix;
+        const nextMatrix = userMatrix
+            ? userMatrix.matrix
+            : wizardMatrix
+                ? wizardMatrix.requiresBatchConfirmation
+                    ? 'unknown'
+                    : wizardMatrix.matrix ?? 'unknown'
+                : state.batch.matrix;
+        const matrixChanged = nextMatrix !== state.batch.matrix;
         const batch = touchBatch({
             ...state.batch,
             components,
             matrix: nextMatrix,
-            matrixSource: wizardMatrix
-                ? wizardMatrix.requiresBatchConfirmation || !wizardMatrix.matrix
-                    ? 'unresolved'
-                    : 'automatic'
-                : state.batch.matrixSource,
-            totalAmount: volumeChanged || compositionChanged
+            matrixSource: userMatrix
+                ? userMatrix.matrixSource
+                : wizardMatrix
+                    ? wizardMatrix.requiresBatchConfirmation || !wizardMatrix.matrix
+                        ? 'unresolved'
+                        : 'automatic'
+                    : state.batch.matrixSource,
+            totalAmount: volumeChanged || compositionChanged || matrixChanged
                 ? reconcileTotalAmountWithComponents(
-                    compositionChanged
+                    compositionChanged || matrixChanged
                         ? amountAfterAutomaticMatrixChange(state.batch, nextMatrix)
                         : state.batch.totalAmount,
                     components,
@@ -1468,16 +1482,26 @@ export const useWasteStore = create<WasteState>((set, get) => ({
 
     recentSearches: [],
     loadSearchHistory: async () => {
-        const history = await searchHistoryService.getRecentSearches(5);
-        set({ recentSearches: history });
+        // Over-fetch so case-only duplicates ("Sodium acetate"/"sodium acetate") don't shrink the list.
+        const history = await searchHistoryService.getRecentSearches(10);
+        const seen = new Set<string>();
+        set({
+            recentSearches: history.filter((item) => {
+                const key = item.trim().toLowerCase();
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            }).slice(0, 5),
+        });
     },
     addSearchHistory: (query) => {
         const normalized = query.trim();
         if (!normalized) return;
+        const key = normalized.toLowerCase();
         set((state) => ({
             recentSearches: [
                 normalized,
-                ...state.recentSearches.filter((item) => item !== normalized),
+                ...state.recentSearches.filter((item) => item.trim().toLowerCase() !== key),
             ].slice(0, 5),
         }));
         searchHistoryService.addSearch(normalized).catch(console.error);

@@ -59,6 +59,13 @@ export function CustomDialog({
 
     const handleConfirm = () => {
         if (isConfirmLoading) return;
+        if (type === 'alert') {
+            // An alert's only button must always dismiss it. Close first so a follow-up
+            // dialog opened from onConfirm is not immediately closed again.
+            onClose();
+            onConfirm?.();
+            return;
+        }
         if (onConfirm) onConfirm();
         else onClose();
     };
@@ -70,6 +77,10 @@ export function CustomDialog({
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
+            // A focused button handles Enter natively (e.g. Enter on 취소 must cancel).
+            if (e.target instanceof HTMLButtonElement) return;
+            // Without a focused button, Enter never triggers a destructive confirm.
+            if (isDestructive && type !== 'prompt') return;
             e.preventDefault();
             handleConfirm();
         } else if (e.key === 'Escape') {

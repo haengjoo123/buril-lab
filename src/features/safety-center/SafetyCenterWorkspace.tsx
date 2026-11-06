@@ -15,6 +15,7 @@ import {
   Layers3,
   Loader2,
   LockKeyhole,
+  LogOut,
   MessageSquare,
   RefreshCw,
   Search,
@@ -32,9 +33,11 @@ import {
   assessRiskItem,
   buildSafetyCenterDashboardSummary,
   filterRiskItems,
+  getLinkScopeLabel,
   getPriorityLabel,
   getRequestStatusLabel,
   getRiskFlagLabel,
+  pickPrefillInstitutionName,
   type SafetyCenterRiskFlag,
 } from './safetyCenterUtils';
 import type {
@@ -50,10 +53,17 @@ import type {
   SafetyCenterWasteLog,
 } from './types';
 import { getSafetyCenterSectionFromPath } from './safetyCenterNavigation';
+import {
+  getSafetyCenterShellMode,
+  useReportSafetyCenterShellMode,
+  useSafetyCenterSignOut,
+} from './safetyCenterShellContext';
 import { WastePolicyDistributionPanel } from './WastePolicyDistributionPanel';
 import { isWasteV2Enabled } from '../../config/featureFlags';
 import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { AppSelect } from '../../components/AppSelect';
+import { useLabStore } from '../../store/useLabStore';
+import { labService } from '../../services/labService';
 
 type DatasetKey = 'risks' | 'waste' | 'audit';
 
@@ -265,6 +275,7 @@ export function SafetyCenterWorkspace() {
   const [members, setMembers] = useState<SafetyCenterMember[]>([]);
   const [exportLogs, setExportLogs] = useState<SafetyCenterExportLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedCenters, setHasLoadedCenters] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestDraft, setRequestDraft] = useState<RequestDraft | null>(null);
@@ -272,14 +283,23 @@ export function SafetyCenterWorkspace() {
   const activeCenter = centers.find((center) => center.id === activeCenterId) ?? centers[0] ?? null;
   const canManageCenter = activeCenter?.member_role === 'owner' || activeCenter?.member_role === 'manager';
   const canExport = canManageCenter;
+  const shellMode = getSafetyCenterShellMode({ hasLoadedCenters, centerStatus: activeCenter?.status });
+  useReportSafetyCenterShellMode(shellMode);
+  // Before approval the screen is a single form/pending card, so the section
+  // header (title + refresh) would only duplicate it.
+  const showWorkspaceHeader = shellMode === 'active' || centers.length > 1;
 
   const loadCenters = useCallback(async () => {
-    const nextCenters = await safetyCenterService.getMyCenters();
-    setCenters(nextCenters);
-    setActiveCenterId((current) => {
-      if (current && nextCenters.some((center) => center.id === current)) return current;
-      return nextCenters[0]?.id ?? '';
-    });
+    try {
+      const nextCenters = await safetyCenterService.getMyCenters();
+      setCenters(nextCenters);
+      setActiveCenterId((current) => {
+        if (current && nextCenters.some((center) => center.id === current)) return current;
+        return nextCenters[0]?.id ?? '';
+      });
+    } finally {
+      setHasLoadedCenters(true);
+    }
   }, []);
 
   const loadCenterData = useCallback(async (center: SafetyCenter | null) => {
@@ -526,7 +546,7 @@ export function SafetyCenterWorkspace() {
     }
   }, [activeCenter, activeSection, approvedLabs, buildExportRows, loadCenterData, t]);
 
-  if (isLoading && centers.length === 0) {
+  if (!hasLoadedCenters || (isLoading && centers.length === 0)) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
@@ -536,45 +556,47 @@ export function SafetyCenterWorkspace() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100">
-      <div className="border-b border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-950">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <ShieldCheck className="h-4 w-4 text-blue-600" />
-              {t('sc_center_title')}
+      {showWorkspaceHeader && (
+        <div className="border-b border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-normal text-slate-500 dark:text-slate-400">
+                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                {t('sc_center_title')}
+              </div>
+              <h1 className="mt-1 text-2xl font-medium tracking-tight text-slate-950 dark:text-white">
+                {activeCenter?.center_name ?? t('sc_open_center')}
+              </h1>
+              {activeCenter && (
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {activeCenter.institution_name} · {activeCenter.institution_domain} · {activeCenter.status === 'approved' ? t('sc_link_approved') : activeCenter.status === 'pending' ? t('sc_status_pending_approval') : t('sc_link_rejected')}
+                </p>
+              )}
             </div>
-            <h1 className="mt-1 text-2xl font-medium tracking-tight text-slate-950 dark:text-white">
-              {activeCenter?.center_name ?? t('sc_open_center')}
-            </h1>
-            {activeCenter && (
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {activeCenter.institution_name} · {activeCenter.institution_domain} · {activeCenter.status === 'approved' ? t('sc_link_approved') : activeCenter.status === 'pending' ? t('sc_status_pending_approval') : t('sc_link_rejected')}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {centers.length > 1 && (
-              <AppSelect
-                value={activeCenter?.id ?? ''}
-                onChange={setActiveCenterId}
-                options={centers.map((center) => ({ value: center.id, label: center.center_name }))}
-                className="min-w-[160px]"
-                buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal !text-slate-700 dark:!border-slate-700 dark:!bg-slate-900 dark:!text-slate-100"
-              />
-            )}
-            <button
-              type="button"
-              onClick={() => void loadCenterData(activeCenter)}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-            >
-              <RefreshCw className="h-4 w-4" />
-              {t('sc_refresh')}
-            </button>
+            <div className="flex items-center gap-2">
+              {centers.length > 1 && (
+                <AppSelect
+                  value={activeCenter?.id ?? ''}
+                  onChange={setActiveCenterId}
+                  options={centers.map((center) => ({ value: center.id, label: center.center_name }))}
+                  className="min-w-[160px]"
+                  buttonClassName="!min-h-10 !rounded-lg !border-slate-200 !bg-white !px-3 !text-sm !font-normal !text-slate-700 dark:!border-slate-700 dark:!bg-slate-900 dark:!text-slate-100"
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => void loadCenterData(activeCenter)}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+              >
+                <RefreshCw className="h-4 w-4" />
+                {t('sc_refresh')}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <main className="min-h-0 flex-1 overflow-y-auto p-6">
+      <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
         {error && (
           <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-normal text-red-700">
             {error}
@@ -584,7 +606,12 @@ export function SafetyCenterWorkspace() {
         {!activeCenter ? (
           <CreateCenterPanel onCreated={() => void reloadAll()} />
         ) : activeCenter.status !== 'approved' ? (
-          <PendingCenterPanel center={activeCenter} members={members} />
+          <PendingCenterPanel
+            center={activeCenter}
+            members={members}
+            isRefreshing={isLoading}
+            onRefresh={() => void reloadAll()}
+          />
         ) : activeSection === 'labs' ? (
           <LabsPage
             candidates={candidates}
@@ -664,12 +691,31 @@ export function SafetyCenterWorkspace() {
 
 function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
   const { t } = useTranslation();
-  const [institutionName, setInstitutionName] = useState('');
+  const currentLabId = useLabStore((state) => state.currentLabId);
+  const myLabs = useLabStore((state) => state.myLabs);
+  const [institutionName, setInstitutionName] = useState(() => pickPrefillInstitutionName(myLabs, currentLabId));
   const [institutionDomain, setInstitutionDomain] = useState('');
   const [centerName, setCenterName] = useState('');
   const [verificationDocument, setVerificationDocument] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const needsLabFetch = myLabs.length === 0;
+
+  // /center is usually opened directly, before the lab switcher has filled the
+  // store, so look the memberships up once to prefill the institution name.
+  useEffect(() => {
+    if (!needsLabFetch) return;
+    let cancelled = false;
+    labService.getMyLabs()
+      .then((labs) => {
+        const name = pickPrefillInstitutionName(labs, currentLabId);
+        if (!cancelled && name) setInstitutionName((current) => current || name);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [currentLabId, needsLabFetch]);
 
   const handleVerificationDocumentChange = (file: File | null) => {
     setError(null);
@@ -717,13 +763,13 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <div className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
       <div className="flex items-start gap-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
           <Building2 className="h-6 w-6" />
         </div>
         <div>
-          <h2 className="text-xl font-medium text-slate-950 dark:text-white">{t('sc_create_title')}</h2>
+          <h1 className="text-xl font-medium text-slate-950 dark:text-white">{t('sc_create_title')}</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
             {t('sc_create_desc')}
           </p>
@@ -814,18 +860,37 @@ function CreateCenterPanel({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function PendingCenterPanel({ center, members }: { center: SafetyCenter; members: SafetyCenterMember[] }) {
+function PendingCenterPanel({
+  center,
+  members,
+  isRefreshing,
+  onRefresh,
+}: {
+  center: SafetyCenter;
+  members: SafetyCenterMember[];
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
   const { t } = useTranslation();
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="rounded-lg border border-amber-100 bg-amber-50 p-6 text-amber-900">
+      <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100 sm:p-6">
         <div className="flex items-start gap-4">
-          <Clock className="mt-1 h-6 w-6" />
+          <Clock className="mt-1 h-6 w-6 shrink-0" />
           <div>
-            <h2 className="text-xl font-medium">{t('sc_pending_title')}</h2>
+            <h1 className="text-xl font-medium">{t('sc_pending_title')}</h1>
             <p className="mt-2 text-sm leading-6">
               {t('sc_pending_body', { name: center.center_name })}
             </p>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-900/40"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {t('sc_refresh')}
+            </button>
           </div>
         </div>
       </div>
@@ -1102,7 +1167,7 @@ function LabsPage({
                         {linkStatusLabel(candidate.link_status)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{(candidate.link_scope ?? ['summary']).join(', ')}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{(candidate.link_scope ?? ['summary']).map(getLinkScopeLabel).join(', ')}</td>
                     <td className="px-4 py-3 text-xs text-slate-500">{formatDateTime(candidate.responded_at ?? candidate.requested_at ?? candidate.created_at)}</td>
                     <td className="px-4 py-3 text-right">
                       {candidate.link_status === 'approved' ? (
@@ -1776,6 +1841,12 @@ function SettingsPage({
   canManage: boolean;
 }) {
   const { t } = useTranslation();
+  const onSignOut = useSafetyCenterSignOut();
+  const statusLabel = center.status === 'approved'
+    ? t('sc_link_approved')
+    : center.status === 'pending'
+      ? t('sc_status_pending_approval')
+      : t('sc_link_rejected');
   return (
     <div className="space-y-5">
       {isWasteV2Enabled && (
@@ -1789,7 +1860,7 @@ function SettingsPage({
             [t('sc_center_name'), center.center_name],
             [t('sc_req_institution_name'), center.institution_name],
             [t('sc_institution_domain'), center.institution_domain],
-            [t('sc_approval_status'), center.status],
+            [t('sc_approval_status'), statusLabel],
             [t('sc_opened_on'), formatDate(center.created_at)],
             [t('sc_approved_on'), formatDate(center.approved_at)],
           ].map(([label, value]) => (
@@ -1821,6 +1892,16 @@ function SettingsPage({
         </section>
       </aside>
       </div>
+      {onSignOut && (
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-red-950/30 dark:hover:text-red-300 lg:hidden"
+        >
+          <LogOut className="h-4 w-4" />
+          {t('sc_logout')}
+        </button>
+      )}
     </div>
   );
 }

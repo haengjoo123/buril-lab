@@ -178,6 +178,46 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
     onImported,
 }) => {
     const { t } = useTranslation();
+
+    // Export in the import template's column layout so a list can be edited and re-imported.
+    const buildRowsForExport = () => items.map((item) => {
+        const shelfLabel = item.storage_type === 'cabinet' && typeof item.shelf_level === 'number'
+            ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})`
+            : '';
+        const storageLabel = item.storage_type === 'cabinet'
+            ? `${item.cabinet_name || t('inventory_loc_cabinet')}${shelfLabel}`
+            : (translateLocationName(item.storage_location_name || '', t) || t('inventory_loc_other'));
+
+        return {
+            [t('inventory_product_name')]: item.name || '',
+            [t('inventory_brand')]: item.brand || '',
+            [t('inventory_product_number')]: item.product_number || '',
+            [t('inventory_cas_number')]: item.cas_number || '',
+            [t('inventory_quantity')]: item.quantity ?? '',
+            [t('inventory_capacity')]: item.capacity || '',
+            [t('inventory_storage_type')]: item.storage_type === 'cabinet' ? t('inventory_loc_cabinet') : t('inventory_loc_other'),
+            [t('inventory_storage_location')]: storageLabel,
+            [t('manufacturer_date_type_label')]: t(getManufacturerDateLabelKey(item.manufacturer_date_type)),
+            [t('manufacturer_date_label')]: hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date || '' : '',
+            [t('inventory_received_date')]: item.received_date || '',
+            [t('inventory_opened_date')]: item.opened_date || '',
+            [t('inventory_memo')]: item.memo || '',
+        };
+    });
+
+    const getExportDateToken = () => {
+        const today = new Date();
+        return `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    };
+
+    const handleInventoryExcelDownload = async () => {
+        const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
+        await downloadRowsAsXlsx(buildRowsForExport(), 'Inventory', `inventory_list_${getExportDateToken()}.xlsx`);
+    };
+
+    const handleInventoryCsvDownload = async () => {
+        await downloadRowsAsCsv(buildRowsForExport(), `inventory_list_${getExportDateToken()}.csv`);
+    };
     const [step, setStep] = useState<CsvStep>('upload');
     const [rawCsvData, setRawCsvData] = useState<RawCsvData | null>(null);
     const [mapping, setMapping] = useState<ColumnMapping>({});
@@ -568,47 +608,6 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
         */
     };
 
-    const buildRowsForExport = () => items.map((item) => {
-            const shelfLabel = item.storage_type === 'cabinet' && typeof item.shelf_level === 'number'
-                ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})`
-                : '';
-            const storageLabel = item.storage_type === 'cabinet'
-                ? `${item.cabinet_name || t('inventory_loc_cabinet')}${shelfLabel}`
-                : (translateLocationName(item.storage_location_name || '', t) || t('inventory_loc_other'));
-
-            return {
-                [t('inventory_product_name')]: item.name || '',
-                [t('inventory_brand')]: item.brand || '',
-                [t('inventory_product_number')]: item.product_number || '',
-                [t('inventory_cas_number')]: item.cas_number || '',
-                [t('inventory_quantity')]: item.quantity ?? '',
-                [t('inventory_capacity')]: item.capacity || '',
-                [t('inventory_storage_type')]: item.storage_type === 'cabinet' ? t('inventory_loc_cabinet') : t('inventory_loc_other'),
-                [t('inventory_storage_location')]: storageLabel,
-                [t('manufacturer_date_type_label')]: t(getManufacturerDateLabelKey(item.manufacturer_date_type)),
-                [t('manufacturer_date_label')]: hasManufacturerDate(item.manufacturer_date_type) ? item.expiry_date || '' : '',
-                [t('inventory_received_date')]: item.received_date || '',
-                [t('inventory_opened_date')]: item.opened_date || '',
-                [t('inventory_memo')]: item.memo || '',
-            };
-        });
-
-    const getExportDateToken = () => {
-        const today = new Date();
-        return `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-    };
-
-    const handleInventoryExcelDownload = async () => {
-        const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
-        const dateToken = getExportDateToken();
-        await downloadRowsAsXlsx(buildRowsForExport(), 'Inventory', `inventory_list_${dateToken}.xlsx`);
-    };
-
-    const handleInventoryCsvDownload = async () => {
-        const dateToken = getExportDateToken();
-        await downloadRowsAsCsv(buildRowsForExport(), `inventory_list_${dateToken}.csv`);
-    };
-
     const parseImportFile = async (file: File) => {
         const lowerName = file.name.toLowerCase();
         const isExcel = lowerName.endsWith('.xlsx');
@@ -715,19 +714,19 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
         event.target.value = '';
     };
 
-    const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    const handleDragOver = (event: React.DragEvent<HTMLElement>) => {
         event.preventDefault();
         if (isParsing || isImporting) return;
         setIsDragOver(true);
     };
 
-    const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    const handleDragLeave = (event: React.DragEvent<HTMLElement>) => {
         event.preventDefault();
         if (isParsing || isImporting) return;
         setIsDragOver(false);
     };
 
-    const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    const handleDrop = async (event: React.DragEvent<HTMLElement>) => {
         event.preventDefault();
         if (isParsing || isImporting) return;
         setIsDragOver(false);
@@ -953,52 +952,91 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
                     </div>
                 )}
 
-                <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2">
-                    <button
-                        onClick={handleInventoryExcelDownload}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                    >
-                        <Download className="w-4 h-4" />
-                        {t('inventory_excel_download')}
-                    </button>
-
-                    <button
-                        onClick={handleInventoryCsvDownload}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-cyan-200 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300"
-                    >
-                        <Download className="w-4 h-4" />
-                        {t('inventory_csv_download')}
-                    </button>
-
-                    <button
-                        onClick={handleTemplateDownload}
-                        disabled={isParsing || isImporting || isTemplateDownloading}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                        {isTemplateDownloading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <Download className="w-4 h-4" />
-                        )}
-                        {t('inventory_csv_download_template')}
-                    </button>
-
-                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 cursor-pointer">
-                        <Upload className="w-4 h-4" />
-                        {t('inventory_csv_upload')}
+                {(() => {
+                    const isBusy = isParsing || isImporting || isTemplateDownloading;
+                    const fileInput = (
                         <input
                             type="file"
                             accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            className="hidden"
+                            className="sr-only"
                             onChange={handleFileChange}
-                            disabled={isParsing || isImporting || isTemplateDownloading}
+                            disabled={isBusy}
                         />
-                    </label>
+                    );
+                    const templateLink = (
+                        <button
+                            type="button"
+                            onClick={handleTemplateDownload}
+                            disabled={isBusy}
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-slate-600 underline-offset-4 hover:text-emerald-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-300 dark:hover:text-emerald-300"
+                        >
+                            {isTemplateDownloading
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Download className="h-4 w-4" />}
+                            {t('inventory_csv_template_link')}
+                        </button>
+                    );
+                    const exportLinkClass = 'inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-slate-500 underline-offset-4 hover:text-emerald-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:text-emerald-300';
+                    const exportLinks = items.length > 0 ? (
+                        <>
+                            <button type="button" onClick={() => void handleInventoryExcelDownload()} disabled={isBusy} className={exportLinkClass}>
+                                {t('inventory_excel_download')}
+                            </button>
+                            <button type="button" onClick={() => void handleInventoryCsvDownload()} disabled={isBusy} className={exportLinkClass}>
+                                {t('inventory_csv_download')}
+                            </button>
+                        </>
+                    ) : null;
 
-                    {lastFileName && (
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{t('inventory_csv_file_label', { fileName: lastFileName })}</span>
-                    )}
-                </div>
+                    if (!rawCsvData) {
+                        // First view: one obvious place to drop or pick the file.
+                        return (
+                            <div className="px-5 py-5">
+                                {isParsing ? (
+                                    <div className="flex min-h-[220px] items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 text-sm text-slate-500 dark:border-slate-700">
+                                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                        {t('inventory_csv_parsing')}
+                                    </div>
+                                ) : (
+                                    <label
+                                        onDragOver={handleDragOver}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={handleDrop}
+                                        className={`flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 text-center transition-colors focus-within:ring-2 focus-within:ring-emerald-500 ${isDragOver
+                                            ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300'
+                                            : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-emerald-300 hover:bg-emerald-50/50 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300 dark:hover:border-emerald-700'
+                                            }`}
+                                    >
+                                        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
+                                            <Upload className="h-6 w-6" />
+                                        </span>
+                                        <span className="text-base font-bold">
+                                            {isDragOver ? t('inventory_csv_drop_here') : t('inventory_csv_upload')}
+                                        </span>
+                                        {fileInput}
+                                    </label>
+                                )}
+                                <div className="mt-3 flex flex-wrap justify-center gap-x-1">{templateLink}{exportLinks}</div>
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2">
+                            {lastFileName && (
+                                <span className="min-w-0 truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                    {lastFileName}
+                                </span>
+                            )}
+                            <label className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 ${isBusy ? 'pointer-events-none opacity-60' : ''}`}>
+                                <Upload className="h-4 w-4" />
+                                {t('inventory_csv_change_file')}
+                                {fileInput}
+                            </label>
+                            <div className="ml-auto">{templateLink}</div>
+                        </div>
+                    );
+                })()}
 
                 {step === 'mapping' && rawCsvData && (
                     <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40">
@@ -1066,12 +1104,14 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
                     </div>
                 )}
 
-                <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex flex-wrap gap-3">
-                    <span>{t('inventory_csv_summary_valid', { count: summary.validCount })}</span>
-                    <span>{t('inventory_csv_summary_invalid', { count: summary.invalidCount })}</span>
-                    <span>{t('inventory_csv_summary_imported', { count: summary.importedCount })}</span>
-                    <span>{t('inventory_csv_summary_failed', { count: summary.failedCount })}</span>
-                </div>
+                {rows.length > 0 && (
+                    <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 flex flex-wrap gap-3">
+                        <span>{t('inventory_csv_summary_valid', { count: summary.validCount })}</span>
+                        <span>{t('inventory_csv_summary_invalid', { count: summary.invalidCount })}</span>
+                        <span>{t('inventory_csv_summary_imported', { count: summary.importedCount })}</span>
+                        <span>{t('inventory_csv_summary_failed', { count: summary.failedCount })}</span>
+                    </div>
+                )}
 
                 {globalError && (
                     <div className="mx-5 mt-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm inline-flex items-center gap-2">
@@ -1080,25 +1120,12 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
                     </div>
                 )}
 
+                {rawCsvData && ((step === 'preview' && rows.length > 0) || isParsing) && (
                 <div className="px-5 py-4">
                     {isParsing ? (
-                        <div className="min-h-[240px] flex items-center justify-center text-slate-500">
+                        <div className="min-h-[160px] flex items-center justify-center text-slate-500">
                             <Loader2 className="w-5 h-5 animate-spin mr-2" />
                             {t('inventory_csv_parsing')}
-                        </div>
-                    ) : (step !== 'preview' || rows.length === 0) ? (
-                        <div
-                            onDragOver={handleDragOver}
-                            onDragLeave={handleDragLeave}
-                            onDrop={handleDrop}
-                            className={`min-h-[240px] rounded-xl border-2 border-dashed flex items-center justify-center text-sm transition-colors ${isDragOver
-                                ? 'border-emerald-400 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-                                : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-500 dark:text-slate-400'
-                                }`}
-                        >
-                            {isDragOver
-                                ? t('inventory_csv_drop_here')
-                                : t('inventory_csv_drop_hint')}
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -1140,6 +1167,7 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
                         </div>
                     )}
                 </div>
+                )}
 
                 <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
                     <button
@@ -1149,14 +1177,16 @@ const LegacyInventoryCsvImportModal: React.FC<InventoryCsvImportModalProps> = ({
                     >
                         {t('btn_close')}
                     </button>
-                    <button
-                        onClick={handleImportValidRows}
-                        disabled={isImporting || isParsing || step !== 'preview' || summary.validCount === 0}
-                        className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
-                    >
-                        {isImporting && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {t('inventory_csv_import_valid_only')}
-                    </button>
+                    {step === 'preview' && rows.length > 0 && (
+                        <button
+                            onClick={handleImportValidRows}
+                            disabled={isImporting || isParsing || summary.validCount === 0}
+                            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-2"
+                        >
+                            {isImporting && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {t('inventory_csv_import_valid_only')}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

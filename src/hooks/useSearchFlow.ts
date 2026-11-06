@@ -18,6 +18,9 @@ import {
   type SearchAnalyticsChannel,
 } from '../services/searchAnalyticsService';
 
+/** not_found is a normal outcome, not a failure; technical errors can be retried. */
+export type SearchErrorKind = 'not_found' | 'invalid_query' | 'technical';
+
 interface UseSearchFlowParams {
   pathname: string;
   searchParams: URLSearchParams;
@@ -43,6 +46,8 @@ interface UseSearchFlowResult {
   isLoading: boolean;
   isAiAnalyzing: boolean;
   error: string | null;
+  errorKind: SearchErrorKind | null;
+  retrySearch: () => void;
   handleBrandChange: (brand: string) => void;
   handleSortChange: (sort: SortOption) => void;
   handleClearFilters: () => void;
@@ -76,6 +81,7 @@ export function useSearchFlow({
   const [isLoading, setIsLoading] = useState(false);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<SearchErrorKind | null>(null);
   const [currentSearchEventId, setCurrentSearchEventId] = useState<string | null>(null);
 
   // Autocomplete states
@@ -127,6 +133,7 @@ export function useSearchFlow({
       setCabinetResults([]);
       setLastSearchQuery(searchQuery);
       setError(t('search_invalid_cas_checksum', 'CAS 번호의 검증 숫자가 올바르지 않습니다. 번호를 확인해 주세요.'));
+      setErrorKind('invalid_query');
       if (trackSubmittedSearch) {
         void recordSearchEvent({
           rawQuery: searchQuery,
@@ -144,6 +151,7 @@ export function useSearchFlow({
     setIsLoading(true);
     setIsAiAnalyzing(false);
     setError(null);
+    setErrorKind(null);
     setResult(null);
     setMediaProducts([]);
     setMediaBrands([]);
@@ -219,6 +227,7 @@ export function useSearchFlow({
 
       if (!chemicalData && mediaSearchResult.products.length === 0 && cabinetSearchResult.length === 0) {
         setError(`'${searchQuery}'${t('search_not_found')}`);
+        setErrorKind('not_found');
       } else {
         addSearchHistory(searchQuery);
       }
@@ -259,6 +268,7 @@ export function useSearchFlow({
       if (searchSequenceRef.current !== searchSequence) return;
       const isOnline = typeof navigator === 'undefined' || navigator.onLine;
       setError(t(getSearchErrorMessageKey(err, isOnline)));
+      setErrorKind('technical');
       if (import.meta.env.DEV) console.error(err);
       if (trackSubmittedSearch) {
         void recordSearchEvent({
@@ -305,6 +315,7 @@ export function useSearchFlow({
     setSortBy('relevance');
     setLastSearchQuery('');
     setError(null);
+    setErrorKind(null);
     setIsAiAnalyzing(false);
     setCurrentSearchEventId(null);
   }, [urlQuery, lastSearchQuery, isLoading, performSearch, isSearchTab]);
@@ -314,9 +325,12 @@ export function useSearchFlow({
     if (!isSearchTab) return;
 
     const trimmedQuery = query.trim();
+    const isLastSearch = trimmedQuery === lastSearchQuery.trim();
+    // A query that found nothing still gets suggestions, so a typo has a next step.
+    const isNotFoundQuery = isLastSearch && errorKind === 'not_found';
 
     // Don't search if query is too short, or if it matches the last executed search (meaning the user already searched it)
-    if (trimmedQuery.length < 2 || trimmedQuery === lastSearchQuery.trim()) {
+    if (trimmedQuery.length < 2 || (isLastSearch && !isNotFoundQuery)) {
       setSuggestions([]);
       setIsSuggestionsLoading(false);
       return;
@@ -341,14 +355,14 @@ export function useSearchFlow({
           setIsSuggestionsLoading(false);
         }
       }
-    }, 300); // 300ms debounce
+    }, isNotFoundQuery ? 0 : 300); // 300ms debounce while typing
 
     return () => {
       isActive = false;
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query, lastSearchQuery, isSearchTab]);
+  }, [query, lastSearchQuery, errorKind, isSearchTab]);
 
   const clearSuggestions = useCallback(() => {
     setSuggestions([]);
@@ -390,8 +404,23 @@ export function useSearchFlow({
       return;
     }
     pendingSearchChannelRef.current = channel;
+    // The URL effect skips an unchanged query, so a failed search would never rerun.
+    if (isSearchTab && error && normalized === lastSearchQuery && urlQuery === normalized) {
+      if (!isLoading) {
+        setQuery(normalized);
+        void performSearch(normalized);
+      }
+      return;
+    }
     navigate(`${labAppRoute()}?q=${encodeURIComponent(normalized)}`);
-  }, [navigate]);
+  }, [error, isLoading, isSearchTab, lastSearchQuery, navigate, performSearch, urlQuery]);
+
+  const retrySearch = useCallback(() => {
+    if (!lastSearchQuery || isLoading) return;
+    pendingSearchChannelRef.current = 'manual';
+    setQuery(lastSearchQuery);
+    void performSearch(lastSearchQuery, selectedBrand, sortBy);
+  }, [isLoading, lastSearchQuery, performSearch, selectedBrand, sortBy]);
 
   const handleSearch = useCallback((e?: FormEvent) => {
     e?.preventDefault();
@@ -423,6 +452,8 @@ export function useSearchFlow({
     isLoading,
     isAiAnalyzing,
     error,
+    errorKind,
+    retrySearch,
     handleBrandChange,
     handleSortChange,
     handleClearFilters,

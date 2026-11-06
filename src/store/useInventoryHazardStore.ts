@@ -89,6 +89,24 @@ export function buildInventoryHazardEntryKey(
     return scopeKey && normalizedCas ? `${scopeKey}|${normalizedCas}` : null;
 }
 
+export type InventoryHazardResolution = 'resolved' | 'pending' | 'failed' | 'unchecked';
+
+/** Whether GHS evidence for one CAS is known; a missing snapshot means "unknown", never "not hazardous". */
+export function getInventoryHazardResolution(
+    snapshot?: InventoryHazardSnapshot | null,
+    runtime?: InventoryHazardRuntimeState | null,
+): InventoryHazardResolution {
+    if (snapshot) return 'resolved';
+    if (runtime?.status === 'error') return 'failed';
+    if (runtime) return 'pending';
+    return 'unchecked';
+}
+
+/** A zero count is only meaningful when every item was classified; otherwise it is unknown ("—"). */
+export function formatInventoryHazardCount(count: number, unresolvedCount: number): string {
+    return count === 0 && unresolvedCount > 0 ? '—' : String(count);
+}
+
 export function isInventoryHazardSnapshotFresh(
     snapshot: InventoryHazardSnapshot,
     now = Date.now(),

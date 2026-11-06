@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { CabinetEnvironment } from './CabinetEnvironment';
 import { CabinetModelReadyContext } from './cabinetModelReadyContext';
+import type { StorageCompatMark } from '../../utils/storageCompatibilityChecker';
 
 /** CabinetFrame과 동일 */
 const SHELF_BOTTOM_Y = -0.25;
@@ -33,7 +34,32 @@ function useCabinetCamera(
         // FOV = 52. Math.tan(26 * PI/180) = 0.4877
         const fovFactor = 2 * Math.tan(26 * Math.PI / 180); // ~0.975
 
-        // VIEW/EDIT/PLACE 모드 모두 하단 UI를 피하기 위해 화면 하단을 안전 영역으로 비워둠
+        if (mode === 'VIEW') {
+            // 보기 모드는 하단에 올라오는 패널이 없으므로 아래를 비워두지 않는다.
+            // 위쪽의 모드 전환·호환성 알림 자리만 남기고 시약장을 화면에 꽉 맞춘다.
+            const topReserve = 0.13;
+            const visibleHeightNeeded = (cabinetHeight + 2.0) / (1 - topReserve);
+            const visibleWidthNeeded = cabinetWidth + 2.0;
+            const distance = Math.max(
+                visibleHeightNeeded / fovFactor,
+                visibleWidthNeeded / (fovFactor * aspect)
+            );
+            // 실제 시약장 중심 (group offset -0.5 포함)
+            const cabinetMidY = SHELF_BOTTOM_Y - 0.5 + cabinetHeight / 2;
+            const targetY = cabinetMidY + (distance * fovFactor * topReserve) / 2;
+            const elevationRad = 5 * (Math.PI / 180);
+
+            return {
+                position: [0, targetY + distance * Math.sin(elevationRad), distance * Math.cos(elevationRad)] as [number, number, number],
+                minDistance: distance * 0.3,
+                maxDistance: distance * 2.5,
+                target: [0, targetY, 0] as [number, number, number],
+                isPlaceMode: false,
+                baseDistance: distance
+            };
+        }
+
+        // EDIT/PLACE 모드는 하단 UI(편집 패널·시약 트레이)를 피하기 위해 화면 하단을 안전 영역으로 비워둠
         // 이전 45%에서 35%로 줄여서 캐비닛이 너무 위로 치우치지 않고 자연스럽게 위치하도록 조정
         const blockedRatio = 0.35;
 
@@ -75,7 +101,7 @@ function useCabinetCamera(
             };
         }
 
-        // VIEW / EDIT 모드: 약간 위(정면 5도)에서 내려다보아 전체적인 크기감이 자연스럽게 보이게 함
+        // EDIT 모드: 약간 위(정면 5도)에서 내려다보아 전체적인 크기감이 자연스럽게 보이게 함
         // 기존 측면 오프셋 제거 및 정면 중심으로 배치
         const elevationRad = 5 * (Math.PI / 180);
         const posY = targetY + distance * Math.sin(elevationRad);
@@ -92,7 +118,13 @@ function useCabinetCamera(
     }, [cabinetWidth, cabinetHeight, mode, aspect]);
 }
 
-export const FridgeScene: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
+interface FridgeSceneProps {
+    children?: React.ReactNode;
+    /** 보관 호환성 표시 (병 둘레 링): 확정 충돌은 실선, 확인 필요는 점선 */
+    compatMarks?: Map<string, StorageCompatMark>;
+}
+
+export const FridgeScene: React.FC<FridgeSceneProps> = ({ children, compatMarks }) => {
     const [shadowRevision, setShadowRevision] = useState(0);
     const onModelReady = useCallback(() => setShadowRevision(revision => revision + 1), []);
     const { t } = useTranslation();
@@ -431,6 +463,7 @@ export const FridgeScene: React.FC<{ children?: React.ReactNode }> = ({ children
                                     shelfHeight={0.05}
                                     isDimmed={isPlaceMode && focusedShelfId != null && floorShelf.id !== focusedShelfId}
                                     isDarkMode={isDarkMode}
+                                    compatMarks={compatMarks}
                                 />
                             );
                         })()}
@@ -452,6 +485,7 @@ export const FridgeScene: React.FC<{ children?: React.ReactNode }> = ({ children
                                     onShelfFocus={(localY) => handleShelfFocus(shelf.id, localY)}
                                     isDimmed={isPlaceMode && focusedShelfId != null && shelf.id !== focusedShelfId}
                                     isDarkMode={isDarkMode}
+                                    compatMarks={compatMarks}
                                 />
                             );
                         })}

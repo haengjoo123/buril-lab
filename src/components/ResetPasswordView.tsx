@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, FlaskConical, Loader2, Lock } from 'lucide-react';
+import { ArrowRight, CheckCircle2, FlaskConical, Loader2, Lock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { labAppRoute } from '../utils/appRoutes';
+import { classifyAuthError, getAuthErrorMessageKey } from '../utils/authOutcome';
 
 export function ResetPasswordView() {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const { session, isLoading: isAuthLoading, updatePassword, signOut } = useAuth();
+    const { session, isLoading: isAuthLoading, updatePassword } = useAuth();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function ResetPasswordView() {
         try {
             const result = await updatePassword(password);
             if (result.error) {
-                setError(result.error);
+                setError(t(getAuthErrorMessageKey(classifyAuthError(result))));
             } else {
                 setPassword('');
                 setConfirmPassword('');
@@ -50,9 +52,9 @@ export function ResetPasswordView() {
         }
     };
 
-    const handleBackToLogin = async () => {
-        await signOut();
-        navigate('/login', { replace: true });
+    // The recovery link already signed the user in, so go straight into the app.
+    const handleContinueToApp = () => {
+        navigate(labAppRoute(), { replace: true });
     };
 
     if (isAuthLoading) {
@@ -84,20 +86,17 @@ export function ResetPasswordView() {
                             <div className="mx-auto w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
                                 <CheckCircle2 className="w-8 h-8 text-emerald-600 dark:text-emerald-300" />
                             </div>
-                            <div>
-                                <h2 className="text-base font-bold text-slate-800 dark:text-white">
-                                    {t('auth_reset_password_success_title')}
-                                </h2>
-                                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                    {t('auth_reset_password_success_desc')}
-                                </p>
-                            </div>
+                            <h2 className="text-base font-bold text-slate-800 dark:text-white">
+                                {t('auth_reset_password_success_title')}
+                            </h2>
                             <button
                                 type="button"
-                                onClick={handleBackToLogin}
-                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-colors"
+                                onClick={handleContinueToApp}
+                                autoFocus
+                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-colors flex items-center justify-center gap-2"
                             >
-                                {t('auth_reset_go_to_login')}
+                                {t('auth_reset_continue_to_app')}
+                                <ArrowRight className="w-4 h-4" />
                             </button>
                         </div>
                     ) : (

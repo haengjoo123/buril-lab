@@ -4,6 +4,8 @@ import { getPictogramCode, getPictogramUrl } from '../data/ghsCodes';
 import {
     buildInventoryHazardEntryKey,
     createInventoryHazardSnapshot,
+    formatInventoryHazardCount,
+    getInventoryHazardResolution,
     isInventoryHazardSnapshotFresh,
     pruneInventoryHazardSnapshots,
 } from './useInventoryHazardStore';
@@ -94,5 +96,16 @@ describe('inventory hazard persisted snapshots', () => {
         expect(keys.filter((key) => key.startsWith('user-a:'))).toHaveLength(1_000);
         expect(keys).toContain('user-b:lab-b|67-64-1');
         expect(keys).not.toContain('user-a:lab-a|cas-0');
+    });
+
+    it('treats a missing snapshot as unknown and never reports an unknown zero as 0', () => {
+        const snapshot = createInventoryHazardSnapshot('67-64-1', enrichmentResult())!;
+        expect(getInventoryHazardResolution(snapshot, { status: 'error', requestToken: 't' })).toBe('resolved');
+        expect(getInventoryHazardResolution(undefined, { status: 'error', requestToken: 't' })).toBe('failed');
+        expect(getInventoryHazardResolution(undefined, { status: 'loading', requestToken: 't' })).toBe('pending');
+        expect(getInventoryHazardResolution(undefined, undefined)).toBe('unchecked');
+        expect(formatInventoryHazardCount(0, 2)).toBe('—');
+        expect(formatInventoryHazardCount(3, 2)).toBe('3');
+        expect(formatInventoryHazardCount(0, 0)).toBe('0');
     });
 });

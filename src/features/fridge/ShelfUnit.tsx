@@ -6,7 +6,7 @@ import type { ShelfData } from '../../types/fridge';
 import { useFridgeStore } from '../../store/fridgeStore';
 import { ReagentItem, ItemGeometry, CONTAINER_BASE_WIDTHS } from './ReagentItem';
 import { Divider } from './Divider';
-import { checkCompatibility } from '../../utils/compatibilityChecker';
+import { checkShelfCompatibility, type StorageCompatMark } from '../../utils/storageCompatibilityChecker';
 import { Html } from '@react-three/drei';
 import { useTranslation } from 'react-i18next';
 
@@ -21,15 +21,10 @@ interface ShelfUnitProps {
     /** PLACE 모드에서 비선택 선반 시각적 비활성화 */
     isDimmed?: boolean;
     isDarkMode?: boolean;
+    compatMarks?: Map<string, StorageCompatMark>;
 }
 
 const DEFAULT_SHELF_HEIGHT = 0.2;
-
-interface MinimalChemicalData {
-    properties?: { ph?: number;[key: string]: unknown };
-    ghs?: { hazardStatements?: string[];[key: string]: unknown };
-    [key: string]: unknown;
-}
 
 export const ShelfUnit: React.FC<ShelfUnitProps> = ({
     shelf,
@@ -40,7 +35,8 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
     onShelfFocus,
     shelfHeight = DEFAULT_SHELF_HEIGHT,
     isDimmed = false,
-    isDarkMode = false
+    isDarkMode = false,
+    compatMarks,
 }) => {
     const { t } = useTranslation();
     const { draggedTemplate, draggedItem, shelves, moveReagent, setDraggedTemplate, setDraggedItem, setPendingPlacement } = useFridgeStore();
@@ -90,49 +86,14 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
         setIsValid(!useFridgeStore.getState().checkCollision(shelf.id, pct, dragWidth, depthPosition, draggedTemplate?.type ?? draggedPlacement?.template, draggedItem?.id));
 
         // 모바일에서는 hover가 없으므로 탭한 지점을 즉시 프리뷰로 보여줍니다.
-        if (draggedTemplate?.chemicalData) {
-            const neighbors = shelf.items.filter(i => {
-                const dist = Math.min(
-                    Math.abs(i.position - (pct + dragWidth)),
-                    Math.abs((i.position + i.width) - pct)
-                );
-                return dist < 5; // 5% proximity threshold
-            });
-
-            checkCompatibility([
-                {
-                    chemical: draggedTemplate.chemicalData || {
-                        name: draggedTemplate.name,
-                        ghs: { hazardStatements: [] },
-                        properties: { ph: 7 }
-                    },
-                    quantity: 1
-                } as any,
-                ...neighbors.map(n => ({
-                    chemical: {
-                        name: n.name,
-                        ghs: { hazardStatements: n.hCodes || [] },
-                        properties: { ph: n.isAcidic ? 1 : (n.isBasic ? 14 : 7) }
-                    },
-                    quantity: 1
-                } as any))
-            ]);
-
-            let warnMsg = null;
-            // Iterate over neighbors logic... 
-            // Simplification for prototype:
-            // If we have `isAcidic` and neighbor is `isBasic`, trigger warning.
-            // We don't have the full rule engine unless we store full data.
-            // Let's implement a simple Acid-Base check here using the flags.
-            const chem = draggedTemplate.chemicalData as MinimalChemicalData | undefined;
-            const isAcid = (chem?.properties?.ph ?? 7) < 7;
-            const isBase = (chem?.properties?.ph ?? 7) > 10;
-            // Also check hCodes if available?
-            for (const n of neighbors) {
-                if (isAcid && n.isBasic) warnMsg = t('compat_acid_base');
-                if (isBase && n.isAcidic) warnMsg = t('compat_acid_base');
-            }
-            setWarning(warnMsg);
+        // 새 용기 템플릿에는 용기 이름뿐이라 판정할 시약 정보가 없다. 이미 배치된 시약을
+        // 옮길 때는 실제 이름·CAS·H코드로 같은 칸의 보관 호환성을 미리 확인한다.
+        if (isPlacedItemDrag && draggedPlacement) {
+            const candidate = { ...draggedPlacement, shelfId: shelf.id, position: pct, depthPosition };
+            const others = shelf.items.filter(item => item.id !== draggedPlacement.id);
+            const conflict = checkShelfCompatibility([...others, candidate], shelf.dividers)
+                .find(warning => warning.itemIds.includes(draggedPlacement.id));
+            setWarning(conflict ? t(conflict.messageKey) : null);
         } else {
             setWarning(null);
         }
@@ -264,6 +225,7 @@ export const ShelfUnit: React.FC<ShelfUnitProps> = ({
                     shelfDepth={shelfDepth}
                     dimmed={isDimmed}
                     isDarkMode={isDarkMode}
+                    compatMark={compatMarks?.get(item.id)}
                 />
             ))}
 

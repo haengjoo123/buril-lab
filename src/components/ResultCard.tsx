@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import type { AnalysisResult } from '../types';
-import { AlertTriangle, Plus, FileText, Sparkles, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Plus, FileText, Sparkles, ChevronDown, PackagePlus } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
-import { translateGHS } from '../data/ghsCodes';
+import { getPictogramCode, getPictogramUrl, translateGHS } from '../data/ghsCodes';
 import { MsdsModal } from './MsdsModal';
 import { ChemicalRegulationPanel } from './ChemicalRegulationPanel';
 import { SdsLinkList } from './SdsLinkList';
@@ -18,8 +18,12 @@ interface ResultCardProps {
     onAddConfirmed?: () => void;
     /** 비로그인 시 폐기 목록 담기 대신 호출 */
     onRequireAuth?: () => void;
-    /** 커스텀 취소/닫기 버튼 텍스트 (기본값: btn_reset) */
+    /** 닫기 버튼 텍스트. 지정한 경우에만 액션 바에 닫기 버튼을 둔다 (검색 화면은 뒤로가기/검색창으로 충분). */
     secondaryBtnText?: string;
+    /** 지정하면 액션 바에 '재고 등록' 보조 액션을 표시한다. */
+    onRegisterInventory?: () => void;
+    /** 헤더 아래 표시할 보조 요소 (예: 이미 보관 중인 시약장 위치). */
+    headerAccessory?: React.ReactNode;
     scanSelectionMeta?: ScannerSelectionMeta;
     sourceSearchEventId?: string;
 }
@@ -29,12 +33,50 @@ const compactReasonKeyByCategory: Partial<Record<AnalysisResult['category'], str
     ORGANIC_HALOGEN: 'result_reason_compact_organic_halogen',
 };
 
+const HANGUL_PATTERN = /[ㄱ-ㆎ가-힣]/;
+
+const hasBalancedParentheses = (value: string) => {
+    let depth = 0;
+    for (const char of value) {
+        if (char === '(') depth += 1;
+        if (char === ')') depth -= 1;
+        if (depth < 0) return false;
+    }
+    return depth === 0;
+};
+
+/** Search returns "국문명 (English name)"; show them on two lines instead of truncating one. */
+const splitChemicalDisplayName = (name: string): { primary: string; secondary: string | null } => {
+    const trimmed = name.trim();
+    if (!trimmed.endsWith(')')) return { primary: trimmed, secondary: null };
+
+    let searchFrom = 0;
+    for (;;) {
+        const index = trimmed.indexOf(' (', searchFrom);
+        if (index <= 0) break;
+        const primary = trimmed.slice(0, index).trim();
+        const secondary = trimmed.slice(index + 2, -1).trim();
+        if (
+            HANGUL_PATTERN.test(primary) &&
+            secondary &&
+            !HANGUL_PATTERN.test(secondary) &&
+            hasBalancedParentheses(secondary)
+        ) {
+            return { primary, secondary };
+        }
+        searchFrom = index + 2;
+    }
+    return { primary: trimmed, secondary: null };
+};
+
 export const ResultCard: React.FC<ResultCardProps> = ({
     result,
     onReset,
     onAddConfirmed,
     onRequireAuth,
     secondaryBtnText,
+    onRegisterInventory,
+    headerAccessory,
     scanSelectionMeta,
     sourceSearchEventId,
 }) => {
@@ -105,6 +147,27 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             hazardStatements.flatMap(statement => statement.match(/H\d{3}/g) || [])
         ));
     }, [hazardStatements]);
+    const ghsPictogramSources = chemical.ghs?.pictograms?.length
+        ? chemical.ghs.pictograms
+        : chemical.hazardLookup?.pictograms;
+    const ghsPictograms = React.useMemo(() => {
+        const seen = new Set<string>();
+        return (ghsPictogramSources ?? []).flatMap((source) => {
+            const code = getPictogramCode(source);
+            const url = getPictogramUrl(source);
+            if (!code || !url || seen.has(code)) return [];
+            seen.add(code);
+            return [{ code, url }];
+        });
+    }, [ghsPictogramSources]);
+    const ghsSignal = chemical.ghs?.signal?.trim() ?? '';
+    const isDangerSignal = ghsSignal.toLowerCase() === 'danger';
+    const ghsSignalLabel = isDangerSignal
+        ? t('ghs_signal_danger' as any)
+        : ghsSignal.toLowerCase() === 'warning'
+            ? t('ghs_signal_warning' as any)
+            : ghsSignal;
+    const displayName = React.useMemo(() => splitChemicalDisplayName(chemical.name), [chemical.name]);
     const hazardLookupPresentation = React.useMemo(() => {
         const status = chemical.hazardLookup?.status;
         if (!status) return null;
@@ -138,25 +201,34 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     return (
         <div
             data-onboarding-target="result-card"
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-hidden border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-5"
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-clip border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500"
         >
             {/* Header: Chemical Info */}
-            <div className="p-5 bg-slate-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center gap-3">
-                <div className="min-w-0 flex-1">
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white truncate">{chemical.name}</h3>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm font-mono mt-1 truncate">
-                        {chemical.molecularFormula} {chemical.casNumber ? `• CAS: ${chemical.casNumber}` : ''}
-                    </p>
+            <div className="p-5 bg-slate-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700">
+                <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                        <h3 className="break-words text-xl font-bold leading-snug text-slate-900 [word-break:keep-all] dark:text-white">{displayName.primary}</h3>
+                        {displayName.secondary && (
+                            <p className="mt-0.5 break-words text-sm font-medium leading-snug text-slate-500 dark:text-slate-400">
+                                {displayName.secondary}
+                            </p>
+                        )}
+                        <p className="text-slate-500 dark:text-slate-400 text-xs font-mono mt-1.5 truncate">
+                            {chemical.molecularFormula} {chemical.casNumber ? `• CAS: ${chemical.casNumber}` : ''}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsMsdsOpen(true)}
+                        aria-label={`${chemical.name} ${t('msds_view')}`}
+                        data-onboarding-target="msds-button"
+                        className="min-h-11 shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                    >
+                        <FileText className="w-3.5 h-3.5" />
+                        {t('msds_view')}
+                    </button>
                 </div>
-                <button
-                    onClick={() => setIsMsdsOpen(true)}
-                    aria-label={`${chemical.name} ${t('msds_view')}`}
-                    data-onboarding-target="msds-button"
-                    className="min-h-11 shrink-0 flex items-center gap-1 px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
-                >
-                    <FileText className="w-3.5 h-3.5" />
-                    {t('msds_view')}
-                </button>
+                {headerAccessory}
             </div>
 
             {/* Body: Disposal Guide */}
@@ -232,18 +304,42 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                             aria-expanded={isGhsExpanded}
                             aria-label={t('safety_ghs' as any)}
                         >
-                            <AlertTriangle className={`h-4 w-4 shrink-0 ${chemical.ghs.signal === 'Danger' ? 'text-red-600 dark:text-red-500' : 'text-orange-500'}`} />
-                            <span className={`text-sm font-bold ${chemical.ghs.signal === 'Danger' ? 'text-red-600 dark:text-red-500' : 'text-orange-600 dark:text-orange-400'}`}>
-                                {t('safety_ghs_short' as any)}
-                            </span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${chemical.ghs.signal === 'Danger' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300'}`}>
-                                {chemical.ghs.signal.toUpperCase()}
-                            </span>
-                            {ghsCodes.length > 0 && (
+                            {ghsPictograms.length > 0 ? (
+                                <span className="flex shrink-0 items-center -space-x-1">
+                                    {ghsPictograms.slice(0, 5).map(({ code, url }) => (
+                                        <img
+                                            key={code}
+                                            src={url}
+                                            alt={t(`ghs_pictogram_${code}` as any)}
+                                            className="h-8 w-8 shrink-0 object-contain"
+                                        />
+                                    ))}
+                                    {ghsPictograms.length > 5 && (
+                                        <span className="pl-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                            +{ghsPictograms.length - 5}
+                                        </span>
+                                    )}
+                                </span>
+                            ) : (
+                                <>
+                                    <AlertTriangle className={`h-4 w-4 shrink-0 ${isDangerSignal ? 'text-red-600 dark:text-red-500' : 'text-orange-500'}`} />
+                                    <span className={`text-sm font-bold ${isDangerSignal ? 'text-red-600 dark:text-red-500' : 'text-orange-600 dark:text-orange-400'}`}>
+                                        {t('safety_ghs_short' as any)}
+                                    </span>
+                                </>
+                            )}
+                            {ghsSignalLabel && (
+                                <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-bold ${isDangerSignal ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300'}`}>
+                                    {ghsSignalLabel}
+                                </span>
+                            )}
+                            {ghsPictograms.length === 0 && ghsCodes.length > 0 ? (
                                 <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600 dark:text-slate-300">
                                     {ghsCodes.slice(0, 4).join(', ')}
                                     {ghsCodes.length > 4 ? ` +${ghsCodes.length - 4}` : ''}
                                 </span>
+                            ) : (
+                                <span className="min-w-0 flex-1" />
                             )}
                             <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isGhsExpanded ? 'rotate-180' : ''}`} />
                         </button>
@@ -274,29 +370,42 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     </div>
                 )}
 
-                {/* Container query: the card is also rendered inside narrow modals (e.g. cabinet disposal guide),
-                    so split into two columns based on the card's own width, not the viewport. */}
-                <div className="@container w-full">
-                    <div className="grid w-full grid-cols-1 gap-3 @md:grid-cols-2">
+            </div>
+
+            {/* Sticky action bar: stays at the bottom of the scrolling pane/modal so the main
+                action is always one tap away. overflow-clip (not hidden) on the card keeps sticky working. */}
+            <div className="sticky bottom-0 z-10 border-t border-gray-100 bg-white/95 px-3 py-3 shadow-[0_-10px_24px_-18px_rgba(15,23,42,0.35)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+                <div className="flex w-full items-stretch gap-2">
+                    {secondaryBtnText && (
                         <button
                             type="button"
                             onClick={onReset}
-                            className="min-h-11 py-2.5 px-3 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl transition-colors text-center leading-snug"
+                            className="min-h-12 shrink-0 rounded-xl bg-gray-100 px-4 py-2.5 text-center text-sm font-medium leading-snug text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-300 dark:hover:bg-slate-700"
                         >
-                            {secondaryBtnText || t('btn_reset')}
+                            {secondaryBtnText}
                         </button>
+                    )}
+                    {onRegisterInventory && (
                         <button
                             type="button"
-                            onClick={handleAddClick}
-                            data-onboarding-target="add-to-list-button"
-                            className="min-h-11 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 min-w-0 text-center leading-snug"
+                            onClick={onRegisterInventory}
+                            className="inline-flex min-h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold leading-snug text-emerald-700 transition-colors hover:bg-emerald-50 active:bg-emerald-100 dark:border-emerald-900/60 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                         >
-                            <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
-                            {t(hasActiveBatch
-                                ? 'result_add_to_current_batch_cta' as any
-                                : 'result_start_waste_batch_cta' as any)}
+                            <PackagePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
+                            {t('add_to_inventory')}
                         </button>
-                    </div>
+                    )}
+                    <button
+                        type="button"
+                        onClick={handleAddClick}
+                        data-onboarding-target="add-to-list-button"
+                        className="flex min-h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-center text-sm font-bold leading-snug text-white shadow-lg shadow-blue-200 transition-colors hover:bg-blue-700 active:bg-blue-800 dark:shadow-blue-900/20"
+                    >
+                        <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+                        {t(hasActiveBatch
+                            ? 'result_add_to_current_batch_cta' as any
+                            : 'result_start_waste_batch_cta' as any)}
+                    </button>
                 </div>
             </div>
 

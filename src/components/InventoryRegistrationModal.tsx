@@ -21,6 +21,7 @@ import { useFridgeStore } from '../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../types/fridge';
 import { AppSelect } from './AppSelect';
 import { ReagentDateFields } from './ReagentDateFields';
+import { QuantityStepper } from '../features/inventory/QuantityStepper';
 import { translateLocationName } from '../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../utils/guessReagentTemplate';
 import type { ManufacturerDateType } from '../utils/manufacturerDate';
@@ -32,6 +33,8 @@ interface InventoryRegistrationModalProps {
     onSuccess?: () => void;
     /** Called when the user wants to navigate to the cabinet to see the placed item */
     onNavigateToCabinet?: (cabinetId: string, itemId: string) => void;
+    /** CAS prefilled from a chemical search result. */
+    initialCasNumber?: string;
 }
 
 export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProps> = ({
@@ -40,6 +43,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     onClose,
     onSuccess,
     onNavigateToCabinet,
+    initialCasNumber = '',
 }) => {
     const { t } = useTranslation();
     const productNumbers = product.product_numbers?.filter(Boolean) || [];
@@ -48,7 +52,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
     const [itemName, setItemName] = useState(product.product_name || '');
     const [brand, setBrand] = useState(product.brand || '');
     const [selectedProductNumber, setSelectedProductNumber] = useState<string>('');
-    const [casNumber, setCasNumber] = useState('');
+    const [casNumber, setCasNumber] = useState(initialCasNumber);
     const [quantity, setQuantity] = useState(1);
     const [capacity, setCapacity] = useState('');
     const [expiryDate, setExpiryDate] = useState('');
@@ -104,7 +108,7 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
         setItemName(product.product_name || '');
         setBrand(product.brand || '');
         setSelectedProductNumber(productNumbers.length === 1 ? productNumbers[0] : '');
-        setCasNumber('');
+        setCasNumber(initialCasNumber);
         setQuantity(1);
         setCapacity('');
         setExpiryDate('');
@@ -196,7 +200,9 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                 quantity,
                 capacityText: capacity || undefined,
                 casNumber: casNumber.trim() || undefined,
-                casInputMethod: casNumber.trim() ? 'manual' : 'unknown',
+                casInputMethod: !casNumber.trim()
+                    ? 'unknown'
+                    : initialCasNumber && casNumber.trim() === initialCasNumber.trim() ? 'catalog' : 'manual',
                 metadata: {
                     brand_input_method: brand.trim() && brand.trim() !== (product.brand || '') ? 'manual' : 'catalog',
                     capacity_input_method: capacity ? 'manual' : 'unknown',
@@ -513,27 +519,11 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                                 {t('inventory_quantity')} <span className="text-red-500">*</span>
                             </label>
-                            <div className="flex items-center h-[46px] border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800">
-                                <button
-                                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                                    className="px-3 h-full text-lg font-medium text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                                >
-                                    −
-                                </button>
-                                <input
-                                    type="number"
-                                    value={quantity}
-                                    onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="flex-1 text-center text-sm font-semibold bg-transparent text-slate-900 dark:text-slate-100 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    min={1}
-                                />
-                                <button
-                                    onClick={() => setQuantity(quantity + 1)}
-                                    className="px-3 h-full text-lg font-medium text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                                >
-                                    +
-                                </button>
-                            </div>
+                            <QuantityStepper
+                                value={quantity}
+                                onChange={setQuantity}
+                                className="h-[46px] rounded-xl"
+                            />
                         </div>
                     </div>
 

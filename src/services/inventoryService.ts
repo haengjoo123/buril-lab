@@ -212,6 +212,39 @@ interface LinkedCabinetCasSyncInput {
     nextCasNumber?: string | null;
 }
 
+// ── Actor context ──────────────────────────────────────
+// Every write records who made it. The session user is read locally (no
+// /auth/v1/user round trip) and the display-name lookup is cached per user and
+// lab, so a save costs one RPC instead of several sequential auth requests.
+
+const ACTOR_NAME_CACHE_TTL_MS = 5 * 60 * 1_000;
+let actorNameCache: { key: string; expiresAt: number; promise: Promise<string | null> } | null = null;
+
+async function getSessionUserId(): Promise<string | null> {
+    try {
+        const { data } = await supabase.auth.getSession();
+        return data.session?.user?.id ?? null;
+    } catch {
+        return null;
+    }
+}
+
+async function resolveInventoryActor(labId: string | null): Promise<{ userId: string | null; actorName: string | null }> {
+    const userId = await getSessionUserId();
+    const key = `${userId ?? 'anonymous'}:${labId ?? 'personal'}`;
+    const now = Date.now();
+    if (!actorNameCache || actorNameCache.key !== key || actorNameCache.expiresAt <= now) {
+        const promise = getCurrentUserDisplayName(labId).catch(() => null);
+        const entry = { key, expiresAt: now + ACTOR_NAME_CACHE_TTL_MS, promise };
+        actorNameCache = entry;
+        // A failed or empty lookup must not be cached for the whole TTL.
+        void promise.then((name) => {
+            if (!name && actorNameCache === entry) actorNameCache = null;
+        });
+    }
+    return { userId, actorName: await actorNameCache.promise };
+}
+
 // ── Default storage locations ──────────────────────────
 
 const DEFAULT_LOCATIONS: { name: string; icon: string }[] = [
@@ -269,6 +302,43 @@ async function findLinkedCabinetItemIdByInventoryId(
     return data?.id || null;
 }
 
+async function fetchStorageLocations(labId: string | null) {
+    let query = supabase
+        .from('storage_locations')
+        .select('*');
+
+    if (labId) {
+        query = query.eq('lab_id', labId);
+    } else {
+        query = query.is('lab_id', null);
+    }
+
+    return query.order('created_at', { ascending: true });
+}
+
+// 동일 lab_id + name 조합이 중복되어 있으면(예: seed 중복 실행) 하나만 노출
+function uniqueStorageLocations(rows: StorageLocation[]): StorageLocation[] {
+    const seen = new Set<string>();
+    return rows.filter((row) => {
+        const key = `${row.lab_id ?? ''}\0${(row.name || '').trim()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+/** `storage_locations_lab_name_unique` (lab_id, name): someone else seeded the same defaults first. */
+function isStorageLocationUniqueViolation(error: unknown): boolean {
+    const candidate = error as { code?: unknown; status?: unknown; message?: unknown; details?: unknown } | null;
+    if (!candidate) return false;
+    const text = `${typeof candidate.message === 'string' ? candidate.message : ''} ${typeof candidate.details === 'string' ? candidate.details : ''}`;
+    return candidate.code === '23505' || candidate.status === 409 || text.includes('storage_locations_lab_name_unique');
+}
+
+// The inventory list and the registration form both load locations on a new lab's first visit;
+// sharing one in-flight seed per scope keeps them from racing each other.
+const pendingStorageLocationSeeds = new Map<string, Promise<StorageLocation[]>>();
+
 export const storageLocationService = {
     /**
      * Get all storage locations for the current lab.
@@ -277,17 +347,7 @@ export const storageLocationService = {
     async getLocations(): Promise<StorageLocation[]> {
         const { currentLabId } = useLabStore.getState();
 
-        let query = supabase
-            .from('storage_locations')
-            .select('*');
-
-        if (currentLabId) {
-            query = query.eq('lab_id', currentLabId);
-        } else {
-            query = query.is('lab_id', null);
-        }
-
-        const { data, error } = await query.order('created_at', { ascending: true });
+        const { data, error } = await fetchStorageLocations(currentLabId);
 
         if (error) {
             console.error('[StorageLocation] fetch error:', error);
@@ -299,39 +359,52 @@ export const storageLocationService = {
             return await this.seedDefaults(currentLabId);
         }
 
-        // 동일 lab_id + name 조합이 중복되어 있으면(예: seed 중복 실행) 하나만 노출
-        const seen = new Set<string>();
-        return data.filter((row) => {
-            const key = `${row.lab_id ?? ''}\0${(row.name || '').trim()}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
+        return uniqueStorageLocations(data);
     },
 
     /** Seed default locations for a lab or personal space */
     async seedDefaults(labId: string | null): Promise<StorageLocation[]> {
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData.user?.id || null;
+        const scope = labId ?? 'personal';
+        const pending = pendingStorageLocationSeeds.get(scope);
+        if (pending) return pending;
 
-        const rows = DEFAULT_LOCATIONS.map(loc => ({
-            lab_id: labId,
-            ...(labId ? {} : { user_id: userId }),
-            name: loc.name,
-            icon: loc.icon,
-        }));
+        const seed = (async (): Promise<StorageLocation[]> => {
+            const { data: userData } = await supabase.auth.getUser();
+            const userId = userData.user?.id || null;
 
-        const { data, error } = await supabase
-            .from('storage_locations')
-            .insert(rows)
-            .select();
+            const rows = DEFAULT_LOCATIONS.map(loc => ({
+                lab_id: labId,
+                ...(labId ? {} : { user_id: userId }),
+                name: loc.name,
+                icon: loc.icon,
+            }));
 
-        if (error) {
-            console.error('[StorageLocation] seed error:', error);
-            return [];
+            const { data, error } = await supabase
+                .from('storage_locations')
+                .insert(rows)
+                .select();
+
+            if (error) {
+                // Another tab or teammate seeded first (409 / 23505): use the rows that now exist.
+                if (isStorageLocationUniqueViolation(error)) {
+                    const { data: existing, error: refetchError } = await fetchStorageLocations(labId);
+                    if (!refetchError && existing && existing.length > 0) {
+                        return uniqueStorageLocations(existing);
+                    }
+                }
+                console.error('[StorageLocation] seed error:', error);
+                return [];
+            }
+
+            return data || [];
+        })();
+
+        pendingStorageLocationSeeds.set(scope, seed);
+        try {
+            return await seed;
+        } finally {
+            if (pendingStorageLocationSeeds.get(scope) === seed) pendingStorageLocationSeeds.delete(scope);
         }
-
-        return data || [];
     },
 
     /** Add a new custom storage location */
@@ -701,18 +774,8 @@ export const inventoryService = {
         }
 
         const orderedInventory = invQuery.order('created_at', { ascending: false }).order('id', { ascending: false });
-        const invData = await readAllPages((from, to) => orderedInventory.range(from, to));
-
-        const inventoryRows = (invData || []) as InventoryRowWithRelations[];
-        const inventoryItems: InventoryItem[] = inventoryRows.map((item) => ({
-            ...item,
-            cabinet_name: item.cabinets?.name || null,
-            shelf_id: null,
-            shelf_level: null,
-            storage_location_name: item.storage_locations?.name || null,
-            storage_location_icon: item.storage_locations?.icon || null,
-            _source: 'inventory',
-        }));
+        // Both tables are independent reads; fetch them concurrently.
+        const invDataPromise = readAllPages((from, to) => orderedInventory.range(from, to));
 
         // 2. Fetch cabinet_items (reagents placed in cabinets)
         let cabQuery = supabase
@@ -731,7 +794,19 @@ export const inventoryService = {
         }
 
         const orderedCabinets = cabQuery.order('created_at', { ascending: false }).order('id', { ascending: false });
-        const cabData = await readAllPages((from, to) => orderedCabinets.range(from, to));
+        const cabDataPromise = readAllPages((from, to) => orderedCabinets.range(from, to));
+        const [invData, cabData] = await Promise.all([invDataPromise, cabDataPromise]);
+
+        const inventoryRows = (invData || []) as InventoryRowWithRelations[];
+        const inventoryItems: InventoryItem[] = inventoryRows.map((item) => ({
+            ...item,
+            cabinet_name: item.cabinets?.name || null,
+            shelf_id: null,
+            shelf_level: null,
+            storage_location_name: item.storage_locations?.name || null,
+            storage_location_icon: item.storage_locations?.icon || null,
+            _source: 'inventory',
+        }));
 
         // 동일 스펙 다건을 누락시키지 않기 위해 키 단위 "개수" 기반 dedupe 사용
         const cabinetRows = (cabData || []) as CabinetItemRowWithCabinet[];
@@ -903,8 +978,7 @@ export const inventoryService = {
     /** Create a new inventory item */
     async createItem(input: CreateInventoryInput): Promise<InventoryItem | null> {
         const { currentLabId } = useLabStore.getState();
-        const { data: userData } = await supabase.auth.getUser();
-        const actorName = await getCurrentUserDisplayName(currentLabId);
+        const { userId, actorName } = await resolveInventoryActor(currentLabId);
 
         const payload = {
             p_name: input.name,
@@ -924,7 +998,7 @@ export const inventoryService = {
             p_memo: input.memo || null,
             p_remaining_percent: input.remaining_percent ?? null,
             p_lab_id: currentLabId || null,
-            p_actor_user_id: userData.user?.id || null,
+            p_actor_user_id: userId,
             p_actor_name: actorName || null,
         };
 
@@ -939,9 +1013,14 @@ export const inventoryService = {
     },
 
     /** Update an inventory item */
+    /** Warm the actor cache while a form is open so the save itself only waits for the RPC. */
+    prefetchActorContext(): void {
+        void resolveInventoryActor(useLabStore.getState().currentLabId);
+    },
+
     async updateItem(id: string, updates: Partial<CreateInventoryInput>, source: InventorySource = 'inventory'): Promise<void> {
         const { currentLabId } = useLabStore.getState();
-        const actorName = await getCurrentUserDisplayName(currentLabId);
+        const { actorName } = await resolveInventoryActor(currentLabId);
 
         const payloadRecord: Record<string, unknown> = {};
 
@@ -1024,6 +1103,43 @@ export const inventoryService = {
 
         await inventoryService.updateItem(linkedCabinetItemId, cabinetUpdates, 'cabinet_item');
         return true;
+    },
+
+    /**
+     * Quick usage update from the list (quantity / remaining level) without the
+     * full edit form. Cabinet placements always represent one bottle, so their
+     * quantity is never changed; the remaining level is mirrored to the linked row.
+     */
+    async updateItemUsage(
+        item: InventoryItem,
+        updates: { quantity?: number; remaining_percent?: number },
+    ): Promise<void> {
+        const source = item._source || 'inventory';
+        const patch: Partial<CreateInventoryInput> = {};
+        if (updates.quantity !== undefined && source === 'inventory' && Number.isFinite(updates.quantity)) {
+            patch.quantity = Math.max(1, Math.round(updates.quantity));
+        }
+        if (updates.remaining_percent !== undefined && Number.isFinite(updates.remaining_percent)) {
+            patch.remaining_percent = Math.min(100, Math.max(0, Math.round(updates.remaining_percent)));
+        }
+        if (Object.keys(patch).length === 0) return;
+
+        await inventoryService.updateItem(item.id, patch, source);
+        if (patch.remaining_percent === undefined) return;
+
+        if (source === 'inventory' && item.storage_type === 'cabinet' && item.cabinet_id) {
+            await inventoryService.syncLinkedCabinetItemFromInventory({
+                inventoryItemId: item.id,
+                cabinetId: item.cabinet_id,
+                updates: { remaining_percent: patch.remaining_percent },
+            });
+        } else if (source === 'cabinet_item' && item.linked_inventory_item_id) {
+            await inventoryService.updateItem(
+                item.linked_inventory_item_id,
+                { remaining_percent: patch.remaining_percent },
+                'inventory',
+            );
+        }
     },
 
     async setCabinetItemInventoryLink(cabinetItemId: string, inventoryItemId: string | null): Promise<void> {
@@ -1179,7 +1295,7 @@ export const inventoryService = {
     /** Remove 1..100 records in one all-or-nothing database transaction. */
     async deleteItems(items: InventoryItem[]): Promise<InventoryRemovalResult> {
         const { currentLabId } = useLabStore.getState();
-        const actorName = await getCurrentUserDisplayName(currentLabId);
+        const { actorName } = await resolveInventoryActor(currentLabId);
         const targets = items.map((item): InventoryRemovalTarget => ({
             item_id: item.id,
             item_source: item._source || 'inventory',
@@ -1316,7 +1432,7 @@ export const inventoryService = {
         if (!input.cabinetId) return;
 
         const { currentLabId } = useLabStore.getState();
-        const actorName = await getCurrentUserDisplayName(currentLabId);
+        const { actorName } = await resolveInventoryActor(currentLabId);
         const reason = CABINET_RECORD_REMOVAL_REASONS[input.reasonKey || 'other'];
         const removeExactRecord = async (target: InventoryRemovalTarget): Promise<boolean> => {
             try {
@@ -1429,7 +1545,7 @@ export const inventoryService = {
         }
 
         const { currentLabId } = useLabStore.getState();
-        const actorName = await getCurrentUserDisplayName(currentLabId);
+        const { actorName } = await resolveInventoryActor(currentLabId);
         await removeInventoryRecords(
             targets,
             currentLabId || null,
