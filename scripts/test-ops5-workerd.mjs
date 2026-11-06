@@ -59,7 +59,7 @@ const options = convertV4MiniflareOptions({
         is_anonymous: false, email: 'ops5-runtime@example.invalid', created_at: '2026-01-01T00:00:00Z',
         app_metadata: {}, user_metadata: mode === 'auth-oversize' ? { oversized: 'x'.repeat(300_000) } : {} })
     }
-    if (url.pathname === '/rest/v1/rpc/join_lab_server_v1' && request.method === 'POST') {
+    if (url.pathname === '/rest/v1/rpc/join_lab_server_v2' && request.method === 'POST') {
       rpcCalls++
       assert.equal(request.headers.get('apikey'), 'ops5-synthetic-service')
       lastRpc = await request.json()

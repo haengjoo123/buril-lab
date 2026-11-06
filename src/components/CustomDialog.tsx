@@ -20,7 +20,11 @@ interface DialogProps {
     // Styling
     isDestructive?: boolean;
     isConfirmLoading?: boolean;
+    /** Disables the confirm button and ignores Enter, e.g. until a required choice in `children` is made. */
+    isConfirmDisabled?: boolean;
     preventCloseWhileLoading?: boolean;
+    /** Extra content (e.g. a small form) after the description. The dialog then scrolls when taller than the screen. */
+    children?: React.ReactNode;
 }
 
 export function CustomDialog({
@@ -37,7 +41,9 @@ export function CustomDialog({
     onConfirm,
     isDestructive = false,
     isConfirmLoading = false,
+    isConfirmDisabled = false,
     preventCloseWhileLoading = false,
+    children,
 }: DialogProps) {
     const { t } = useTranslation();
     const dialogRef = useRef<HTMLDivElement>(null);
@@ -58,7 +64,7 @@ export function CustomDialog({
     if (!isOpen) return null;
 
     const handleConfirm = () => {
-        if (isConfirmLoading) return;
+        if (isConfirmLoading || isConfirmDisabled) return;
         if (type === 'alert') {
             // An alert's only button must always dismiss it. Close first so a follow-up
             // dialog opened from onConfirm is not immediately closed again.
@@ -79,6 +85,8 @@ export function CustomDialog({
         if (e.key === 'Enter') {
             // A focused button handles Enter natively (e.g. Enter on 취소 must cancel).
             if (e.target instanceof HTMLButtonElement) return;
+            // Enter in a multi-line field (in children) adds a line; a disabled confirm ignores Enter.
+            if (e.target instanceof HTMLTextAreaElement || isConfirmDisabled) return;
             // Without a focused button, Enter never triggers a destructive confirm.
             if (isDestructive && type !== 'prompt') return;
             e.preventDefault();
@@ -99,12 +107,12 @@ export function CustomDialog({
 
             {/* Modal Box */}
             <div
-                className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+                className={`relative bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-300${children ? ' flex max-h-[calc(100dvh-2rem)] flex-col' : ''}`}
                 onClick={e => e.stopPropagation()}
                 onKeyDown={handleKeyDown}
             >
-                {/* Header Icon & Title */}
-                <div className="p-6 pb-4">
+                {/* Header Icon & Title (scrolls above the fixed buttons when children make it tall) */}
+                <div className={children ? 'min-h-0 overflow-y-auto overscroll-contain p-6 pb-4' : 'p-6 pb-4'}>
                     <div className="flex items-center gap-3 mb-2">
                         {isDestructive ? (
                             <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-full text-red-600 dark:text-red-400">
@@ -136,6 +144,8 @@ export function CustomDialog({
                             />
                         </div>
                     )}
+
+                    {children && <div className="mt-4">{children}</div>}
                 </div>
 
                 {/* Footer Buttons */}
@@ -152,7 +162,7 @@ export function CustomDialog({
                     )}
                     <button
                         onClick={handleConfirm}
-                        disabled={isConfirmLoading}
+                        disabled={isConfirmLoading || isConfirmDisabled}
                         className={`flex-1 px-4 py-2.5 rounded-xl font-medium text-white flex items-center justify-center gap-2 transition-transform active:scale-95 ${isDestructive
                             ? 'bg-red-600 hover:bg-red-700 shadow-md shadow-red-200 dark:shadow-red-900/20'
                             : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200 dark:shadow-blue-900/20'

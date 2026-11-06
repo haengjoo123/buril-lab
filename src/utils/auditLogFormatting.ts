@@ -29,9 +29,32 @@ const ACTION_KEY: Record<string, string> = {
     create: 'audit_action_create',
     update: 'audit_action_update',
     delete: 'audit_action_delete',
+    // Lab admin actions recorded by the database (members, center links, waste site settings).
+    join: 'audit_action_join',
+    role_change: 'audit_action_role_change',
+    remove: 'audit_action_remove',
+    leave: 'audit_action_leave',
+    link_request: 'audit_action_link_request',
+    link_approve: 'audit_action_link_approve',
+    link_reject: 'audit_action_link_reject',
+    link_revoke: 'audit_action_link_revoke',
+    scope_change: 'audit_action_scope_change',
 };
 
 type AuditActionCategory = 'create' | 'update' | 'delete' | 'activity';
+
+/** Where the lab admin actions fall in the create/update/delete counters and filters. */
+const ACTION_CATEGORY: Record<string, Exclude<AuditActionCategory, 'activity'>> = {
+    join: 'create',
+    role_change: 'update',
+    link_request: 'update',
+    link_approve: 'update',
+    link_reject: 'update',
+    link_revoke: 'update',
+    scope_change: 'update',
+    remove: 'delete',
+    leave: 'delete',
+};
 
 const ENTITY_KEY: Record<string, string> = {
     inventory: 'audit_entity_inventory',
@@ -40,6 +63,17 @@ const ENTITY_KEY: Record<string, string> = {
     cabinet: 'audit_entity_cabinet',
     waste_log: 'audit_entity_waste_log',
     waste_container: 'audit_entity_waste_container',
+    lab_member: 'audit_entity_lab_member',
+    safety_center_link: 'audit_entity_safety_center_link',
+    waste_policy_override: 'audit_entity_waste_policy_override',
+};
+
+/** Center link states (safety_center_lab_links.status) shown in link records. */
+const LINK_STATUS_KEY: Record<string, string> = {
+    requested: 'sc_link_requested',
+    approved: 'sc_link_approved',
+    rejected: 'sc_link_rejected',
+    revoked: 'sc_link_revoked',
 };
 
 const FIELD_KEY: Record<string, string> = {
@@ -64,11 +98,23 @@ const FIELD_KEY: Record<string, string> = {
     status: 'audit_field_waste_container_status',
     location: 'audit_field_waste_container_location',
     stream_code: 'audit_field_waste_container_stream',
+    role: 'audit_field_role',
+    scope: 'audit_field_scope',
+    center_name: 'audit_field_center_name',
+    is_disabled: 'audit_field_is_disabled',
+    changed_fields: 'audit_field_changed_fields',
 };
 
 const FIELD_ORDER = [
     'item_name',
     'name',
+    'role',
+    'status',
+    'scope',
+    'center_name',
+    'stream_code',
+    'is_disabled',
+    'changed_fields',
     'action_type',
     'reason',
     'quantity',
@@ -209,6 +255,15 @@ const formatArrayValue = (key: string, value: unknown[], t: TFunction, locale: s
     return t('audit_complex_data');
 };
 
+/** Center link scope values (summary, risk_detail, ...) as readable labels; unknown values pass through. */
+const formatLinkScope = (value: unknown, t: TFunction): string => {
+    if (!Array.isArray(value)) return '-';
+    const labels = value
+        .filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+        .map((entry) => t(`sc_scope_${entry}`, { defaultValue: entry }));
+    return labels.length > 0 ? labels.join(', ') : '-';
+};
+
 export const isUuidLike = (value: string): boolean =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
@@ -243,7 +298,7 @@ export const getAuditActionCategory = (
         return log.action;
     }
 
-    return 'activity';
+    return ACTION_CATEGORY[log.action] ?? 'activity';
 };
 
 export const formatAuditActionName = (
@@ -295,9 +350,13 @@ export const formatAuditValue = (
     if (typeof value === 'string') {
         if (key === 'stream_code') return wasteStreamLabel(value, locale);
         if (key === 'status') {
-            return value === 'active' || value === 'sealed' || value === 'collected'
-                ? containerStatusLabel(value, locale)
-                : t('common_unknown');
+            if (value === 'active' || value === 'sealed' || value === 'collected') {
+                return containerStatusLabel(value, locale);
+            }
+            return LINK_STATUS_KEY[value] ? t(LINK_STATUS_KEY[value]) : t('common_unknown');
+        }
+        if (key === 'role') {
+            return t(`member_role_${value}`, { defaultValue: t('common_unknown') });
         }
         if (key === 'storage_type') {
             if (value === 'cabinet') return t('inventory_loc_cabinet');
@@ -343,6 +402,13 @@ export const formatAuditValue = (
     }
 
     if (Array.isArray(value)) {
+        if (key === 'scope') return formatLinkScope(value, t);
+        if (key === 'changed_fields') {
+            const labels = value
+                .filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+                .map((entry) => t(`audit_override_field_${entry}`, { defaultValue: t('common_unknown') }));
+            return labels.length > 0 ? labels.join(', ') : '-';
+        }
         return formatArrayValue(key, value, t, locale);
     }
 
@@ -455,12 +521,90 @@ export const getAuditDetailSections = (
     return sections;
 };
 
-export const buildAuditEventDescription = (
-    log: Pick<AuditLog, 'actor_name' | 'action' | 'entity_type' | 'before_data' | 'after_data' | 'location_context'>,
+export interface AuditEventDescriptionContext {
+    /** Current lab members, user_id -> display name. A member missing here is shown as a former member. */
+    memberNames?: Readonly<Record<string, string>>;
+}
+
+type AuditDescriptionLog = Pick<AuditLog, 'actor_name' | 'action' | 'entity_type' | 'before_data' | 'after_data' | 'location_context'>
+    & Partial<Pick<AuditLog, 'diff_data'>>;
+
+const textValue = (value: unknown): string | null =>
+    typeof value === 'string' && value.trim() ? value : null;
+
+/** Lab member records (join, leave, remove, role change). Null for an action this build does not know. */
+const describeMemberEvent = (
+    log: AuditDescriptionLog,
+    actor: string,
     t: TFunction,
-    locale: string
+    locale: string,
+    context: AuditEventDescriptionContext | undefined,
+): string | null => {
+    const beforeData = toRecord(log.before_data);
+    const afterData = toRecord(log.after_data);
+    // The account deletion scrub removes user_id: that member then reads as a former member.
+    const userId = textValue(afterData?.user_id) ?? textValue(beforeData?.user_id);
+    const member = (userId ? context?.memberNames?.[userId] : undefined) || t('audit_member_former');
+
+    if (log.action === 'join') return t('audit_event_member_join', { actor });
+    if (log.action === 'leave') return t('audit_event_member_leave', { actor });
+    if (log.action === 'remove') return t('audit_event_member_remove', { actor, member });
+    if (log.action === 'role_change') {
+        const roleDiff = toRecord(toRecord(log.diff_data)?.role);
+        const fromRole = beforeData?.role ?? roleDiff?.from;
+        const toRole = afterData?.role ?? roleDiff?.to;
+        return t('audit_event_member_role', {
+            actor,
+            member,
+            from: formatAuditValue('role', fromRole, t, locale),
+            to: formatAuditValue('role', toRole, t, locale),
+        });
+    }
+    return null;
+};
+
+/** Safety center link records. Null for an action this build does not know. */
+const describeLinkEvent = (log: AuditDescriptionLog, actor: string, t: TFunction): string | null => {
+    const afterData = toRecord(log.after_data);
+    const center = textValue(afterData?.center_name) ?? t('audit_center_unknown');
+    const scope = formatLinkScope(afterData?.scope, t);
+
+    if (log.action === 'link_request') return t('audit_event_link_request', { center, scope });
+    if (log.action === 'link_approve') return t('audit_event_link_approve', { actor, center });
+    if (log.action === 'link_reject') return t('audit_event_link_reject', { actor, center });
+    if (log.action === 'link_revoke') return t('audit_event_link_revoke', { actor, center });
+    if (log.action === 'scope_change') return t('audit_event_link_scope', { center, scope });
+    return null;
+};
+
+/** Waste container site setting records. Null for an action this build does not know. */
+const describeOverrideEvent = (log: AuditDescriptionLog, actor: string, t: TFunction, locale: string): string | null => {
+    const streamCode = textValue(toRecord(log.after_data)?.stream_code) ?? textValue(toRecord(log.before_data)?.stream_code) ?? '';
+    const stream = wasteStreamLabel(streamCode, locale);
+
+    if (log.action === 'create') return t('audit_event_override_create', { actor, stream });
+    if (log.action === 'update') return t('audit_event_override_update', { actor, stream });
+    if (log.action === 'delete') return t('audit_event_override_delete', { actor, stream });
+    return null;
+};
+
+export const buildAuditEventDescription = (
+    log: AuditDescriptionLog,
+    t: TFunction,
+    locale: string,
+    context?: AuditEventDescriptionContext
 ): string => {
     const actor = log.actor_name || t('audit_unknown_user');
+
+    const specificDescription = log.entity_type === 'lab_member'
+        ? describeMemberEvent(log, actor, t, locale, context)
+        : log.entity_type === 'safety_center_link'
+            ? describeLinkEvent(log, actor, t)
+            : log.entity_type === 'waste_policy_override'
+                ? describeOverrideEvent(log, actor, t, locale)
+                : null;
+    if (specificDescription) return specificDescription;
+
     const actionLabel = formatAuditActionName(log.action, t, log);
     const entityLabel = formatAuditEntityName(log.entity_type, t);
     const beforeData = toRecord(log.before_data);

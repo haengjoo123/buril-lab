@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Building2,
   CheckCircle2,
   Clock,
+  Hourglass,
+  Link2Off,
   Loader2,
   MessageSquare,
   Send,
@@ -14,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { safetyCenterService } from '../../services/safetyCenterService';
 import { useLabStore } from '../../store/useLabStore';
+import { invalidateLabAdminAttention } from '../../store/useLabAdminAttentionStore';
 import { LabManagementModal } from '../../components/LabManagementModal';
 import type {
   LabSafetyCenterLinkRequest,
@@ -25,18 +28,40 @@ import {
   getPriorityLabel,
   getRequestStatusLabel,
 } from '../safety-center/safetyCenterUtils';
+import {
+  formatDueDate,
+  getRequestDueState,
+  sortLabSafetyRequests,
+  type RequestDueState,
+} from './safetyRequestDue';
+import { canLabCloseRequest, nextLabRequestStatus } from './labRequestFlow';
 
 type UpdatingState =
   | { type: 'link'; id: string }
   | { type: 'request'; id: string }
   | null;
 
-function formatDateTime(value?: string | null): string {
+const REQUEST_PRIMARY_BUTTON = 'inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white';
+const REQUEST_SECONDARY_BUTTON = 'inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800';
+
+function formatDateTime(value: string | null | undefined, locale: string): string {
   if (!value) return '-';
-  return new Date(value).toLocaleString('ko-KR', {
+  return new Date(value).toLocaleString(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+function dueChipLabel({ daysLeft }: RequestDueState, t: TFunction): string {
+  if (daysLeft > 0) return t('cmp_lsc_due_in_days', { days: daysLeft });
+  if (daysLeft === 0) return t('cmp_lsc_due_today');
+  return t('cmp_lsc_overdue_days', { days: -daysLeft });
+}
+
+function dueChipTone(tone: RequestDueState['tone']): string {
+  if (tone === 'overdue') return 'bg-red-50 text-red-700 border-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300';
+  if (tone === 'soon') return 'bg-amber-50 text-amber-700 border-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300';
+  return 'bg-slate-50 text-slate-600 border-slate-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300';
 }
 
 function linkStatusLabel(status: LabSafetyCenterLinkRequest['link_status'], t: TFunction): string {
@@ -46,29 +71,37 @@ function linkStatusLabel(status: LabSafetyCenterLinkRequest['link_status'], t: T
   return t('cmp_lsc_status_revoked', '철회됨');
 }
 
+// Chip tones with dark variants: the admin tab follows the app's dark mode.
+const TONE_EMERALD = 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300';
+const TONE_BLUE = 'bg-blue-50 text-blue-700 border-blue-100 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300';
+const TONE_RED = 'bg-red-50 text-red-700 border-red-100 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300';
+const TONE_AMBER = 'bg-amber-50 text-amber-700 border-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300';
+const TONE_ORANGE = 'bg-orange-50 text-orange-700 border-orange-100 dark:border-orange-900/40 dark:bg-orange-900/20 dark:text-orange-300';
+
 function linkStatusTone(status: LabSafetyCenterLinkRequest['link_status']): string {
-  if (status === 'approved') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-  if (status === 'requested') return 'bg-blue-50 text-blue-700 border-blue-100';
-  if (status === 'rejected') return 'bg-red-50 text-red-700 border-red-100';
-  return 'bg-slate-100 text-slate-600 border-slate-200';
+  if (status === 'approved') return TONE_EMERALD;
+  if (status === 'requested') return TONE_BLUE;
+  if (status === 'rejected') return TONE_RED;
+  return 'bg-slate-100 text-slate-600 border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200';
 }
 
 function requestStatusTone(status: SafetyCenterRequestStatus): string {
-  if (status === 'resolved') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-  if (status === 'submitted') return 'bg-blue-50 text-blue-700 border-blue-100';
-  if (status === 'in_progress') return 'bg-amber-50 text-amber-700 border-amber-100';
-  return 'bg-slate-50 text-slate-700 border-slate-200';
+  if (status === 'resolved') return TONE_EMERALD;
+  if (status === 'submitted') return TONE_BLUE;
+  if (status === 'in_progress') return TONE_AMBER;
+  return 'bg-slate-50 text-slate-700 border-slate-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200';
 }
 
 function priorityTone(priority: LabSafetyCenterRequest['priority']): string {
-  if (priority === 'urgent') return 'bg-red-50 text-red-700 border-red-100';
-  if (priority === 'high') return 'bg-orange-50 text-orange-700 border-orange-100';
-  if (priority === 'low') return 'bg-slate-50 text-slate-500 border-slate-200';
-  return 'bg-blue-50 text-blue-700 border-blue-100';
+  if (priority === 'urgent') return TONE_RED;
+  if (priority === 'high') return TONE_ORANGE;
+  if (priority === 'low') return 'bg-slate-50 text-slate-500 border-slate-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-400';
+  return TONE_BLUE;
 }
 
 export function LabSafetyCenterPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language.startsWith('ko') ? 'ko-KR' : 'en-US';
   const currentLabId = useLabStore((state) => state.currentLabId);
   const myLabs = useLabStore((state) => state.myLabs);
   const currentLab = myLabs.find((lab) => lab.lab_id === currentLabId);
@@ -76,14 +109,22 @@ export function LabSafetyCenterPanel() {
 
   const [links, setLinks] = useState<LabSafetyCenterLinkRequest[]>([]);
   const [requests, setRequests] = useState<LabSafetyCenterRequest[]>([]);
+  // When requests were loaded: "today" for the D-day chips.
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [updating, setUpdating] = useState<UpdatingState>(null);
   const [error, setError] = useState<string | null>(null);
   const [replyTextByRequestId, setReplyTextByRequestId] = useState<Record<string, string>>({});
   const [isLabSettingsOpen, setIsLabSettingsOpen] = useState(false);
   const institutionName = currentLab?.lab?.institution_name?.trim() ?? '';
+  // Only the latest load may commit, so a slow load for the previous lab never shows here.
+  const loadSeqRef = useRef(0);
 
   const load = useCallback(async () => {
+    loadSeqRef.current += 1;
+    const seq = loadSeqRef.current;
+    const isCurrentLoad = () => loadSeqRef.current === seq;
+
     if (!currentLabId) {
       setLinks([]);
       setRequests([]);
@@ -98,13 +139,15 @@ export function LabSafetyCenterPanel() {
         isAdmin ? safetyCenterService.getLabLinkRequests(currentLabId) : Promise.resolve([]),
         safetyCenterService.getLabRequests(currentLabId),
       ]);
+      if (!isCurrentLoad()) return;
       setLinks(nextLinks);
       setRequests(nextRequests);
+      setLoadedAt(Date.now());
     } catch (err) {
       console.error(err);
-      setError(t('cmp_lsc_load_error', '통합센터 요청을 불러오지 못했습니다.'));
+      if (isCurrentLoad()) setError(t('cmp_lsc_load_error', '통합센터 요청을 불러오지 못했습니다.'));
     } finally {
-      setIsLoading(false);
+      if (isCurrentLoad()) setIsLoading(false);
     }
   }, [currentLabId, isAdmin, t]);
 
@@ -115,6 +158,8 @@ export function LabSafetyCenterPanel() {
   const pendingLinks = useMemo(() => links.filter((link) => link.link_status === 'requested'), [links]);
   const approvedLinkCount = useMemo(() => links.filter((link) => link.link_status === 'approved').length, [links]);
   const openRequests = useMemo(() => requests.filter((request) => request.status !== 'resolved'), [requests]);
+  // Unresolved first, nearest due date first, so overdue work sits at the top.
+  const sortedRequests = useMemo(() => sortLabSafetyRequests(requests), [requests]);
   // Nothing has ever reached this lab: show one line instead of zero counters and empty inboxes.
   const isEmpty = links.length === 0 && requests.length === 0;
 
@@ -123,6 +168,7 @@ export function LabSafetyCenterPanel() {
     setError(null);
     try {
       await safetyCenterService.respondLabLink(linkId, status);
+      if (currentLabId) invalidateLabAdminAttention(currentLabId);
       await load();
     } catch (err) {
       console.error(err);
@@ -132,13 +178,16 @@ export function LabSafetyCenterPanel() {
     }
   };
 
-  const updateRequest = async (requestId: string, nextStatus: SafetyCenterRequestStatus) => {
+  /** Moves a request on (start, reply, close) or, without a status, only sends the note. */
+  const updateRequest = async (requestId: string, nextStatus: SafetyCenterRequestStatus | undefined) => {
+    const body = replyTextByRequestId[requestId]?.trim();
+    if (!nextStatus && !body) return;
     setUpdating({ type: 'request', id: requestId });
     setError(null);
     try {
-      const body = replyTextByRequestId[requestId]?.trim();
       await safetyCenterService.addRequestEvent(requestId, body || undefined, nextStatus);
       setReplyTextByRequestId((current) => ({ ...current, [requestId]: '' }));
+      if (currentLabId) invalidateLabAdminAttention(currentLabId);
       await load();
     } catch (err) {
       console.error(err);
@@ -159,7 +208,7 @@ export function LabSafetyCenterPanel() {
   return (
     <div className="flex flex-col gap-4 p-4 sm:gap-5 sm:p-5" style={{ paddingBottom: '100px' }}>
       {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           {error}
         </div>
@@ -175,7 +224,7 @@ export function LabSafetyCenterPanel() {
             <button
               type="button"
               onClick={() => setIsLabSettingsOpen(true)}
-              className="inline-flex h-9 shrink-0 items-center rounded-lg bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+              className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
             >
               {t('cmp_lsc_set_institution')}
             </button>
@@ -229,7 +278,7 @@ export function LabSafetyCenterPanel() {
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-slate-500">
-                          {link.institution_name} · {link.institution_domain} · {t('cmp_lsc_requested_at', { date: formatDateTime(link.requested_at), defaultValue: '요청 {{date}}' })}
+                          {link.institution_name} · {link.institution_domain} · {t('cmp_lsc_requested_at', { date: formatDateTime(link.requested_at, locale), defaultValue: '요청 {{date}}' })}
                         </p>
                         <p className="mt-2 text-xs font-semibold text-slate-500">{t('cmp_lsc_link_scope', { scope: link.link_scope.map(getLinkScopeLabel).join(', '), defaultValue: '공개 범위: {{scope}}' })}</p>
                       </div>
@@ -240,7 +289,7 @@ export function LabSafetyCenterPanel() {
                               type="button"
                               disabled={isWorking}
                               onClick={() => void respondLink(link.link_id, 'approved')}
-                              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                             >
                               {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                               {t('cmp_lsc_approve', '승인')}
@@ -249,7 +298,7 @@ export function LabSafetyCenterPanel() {
                               type="button"
                               disabled={isWorking}
                               onClick={() => void respondLink(link.link_id, 'rejected')}
-                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-950/50"
                             >
                               <XCircle className="h-3.5 w-3.5" />
                               {t('cmp_lsc_reject', '거절')}
@@ -261,7 +310,7 @@ export function LabSafetyCenterPanel() {
                             type="button"
                             disabled={isWorking}
                             onClick={() => void respondLink(link.link_id, 'revoked')}
-                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
                           >
                             {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                             {t('cmp_lsc_revoke_link', '연결 철회')}
@@ -287,21 +336,23 @@ export function LabSafetyCenterPanel() {
               <div className="p-5 text-sm text-slate-500">{t('cmp_lsc_no_check_requests', '센터 점검 요청이 없습니다.')}</div>
             ) : (
               <div className="grid gap-3 p-4 lg:grid-cols-2">
-                {requests.map((request) => {
+                {sortedRequests.map((request) => {
                   const isWorking = updating?.type === 'request' && updating.id === request.id;
-                  const nextStatus: SafetyCenterRequestStatus = request.status === 'open'
-                    ? 'in_progress'
-                    : request.status === 'in_progress'
-                      ? 'submitted'
-                      : request.status === 'submitted'
-                        ? 'resolved'
-                        : 'resolved';
+                  const dueState = request.status !== 'resolved' && loadedAt !== null
+                    ? getRequestDueState(request.due_date, loadedAt)
+                    : null;
+                  // The lab replies up to "submitted"; the center reviews and closes the request.
+                  const nextStatus = nextLabRequestStatus(request.status);
+                  const isWaitingForCenter = nextStatus === null && request.status === 'submitted';
+                  // Only when the center can no longer see the request (link ended, paused, or center not approved).
+                  const canCloseHere = canLabCloseRequest(request, isAdmin ? links : null);
+                  const replyText = replyTextByRequestId[request.id] ?? '';
                   return (
                     <article key={request.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h3 className="font-bold text-slate-900 dark:text-white">{request.title}</h3>
-                          <p className="mt-1 text-xs text-slate-500">{request.center_name} · {formatDateTime(request.created_at)}</p>
+                          <p className="mt-1 text-xs text-slate-500">{request.center_name} · {formatDateTime(request.created_at, locale)}</p>
                         </div>
                         <span className={`rounded border px-2 py-0.5 text-xs font-bold ${priorityTone(request.priority)}`}>
                           {getPriorityLabel(request.priority)}
@@ -316,30 +367,76 @@ export function LabSafetyCenterPanel() {
                         </span>
                         <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                           <Clock className="h-3.5 w-3.5" />
-                          {t('cmp_lsc_due', { date: request.due_date || '-', defaultValue: '마감 {{date}}' })}
+                          {t('cmp_lsc_due', { date: formatDueDate(request.due_date, locale), defaultValue: '마감 {{date}}' })}
                         </span>
+                        {dueState && (
+                          <span className={`rounded border px-2 py-0.5 text-xs font-bold ${dueChipTone(dueState.tone)}`}>
+                            {dueChipLabel(dueState, t)}
+                          </span>
+                        )}
                       </div>
+                      {isWaitingForCenter && !canCloseHere && (
+                        <p className="mt-2 flex items-start gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                          <Hourglass className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          {t('cmp_lsc_waiting_center')}
+                        </p>
+                      )}
+                      {canCloseHere && (
+                        <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                          <Link2Off className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          {t('cmp_lsc_center_unlinked')}
+                        </p>
+                      )}
                       {request.status !== 'resolved' && (
                         <div className="mt-4 space-y-2">
+                          <label htmlFor={`lab-request-reply-${request.id}`} className="sr-only">
+                            {t('cmp_lsc_reply_placeholder', '처리 내용 또는 회신 메모를 입력하세요.')}
+                          </label>
                           <textarea
-                            value={replyTextByRequestId[request.id] ?? ''}
+                            id={`lab-request-reply-${request.id}`}
+                            value={replyText}
                             onChange={(event) => setReplyTextByRequestId((current) => ({
                               ...current,
                               [request.id]: event.target.value,
                             }))}
                             rows={3}
                             placeholder={t('cmp_lsc_reply_placeholder', '처리 내용 또는 회신 메모를 입력하세요.')}
-                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 dark:border-slate-600 dark:bg-slate-900"
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 outline-none focus:border-blue-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 sm:text-sm"
                           />
-                          <button
-                            type="button"
-                            disabled={isWorking}
-                            onClick={() => void updateRequest(request.id, nextStatus)}
-                            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
-                          >
-                            {isWorking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                            {nextStatus === 'in_progress' ? t('cmp_lsc_start', '처리 시작') : nextStatus === 'submitted' ? t('cmp_lsc_submit_reply', '회신 제출') : t('cmp_lsc_complete', '완료 처리')}
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            {nextStatus ? (
+                              <button
+                                type="button"
+                                disabled={isWorking}
+                                onClick={() => void updateRequest(request.id, nextStatus)}
+                                className={REQUEST_PRIMARY_BUTTON}
+                              >
+                                {isWorking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+                                {nextStatus === 'in_progress' ? t('cmp_lsc_start', '처리 시작') : t('cmp_lsc_submit_reply', '회신 제출')}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isWorking || !replyText.trim()}
+                                onClick={() => void updateRequest(request.id, undefined)}
+                                className={REQUEST_PRIMARY_BUTTON}
+                              >
+                                {isWorking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <MessageSquare className="h-4 w-4" aria-hidden="true" />}
+                                {t('cmp_lsc_send_comment')}
+                              </button>
+                            )}
+                            {canCloseHere && (
+                              <button
+                                type="button"
+                                disabled={isWorking}
+                                onClick={() => void updateRequest(request.id, 'resolved')}
+                                className={REQUEST_SECONDARY_BUTTON}
+                              >
+                                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                                {t('cmp_lsc_close_unlinked')}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </article>

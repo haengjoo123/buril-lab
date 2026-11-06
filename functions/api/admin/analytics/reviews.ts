@@ -21,6 +21,7 @@ interface ReviewsBody {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const LIST_STATUSES = new Set(['pending', 'approved', 'rejected'])
 const SELECT_FIELDS = [
   'id', 'candidate_type', 'source_key', 'title', 'summary', 'proposed_alias',
   'canonical_name', 'canonical_cas', 'evidence', 'sample_count', 'status',
@@ -71,9 +72,19 @@ export const onRequestPost = async (context: {
       p_assurance_level: auth.context.identity.assuranceLevel,
     })
     if (error) {
-      return error.code === 'P0002'
-        ? json({ error: 'Review candidate was not found.' }, { status: 404 })
-        : internalErrorResponse('admin.analytics.reviews.decide', error)
+      if (error.code === 'P0002') return json({ error: 'Review candidate was not found.' }, { status: 404 })
+      if (error.code === '22023') {
+        // The decide RPC raises 22023 both for an already-decided candidate and for invalid
+        // input (for example a stored canonical CAS that fails validation). Only the former is a
+        // conflict; provider messages are never echoed back.
+        return typeof error.message === 'string' && error.message.includes('already been decided')
+          ? json(
+            { error: 'Review candidate has already been decided.', code: 'REVIEW_ALREADY_DECIDED' },
+            { status: 409, headers: { 'Cache-Control': 'no-store' } },
+          )
+          : json({ error: 'The review decision is invalid.' }, { status: 400 })
+      }
+      return internalErrorResponse('admin.analytics.reviews.decide', error)
     }
     const result = Array.isArray(data) && data.length === 1 ? data[0] : data
     if (!result || typeof result !== 'object' || Array.isArray(result)) {
@@ -88,6 +99,11 @@ export const onRequestPost = async (context: {
 
   // Candidate refresh belongs to the existing scheduled database job. Listing
   // reviews must never create or update records as a side effect.
+  // An absent (or null) status keeps the original behaviour of listing every candidate.
+  const statusFilter = body.status === undefined || body.status === null ? null : body.status
+  if (statusFilter !== null && (typeof statusFilter !== 'string' || !LIST_STATUSES.has(statusFilter))) {
+    return json({ error: 'status must be pending, approved, or rejected.' }, { status: 400 })
+  }
   const limit = parseBoundedLimit(body.limit, 50, 100)
   let query = auth.context.adminClient
     .from('analytics_review_candidates')
@@ -95,6 +111,7 @@ export const onRequestPost = async (context: {
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit + 1)
+  if (typeof statusFilter === 'string') query = query.eq('status', statusFilter)
   const cursorCreatedAt = typeof body.cursor?.createdAt === 'string' ? body.cursor.createdAt : null
   const cursorId = typeof body.cursor?.id === 'string' && UUID_PATTERN.test(body.cursor.id) ? body.cursor.id : null
   if (cursorCreatedAt && cursorId && Number.isFinite(Date.parse(cursorCreatedAt))) {

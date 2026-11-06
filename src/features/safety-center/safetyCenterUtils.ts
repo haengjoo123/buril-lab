@@ -357,6 +357,7 @@ const LINK_SCOPE_LABEL_KEYS: Record<string, string> = {
   summary: 'sc_scope_summary',
   risk_detail: 'sc_scope_risk_detail',
   exports: 'sc_scope_exports',
+  waste_management: 'sc_scope_waste_management',
 };
 
 /** Readable label for a `safety_center_lab_links.scope` value; unknown values pass through. */

@@ -181,6 +181,8 @@ describe('getLinkScopeLabel', () => {
     await i18n.changeLanguage('ko');
     expect(['summary', 'risk_detail', 'exports'].map(getLinkScopeLabel)).toEqual(['요약', '위험 상세', '내보내기']);
     expect(getLinkScopeLabel('future_scope')).toBe('future_scope');
+    // The waste policy scope the database already uses has its own label too.
+    expect(getLinkScopeLabel('waste_management')).not.toBe('waste_management');
   });
 });
 

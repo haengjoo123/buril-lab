@@ -64,6 +64,18 @@ describe('Ops10 operator-role and MFA preparation boundary', () => {
     })).toThrow(/bypasses its atomic operator audit/)
   })
 
+  it('requires the safety-center status v2 RPC with the review note and rejects a return to v1', () => {
+    expect(verifyOps10ApplicationSources(application)).toMatchObject({ atomicMutationAudit: true })
+    expect(() => verifyOps10ApplicationSources({
+      ...application,
+      centerStatus: application.centerStatus.replace("rpc('operator_safety_center_status_v2'", "rpc('operator_safety_center_status_v1'"),
+    })).toThrow(/safety-center mutation/)
+    expect(() => verifyOps10ApplicationSources({
+      ...application,
+      centerStatus: application.centerStatus.replace('p_review_note: note', 'p_review_note: null'),
+    })).toThrow(/safety-center mutation/)
+  })
+
   it('rejects a second analytics email gate outside the explicit fallback boundary', () => {
     expect(() => verifyOps10ApplicationSources({
       ...application,

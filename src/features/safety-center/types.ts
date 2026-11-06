@@ -16,6 +16,10 @@ export interface SafetyCenter {
   approved_at: string | null;
   created_at: string;
   member_role: SafetyCenterRole;
+  /** Operator rejection reason preset; only set while status = rejected (absent on an older database). */
+  review_reason?: string | null;
+  /** Optional operator note to the applicant; only set while status = rejected. */
+  review_note?: string | null;
 }
 
 export interface SafetyCenterMember {

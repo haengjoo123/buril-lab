@@ -142,9 +142,11 @@ export function verifyOps10ApplicationSources({
     'p_request_id: identity.requestId',
     'p_assurance_level: identity.assuranceLevel',
   ], 'feedback mutation')
+  // v2 (lab admin action audit) keeps v1's atomic operator audit and adds the rejection reason/note.
   requireMarkers(centerStatus, [
-    "rpc('operator_safety_center_status_v1'",
+    "rpc('operator_safety_center_status_v2'",
     'p_request_id: identity.requestId',
+    'p_review_note: note',
   ], 'safety-center mutation')
   requireMarkers(reviews, [
     "rpc('operator_analytics_review_decide_v1'",

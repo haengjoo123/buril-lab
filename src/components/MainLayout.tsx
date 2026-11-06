@@ -22,6 +22,8 @@ interface MainLayoutProps {
     onTabClick?: (tab: AppTab) => void;
     cartCount?: number;
     onCartClick?: () => void;
+    /** Red "확인할 일" count for the admin tab in the side nav (the bottom nav gets it from App). */
+    adminAttentionCount?: number;
 }
 
 export const MainLayout: React.FC<MainLayoutProps> = ({
@@ -37,6 +39,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     onTabClick,
     cartCount = 0,
     onCartClick,
+    adminAttentionCount = 0,
 }) => {
     const { t } = useTranslation();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -57,7 +60,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         <div className="adaptive-shell fixed bg-gray-100 font-sans text-slate-900 dark:bg-slate-950 dark:text-slate-100"
             data-navigation={mode} style={{ left: region.x, top: region.y, width: region.width || '100%', height: region.height || '100dvh' }}>
             {onTabClick && <DesktopSideNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={onTabClick}
-                userEmail={userEmail} onSettingsClick={() => setIsSettingsOpen(true)} onLogoClick={onLogoClick} />}
+                userEmail={userEmail} onSettingsClick={() => setIsSettingsOpen(true)} onLogoClick={onLogoClick}
+                adminAttentionCount={adminAttentionCount} />}
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
                 <div style={{ width: headerWidth }} className="shrink-0 min-w-0">
                     <header className="adaptive-header flex min-h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-950">
@@ -126,6 +130,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                     userEmail={userEmail}
                     onSignOut={onSignOut}
                     onClose={() => setIsSettingsOpen(false)}
+                    feedbackSourceScreen={onTabClick ? activeTab : undefined}
                 />
             )}
         </div>

@@ -49,7 +49,7 @@ describe('server lab join API', () => {
     expect(mocked.getUser).toHaveBeenCalledWith(token)
     const hmac = (type: string, value: string) => createHmac('sha256', env.LAB_JOIN_RATE_LIMIT_SECRET)
       .update(`burillab:lab-join:v1:${type}:${labId}:${value}`).digest('hex')
-    expect(mocked.rpc).toHaveBeenCalledExactlyOnceWith('join_lab_server_v1', {
+    expect(mocked.rpc).toHaveBeenCalledExactlyOnceWith('join_lab_server_v2', {
       p_user_id: userId, p_lab_id: labId, p_password: 'synthetic-password', p_nickname: 'Synthetic member',
       p_user_hash: hmac('user', userId), p_ip_hash: hmac('ip', '192.0.2.8'),
     })
@@ -171,7 +171,7 @@ describe('server lab join API', () => {
     expect(await result.text()).not.toContain('sensitive-sql-secret')
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('sensitive-sql-secret')
     expect(mocked.rpc).toHaveBeenCalledTimes(1)
-    expect(mocked.rpc.mock.calls[0][0]).toBe('join_lab_server_v1')
+    expect(mocked.rpc.mock.calls[0][0]).toBe('join_lab_server_v2')
   })
 
   it('maps the existing membership cap without returning the DB message', async () => {

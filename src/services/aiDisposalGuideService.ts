@@ -205,6 +205,17 @@ export function generateDisposalGuideClientCacheKey(
     }))
 }
 
+/**
+ * Opaque SHA-256 identifier for a guide request. Analytics can group repeated requests by it
+ * without storing the request itself (batch composition, lab policy contacts, SOP links).
+ */
+export async function hashDisposalGuideCacheKey(cacheKey: string): Promise<string | null> {
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) return null
+    const digest = await subtle.digest('SHA-256', new TextEncoder().encode(cacheKey))
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export async function getAIDisposalGuide(
     chemicals: DisposalGuideChemicalInput[],
     options: DisposalGuideRequestOptions = {},
@@ -220,22 +231,25 @@ export async function getAIDisposalGuide(
         ruleVersion: options.ruleVersion,
     })
 
-    void analyticsService.trackAIDisposalGuideView({
-        chemicals,
-        sourceScreen: options.sourceScreen || 'unknown',
-        triggerSource: options.triggerSource || 'user_request',
-        metadata: {
-            ...options.metadata,
-            cache_key: cacheKey,
-            response_source: result.responseSource,
-            availability: result.availability,
-            availability_reason: result.availabilityReason,
-            decision_status: result.decisionStatus,
-            stream_code: result.destination.streamCode,
-            policy_version: options.decision?.policyVersion || options.policy?.version,
-            rule_version: options.decision?.ruleVersion || options.ruleVersion,
-        },
-    })
+    void (async () => {
+        const cacheKeyHash = await hashDisposalGuideCacheKey(cacheKey).catch(() => null)
+        await analyticsService.trackAIDisposalGuideView({
+            chemicals,
+            sourceScreen: options.sourceScreen || 'unknown',
+            triggerSource: options.triggerSource || 'user_request',
+            metadata: {
+                ...options.metadata,
+                cache_key_sha256: cacheKeyHash,
+                response_source: result.responseSource,
+                availability: result.availability,
+                availability_reason: result.availabilityReason,
+                decision_status: result.decisionStatus,
+                stream_code: result.destination.streamCode,
+                policy_version: options.decision?.policyVersion || options.policy?.version,
+                rule_version: options.decision?.ruleVersion || options.ruleVersion,
+            },
+        })
+    })()
 
     return result
 }

@@ -11,6 +11,8 @@ interface DesktopSideNavProps {
   userEmail?: string;
   onSettingsClick: () => void;
   onLogoClick?: () => void;
+  /** Red "확인할 일" count shown on the admin item (admins only). */
+  adminAttentionCount?: number;
 }
 
 type NavTone = 'blue' | 'emerald' | 'red';
@@ -37,9 +39,11 @@ export function DesktopSideNav({
   userEmail,
   onSettingsClick,
   onLogoClick,
+  adminAttentionCount = 0,
 }: DesktopSideNavProps) {
   const { t } = useTranslation();
   const { isDarkMode, toggleThemeMode } = useThemeMode();
+  const attentionCount = isAdmin && adminAttentionCount > 0 ? adminAttentionCount : 0;
 
   const navItems: Array<{
     tab: AppTab;
@@ -73,6 +77,7 @@ export function DesktopSideNav({
         {navItems.filter((item) => item.visible !== false).map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.tab;
+          const badgeCount = item.tab === 'admin' ? attentionCount : 0;
           return (
             <button
               key={item.tab}
@@ -82,8 +87,25 @@ export function DesktopSideNav({
               className={navItemClasses(isActive, item.tone)}
               aria-current={isActive ? 'page' : undefined}
             >
-              <Icon className="h-5 w-5 shrink-0" />
+              {badgeCount > 0 ? (
+                // On the icon, so the rail (labels under icons) shows it too.
+                <span className="relative flex shrink-0">
+                  <Icon className="h-5 w-5 shrink-0" />
+                  <span
+                    aria-hidden="true"
+                    className={`absolute -right-2 -top-1.5 h-4 min-w-4 rounded-full px-1 text-center text-3xs font-bold leading-4 ring-2 ${isActive
+                      ? 'bg-white text-red-700 ring-red-600'
+                      : 'bg-red-600 text-white ring-white dark:bg-red-500 dark:ring-slate-950'
+                      }`}
+                  >
+                    {badgeCount > 9 ? '9+' : badgeCount}
+                  </span>
+                </span>
+              ) : (
+                <Icon className="h-5 w-5 shrink-0" />
+              )}
               <span className="truncate">{item.label}</span>
+              {badgeCount > 0 && <span className="sr-only">{t('nav_admin_attention', { count: badgeCount })}</span>}
             </button>
           );
         })}

@@ -92,6 +92,15 @@ export interface FeedbackRow {
   status: string
   resolved_at: string | null
   resolved_by: string | null
+  /** Lab space it was sent from; cleared on account deletion and lab deletion. */
+  lab_id: string | null
+  /** App tab it was sent from: search, logs, cabinet, inventory or admin. */
+  source_screen: string | null
+  /**
+   * Current name of that lab, flattened from the `lab:labs(name)` embed by the list endpoint.
+   * The status endpoint returns the RPC's table row, which has no lab name.
+   */
+  lab_name?: string | null
 }
 
 export interface FeedbackAdminContext {
@@ -101,7 +110,7 @@ export interface FeedbackAdminContext {
 
 export const FEEDBACK_SELECT_FIELDS = [
   'id', 'type', 'message', 'contact', 'user_email', 'user_id', 'user_agent',
-  'created_at', 'status', 'resolved_at', 'resolved_by',
+  'created_at', 'status', 'resolved_at', 'resolved_by', 'lab_id', 'source_screen', 'lab:labs(name)',
 ].join(', ')
 
 function resolveSupabaseUrl(env: FeedbackAdminEnv): string | null {

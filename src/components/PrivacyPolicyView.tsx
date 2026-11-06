@@ -36,7 +36,7 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
                         {isKorean ? '개인정보처리방침' : 'Privacy Policy'}
                     </h1>
                     <p className="text-sm text-slate-400">
-                        {isKorean ? '최종 수정일: 2026년 8월 23일' : 'Last updated: August 23, 2026'}
+                        {isKorean ? '최종 수정일: 2026년 11월 6일' : 'Last updated: November 6, 2026'}
                     </p>
                 </div>
 
@@ -142,13 +142,18 @@ const KoreanPolicy: React.FC = () => (
                     ['이메일 주소, 계정 식별자', '회원가입, 로그인, 계정 관리, 고객 지원'],
                     ['비밀번호', 'Supabase 인증 시스템에서 해시 처리되며 원문은 BurilLab이 보관하지 않음'],
                     ['연구실, 멤버, 닉네임, 권한 정보', '공동 연구실 관리와 접근 권한 확인'],
+                    ['연구실 관리 기록: 멤버 가입·역할 변경·제외·나가기(대상 계정 식별자와 역할만), 안전센터 연결 상태·공개 범위, 폐액통 현장 설정에서 바뀐 항목 이름', '연구실 안전·관리 기록 유지. 멤버 관련 기록은 그 연구실 관리자만, 센터 연결·현장 설정 기록은 연구실 멤버 모두 볼 수 있음'],
                     ['시약, 시약장, 보관 위치, 최종 폐액 배치·구성품·처리 기록, 활동 로그', '시약 재고 관리, 보관 이력 확인, 안전 기록 유지와 검색→최종 배치 연결 분석'],
                     ['실제 제출한 정제 검색어, 검색 유형·채널, 결과 수·상태·지연시간, 최종 매칭 식별자', '검색 수요·결과 없음·기술 오류와 검색 품질 분석. 입력 중 키 입력은 수집하지 않음'],
                     ['결과 열람·선택, 10분 내 재검색, 스캔 수정, 배치 추가 행동', '혼동 원인과 검색→배치 전환 분석, 검색 별칭 개선 후보 생성'],
                     ['AI 분석 요청 내용, 스캔한 라벨 이미지', '라벨 인식과 사용자가 요청한 AI 분석 기능 제공'],
                     ['음성 질문 오디오와 전사 결과', '음성 비서 기능 제공. 음성 기능이 활성화된 경우에만 처리'],
-                    ['피드백 내용, 선택 입력한 연락처, 사용자 에이전트', '버그 제보와 개선 요청 처리'],
-                    ['언어, 온보딩, 안전 안내 확인 상태 등 로컬 저장 정보', '기기 내 사용 환경 유지'],
+                    ['피드백 내용, 선택 입력한 연락처, 사용자 에이전트, 보낸 화면, 연구실 공간에서 보낸 경우 그 연구실', '버그 제보와 개선 요청 처리'],
+                    ['언어, 화면 테마, 안전 안내 확인 여부 등 기기 저장 설정', '기기 내 사용 환경 유지(이 기기의 브라우저·앱 저장소에 보관)'],
+                    ['온보딩 진행 기록: 안내 단계, 표시·완료·건너뜀·다시 보기 여부, 화면, 웹·앱 구분, 폐액 배치에 담은 시약 수·완료한 단계 수·앱 언어, 온보딩 검색 단계의 검색어 글자 수(검색어 원문은 저장하지 않음)', '기기를 바꿔도 온보딩 진행 상태 유지, 온보딩 개선을 위한 내부 집계'],
+                    ['보관 경고 무시 기록: 함께 두면 위험하다는 경고가 있는 칸에 시약을 배치했을 때의 경고 규칙·심각도, 시약장·선반, 두 시약의 이름·CAS 번호', '보관 안전 안내 개선을 위한 내부 집계'],
+                    ['AI 폐기 안내 열람 기록: 조회한 시약의 이름·CAS 번호·분자식·분류, 함께 조회한 시약, 같은 안내 요청을 묶기 위한 해시값(요청 내용 자체는 저장하지 않음), 안내 결과 상태와 규칙 버전', '폐기 안내 개선을 위한 내부 집계'],
+                    ['구매 의도 기록: 시약 등록·수정·시약장 배치 때 입력한 브랜드, 제품명·제품번호, 수량, 용량, CAS 번호와 입력 방식(직접 입력·카탈로그·스캔 등), 보관 유형', '시약 수요 파악 등 서비스 개선을 위한 내부 집계. 외부에 제공하지 않음'],
                 ]}
             />
         </Section>
@@ -160,6 +165,7 @@ const KoreanPolicy: React.FC = () => (
                 <li>AI 라벨 인식, OCR, 음성 비서 등 사용자가 요청한 기능 제공</li>
                 <li>제출 검색의 수요·혼동 원인, 검색→최종 배치 전환, 배치 데이터 완성도 분석</li>
                 <li>검색 별칭·자동완성·스캔 교정, 교육 우선순위와 안전규칙 검토 후보 개선</li>
+                <li>온보딩 단계별 완료·건너뜀, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도 기록의 내부 집계를 통한 온보딩·안전 안내·서비스 개선</li>
                 <li>보안, 오류 분석, 분석 수집 오류율 감시, API 남용 방지, 서비스 품질 개선</li>
             </ul>
         </Section>
@@ -174,7 +180,19 @@ const KoreanPolicy: React.FC = () => (
             </ul>
         </Section>
 
-        <Section title="5. 제3자 처리 서비스">
+        <Section title="5. 앱 이용 기록">
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>온보딩 진행, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도 기록은 로그인한 상태에서만 서버(Supabase)에 저장합니다. 게스트로 사용할 때는 저장하지 않습니다.</li>
+                <li>각 기록에는 계정, 기록 당시 선택한 연구실(있는 경우), 기록 시각이 함께 저장됩니다.</li>
+                <li>다른 사용자는 온보딩 진행 기록을 볼 수 없습니다. 연구실에 연결된 보관 경고 무시·AI 폐기 안내 열람·구매 의도 기록은 같은 연구실 멤버도 볼 수 있으며, 연구실을 나가도 기록의 연구실 연결은 그대로 남습니다.</li>
+                <li>이전 버전의 앱은 온보딩 검색 단계의 검색어 원문도 함께 저장했습니다. 그때 저장된 기록에는 원문이 남아 있을 수 있으며, 회원 탈퇴 시 함께 삭제됩니다.</li>
+                <li>이전 버전의 앱은 AI 폐기 안내 열람 기록에 안내 요청 내용(폐액 배치의 농도·부피·pH·혼합 상태, 적용된 연구실 폐액 규정의 보관 위치·담당 연락처 등)도 함께 저장했습니다. 그때 저장된 기록에는 이 내용이 남아 있을 수 있으며, 회원 탈퇴 시 함께 삭제됩니다.</li>
+                <li>이 기록은 위 표에 적은 목적에만 사용합니다. 외부에 제공하거나 판매하지 않으며, 광고나 다른 앱·웹사이트 추적에 사용하지 않습니다.</li>
+                <li>앱 안에서 이 기록만 따로 끄는 설정은 없습니다. 처리 중지를 원하면 아래 문의처로 요청해 주세요.</li>
+            </ul>
+        </Section>
+
+        <Section title="6. 제3자 처리 서비스">
             <p className="text-slate-400 text-[15px] leading-relaxed">
                 BurilLab은 개인정보를 판매하지 않습니다. 다만 서비스 운영을 위해 다음 제공자를 사용할 수 있습니다.
             </p>
@@ -186,20 +204,21 @@ const KoreanPolicy: React.FC = () => (
             </ul>
         </Section>
 
-        <Section title="6. 보관 및 삭제">
+        <Section title="7. 보관 및 삭제">
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>계정 정보와 연구실 데이터는 계정 또는 연구실이 유지되는 동안 보관됩니다.</li>
+                <li>온보딩 진행, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도 기록은 별도 자동 삭제 기간 없이 계정이 유지되는 동안 보관하며, 회원 탈퇴 시 모두 삭제합니다. 연구실이 삭제되면 연구실 연결만 지우고 기록은 계정에 남습니다.</li>
                 <li>게스트 원문 검색 이벤트와 행동은 수집 후 90일에 자동 삭제되며, 이 브라우저의 삭제 토큰으로 그 전에 직접 삭제할 수 있습니다.</li>
                 <li>로그인 사용자의 원문 검색 분석은 계정 유지 중 보관합니다. 최근 검색 기록 삭제 또는 회원 탈퇴 시 연결된 원문·가명 이벤트·행동을 함께 삭제합니다.</li>
                 <li>삭제된 검색 이벤트를 참조한 최종 배치 구성품은 배치 기록을 유지하되 검색 연결만 제거합니다.</li>
                 <li>개별 삭제 전에 최소 공개 임계치를 충족해 비가역 월간 통계로 확정된 집계만 개인 삭제 이후에도 유지될 수 있습니다.</li>
-                <li>회원 탈퇴 시 개인 식별 정보와 개인 피드백 식별자는 삭제 또는 익명화됩니다.</li>
+                <li>회원 탈퇴 시 개인 식별 정보와 개인 피드백 식별자(보낸 연구실 연결 포함)는 삭제 또는 익명화됩니다.</li>
                 <li>다른 멤버가 함께 사용하는 연구실 시약장, 재고, 안전 기록은 협업 연속성을 위해 유지될 수 있으며 사용자 식별자는 제거됩니다.</li>
                 <li>법령상 보관이 필요한 정보가 있다면 해당 기간 동안만 보관한 뒤 삭제합니다.</li>
             </ul>
         </Section>
 
-        <Section title="7. 계정과 데이터 삭제 방법" id="delete-account">
+        <Section title="8. 계정과 데이터 삭제 방법" id="delete-account">
             <p className="text-slate-400 text-[15px] leading-relaxed">
                 사용자는 언제든지 앱 안에서 직접 계정 삭제를 요청할 수 있습니다.
             </p>
@@ -218,7 +237,7 @@ const KoreanPolicy: React.FC = () => (
             </p>
         </Section>
 
-        <Section title="8. 사용자 권리와 문의">
+        <Section title="9. 사용자 권리와 문의">
             <p className="text-slate-400 text-[15px] leading-relaxed">
                 개인정보 열람, 정정, 삭제, 처리 중지를 요청하려면 아래 연락처로 문의해 주세요.
             </p>
@@ -254,13 +273,18 @@ const EnglishPolicy: React.FC = () => (
                     ['Email address and account identifier', 'Sign-up, login, account management, and support'],
                     ['Password', 'Processed by Supabase authentication using hashing; BurilLab does not store the original password'],
                     ['Lab, member, nickname, and role information', 'Shared lab management and access control'],
+                    ['Lab management records: member joins, role changes, removals, and departures (only the account identifier and role), safety center link status and shared data, and the names of changed waste container site settings', 'Keeping lab safety and management records. Member records are visible only to that lab’s admins; center link and site setting records are visible to all lab members'],
                     ['Reagent, cabinet, storage location, final waste batch, component, handling, and activity records', 'Inventory, storage history, safety records, and search-to-final-batch linkage analysis'],
                     ['Sanitized submitted query, query type/channel, result counts/status/latency, and final matched identifiers', 'Demand, no-result, technical-error, and search quality analysis; keystrokes are not collected'],
                     ['Result open/selection, search reformulation within 10 minutes, scan correction, and add-to-batch actions', 'Confusion causes, search-to-batch conversion, and search-alias improvement candidates'],
                     ['AI request content and scanned label images', 'Label recognition, OCR, and user-requested AI analysis features'],
                     ['Voice question audio and transcription results', 'Voice assistant features, only when voice features are enabled'],
-                    ['Feedback message, optional contact, and user agent', 'Bug reports and improvement requests'],
-                    ['Language, onboarding, and safety acknowledgement stored locally', 'Keeping user preferences on the device'],
+                    ['Feedback message, optional contact, user agent, the screen it was sent from, and the lab when sent from a lab space', 'Bug reports and improvement requests'],
+                    ['Language, theme, safety-notice acknowledgement, and other settings stored on the device', 'Keeping user preferences on the device (kept in this device’s browser or app storage)'],
+                    ['Onboarding progress records: guide step, whether it was shown, completed, skipped, or replayed, screen, web or app, number of reagents in the waste batch, number of completed steps, app language, and the character count of the onboarding search (the search text itself is not stored)', 'Keeping onboarding progress across devices and internal aggregates to improve onboarding'],
+                    ['Ignored storage warning records: when a reagent is placed in a slot with an incompatible-storage warning, the warning rule and severity, cabinet and shelf, and both reagents’ names and CAS numbers', 'Internal aggregates to improve storage safety guidance'],
+                    ['AI disposal guide view records: names, CAS numbers, molecular formulas, and categories of the reagents looked up, reagents looked up together, a hash that groups identical guide requests (the request itself is not stored), guide result status, and rule version', 'Internal aggregates to improve disposal guidance'],
+                    ['Purchase intent records: brand, product name and number, quantity, capacity, CAS number and how it was entered (typed, catalog, scan, etc.), and storage type entered when registering, editing, or placing a reagent', 'Internal aggregates for service improvement, such as understanding reagent demand; not provided to third parties'],
                 ]}
             />
         </Section>
@@ -272,6 +296,7 @@ const EnglishPolicy: React.FC = () => (
                 <li>Process user-requested AI label recognition, OCR, and voice assistant features</li>
                 <li>Analyze submitted-query demand, confusion causes, search-to-final-batch conversion, and batch data completeness</li>
                 <li>Improve aliases, autocomplete, scan correction, training priorities, and human-reviewed safety candidates</li>
+                <li>Improve onboarding, safety guidance, and the service through internal aggregates of onboarding completion and skips, ignored storage warnings, AI disposal guide views, and purchase intent records</li>
                 <li>Improve service quality, monitor analytics ingestion errors, protect security, and prevent API abuse</li>
             </ul>
         </Section>
@@ -286,7 +311,19 @@ const EnglishPolicy: React.FC = () => (
             </ul>
         </Section>
 
-        <Section title="5. Service Providers">
+        <Section title="5. App Usage Records">
+            <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
+                <li>Onboarding progress, ignored storage warning, AI disposal guide view, and purchase intent records are stored on the server (Supabase) only while you are signed in. They are not stored when you use the app as a guest.</li>
+                <li>Each record is stored with your account, the lab selected at the time (if any), and the time of the record.</li>
+                <li>Other users cannot view your onboarding progress records. Ignored storage warning, AI disposal guide view, and purchase intent records linked to a lab can also be viewed by members of that lab, and the lab link stays on these records even after you leave the lab.</li>
+                <li>Earlier versions of the app also stored the raw text of the onboarding search. Records saved then may still contain that text, and they are deleted when the account is deleted.</li>
+                <li>Earlier versions of the app also stored the guide request (waste batch concentrations, volumes, pH, and mixing state, plus the storage location, contact, and other details of the lab waste policy applied) in AI disposal guide view records. Records saved then may still contain these details, and they are deleted when the account is deleted.</li>
+                <li>These records are used only for the purposes listed in the table above. They are not provided to third parties or sold, and are not used for advertising or for tracking you across other apps or websites.</li>
+                <li>The app has no separate setting to turn off only these records. To request that processing stop, contact us below.</li>
+            </ul>
+        </Section>
+
+        <Section title="6. Service Providers">
             <p className="text-slate-400 text-[15px] leading-relaxed">
                 BurilLab does not sell personal information. The following providers may process information to operate the service.
             </p>
@@ -298,20 +335,21 @@ const EnglishPolicy: React.FC = () => (
             </ul>
         </Section>
 
-        <Section title="6. Retention and Deletion">
+        <Section title="7. Retention and Deletion">
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>Account and lab data are retained while the account or lab remains active.</li>
+                <li>Onboarding progress, ignored storage warning, AI disposal guide view, and purchase intent records have no separate automatic deletion period. They are retained while the account is active and are all deleted when the account is deleted. If a lab is deleted, only the lab link is removed and the records stay with the account.</li>
                 <li>Raw guest search events and actions are automatically deleted after 90 days and can be deleted earlier with the deletion token held by this browser.</li>
                 <li>Authenticated raw search analytics are retained while the account is active. Deleting recent-search history or the account also deletes linked raw and pseudonymous events and actions.</li>
                 <li>If a deleted search event was linked to a final batch component, the batch remains but the search link is removed.</li>
                 <li>Only irreversible monthly aggregates that met minimum release thresholds before an individual deletion may remain afterward.</li>
-                <li>When an account is deleted, personally identifying account and feedback data are deleted or anonymized.</li>
+                <li>When an account is deleted, personally identifying account and feedback data (including the lab it was sent from) are deleted or anonymized.</li>
                 <li>Shared lab cabinets, inventory, and safety records may remain available to other lab members, with the deleted user attribution removed.</li>
                 <li>Information that must be retained by law is kept only for the required period and then deleted.</li>
             </ul>
         </Section>
 
-        <Section title="7. How to Delete Your Account and Data" id="delete-account-en">
+        <Section title="8. How to Delete Your Account and Data" id="delete-account-en">
             <p className="text-slate-400 text-[15px] leading-relaxed">
                 You can request account deletion directly in the app at any time.
             </p>
@@ -330,7 +368,7 @@ const EnglishPolicy: React.FC = () => (
             </p>
         </Section>
 
-        <Section title="8. Your Rights and Contact">
+        <Section title="9. Your Rights and Contact">
             <p className="text-slate-400 text-[15px] leading-relaxed">
                 To request access, correction, deletion, or restriction of your personal information, contact us below.
             </p>

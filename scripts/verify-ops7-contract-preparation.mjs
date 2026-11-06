@@ -100,7 +100,8 @@ export function verifyOps7DatabaseSources({ migration, permissionTest, nativeAss
 export function verifyOps7ApplicationSources({ labService, joinHandler, cabinetService, auditService }) {
   if (/\.rpc\(\s*['"]join_lab['"]/.test(labService)) fail('client still calls the legacy join RPC')
   if (!labService.includes(">('/api/labs/join', {")) fail('client does not use the server join endpoint')
-  if (!joinHandler.includes("adminClient.rpc('join_lab_server_v1'")) fail('server join endpoint does not use the bounded RPC')
+  // join_lab_server_v2 (lab admin action audit) wraps the bounded v1 and records the join.
+  if (!joinHandler.includes("adminClient.rpc('join_lab_server_v2'")) fail('server join endpoint does not use the bounded RPC')
   if (/\.rpc\(\s*['"]insert_audit_log_rpc['"]/.test(cabinetService)
     || /\.from\(\s*['"]audit_logs['"]\s*\)\s*\.(?:insert|update|delete)/.test(cabinetService)) {
     fail('cabinet client still has a generic audit write fallback')

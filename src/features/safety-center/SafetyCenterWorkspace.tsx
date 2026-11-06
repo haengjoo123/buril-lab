@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import i18n from '../../locales/i18n';
 import {
   AlertTriangle,
@@ -16,11 +17,13 @@ import {
   Loader2,
   LockKeyhole,
   LogOut,
+  Mail,
   MessageSquare,
   RefreshCw,
   Search,
   Send,
   ShieldCheck,
+  ShieldX,
   Users,
   XCircle,
 } from 'lucide-react';
@@ -48,6 +51,7 @@ import type {
   SafetyCenterLabCandidate,
   SafetyCenterMember,
   SafetyCenterRequest,
+  SafetyCenterRequestEvent,
   SafetyCenterRequestPriority,
   SafetyCenterRiskItem,
   SafetyCenterWasteLog,
@@ -64,6 +68,9 @@ import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { AppSelect } from '../../components/AppSelect';
 import { useLabStore } from '../../store/useLabStore';
 import { labService } from '../../services/labService';
+import { CustomDialog } from '../../components/CustomDialog';
+import { OPERATOR_CONTACT_EMAIL } from '../../config/operator';
+import { formatAuditActionName, formatAuditEntityName } from '../../utils/auditLogFormatting';
 
 type DatasetKey = 'risks' | 'waste' | 'audit';
 
@@ -605,6 +612,13 @@ export function SafetyCenterWorkspace() {
 
         {!activeCenter ? (
           <CreateCenterPanel onCreated={() => void reloadAll()} />
+        ) : activeCenter.status === 'rejected' ? (
+          <RejectedCenterPanel
+            center={activeCenter}
+            members={members}
+            isRefreshing={isLoading}
+            onRefresh={() => void reloadAll()}
+          />
         ) : activeCenter.status !== 'approved' ? (
           <PendingCenterPanel
             center={activeCenter}
@@ -647,7 +661,11 @@ export function SafetyCenterWorkspace() {
             requests={requests}
             approvedLabs={approvedLabs}
             canCreate={canManageCenter}
+            canManage={canManageCenter}
             onOpenRequest={openRequestDraft}
+            onRequestsChanged={async () => {
+              setRequests(await safetyCenterService.getRequests(activeCenter.id));
+            }}
           />
         ) : activeSection === 'exports' ? (
           <ExportsPage
@@ -907,6 +925,81 @@ function PendingCenterPanel({
   );
 }
 
+/** The operator did not approve the application: why, the operator's note, and how to ask again. */
+function RejectedCenterPanel({
+  center,
+  members,
+  isRefreshing,
+  onRefresh,
+}: {
+  center: SafetyCenter;
+  members: SafetyCenterMember[];
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
+  const reason = center.review_reason?.trim() || null;
+  const note = center.review_note?.trim() || null;
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-900 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-100 sm:p-6">
+        <div className="flex items-start gap-4">
+          <ShieldX className="mt-1 h-6 w-6 shrink-0" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-medium">{t('sc_rejected_title')}</h1>
+            <p className="mt-2 text-sm leading-6">
+              {t('sc_rejected_body', { name: center.center_name })}
+            </p>
+            <dl className="mt-4 space-y-3 rounded-lg border border-red-100 bg-white p-4 text-sm text-slate-800 dark:border-red-900/50 dark:bg-slate-900 dark:text-slate-100">
+              <div>
+                <dt className="text-xs font-medium text-red-700 dark:text-red-300">{t('sc_rejected_reason_label')}</dt>
+                <dd className="mt-1 break-words">
+                  {reason
+                    ? t(`sc_review_reason_${reason}`, { defaultValue: t('sc_review_reason_other') })
+                    : t('sc_rejected_no_reason')}
+                </dd>
+              </div>
+              {note && (
+                <div>
+                  <dt className="text-xs font-medium text-red-700 dark:text-red-300">{t('sc_rejected_note_label')}</dt>
+                  <dd className="mt-1 whitespace-pre-wrap break-words">{note}</dd>
+                </div>
+              )}
+            </dl>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a
+                href={`mailto:${OPERATOR_CONTACT_EMAIL}`}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-red-700 px-4 text-sm font-medium text-white transition-colors hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-500"
+              >
+                <Mail className="h-4 w-4" aria-hidden="true" />
+                {t('sc_rejected_contact')}
+              </a>
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-white px-3 text-sm font-medium text-red-900 transition-colors hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-900/40"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                {t('sc_refresh')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('sc_center_basic_info')}</h3>
+        <div className="mt-4 space-y-3 text-sm">
+          <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">{t('sc_institution')}</span><span className="min-w-0 break-words text-right font-normal">{center.institution_name}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">{t('sc_domain')}</span><span className="min-w-0 break-words text-right font-normal">{center.institution_domain}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">{t('sc_members')}</span><span className="font-normal">{t('sc_member_count', { n: members.length })}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">{t('sc_requested_on')}</span><span className="font-normal">{formatDate(center.created_at)}</span></div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 function DashboardPage({
   summary,
   riskItems,
@@ -1057,8 +1150,8 @@ function DashboardPage({
             <div className="mt-4 space-y-3">
               {auditLogs.slice(0, 5).map((log) => (
                 <div key={log.id} className="border-l-2 border-slate-200 pl-3">
-                  <p className="text-sm font-normal text-slate-800 dark:text-slate-100">{log.lab_name} · {log.entity_type}</p>
-                  <p className="mt-1 text-xs text-slate-500">{log.action} · {log.actor_name ?? t('sc_unknown')} · {formatDateTime(log.created_at)}</p>
+                  <p className="text-sm font-normal text-slate-800 dark:text-slate-100">{log.lab_name} · {formatAuditEntityName(log.entity_type, t)}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatAuditActionName(log.action, t, log)} · {log.actor_name ?? t('sc_unknown')} · {formatDateTime(log.created_at)}</p>
                 </div>
               ))}
               {auditLogs.length === 0 && <p className="text-sm text-slate-500">{t('sc_no_audit_events')}</p>}
@@ -1505,12 +1598,18 @@ function RequestsPage({
   requests,
   approvedLabs,
   canCreate,
+  canManage,
   onOpenRequest,
+  onRequestsChanged,
 }: {
   requests: SafetyCenterRequest[];
   approvedLabs: SafetyCenterLabCandidate[];
   canCreate: boolean;
+  /** Owners and managers close requests once they have reviewed the lab's reply. */
+  canManage: boolean;
   onOpenRequest: (draft: RequestDraft) => void;
+  /** Reloads the request list after a request changed here. */
+  onRequestsChanged: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1610,12 +1709,179 @@ function RequestsPage({
               <div className="flex justify-between gap-3"><span className="text-slate-500">{t('sc_target')}</span><span className="text-right font-normal">{selectedRequest.target_type ?? '-'}</span></div>
               <div className="flex justify-between gap-3"><span className="text-slate-500">{t('sc_created_on')}</span><span className="text-right font-normal">{formatDateTime(selectedRequest.created_at)}</span></div>
             </div>
+            <RequestFollowUp
+              key={selectedRequest.id}
+              request={selectedRequest}
+              canManage={canManage}
+              onRequestsChanged={onRequestsChanged}
+            />
           </div>
         ) : (
           <p className="mt-4 text-sm text-slate-500">{t('sc_no_selected_request')}</p>
         )}
       </aside>
     </div>
+  );
+}
+
+function requestEventStatusText(event: SafetyCenterRequestEvent, t: TFunction): string | null {
+  if (event.event_type === 'status_change' && event.to_status) {
+    return event.from_status
+      ? t('sc_request_event_status', { from: getRequestStatusLabel(event.from_status), to: getRequestStatusLabel(event.to_status) })
+      : getRequestStatusLabel(event.to_status);
+  }
+  if (event.event_type === 'created' && event.to_status) return getRequestStatusLabel(event.to_status);
+  return null;
+}
+
+/**
+ * The selected request's timeline and, for owners and managers, "확인 후 종료": the lab replies
+ * up to "submitted" and the center closes the request after reviewing it. No person names are shown.
+ */
+function RequestFollowUp({
+  request,
+  canManage,
+  onRequestsChanged,
+}: {
+  request: SafetyCenterRequest;
+  canManage: boolean;
+  onRequestsChanged: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [events, setEvents] = useState<SafetyCenterRequestEvent[] | null>(null);
+  const [eventsError, setEventsError] = useState(false);
+  const [closeNote, setCloseNote] = useState('');
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const canClose = canManage && request.status !== 'resolved';
+  const noteId = `sc-request-close-note-${request.id}`;
+  const timelineHeadingId = `sc-request-timeline-${request.id}`;
+
+  // The status is a dependency so the timeline shows the closing event right after closing.
+  useEffect(() => {
+    let isCurrent = true;
+    safetyCenterService.getRequestEvents(request.id)
+      .then((items) => {
+        if (!isCurrent) return;
+        setEvents(items);
+        setEventsError(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (isCurrent) setEventsError(true);
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, [request.id, request.status]);
+
+  const closeRequest = async () => {
+    setIsClosing(true);
+    setCloseError(null);
+    try {
+      await safetyCenterService.addRequestEvent(request.id, closeNote.trim() || undefined, 'resolved');
+    } catch (err) {
+      console.error(err);
+      setCloseError(t('sc_request_close_error'));
+      setIsConfirmOpen(false);
+      setIsClosing(false);
+      return;
+    }
+    setCloseNote('');
+    setIsConfirmOpen(false);
+    setIsClosing(false);
+    try {
+      await onRequestsChanged();
+    } catch (err) {
+      // Closed already; the list catches up on the next refresh.
+      console.error(err);
+    }
+  };
+
+  return (
+    <>
+      <section aria-labelledby={timelineHeadingId} className="border-t border-slate-200 pt-4 dark:border-slate-800">
+        <h4 id={timelineHeadingId} className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          {t('sc_request_timeline')}
+        </h4>
+        {eventsError ? (
+          <p className="mt-2 text-sm text-red-700 dark:text-red-300">{t('sc_err_load_data')}</p>
+        ) : events === null ? (
+          <Loader2 className="mt-3 h-4 w-4 animate-spin text-slate-400" aria-label={t('loading')} />
+        ) : events.length === 0 ? (
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t('sc_request_timeline_empty')}</p>
+        ) : (
+          <ol className="mt-3 space-y-3 border-l border-slate-200 pl-4 dark:border-slate-700">
+            {events.map((event) => {
+              const statusText = requestEventStatusText(event, t);
+              const actorLabel = event.actor_scope === 'lab'
+                ? t('sc_request_actor_lab')
+                : event.actor_scope === 'center'
+                  ? t('sc_request_actor_center')
+                  : null;
+              return (
+                <li key={event.id} className="relative">
+                  <span
+                    aria-hidden="true"
+                    className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-slate-900 ${event.actor_scope === 'lab' ? 'bg-violet-500' : 'bg-blue-500'}`}
+                  />
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    {actorLabel && <span className="font-medium text-slate-700 dark:text-slate-200">{actorLabel}</span>}
+                    <time dateTime={event.created_at}>{formatDateTime(event.created_at)}</time>
+                  </div>
+                  {statusText && (
+                    <p className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-200">{statusText}</p>
+                  )}
+                  {event.body && (
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 dark:text-slate-300">{event.body}</p>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
+
+      {canClose && (
+        <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <label htmlFor={noteId} className="sr-only">{t('sc_request_close_note_placeholder')}</label>
+          <textarea
+            id={noteId}
+            value={closeNote}
+            onChange={(event) => setCloseNote(event.target.value)}
+            rows={3}
+            disabled={isClosing}
+            placeholder={t('sc_request_close_note_placeholder')}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 sm:text-sm"
+          />
+          {closeError && (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-300">{closeError}</p>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsConfirmOpen(true)}
+            disabled={isClosing}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400"
+          >
+            {isClosing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+            {t('sc_request_close')}
+          </button>
+        </div>
+      )}
+
+      <CustomDialog
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        type="confirm"
+        title={t('sc_request_close_confirm_title')}
+        description={t('sc_request_close_confirm_body')}
+        confirmText={t('sc_request_close')}
+        onConfirm={() => void closeRequest()}
+        isConfirmLoading={isClosing}
+        preventCloseWhileLoading
+      />
+    </>
   );
 }
 
