@@ -3,7 +3,7 @@ import { CabinetTrash } from './components/CabinetTrash';
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { Box, Camera, ChevronDown, ChevronUp, Layers, Minus, PencilRuler, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, X, Undo2, Redo2 } from 'lucide-react';
+import { AlertCircle, Box, Camera, ChevronDown, ChevronUp, Info, Layers, Minus, MoreVertical, PencilRuler, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, Trash2, X, Undo2, Redo2, type LucideIcon } from 'lucide-react';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
@@ -30,14 +30,18 @@ import type { WasteBatchDisposalReason } from './reagentDisposalFlow';
 import { resolveAutoPlacementStorageData } from '../../utils/storagePlacementGate';
 import type { ManufacturerDateType } from '../../utils/manufacturerDate';
 
-import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
+import type { PendingPlacement, ReagentPlacement, ReagentTemplateType, ShelfData } from '../../types/fridge';
 import { createCabinetLayoutSnapshot } from '../../utils/cabinetLayoutHistory';
-import { checkCabinetCompatibility } from '../../utils/storageCompatibilityChecker';
+import {
+    buildCabinetCompatMarks,
+    checkCabinetCompatibility,
+    checkCabinetReviewConflicts,
+} from '../../utils/storageCompatibilityChecker';
+import { AmberBottleIcon, GlassBottleIcon, PlasticContainerIcon, SquareBottleIcon } from './components/ContainerTypeIcons';
 
 const FridgeScene = lazy(() =>
     import('./FridgeScene').then((module) => ({ default: module.FridgeScene }))
 );
-const ReagentModelPreview = lazy(() => import('./components/ReagentModelPreview'));
 
 const SceneLoadingFallback = () => (
     <div className="absolute inset-0 flex items-center justify-center bg-slate-50/80 dark:bg-slate-950/80">
@@ -47,15 +51,34 @@ const SceneLoadingFallback = () => (
     </div>
 );
 
-const ReagentPreviewFallback = ({ width, height }: { width: number; height: number }) => (
-    <div
-        className="flex items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-        style={{ width, height }}
-        aria-hidden="true"
-    >
-        <Loader2 className="h-4 w-4 animate-spin" />
-    </div>
-);
+/** Static container icons: one WebGL context for the cabinet only, none per tray tile. */
+const CONTAINER_ICONS: Record<ReagentTemplateType, { icon: LucideIcon; className: string }> = {
+    A: { icon: AmberBottleIcon, className: 'text-amber-700 dark:text-amber-400' },
+    B: { icon: PlasticContainerIcon, className: 'text-slate-500 dark:text-slate-300' },
+    C: { icon: GlassBottleIcon, className: 'text-cyan-700 dark:text-cyan-400' },
+    D: { icon: SquareBottleIcon, className: 'text-slate-600 dark:text-slate-400' },
+};
+
+type ToastTone = 'success' | 'error' | 'info';
+
+interface ToastState {
+    id: number;
+    message: string;
+    tone: ToastTone;
+    /** Top of the layout undo stack right after the action; undo only while it still is. */
+    undoAnchor?: ShelfData[];
+}
+
+const TOAST_STYLES: Record<ToastTone, { className: string; icon: LucideIcon }> = {
+    success: { className: 'bg-emerald-600 text-white', icon: CheckCircle2 },
+    error: { className: 'bg-red-600 text-white', icon: AlertCircle },
+    info: { className: 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900', icon: Info },
+};
+
+const currentUndoAnchor = (): ShelfData[] | undefined => {
+    const stack = useFridgeStore.getState().layoutUndoStack;
+    return stack[stack.length - 1];
+};
 
 export interface FridgeViewProps {
     cabinetId: string;
@@ -122,7 +145,15 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const layout = useAdaptiveLayout();
     const [verticalPanelPos, setVerticalPanelPos] = useState(50);
     const [isEditPanelVisible, setIsEditPanelVisible] = useState(false);
-    const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(false);
+    // A cabinet created a moment ago opens straight into placing reagents.
+    const [isReagentTrayVisible, setIsReagentTrayVisible] = useState(() => {
+        const intent = useFridgeStore.getState().cabinetOpenIntent;
+        return intent?.cabinetId === cabinetId && intent.mode === 'PLACE';
+    });
+    const [lastSeenMode, setLastSeenMode] = useState(() => useFridgeStore.getState().mode);
+    const [isTrayMenuOpen, setIsTrayMenuOpen] = useState(false);
+    const trayMenuRef = React.useRef<HTMLDivElement>(null);
+    const hasLoadedOnceRef = React.useRef(false);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
     const [isClearSecondConfirmOpen, setIsClearSecondConfirmOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -142,6 +173,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const [placementProductNumber, setPlacementProductNumber] = useState('');
     const [placementCas, setPlacementCas] = useState('');
     const [placementRemainingPercent, setPlacementRemainingPercent] = useState<number>(100);
+    const [isPlacementDetailsOpen, setIsPlacementDetailsOpen] = useState(false);
+    const [detailsPlacement, setDetailsPlacement] = useState<PendingPlacement | null>(null);
 
     // Scan & Auto-Place State
     const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -168,8 +201,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     const [scanProductNumber, setScanProductNumber] = useState('');
     const [scanRemainingPercent, setScanRemainingPercent] = useState<number>(100);
 
-    // Toast state
-    const [toastMessage, setToastMessage] = useState<string | null>(null);
+    // Toast state: a new action always replaces the current toast.
+    const [toast, setToast] = useState<ToastState | null>(null);
+    const toastSequenceRef = React.useRef(0);
+    const showToast = React.useCallback((message: string, tone: ToastTone = 'success', undoAnchor?: ShelfData[]) => {
+        toastSequenceRef.current += 1;
+        setToast({ id: toastSequenceRef.current, message, tone, undoAnchor });
+    }, []);
     const [isCoarsePointer, setIsCoarsePointer] = useState(false);
     const [storageCompatBannerReopenToken, setStorageCompatBannerReopenToken] = useState(0);
     const [isCompatibilityPreviewVisible, setIsCompatibilityPreviewVisible] = useState(false);
@@ -209,7 +247,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         autoPlaceReagent,
         autoPlaceResult,
         clearAutoPlaceResult,
-        setHighlightedItemId,
         compatibilityPlanPreview,
         isBuildingCompatibilityPlan,
         isApplyingCompatibilityPlan,
@@ -223,6 +260,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         undoCabinetLayout,
         redoCabinetLayout,
     } = useFridgeStore();
+
+    // Entering place mode always brings up the reagent tray.
+    if (mode !== lastSeenMode) {
+        setLastSeenMode(mode);
+        if (mode === 'PLACE') setIsReagentTrayVisible(true);
+    }
 
     const [showModalContent, setShowModalContent] = useState(false);
     const placementCasSuggestion = useCasSuggestion({
@@ -246,13 +289,30 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         onApplyCasNumber: setScanCas,
     });
     const storageCompatWarningMap = React.useMemo(() => checkCabinetCompatibility(shelves), [shelves]);
-    const storageCompatWarningCount = React.useMemo(() => {
+    const storageCompatReviewMap = React.useMemo(() => checkCabinetReviewConflicts(shelves), [shelves]);
+    const storageCompatMarks = React.useMemo(
+        () => buildCabinetCompatMarks(storageCompatWarningMap, storageCompatReviewMap),
+        [storageCompatWarningMap, storageCompatReviewMap]
+    );
+    const storageCompatIssueCount = React.useMemo(() => {
         let count = 0;
         storageCompatWarningMap.forEach((warnings) => {
             count += warnings.length;
         });
+        storageCompatReviewMap.forEach((conflicts) => {
+            count += conflicts.length;
+        });
         return count;
-    }, [storageCompatWarningMap]);
+    }, [storageCompatWarningMap, storageCompatReviewMap]);
+
+    // The detail fields start closed for a new reagent and open when one already has a value.
+    if (pendingPlacement !== detailsPlacement) {
+        setDetailsPlacement(pendingPlacement);
+        setIsPlacementDetailsOpen(Boolean(
+            placementBrand || placementProductNumber || placementExpiry || placementReceivedDate
+            || placementOpenedDate || placementMemo.trim() || placementManufacturerDateType !== 'unlabeled'
+        ));
+    }
 
     // 시약 정보 입력 모달 렌더링 지연 (모바일 고스트 클릭 방지용)
     React.useEffect(() => {
@@ -272,6 +332,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         let isDisposed = false;
         let isReloading = false;
         let hasPendingReload = false;
+        let needsReload = false;
+        let pendingCabinetRevision: number | null = null;
 
         const runReload = async () => {
             if (isDisposed) return;
@@ -281,8 +343,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             }
 
             isReloading = true;
+            // Opening a cabinet starts in VIEW (or its open intent); realtime reloads keep
+            // the mode. A ref, so StrictMode's repeated effect does not reset it twice.
+            const resetMode = !hasLoadedOnceRef.current;
+            hasLoadedOnceRef.current = true;
             try {
-                await loadCabinet(cabinetId);
+                await loadCabinet(cabinetId, { resetMode });
             } finally {
                 isReloading = false;
                 if (hasPendingReload && !isDisposed) {
@@ -310,14 +376,39 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     && (item.openedDate ?? null) === row.opened_date && (item.manufacturerDateType ?? 'unlabeled') === row.manufacturer_date_type
                     && (item.remaining_percent ?? null) === row.remaining_percent) return;
             }
+            // Our own saves rewrite every shelf row unchanged; those echoes need no reload
+            // (a reload would drop the highlight, focus and undo the save just produced).
+            if (payload.table === 'cabinet_shelves' && payload.eventType === 'UPDATE') {
+                const row = payload.new;
+                const shelf = useFridgeStore.getState().shelves.find(s => s.id === row.id);
+                if (shelf && shelf.level === Number(row.level)
+                    && JSON.stringify(shelf.dividers ?? []) === JSON.stringify(row.dividers ?? [])) return;
+            }
             const currentMode = useFridgeStore.getState().mode;
             // 편집 모드나 배치 모드 중일 때는 사용자 작업을 방해하지 않기 위해 자동 새로고침을 건너뜁니다.
             if (currentMode === 'EDIT' || currentMode === 'PLACE') return;
 
+            if (payload.table === 'cabinets' && payload.eventType === 'UPDATE') {
+                const row = payload.new;
+                const state = useFridgeStore.getState();
+                const sameVisibleCabinet = row.name === state.cabinetName && Number(row.width) === state.cabinetWidth
+                    && Number(row.height) === state.cabinetHeight && Number(row.depth) === state.cabinetDepth;
+                // Decide after the debounce, once our own save has recorded its revision.
+                if (sameVisibleCabinet && row.layout_revision != null) pendingCabinetRevision = Number(row.layout_revision);
+                else needsReload = true;
+            } else {
+                needsReload = true;
+            }
+
             clearTimeout(reloadTimeout);
             // 여러 변경 이벤트가 동시에 발생할 수 있으므로 디바운스 처리
             reloadTimeout = setTimeout(() => {
-                void runReload();
+                const isOwnSaveEcho = pendingCabinetRevision !== null
+                    && pendingCabinetRevision === cabinetService.getLoadedRevision(cabinetId);
+                const shouldReload = needsReload || (pendingCabinetRevision !== null && !isOwnSaveEcho);
+                needsReload = false;
+                pendingCabinetRevision = null;
+                if (shouldReload) void runReload();
             }, 500);
         };
 
@@ -334,28 +425,45 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         };
     }, [cabinetId, loadCabinet]);
 
-    // Auto-place result toast
+    // Placement result toast (manual, scan and auto-place): "Toluene → 1층" with undo.
     useEffect(() => {
         if (autoPlaceResult) {
-            setToastMessage(
-                t('reagent_placed_toast', {
-                    name: autoPlaceResult.reagentName,
-                    level: autoPlaceResult.shelfLevel,
-                })
+            showToast(
+                `${autoPlaceResult.reagentName} → ${t('inventory_shelf_level', { level: autoPlaceResult.shelfLevel })}`,
+                'success',
+                currentUndoAnchor()
             );
             const timer = setTimeout(() => {
-                setToastMessage(null);
                 clearAutoPlaceResult();
             }, 4000);
             return () => clearTimeout(timer);
         }
-    }, [autoPlaceResult, clearAutoPlaceResult, t]);
+    }, [autoPlaceResult, clearAutoPlaceResult, showToast, t]);
 
     useEffect(() => {
-        if (!toastMessage) return;
-        const timer = setTimeout(() => setToastMessage(null), 4000);
+        if (!toast) return;
+        const timer = setTimeout(() => {
+            setToast((current) => current?.id === toast.id ? null : current);
+        }, toast.undoAnchor ? 6000 : 4000);
         return () => clearTimeout(timer);
-    }, [toastMessage]);
+    }, [toast]);
+
+    useEffect(() => {
+        if (!isTrayMenuOpen) return;
+        const handlePointerDown = (event: PointerEvent) => {
+            if (event.target instanceof Node && trayMenuRef.current?.contains(event.target)) return;
+            setIsTrayMenuOpen(false);
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsTrayMenuOpen(false);
+        };
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isTrayMenuOpen]);
 
     useEffect(() => {
         if (!cabinetSaveError) {
@@ -363,8 +471,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             return;
         }
         setSaveStatus('error');
-        setToastMessage(t('cabinet_save_failed_retry'));
-    }, [cabinetSaveError, t]);
+        showToast(t('cabinet_save_failed_retry'), 'error');
+    }, [cabinetSaveError, showToast, t]);
 
     useEffect(() => {
         if (compatibilityPlanPreview) {
@@ -451,6 +559,16 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         if (changed) await autoSave();
     };
 
+    /** Undo the action a toast reports, only while it is still the latest layout change. */
+    const handleToastUndo = async () => {
+        const anchor = toast?.undoAnchor;
+        setToast(null);
+        const state = useFridgeStore.getState();
+        if (!anchor || state.isLoadingCabinet || currentUndoAnchor() !== anchor) return;
+        // Saves are queued in order, so undoing while the previous save is in flight is safe.
+        if (undoCabinetLayout()) await autoSave();
+    };
+
     const handleClearCabinet = async () => {
         // 전체비우기 전에 현재 아이템 목록 수집
         const state = useFridgeStore.getState();
@@ -484,7 +602,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
             try {
                 // 연결된 재고 항목 삭제 및 폐기 로그 기록 (allItems가 없어도 DB에서 cabinet_id로 삭제함)
-                setToastMessage(t('msc_fridge_trash_moved'));
+                showToast(t('msc_fridge_trash_moved'), 'info');
 
                 if (allItems.length > 0) {
                     const names = allItems.map(i => i.name).join(', ');
@@ -500,13 +618,24 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         }
     };
 
+    const handleRemoveLastShelf = () => {
+        if (shelves.length <= 1) return;
+        const lastShelf = shelves[shelves.length - 1];
+        const hadItems = lastShelf.items.length > 0;
+        removeShelf(lastShelf.id);
+        // The shelf disappearing is the feedback; only a shelf with reagents is worth a trash notice.
+        void autoSave().then(saved => {
+            if (saved && hadItems) showToast(t('msc_fridge_trash_moved_shelf'), 'info');
+        });
+    };
+
     const handleClearConfirmStep1 = () => {
         setIsClearConfirmOpen(false);
         setIsClearSecondConfirmOpen(true);
     };
 
     const handleOpenStorageCompatBanner = () => {
-        if (storageCompatWarningCount === 0) return;
+        if (storageCompatIssueCount === 0) return;
         setStorageCompatBannerReopenToken((current) => current + 1);
     };
 
@@ -523,19 +652,24 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         }
 
         if (!preview) {
-            setToastMessage(t('cabinet_auto_place_failed'));
+            showToast(t('cabinet_auto_place_failed'), 'error');
         }
     };
 
     const handleApplyCompatibilityPreview = async () => {
+        const movedItemIds = compatibilityPlanPreview?.movedItemIds ?? [];
         const applied = await applyCompatibilityPlan();
         if (!applied) {
             setSaveStatus('error');
-            setToastMessage(t('cabinet_auto_place_save_failed'));
+            showToast(t('cabinet_auto_place_save_failed'), 'error');
             return;
         }
 
-        setToastMessage(t('cabinet_auto_place_success'));
+        // Show the result: whole cabinet in view, moved bottles highlighted, one-tap undo.
+        setIsReagentTrayVisible(false);
+        setFocusedShelfId(null);
+        useFridgeStore.getState().revealItems(movedItemIds, { clearAfterMs: 5000 });
+        showToast(t('cabinet_auto_place_success'), 'success', currentUndoAnchor());
         setSaveStatus('saved');
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
         savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
@@ -550,24 +684,16 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         clearCompatibilityPlan();
     };
 
-    const handleFocusCompatibilityIssue = (itemId: string) => {
-        const targetItem = shelves.flatMap((shelf) => shelf.items).find((item) => item.id === itemId);
+    /** Bring the affected shelf into view and highlight the bottles involved. */
+    const handleFocusCompatibilityIssue = (itemIds: string[]) => {
+        const targetItem = shelves.flatMap((shelf) => shelf.items).find((item) => itemIds.includes(item.id));
         if (!targetItem) return;
 
         handleHideCompatibilityPreview();
-        setMode('VIEW');
-        setHighlightedItemId(itemId);
-        setFocusedShelfId(null);
-
-        queueMicrotask(() => {
-            setFocusedShelfId(targetItem.shelfId);
-        });
-
-        setTimeout(() => {
-            if (useFridgeStore.getState().highlightedItemId === itemId) {
-                useFridgeStore.getState().setHighlightedItemId(null);
-            }
-        }, 4000);
+        // Shelf focus works in VIEW and PLACE; edit mode switches to VIEW to show it.
+        if (mode === 'EDIT') setMode('VIEW');
+        setIsReagentTrayVisible(false);
+        useFridgeStore.getState().revealItems(itemIds, { shelfId: targetItem.shelfId });
     };
 
     const handleReagentClick = (item: GenericContainerItem) => {
@@ -596,6 +722,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     };
 
     const handleConfirmPlacement = async () => {
+        // Read the store, not the render closure, so a double Enter cannot place twice.
+        const pendingPlacement = useFridgeStore.getState().pendingPlacement;
         if (!pendingPlacement) return;
 
         const finalName = placementName.trim() || t('msc_fridge_unnamed');
@@ -628,12 +756,12 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             casNo: placementCas || undefined,
             remaining_percent: placementRemainingPercent,
         });
-        if (!placed) { setToastMessage(t('msc_fridge_no_space_overlap')); return; }
+        if (!placed) { showToast(t('msc_fridge_no_space_overlap'), 'error'); return; }
         const newlyPlacedItemId = useFridgeStore.getState().shelves
             .flatMap((shelf) => shelf.items)
             .find((item) => !existingItemIds.has(item.id))?.id || null;
 
-        // Reset states
+        // Reset states. The tray stays collapsed so the highlighted bottle is in view.
         setPendingPlacement(null);
         setPlacementName('');
         setPlacementMemo('');
@@ -647,7 +775,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         setPlacementProductNumber('');
         setPlacementCas('');
         setPlacementRemainingPercent(100);
-        setIsReagentTrayVisible(true);
+        setIsReagentTrayVisible(false);
 
         // 자동저장 + 활동 로그 (병렬)
         const currentCabinetId = useFridgeStore.getState().cabinetId;
@@ -702,6 +830,15 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         setPlacementCas('');
         setPlacementRemainingPercent(100);
         setIsReagentTrayVisible(true);
+    };
+
+    const handlePlacementKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        // Enter in a single-line field confirms; never while an IME (Korean) is composing.
+        if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || ['button', 'checkbox', 'radio', 'submit'].includes(target.type)) return;
+        event.preventDefault();
+        if (placementName.trim()) void handleConfirmPlacement();
     };
 
     // ====== Scan Queue Flow ======
@@ -856,8 +993,8 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             if (!saved) {
                 throw new Error(t('cabinet_save_failed_retry'));
             }
+            // The placement toast ("name → level" with undo) already reports this result.
             updateScanQueueItem(queueItemId, { status: 'success', label: finalName });
-            setToastMessage(t('scan_auto_place_done', { name: finalName }));
             void analyticsService.trackCommerceIntentEvent({
                 eventType: 'cabinet_item_scanned',
                 sourceScreen: 'fridge_view',
@@ -914,9 +1051,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
             console.error('Queued cabinet scan failed:', error);
             const message = error instanceof Error ? error.message : t('inventory_scan_error_default');
             updateScanQueueItem(task.id, { status: 'error', label: t('scan_failed') });
-            setToastMessage(message);
+            showToast(message, 'error');
         }
-    }, [autoPlaceScannedReagent, enqueueScanReview, t, updateScanQueueItem]);
+    }, [autoPlaceScannedReagent, enqueueScanReview, showToast, t, updateScanQueueItem]);
 
     const runNextScanTasks = React.useCallback(() => {
         const MAX_PARALLEL_SCANS = 3;
@@ -958,7 +1095,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         const activeReview = activeScanReviewRef.current;
         if (!activeReview || !scanResult || !scanName.trim() || !scanContainerType) return;
         if (scanExpiry && scanManufacturerDateType === 'unlabeled') {
-            setToastMessage(t('scan_manufacturer_date_type_required'));
+            showToast(t('scan_manufacturer_date_type_required'), 'error');
             return;
         }
 
@@ -1002,12 +1139,13 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 status: 'error',
                 label: t('scan_failed'),
             });
-            setToastMessage(message);
+            showToast(message, 'error');
             setIsScanning(false);
         }
     }, [
         autoPlaceScannedReagent,
         completeActiveScanReview,
+        showToast,
         scanBrand,
         scanCapacity,
         scanCas,
@@ -1154,7 +1292,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     </div>
                 )}
                 <Suspense fallback={<SceneLoadingFallback />}>
-                    <FridgeScene>
+                    <FridgeScene compatMarks={storageCompatMarks}>
                         <SegmentedControl
                             semantics="radio"
                             appearance="floating"
@@ -1170,7 +1308,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             ]}
                         />
                     </FridgeScene>
-                    <CabinetTrash />
                 </Suspense>
 
                 {showOnboardingGuide && (
@@ -1211,20 +1348,23 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         <p className="truncate text-sm font-semibold text-slate-800">
                                             {t('cabinet_auto_place_collapsed_title')}
                                         </p>
-                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-2xs text-slate-500">
-                                            <span>
-                                                {t('cabinet_auto_place_after')}: {compatibilityPlanPreview.afterWarningCount}
-                                            </span>
-                                            <span>
-                                                {t('cabinet_auto_place_review_items')}: {compatibilityPlanPreview.reviewItems.length}
-                                            </span>
-                                            <span>
-                                                {t('cabinet_auto_place_unplaced_items')}: {compatibilityPlanPreview.unplacedItems.length}
-                                            </span>
-                                        </div>
-                                        <p className="mt-1 text-xs text-slate-600">
-                                            {t('cabinet_auto_place_collapsed_desc')}
-                                        </p>
+                                        {(() => {
+                                            // Only counts that need attention; zeros are noise.
+                                            const counts = [
+                                                { key: 'cabinet_auto_place_moved', value: compatibilityPlanPreview.movedItemCount },
+                                                { key: 'cabinet_auto_place_after', value: compatibilityPlanPreview.afterWarningCount },
+                                                { key: 'cabinet_auto_place_review_items', value: compatibilityPlanPreview.reviewItems.length },
+                                                { key: 'cabinet_auto_place_unplaced_items', value: compatibilityPlanPreview.unplacedItems.length },
+                                            ].filter(count => count.value > 0);
+                                            if (counts.length === 0) return null;
+                                            return (
+                                                <div className="mt-1 flex flex-wrap items-center gap-2 text-2xs text-slate-500">
+                                                    {counts.map(count => (
+                                                        <span key={count.key}>{t(count.key)}: {count.value}</span>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </button>
                                 <button
@@ -1262,13 +1402,20 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 )}
 
                 {/* Storage Compatibility Warning Banner */}
-                <StorageCompatBanner reopenToken={storageCompatBannerReopenToken} />
+                <StorageCompatBanner
+                    reopenToken={storageCompatBannerReopenToken}
+                    warningMap={storageCompatWarningMap}
+                    reviewMap={storageCompatReviewMap}
+                    onFocusIssue={handleFocusCompatibilityIssue}
+                    onAutoArrange={() => void handleBuildCompatibilityPreview()}
+                    isAutoArrangeBusy={isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}
+                />
                 <CabinetAutoLayoutPreviewModal
                     preview={isCompatibilityPreviewVisible ? compatibilityPlanPreview : null}
                     isApplying={isApplyingCompatibilityPlan}
                     onApply={handleApplyCompatibilityPreview}
                     onCancel={handleCancelCompatibilityPreview}
-                    onFocusIssue={handleFocusCompatibilityIssue}
+                    onFocusIssue={(itemId) => handleFocusCompatibilityIssue([itemId])}
                 />
 
                 {/* Edit Mode Overlay */}
@@ -1289,7 +1436,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                     {/* 버튼 행 - 4개의 버튼이 모바일에서 한 줄에 들어가도록 최적화 */}
                                     <div className="flex justify-between sm:justify-center items-end gap-x-2 sm:gap-x-6 w-full px-1">
                                         <button
-                                            onClick={() => { const before = useFridgeStore.getState().shelves.length; addShelf(); if (useFridgeStore.getState().shelves.length === before) setToastMessage(t('msc_fridge_shelf_no_height')); else void autoSave(); }}
+                                            onClick={() => { const before = useFridgeStore.getState().shelves.length; addShelf(); if (useFridgeStore.getState().shelves.length === before) showToast(t('msc_fridge_shelf_no_height'), 'error'); else void autoSave(); }}
                                             className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-blue-600 transition-colors group shrink-0"
                                         >
                                             <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center border group-hover:border-blue-500 group-hover:bg-blue-50 transition-all">
@@ -1298,7 +1445,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             <span className="whitespace-nowrap text-3xs sm:text-xs font-medium">{t('cabinet_add_shelf')}</span>
                                         </button>
                                         <button
-                                            onClick={() => { if (shelves.length > 0) { removeShelf(shelves[shelves.length - 1].id); void autoSave().then(saved => { if (saved) setToastMessage(t('msc_fridge_trash_moved_shelf')); }); } }}
+                                            onClick={handleRemoveLastShelf}
                                             disabled={shelves.length <= 1}
                                             className="flex flex-col items-center gap-1.5 text-gray-600 hover:text-red-600 transition-colors group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-600 shrink-0"
                                         >
@@ -1423,38 +1570,67 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                         {isReagentTrayVisible ? (
                             <div className="relative bg-white/90 backdrop-blur pointer-events-auto p-4 rounded-xl shadow-lg border flex flex-col gap-2 max-w-full w-full mx-4 z-20">
                                 <button
+                                    type="button"
                                     onClick={() => setIsReagentTrayVisible(false)}
-                                    className="absolute top-2 right-2 p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                                    className="absolute top-1.5 right-1.5 p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                                     title={t('cabinet_reagent_tray_hide')}
+                                    aria-label={t('cabinet_reagent_tray_hide')}
                                 >
                                     <ChevronDown size={18} />
                                 </button>
-                                <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 px-1 pr-6 w-full">
+                                <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 px-1 pr-8 w-full">
                                     <h3 className="text-sm font-semibold text-gray-700 whitespace-nowrap shrink-0">{t('cabinet_reagent_tray_title')}</h3>
-                                    <div className="flex flex-1 flex-wrap items-center gap-1.5 sm:gap-2 w-full">
+                                    <div className="flex flex-1 flex-wrap items-center gap-2 w-full">
                                         <button
+                                            type="button"
                                             onClick={() => void handleBuildCompatibilityPreview()}
                                             disabled={shelves.every(s => s.items.length === 0) || isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}
-                                            className="px-2 py-1 text-3xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap"
+                                            className="h-10 px-3 text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            {isBuildingCompatibilityPlan ? <Loader2 size={10} className="animate-spin" /> : <Layers size={10} />}
+                                            {isBuildingCompatibilityPlan ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
                                             {isBuildingCompatibilityPlan ? t('cabinet_auto_place_loading') : t('cabinet_auto_place_button')}
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={handleOpenStorageCompatBanner}
-                                            disabled={storageCompatWarningCount === 0}
-                                            className="px-2 py-1 text-3xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 hover:text-amber-800 hover:border-amber-300 transition-colors flex items-center gap-1 shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50 disabled:hover:text-amber-700 disabled:hover:border-amber-200"
+                                            disabled={storageCompatIssueCount === 0}
+                                            className="h-10 px-3 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 hover:text-amber-800 hover:border-amber-300 transition-colors flex items-center gap-1.5 shrink-0 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-50 disabled:hover:text-amber-700 disabled:hover:border-amber-200"
                                         >
-                                            <ShieldAlert size={10} />
+                                            <ShieldAlert size={14} />
                                             {t('btn_check_storage_compat')}
                                         </button>
-                                        <button
-                                            onClick={() => setIsClearConfirmOpen(true)}
-                                            disabled={shelves.every(s => s.items.length === 0)}
-                                            className="ml-auto text-2xs sm:text-xs text-red-600 hover:underline flex items-center gap-1 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
-                                        >
-                                            {t('cabinet_clear_all')}
-                                        </button>
+                                        <div ref={trayMenuRef} className="relative ml-auto shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsTrayMenuOpen(current => !current)}
+                                                aria-label={t('cabinet_card_actions')}
+                                                aria-haspopup="menu"
+                                                aria-expanded={isTrayMenuOpen}
+                                                className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                                            >
+                                                <MoreVertical size={18} />
+                                            </button>
+                                            {isTrayMenuOpen && (
+                                                <div
+                                                    role="menu"
+                                                    className="absolute bottom-full right-0 z-40 mb-2 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        role="menuitem"
+                                                        onClick={() => {
+                                                            setIsTrayMenuOpen(false);
+                                                            setIsClearConfirmOpen(true);
+                                                        }}
+                                                        disabled={shelves.every(s => s.items.length === 0)}
+                                                        className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                        {t('cabinet_clear_all')}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 {!draggedTemplate && (
@@ -1478,24 +1654,25 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             </span>
                                         </div>
                                     </div>
-                                    {genericContainers.map((item, idx) => (
-                                        <div
-                                            key={idx}
-                                            onClick={() => handleReagentClick(item)}
-                                            className={`min-w-[90px] h-[100px] flex flex-col items-center justify-end gap-1 px-2 py-1.5 bg-white border rounded-lg hover:shadow-md hover:border-blue-300 cursor-pointer transition-all shrink-0 group relative ${draggedTemplate?.name === item.name ? 'ring-2 ring-blue-500 ring-offset-1 bg-blue-50' : ''}`}
-                                        >
-                                            <div className="group-hover:scale-105 transition-transform origin-bottom">
-                                                <Suspense fallback={<ReagentPreviewFallback width={60} height={64} />}>
-                                                    <ReagentModelPreview type={item.type as 'A' | 'B' | 'C' | 'D'} width={60} height={64} />
-                                                </Suspense>
+                                    {genericContainers.map((item, idx) => {
+                                        const { icon: ContainerIcon, className: iconClassName } = CONTAINER_ICONS[item.type];
+                                        return (
+                                            <div
+                                                key={idx}
+                                                onClick={() => handleReagentClick(item)}
+                                                className={`min-w-[90px] h-[100px] flex flex-col items-center justify-end gap-1 px-2 py-1.5 bg-white border rounded-lg hover:shadow-md hover:border-blue-300 cursor-pointer transition-all shrink-0 group relative ${draggedTemplate?.name === item.name ? 'ring-2 ring-blue-500 ring-offset-1 bg-blue-50' : ''}`}
+                                            >
+                                                <div className="flex h-16 w-[60px] items-center justify-center group-hover:scale-105 transition-transform origin-bottom">
+                                                    <ContainerIcon className={`h-12 w-12 ${iconClassName}`} strokeWidth={1.5} aria-hidden="true" />
+                                                </div>
+                                                <div className="w-full text-center">
+                                                    <span className="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">
+                                                        {item.name}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <div className="w-full text-center">
-                                                <span className="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">
-                                                    {item.name}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ) : (
@@ -1572,14 +1749,24 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             handleCancelPlacement();
                         }}
                     />
-                    <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-6 gap-4 flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh] overflow-y-auto`}>
-                        <h3 className="text-xl font-bold text-slate-800">{t('reagent_info_title')}</h3>
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="placement-dialog-title"
+                        onKeyDown={handlePlacementKeyDown}
+                        className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 max-h-[90vh]"
+                    >
+                      <div className="min-h-0 flex-1 overflow-y-auto p-6 pb-4 gap-4 flex flex-col">
+                        <h3 id="placement-dialog-title" className="text-xl font-bold text-slate-800">{t('reagent_info_title')}</h3>
 
                         <div className="flex flex-col gap-1">
-                            <label className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
+                            <label htmlFor="placement-reagent-name" className="text-xs font-semibold text-gray-600">{t('reagent_name_label')}</label>
                             <input
+                                id="placement-reagent-name"
                                 ref={placementNameInputRef}
+                                autoFocus
                                 type="text"
+                                enterKeyHint="done"
                                 value={placementName}
                                 onChange={e => {
                                     placementCasSuggestion.markNameInputChanged();
@@ -1589,30 +1776,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                 placeholder={t('reagent_name_placeholder')}
                                 className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                             />
-                        </div>
-
-                        {/* 브랜드 + 제품번호 */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-semibold text-gray-600">📦 {t('inventory_brand')}</label>
-                                <input
-                                    type="text"
-                                    value={placementBrand}
-                                    onChange={e => setPlacementBrand(e.target.value)}
-                                    placeholder={t('inventory_brand_placeholder')}
-                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-xs font-semibold text-gray-600">🏷 {t('inventory_product_number')}</label>
-                                <input
-                                    type="text"
-                                    value={placementProductNumber}
-                                    onChange={e => setPlacementProductNumber(e.target.value)}
-                                    placeholder={t('inventory_pn_placeholder')}
-                                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
-                                />
-                            </div>
                         </div>
 
                         {/* CAS 번호 */}
@@ -1699,24 +1862,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             </div>
                         </div>
 
-                        <ReagentDateFields
-                            value={{
-                                manufacturer_date_type: placementManufacturerDateType,
-                                expiry_date: placementExpiry,
-                                received_date: placementReceivedDate,
-                                opened_date: placementOpenedDate,
-                            }}
-                            onChange={(next) => {
-                                setPlacementManufacturerDateType(next.manufacturer_date_type);
-                                setPlacementExpiry(next.expiry_date);
-                                setPlacementReceivedDate(next.received_date);
-                                setPlacementOpenedDate(next.opened_date);
-                            }}
-                            labelClassName="text-xs font-semibold text-gray-600"
-                            inputClassName="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            columnsClassName="grid grid-cols-1 gap-3 sm:grid-cols-3"
-                        />
-
                         {/* Remaining Amount Input */}
                         <div className="flex flex-col gap-2 mt-1 px-1">
                             <label className="text-sm font-semibold text-slate-700">
@@ -1764,28 +1909,92 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                             </p>
                         </div>
 
-                        {/* 메모 */}
-                        <div className="flex flex-col gap-1">
-                            <label className="text-xs font-semibold text-gray-600">{t('reagent_memo_label')}</label>
-                            <textarea
-                                value={placementMemo}
-                                onChange={e => setPlacementMemo(e.target.value)}
-                                placeholder={t('reagent_memo_placeholder')}
-                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-16"
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-3 mt-1">
+                        {/* 상세 정보: 브랜드·제품번호·날짜·메모 (자주 쓰지 않는 항목) */}
+                        <div className="flex flex-col gap-3">
                             <button
+                                type="button"
+                                onClick={() => setIsPlacementDetailsOpen(current => !current)}
+                                aria-expanded={isPlacementDetailsOpen}
+                                aria-controls="placement-detail-fields"
+                                className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                            >
+                                {t('cabinet_detail_fields')}
+                                <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isPlacementDetailsOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {isPlacementDetailsOpen && (
+                                <div id="placement-detail-fields" className="flex flex-col gap-4">
+                                    {/* 브랜드 + 제품번호 */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-xs font-semibold text-gray-600">📦 {t('inventory_brand')}</label>
+                                            <input
+                                                type="text"
+                                                value={placementBrand}
+                                                onChange={e => setPlacementBrand(e.target.value)}
+                                                placeholder={t('inventory_brand_placeholder')}
+                                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-xs font-semibold text-gray-600">🏷 {t('inventory_product_number')}</label>
+                                            <input
+                                                type="text"
+                                                value={placementProductNumber}
+                                                onChange={e => setPlacementProductNumber(e.target.value)}
+                                                placeholder={t('inventory_pn_placeholder')}
+                                                className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <ReagentDateFields
+                                        value={{
+                                            manufacturer_date_type: placementManufacturerDateType,
+                                            expiry_date: placementExpiry,
+                                            received_date: placementReceivedDate,
+                                            opened_date: placementOpenedDate,
+                                        }}
+                                        onChange={(next) => {
+                                            setPlacementManufacturerDateType(next.manufacturer_date_type);
+                                            setPlacementExpiry(next.expiry_date);
+                                            setPlacementReceivedDate(next.received_date);
+                                            setPlacementOpenedDate(next.opened_date);
+                                        }}
+                                        labelClassName="text-xs font-semibold text-gray-600"
+                                        inputClassName="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                        columnsClassName="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                                    />
+
+                                    {/* 메모 */}
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-xs font-semibold text-gray-600">{t('reagent_memo_label')}</label>
+                                        <textarea
+                                            value={placementMemo}
+                                            onChange={e => setPlacementMemo(e.target.value)}
+                                            placeholder={t('reagent_memo_placeholder')}
+                                            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-16"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                      </div>
+
+                        {/* 확인 버튼은 긴 폼에서도 항상 보이도록 하단에 고정 */}
+                        <div className="flex shrink-0 items-center gap-3 border-t border-slate-100 bg-white px-6 py-3">
+                            <button
+                                type="button"
                                 onClick={handleCancelPlacement}
-                                className="flex-1 py-2 rounded-xl text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 transition-colors"
+                                className="h-12 flex-1 rounded-xl text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 transition-colors"
                             >
                                 {t('btn_cancel')}
                             </button>
                             <button
-                                onClick={handleConfirmPlacement}
+                                type="button"
+                                onClick={() => void handleConfirmPlacement()}
                                 disabled={!placementName.trim()}
-                                className="flex-1 py-2 rounded-xl text-white font-medium bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                className="h-12 flex-1 rounded-xl text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
                             >
                                 {t('btn_confirm')}
                             </button>
@@ -1950,21 +2159,25 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         </p>
                                     )}
                                     <div className="grid grid-cols-4 gap-2">
-                                        {containerTypeOptions.map(opt => (
-                                            <button
-                                                key={opt.type}
-                                                onClick={() => setScanContainerType(opt.type)}
-                                                className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-3xs font-medium transition-all ${scanContainerType === opt.type
-                                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200'
-                                                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                <Suspense fallback={<ReagentPreviewFallback width={36} height={44} />}>
-                                                    <ReagentModelPreview type={opt.type as 'A' | 'B' | 'C' | 'D'} width={36} height={44} />
-                                                </Suspense>
-                                                <span className="text-center leading-tight">{opt.label}</span>
-                                            </button>
-                                        ))}
+                                        {containerTypeOptions.map(opt => {
+                                            const { icon: ContainerIcon, className: iconClassName } = CONTAINER_ICONS[opt.type];
+                                            return (
+                                                <button
+                                                    key={opt.type}
+                                                    type="button"
+                                                    onClick={() => setScanContainerType(opt.type)}
+                                                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-3xs font-medium transition-all ${scanContainerType === opt.type
+                                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-200'
+                                                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    <span className="flex h-11 w-9 items-center justify-center">
+                                                        <ContainerIcon className={`h-8 w-8 ${iconClassName}`} strokeWidth={1.5} aria-hidden="true" />
+                                                    </span>
+                                                    <span className="text-center leading-tight">{opt.label}</span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
@@ -2108,15 +2321,32 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                 </div>
             )}
 
-            {/* Toast Notification */}
-            {toastMessage && (
-                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 fade-in duration-300 w-max max-w-[90vw]">
-                    <div className="bg-emerald-600 text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium text-center break-words">
-                        <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        {toastMessage}
+            {/* Toast Notification: one at a time, the newest action wins */}
+            {toast && (() => {
+                const { className: toneClassName, icon: ToastIcon } = TOAST_STYLES[toast.tone];
+                return (
+                    <div
+                        key={toast.id}
+                        role={toast.tone === 'error' ? 'alert' : 'status'}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 fade-in duration-300 w-max max-w-[90vw]"
+                    >
+                        <div className={`${toneClassName} pl-5 ${toast.undoAnchor ? 'pr-2' : 'pr-5'} py-2.5 min-h-11 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium break-words`}>
+                            <ToastIcon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                            <span className="min-w-0">{toast.message}</span>
+                            {toast.undoAnchor && (
+                                <button
+                                    type="button"
+                                    onClick={() => void handleToastUndo()}
+                                    className="ml-1 flex h-8 shrink-0 items-center gap-1 rounded-full bg-white/20 px-3 text-xs font-semibold transition-colors hover:bg-white/30"
+                                >
+                                    <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                    {t('cabinet_undo_layout')}
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
         </div>
     );
 };

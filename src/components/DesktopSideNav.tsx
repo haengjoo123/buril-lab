@@ -1,4 +1,4 @@
-import { ClipboardList, Moon, Package, Rows3, Search, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { Building2, ClipboardList, Moon, Package, Rows3, Search, Settings, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import logo from '../assets/burillab_app_icon.png';
 import type { AppTab } from '../hooks/useAppUiState';
@@ -13,11 +13,13 @@ interface DesktopSideNavProps {
   onLogoClick?: () => void;
 }
 
-const navItemClasses = (isActive: boolean, tone: 'blue' | 'emerald' | 'indigo' = 'blue') => {
+type NavTone = 'blue' | 'emerald' | 'red';
+
+const navItemClasses = (isActive: boolean, tone: NavTone = 'blue') => {
   const activeTone = {
     blue: 'bg-blue-600 text-white shadow-sm shadow-blue-950/15',
     emerald: 'bg-emerald-600 text-white shadow-sm shadow-emerald-950/15',
-    indigo: 'bg-indigo-600 text-white shadow-sm shadow-indigo-950/15',
+    red: 'bg-red-600 text-white shadow-sm shadow-red-950/15',
   }[tone];
 
   return [
@@ -43,14 +45,15 @@ export function DesktopSideNav({
     tab: AppTab;
     label: string;
     icon: typeof Search;
-    tone?: 'blue' | 'emerald' | 'indigo';
+    tone?: NavTone;
     visible?: boolean;
   }> = [
     { tab: 'search', label: t('tab_search'), icon: Search },
     { tab: 'logs', label: t('tab_logs'), icon: ClipboardList },
     { tab: 'cabinet', label: t('tab_cabinet'), icon: Rows3 },
     { tab: 'inventory', label: t('tab_inventory'), icon: Package, tone: 'emerald' },
-    { tab: 'admin', label: t('tab_audit'), icon: ShieldCheck, tone: 'indigo', visible: isAdmin },
+    // Same icon and accent as the admin tab in the mobile bottom nav.
+    { tab: 'admin', label: t('tab_audit'), icon: Building2, tone: 'red', visible: isAdmin },
   ];
 
   return (

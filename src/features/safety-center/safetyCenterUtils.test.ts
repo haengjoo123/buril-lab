@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import i18n from '../../locales/i18n';
 import type { SafetyCenterLabCandidate, SafetyCenterRiskItem } from './types';
 import {
   assessRiskItem,
   buildSafetyCenterDashboardSummary,
   filterRiskItems,
+  getLinkScopeLabel,
+  pickPrefillInstitutionName,
 } from './safetyCenterUtils';
 
 function createRiskItem(overrides: Partial<SafetyCenterRiskItem> = {}): SafetyCenterRiskItem {
@@ -170,5 +173,36 @@ describe('Safety Center risk scoring v2', () => {
       riskScore: 0,
       totalItems: 0,
     });
+  });
+});
+
+describe('getLinkScopeLabel', () => {
+  it('maps stored link scopes to readable labels and passes unknown scopes through', async () => {
+    await i18n.changeLanguage('ko');
+    expect(['summary', 'risk_detail', 'exports'].map(getLinkScopeLabel)).toEqual(['요약', '위험 상세', '내보내기']);
+    expect(getLinkScopeLabel('future_scope')).toBe('future_scope');
+  });
+});
+
+describe('pickPrefillInstitutionName', () => {
+  const membership = (labId: string, institutionName?: string | null) => ({
+    lab_id: labId,
+    lab: { institution_name: institutionName },
+  });
+
+  it('prefers the current lab and falls back to any lab with an institution name', () => {
+    expect(pickPrefillInstitutionName([
+      membership('lab-a', 'A University'),
+      membership('lab-b', '  B Institute  '),
+    ], 'lab-b')).toBe('B Institute');
+    expect(pickPrefillInstitutionName([
+      membership('lab-a', null),
+      membership('lab-b', 'B Institute'),
+    ], 'lab-a')).toBe('B Institute');
+  });
+
+  it('returns an empty string when no lab has an institution name', () => {
+    expect(pickPrefillInstitutionName([membership('lab-a', '   ')], 'lab-a')).toBe('');
+    expect(pickPrefillInstitutionName([], null)).toBe('');
   });
 });

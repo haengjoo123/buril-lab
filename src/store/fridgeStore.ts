@@ -36,6 +36,27 @@ interface AutoPlaceOptions {
     sectionIndex?: number;
 }
 
+export type CabinetMode = FridgeState['mode'];
+
+interface CabinetOpenIntent {
+    cabinetId: string;
+    mode: CabinetMode;
+}
+
+interface LoadCabinetOptions {
+    /**
+     * Start the cabinet in VIEW (or its pending open intent). Defaults to true
+     * when switching cabinets and false for a reload of the open cabinet.
+     */
+    resetMode?: boolean;
+}
+
+interface RevealItemsOptions {
+    /** Focus the camera on this shelf (VIEW/PLACE). */
+    shelfId?: string | null;
+    clearAfterMs?: number;
+}
+
 interface FridgeStore extends FridgeState {
     checkCollision: (shelfId: string, position: number, width: number, depthPosition?: number, templateType?: string, ignoreItemId?: string) => boolean;
     sortShelves: (criteria: 'name' | 'type') => void;
@@ -44,7 +65,12 @@ interface FridgeStore extends FridgeState {
     isLoadingCabinet: boolean;
     loadedCabinetId: string | null;
     cabinetSaveError: string | null;
-    loadCabinet: (cabinetId: string) => Promise<void>;
+    /** One-shot mode to open a cabinet in, e.g. PLACE right after creating it. */
+    cabinetOpenIntent: CabinetOpenIntent | null;
+    requestCabinetOpenMode: (cabinetId: string, mode: CabinetMode) => void;
+    /** Highlight placements and optionally bring their shelf into view. */
+    revealItems: (itemIds: string[], options?: RevealItemsOptions) => void;
+    loadCabinet: (cabinetId: string, options?: LoadCabinetOptions) => Promise<void>;
     saveCabinet: () => Promise<void>;
     saveCabinetStrict: () => Promise<void>;
     clearCabinet: () => void;
@@ -201,13 +227,41 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     compatibilityPlanPreview: null,
     isBuildingCompatibilityPlan: false,
     isApplyingCompatibilityPlan: false,
+    cabinetOpenIntent: null,
 
-    loadCabinet: async (cabinetId: string) => {
+    requestCabinetOpenMode: (cabinetId, mode) => set({ cabinetOpenIntent: { cabinetId, mode } }),
+
+    revealItems: (itemIds, options) => {
+        const ids = [...new Set(itemIds.filter(Boolean))];
+        if (ids.length === 0) return;
+        const highlight = ids.length === 1 ? ids[0] : ids;
+        const shelfId = options?.shelfId;
+        // Reset first so FridgeScene's focus effect re-fires for the same shelf.
+        set({ highlightedItemId: highlight, ...(shelfId ? { focusedShelfId: null } : {}) });
+
+        if (shelfId) {
+            queueMicrotask(() => {
+                const shelf = get().shelves.find(s => s.id === shelfId);
+                if (!shelf || !shelf.items.some(item => ids.includes(item.id))) return;
+                set({ focusedShelfId: shelfId });
+            });
+        }
+
+        setTimeout(() => {
+            if (get().highlightedItemId === highlight) set({ highlightedItemId: null });
+        }, options?.clearAfterMs ?? 4000);
+    },
+
+    loadCabinet: async (cabinetId: string, options?: LoadCabinetOptions) => {
         const pendingSave = CABINET_SAVE_QUEUES.get(cabinetId);
         if (pendingSave) await pendingSave.catch(() => undefined);
         const requestSequence = ++cabinetLoadSequence;
         const previousState = get();
         const isSameCabinet = previousState.cabinetId === cabinetId;
+        const openIntent = previousState.cabinetOpenIntent?.cabinetId === cabinetId
+            ? previousState.cabinetOpenIntent
+            : null;
+        const shouldResetMode = Boolean(openIntent) || (options?.resetMode ?? !isSameCabinet);
         set({
             isLoadingCabinet: true,
             loadedCabinetId: null,
@@ -222,6 +276,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             cabinetSaveError: null,
             layoutUndoStack: [],
             layoutRedoStack: [],
+            ...(shouldResetMode ? { mode: openIntent?.mode ?? 'VIEW', cabinetOpenIntent: null } : {}),
             ...resetCompatibilityPlanPreview(),
         });
         try {
@@ -435,6 +490,15 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
                 items: [...s.items, newItem]
             } : s)) ?? {}),
         }));
+
+        const targetShelf = get().shelves.find(s => s.id === shelfId);
+        if (!targetShelf?.items.some(item => item.id === newItem.id)) return false;
+
+        // Same visible result as auto-placement: highlight, focus the shelf, report where it went.
+        set({
+            autoPlaceResult: { itemId: newItem.id, shelfLevel: targetShelf.level + 1, reagentName: newItem.name },
+        });
+        get().revealItems([newItem.id], { shelfId });
 
         // Background: the unified service can recover CAS from an exact name too.
         if (newItem.name && newItem.hCodes.length === 0) {

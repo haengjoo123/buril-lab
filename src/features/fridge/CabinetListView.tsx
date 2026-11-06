@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, Camera, Clock, Edit2, FileEdit, Loader2, Pac
 import { cabinetService, type ActivityActionType, type Cabinet } from '../../services/cabinetService';
 import { auditService, type AuditLog } from '../../services/auditService';
 import { useLabStore } from '../../store/useLabStore';
+import { useFridgeStore } from '../../store/fridgeStore';
 import { CabinetCard } from './components/CabinetCard';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CabinetFormDialog } from './components/CabinetFormDialog';
@@ -75,6 +76,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         inputValue?: string;
         inputPlaceholder?: string;
         onConfirm?: (val?: string) => void;
+        confirmText?: string;
         isDestructive?: boolean;
     }>({
         isOpen: false,
@@ -340,7 +342,9 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             if (!isCurrentRequest()) return;
             setCabinets(data);
             setLoadedLabId(token.labId);
-            await loadCabinetStats(data.map((cabinet) => cabinet.id), token);
+            setIsLoading(false);
+            // The list is usable now; counts fill in when they arrive.
+            void loadCabinetStats(data.map((cabinet) => cabinet.id), token);
         } catch (err) {
             if (!isCurrentRequest()) return;
             console.error(err);
@@ -539,7 +543,14 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         try {
             setIsCreating(true);
             if (formDialogConfig.mode === 'create') {
-                await cabinetService.createCabinet(name, location);
+                const created = await cabinetService.createCabinet(name, location);
+                if (created?.id) {
+                    // A new cabinet is empty: open it ready to place reagents.
+                    closeFormDialog();
+                    useFridgeStore.getState().requestCabinetOpenMode(created.id, 'PLACE');
+                    onSelectCabinet(created.id);
+                    return;
+                }
             } else if (formDialogConfig.mode === 'edit' && formDialogConfig.cabinetId) {
                 await cabinetService.updateCabinet(formDialogConfig.cabinetId, { name, location });
                 cabinetService.logActivity(
@@ -613,18 +624,24 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         await uploadCabinetPhoto(cabinetId, file, t('cabinet_image_camera'));
     };
 
-    const handleDelete = (e: React.MouseEvent, id: string) => {
+    const handleDelete = (e: React.MouseEvent, cabinet: Cabinet) => {
         e.stopPropagation();
+        const id = cabinet.id;
+        const reagentCount = cabinetStats[id]?.inventoryCount ?? 0;
         setDialogConfig({
             isOpen: true,
             type: 'confirm',
             title: t('cabinet_delete_title'),
             description: t('cabinet_delete_desc'),
+            // Say exactly what goes: "시약 3개와 함께 삭제".
+            confirmText: reagentCount > 0
+                ? t('cabinet_delete_with_reagents', { count: reagentCount })
+                : t('cabinet_delete'),
             isDestructive: true,
             onConfirm: async () => {
                 closeDialog();
                 try {
-                    await cabinetService.deleteCabinet(id);
+                    await cabinetService.deleteCabinet(id, { hasImage: Boolean(cabinet.image_path || cabinet.image_url) });
                     await loadCabinets();
                 } catch (err) {
                     console.error('Delete error:', err);
@@ -640,7 +657,8 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         });
     };
 
-    if (isLoading || loadedLabId !== currentLabId) {
+    // Full-screen loading only before the first list of this lab; refreshes keep the list on screen.
+    if (isLoading && loadedLabId !== currentLabId) {
         return (
             <div className="h-full flex flex-col items-center justify-center p-6 gap-4">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
@@ -734,17 +752,22 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                                 cabinet={cabinet}
                                 isSelected={isSelected}
                                 onClick={() => {
-                                    setSelectedCabinetId(cabinet.id);
-                                    setActivePane('detail');
+                                    // Phones open the cabinet in one tap; side-by-side layouts
+                                    // select it so the detail pane next to the list follows.
+                                    if (layout.twoPane) {
+                                        setSelectedCabinetId(cabinet.id);
+                                        return;
+                                    }
+                                    onSelectCabinet(cabinet.id);
                                 }}
                                 onEdit={(e) => handleEdit(e, cabinet)}
-                                onDelete={canCreateCabinet ? (e) => handleDelete(e, cabinet.id) : undefined}
+                                onDelete={canCreateCabinet ? (e) => handleDelete(e, cabinet) : undefined}
                                 onImageClick={(e) => handleImageClick(e, cabinet.id)}
                                 onInventory={(e) => handleInventory(e, cabinet)}
                                 onDisposalLog={(e) => handleDisposalLog(e, cabinet)}
                                 onManage={() => onSelectCabinet(cabinet.id)}
-                                inventoryCount={cabinetStats[cabinet.id]?.inventoryCount ?? 0}
-                                historyCount={cabinetStats[cabinet.id]?.historyCount ?? 0}
+                                inventoryCount={cabinetStats[cabinet.id]?.inventoryCount}
+                                historyCount={cabinetStats[cabinet.id]?.historyCount}
                             />
                         </div>
                     )})}
@@ -922,7 +945,11 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 onInputChange={(val) => setDialogConfig(prev => ({ ...prev, inputValue: val }))}
                 inputPlaceholder={dialogConfig.inputPlaceholder}
                 isDestructive={dialogConfig.isDestructive}
-                onConfirm={() => dialogConfig.onConfirm?.(dialogConfig.inputValue)}
+                confirmText={dialogConfig.confirmText}
+                // Alerts have no onConfirm: their only button must close them.
+                onConfirm={dialogConfig.onConfirm
+                    ? () => dialogConfig.onConfirm?.(dialogConfig.inputValue)
+                    : closeDialog}
             />
 
             <CabinetFormDialog

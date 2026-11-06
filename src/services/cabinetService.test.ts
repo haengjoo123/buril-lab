@@ -158,6 +158,46 @@ describe('cabinet image upload', () => {
     });
 });
 
+describe('cabinet deletion', () => {
+    let deleteEq: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        postJsonMock.mockReset();
+        fromMock.mockReset();
+        deleteEq = vi.fn().mockResolvedValue({ error: null });
+        fromMock.mockReturnValue({ delete: vi.fn(() => ({ eq: deleteEq })) });
+    });
+
+    it('skips the photo cleanup when the cabinet has no photo', async () => {
+        await expect(cabinetService.deleteCabinet(cabinetId, { hasImage: false })).resolves.toBeUndefined();
+        expect(postJsonMock).not.toHaveBeenCalled();
+        expect(deleteEq).toHaveBeenCalledWith('id', cabinetId);
+    });
+
+    it('detaches an existing photo first', async () => {
+        postJsonMock.mockResolvedValueOnce({ success: true, imageUrl: null });
+        await cabinetService.deleteCabinet(cabinetId, { hasImage: true });
+        expect(postJsonMock).toHaveBeenCalledWith(`/api/cabinets/${cabinetId}/image`, { action: 'remove' });
+        expect(deleteEq).toHaveBeenCalledWith('id', cabinetId);
+    });
+
+    it('still deletes the cabinet when the photo cleanup service is unreachable', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        postJsonMock.mockRejectedValueOnce(new Error('internal API unreachable'));
+        await expect(cabinetService.deleteCabinet(cabinetId, { hasImage: true })).resolves.toBeUndefined();
+        expect(deleteEq).toHaveBeenCalledWith('id', cabinetId);
+        warn.mockRestore();
+    });
+
+    it('looks up whether a photo exists when the caller does not know', async () => {
+        const maybeSingle = vi.fn().mockResolvedValue({ data: { image_path: null, image_url: null }, error: null });
+        fromMock.mockReturnValueOnce({ select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })) });
+        await cabinetService.deleteCabinet(cabinetId);
+        expect(postJsonMock).not.toHaveBeenCalled();
+        expect(deleteEq).toHaveBeenCalledWith('id', cabinetId);
+    });
+});
+
 describe('private cabinet image hydration', () => {
     const row = { id: cabinetId, name: 'Private cabinet', image_path:
         `labs/33333333-3333-4333-8333-333333333333/cabinets/${cabinetId}/44444444-4444-4444-8444-444444444444.webp`,

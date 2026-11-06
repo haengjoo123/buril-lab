@@ -5,7 +5,7 @@ beforeEach(async () => { await i18n.changeLanguage('ko'); });
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartItem, ChemicalEnrichmentResult, DisposalCategory } from '../types';
-import { createEmptyWasteBatch, createWasteComponentFromAnalysis } from '../utils/wasteBatch';
+import { analyzeWasteBatch, createEmptyWasteBatch, createWasteComponentFromAnalysis } from '../utils/wasteBatch';
 import { useWasteStore } from './useWasteStore';
 
 class MemoryStorage implements Storage {
@@ -823,6 +823,75 @@ describe('useWasteStore V2 batch isolation', () => {
         // matrix, but changing to mass clears it instead of converting it.
         useWasteStore.getState().setMatrix('solid_slurry');
         expect(useWasteStore.getState().batch.totalAmount.value).toBeNull();
+    });
+
+    it('recognizes DCM without a CAS as halogenated and keeps the user matrix when a neat solvent is added', () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        const dcm = cartItem('dcm', 'Dichloromethane', 'ORGANIC_HALOGEN');
+        dcm.chemical.casNumber = '';
+        dcm.chemical.molecularFormula = 'CH2Cl2';
+        dcm.chemical.properties = { isOrganic: true, isHalogenated: true };
+
+        useWasteStore.getState().addToCart(dcm);
+        expect(useWasteStore.getState().batch).toMatchObject({
+            matrix: 'organic_halogenated',
+            matrixSource: 'automatic',
+        });
+
+        useWasteStore.getState().setMatrix('organic_halogenated');
+        useWasteStore.getState().addToCart(cartItem('acetone', 'Acetone'));
+        const acetoneLineId = useWasteStore.getState().cart[1].cartLineId;
+        useWasteStore.getState().updateComponent(acetoneLineId, { materialForm: 'neat' });
+        useWasteStore.getState().updateComponent(acetoneLineId, {
+            solutionVolume: { value: 50, unit: 'mL', normalizedMl: 50 },
+        });
+
+        const { batch } = useWasteStore.getState();
+        expect(batch).toMatchObject({ matrix: 'organic_halogenated', matrixSource: 'user' });
+        // The recorded matrix and stream must agree.
+        expect(analyzeWasteBatch(batch).streamCode).toBe('ORGANIC_HALOGENATED');
+    });
+
+    it('raises a user non-halogenated matrix when halogenated evidence is added later', () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        useWasteStore.getState().addToCart(cartItem('acetone', 'Acetone'));
+        useWasteStore.getState().setMatrix('organic_non_halogenated');
+
+        const dcm = cartItem('dcm', 'Dichloromethane', 'ORGANIC_HALOGEN');
+        dcm.chemical.casNumber = '75-09-2';
+        dcm.chemical.molecularFormula = 'CH2Cl2';
+        dcm.chemical.properties = { isOrganic: true, isHalogenated: true };
+        useWasteStore.getState().addToCart(dcm);
+
+        expect(useWasteStore.getState().batch).toMatchObject({
+            matrix: 'organic_halogenated',
+            matrixSource: 'automatic',
+        });
+    });
+
+    it('reopens a user aqueous matrix when a component is said to be dissolved in a halogenated solvent', () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        const solute = cartItem('glucose', 'Glucose', 'NEUTRAL');
+        solute.chemical.casNumber = '50-99-7';
+        solute.chemical.molecularFormula = 'C6H12O6';
+        useWasteStore.getState().addToCart(solute);
+        const { cartLineId } = useWasteStore.getState().cart[0];
+        useWasteStore.getState().updateComponent(cartLineId, { concentration: { value: 0.1, unit: 'M' } });
+        useWasteStore.getState().setMatrix('aqueous');
+
+        useWasteStore.getState().updateComponent(cartLineId, {
+            solutionContext: {
+                physicalForm: 'organic_solvent',
+                solventClass: 'organic_halogen',
+                isSolventVerified: false,
+                solventResolution: 'user',
+            },
+        });
+
+        expect(useWasteStore.getState().batch).toMatchObject({
+            matrix: 'unknown',
+            matrixSource: 'unresolved',
+        });
     });
 
     it('stores and reuses the previous confirmed matrix only within the same scope', () => {

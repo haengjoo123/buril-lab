@@ -1,22 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronRight, Loader2, MapPin, Plus } from 'lucide-react';
-import type { WasteStreamCode } from '../../types';
 import {
-    createWasteContainer,
     fetchWasteContainerTotals,
     fetchWasteContainers,
-    toWasteContainerError,
-    updateWasteContainer,
     type WasteContainer,
     type WasteContainerTotals,
 } from '../../services/wasteContainerService';
-import { WASTE_STREAM_LABELS, wasteStreamDotClass, wasteStreamLabel } from '../../utils/wasteLabels';
+import { wasteStreamDotClass, wasteStreamLabel } from '../../utils/wasteLabels';
 import { sortContainers } from './containerSummary';
 import { formatLabelDate } from './containerLabel';
-import { containerCopy, containerErrorMessage } from './copy';
+import { containerCopy } from './copy';
 import { ContainerFillBar } from './ContainerFillBar';
 import { ContainerStatusChip } from './ContainerStatusChip';
-import { ContainerDialog, dialogInput, dialogPrimaryButton, dialogSecondaryButton } from './ContainerDialog';
+import { ContainerFormDialog, type ContainerFormState } from './ContainerFormDialog';
 import { WasteContainerDetail } from './WasteContainerDetail';
 
 interface WasteContainersPanelProps {
@@ -27,11 +23,7 @@ interface WasteContainersPanelProps {
     language: string;
 }
 
-type FormState =
-    | { mode: 'create' }
-    | { mode: 'edit'; container: WasteContainer };
-
-const STREAM_OPTIONS = Object.keys(WASTE_STREAM_LABELS) as WasteStreamCode[];
+type FormState = ContainerFormState;
 const EMPTY_TOTALS: WasteContainerTotals = { depositCount: 0, totalMl: 0, hasUnknownAmounts: false };
 
 export const WasteContainersPanel: React.FC<WasteContainersPanelProps> = ({ labId, labName, canCollect, language }) => {
@@ -202,128 +194,5 @@ export const WasteContainersPanel: React.FC<WasteContainersPanelProps> = ({ labI
                 />
             )}
         </div>
-    );
-};
-
-interface ContainerFormDialogProps {
-    state: FormState;
-    language: string;
-    onClose: () => void;
-    onSaved: (container: WasteContainer) => void;
-}
-
-const ContainerFormDialog: React.FC<ContainerFormDialogProps> = ({ state, language, onClose, onSaved }) => {
-    const copy = containerCopy(language);
-    const editing = state.mode === 'edit' ? state.container : null;
-    const [streamCode, setStreamCode] = useState<WasteStreamCode>(editing?.streamCode ?? 'ORGANIC_NON_HALOGENATED');
-    const [label, setLabel] = useState(editing?.label ?? '');
-    const [location, setLocation] = useState(editing?.location ?? '');
-    const [capacityL, setCapacityL] = useState(editing?.capacityMl ? String(editing.capacityMl / 1000) : '');
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const capacityValue = capacityL.trim() ? Number(capacityL.replace(',', '.')) : null;
-    const capacityInvalid = capacityValue !== null && (!Number.isFinite(capacityValue) || capacityValue <= 0 || capacityValue > 1000);
-
-    const submit = async (event: React.FormEvent) => {
-        event.preventDefault();
-        if (saving || capacityInvalid || !label.trim()) return;
-        setSaving(true);
-        setError(null);
-        const input = {
-            label,
-            location,
-            capacityMl: capacityValue === null ? null : Math.round(capacityValue * 1_000_000) / 1000,
-        };
-        try {
-            const saved = editing
-                ? await updateWasteContainer(editing.id, input)
-                : await createWasteContainer(streamCode, input);
-            onSaved(saved);
-        } catch (saveError) {
-            setError(containerErrorMessage(toWasteContainerError(saveError).code, language));
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const fieldLabel = 'flex flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300';
-
-    return (
-        <ContainerDialog
-            as="form"
-            onSubmit={submit}
-            titleId="waste-container-form-title"
-            title={editing ? copy.editTitle : copy.addTitle}
-            subtitle={editing ? undefined : copy.addDesc}
-            closeLabel={copy.close}
-            onClose={onClose}
-            footer={(
-                <>
-                    <button type="button" onClick={onClose} className={dialogSecondaryButton}>{copy.cancel}</button>
-                    <button type="submit" disabled={saving || !label.trim() || capacityInvalid} className={dialogPrimaryButton}>
-                        {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                        {copy.save}
-                    </button>
-                </>
-            )}
-        >
-            <div className="space-y-3">
-                <label className={fieldLabel}>
-                    <span>{copy.formStream}</span>
-                    <select
-                        value={streamCode}
-                        onChange={(event) => setStreamCode(event.target.value as WasteStreamCode)}
-                        disabled={Boolean(editing)}
-                        className={dialogInput}
-                    >
-                        {STREAM_OPTIONS.map((code) => (
-                            <option key={code} value={code}>{wasteStreamLabel(code, language)}</option>
-                        ))}
-                    </select>
-                    {editing && <span className="break-keep text-xs text-slate-500 dark:text-slate-400">{copy.formStreamLocked}</span>}
-                </label>
-                <label className={fieldLabel}>
-                    <span>{copy.formLabel}</span>
-                    <input
-                        data-autofocus
-                        value={label}
-                        onChange={(event) => setLabel(event.target.value)}
-                        maxLength={80}
-                        required
-                        placeholder={copy.formLabelPlaceholder}
-                        className={dialogInput}
-                    />
-                </label>
-                <label className={fieldLabel}>
-                    <span>{copy.formLocation}</span>
-                    <input
-                        value={location}
-                        onChange={(event) => setLocation(event.target.value)}
-                        maxLength={200}
-                        placeholder={copy.formLocationPlaceholder}
-                        className={dialogInput}
-                    />
-                </label>
-                <label className={fieldLabel}>
-                    <span>{copy.formCapacity}</span>
-                    <input
-                        value={capacityL}
-                        onChange={(event) => setCapacityL(event.target.value)}
-                        inputMode="decimal"
-                        placeholder="20"
-                        aria-invalid={capacityInvalid}
-                        className={`${dialogInput} ${capacityInvalid ? 'border-red-400 focus:ring-red-400/50' : ''}`}
-                    />
-                    {capacityInvalid && <span className="break-keep text-xs text-red-600 dark:text-red-400">{copy.formCapacityInvalid}</span>}
-                </label>
-                {error && (
-                    <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-600 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400">
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                        <span className="break-keep">{error}</span>
-                    </div>
-                )}
-            </div>
-        </ContainerDialog>
     );
 };

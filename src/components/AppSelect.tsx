@@ -53,19 +53,35 @@ export const AppSelect: React.FC<AppSelectProps> = ({
             }
         };
 
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setIsOpen(false);
-            }
-        };
-
         document.addEventListener('mousedown', handlePointerDown);
-        document.addEventListener('keydown', handleEscape);
         return () => {
             document.removeEventListener('mousedown', handlePointerDown);
-            document.removeEventListener('keydown', handleEscape);
         };
     }, []);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        // Capture on window runs before any dialog's Escape handler, so Esc closes only this
+        // list and leaves the surrounding modal (and its input) open.
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            setIsOpen(false);
+        };
+        // Android back gets the same treatment: the capture listener runs before the dialog's.
+        const handleBack = (event: Event) => {
+            if (event.defaultPrevented) return;
+            event.preventDefault();
+            setIsOpen(false);
+        };
+        window.addEventListener('keydown', handleEscape, true);
+        window.addEventListener('buril:adaptive-back', handleBack, true);
+        return () => {
+            window.removeEventListener('keydown', handleEscape, true);
+            window.removeEventListener('buril:adaptive-back', handleBack, true);
+        };
+    }, [isOpen]);
 
     const sizeClasses = size === 'sm'
         ? 'min-h-[34px] px-3 py-1.5 text-xs rounded-lg'

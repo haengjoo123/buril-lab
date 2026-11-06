@@ -300,6 +300,28 @@ const getLegalWastePhClass = (batch: WasteBatchDraft): WasteLegalPhClass => {
 export const isMassCapacity = (capacity: string | null | undefined): boolean =>
     /(?:^|\s|\d)(?:kg|mg|g)\s*$/i.test(capacity?.trim() ?? '');
 
+/**
+ * Without a CAS number the solvent allowlist cannot match (manual entries,
+ * label-only bottles). A component that is itself a halogenated organic
+ * liquid, neat or with no solution data, still counts as halogenated
+ * evidence. Conflicting category/property evidence resolves to halogenated.
+ * This fallback only ever yields the stricter halogenated matrix; the
+ * non-halogenated matrix keeps requiring an exact allowlisted CAS.
+ */
+const getHalogenatedLiquidFallbackEvidence = (
+    component: WasteComponent,
+): 'organic_halogenated' | null => {
+    if (isValidCasNumber(component.chemical.casNumber)) return null;
+    if (component.materialForm === 'solid' || component.materialForm === 'solution') return null;
+    // A neat product's concentration is its purity; otherwise a concentration means it was dissolved.
+    if (component.materialForm !== 'neat' && component.concentration !== undefined) return null;
+    const isHalogenatedOrganic = component.category === 'ORGANIC_HALOGEN' || (
+        component.category === 'ORGANIC_NON_HALOGEN'
+        && component.chemical.properties?.isHalogenated === true
+    );
+    return isHalogenatedOrganic ? 'organic_halogenated' : null;
+};
+
 /** Infer a batch matrix only from evidence that is strong enough to show as editable. */
 export function inferWasteMatrixFromComponent(component: WasteComponent): WasteMatrix | null {
     const hasMassCapacity = isMassCapacity(component.inventorySnapshot?.nominalCapacity);
@@ -314,7 +336,66 @@ export function inferWasteMatrixFromComponent(component: WasteComponent): WasteM
     if (formula === 'H2O' || /^(?:water|distilled water|deionized water|물|증류수|탈이온수)$/i.test(name)) {
         return 'aqueous';
     }
-    return getOrganicSolventMatrixEvidence(component);
+    return getOrganicSolventMatrixEvidence(component) ?? getHalogenatedLiquidFallbackEvidence(component);
+}
+
+/**
+ * Halogenated organic evidence the routing engine already honours: the
+ * halogen category (which routes to the halogenated stream), conflicting
+ * halogen properties, strong solvent evidence, or a halogenated solvent the
+ * user named for a dissolved component.
+ */
+export function hasHalogenatedOrganicEvidence(component: WasteComponent): boolean {
+    if (component.category === 'ORGANIC_HALOGEN') return true;
+    if (component.category === 'ORGANIC_NON_HALOGEN' && component.chemical.properties?.isHalogenated === true) {
+        return true;
+    }
+    if (component.concentration !== undefined && component.solutionContext?.solventClass === 'organic_halogen') {
+        return true;
+    }
+    return inferWasteMatrixFromComponent(component) === 'organic_halogenated';
+}
+
+/**
+ * True when a matrix claims less than the components show: a non-halogenated
+ * matrix for halogenated organic content, or a matrix no strong component
+ * evidence supports. Suggestions such as "same as the previous batch" must
+ * not offer such a matrix.
+ */
+export function matrixContradictsComponentEvidence(
+    matrix: WasteMatrix,
+    components: readonly WasteComponent[],
+): boolean {
+    if (matrix === 'unknown') return false;
+    if (matrix !== 'organic_halogenated' && components.some(hasHalogenatedOrganicEvidence)) return true;
+    const strongEvidence = components
+        .map(inferWasteMatrixFromComponent)
+        .filter((evidence): evidence is WasteMatrix => evidence !== null);
+    return strongEvidence.length > 0 && !strongEvidence.includes(matrix);
+}
+
+/**
+ * Keep a matrix the user chose when the components change. The one exception
+ * is a change that adds halogenated organic evidence the choice understates:
+ * a non-halogenated organic choice is raised to the halogenated stream, and an
+ * aqueous or solid choice is reopened for the user to confirm again. Removing
+ * or editing evidence never lowers a user's choice.
+ */
+export function reconcileUserMatrix(
+    userMatrix: WasteMatrix,
+    previousComponents: readonly WasteComponent[],
+    nextComponents: readonly WasteComponent[],
+): { matrix: WasteMatrix; matrixSource: WasteBatchDraft['matrixSource'] } {
+    const keep = { matrix: userMatrix, matrixSource: 'user' as const };
+    if (userMatrix === 'organic_halogenated' || userMatrix === 'unknown' || userMatrix === 'mixed_biphasic') {
+        return keep;
+    }
+    const addsHalogenEvidence = !previousComponents.some(hasHalogenatedOrganicEvidence)
+        && nextComponents.some(hasHalogenatedOrganicEvidence);
+    if (!addsHalogenEvidence) return keep;
+    return userMatrix === 'organic_non_halogenated'
+        ? { matrix: 'organic_halogenated', matrixSource: 'automatic' }
+        : { matrix: 'unknown', matrixSource: 'unresolved' };
 }
 
 /**

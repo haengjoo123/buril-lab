@@ -35,7 +35,7 @@ import { useSearchFlow } from './hooks/useSearchFlow';
 import { useLabStore } from './store/useLabStore';
 import { useOnboardingStore, type OnboardingMissionKey } from './store/useOnboardingStore';
 import { useTranslation } from 'react-i18next';
-import { Loader2, ShoppingBag } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { OnboardingMissionPanel } from './components/onboarding/OnboardingMissionPanel';
 import { SafetyCenterShell } from './features/safety-center/SafetyCenterShell';
 import { isAuthRequiredPath, sanitizeReturnTo } from './utils/authRoutes';
@@ -131,6 +131,9 @@ function App() {
   const myLabs = useLabStore((state) => state.myLabs);
   const currentRole = myLabs.find((membership) => membership.lab_id === currentLabId)?.role;
   const isAdmin = currentRole === 'admin';
+  const labsLoaded = useLabStore((state) => state.labsLoaded);
+  // Whether we know if the admin tab exists: personal space never has it; a lab needs its role.
+  const isLabRoleResolved = !currentLabId || Boolean(currentRole) || labsLoaded;
   const isWelcomeOpen = useOnboardingStore((state) => state.isWelcomeOpen);
   const hasCompletedWelcome = useOnboardingStore((state) => state.hasCompletedWelcome);
   const hasSkippedOnboarding = useOnboardingStore((state) => state.hasSkippedOnboarding);
@@ -162,6 +165,8 @@ function App() {
     isLoading,
     isAiAnalyzing,
     error,
+    errorKind,
+    retrySearch,
     handleBrandChange,
     handleSortChange,
     handleClearFilters,
@@ -202,6 +207,8 @@ function App() {
     logRefreshKey,
     incrementLogRefreshKey,
     handleTabClick,
+    searchInputFocusKey,
+    requestSearchInputFocus,
   } = useAppUiState({
     pathname: location.pathname,
     activeCabinetId,
@@ -397,10 +404,18 @@ function App() {
   useEffect(() => {
     if (isAuthLoading) return;
     if (session) return;
-    if (useLabStore.getState().currentLabId !== null) {
-      useLabStore.getState().clearLabState();
+    const labState = useLabStore.getState();
+    if (labState.currentLabId !== null || labState.myLabs.length > 0) {
+      labState.clearLabState();
     }
   }, [isAuthLoading, session]);
+
+  // Lost admin rights (personal space, another lab, transfer) while on the admin route: leave it.
+  useEffect(() => {
+    if (isAuthLoading || !session || activeTab !== 'admin') return;
+    if (!isLabRoleResolved || isAdmin) return;
+    navigate(labAppRoute(), { replace: true });
+  }, [isAuthLoading, session, activeTab, isLabRoleResolved, isAdmin, navigate]);
 
   useEffect(() => {
     if (!labAppRedirectTarget) return;
@@ -854,6 +869,10 @@ function App() {
           <Scanner
             onScan={handleScan}
             onClose={() => setIsScanning(false)}
+            onManualInput={() => {
+              setIsScanning(false);
+              requestSearchInputFocus();
+            }}
           />
         </Suspense>
       )}
@@ -868,6 +887,13 @@ function App() {
               : labAppRoute('/logs'))}
             onAddComponent={() => {
               setIsAddingWasteComponent(true);
+              setWasteComponentSearchRequestKey((requestKey) => requestKey + 1);
+              setIsCartOpen(false);
+              handleTabClick('search');
+            }}
+            onContinueSearch={() => {
+              // The recorded batch is already cleared: plain search, input focused.
+              setIsAddingWasteComponent(false);
               setWasteComponentSearchRequestKey((requestKey) => requestKey + 1);
               setIsCartOpen(false);
               handleTabClick('search');
@@ -932,6 +958,8 @@ function App() {
             />
           ) : activeTab === 'admin' && isAdmin ? (
             <GlobalAuditLogsView />
+          ) : activeTab === 'admin' && !isLabRoleResolved ? (
+            <TabContentFallback />
           ) : (
             <SearchTabView
               cartCount={cart.length}
@@ -958,6 +986,8 @@ function App() {
               isLoading={isLoading}
               isAiAnalyzing={isAiAnalyzing}
               error={error}
+              errorKind={errorKind}
+              onRetrySearch={retrySearch}
               result={result}
               scanSelectionMeta={scanSelection &&
                 scanSelection.searchTerm.trim().toLowerCase() === lastSearchQuery.trim().toLowerCase()
@@ -1065,6 +1095,7 @@ function App() {
               onSearchFocusChange={setIsSearchInputFocused}
               wasteComponentSearchMode={isAddingWasteComponent}
               searchFocusRequestKey={wasteComponentSearchRequestKey}
+              inputFocusRequestKey={searchInputFocusKey}
               onReturnToWasteBatch={() => {
                 setIsAddingWasteComponent(false);
                 setIsCartOpen(true);
@@ -1078,23 +1109,6 @@ function App() {
           )}
         </Suspense>
 
-        {wasteDraftCount > 0 && !isCartOpen && !shouldHideMobileSearchChrome && (
-          <button
-            onClick={() => {
-              if (!isAuthenticated) {
-                navigateToLogin(labAppRoute());
-                return;
-              }
-
-              setIsCartOpen(true);
-            }}
-            className={`adaptive-voice-button absolute ${activeTab === 'inventory' ? 'bottom-24 right-24' : 'bottom-20 right-6'} z-40 flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition-transform animate-in fade-in slide-in-from-bottom-4 active:scale-90 dark:bg-slate-100 dark:text-slate-900 lg:hidden`}
-            aria-label={`${t('cart_title')} ${wasteDraftCount}`}
-          >
-            <ShoppingBag className="w-6 h-6" />
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center font-bold border-2 border-white dark:border-slate-900 text-white">{wasteDraftCount}</span>
-          </button>
-        )}
       </MainLayout>
 
       <VoiceAgentSheet

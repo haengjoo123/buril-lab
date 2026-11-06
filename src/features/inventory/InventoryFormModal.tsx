@@ -3,7 +3,7 @@ import { formatAuditActionName } from '../../utils/auditLogFormatting';
 import { AuditChangeList } from '../../components/AuditChangeList';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Save, AlertCircle, CheckCircle2, History, Loader2 } from 'lucide-react';
+import { X, Save, AlertCircle, History, Loader2 } from 'lucide-react';
 import { analyticsService } from '../../services/analyticsService';
 import { inventoryService, type InventoryItem, type CreateInventoryInput, type StorageLocation } from '../../services/inventoryService';
 import { cabinetService, type Cabinet } from '../../services/cabinetService';
@@ -15,25 +15,66 @@ import { AppSelect } from '../../components/AppSelect';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { ReagentDateFields } from '../../components/ReagentDateFields';
 import { readableImportAttributes } from './import/sourceAttributes';
+import { QuantityStepper } from './QuantityStepper';
+import { INVENTORY_REMAINING_LEVELS, getInventoryRemainingStage } from './remainingLevels';
+import { readLastInventoryLocation, writeLastInventoryLocation } from './inventoryFormPrefs';
+import { useLabStore } from '../../store/useLabStore';
+import type { ManufacturerDateType } from '../../utils/manufacturerDate';
 
 import { translateLocationName } from '../../utils/i18nUtils';
 import { guessTemplateFromCapacity, getWidthForTemplate } from '../../utils/guessReagentTemplate';
 import { getSuggestedCasInputMethod, useCasSuggestion } from '../../hooks/useCasSuggestion';
 
+export interface InventoryFormSaveResult {
+    kind: 'created' | 'updated';
+    itemId: string;
+    /** Server row returned by a creation; null for updates. */
+    item: InventoryItem | null;
+    /** Values that were written, for optimistic display. */
+    values: CreateInventoryInput;
+    /** Present when a new item is auto-placed in a cabinet; resolves to whether it fit. */
+    placement?: Promise<boolean>;
+}
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;
     locations: StorageLocation[];
+    cabinets?: Cabinet[];
     initialData?: InventoryItem | null;
     initialDraft?: Partial<CreateInventoryInput> | null;
     entryMode?: 'manual_form' | 'scan_prefill';
-    onSaved: () => void;
+    onSaved: (result: InventoryFormSaveResult) => void;
+}
+
+type InventoryFormField = 'name' | 'location' | 'date';
+
+// Auto-placement runs after the modal closed; serialise it so two quick
+// registrations never interleave on the shared cabinet store.
+let cabinetPlacementQueue: Promise<unknown> = Promise.resolve();
+function enqueueCabinetPlacement(task: () => Promise<boolean>): Promise<boolean> {
+    const run = cabinetPlacementQueue
+        .then(task)
+        .catch((placementError: unknown) => {
+            console.error('Failed to auto-place inventory item in cabinet:', placementError);
+            return false;
+        });
+    cabinetPlacementQueue = run;
+    return run;
+}
+
+/** Analytics must never delay or fail a save. */
+function trackInBackground(task: Promise<unknown>): void {
+    void task.catch((trackingError: unknown) => {
+        console.warn('[Inventory] Background tracking failed:', trackingError);
+    });
 }
 
 export const InventoryFormModal: React.FC<Props> = ({
     isOpen,
     onClose,
     locations,
+    cabinets: initialCabinets,
     initialData,
     initialDraft = null,
     entryMode = 'manual_form',
@@ -42,12 +83,23 @@ export const InventoryFormModal: React.FC<Props> = ({
     const { t, i18n } = useTranslation();
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [cabinets, setCabinets] = useState<Cabinet[]>([]);
-    const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
+    const [fieldErrors, setFieldErrors] = useState<Partial<Record<InventoryFormField, string>>>({});
+    const [cabinets, setCabinets] = useState<Cabinet[]>(initialCabinets ?? []);
     const dialogRef = useRef<HTMLDivElement>(null);
     useAdaptiveDialog(dialogRef, onClose, isOpen);
-    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const nameInputRef = useRef<HTMLInputElement>(null);
+    const locationFieldRef = useRef<HTMLDivElement>(null);
+    const dateFieldRef = useRef<HTMLDivElement>(null);
+    const locationsRef = useRef(locations);
+    const initialCabinetsRef = useRef(initialCabinets);
+    const qtyNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const savingRef = useRef(false);
     const [showQtyNotice, setShowQtyNotice] = useState(false);
+
+    useEffect(() => {
+        locationsRef.current = locations;
+        initialCabinetsRef.current = initialCabinets;
+    }, [locations, initialCabinets]);
 
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -63,7 +115,7 @@ export const InventoryFormModal: React.FC<Props> = ({
         cabinet_id: '',
         storage_location_id: '',
         expiry_date: '',
-        manufacturer_date_type: 'unlabeled',
+        manufacturer_date_type: 'expiry',
         received_date: '',
         opened_date: '',
         memo: '',
@@ -85,10 +137,16 @@ export const InventoryFormModal: React.FC<Props> = ({
 
     useEffect(() => {
         if (isOpen) {
+            const currentLocations = locationsRef.current;
+            const knownCabinets = initialCabinetsRef.current ?? [];
+            if (knownCabinets.length > 0) setCabinets(knownCabinets);
             // Fetch cabinets when modal opens
             cabinetService.getCabinets().then(setCabinets).catch(console.error);
+            // Resolve the actor (session + display name) while the user is typing.
+            inventoryService.prefetchActorContext();
 
             if (initialData) {
+                setAuditLogs([]);
                 setIsLoadingLogs(true);
                 auditService.getLogs({ entity_id: initialData.id, limit: 10 })
                     .then(setAuditLogs)
@@ -106,15 +164,31 @@ export const InventoryFormModal: React.FC<Props> = ({
                     cabinet_id: initialData.cabinet_id || '',
                     storage_location_id: initialData.storage_location_id || '',
                     expiry_date: initialData.expiry_date || '',
-                    manufacturer_date_type: initialData.manufacturer_date_type || 'unlabeled',
+                    // Keep the date field visible so an expiry can be added in one step.
+                    manufacturer_date_type: initialData.manufacturer_date_type && initialData.manufacturer_date_type !== 'unlabeled'
+                        ? initialData.manufacturer_date_type
+                        : 'expiry',
                     received_date: initialData.received_date || '',
                     opened_date: initialData.opened_date || '',
                     memo: initialData.memo || '',
                     remaining_percent: initialData.remaining_percent ?? 100,
                 });
             } else {
-                const defaultStorageType = locations.length > 0 ? 'other' : 'cabinet';
+                // Start where the user last stored something in this lab.
+                const remembered = readLastInventoryLocation(useLabStore.getState().currentLabId);
+                const rememberedOther = remembered?.storage_type === 'other'
+                    && currentLocations.some((location) => location.id === remembered.storage_location_id)
+                    ? remembered.storage_location_id
+                    : undefined;
+                const rememberedCabinet = remembered?.storage_type === 'cabinet'
+                    && knownCabinets.some((cabinet) => cabinet.id === remembered.cabinet_id)
+                    ? remembered.cabinet_id
+                    : undefined;
+                const defaultStorageType = rememberedCabinet
+                    ? 'cabinet'
+                    : (rememberedOther || currentLocations.length > 0 ? 'other' : 'cabinet');
                 const draftStorageType = initialDraft?.storage_type || defaultStorageType;
+                const draftDateType = initialDraft?.manufacturer_date_type;
                 setFormData({
                     name: initialDraft?.name || '',
                     brand: initialDraft?.brand || '',
@@ -123,12 +197,15 @@ export const InventoryFormModal: React.FC<Props> = ({
                     quantity: initialDraft?.quantity ?? 1,
                     capacity: initialDraft?.capacity || '',
                     storage_type: draftStorageType,
-                    cabinet_id: draftStorageType === 'cabinet' ? (initialDraft?.cabinet_id || '') : '',
+                    cabinet_id: draftStorageType === 'cabinet'
+                        ? (initialDraft?.cabinet_id || rememberedCabinet || '')
+                        : '',
                     storage_location_id: draftStorageType === 'other'
-                        ? (initialDraft?.storage_location_id || (locations.length > 0 ? locations[0].id : ''))
+                        ? (initialDraft?.storage_location_id || rememberedOther || (currentLocations.length > 0 ? currentLocations[0].id : ''))
                         : '',
                     expiry_date: initialDraft?.expiry_date || '',
-                    manufacturer_date_type: initialDraft?.manufacturer_date_type || 'unlabeled',
+                    // The list sorts by expiry, so the expiry field is shown by default.
+                    manufacturer_date_type: draftDateType && draftDateType !== 'unlabeled' ? draftDateType : 'expiry',
                     received_date: initialDraft?.received_date || '',
                     opened_date: initialDraft?.opened_date || '',
                     memo: initialDraft?.memo || '',
@@ -136,27 +213,45 @@ export const InventoryFormModal: React.FC<Props> = ({
                 });
             }
             setError(null);
+            setFieldErrors({});
         }
-    }, [isOpen, initialData, locations, initialDraft]);
+    }, [isOpen, initialData, initialDraft]);
+
+    useEffect(() => {
+        if (!isOpen || initialData) return;
+        // Registration starts by typing the name.
+        const frame = requestAnimationFrame(() => {
+            nameInputRef.current?.focus({ preventScroll: true });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [isOpen, initialData]);
 
     useEffect(() => {
         return () => {
-            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            if (qtyNoticeTimerRef.current) clearTimeout(qtyNoticeTimerRef.current);
         };
     }, []);
+
+    const clearFieldError = (field: InventoryFormField) => {
+        setError(null);
+        setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+    };
+
+    const showQuantityNotice = () => {
+        setShowQtyNotice(true);
+        if (qtyNoticeTimerRef.current) clearTimeout(qtyNoticeTimerRef.current);
+        qtyNoticeTimerRef.current = setTimeout(() => setShowQtyNotice(false), 3000);
+    };
 
     // Handle form changes
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
 
-        if (name === 'quantity') {
-            const parsed = parseInt(value, 10);
-            setFormData(prev => ({ ...prev, [name]: isNaN(parsed) ? 1 : Math.max(1, parsed) }));
-            return;
-        }
-
         if (name === 'name') {
             casSuggestion.markNameInputChanged();
+            clearFieldError('name');
+        } else {
+            setError(null);
         }
 
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -184,49 +279,92 @@ export const InventoryFormModal: React.FC<Props> = ({
         );
     };
 
+    const focusInvalidField = (field: InventoryFormField, message: string) => {
+        setFieldErrors({ [field]: message });
+        setError(null);
+        requestAnimationFrame(() => {
+            const container = field === 'name'
+                ? nameInputRef.current
+                : field === 'location'
+                    ? locationFieldRef.current
+                    : dateFieldRef.current;
+            if (!container) return;
+            container.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            const focusTarget = container instanceof HTMLInputElement
+                ? container
+                : container.querySelector<HTMLElement>('input, button');
+            focusTarget?.focus({ preventScroll: true });
+        });
+    };
+
+    /** A date type without a date is stored as "unlabeled" unless the record already had it that way. */
+    const resolveManufacturerDateType = (): ManufacturerDateType => {
+        if (formData.expiry_date) return formData.manufacturer_date_type || 'expiry';
+        if (initialData && !initialData.expiry_date) return initialData.manufacturer_date_type || 'unlabeled';
+        return 'unlabeled';
+    };
+
+    const rememberLocation = (input: CreateInventoryInput) => {
+        writeLastInventoryLocation(useLabStore.getState().currentLabId, {
+            storage_type: input.storage_type,
+            cabinet_id: input.cabinet_id,
+            storage_location_id: input.storage_location_id,
+        });
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (savingRef.current) return;
 
         if (!formData.name.trim()) {
-            setError(t('msg_input_required_name'));
+            focusInvalidField('name', t('msg_input_required_name'));
             return;
         }
 
         if (formData.storage_type === 'cabinet' && !formData.cabinet_id) {
-            setError(t('msg_select_cabinet'));
+            focusInvalidField('location', t('msg_select_cabinet'));
             return;
         }
 
         if (formData.storage_type === 'other' && !formData.storage_location_id) {
-            setError(t('msg_select_location'));
+            focusInvalidField('location', t('msg_select_location'));
             return;
         }
 
         if (formData.expiry_date && formData.manufacturer_date_type === 'unlabeled') {
-            setError(t('scan_manufacturer_date_type_required'));
+            focusInvalidField('date', t('scan_manufacturer_date_type_required'));
             return;
         }
 
+        const payload: CreateInventoryInput = {
+            ...formData,
+            name: formData.name.trim(),
+            quantity: Math.max(1, Math.round(formData.quantity ?? 1)),
+            manufacturer_date_type: resolveManufacturerDateType(),
+        };
+
+        savingRef.current = true;
         setIsSaving(true);
         setError(null);
+        setFieldErrors({});
 
         try {
             if (initialData) {
-                const isStorageChanged = initialData.storage_type !== formData.storage_type
-                    || (formData.storage_type === 'cabinet' && (initialData.cabinet_id || '') !== (formData.cabinet_id || ''))
-                    || (formData.storage_type === 'other' && (initialData.storage_location_id || '') !== (formData.storage_location_id || ''));
-                const shouldTrackCommerceUpdate = hasCommerceSignalChange(initialData, formData);
-                const casChanged = (initialData.cas_number || '').trim() !== (formData.cas_number || '').trim();
+                const isStorageChanged = initialData.storage_type !== payload.storage_type
+                    || (payload.storage_type === 'cabinet' && (initialData.cabinet_id || '') !== (payload.cabinet_id || ''))
+                    || (payload.storage_type === 'other' && (initialData.storage_location_id || '') !== (payload.storage_location_id || ''));
+                const shouldTrackCommerceUpdate = hasCommerceSignalChange(initialData, payload);
+                const casChanged = (initialData.cas_number || '').trim() !== (payload.cas_number || '').trim();
 
                 if (isStorageChanged) {
-                    await moveItemStorage(initialData, formData);
+                    await moveItemStorage(initialData, payload);
                 } else {
-                    await inventoryService.updateItem(initialData.id, formData, initialData._source || 'inventory');
+                    await inventoryService.updateItem(initialData.id, payload, initialData._source || 'inventory');
                     if (initialData._source === 'inventory' && initialData.storage_type === 'cabinet' && initialData.cabinet_id) {
                         const synced = await inventoryService.syncLinkedCabinetItemFromInventory({
                             inventoryItemId: initialData.id,
                             cabinetId: initialData.cabinet_id,
-                            updates: formData,
+                            updates: payload,
                         });
                         if (!synced && casChanged) {
                             await inventoryService.syncLinkedCabinetCas({
@@ -238,12 +376,12 @@ export const InventoryFormModal: React.FC<Props> = ({
                                 productNumber: initialData.product_number,
                                 capacity: initialData.capacity,
                                 previousCasNumber: initialData.cas_number,
-                                nextCasNumber: formData.cas_number,
+                                nextCasNumber: payload.cas_number,
                             });
                         }
                     } else if (initialData._source === 'cabinet_item' && initialData.linked_inventory_item_id) {
                         await inventoryService.updateItem(initialData.linked_inventory_item_id, {
-                            ...formData,
+                            ...payload,
                             storage_type: 'cabinet',
                             cabinet_id: initialData.cabinet_id || undefined,
                         }, 'inventory');
@@ -257,71 +395,69 @@ export const InventoryFormModal: React.FC<Props> = ({
                             productNumber: initialData.product_number,
                             capacity: initialData.capacity,
                             previousCasNumber: initialData.cas_number,
-                            nextCasNumber: formData.cas_number,
+                            nextCasNumber: payload.cas_number,
                         });
                     }
                 }
                 if (shouldTrackCommerceUpdate) {
-                    await analyticsService.trackCommerceIntentEvent({
+                    trackInBackground(analyticsService.trackCommerceIntentEvent({
                         eventType: initialData._source === 'cabinet_item' ? 'cabinet_item_updated' : 'inventory_updated',
                         sourceScreen: 'inventory_form_modal',
-                        storageType: formData.storage_type,
+                        storageType: payload.storage_type,
                         sourceItemType: initialData._source || 'inventory',
                         sourceItemId: initialData.id,
-                        brandName: formData.brand,
-                        productNumber: formData.product_number,
-                        quantity: formData.quantity,
-                        capacityText: formData.capacity,
-                        casNumber: formData.cas_number,
+                        brandName: payload.brand,
+                        productNumber: payload.product_number,
+                        quantity: payload.quantity,
+                        capacityText: payload.capacity,
+                        casNumber: payload.cas_number,
                         casInputMethod: currentCasInputMethod,
                         metadata: {
                             action: isStorageChanged ? 'move_and_update' : 'update',
                         },
-                    });
+                    }));
                 }
+                rememberLocation(payload);
+                onSaved({ kind: 'updated', itemId: initialData.id, item: null, values: payload });
             } else {
-                const createdItem = await inventoryService.createItem(formData);
+                const createdItem = await inventoryService.createItem(payload);
                 if (!createdItem) {
                     throw new Error(t('inventory_error'));
                 }
-                await analyticsService.trackCommerceIntentEvent({
+                trackInBackground(analyticsService.trackCommerceIntentEvent({
                     eventType: 'inventory_registered',
                     sourceScreen: 'inventory_form_modal',
-                    storageType: formData.storage_type,
+                    storageType: payload.storage_type,
                     sourceItemType: 'inventory',
                     sourceItemId: createdItem.id,
-                    brandName: formData.brand,
-                    productNumber: formData.product_number,
-                    quantity: formData.quantity,
-                    capacityText: formData.capacity,
-                    casNumber: formData.cas_number,
+                    brandName: payload.brand,
+                    productNumber: payload.product_number,
+                    quantity: payload.quantity,
+                    capacityText: payload.capacity,
+                    casNumber: payload.cas_number,
                     casInputMethod: currentCasInputMethod,
                     metadata: {
                         entry_mode: entryMode,
                     },
-                });
+                }));
 
-                // 수동 등록에서도 시약장 선택 시 실제 3D 시약장 빈 공간에 자동 배치
-                if (formData.storage_type === 'cabinet' && formData.cabinet_id) {
-                    const isPlaced = await placeToCabinet(createdItem.id, formData);
-                    if (!isPlaced) {
-                        onSaved();
-                        setError(t('inventory_auto_placed_fail'));
-                        return;
-                    }
-                    // 모달이 닫힌 뒤에도 짧게 성공 피드백을 보여 중복 입력을 줄입니다.
-                    setSuccessToastMessage(t('inventory_auto_placed'));
-                    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-                    toastTimerRef.current = setTimeout(() => setSuccessToastMessage(null), 1800);
-                }
+                // The record exists from here on: close right away so a second tap can
+                // never create a duplicate. Cabinet auto-placement (수동 등록에서도 시약장
+                // 선택 시 실제 3D 시약장 빈 공간에 자동 배치) continues in the background and
+                // reports its own outcome to the list.
+                const placement = payload.storage_type === 'cabinet' && payload.cabinet_id
+                    ? enqueueCabinetPlacement(() => placeToCabinet(createdItem.id, payload))
+                    : undefined;
+                rememberLocation(payload);
+                onSaved({ kind: 'created', itemId: createdItem.id, item: createdItem, values: payload, placement });
             }
-            onSaved();
             onClose();
         } catch (err: unknown) {
             console.error('Failed to save inventory:', err);
             const message = err instanceof Error ? err.message : t('error_save_generic');
             setError(message);
         } finally {
+            savingRef.current = false;
             setIsSaving(false);
         }
     };
@@ -413,7 +549,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                 }
             }
 
-            await analyticsService.trackStorageWarningIgnoredForItem({
+            trackInBackground(analyticsService.trackStorageWarningIgnoredForItem({
                 cabinetId: input.cabinet_id,
                 shelves: useFridgeStore.getState().shelves,
                 relatedItemId: placed.itemId,
@@ -422,7 +558,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                 metadata: {
                     inventory_source: sourceItem._source || 'inventory',
                 },
-            });
+            }));
             return;
         }
 
@@ -595,32 +731,24 @@ export const InventoryFormModal: React.FC<Props> = ({
         value: cab.id,
         label: cab.name,
     }));
-    const locationOptions = locations.map((loc) => ({
-        value: loc.id,
-        label: `${loc.icon} ${translateLocationName(loc.name, t)}`,
-    }));
-    const isLocationChanged = initialData
-        ? (
-            initialData.storage_type !== formData.storage_type
-            || (formData.storage_type === 'cabinet' && (initialData.cabinet_id || '') !== (formData.cabinet_id || ''))
-            || (formData.storage_type === 'other' && (initialData.storage_location_id || '') !== (formData.storage_location_id || ''))
-        )
-        : Boolean(formData.cabinet_id || formData.storage_location_id);
+    // Only an edit that actually moves the item needs the "from -> to" preview.
+    const isLocationChanged = Boolean(initialData) && (
+        initialData?.storage_type !== formData.storage_type
+        || (formData.storage_type === 'cabinet' && (initialData?.cabinet_id || '') !== (formData.cabinet_id || ''))
+        || (formData.storage_type === 'other' && (initialData?.storage_location_id || '') !== (formData.storage_location_id || ''))
+    );
+    const remainingStage = getInventoryRemainingStage(formData.remaining_percent);
+    const fieldInputClass = (field: InventoryFormField) => (
+        fieldErrors[field]
+            ? 'border-red-400 focus:ring-red-500 dark:border-red-500'
+            : 'border-slate-200 dark:border-slate-700'
+    );
 
-    if (!isOpen && !successToastMessage) return null;
+    if (!isOpen) return null;
 
 
     return (
         <>
-            {successToastMessage && (
-                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[230] animate-in slide-in-from-top-3 fade-in duration-200">
-                    <div className="bg-emerald-600 text-white px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium">
-                        <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        {successToastMessage}
-                    </div>
-                </div>
-            )}
-
             {isOpen && (
                 <div className="adaptive-overlay fixed inset-0 z-[200] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -636,25 +764,27 @@ export const InventoryFormModal: React.FC<Props> = ({
                         </div>
 
                         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">
-                            <form id="inventory-form" onSubmit={handleSubmit} className="flex flex-col gap-4">
-
-                                {error && (
-                                    <div className="flex bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm gap-2">
-                                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                                        <span>{error}</span>
-                                    </div>
-                                )}
+                            <form id="inventory-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_product_name')} <span className="text-red-500">*</span></label>
+                                    <label htmlFor="inventory-form-name" className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_product_name')} <span className="text-red-500">*</span></label>
                                     <input
+                                        ref={nameInputRef}
+                                        id="inventory-form-name"
                                         name="name"
                                         value={formData.name}
                                         onChange={handleChange}
                                         onBlur={casSuggestion.triggerLookupFromBlur}
                                         placeholder={t('inventory_product_name_placeholder')}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
+                                        aria-invalid={Boolean(fieldErrors.name)}
+                                        aria-describedby={fieldErrors.name ? 'inventory-form-name-error' : undefined}
+                                        className={`w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100 ${fieldInputClass('name')}`}
                                     />
+                                    {fieldErrors.name && (
+                                        <p id="inventory-form-name-error" role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+                                            {fieldErrors.name}
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
@@ -688,25 +818,17 @@ export const InventoryFormModal: React.FC<Props> = ({
                                             value={formData.capacity}
                                             onChange={handleChange}
                                             placeholder={t('inventory_capacity_placeholder')}
-                                            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
+                                            className="h-11 w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-slate-900 dark:text-slate-100"
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_quantity')} <span className="text-red-500">*</span></label>
-                                        <input
-                                            name="quantity"
-                                            type="number"
-                                            min="1"
-                                            value={formData.quantity}
-                                            onChange={handleChange}
+                                        <label htmlFor="inventory-form-quantity" className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_quantity')} <span className="text-red-500">*</span></label>
+                                        <QuantityStepper
+                                            id="inventory-form-quantity"
+                                            value={formData.quantity ?? 1}
+                                            onChange={(quantity) => setFormData((prev) => ({ ...prev, quantity }))}
                                             readOnly={isEditingCabinetItem}
-                                            onClick={() => {
-                                                if (isEditingCabinetItem) {
-                                                    setShowQtyNotice(true);
-                                                    setTimeout(() => setShowQtyNotice(false), 3000);
-                                                }
-                                            }}
-                                            className={`w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-900 dark:text-slate-100 ${isEditingCabinetItem ? 'opacity-70 cursor-not-allowed bg-slate-50 dark:bg-slate-900/50' : ''}`}
+                                            onReadOnlyClick={showQuantityNotice}
                                         />
                                         {isEditingCabinetItem && showQtyNotice && (
                                             <span className="text-2xs text-red-500 dark:text-red-400 font-medium animate-in fade-in slide-in-from-top-1">
@@ -767,24 +889,14 @@ export const InventoryFormModal: React.FC<Props> = ({
                                         {t('inventory_remaining_amount')}
                                     </label>
                                     <div className="grid grid-cols-4 gap-2">
-                                        {[
-                                            { stage: 1, value: 5, color: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800', active: 'bg-red-600 text-white border-red-600 dark:bg-red-600 dark:text-white' },
-                                            { stage: 2, value: 30, color: 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800', active: 'bg-orange-500 text-white border-orange-500 dark:bg-orange-500 dark:text-white' },
-                                            { stage: 3, value: 60, color: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800', active: 'bg-blue-600 text-white border-blue-600 dark:bg-blue-600 dark:text-white' },
-                                            { stage: 4, value: 100, color: 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800', active: 'bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-600 dark:text-white' }
-                                        ].map((item) => {
-                                            const val = formData.remaining_percent ?? 100;
-                                            const isSelected = (
-                                                item.stage === 1 ? val <= 10 :
-                                                item.stage === 2 ? (val > 10 && val <= 30) :
-                                                item.stage === 3 ? (val > 30 && val <= 70) :
-                                                val > 70
-                                            );
+                                        {INVENTORY_REMAINING_LEVELS.map((item) => {
+                                            const isSelected = item.stage === remainingStage;
 
                                             return (
                                                 <button
                                                     key={item.stage}
                                                     type="button"
+                                                    aria-pressed={isSelected}
                                                     onClick={() => setFormData(prev => ({ ...prev, remaining_percent: item.value }))}
                                                     className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-xl border-2 transition-all duration-200 ${
                                                         isSelected ? item.active : `${item.color} opacity-60`
@@ -800,16 +912,6 @@ export const InventoryFormModal: React.FC<Props> = ({
                                             )
                                         })}
                                     </div>
-                                    <p className="text-2xs text-slate-500 dark:text-slate-400 ml-1 h-4">
-                                        {formData.remaining_percent !== undefined && (
-                                            <>
-                                                {formData.remaining_percent <= 10 && t('inventory_remaining_stage_1_desc')}
-                                                {formData.remaining_percent > 10 && formData.remaining_percent <= 30 && t('inventory_remaining_stage_2_desc')}
-                                                {formData.remaining_percent > 30 && formData.remaining_percent <= 70 && t('inventory_remaining_stage_3_desc')}
-                                                {formData.remaining_percent > 70 && t('inventory_remaining_stage_4_desc')}
-                                            </>
-                                        )}
-                                    </p>
                                 </div>
 
                                 {/* 보관 위치 지정 */}
@@ -817,10 +919,10 @@ export const InventoryFormModal: React.FC<Props> = ({
                                     <label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">{t('inventory_storage_type')}</label>
 
                                     <div className="flex gap-2">
-                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, storage_type: 'cabinet' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'cabinet' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
+                                        <button type="button" aria-pressed={formData.storage_type === 'cabinet'} onClick={() => { clearFieldError('location'); setFormData(prev => ({ ...prev, storage_type: 'cabinet' })); }} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'cabinet' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
                                             {t('inventory_storage_cabinet')}
                                         </button>
-                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, storage_type: 'other' }))} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'other' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
+                                        <button type="button" aria-pressed={formData.storage_type === 'other'} onClick={() => { clearFieldError('location'); setFormData(prev => ({ ...prev, storage_type: 'other', storage_location_id: prev.storage_location_id || locations[0]?.id || '' })); }} className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${formData.storage_type === 'other' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-white dark:bg-slate-700 text-slate-500 border border-slate-200 dark:border-slate-600'}`}>
                                             {t('inventory_storage_other')}
                                         </button>
                                     </div>
@@ -830,52 +932,78 @@ export const InventoryFormModal: React.FC<Props> = ({
                                         </p>
                                     )}
 
-                                    {formData.storage_type === 'cabinet' && (
-                                        <AppSelect
-                                            value={formData.cabinet_id || ''}
-                                            onChange={(value) => setFormData((prev) => ({ ...prev, cabinet_id: value }))}
-                                            options={cabinetOptions}
-                                            placeholder={`-- ${t('inventory_select_cabinet')} --`}
-                                            buttonClassName="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-                                        />
-                                    )}
+                                    <div ref={locationFieldRef}>
+                                        {formData.storage_type === 'cabinet' && (
+                                            <AppSelect
+                                                value={formData.cabinet_id || ''}
+                                                onChange={(value) => {
+                                                    clearFieldError('location');
+                                                    setFormData((prev) => ({ ...prev, cabinet_id: value }));
+                                                }}
+                                                options={cabinetOptions}
+                                                placeholder={`-- ${t('inventory_select_cabinet')} --`}
+                                                buttonClassName={`bg-white dark:bg-slate-800 ${fieldInputClass('location')}`}
+                                            />
+                                        )}
 
-                                    {formData.storage_type === 'other' && (
-                                        <AppSelect
-                                            value={formData.storage_location_id || ''}
-                                            onChange={(value) => setFormData((prev) => ({ ...prev, storage_location_id: value }))}
-                                            options={locationOptions}
-                                            placeholder={`-- ${t('inventory_select_location')} --`}
-                                            buttonClassName="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-                                        />
-                                    )}
+                                        {formData.storage_type === 'other' && (
+                                            <div role="radiogroup" aria-label={t('inventory_select_location')} className="flex flex-wrap gap-2">
+                                                {locations.map((location) => {
+                                                    const isSelected = formData.storage_location_id === location.id;
+                                                    return (
+                                                        <button
+                                                            key={location.id}
+                                                            type="button"
+                                                            role="radio"
+                                                            aria-checked={isSelected}
+                                                            onClick={() => {
+                                                                clearFieldError('location');
+                                                                setFormData((prev) => ({ ...prev, storage_location_id: location.id }));
+                                                            }}
+                                                            className={`inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${isSelected
+                                                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                                                : `bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 ${fieldErrors.location ? 'border-red-300 dark:border-red-700' : 'border-slate-200 dark:border-slate-600'}`
+                                                                }`}
+                                                        >
+                                                            <span aria-hidden="true">{location.icon}</span>
+                                                            {translateLocationName(location.name, t)}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                        {fieldErrors.location && (
+                                            <p role="alert" className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+                                                {fieldErrors.location}
+                                            </p>
+                                        )}
+                                    </div>
 
-                                    {/* 현재 위치 -> 변경 위치 미리보기 */}
-                                    <div className={`rounded-lg border px-3 py-2 text-xs ${isLocationChanged
-                                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
-                                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
-                                        }`}>
-                                        <span className="font-semibold">{t('inventory_current_location')}</span>
-                                        <span className="mx-1">→</span>
-                                        <span className="font-semibold">{t('inventory_change_location')}</span>
-                                        <div className="mt-1 leading-relaxed">
+                                    {/* 현재 위치 -> 변경 위치 미리보기 (수정 중 위치가 바뀔 때만) */}
+                                    {isLocationChanged && (
+                                        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
                                             {currentLocationLabel}
                                             <span className="mx-1.5">→</span>
-                                            {targetLocationLabel}
+                                            <span className="font-semibold">{targetLocationLabel}</span>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
 
-                                <ReagentDateFields
-                                    className="mt-2"
-                                    value={formData}
-                                    onChange={(next) => setFormData((prev) => ({ ...prev, ...next }))}
-                                />
-                                {formData.expiry_date && formData.manufacturer_date_type === 'unlabeled' && (
-                                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                        {t('scan_manufacturer_date_type_required')}
-                                    </p>
-                                )}
+                                <div ref={dateFieldRef}>
+                                    <ReagentDateFields
+                                        className="mt-2"
+                                        value={formData}
+                                        onChange={(next) => {
+                                            clearFieldError('date');
+                                            setFormData((prev) => ({ ...prev, ...next }));
+                                        }}
+                                    />
+                                    {(fieldErrors.date || (formData.expiry_date && formData.manufacturer_date_type === 'unlabeled')) && (
+                                        <p role="alert" className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">
+                                            {fieldErrors.date || t('scan_manufacturer_date_type_required')}
+                                        </p>
+                                    )}
+                                </div>
 
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t('inventory_memo')}</label>
@@ -889,7 +1017,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                                 </div>
 
                                 {readableImportAttributes(initialData?.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">{t('inv_imported_source_info')}</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(initialData?.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
-                                {initialData && (
+                                {initialData && (isLoadingLogs || auditLogs.length > 0) && (
                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                                         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
                                             <History className="w-4 h-4" /> {t('history_log', '변경 이력')}
@@ -898,8 +1026,6 @@ export const InventoryFormModal: React.FC<Props> = ({
                                             <div className="flex justify-center p-4">
                                                 <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
                                             </div>
-                                        ) : auditLogs.length === 0 ? (
-                                            <p className="text-xs text-slate-500 text-center py-2">{t('log_empty', '기록이 없습니다.')}</p>
                                         ) : (
                                             <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                                                 {auditLogs.map(log => (
@@ -925,6 +1051,12 @@ export const InventoryFormModal: React.FC<Props> = ({
                                 )}
                             </form>
                         </div>
+                        {error && (
+                            <div role="alert" className="flex gap-2 border-t border-red-100 bg-red-50 px-5 py-2.5 text-sm text-red-600 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>{error}</span>
+                            </div>
+                        )}
                         <div className="px-5 py-4 border-t border-gray-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-end gap-3 sticky bottom-0">
                             <button
                                 type="button"
@@ -982,19 +1114,16 @@ export const InventoryFormModal: React.FC<Props> = ({
         if (!placeResult) return false;
 
         await useFridgeStore.getState().saveCabinetStrict();
-        try {
-            await cabinetService.logActivity(input.cabinet_id, 'add', input.name, undefined, input.memo || undefined);
-        } catch (error) {
-            console.error('Failed to log cabinet add activity:', error);
-        }
+        cabinetService.logActivity(input.cabinet_id, 'add', input.name, undefined, input.memo || undefined)
+            .catch((logError: unknown) => console.error('Failed to log cabinet add activity:', logError));
 
-        await analyticsService.trackStorageWarningIgnoredForItem({
+        trackInBackground(analyticsService.trackStorageWarningIgnoredForItem({
             cabinetId: input.cabinet_id,
             shelves: useFridgeStore.getState().shelves,
             relatedItemId: placeResult.itemId,
             sourceScreen: 'inventory_form_modal',
             triggerSource: 'inventory_auto_place',
-        });
+        }));
 
         return true;
     }

@@ -1032,6 +1032,41 @@ export interface FetchWasteLogsParams {
     createdBefore?: string;
 }
 
+/**
+ * Component positions whose names are matched on the server. V2 rows store the
+ * name as `chemicalName`; legacy cart rows nest it under `chemical.name` and
+ * older inventory rows keep it as a top-level `name`. Components past this
+ * bound are still matched client-side among the loaded rows.
+ */
+const WASTE_LOG_SEARCH_COMPONENT_SLOTS = 8;
+const WASTE_LOG_SEARCH_COLUMNS = [
+    'disposal_category',
+    'handler_name',
+    'memo',
+    'stream_code',
+    ...Array.from({ length: WASTE_LOG_SEARCH_COMPONENT_SLOTS }, (_, index) => [
+        `chemicals->${index}->>chemicalName`,
+        `chemicals->${index}->chemical->>name`,
+        `chemicals->${index}->>name`,
+    ]).flat(),
+];
+
+/**
+ * PostgREST `or` filter for the log search box, or null for an empty query.
+ * LIKE wildcards in the query are escaped, and characters that delimit a
+ * PostgREST logic tree become a single-character wildcard so names such as
+ * "Copper(II) sulfate" or "N,N-Dimethylformamide" never break the request.
+ */
+export function buildWasteLogSearchFilter(search: string | undefined): string | null {
+    const trimmed = search?.trim();
+    if (!trimmed) return null;
+    const escaped = trimmed
+        .replace(/[%_\\]/g, '\\$&')
+        .replace(/[,.:()"]/g, '_');
+    const pattern = `%${escaped}%`;
+    return WASTE_LOG_SEARCH_COLUMNS.map((column) => `${column}.ilike.${pattern}`).join(',');
+}
+
 /** Fetch legacy and V2 records with the existing paging/search contract. */
 export async function fetchWasteLogs(
     limit: number = 20,
@@ -1039,7 +1074,7 @@ export async function fetchWasteLogs(
     params?: Partial<FetchWasteLogsParams>,
 ): Promise<{ logs: WasteLogRecord[]; count: number }> {
     const { currentLabId } = useLabStore.getState();
-    const search = params?.search?.trim();
+    const searchFilter = buildWasteLogSearchFilter(params?.search);
     const sortBy = params?.sortBy ?? 'created_at';
     const sortOrder = params?.sortOrder ?? 'desc';
     const createdAfter = params?.createdAfter;
@@ -1055,12 +1090,8 @@ export async function fetchWasteLogs(
         query = query.is('lab_id', null);
     }
 
-    if (search && search.length > 0) {
-        const escaped = search.replace(/[%_\\]/g, '\\$&');
-        const pattern = `%${escaped}%`;
-        query = query.or(
-            `disposal_category.ilike.${pattern},handler_name.ilike.${pattern},memo.ilike.${pattern},stream_code.ilike.${pattern}`,
-        );
+    if (searchFilter) {
+        query = query.or(searchFilter);
     }
 
     if (createdAfter) query = query.gte('created_at', createdAfter);

@@ -5,6 +5,8 @@ import { useLabStore } from '../../store/useLabStore';
 import { supabase } from '../../services/supabaseClient';
 import { Loader2, ShieldCheck, UserMinus, Crown } from 'lucide-react';
 import { AppSelect } from '../../components/AppSelect';
+import { LabInviteButton } from '../../components/LabInviteButton';
+import { LabRoleBadge } from '../../components/LabRoleBadge';
 
 interface LabMemberRow {
     user_id: string;
@@ -118,25 +120,11 @@ export const MemberManagementPanel: React.FC = () => {
         }
     };
 
-    const currentRole = myLabs.find((m) => m.lab_id === currentLabId)?.role;
+    const currentMembership = myLabs.find((m) => m.lab_id === currentLabId);
+    const currentRole = currentMembership?.role;
     const isAdmin = currentRole === 'admin';
-
-    const roleLabel = (role: string) => {
-        const key = `member_role_${role}`;
-        const translated = t(key);
-        // If no translation found (key returned as-is), fall back to raw role
-        return translated === key ? role : translated;
-    };
-
-    const roleColor = (role: string) => {
-        if (role === 'admin') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
-        if (role === 'pi') return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
-        if (role === 'postdoc') return 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300';
-        if (role === 'graduate') return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300';
-        if (role === 'undergrad') return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
-        if (role === 'student') return 'bg-slate-50 text-slate-400 dark:bg-slate-800/40 dark:text-slate-500 italic border border-slate-100 dark:border-slate-800';
-        return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
-    };
+    const currentLabName = currentMembership?.lab?.name ?? '';
+    const currentInstitutionName = currentMembership?.lab?.institution_name;
 
     const roleOptions = [
         { value: 'pi', label: t('member_role_pi') },
@@ -173,6 +161,9 @@ export const MemberManagementPanel: React.FC = () => {
                 <ShieldCheck className="w-5 h-5 text-indigo-500" />
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('admin_members_title')}</h2>
                 <span className="ml-auto text-xs text-slate-400">{t('cmp_member_count', { count: members.length, defaultValue: '{{count}}명' })}</span>
+                {members.length > 1 && currentLabId && currentLabName && (
+                    <LabInviteButton variant="compact" labId={currentLabId} labName={currentLabName} institutionName={currentInstitutionName} />
+                )}
             </div>
 
             {/* Member List */}
@@ -208,9 +199,7 @@ export const MemberManagementPanel: React.FC = () => {
                                         {t('member_joined_at')}: {new Date(member.joined_at).toLocaleDateString(locale)}
                                     </span>
                                 </div>
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${roleColor(member.role)}`}>
-                                    {roleLabel(member.role)}
-                                </span>
+                                <LabRoleBadge role={member.role} />
                             </div>
 
                             {/* Action row — only admin can act, cannot act on self or other admin */}
@@ -258,6 +247,10 @@ export const MemberManagementPanel: React.FC = () => {
                         </div>
                     );
                 })}
+                {/* Alone in the lab: the next useful step is bringing teammates in. */}
+                {members.length <= 1 && currentLabId && currentLabName && (
+                    <LabInviteButton labId={currentLabId} labName={currentLabName} institutionName={currentInstitutionName} />
+                )}
             </div>
 
             {/* Transfer Confirm Dialog */}

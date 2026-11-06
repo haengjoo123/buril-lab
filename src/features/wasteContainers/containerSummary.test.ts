@@ -5,9 +5,20 @@ import {
     chooseDefaultContainer,
     formatMassMg,
     formatVolumeMl,
+    nextContainerLabel,
     sortContainers,
     summarizeContainer,
 } from './containerSummary';
+
+describe('nextContainerLabel', () => {
+    it('numbers a new container after the names already in use', () => {
+        expect(nextContainerLabel('할로겐 유기 폐액', [])).toBe('할로겐 유기 폐액-1');
+        expect(nextContainerLabel('할로겐 유기 폐액', ['할로겐 유기 폐액-1', ' 할로겐 유기 폐액-2 ']))
+            .toBe('할로겐 유기 폐액-3');
+        expect(nextContainerLabel('Halogenated organic waste', ['halogenated organic waste-1', 'Other-2']))
+            .toBe('Halogenated organic waste-2');
+    });
+});
 
 function deposit(overrides: Partial<WasteContainerDeposit>): WasteContainerDeposit {
     return {

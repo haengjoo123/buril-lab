@@ -9,6 +9,18 @@ import { Loader2, X, FileText, ChevronDown, ChevronRight } from 'lucide-react';
 
 const KOSHA_REFERENCE_URL = 'https://msds.kosha.or.kr/MSDSInfo/kcic/msdssearchMsds.do';
 
+/** KOSHA titles are "13. 폐기시 주의사항"; PubChem uses English TOC headings without numbers. */
+const getMsdsSectionNumber = (title: string): number | null => {
+    const numbered = title.trim().match(/^(\d{1,2})\s*[.)]/);
+    if (numbered) return Number(numbered[1]);
+    if (/disposal/i.test(title)) return 13;
+    if (/hazards?\s+identification/i.test(title)) return 2;
+    return null;
+};
+
+/** Disposal (13) first, then hazards (2); both start open because they answer "how do I throw this away safely?". */
+const PRIORITY_SECTIONS = [13, 2];
+
 interface MsdsModalProps {
     chemical: Chemical;
     isOpen: boolean;
@@ -95,6 +107,12 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
 
     if (!isOpen) return null;
 
+    const numberedSections = sections.map((section) => ({ section, number: getMsdsSectionNumber(section.title) }));
+    const orderedSections = [
+        ...numberedSections.filter(({ number }) => number === PRIORITY_SECTIONS[0]),
+        ...numberedSections.filter(({ number }) => number !== PRIORITY_SECTIONS[0]),
+    ];
+
     return createPortal(
         <div className="adaptive-overlay fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden border border-gray-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
@@ -112,7 +130,9 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                         </p>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
+                        aria-label={t('btn_close')}
                         className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
                     >
                         <X className="w-6 h-6" />
@@ -153,8 +173,12 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
                                     {t('msds_incomplete', { sections: missingSections.join(', ') })}
                                 </div>
                             )}
-                            {sections.map((section, idx) => (
-                                <SectionItem key={idx} section={section} />
+                            {orderedSections.map(({ section, number }, idx) => (
+                                <SectionItem
+                                    key={`${section.title}-${idx}`}
+                                    section={section}
+                                    defaultExpanded={number !== null && PRIORITY_SECTIONS.includes(number)}
+                                />
                             ))}
                         </div>
                     )}
@@ -167,9 +191,9 @@ export const MsdsModal: React.FC<MsdsModalProps> = ({ chemical, isOpen, onClose 
 
 import { getPictogramCode, getPictogramUrl } from '../data/ghsCodes';
 
-const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
+const SectionItem: React.FC<{ section: MsdsSection; defaultExpanded?: boolean }> = ({ section, defaultExpanded = false }) => {
     const { t, i18n } = useTranslation();
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
     const renderValue = (label: string, value: string) => {
         // Detect Pictogram fields (KOSHA: "그림문자", PubChem: "Pictogram(s)")
@@ -222,7 +246,9 @@ const SectionItem: React.FC<{ section: MsdsSection }> = ({ section }) => {
     return (
         <div className="border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
             <button
+                type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
+                aria-expanded={isExpanded}
                 className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors text-left"
             >
                 <h3 className="font-bold text-slate-800 dark:text-slate-200 text-base">

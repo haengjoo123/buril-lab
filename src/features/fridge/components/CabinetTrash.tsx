@@ -12,6 +12,8 @@ export function CabinetTrash() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const rootRef = useRef<HTMLDivElement>(null);
+    // Removing an empty shelf still leaves a server-side trash row; it holds nothing to restore.
+    const visibleEntries = entries.filter(entry => entry.payload.items.length > 0);
     useEffect(() => {
         if (!open) return;
         const onPointerDown = (event: PointerEvent) => {
@@ -66,8 +68,8 @@ export function CabinetTrash() {
             <p className="mb-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('cabinet_trash_notice')}</p>
             {error && <p role="alert" className="mb-2 text-xs text-red-600">{error}</p>}
             {busy && <p role="status" className="text-xs">{t('cabinet_processing')}</p>}
-            {!busy && !error && entries.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400">{t('cabinet_trash_empty')}</p>}
-            {entries.map(entry => <div key={entry.id} className="mb-2 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
+            {!busy && !error && visibleEntries.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400">{t('cabinet_trash_empty')}</p>}
+            {visibleEntries.map(entry => <div key={entry.id} className="mb-2 rounded-xl border border-gray-200 p-2 dark:border-slate-700">
                 <p className="text-xs font-medium">{t('cabinet_trash_summary', { shelves: entry.payload.shelves.length, items: entry.payload.items.length })}</p>
                 {entry.payload.items.length > 0 && <p className="mt-1 truncate text-xs text-slate-600 dark:text-slate-300">{entry.payload.items.slice(0, 3).map(item => item.name).join(', ')}{entry.payload.items.length > 3 ? '…' : ''}</p>}
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('cabinet_trash_expires', { date: new Date(entry.expires_at).toLocaleString(i18n.language) })}</p>

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useLabStore } from '../store/useLabStore';
-import { labService } from '../services/labService';
-import { Check, ChevronDown, Users, User } from 'lucide-react';
-import { LabManagementModal } from './LabManagementModal';
+import { LAB_MEMBERSHIP_LIMIT, labService } from '../services/labService';
+import { Check, ChevronDown, Plus, Users, User, X } from 'lucide-react';
+import { LabManagementModal, type EnteredLab, type LabEnteredKind } from './LabManagementModal';
+import { LabInviteButton } from './LabInviteButton';
 import { useTranslation } from 'react-i18next';
 import { resolveLabSegmentAction } from './labContextSegment';
+import { readLabJoinTarget, withoutLabJoinParams, type LabJoinTarget } from './labInvite';
 
 // Same shape as SegmentedControl: a 44px hit area with the visible pill inset by 4px,
 // so the switcher matches the 44px header buttons instead of growing to 50px on touch.
@@ -13,26 +15,39 @@ const SEGMENT_PILL = 'flex h-full min-w-0 items-center gap-1.5 rounded-lg px-2 t
 const SEGMENT_IDLE = 'font-medium text-slate-500 group-hover:bg-white/70 group-hover:text-slate-900 dark:text-slate-400 dark:group-hover:bg-slate-700/60 dark:group-hover:text-slate-100';
 const SEGMENT_PERSONAL_ACTIVE = 'bg-white font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200 dark:bg-slate-950 dark:text-slate-100 dark:ring-slate-700';
 const SEGMENT_LAB_ACTIVE = 'bg-blue-600 font-semibold text-white shadow-sm group-hover:bg-blue-700';
+// Brief ring on the lab pill right after the user creates or joins a lab.
+const SEGMENT_LAB_ENTERED = 'ring-2 ring-emerald-400 dark:ring-emerald-300';
 // Width priority on phones: the current lab name first. The inactive segment stays icon-only
 // until the switcher is tablet-wide (container ≥ 18rem), and the active lab pill drops its
 // people icon below 13rem (the blue fill already says "lab"), so 320–390px phones show
 // 3–7 characters of the lab name instead of one.
 const INACTIVE_LABEL = 'hidden @min-[18rem]:inline';
 const ACTIVE_LAB_ICON = 'hidden h-4 w-4 shrink-0 @min-[13rem]:block';
+const ENTERED_TOAST_MS = 6000;
+
+type ManageRequest = { initialView: 'menu' | 'create'; joinTarget?: LabJoinTarget | null };
 
 export const LabContextSwitcher: React.FC = () => {
     const { t } = useTranslation();
-    const { currentLabId, lastLabId, setCurrentLabId, myLabs, setMyLabs } = useLabStore();
+    const { currentLabId, lastLabId, setCurrentLabId, myLabs, setMyLabs, labsLoaded, markLabsLoaded } = useLabStore();
     const [isOpen, setIsOpen] = useState(false);
-    const [isManageOpen, setIsManageOpen] = useState(false);
-    const [labsLoaded, setLabsLoaded] = useState(false);
+    const [manage, setManage] = useState<ManageRequest | null>(null);
+    const [entered, setEntered] = useState<{ lab: EnteredLab; kind: LabEnteredKind; at: number } | null>(null);
 
     useEffect(() => {
+        // Invite link (?joinLab=…&lab=…): consume it once, then join or switch after labs load.
+        const joinTarget = readLabJoinTarget(window.location.search);
+        if (joinTarget) window.history.replaceState(window.history.state, '', withoutLabJoinParams(window.location.href));
         labService.getMyLabs()
-            .then(setMyLabs)
+            .then(labs => {
+                setMyLabs(labs);
+                if (!joinTarget) return;
+                if (labs.some(member => member.lab_id === joinTarget.labId)) setCurrentLabId(joinTarget.labId);
+                else setManage({ initialView: 'menu', joinTarget });
+            })
             .catch(console.error)
-            .finally(() => setLabsLoaded(true));
-    }, [setMyLabs]);
+            .finally(() => markLabsLoaded());
+    }, [setMyLabs, setCurrentLabId, markLabsLoaded]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -43,20 +58,30 @@ export const LabContextSwitcher: React.FC = () => {
         return () => window.removeEventListener('keydown', closeOnEscape);
     }, [isOpen]);
 
+    useEffect(() => {
+        if (!entered) return;
+        const timer = window.setTimeout(() => setEntered(current => (current?.at === entered.at ? null : current)), ENTERED_TOAST_MS);
+        return () => window.clearTimeout(timer);
+    }, [entered]);
+
     const labsReady = labsLoaded || myLabs.length > 0;
     const isLab = Boolean(currentLabId);
     const opensMenu = isLab || !labsReady;
     const currentLabName = myLabs.find(m => m.lab_id === currentLabId)?.lab?.name || t('lab_default_name');
+    const canAddLab = myLabs.length < LAB_MEMBERSHIP_LIMIT;
+    const showEntered = Boolean(entered && entered.lab.id === currentLabId);
 
     const selectPersonal = () => {
         setCurrentLabId(null);
         setIsOpen(false);
+        setEntered(null);
     };
 
     const pressLabSegment = () => {
+        setEntered(null);
         const action = resolveLabSegmentAction({ currentLabId, lastLabId, myLabs, labsReady });
         if (action.type === 'switch') setCurrentLabId(action.labId);
-        else if (action.type === 'open-manage') setIsManageOpen(true);
+        else if (action.type === 'open-manage') setManage({ initialView: 'menu' });
         else setIsOpen(open => !open);
     };
 
@@ -94,7 +119,7 @@ export const LabContextSwitcher: React.FC = () => {
                         aria-expanded={opensMenu ? isOpen : undefined}
                         className={`${SEGMENT_BUTTON} min-w-0`}
                     >
-                        <span className={`${SEGMENT_PILL} ${isLab ? SEGMENT_LAB_ACTIVE : SEGMENT_IDLE}`}>
+                        <span className={`${SEGMENT_PILL} ${isLab ? SEGMENT_LAB_ACTIVE : SEGMENT_IDLE} ${showEntered ? SEGMENT_LAB_ENTERED : ''}`}>
                             <Users className={isLab ? ACTIVE_LAB_ICON : 'h-4 w-4 shrink-0'} aria-hidden="true" />
                             <span className={isLab
                                 ? 'min-w-0 max-w-[9rem] truncate whitespace-nowrap sm:max-w-[14rem] lg:max-w-[18rem]'
@@ -109,6 +134,35 @@ export const LabContextSwitcher: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {entered && showEntered && (
+                <div
+                    role="status"
+                    className="absolute left-0 top-full z-50 mt-1.5 flex w-max max-w-[calc(var(--overlay-width,100vw)-5rem)] items-center gap-2 rounded-xl bg-slate-900 py-1.5 pl-3 pr-1 text-sm text-white shadow-lg animate-in fade-in slide-in-from-top-1 dark:bg-slate-700"
+                >
+                    <Check className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden="true" />
+                    <span className="min-w-0 truncate font-medium">
+                        {t(entered.kind === 'created' ? 'lab_created_toast' : 'lab_joined_toast', { name: entered.lab.name })}
+                    </span>
+                    {entered.kind === 'created' && (
+                        <LabInviteButton
+                            variant="compact"
+                            labId={entered.lab.id}
+                            labName={entered.lab.name}
+                            institutionName={entered.lab.institutionName}
+                            className="shrink-0"
+                        />
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => setEntered(null)}
+                        aria-label={t('btn_close')}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white"
+                    >
+                        <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                </div>
+            )}
 
             {isOpen && (
                 <>
@@ -152,12 +206,22 @@ export const LabContextSwitcher: React.FC = () => {
                             })
                         )}
 
-                        <div className="mx-2 mt-2 border-t border-slate-100 pt-2 dark:border-slate-700">
+                        <div className="mx-2 mt-2 space-y-0.5 border-t border-slate-100 pt-2 dark:border-slate-700">
+                            {labsReady && canAddLab && (
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => { setIsOpen(false); setManage({ initialView: 'create' }); }}
+                                    className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700/50"
+                                >
+                                    <Plus className="h-4 w-4" aria-hidden="true" /> {t('lab_new')}
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 role="menuitem"
-                                onClick={() => { setIsOpen(false); setIsManageOpen(true); }}
-                                className="flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                                onClick={() => { setIsOpen(false); setManage({ initialView: 'menu' }); }}
+                                className="flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
                             >
                                 <Users className="h-4 w-4" aria-hidden="true" /> {t('lab_manage_join')}
                             </button>
@@ -166,8 +230,13 @@ export const LabContextSwitcher: React.FC = () => {
                 </>
             )}
 
-            {isManageOpen && (
-                <LabManagementModal onClose={() => setIsManageOpen(false)} />
+            {manage && (
+                <LabManagementModal
+                    initialView={manage.initialView}
+                    joinTarget={manage.joinTarget}
+                    onClose={() => setManage(null)}
+                    onLabEntered={(lab, kind) => setEntered({ lab, kind, at: Date.now() })}
+                />
             )}
         </div>
     );

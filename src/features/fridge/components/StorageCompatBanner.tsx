@@ -1,134 +1,204 @@
 /**
  * StorageCompatBanner
- * Floating banner that shows chemical storage compatibility warnings
- * for the current cabinet. Minimizable, with per-shelf breakdown.
+ * Compact pill for storage-compatibility problems in the current cabinet.
+ * Expands into a per-shelf list; tapping a row collapses back to the pill
+ * and brings the affected shelf into view.
  */
-import React, { useState, useMemo } from 'react';
-import { AlertTriangle, ChevronDown, ChevronUp, ShieldAlert, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, ChevronDown, ChevronUp, Layers, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useFridgeStore } from '../../../store/fridgeStore';
-import {
-    checkCabinetCompatibility,
-    type StorageWarning,
+import type {
+    StorageReviewConflict,
+    StorageWarning,
 } from '../../../utils/storageCompatibilityChecker';
 
 interface StorageCompatBannerProps {
     reopenToken?: number;
+    warningMap: Map<string, StorageWarning[]>;
+    /** Pairs whose GHS data is missing but whose names suggest a conflict. */
+    reviewMap: Map<string, StorageReviewConflict[]>;
+    onFocusIssue: (itemIds: string[]) => void;
+    onAutoArrange?: () => void;
+    isAutoArrangeBusy?: boolean;
 }
 
-export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopenToken = 0 }) => {
+type IssueKind = 'danger' | 'warning' | 'review';
+
+interface IssueRow {
+    key: string;
+    kind: IssueKind;
+    itemA: string;
+    itemB: string;
+    messageKey: string;
+    itemIds: string[];
+}
+
+const KIND_STYLES: Record<IssueKind, { row: string; chip: string; icon: string }> = {
+    danger: {
+        row: 'bg-red-100/60 dark:bg-red-900/30',
+        chip: 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200',
+        icon: 'text-red-500',
+    },
+    warning: {
+        row: 'bg-orange-100/60 dark:bg-orange-900/30',
+        chip: 'bg-orange-200 text-orange-800 dark:bg-orange-800 dark:text-orange-100',
+        icon: 'text-orange-500',
+    },
+    review: {
+        row: 'border border-dashed border-amber-300 bg-amber-50/70 dark:border-amber-700 dark:bg-amber-950/30',
+        chip: 'border border-amber-300 bg-white text-amber-700 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-300',
+        icon: 'text-amber-500',
+    },
+};
+
+const KIND_LABEL_KEYS: Record<IssueKind, string> = {
+    danger: 'storage_compat_danger',
+    warning: 'storage_compat_warning',
+    review: 'storage_compat_review_needed',
+};
+
+export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({
+    reopenToken = 0,
+    warningMap,
+    reviewMap,
+    onFocusIssue,
+    onAutoArrange,
+    isAutoArrangeBusy = false,
+}) => {
     const { t } = useTranslation();
     const shelves = useFridgeStore(s => s.shelves);
-    const [expandedToken, setExpandedToken] = useState<number | null>(null);
-    const [dismissedToken, setDismissedToken] = useState<number | null>(null);
+    // Re-opening from the tray expands the list and undoes a dismiss.
+    const [ui, setUi] = useState({ token: reopenToken, expanded: false, dismissed: false });
+    if (ui.token !== reopenToken) {
+        setUi({ token: reopenToken, expanded: true, dismissed: false });
+    }
 
-    const warningMap = useMemo(() => checkCabinetCompatibility(shelves), [shelves]);
-    const isExpanded = expandedToken === reopenToken;
-    const isDismissed = dismissedToken === reopenToken;
+    const rowsByShelf = shelves
+        .map(shelf => {
+            const rows: IssueRow[] = [
+                ...(warningMap.get(shelf.id) ?? []).map((warning, index) => ({
+                    key: `w-${warning.ruleId}-${index}`,
+                    kind: (warning.severity === 'DANGER' ? 'danger' : 'warning') as IssueKind,
+                    itemA: warning.itemA,
+                    itemB: warning.itemB,
+                    messageKey: warning.messageKey,
+                    itemIds: warning.itemIds,
+                })),
+                ...(reviewMap.get(shelf.id) ?? []).map((conflict, index) => ({
+                    key: `r-${conflict.ruleId}-${index}`,
+                    kind: 'review' as IssueKind,
+                    itemA: conflict.itemA,
+                    itemB: conflict.itemB,
+                    messageKey: conflict.messageKey,
+                    itemIds: conflict.itemIds,
+                })),
+            ];
+            return { shelf, rows };
+        })
+        .filter(entry => entry.rows.length > 0);
 
-    const totalWarnings = useMemo(() => {
-        let count = 0;
-        warningMap.forEach(w => count += w.length);
-        return count;
-    }, [warningMap]);
+    const counts: Record<IssueKind, number> = { danger: 0, warning: 0, review: 0 };
+    rowsByShelf.forEach(entry => entry.rows.forEach(row => { counts[row.kind] += 1; }));
+    const total = counts.danger + counts.warning + counts.review;
 
-    const dangerCount = useMemo(() => {
-        let count = 0;
-        warningMap.forEach(warnings => {
-            count += warnings.filter(w => w.severity === 'DANGER').length;
-        });
-        return count;
-    }, [warningMap]);
+    if (total === 0 || ui.dismissed) return null;
 
-    // No warnings or dismissed → don't render
-    if (totalWarnings === 0 || isDismissed) return null;
+    const tone: IssueKind = counts.danger > 0 ? 'danger' : counts.warning > 0 ? 'warning' : 'review';
+    const shellClassName = {
+        danger: 'bg-red-50/95 dark:bg-red-950/90 border-red-300 dark:border-red-800',
+        warning: 'bg-orange-50/95 dark:bg-orange-950/90 border-orange-300 dark:border-orange-800',
+        review: 'bg-amber-50/95 dark:bg-amber-950/90 border-dashed border-amber-300 dark:border-amber-700',
+    }[tone];
+    const titleClassName = {
+        danger: 'text-red-800 dark:text-red-200',
+        warning: 'text-orange-800 dark:text-orange-100',
+        review: 'text-amber-800 dark:text-amber-200',
+    }[tone];
 
-    const hasDanger = dangerCount > 0;
+    const toggleExpanded = () => setUi(current => ({ ...current, expanded: !current.expanded }));
+
+    const handleRowClick = (row: IssueRow) => {
+        setUi(current => ({ ...current, expanded: false }));
+        onFocusIssue(row.itemIds);
+    };
 
     return (
         <div className={`
-            absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto
-            w-[360px] max-w-[calc(100vw-2rem)]
+            absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none
+            flex w-[360px] max-w-[calc(100vw-2rem)] justify-center
             animate-in fade-in slide-in-from-top-3 duration-300
         `}>
             <div className={`
-                rounded-xl border shadow-lg backdrop-blur-md overflow-hidden
-                ${hasDanger
-                    ? 'bg-red-50/95 dark:bg-red-950/90 border-red-300 dark:border-red-800'
-                    : 'bg-amber-50/95 dark:bg-amber-950/90 border-amber-300 dark:border-amber-800'
-                }
+                pointer-events-auto border shadow-lg backdrop-blur-md overflow-hidden
+                ${ui.expanded ? 'w-full rounded-xl' : 'rounded-full'}
+                ${shellClassName}
             `}>
-                {/* Header */}
-                <div
-                    className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer select-none"
-                    onClick={() => setExpandedToken(current => current === reopenToken ? null : reopenToken)}
-                >
-                    <div className={`
-                        w-8 h-8 rounded-lg flex items-center justify-center shrink-0
-                        ${hasDanger
-                            ? 'bg-red-200/60 dark:bg-red-800/40'
-                            : 'bg-amber-200/60 dark:bg-amber-800/40'
+                {/* Pill / header */}
+                <div className="flex items-center">
+                    <button
+                        type="button"
+                        onClick={toggleExpanded}
+                        aria-expanded={ui.expanded}
+                        className="flex min-h-10 min-w-0 flex-1 items-center gap-2 py-1.5 pl-3 pr-1 text-left"
+                    >
+                        <ShieldAlert className={`h-4 w-4 shrink-0 ${KIND_STYLES[tone].icon}`} aria-hidden="true" />
+                        <span className={`sr-only`}>{t('storage_compat_banner_title')}</span>
+                        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            {(['danger', 'warning', 'review'] as IssueKind[]).filter(kind => counts[kind] > 0).map(kind => (
+                                <span key={kind} className={`whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-bold ${KIND_STYLES[kind].chip}`}>
+                                    {t(KIND_LABEL_KEYS[kind])} {counts[kind]}
+                                </span>
+                            ))}
+                        </span>
+                        {ui.expanded
+                            ? <ChevronUp className="ml-auto h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                            : <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
                         }
-                    `}>
-                        <ShieldAlert className={`w-4.5 h-4.5 ${hasDanger ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <span className={`text-sm font-bold ${hasDanger ? 'text-red-800 dark:text-red-200' : 'text-amber-800 dark:text-amber-200'}`}>
-                                {t('storage_compat_banner_title')}
-                            </span>
-                            <span className={`
-                                text-3xs font-bold px-1.5 py-0.5 rounded-full
-                                ${hasDanger
-                                    ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200'
-                                    : 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200'
-                                }
-                            `}>
-                                {totalWarnings}
-                            </span>
-                        </div>
-                        <p className={`text-2xs mt-0.5 ${hasDanger ? 'text-red-600/80 dark:text-red-400/80' : 'text-amber-600/80 dark:text-amber-400/80'}`}>
-                            {t('storage_compat_banner_desc')}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                        {isExpanded
-                            ? <ChevronUp className="w-4 h-4 text-slate-400" />
-                            : <ChevronDown className="w-4 h-4 text-slate-400" />
-                        }
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setDismissedToken(reopenToken);
-                                setExpandedToken(null);
-                            }}
-                            className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                        >
-                            <X className="w-3.5 h-3.5 text-slate-400" />
-                        </button>
-                    </div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setUi(current => ({ ...current, dismissed: true, expanded: false }))}
+                        aria-label={t('btn_close')}
+                        className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                    >
+                        <X className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
                 </div>
 
-                {/* Expanded Detail */}
-                {isExpanded && (
-                    <div className="px-3.5 pb-3 border-t border-black/5 dark:border-white/5 max-h-[40vh] overflow-y-auto">
-                        {shelves.map(shelf => {
-                            const warnings = warningMap.get(shelf.id);
-                            if (!warnings || warnings.length === 0) return null;
-
-                            return (
+                {/* Expanded list */}
+                {ui.expanded && (
+                    <div className="border-t border-black/5 dark:border-white/5">
+                        <div className="max-h-[38vh] overflow-y-auto px-3 pb-2">
+                            {rowsByShelf.map(({ shelf, rows }) => (
                                 <div key={shelf.id} className="mt-2.5">
-                                    <div className="text-2xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                                    <div className={`mb-1.5 text-2xs font-bold ${titleClassName}`}>
                                         {t('storage_compat_shelf', { level: shelf.level + 1 })}
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        {warnings.map((w, i) => (
-                                            <WarningRow key={`${w.ruleId}-${i}`} warning={w} />
+                                        {rows.map(row => (
+                                            <IssueRowButton key={row.key} row={row} onClick={() => handleRowClick(row)} />
                                         ))}
                                     </div>
                                 </div>
-                            );
-                        })}
+                            ))}
+                        </div>
+                        {onAutoArrange && (
+                            <div className="border-t border-black/5 p-2 dark:border-white/5">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setUi(current => ({ ...current, expanded: false }));
+                                        onAutoArrange();
+                                    }}
+                                    disabled={isAutoArrangeBusy}
+                                    className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {isAutoArrangeBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Layers className="h-4 w-4" />}
+                                    {isAutoArrangeBusy ? t('cabinet_auto_place_loading') : t('cabinet_auto_place_button')}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -136,71 +206,30 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({ reopen
     );
 };
 
-const WarningRow: React.FC<{ warning: StorageWarning }> = ({ warning }) => {
+const IssueRowButton: React.FC<{ row: IssueRow; onClick: () => void }> = ({ row, onClick }) => {
     const { t } = useTranslation();
-    const isDanger = warning.severity === 'DANGER';
-    const setHighlightedItemId = useFridgeStore(s => s.setHighlightedItemId);
+    const styles = KIND_STYLES[row.kind];
 
     return (
-        <div 
-            className={`
-                flex items-start gap-2 p-2 rounded-lg text-xs cursor-pointer hover:opacity-80 transition-opacity
-                ${isDanger
-                    ? 'bg-red-100/60 dark:bg-red-900/30'
-                    : 'bg-amber-100/60 dark:bg-amber-900/30'
-                }
-            `}
-            onClick={() => {
-                const ids: string[] = [];
-                if (warning.itemAId) ids.push(warning.itemAId);
-                if (warning.itemBId) ids.push(warning.itemBId);
-                if (ids.length > 0) setHighlightedItemId(ids);
-            }}
+        <button
+            type="button"
+            onClick={onClick}
+            className={`flex min-h-11 w-full items-start gap-2 rounded-lg p-2 text-left text-xs transition-opacity hover:opacity-80 ${styles.row}`}
         >
-            <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isDanger ? 'text-red-500' : 'text-amber-500'}`} />
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <span className={`
-                        text-3xs font-bold px-1.5 py-px rounded shrink-0
-                        ${isDanger
-                            ? 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200'
-                            : 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200'
-                        }
-                    `}>
-                        {isDanger ? t('storage_compat_danger') : t('storage_compat_warning')}
+            <AlertTriangle className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${styles.icon}`} aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+                <div className="mb-0.5 flex min-w-0 items-center gap-1.5">
+                    <span className={`shrink-0 rounded px-1.5 py-px text-3xs font-bold ${styles.chip}`}>
+                        {t(KIND_LABEL_KEYS[row.kind])}
                     </span>
-                    <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 font-medium truncate">
-                        <span 
-                            className={`truncate ${warning.itemAId ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors' : ''}`}
-                            onClick={(e) => {
-                                if (warning.itemAId) {
-                                    e.stopPropagation();
-                                    setHighlightedItemId(warning.itemAId);
-                                }
-                            }}
-                            title={warning.itemA}
-                        >
-                            {warning.itemA}
-                        </span>
-                        <span>↔</span>
-                        <span 
-                            className={`truncate ${warning.itemBId ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors' : ''}`}
-                            onClick={(e) => {
-                                if (warning.itemBId) {
-                                    e.stopPropagation();
-                                    setHighlightedItemId(warning.itemBId);
-                                }
-                            }}
-                            title={warning.itemB}
-                        >
-                            {warning.itemB}
-                        </span>
-                    </div>
+                    <span className="min-w-0 truncate font-semibold text-slate-700 dark:text-slate-200">
+                        {row.itemA} ↔ {row.itemB}
+                    </span>
                 </div>
-                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {t(warning.messageKey)}
+                <p className="line-clamp-2 leading-relaxed text-slate-600 dark:text-slate-300">
+                    {t(row.messageKey)}
                 </p>
             </div>
-        </div>
+        </button>
     );
 };

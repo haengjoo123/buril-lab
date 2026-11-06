@@ -15,7 +15,9 @@ import {
     getAllowedAmountUnits,
     inferWasteMatrixFromComponent,
     inferWasteMatrixFromComponents,
+    matrixContradictsComponentEvidence,
     normalizeWasteAmount,
+    reconcileUserMatrix,
     validateWasteAmount,
 } from './wasteBatch';
 import { analyzeChemical } from './chemicalAnalyzer';
@@ -160,6 +162,103 @@ describe('analyzeWasteBatch', () => {
         expect(inferWasteMatrixFromComponents([acetone, dcm])).toBe('organic_halogenated');
         expect(inferWasteMatrixFromComponents([water, acetone])).toBe('organic_non_halogenated');
         expect(inferWasteMatrixFromComponents([solid, acetone])).toBeNull();
+    });
+
+    it('falls back to halogenated category evidence when a liquid has no CAS, but never to non-halogenated', () => {
+        const dcm = createWasteComponentFromAnalysis(
+            analysis('Dichloromethane', 'CH2Cl2', 'ORGANIC_HALOGEN', { isOrganic: true, isHalogenated: true }),
+        );
+        dcm.chemical.casNumber = '';
+        expect(inferWasteMatrixFromComponent(dcm)).toBe('organic_halogenated');
+        expect(inferWasteMatrixFromComponent({ ...dcm, materialForm: 'neat' })).toBe('organic_halogenated');
+        expect(inferWasteMatrixFromComponent({
+            ...dcm,
+            materialForm: 'neat',
+            concentration: { value: 99.8, unit: '%', basis: 'w_w' },
+        })).toBe('organic_halogenated');
+        // Dissolved, the solvent decides; a solid is a solid.
+        expect(inferWasteMatrixFromComponent({ ...dcm, materialForm: 'solution' })).toBeNull();
+        expect(inferWasteMatrixFromComponent({ ...dcm, concentration: { value: 1, unit: 'M' } })).toBeNull();
+        expect(inferWasteMatrixFromComponent({ ...dcm, materialForm: 'solid' })).toBe('solid_slurry');
+
+        // Conflicting category and property evidence resolves to the stricter stream.
+        const conflicting = createWasteComponentFromAnalysis(
+            analysis('Label-only solvent', 'CH2Cl2', 'ORGANIC_NON_HALOGEN', { isOrganic: true, isHalogenated: true }),
+        );
+        conflicting.chemical.casNumber = '';
+        expect(inferWasteMatrixFromComponent(conflicting)).toBe('organic_halogenated');
+
+        // A non-halogenated category alone is never enough for the less strict stream.
+        const acetoneWithoutCas = createWasteComponentFromAnalysis(
+            analysis('Acetone', 'C3H6O', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
+        );
+        acetoneWithoutCas.chemical.casNumber = '';
+        expect(inferWasteMatrixFromComponent(acetoneWithoutCas)).toBeNull();
+
+        const acetone = createWasteComponentFromAnalysis(
+            analysis('Acetone', 'C3H6O', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
+        );
+        acetone.chemical.casNumber = '67-64-1';
+        expect(inferWasteMatrixFromComponents([dcm, { ...acetone, materialForm: 'neat' }])).toBe('organic_halogenated');
+    });
+
+    it('flags a suggested matrix that understates halogenated or strong component evidence', () => {
+        const dcm = createWasteComponentFromAnalysis(
+            analysis('Dichloromethane', 'CH2Cl2', 'ORGANIC_HALOGEN', { isOrganic: true, isHalogenated: true }),
+        );
+        dcm.chemical.casNumber = '';
+        const acetone = createWasteComponentFromAnalysis(
+            analysis('Acetone', 'C3H6O', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
+        );
+        acetone.chemical.casNumber = '67-64-1';
+        const dissolvedInDcm = createWasteComponentFromAnalysis(
+            analysis('Generic solute', 'C6H12O6', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
+            { concentration: { value: 0.1, unit: 'M' } },
+        );
+        dissolvedInDcm.solutionContext = {
+            physicalForm: 'organic_solvent',
+            solventClass: 'organic_halogen',
+            isSolventVerified: false,
+            solventResolution: 'user',
+        };
+
+        expect(matrixContradictsComponentEvidence('organic_non_halogenated', [dcm, acetone])).toBe(true);
+        expect(matrixContradictsComponentEvidence('aqueous', [dissolvedInDcm])).toBe(true);
+        expect(matrixContradictsComponentEvidence('organic_halogenated', [dcm, acetone])).toBe(false);
+        expect(matrixContradictsComponentEvidence('organic_non_halogenated', [acetone])).toBe(false);
+        expect(matrixContradictsComponentEvidence('aqueous', [acetone])).toBe(true);
+        expect(matrixContradictsComponentEvidence('unknown', [dcm])).toBe(false);
+    });
+
+    it('keeps a user-chosen matrix unless a change adds halogen evidence the choice understates', () => {
+        const dcm = createWasteComponentFromAnalysis(
+            analysis('Dichloromethane', 'CH2Cl2', 'ORGANIC_HALOGEN', { isOrganic: true, isHalogenated: true }),
+        );
+        dcm.chemical.casNumber = '';
+        const acetone = createWasteComponentFromAnalysis(
+            analysis('Acetone', 'C3H6O', 'ORGANIC_NON_HALOGEN', { isOrganic: true }),
+        );
+        acetone.chemical.casNumber = '67-64-1';
+
+        // Adding or editing non-halogenated evidence never lowers a halogenated choice.
+        expect(reconcileUserMatrix('organic_halogenated', [dcm], [dcm, acetone]))
+            .toEqual({ matrix: 'organic_halogenated', matrixSource: 'user' });
+        expect(reconcileUserMatrix('organic_halogenated', [dcm, acetone], [dcm, { ...acetone, materialForm: 'neat' }]))
+            .toEqual({ matrix: 'organic_halogenated', matrixSource: 'user' });
+        expect(reconcileUserMatrix('aqueous', [acetone], [acetone, { ...acetone, cartLineId: 'other' }]))
+            .toEqual({ matrix: 'aqueous', matrixSource: 'user' });
+
+        // New halogen evidence raises a non-halogenated choice and reopens a phase choice.
+        expect(reconcileUserMatrix('organic_non_halogenated', [acetone], [acetone, dcm]))
+            .toEqual({ matrix: 'organic_halogenated', matrixSource: 'automatic' });
+        expect(reconcileUserMatrix('aqueous', [acetone], [acetone, dcm]))
+            .toEqual({ matrix: 'unknown', matrixSource: 'unresolved' });
+        expect(reconcileUserMatrix('solid_slurry', [], [dcm]))
+            .toEqual({ matrix: 'unknown', matrixSource: 'unresolved' });
+
+        // A choice made while that evidence was already present stays the user's answer.
+        expect(reconcileUserMatrix('organic_non_halogenated', [acetone, dcm], [acetone, { ...dcm, materialForm: 'neat' }]))
+            .toEqual({ matrix: 'organic_non_halogenated', matrixSource: 'user' });
     });
 
     it('preserves legacy cart fields while migrating an existing draft', () => {

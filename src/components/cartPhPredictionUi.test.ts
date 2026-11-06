@@ -5,7 +5,9 @@ import {
   canDisplayPhPredictionNumber,
   createPhPredictionAuditSnapshot,
   getApprovedPhCatalogOptions,
+  getPhCatalogFormLabel,
   shouldAskPhPredictionCompleteness,
+  shouldOfferPhCatalogForm,
   shouldShowPhPredictionMatrixNotice,
 } from './cartPhPredictionUi'
 
@@ -80,13 +82,33 @@ describe('pH prediction UI safety policy', () => {
     expect(shouldAskPhPredictionCompleteness(true, 'mixed_biphasic', 1)).toBe(false)
   })
 
-  it('shows a non-numeric scope notice for known non-aqueous matrices', () => {
+  it('shows a non-numeric scope notice only for a mixed phase, and no pH block for organic or solid batches', () => {
     expect(shouldShowPhPredictionMatrixNotice(true, 'mixed_biphasic', 2)).toBe(true)
-    expect(shouldShowPhPredictionMatrixNotice(true, 'organic_non_halogenated', 1)).toBe(true)
+    expect(shouldShowPhPredictionMatrixNotice(true, 'organic_non_halogenated', 1)).toBe(false)
+    expect(shouldShowPhPredictionMatrixNotice(true, 'organic_halogenated', 1)).toBe(false)
+    expect(shouldShowPhPredictionMatrixNotice(true, 'solid_slurry', 1)).toBe(false)
     expect(shouldShowPhPredictionMatrixNotice(true, 'aqueous', 2)).toBe(false)
     expect(shouldShowPhPredictionMatrixNotice(true, 'unknown', 2)).toBe(false)
     expect(shouldShowPhPredictionMatrixNotice(false, 'mixed_biphasic', 2)).toBe(false)
     expect(shouldShowPhPredictionMatrixNotice(true, 'mixed_biphasic', 0)).toBe(false)
+  })
+
+  it('offers the pH form picker only where a form exists and the batch can be aqueous', () => {
+    const acid = { ...component('7647-01-0', 'HCl'), phCatalogId: undefined, materialForm: undefined }
+    const acetone = { ...component('67-64-1', 'C3H6O'), phCatalogId: undefined, materialForm: undefined }
+    expect(shouldOfferPhCatalogForm(true, 'aqueous', acid)).toBe(true)
+    expect(shouldOfferPhCatalogForm(true, 'unknown', acid)).toBe(true)
+    expect(shouldOfferPhCatalogForm(true, 'organic_non_halogenated', acid)).toBe(false)
+    expect(shouldOfferPhCatalogForm(true, 'aqueous', acetone)).toBe(false)
+    expect(shouldOfferPhCatalogForm(false, 'aqueous', acid)).toBe(false)
+    expect(shouldOfferPhCatalogForm(true, 'aqueous', { ...acetone, phCatalogId: 'water' })).toBe(true)
+  })
+
+  it('shows a readable chemical-form name instead of the catalog slug', () => {
+    expect(getPhCatalogFormLabel('hydrochloric-acid', 'ko')).toBe('염산')
+    expect(getPhCatalogFormLabel('hydrochloric-acid', 'en')).toBe('Hydrochloric acid')
+    expect(getPhCatalogFormLabel('not-a-catalog-id', 'ko')).toBeNull()
+    expect(getPhCatalogFormLabel(undefined, 'ko')).toBeNull()
   })
 
   it('keeps the audit snapshot stable across retries of the same batch input', () => {

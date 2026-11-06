@@ -1100,7 +1100,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                 const groupLabels = getStorageGroupLabels(storageGroups);
                                 const currentShelf = shelves.find(s => s.items.some(i => i.id === selectedReagentId));
                                 const shelfWarnings = currentShelf ? checkShelfCompatibility(currentShelf.items, currentShelf.dividers).filter(
-                                    w => w.itemA === selectedItem.name || w.itemB === selectedItem.name
+                                    w => w.itemIds.includes(selectedItem.id)
                                 ) : [];
                                 const visibleShelfWarnings = isStorageWarningsExpanded
                                     ? shelfWarnings
@@ -1182,7 +1182,8 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                 );
                             })()}
 
-                            {/* Change History Section */}
+                            {/* Change History Section — hidden while there is no history to show */}
+                            {(isLoadingLogs || auditLogs.length > 0) && (
                             <div className="mt-2 pt-4 border-t border-slate-200 dark:border-slate-700">
                                 <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2.5 flex items-center gap-2">
                                     <History className="w-3.5 h-3.5" /> {t('history_log', '변경 이력')}
@@ -1191,8 +1192,6 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                     <div className="flex justify-center p-3">
                                         <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                                     </div>
-                                ) : auditLogs.length === 0 ? (
-                                    <p className="text-3xs text-slate-500 text-center py-1">{t('log_empty', '기록이 없습니다.')}</p>
                                 ) : (
                                     <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 scrollbar-thin">
                                         {auditLogs.map(log => (
@@ -1217,6 +1216,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                     </div>
                                 )}
                             </div>
+                            )}
                         </div>
 
                         {/* Footer Actions */}
@@ -1227,7 +1227,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                 className="flex items-center gap-1.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                             >
                                 <Trash2 size={16} />
-                                {t('cabinet_delete')}
+                                {t('cabinet_dispose_action')}
                             </button>
                             <button
                                 onClick={handleCopy}

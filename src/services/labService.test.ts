@@ -148,3 +148,19 @@ describe('Ops9 lab deletion intake', () => {
     expect(mocked.from).not.toHaveBeenCalled()
   })
 })
+
+describe('lab join-password state', () => {
+  it('reads whether the lab has a password through the lab search, matching by id', async () => {
+    mocked.rpc.mockResolvedValueOnce({ data: [
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Kim Lab 2', has_password: false },
+      { id: labId, name: 'Kim Lab', has_password: true },
+    ], error: null })
+    await expect(labService.getLabHasPassword(labId.toUpperCase(), 'Kim Lab')).resolves.toBe(true)
+    expect(mocked.rpc).toHaveBeenCalledWith('search_labs', { search_query: 'Kim Lab' })
+  })
+
+  it('returns null when the lab is not among the results', async () => {
+    mocked.rpc.mockResolvedValueOnce({ data: [], error: null })
+    await expect(labService.getLabHasPassword(labId, 'Renamed')).resolves.toBeNull()
+  })
+})

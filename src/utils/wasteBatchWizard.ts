@@ -3,6 +3,7 @@ import type {
     WasteBatchDraft,
     WasteComponent,
     WasteMatrix,
+    WasteMissingField,
 } from '../types';
 import {
     getWasteAcidBasePresence,
@@ -155,54 +156,79 @@ export const createUserSolutionContext = (
 const hasValidStoredNumber = (value: number | undefined): boolean =>
     value === undefined || (Number.isFinite(value) && value > 0);
 
+const hasInvalidInventoryQuantity = (component: WasteComponent): boolean => {
+    if (component.sourceType !== 'inventory' || !component.inventoryId) return false;
+    const available = component.inventorySnapshot?.quantity ?? 1;
+    const selected = component.inventoryDisposalQuantity;
+    return !Number.isInteger(selected) || selected === undefined || selected < 1 || selected > available;
+};
+
+const isComponentReadyForNextStep = (component: WasteComponent): boolean =>
+    component.identityConfidence === 'verified'
+    && hasValidStoredNumber(component.concentration?.value)
+    && hasValidStoredNumber(component.solutionVolume?.value)
+    && !hasInvalidInventoryQuantity(component);
+
 const isComponentStepComplete = (batch: WasteBatchDraft): boolean =>
-    batch.components.length > 0 && batch.components.every((component) => {
-        if (component.identityConfidence !== 'verified') return false;
-        if (!hasValidStoredNumber(component.concentration?.value)) return false;
-        if (!hasValidStoredNumber(component.solutionVolume?.value)) return false;
-        if (component.sourceType === 'inventory' && component.inventoryId) {
-            const available = component.inventorySnapshot?.quantity ?? 1;
-            const selected = component.inventoryDisposalQuantity;
-            if (!Number.isInteger(selected) || selected === undefined || selected < 1 || selected > available) {
-                return false;
-            }
-        }
-        return true;
-    });
+    batch.components.length > 0 && batch.components.every(isComponentReadyForNextStep);
 
 const shouldAskAdditionalComponents = (batch: WasteBatchDraft): boolean =>
     batch.components.length > 1 || batch.matrix === 'unknown';
 
-const isBatchStepComplete = (
-    batch: WasteBatchDraft,
-    resolution: WizardMatrixResolution,
-    options: WasteBatchWizardOptions,
-): boolean => {
-    const matrixAnswered = resolution.requiresBatchConfirmation
-        ? batch.matrixSource === 'user'
-        : batch.matrix !== 'unknown';
-    if (!matrixAnswered) return false;
-    if (shouldAskAdditionalComponents(batch)
-        && (batch.additionalComponentsStatus === undefined || batch.additionalComponentsStatus === 'present')) {
-        return false;
-    }
-    if (!validateWasteAmount(batch.totalAmount, batch.matrix).valid) return false;
-    if (batch.mixingState === 'separate') return false;
+/** Batch-step questions in the order the batch step shows them. */
+export type WizardBatchSection =
+    | 'matrix'
+    | 'additional_components'
+    | 'fluoride_container'
+    | 'total_amount'
+    | 'mixing_state'
+    | 'measured_ph';
+
+/** Where an unanswered question or a missing detail is answered in the wizard. */
+export type WizardFocusTarget =
+    | { step: 'components'; cartLineId?: string; openPanel?: boolean }
+    | { step: 'amounts'; cartLineId: string }
+    | { step: 'solution'; cartLineId: string }
+    | { step: 'batch'; section: WizardBatchSection };
+
+const needsMeasuredPhAnswer = (batch: WasteBatchDraft, options: WasteBatchWizardOptions): boolean => {
     const { hasAcid, hasAlkali } = getWasteAcidBasePresence(batch.components);
-    if (hasAcid && hasAlkali && batch.matrix === 'aqueous'
+    return hasAcid && hasAlkali && batch.matrix === 'aqueous'
         && !hasApprovedPredictedBatchPh(options.approvedPredictedBatchPh)
         && (batch.measuredPhStatus !== 'measured'
             || batch.measuredBatchPh === undefined
             || !Number.isFinite(batch.measuredBatchPh)
             || batch.measuredBatchPh < 0
-            || batch.measuredBatchPh > 14)) {
-        return false;
+            || batch.measuredBatchPh > 14);
+};
+
+const getFirstUnansweredBatchSection = (
+    batch: WasteBatchDraft,
+    resolution: WizardMatrixResolution,
+    options: WasteBatchWizardOptions,
+): WizardBatchSection | null => {
+    const matrixAnswered = resolution.requiresBatchConfirmation
+        ? batch.matrixSource === 'user'
+        : batch.matrix !== 'unknown';
+    if (!matrixAnswered) return 'matrix';
+    if (shouldAskAdditionalComponents(batch)
+        && (batch.additionalComponentsStatus === undefined || batch.additionalComponentsStatus === 'present')) {
+        return 'additional_components';
     }
     const hasFluoride = batch.components.some((component) =>
         component.hazardFlags.includes('HYDROFLUORIC_ACID') || component.hazardFlags.includes('FLUORIDE'));
-    if (hasFluoride && batch.fluorideContainerStatus === undefined) return false;
-    return true;
+    if (hasFluoride && batch.fluorideContainerStatus === undefined) return 'fluoride_container';
+    if (!validateWasteAmount(batch.totalAmount, batch.matrix).valid) return 'total_amount';
+    if (batch.mixingState === 'separate') return 'mixing_state';
+    if (needsMeasuredPhAnswer(batch, options)) return 'measured_ph';
+    return null;
 };
+
+const isBatchStepComplete = (
+    batch: WasteBatchDraft,
+    resolution: WizardMatrixResolution,
+    options: WasteBatchWizardOptions,
+): boolean => getFirstUnansweredBatchSection(batch, resolution, options) === null;
 
 export const resolveWasteBatchWizard = (
     batch: WasteBatchDraft,
@@ -272,4 +298,72 @@ export const getPreviousWizardStep = (
     if (current === 'solution') return 'amounts';
     if (current === 'amounts') return 'components';
     return 'components';
+};
+
+/**
+ * The first question, in screen order, that keeps the wizard from reaching
+ * the result. A blocked "Next" points here instead of doing nothing.
+ */
+export const getFirstIncompleteWizardTarget = (
+    batch: WasteBatchDraft,
+    options: WasteBatchWizardOptions = {},
+): WizardFocusTarget | null => {
+    if (batch.components.length === 0) return { step: 'components' };
+    const notReady = batch.components.find((component) => !isComponentReadyForNextStep(component));
+    if (notReady) return { step: 'components', cartLineId: notReady.cartLineId };
+    const unanswered = getUnansweredSolutionComponents(batch.components)[0];
+    if (unanswered) return { step: 'solution', cartLineId: unanswered.cartLineId };
+    const section = getFirstUnansweredBatchSection(
+        batch,
+        deriveWizardMatrixFromComponents(batch.components),
+        options,
+    );
+    return section ? { step: 'batch', section } : null;
+};
+
+/**
+ * Where the user supplies a detail the decision engine reports as missing.
+ * Policy gaps are not answerable in the wizard and return null.
+ */
+export const getMissingFieldTarget = (
+    field: WasteMissingField,
+    batch: WasteBatchDraft,
+): WizardFocusTarget | null => {
+    switch (field) {
+        case 'components':
+            return { step: 'components' };
+        case 'identity':
+            return {
+                step: 'components',
+                cartLineId: batch.components.find(({ identityConfidence }) => identityConfidence !== 'verified')
+                    ?.cartLineId,
+            };
+        case 'hazard_data': {
+            const component = batch.components.find(({ ghsDataStatus, hazardDataConfirmedByUser }) => (
+                ghsDataStatus !== 'verified' && !hazardDataConfirmedByUser
+            ));
+            return { step: 'components', cartLineId: component?.cartLineId, openPanel: Boolean(component) };
+        }
+        case 'inventory_quantity':
+            return {
+                step: 'components',
+                cartLineId: batch.components.find(hasInvalidInventoryQuantity)?.cartLineId,
+            };
+        case 'classification': {
+            const component = batch.components.find(({ category }) => category === 'UNKNOWN');
+            return component
+                ? { step: 'amounts', cartLineId: component.cartLineId }
+                : { step: 'components' };
+        }
+        case 'matrix':
+        case 'additional_components':
+        case 'fluoride_container':
+        case 'total_amount':
+        case 'mixing_state':
+        case 'measured_ph':
+            return { step: 'batch', section: field };
+        case 'policy_stream':
+        case 'policy_destination':
+            return null;
+    }
 };

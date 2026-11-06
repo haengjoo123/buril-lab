@@ -23,7 +23,9 @@ vi.mock('../store/useLabStore', () => ({
 import {
     buildWastePhPredictionAuthorizationContext,
     buildWasteHandlingRpcPayload,
+    buildWasteLogSearchFilter,
     fetchWasteLogById,
+    fetchWasteLogs,
     fetchWasteLogItemsV2,
     isLegacyWasteLog,
     normalizeWasteLogItemRow,
@@ -898,5 +900,36 @@ describe('wasteLogService V2 mutations', () => {
             concentrationValue: null,
             concentrationUnit: null,
         });
+    });
+
+    it('searches component names in V2 and legacy rows without breaking on reserved characters', () => {
+        expect(buildWasteLogSearchFilter('   ')).toBeNull();
+
+        const filter = buildWasteLogSearchFilter(' Copper(II), 50%_ ') ?? '';
+        const conditions = filter.split(',');
+        const pattern = String.raw`%Copper_II__ 50\%\_%`;
+        expect(conditions).toContain(`chemicals->0->>chemicalName.ilike.${pattern}`);
+        expect(conditions).toContain(`chemicals->7->chemical->>name.ilike.${pattern}`);
+        expect(conditions).toContain(`chemicals->0->>name.ilike.${pattern}`);
+        expect(conditions).toContain(`memo.ilike.${pattern}`);
+        expect(conditions.every((condition) => !/[()]/.test(condition))).toBe(true);
+    });
+
+    it('sends the component-name search to the scoped waste-log query', async () => {
+        const range = vi.fn().mockResolvedValue({ data: [], error: null, count: 0 });
+        const order = vi.fn().mockReturnValue({ range });
+        const query = { eq: vi.fn(), is: vi.fn(), or: vi.fn(), gte: vi.fn(), lte: vi.fn(), order };
+        query.eq.mockReturnValue(query);
+        query.is.mockReturnValue(query);
+        query.or.mockReturnValue(query);
+        query.gte.mockReturnValue(query);
+        query.lte.mockReturnValue(query);
+        mocks.from.mockReturnValue({ select: vi.fn().mockReturnValue(query) });
+
+        await fetchWasteLogs(20, 0, { search: 'Methanol' });
+
+        expect(query.eq).toHaveBeenCalledWith('lab_id', mocks.labState.currentLabId);
+        expect(query.or).toHaveBeenCalledOnce();
+        expect(query.or.mock.calls[0][0]).toContain('chemicals->0->>chemicalName.ilike.%Methanol%');
     });
 });

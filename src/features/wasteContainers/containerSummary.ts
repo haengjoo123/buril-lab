@@ -190,6 +190,17 @@ export function chooseDefaultContainer<T extends Pick<WasteContainer, 'id'>>(
 }
 
 /**
+ * A ready-to-use container name such as "할로겐 유기 폐액-1": the stream name
+ * plus the first number no existing container in the scope already uses.
+ */
+export function nextContainerLabel(baseLabel: string, existingLabels: readonly string[]): string {
+    const taken = new Set(existingLabels.map((label) => label.trim().toLowerCase()));
+    let number = 1;
+    while (taken.has(`${baseLabel}-${number}`.toLowerCase())) number += 1;
+    return `${baseLabel}-${number}`;
+}
+
+/**
  * The deposit list can be partial (see MAX_CONTAINER_DEPOSITS). Database totals
  * cover every live deposit, so they replace the list-based totals when present.
  */

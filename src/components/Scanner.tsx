@@ -10,6 +10,8 @@ import {
     Search,
     Sparkles,
     AlertTriangle,
+    CameraOff,
+    Keyboard,
 } from 'lucide-react';
 import {
     getAutoVerifiedReagentScanIdentity,
@@ -33,9 +35,21 @@ export interface ScannerSelectionMeta {
 interface ScannerProps {
     onScan: (searchTerm: string, selectionMeta: ScannerSelectionMeta) => void;
     onClose: () => void;
+    /** Close the scanner and type the name instead (offered when the camera can't be used). */
+    onManualInput?: () => void;
 }
 
 type ScannerState = 'camera' | 'preview' | 'processing' | 'result';
+type CameraIssue = 'denied' | 'not_found' | 'unavailable';
+
+const getCameraIssue = (err: unknown): CameraIssue => {
+    const errorName = typeof err === 'object' && err && 'name' in err
+        ? String((err as { name?: string }).name)
+        : '';
+    if (['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName)) return 'denied';
+    if (['NotFoundError', 'DevicesNotFoundError'].includes(errorName)) return 'not_found';
+    return 'unavailable';
+};
 
 const FOCUSABLE_SELECTOR = [
     'button:not([disabled])',
@@ -46,7 +60,7 @@ const FOCUSABLE_SELECTOR = [
     '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
+export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onManualInput }) => {
     const dialogRef = useRef<HTMLDivElement>(null);
     const resultPanelRef = useRef<HTMLDivElement>(null);
     const webcamRef = useRef<Webcam>(null);
@@ -59,7 +73,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
     const [selectedField, setSelectedField] = useState<ReagentScanIdentityField | null>(null);
     const [userConfirmedSelection, setUserConfirmedSelection] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [cameraPermissionDenied, setCameraPermissionDenied] = useState(false);
+    const [cameraIssue, setCameraIssue] = useState<CameraIssue | null>(null);
     const [showFlash, setShowFlash] = useState(false);
 
     // Stop all camera tracks helper
@@ -145,7 +159,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
         setSelectedField(null);
         setUserConfirmedSelection(false);
         setError(null);
-        setCameraPermissionDenied(false);
+        setCameraIssue(null);
     }, []);
 
     const processImage = useCallback(async (imageSrc: string) => {
@@ -367,8 +381,15 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
             </button>
 
             {/* State-based Header */}
-            <div id="scanner-dialog-title" className="absolute top-[calc(4rem+env(safe-area-inset-top))] text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-20">
-                {state === 'camera' && t('scanner_guide')}
+            <div id="scanner-dialog-title" aria-live="polite" className="absolute top-[calc(4rem+env(safe-area-inset-top))] text-center text-white/90 text-sm px-4 bg-black/50 p-2 rounded z-20">
+                {state === 'camera' && (cameraIssue && error ? (
+                    <>
+                        <span className="block font-semibold text-white">{error}</span>
+                        {cameraIssue === 'denied' && (
+                            <span className="mt-1 block text-xs text-white/70">{t('scanner_permission_help')}</span>
+                        )}
+                    </>
+                ) : t('scanner_guide'))}
                 {state === 'preview' && t('scanner_preview')}
                 {state === 'processing' && t('scanner_processing')}
                 {state === 'result' && t('scanner_result')}
@@ -391,7 +412,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                             }}
                             className="w-full h-full object-cover"
                             onUserMedia={(stream) => {
-                                setCameraPermissionDenied(false);
+                                setCameraIssue(null);
                                 setError(null);
                                 const track = stream.getVideoTracks()[0];
                                 const settings = track.getSettings();
@@ -399,18 +420,25 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
                             }}
                             onUserMediaError={(err) => {
                                 console.error('[Scanner] Camera error:', err);
-                                const errorName = typeof err === 'object' && err && 'name' in err
-                                    ? String((err as { name?: string }).name)
-                                    : '';
-                                const denied = ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(errorName);
-                                setCameraPermissionDenied(denied);
-                                setError(denied ? t('scanner_permission_denied') : t('scanner_error_cam'));
+                                const issue = getCameraIssue(err);
+                                setCameraIssue(issue);
+                                setError(issue === 'denied'
+                                    ? t('scanner_permission_denied')
+                                    : issue === 'not_found'
+                                        ? t('scanner_camera_not_found')
+                                        : t('scanner_camera_unavailable'));
                             }}
                         />
-                        {/* Viewfinder Overlay */}
-                        <div className="absolute inset-0 border-2 border-white/30 pointer-events-none flex items-center justify-center">
-                            <div className="w-80 h-48 border-2 border-yellow-400/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
-                        </div>
+                        {cameraIssue ? (
+                            <div className="absolute inset-0 flex items-center justify-center text-white/25 pointer-events-none">
+                                <CameraOff aria-hidden="true" className="h-16 w-16" />
+                            </div>
+                        ) : (
+                            /* Viewfinder Overlay */
+                            <div className="absolute inset-0 border-2 border-white/30 pointer-events-none flex items-center justify-center">
+                                <div className="w-80 h-48 border-2 border-yellow-400/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
+                            </div>
+                        )}
                     </>
                 )}
 
@@ -562,25 +590,54 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
             {/* Footer Controls */}
             <div className="absolute bottom-[calc(2.5rem+env(safe-area-inset-bottom))] flex flex-col items-center gap-4 w-full px-5">
-                {error && state === 'camera' && (
+                {error && state === 'camera' && !cameraIssue && (
                     <div role="alert" className="max-w-sm rounded-xl bg-red-500/95 px-4 py-3 text-center text-sm text-white shadow-lg">
                         <p className="font-semibold">{error}</p>
-                        {cameraPermissionDenied && <p className="mt-1 text-xs text-red-50">{t('scanner_permission_help')}</p>}
+                    </div>
+                )}
+
+                {state === 'camera' && (
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="image/*"
+                        tabIndex={-1}
+                        className="hidden"
+                    />
+                )}
+
+                {/* Camera unavailable: the photo picker becomes the main action */}
+                {state === 'camera' && cameraIssue && (
+                    <div className="flex w-full max-w-sm flex-col gap-3">
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-base font-bold text-slate-900 shadow-lg transition-transform active:scale-[0.98]"
+                        >
+                            <ImageIcon aria-hidden="true" className="h-5 w-5" />
+                            {t('scanner_pick_photo')}
+                        </button>
+                        {onManualInput && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    stopCamera();
+                                    onManualInput();
+                                }}
+                                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white/15 px-5 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
+                            >
+                                <Keyboard aria-hidden="true" className="h-5 w-5" />
+                                {t('scanner_manual_input')}
+                            </button>
+                        )}
                     </div>
                 )}
 
                 {/* Camera Mode Controls */}
-                {state === 'camera' && (
+                {state === 'camera' && !cameraIssue && (
                     <>
                         <div className="flex items-center justify-center gap-8 w-full relative">
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleFileChange}
-                                accept="image/*"
-                                tabIndex={-1}
-                                className="hidden"
-                            />
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className="flex h-12 w-12 items-center justify-center bg-white/20 hover:bg-white/30 rounded-full backdrop-blur-sm transition-colors text-white"
@@ -592,7 +649,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose }) => {
 
                             <button
                                 onClick={capture}
-                                disabled={cameraPermissionDenied}
                                 aria-label={t('scanner_capture')}
                                 className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform disabled:cursor-not-allowed disabled:opacity-40"
                             >
