@@ -112,7 +112,7 @@ describe('feature integration', () => {
     }))
     const response = await onRequestPost({ env: env('active'), data: { userId: 'user' },
       request: new Request('https://example.com/api/ai/classify', { method: 'POST', body: JSON.stringify({ chemical: { name: 'Hydrochloric acid' } }) }) })
-    expect(await response.json()).toMatchObject({ category: 'ACID', confidence: 0.4, reason: expect.any(String), responseSource: 'ai', decision: { choiceProbability: 0.99, policyVersion: 'classification:v1' } })
+    expect(await response.json()).toMatchObject({ category: 'ACID', confidence: 0.4, reason: expect.any(String), responseSource: 'ai', decision: { choiceProbability: 0.99, policyVersion: 'classification:v2' } })
   })
   it('does not resolve indistinguishable bottles even at high model probability', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {

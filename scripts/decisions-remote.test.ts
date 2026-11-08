@@ -15,6 +15,25 @@ afterEach(async () => {
 })
 const credentials = { clientId: 'test-access-id', clientSecret: 'test-access-secret' }
 describe('remote evaluation report retention', () => {
+  it('runs and retains paired v1/v2 results without mixing guard cases into the comparison set', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
+    await prepare(directory, ['classification-3-0', 'guard-classification-2-clear'], 'production')
+    const state = JSON.parse(await readFile(join(directory, 'private.json'), 'utf8'))
+    const output = join(directory, 'report.json')
+    const calls: string[] = []
+    await runRemote(state, output, {}, async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string)
+      calls.push(body.backend)
+      return Response.json({ id: body.caseId, backend: body.backend, feature: 'classification', expected: 'NEUTRAL', choice: 'NEUTRAL',
+        policyVersion: body.backend === 'decisionsV1' ? 'classification:v1' : 'classification:v2', error: false, elapsedMs: 1 })
+    }, { compareV1: true })
+    const report = JSON.parse(await readFile(output, 'utf8'))
+    expect(calls).toEqual(['legacy', 'decisionsV1', 'decisions', 'legacy', 'decisionsV1', 'decisions'])
+    expect(report.rows[0].decisionsV1.policyVersion).toBe('classification:v1')
+    expect(report.summary.classification.legacy.total).toBe(1)
+    expect(report.guardSummary.classification.legacy.total).toBe(1)
+    await expect(runRemote(state, output, {}, undefined, { resume: true })).rejects.toThrow('does not match')
+  })
   it('uses one exact fifteen-second lifetime and tolerates a verifier clock one second behind', async () => {
     directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
     await prepare(directory, ['classification-3-0'], 'production')
