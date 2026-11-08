@@ -12,6 +12,12 @@ describe('Decisions evaluation integrity', () => {
     expect(guards.every((row: { humanReviewed: boolean }) => row.humanReviewed === false)).toBe(true)
     expect(new Set(allDecisionFixtures().map((row: { id: string }) => row.id)).size).toBe(480)
     expect(guards.filter((row: { id: string }) => row.id.endsWith('-conflict')).every((row: { expected: unknown }) => row.expected === null)).toBe(true)
+    const outsideCap = guards.find((row: { id: string }) => row.id === 'guard-voice-1-7')
+    expect(outsideCap.input.text).toContain('글루코스')
+    expect(outsideCap.input.matches).toHaveLength(121)
+    expect(outsideCap.input.matches.slice(0, 120).every((item: { name: string }) => item.name !== 'Glucose')).toBe(true)
+    expect(outsideCap.input.matches[120].name).toBe('Glucose')
+    expect(outsideCap.expected).toBeNull()
   })
   it('contains 200 explicitly synthetic cases for each feature with unique ids', () => {
     const fixtures = decisionFixtures()
