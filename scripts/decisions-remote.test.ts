@@ -1,11 +1,12 @@
 import { mkdtemp, readFile, unlink, rmdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 // @ts-expect-error The remotely usable CLI is JavaScript.
 import { prepare, runRemote, requestCase, evaluationTarget } from './decisions-remote.mjs'
 let directory: string | undefined
 afterEach(async () => {
+  vi.restoreAllMocks()
   if (!directory) return
   await Promise.allSettled(['private.json', 'grant.json', 'report.json'].map(name => unlink(join(directory!, name))))
   await rmdir(directory)
@@ -13,6 +14,40 @@ afterEach(async () => {
 })
 const credentials = { clientId: 'test-access-id', clientSecret: 'test-access-secret' }
 describe('remote evaluation report retention', () => {
+  it('uses a single numeric timestamp for the strict fifteen-second JWT lifetime', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
+    await prepare(directory, ['classification-3-0'], 'production')
+    const state = JSON.parse(await readFile(join(directory, 'private.json'), 'utf8'))
+    const now = vi.spyOn(Date, 'now').mockReturnValue(2_999)
+    await requestCase(state, 'classification-3-0', 'probe', {}, async (_url: string, init: RequestInit) => {
+      const token = (init.headers as Record<string, string>).Authorization.slice(7)
+      const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+      expect(claims.iat).toBe(2)
+      expect(claims.exp).toBe(17)
+      expect(now).toHaveBeenCalledTimes(1)
+      return Response.json({ id: 'classification-3-0', backend: 'probe', error: false })
+    })
+  })
+  it('checkpoints a completed backend and resumes explicitly without repeating it', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
+    await prepare(directory, ['classification-3-0'], 'production')
+    const state = JSON.parse(await readFile(join(directory, 'private.json'), 'utf8'))
+    const output = join(directory, 'report.json')
+    const called: string[] = []
+    const transport = async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string)
+      called.push(body.backend)
+      if (called.length === 2) return Response.json({ code: 'GRANT_DENIED' }, { status: 403 })
+      return Response.json({ id: body.caseId, backend: body.backend, feature: 'classification', expected: null, choice: null, error: false, elapsedMs: 1 })
+    }
+    await expect(runRemote(state, output, {}, transport)).rejects.toThrow('REMOTE_403_REJECTED')
+    expect(JSON.parse(await readFile(output, 'utf8')).partialRow.legacy.error).toBe(false)
+    const rows = await runRemote(state, output, {}, transport, { resume: true })
+    expect(called).toEqual(['legacy', 'decisions', 'decisions'])
+    expect(rows).toHaveLength(1)
+    expect(JSON.parse(await readFile(output, 'utf8')).partialRow).toBeUndefined()
+    await expect(runRemote({ ...state, grant: { ...state.grant, id: 'another-grant' } }, output, {}, transport, { resume: true })).rejects.toThrow('does not match')
+  })
   it('explicitly binds production grants, endpoint, audience and report without forwarding staging credentials', async () => {
     directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
     await prepare(directory, ['classification-3-0'], 'production')

@@ -30,31 +30,46 @@ export async function requestCase(state, caseId, backend, credentials, fetchImpl
   const staging = target.execution === 'cloudflare-staging'
   if (staging && (!credentials.clientId || !credentials.clientSecret)) throw new Error('Missing Staging Access credentials')
   const key = await importJWK(state.privateKey, 'EdDSA')
+  const issuedAt = Math.floor(Date.now() / 1000)
   const token = await new SignJWT({}).setProtectedHeader({ alg: 'EdDSA' }).setIssuer(state.grant.id)
-    .setAudience(target.audience).setSubject(`${caseId}:${backend}`).setIssuedAt().setExpirationTime('15s').sign(key)
+    .setAudience(target.audience).setSubject(`${caseId}:${backend}`).setIssuedAt(issuedAt).setExpirationTime(issuedAt + 15).sign(key)
   const response = await fetchImpl(target.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
       ...(staging ? { 'CF-Access-Client-Id': credentials.clientId, 'CF-Access-Client-Secret': credentials.clientSecret } : {}) },
     body: JSON.stringify({ caseId, backend }) })
   if (!response.headers.get('content-type')?.includes('application/json')) throw new Error(`REMOTE_${response.status}_NON_JSON`)
   const result = await response.json()
-  if (response.status !== 200 && response.status !== 502) throw new Error(`REMOTE_${response.status}_REJECTED`)
+  if (response.status !== 200 && response.status !== 502) throw Object.assign(new Error(`REMOTE_${response.status}_REJECTED`), {
+    serverCode: typeof result.code === 'string' && /^[A-Z_]{1,64}$/.test(result.code) ? result.code : null,
+    tokenLifetimeSeconds: 15, tokenAgeSeconds: Math.floor(Date.now() / 1000) - issuedAt,
+  })
   if (result.id !== caseId || result.backend !== backend || typeof result.error !== 'boolean') throw new Error(`REMOTE_${response.status}_INVALID_RESULT`)
   return result
 }
-export async function runRemote(state, output, credentials, fetchImpl = fetch) {
+export async function runRemote(state, output, credentials, fetchImpl = fetch, { resume = false } = {}) {
   const { execution } = evaluationTarget(state.grant.environment)
-  const rows = []
+  let rows = [], partialRow
+  if (resume) {
+    const previous = JSON.parse(await readFile(output, 'utf8'))
+    if (previous.grantId !== state.grant.id || previous.execution !== execution || !Array.isArray(previous.rows)
+      || previous.rows.some(row => !state.grant.caseIds.includes(row.id) || !row.legacy || !row.decisions)
+      || new Set(previous.rows.map(row => row.id)).size !== previous.rows.length) throw new Error('Resume report does not match this grant')
+    rows = previous.rows
+    partialRow = previous.partialRow
+  }
   await mkdir(dirname(resolve(output)), { recursive: true })
   for (const id of state.grant.caseIds) {
-    const row = { id, cacheHit: false }
+    if (rows.some(row => row.id === id)) continue
+    const row = partialRow?.id === id ? partialRow : { id, cacheHit: false }
     for (const backend of ['legacy', 'decisions']) {
+      if (row[backend]) continue // Explicit resume never repeats a recorded provider call.
       let result
       try { result = await requestCase(state, id, backend, credentials, fetchImpl) }
       catch (error) {
         const diagnostic = error instanceof Error && /^REMOTE_\d{3}_[A-Z_]+$/.test(error.message) ? error.message : 'REMOTE_TRANSPORT_FAILED'
         await writeFile(output, JSON.stringify({ execution, grantId: state.grant.id,
-          summary: summarize(rows), rows, incompleteCase: { id, backend, diagnostic } }, null, 2))
+          summary: summarize(rows), rows, partialRow: row, incompleteCase: { id, backend, diagnostic,
+            serverCode: error?.serverCode ?? null, tokenLifetimeSeconds: error?.tokenLifetimeSeconds ?? null, tokenAgeSeconds: error?.tokenAgeSeconds ?? null } }, null, 2))
         throw new Error(diagnostic)
       }
       row.feature = result.feature; row.expected = result.expected
@@ -64,6 +79,9 @@ export async function runRemote(state, output, credentials, fetchImpl = fetch) {
         usage: { inputTokens: u.input_tokens ?? u.inputTokens ?? 0, outputTokens: u.output_tokens ?? u.outputTokens ?? 0,
           cachedTokens: u.input_tokens_details?.cached_tokens ?? 0, cacheWriteTokens: u.input_tokens_details?.cache_write_tokens ?? 0 },
         costUsd: null }
+      // Persist each backend immediately, even if the next signed request is rejected.
+      await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution,
+        grantId: state.grant.id, summary: summarize(rows), rows, partialRow: row }, null, 2))
     }
     rows.push(row)
     await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution,
@@ -91,7 +109,7 @@ async function main() {
     }
     if (!ready) throw new Error('Grant not installed in time')
   }
-  const rows = await runRemote(state, value('--output'), credentials)
+  const rows = await runRemote(state, value('--output'), credentials, fetch, { resume: args.includes('--resume') })
   if (rows.some(row => row.legacy.error || row.decisions.error)) throw new Error('Provider execution failed; report retained')
   console.log('Remote evaluation completed. Review the report; production remains unchanged.')
 }
