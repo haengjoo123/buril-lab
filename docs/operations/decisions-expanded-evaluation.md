@@ -101,6 +101,16 @@ The arithmetic formula gate alone cannot reject them. They test whether the
 model uses the readable reference identity, and are authored before v5 live
 evaluation. They do not change the frozen 2,000 inputs or their denominators.
 
+On cohort-v2 tuning, voice v4 accepted 149/200 with zero wrong (Responses
+132 accepted, 13 wrong). Classification v5 accepted 146/200 with zero wrong
+(Responses 175 accepted, 25 wrong); four answerable cases proposed the right
+category but fell below the unchanged probability gate. Candidate v6 supplies
+the normalized elemental composition and formula-equivalence status as factual
+input, and clarifies bilingual labels and canonical titles that omit ordinary
+physical-form words. It supplies no category hint and preserves identity-conflict
+review even for isomers with equal formulas. No validation outcomes were used.
+v5 remains available as a frozen archive, with its original reference lookup.
+
 ## Explicit paid execution
 
 Use the protected main CI -> staging -> production release pipeline. Verify

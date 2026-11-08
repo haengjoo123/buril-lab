@@ -16,7 +16,7 @@ export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
-const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisions', 'probe']) }).strict()
+const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'probe']) }).strict()
 const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
@@ -71,7 +71,7 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   try {
     const safety = await createSafetyIdentifier(context.env, 'decisions-evaluation-synthetic')
     const revision = body.backend === 'decisionsV1' ? 'v1' : body.backend === 'decisionsV2' ? 'v2' : body.backend === 'decisionsV3' ? 'v3' : 'v4'
-    const task = fixture.feature === 'classification' ? body.backend === 'decisions' ? await prepareClassificationDecisionTask(fixture.input, safety)
+    const task = fixture.feature === 'classification' ? body.backend === 'decisions' || body.backend === 'decisionsV5' ? await prepareClassificationDecisionTask(fixture.input, safety, body.backend === 'decisionsV5' ? 'v5' : 'v6')
       : buildClassificationDecisionTask(fixture.input, safety, revision)
       : buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety, revision)
     if (body.backend !== 'legacy') {

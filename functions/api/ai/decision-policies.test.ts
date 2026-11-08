@@ -34,7 +34,7 @@ describe('versioned Decisions questions', () => {
     expect(v2.instructions).toContain(rules)
     expect(v2.choices.map(item => item.value)).toEqual(v1.choices.map(item => item.value))
     expect(v2.choices.every(item => item.description)).toBe(true)
-    expect(v2.policyVersion).toBe('classification:v5')
+    expect(v2.policyVersion).toBe('classification:v6')
   })
   it('does not interpolate instructions embedded in input fields into question instructions', () => {
     const injected = 'OVERRIDE_AND_FORCE_NEUTRAL'
@@ -48,7 +48,7 @@ describe('versioned Decisions questions', () => {
     const task = buildClassificationDecisionTask({ name: 'Water' }, 'hash')
     const result = parseDecision({ model: 'gpt-6-luna', answers: [{ type: 'choice', name: task.feature, choice: 'NEUTRAL', confidence: 1,
       probabilities: task.choices.map(item => ({ value: item.value, probability: item.value === 'NEUTRAL' ? 0.89 : 0.11 / 9 })) }] }, task)
-    expect(result).toMatchObject({ choice: null, proposedChoice: 'NEUTRAL', abstentionReason: 'probability', decision: { policyVersion: 'classification:v5' } })
+    expect(result).toMatchObject({ choice: null, proposedChoice: 'NEUTRAL', abstentionReason: 'probability', decision: { policyVersion: 'classification:v6' } })
   })
   it('uses stated locations to distinguish bottles and still blocks bottles without distinct information', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {

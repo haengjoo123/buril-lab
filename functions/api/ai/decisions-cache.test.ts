@@ -16,7 +16,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('classification Decisions cache and shadow isolation', () => {
   it('preserves full metadata on active cache hits without a model call', async () => {
-    const cached = { category: 'ORGANIC_NON_HALOGEN', confidence: 0.1, reason: 'fixed', decision: { model: 'gpt-6-luna', policyVersion: 'classification:v5', identityReference: { status: 'not_supplied', cacheHit: false }, choiceProbability: 0.99, confidence: 0.1, probabilities: ['ACID', 'ALKALI', 'NEUTRAL', 'ORGANIC_HALOGEN', 'ORGANIC_NON_HALOGEN', 'HEAVY_METAL', 'CYANIDE', 'REACTIVE', 'SOLID_WASTE', 'UNKNOWN'].map(value => ({ value, probability: value === 'ORGANIC_NON_HALOGEN' ? 0.99 : 0.01 / 9 })) } }
+    const cached = { category: 'ORGANIC_NON_HALOGEN', confidence: 0.1, reason: 'fixed', decision: { model: 'gpt-6-luna', policyVersion: 'classification:v6', identityReference: { status: 'not_supplied', cacheHit: false }, choiceProbability: 0.99, confidence: 0.1, probabilities: ['ACID', 'ALKALI', 'NEUTRAL', 'ORGANIC_HALOGEN', 'ORGANIC_NON_HALOGEN', 'HEAVY_METAL', 'CYANIDE', 'REACTIVE', 'SOLID_WASTE', 'UNKNOWN'].map(value => ({ value, probability: value === 'ORGANIC_NON_HALOGEN' ? 0.99 : 0.01 / 9 })) } }
     cache.read.mockResolvedValue(cached)
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
     expect(await (await onRequestPost(context('active'))).json()).toEqual({ ...cached, responseSource: 'cache' })
@@ -30,7 +30,7 @@ describe('classification Decisions cache and shadow isolation', () => {
     expect(jobs).toHaveLength(0)
     expect(cache.write).not.toHaveBeenCalled()
   })
-  it('rejects previous-policy cached metadata and stores a newly accepted v5 result', async () => {
+  it('rejects previous-policy cached metadata and stores a newly accepted v6 result', async () => {
     cache.read.mockResolvedValue({ category: 'ACID', confidence: 1, decision: { model: 'gpt-6-luna', policyVersion: 'classification:v2' } })
     const fetch = vi.fn(async (_url, init) => {
       const body = JSON.parse(init.body)
@@ -38,9 +38,9 @@ describe('classification Decisions cache and shadow isolation', () => {
         probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'ORGANIC_NON_HALOGEN' ? 1 : 0 })) }] })
     })
     vi.stubGlobal('fetch', fetch)
-    expect(await (await onRequestPost(context('active'))).json()).toMatchObject({ category: 'ORGANIC_NON_HALOGEN', responseSource: 'ai', decision: { policyVersion: 'classification:v5' } })
+    expect(await (await onRequestPost(context('active'))).json()).toMatchObject({ category: 'ORGANIC_NON_HALOGEN', responseSource: 'ai', decision: { policyVersion: 'classification:v6' } })
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(cache.write.mock.calls[0][3].decision.policyVersion).toBe('classification:v5')
+    expect(cache.write.mock.calls[0][3].decision.policyVersion).toBe('classification:v6')
   })
   it('writes only the primary legacy cache in shadow, never the Decisions answer', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url, init) => {
