@@ -1,9 +1,10 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 // @ts-expect-error Shared corpus is JavaScript.
-import { expandedDecisionFixtures, identityBoundaryFixtures } from './decisions-expanded-fixtures.mjs'
+import { expandedDecisionFixtures, expandedDecisionFixturesV1, identityBoundaryFixtures } from './decisions-expanded-fixtures.mjs'
 // @ts-expect-error Standalone evaluator is JavaScript.
 import { analyzeExpanded, expandedManifest, runExpanded } from './decisions-expanded.mjs'
 // @ts-expect-error Standalone grant tool is JavaScript.
@@ -33,7 +34,26 @@ describe('expanded evaluation validity and execution', () => {
     const guards = identityBoundaryFixtures()
     expect(guards).toHaveLength(4)
     expect(guards.every((item: Fixture) => item.expected === null && !fixtures.some(f => f.id === item.id))).toBe(true)
-    expect(expandedManifest().sha256).toBe('c0d3cb5e939235006b673d9e851f4f3f82fad56ce11eaf4dffe31374dfce844e')
+    expect(createHash('sha256').update(JSON.stringify(expandedDecisionFixturesV1())).digest('hex')).toBe('c0d3cb5e939235006b673d9e851f4f3f82fad56ce11eaf4dffe31374dfce844e')
+  })
+  it('removes role-bearing candidate IDs without changing the answer meaning or abstention policy', () => {
+    type VoiceFixture = Fixture & { input: { text: string; matches: Array<{ source: string; id: string; name: string; casNumber: string }> } }
+    const prior: VoiceFixture[] = expandedDecisionFixturesV1()
+    for (const [index, row] of (fixtures as VoiceFixture[]).entries()) {
+      const old = prior[index]
+      expect(row.expected === null).toBe(old.expected === null)
+      if (row.feature === 'classification') { expect(row.input).toEqual(old.input); continue }
+      expect(row.input.matches).toHaveLength(old.input.matches.length)
+      expect(row.input.matches.every(match => /^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(match.id))).toBe(true)
+      expect(JSON.stringify(row.input)).not.toMatch(/inventory:(target|noise|other|left|right)/)
+      if (row.expected !== null) {
+        const selected = row.input.matches.find(match => `${match.source}:${match.id}` === row.expected)!
+        const previous = old.input.matches.find(match => `${match.source}:${match.id}` === old.expected)!
+        expect({ ...selected, id: '' }).toEqual({ ...previous, id: '' })
+      }
+    }
+    expect(new Set((fixtures as VoiceFixture[]).filter(f => f.feature === 'voiceCandidate').flatMap(f => f.input.matches.map(m => m.id))).size)
+      .toBe((fixtures as VoiceFixture[]).filter(f => f.feature === 'voiceCandidate').reduce((sum, f) => sum + f.input.matches.length, 0))
   })
   it('fixes the corpus before live results; ignores no failures and rejects changed labels', () => {
     const fixture = fixtures[0], ids = [fixture.id]

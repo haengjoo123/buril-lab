@@ -47,6 +47,25 @@ both pieces of evidence. v3 remains frozen as `decisionsV3`. The voice v4 prompt
 also clarifies count questions and elimination of incompatible distractors.
 The original v3 errors and one provider 503 are retained in their own report.
 
+### Evaluation corpus v2: remove candidate-ID hints
+
+Before any held-out validation, an input audit found that corpus v1 used role
+names such as `target` and `noise-0` as inventory IDs. These can reveal the answer
+to either model. Its voice numbers are trial diagnostics, not final performance
+evidence. Preserve v1 byte-for-byte and retain all recorded calls.
+
+Corpus v2 uses deterministic opaque UUIDs assigned independently of answer role,
+and a new `expanded-v2-` case namespace. It remaps only IDs and embedded forced-ID
+injection references. Chemical names, candidate ordering/counts, selectors,
+answer meaning, abstentions and target-family splits are unchanged. Tests check
+equivalent selected identities and retain the v1 SHA-256. The 2,000-case v2 hash
+is frozen before its first model call; re-run Responses, frozen v2 policy and
+the selected policy on v2 rather than mixing in v1 voice results. Classification
+input objects are identical, but are also rerun for a consistent comparison.
+The signed registry retains old IDs for audit/replay and is constructed lazily
+only after authorization. Closed evaluation and ordinary app calls do no large
+fixture construction work.
+
 The tuning Responses classification result accepted 175/200, including 25
 intentional-abstention cases; all 150 answerable cases were already correct.
 Higher raw acceptance at zero wrong is mathematically impossible on that
