@@ -84,6 +84,8 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     const providerStatus = typeof reportedStatus === 'number' && reportedStatus >= 400 && reportedStatus <= 599
       ? reportedStatus : decisionStatus ? Number(decisionStatus) : null
     return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
-      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', providerStatus, cacheHit: false }, 502)
+      // The evaluation itself completed. Keep provider failures in its typed
+      // result so an edge-generated 5xx page cannot erase diagnostic evidence.
+      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', providerStatus, cacheHit: false })
   }
 }
