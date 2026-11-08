@@ -10,7 +10,7 @@ import type { VoiceMatch } from '../../../../src/utils/voiceAgent'
 // @ts-expect-error Shared CLI fixtures are JavaScript.
 import { allDecisionFixtures } from '../../../../scripts/decisions-fixtures.mjs'
 // @ts-expect-error Shared fixed synthetic corpus is JavaScript.
-import { expandedDecisionFixtures } from '../../../../scripts/decisions-expanded-fixtures.mjs'
+import { expandedDecisionFixtures, identityBoundaryFixtures } from '../../../../scripts/decisions-expanded-fixtures.mjs'
 
 export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
@@ -26,7 +26,7 @@ const grantSchema = z.object({
 interface Fixture { id: string; feature: 'classification' | 'voiceCandidate'; expected: string | null;
   input: { name?: string; molecularFormula?: string; casNumber?: string; text: string; language: 'ko' | 'en'; matches: VoiceMatch[] } }
 type Env = DecisionsEnv & { APP_ENVIRONMENT?: string }
-const fixtures = new Map(([...allDecisionFixtures(), ...expandedDecisionFixtures()] as Fixture[]).map(item => [item.id, item]))
+const fixtures = new Map(([...allDecisionFixtures(), ...expandedDecisionFixtures(), ...identityBoundaryFixtures()] as Fixture[]).map(item => [item.id, item]))
 
 export async function onRequestPost(context: { request: Request; env: Env }) {
   const headers = { 'Cache-Control': 'no-store' }
