@@ -1,0 +1,59 @@
+name: Decisions remote evaluation
+on:
+  workflow_dispatch:
+    inputs:
+      smoke:
+        description: Run two synthetic cases before a full comparison
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: decisions-staging-evaluation
+  cancel-in-progress: false
+jobs:
+  evaluate:
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Generate ephemeral signing key and public grant
+        env:
+          SMOKE: ${{ inputs.smoke }}
+        run: |
+          if [ "$SMOKE" = "true" ]; then
+            node scripts/decisions-remote.mjs --prepare "$RUNNER_TEMP/decisions" --smoke
+          else
+            node scripts/decisions-remote.mjs --prepare "$RUNNER_TEMP/decisions"
+          fi
+          echo 'Install the public grant artifact in the Staging runtime KV under ai_decisions_evaluation within five minutes. No OpenAI key or private signing key is exported.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish public grant only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: decisions-public-grant-${{ github.run_id }}
+          path: ${{ runner.temp }}/decisions/grant.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Evaluate using existing Cloudflare server secrets
+        env:
+          STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+          STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
+        run: node scripts/decisions-remote.mjs --state "$RUNNER_TEMP/decisions/private.json" --output results/decisions.json --wait-grant
+      - name: Publish evaluation report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: decisions-report-${{ github.run_id }}
+          path: results/decisions.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Remove ephemeral private key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/decisions/private.json"

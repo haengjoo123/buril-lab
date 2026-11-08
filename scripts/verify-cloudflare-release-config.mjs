@@ -166,6 +166,15 @@ function normalizedWorkflowHash(workflow) {
   return createHash('sha256').update(normalized, 'utf8').digest('hex')
 }
 
+export function verifyDecisionsEvaluationWorkflow(source) {
+  // This workflow can only call signed fixed-case Staging evaluation. It has
+  // no provider keys, deployment token, KV write token or Production job.
+  if (normalizedWorkflowHash(source) !== '66c8ff7f8fbf1bcd6be09362ec1d5a6908666c8c2160006164df759a63b26a13') {
+    throw new Error('Decisions evaluation workflow differs from the reviewed Staging-only execution contract.')
+  }
+  return true
+}
+
 function rawSourceHash(source) {
   return createHash('sha256').update(normalizeLineEndings(source), 'utf8').digest('hex')
 }
@@ -598,6 +607,10 @@ export function verifyReleaseConfiguration({ productionRaw, stagingRaw, workflow
   if (Object.hasOwn(workflows, 'web-release.yml')) {
     verifyWebReleaseWorkflow(workflows['web-release.yml'])
     delete workflows['web-release.yml']
+  }
+  if (Object.hasOwn(workflows, 'decisions-evaluation.yml')) {
+    verifyDecisionsEvaluationWorkflow(workflows['decisions-evaluation.yml'])
+    delete workflows['decisions-evaluation.yml']
   }
   const workflowNames = Object.keys(workflows || {}).sort()
   const approvedWorkflowNames = Object.keys(APPROVED_WORKFLOW_ACTION_REFERENCES).sort()

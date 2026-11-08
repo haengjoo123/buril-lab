@@ -317,6 +317,18 @@ export function createApiMiddleware(dependencies: MiddlewareDependencies = {}): 
       }
     }
 
+    // Evaluation uses a short-lived, public-key grant, never a Supabase JWT.
+    if (policy.id === '/api/internal/decisions/evaluate') {
+      if (env.APP_ENVIRONMENT !== 'staging') return respond(json({ code: 'NOT_FOUND' }, { status: 404 }))
+      try {
+        const bytes = await readLimitedRequestBytes(request, getApiRequestBodyLimit(policy))
+        return respond(await next(new Request(request, { body: bytes })))
+      } catch (error) {
+        if (error instanceof RequestBodyError) return respond(requestBodyErrorResponse(error))
+        return respond(json({ code: 'INTERNAL_ERROR' }, { status: 500 }))
+      }
+    }
+
     let identifier = request.headers.get('cf-connecting-ip') || 'anonymous'
     let isUser = false
     let authVerificationFailed = false
