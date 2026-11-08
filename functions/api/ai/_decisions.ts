@@ -151,7 +151,9 @@ export async function runDecisionTask<T>(context: DecisionContext, task: ChoiceT
       const evaluatedTask = prepareTask ? await prepareTask() : task
       const result = await evaluateDecision(context.env, evaluatedTask)
       logDecision(context, task, { mode: config.mode, outcome: result.outcome, choice: result.choice,
-        elapsedMs: Date.now() - started, usage: result.usage, fallbackReason: null })
+        elapsedMs: Date.now() - started, usage: result.usage, fallbackReason: null, abstentionReason: result.abstentionReason,
+        referenceStatus: evaluatedTask.identityReference?.status ?? null,
+        referenceCacheHit: evaluatedTask.identityReference?.cacheHit ?? null })
       return result
     } catch (error) {
       const reason = error instanceof Error && /^http_\d+$|^timeout$|^invalid_/.test(error.message) ? error.message : 'technical_error'
