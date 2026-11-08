@@ -31,6 +31,7 @@ const POST_ROUTES = [
   '/api/gemini/disposal-guide',
   '/api/gemini/scan-label',
   '/api/internal/deletions/process',
+  '/api/internal/decisions/evaluate',
   '/api/labs/join',
   '/api/labs/delete',
   '/api/reagents/cas-resolve',
@@ -81,6 +82,7 @@ export function isAllowedApiMethod(policy: ApiRoutePolicy, method: string): meth
 
 export function getApiRequestBodyLimit(policy: ApiRoutePolicy): number {
   if (policy.id === '/api/internal/deletions/process') return 1
+  if (policy.id === '/api/internal/decisions/evaluate') return 1024
   if (policy.id === '/api/cabinets/[id]/image') return 2 * 1024 * 1024
   if (policy.id === '/api/cabinets/image-urls') return 8 * 1024
   if (policy.id === '/api/labs/join') return 8 * 1024

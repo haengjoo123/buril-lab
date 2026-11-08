@@ -1,3 +1,4 @@
+import type { DecisionContext } from '../ai/_decisions'
 import { createClient } from '@supabase/supabase-js'
 import { internalErrorResponse } from '../_shared/json'
 import { readLimitedJson, RequestBodyError, requestBodyErrorResponse } from '../_shared/requestBody'
@@ -44,7 +45,7 @@ import {
   type OpenAIResponsesEnv,
 } from '../ai/_openai'
 
-interface VoiceQueryEnv extends OpenAIResponsesEnv {
+interface VoiceQueryEnv extends OpenAIResponsesEnv, NonNullable<DecisionContext['env']> {
   KOSHA_API_KEY?: string
   SUPABASE_URL?: string
   SUPABASE_ANON_KEY?: string
@@ -643,6 +644,7 @@ export const onRequestPost = async (context: {
   request: Request
   env: VoiceQueryEnv
   data?: Record<string, unknown>
+  waitUntil?: (task: Promise<unknown>) => void
 }) => {
   const authHeader = context.request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -834,11 +836,12 @@ export const onRequestPost = async (context: {
         language,
         topMatch ? closeMatches.map(({ match }) => match) : allMatches,
         safetyIdentifier,
+        { data: context.data, waitUntil: context.waitUntil?.bind(context) },
       )
 
       if (
         candidateResolution?.candidateId &&
-        candidateResolution.confidence >= CANDIDATE_ALIAS_CONFIDENCE_THRESHOLD
+        (candidateResolution.decisionAccepted || candidateResolution.confidence >= CANDIDATE_ALIAS_CONFIDENCE_THRESHOLD)
       ) {
         const resolvedMatch = allMatches.find(
           (match) => getMatchKeyForAlias(match) === candidateResolution.candidateId,

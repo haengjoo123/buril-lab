@@ -75,7 +75,8 @@
     "lint": "eslint .",
     "test": "vitest run --exclude=e2e/**",
     "test:chemical-live": "node scripts/run-chemical-live-smoke.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "decisions:eval": "node scripts/evaluate-decisions.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.1",

@@ -6,7 +6,7 @@ import {
   safeFailure, SmokeError, MAX_API_REQUESTS, MAX_PAID_REQUESTS, VOICE_LOCATION_INPUT,
   runSmokeChecks,
 } from './ops3-live-smoke-safety.mjs'
-import { generateClassificationCacheKey } from '../functions/api/ai/classify'
+import { generateClassificationCacheKey, generateDecisionsClassificationCacheKey } from '../functions/api/ai/classify'
 import { generateDisposalGuideCacheKey } from '../functions/api/ai/disposal-guide'
 
 const ownerId = '20000000-0000-4000-8000-000000000003'
@@ -110,6 +110,10 @@ describe('Ops3 live Staging verification safety', () => {
       const classify = generateClassificationCacheKey({ name: `Water ${marker} ${variant}`, casNumber: '7732-18-5', molecularFormula: 'H2O' })
       const guide = generateDisposalGuideCacheKey({ chemicals: [{ name: 'Water', casNumber: '7732-18-5' }], batch: { batchId: `${marker}-${variant}` }, decision: { decisionStatus: 'needs_input' } })
       expect(verifySmokeCacheRow({ id: rowId, api_type: 'classify', cache_key: classify, created_at: createdAt }, state)).toBe(rowId)
+      const decisions = generateDecisionsClassificationCacheKey({ name: `Water ${marker} ${variant}`, casNumber: '7732-18-5', molecularFormula: 'H2O' })
+      expect(verifySmokeCacheRow({ id: rowId, api_type: 'classify', cache_key: decisions, created_at: createdAt }, state)).toBe(rowId)
+      expect(() => verifySmokeCacheRow({ id: rowId, api_type: 'classify', cache_key: decisions.replace('classification:v1', 'classification:v999'), created_at: createdAt }, state)).toThrow()
+      expect(() => verifySmokeCacheRow({ id: rowId, api_type: 'classify', cache_key: decisions.replace(marker, 'another-run'), created_at: createdAt }, state)).toThrow()
       expect(verifySmokeCacheRow({ id: rowId, api_type: 'disposal_guide', cache_key: guide, created_at: createdAt }, state)).toBe(rowId)
       expect(() => verifySmokeCacheRow({ id: rowId, api_type: 'classify', cache_key: classify.replace(marker, 'another-run'), created_at: createdAt }, state)).toThrow()
     }

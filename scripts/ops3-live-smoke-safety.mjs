@@ -116,10 +116,16 @@ export function newOwnedRowIds(before, after, { ownerId, kind, startedAt }) {
 export function verifySmokeCacheRow(row, state) {
   check(UUID.test(row.id) && Date.parse(row.created_at) >= Date.parse(state.startedAt)
     && typeof row.cache_key === 'string' && row.cache_key.length <= 16384, 'CACHE_OWNERSHIP_MISMATCH')
-  check(row.cache_key.startsWith(row.api_type === 'classify' ? 'classify:v3:{' : 'disposal_guide:v4:{'), 'CACHE_KEY_INVALID')
+  const decisionsCache = row.api_type === 'classify' && row.cache_key.startsWith('classify:decisions:v1:{')
+  check(decisionsCache || row.cache_key.startsWith(row.api_type === 'classify' ? 'classify:v3:{' : 'disposal_guide:v4:{'), 'CACHE_KEY_INVALID')
   const separator = row.cache_key.indexOf(':{')
   let data
   try { data = JSON.parse(row.cache_key.slice(separator + 1)) } catch { throw new SmokeError('CACHE_KEY_INVALID') }
+  if (decisionsCache) {
+    check(data.model === 'gpt-6-luna' && data.policy === 'classification:v1', 'CACHE_SCOPE_MISMATCH')
+    data = data.chemical
+    check(data && typeof data === 'object', 'CACHE_SCOPE_MISMATCH')
+  }
   const variant = ['new', 'legacy'].find((value) => (
     row.api_type === 'classify'
       ? data.name === `Water ${state.marker} ${value}` && data.casNumber === '7732-18-5' && data.molecularFormula === 'H2O'
