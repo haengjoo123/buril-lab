@@ -8,8 +8,8 @@ export const DECISIONS_CONFIG_KEY = 'ai_decisions_config'
 export const MIN_CHOICE_PROBABILITY = 0.90
 export const MIN_CHOICE_MARGIN = 0.20
 export type DecisionFeature = 'voiceCandidate' | 'classification'
-export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v2', classification: 'classification:v2' } as const
-export type DecisionPolicyRevision = 'v1' | 'v2'
+export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v3', classification: 'classification:v3' } as const
+export type DecisionPolicyRevision = 'v1' | 'v2' | 'v3'
 export type DecisionsEnv = OpenAIResponsesEnv & RuntimeConfigEnv
 export interface DecisionContext {
   env: DecisionsEnv

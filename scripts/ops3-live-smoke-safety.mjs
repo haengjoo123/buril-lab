@@ -122,7 +122,7 @@ export function verifySmokeCacheRow(row, state) {
   let data
   try { data = JSON.parse(row.cache_key.slice(separator + 1)) } catch { throw new SmokeError('CACHE_KEY_INVALID') }
   if (decisionsCache) {
-    check(data.model === 'gpt-6-luna' && ['classification:v1', 'classification:v2'].includes(data.policy), 'CACHE_SCOPE_MISMATCH')
+    check(data.model === 'gpt-6-luna' && ['classification:v1', 'classification:v2', 'classification:v3'].includes(data.policy), 'CACHE_SCOPE_MISMATCH')
     data = data.chemical
     check(data && typeof data === 'object', 'CACHE_SCOPE_MISMATCH')
   }
