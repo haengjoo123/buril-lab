@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { exportJWK, generateKeyPair, SignJWT } from 'jose'
+import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose'
 import { onRequestPost, EVALUATION_AUDIENCE, PRODUCTION_EVALUATION_AUDIENCE, EVALUATION_PATH } from './evaluate'
 import { createApiMiddleware } from '../../_middleware'
 // @ts-expect-error The CLI is intentionally authored as JavaScript.
 import { requestCase } from '../../../../scripts/decisions-remote.mjs'
 
-let state: { grant: { environment?: string; id: string; expiresAt: string; publicKey: { kty: string; crv: string; x: string }; caseIds: string[] }; privateKey: Record<string, unknown> }
+let state: { grant: { environment?: string; id: string; expiresAt: string; publicKey: { kty: string; crv: string; x: string }; caseIds: string[] }; privateKey: JWK }
 beforeEach(async () => {
   const pair = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true })
   const pub = await exportJWK(pair.publicKey)
