@@ -13,6 +13,26 @@ afterEach(async () => {
 })
 const credentials = { clientId: 'test-access-id', clientSecret: 'test-access-secret' }
 describe('remote evaluation report retention', () => {
+  it('checkpoints a completed backend and resumes explicitly without repeating it', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
+    await prepare(directory, ['classification-3-0'], 'production')
+    const state = JSON.parse(await readFile(join(directory, 'private.json'), 'utf8'))
+    const output = join(directory, 'report.json')
+    const called: string[] = []
+    const transport = async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string)
+      called.push(body.backend)
+      if (called.length === 2) return Response.json({ code: 'GRANT_DENIED' }, { status: 403 })
+      return Response.json({ id: body.caseId, backend: body.backend, feature: 'classification', expected: null, choice: null, error: false, elapsedMs: 1 })
+    }
+    await expect(runRemote(state, output, {}, transport)).rejects.toThrow('REMOTE_403_REJECTED')
+    expect(JSON.parse(await readFile(output, 'utf8')).partialRow.legacy.error).toBe(false)
+    const rows = await runRemote(state, output, {}, transport, { resume: true })
+    expect(called).toEqual(['legacy', 'decisions', 'decisions'])
+    expect(rows).toHaveLength(1)
+    expect(JSON.parse(await readFile(output, 'utf8')).partialRow).toBeUndefined()
+    await expect(runRemote({ ...state, grant: { ...state.grant, id: 'another-grant' } }, output, {}, transport, { resume: true })).rejects.toThrow('does not match')
+  })
   it('explicitly binds production grants, endpoint, audience and report without forwarding staging credentials', async () => {
     directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
     await prepare(directory, ['classification-3-0'], 'production')

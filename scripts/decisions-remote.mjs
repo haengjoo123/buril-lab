@@ -42,19 +42,29 @@ export async function requestCase(state, caseId, backend, credentials, fetchImpl
   if (result.id !== caseId || result.backend !== backend || typeof result.error !== 'boolean') throw new Error(`REMOTE_${response.status}_INVALID_RESULT`)
   return result
 }
-export async function runRemote(state, output, credentials, fetchImpl = fetch) {
+export async function runRemote(state, output, credentials, fetchImpl = fetch, { resume = false } = {}) {
   const { execution } = evaluationTarget(state.grant.environment)
-  const rows = []
+  let rows = [], partialRow
+  if (resume) {
+    const previous = JSON.parse(await readFile(output, 'utf8'))
+    if (previous.grantId !== state.grant.id || previous.execution !== execution || !Array.isArray(previous.rows)
+      || previous.rows.some(row => !state.grant.caseIds.includes(row.id) || !row.legacy || !row.decisions)
+      || new Set(previous.rows.map(row => row.id)).size !== previous.rows.length) throw new Error('Resume report does not match this grant')
+    rows = previous.rows
+    partialRow = previous.partialRow
+  }
   await mkdir(dirname(resolve(output)), { recursive: true })
   for (const id of state.grant.caseIds) {
-    const row = { id, cacheHit: false }
+    if (rows.some(row => row.id === id)) continue
+    const row = partialRow?.id === id ? partialRow : { id, cacheHit: false }
     for (const backend of ['legacy', 'decisions']) {
+      if (row[backend]) continue // Explicit resume never repeats a recorded provider call.
       let result
       try { result = await requestCase(state, id, backend, credentials, fetchImpl) }
       catch (error) {
         const diagnostic = error instanceof Error && /^REMOTE_\d{3}_[A-Z_]+$/.test(error.message) ? error.message : 'REMOTE_TRANSPORT_FAILED'
         await writeFile(output, JSON.stringify({ execution, grantId: state.grant.id,
-          summary: summarize(rows), rows, incompleteCase: { id, backend, diagnostic } }, null, 2))
+          summary: summarize(rows), rows, partialRow: row, incompleteCase: { id, backend, diagnostic } }, null, 2))
         throw new Error(diagnostic)
       }
       row.feature = result.feature; row.expected = result.expected
@@ -64,6 +74,9 @@ export async function runRemote(state, output, credentials, fetchImpl = fetch) {
         usage: { inputTokens: u.input_tokens ?? u.inputTokens ?? 0, outputTokens: u.output_tokens ?? u.outputTokens ?? 0,
           cachedTokens: u.input_tokens_details?.cached_tokens ?? 0, cacheWriteTokens: u.input_tokens_details?.cache_write_tokens ?? 0 },
         costUsd: null }
+      // Persist each backend immediately, even if the next signed request is rejected.
+      await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution,
+        grantId: state.grant.id, summary: summarize(rows), rows, partialRow: row }, null, 2))
     }
     rows.push(row)
     await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution,
@@ -91,7 +104,7 @@ async function main() {
     }
     if (!ready) throw new Error('Grant not installed in time')
   }
-  const rows = await runRemote(state, value('--output'), credentials)
+  const rows = await runRemote(state, value('--output'), credentials, fetch, { resume: args.includes('--resume') })
   if (rows.some(row => row.legacy.error || row.decisions.error)) throw new Error('Provider execution failed; report retained')
   console.log('Remote evaluation completed. Review the report; production remains unchanged.')
 }

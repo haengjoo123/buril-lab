@@ -62,6 +62,8 @@ node scripts/decisions-remote.mjs --state output/decisions-production-smoke/priv
 
 네 호출이 성공한 뒤에만 전체 평가로 확대한다. 종료 후 현재 grant ID가 해당 실행과 같은지 확인하고 운영의 `ai_decisions_evaluation`를 삭제한 뒤 로컬 `private.json`도 제거한다. KV 전파 후 서명 probe 거부와 미인증 404를 확인한다. `ai_decisions_config` 및 `runtime_config`와 서버 secret은 이 평가로 변경하지 않는다. 비교는 DB·재고·별칭·분류 캐시를 쓰지 않는 고정 합성 사례이며, 실제 사용자 shadow 관찰이나 독립 정답 평가를 대체하지 않는다.
 
+전송/인증 오류로 중단되면 원본 보고서를 보존하고 무료 signed probe로 권한 상태를 확인한다. 같은 grant와 보고서에 `--resume`을 명시하면 기록된 API 결과를 다시 호출하지 않고 남은 backend부터 이어간다. 도구는 각 API 결과를 즉시 체크포인트에 저장한다. 자동 유료 재시도는 하지 않으며, 이미 기록된 공급자 장애도 재평가해 지우지 않는다. 체크포인트 도입 전 보고서는 마지막 미완료 사례의 첫 API 결과가 없을 수 있어 해당 사례 재실행의 추가 호출 가능성을 별도 기록한다. 임시 서명 파일은 가능하면 OS 임시 디렉터리에 생성하고 보고서만 작업공간에 보관한다.
+
 ```powershell
 node scripts/evaluate-decisions.mjs --live --fixtures <검토된-평가셋.json> --output tmp/decisions-evaluation.json --responses-input-per-million <입력요율> --responses-output-per-million <출력요율> --responses-cached-input-per-million <캐시입력요율>
 ```
