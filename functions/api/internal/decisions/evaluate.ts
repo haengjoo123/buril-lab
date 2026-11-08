@@ -16,7 +16,7 @@ export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
-const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisions', 'probe']) }).strict()
+const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisions', 'probe']) }).strict()
 const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
@@ -65,10 +65,10 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   const started = Date.now()
   try {
     const safety = await createSafetyIdentifier(context.env, 'decisions-evaluation-synthetic')
-    const revision = body.backend === 'decisionsV1' ? 'v1' : body.backend === 'decisionsV2' ? 'v2' : 'v3'
+    const revision = body.backend === 'decisionsV1' ? 'v1' : body.backend === 'decisionsV2' ? 'v2' : body.backend === 'decisionsV3' ? 'v3' : 'v4'
     const task = fixture.feature === 'classification' ? buildClassificationDecisionTask(fixture.input, safety, revision)
       : buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety, revision)
-    if (body.backend === 'decisions' || body.backend === 'decisionsV1' || body.backend === 'decisionsV2') {
+    if (body.backend !== 'legacy') {
       const result = await evaluateDecision(context.env, task)
       return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
         choice: result.choice, model: 'gpt-6-luna', policyVersion: task.policyVersion,

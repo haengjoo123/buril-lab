@@ -37,6 +37,21 @@ Policy changes require another version and evaluation. v3 cache metadata is
 isolated from earlier policy versions. The operating mode is controlled by
 the existing independent KV setting, never by this experiment.
 
+The first v3 tuning run found four wrong classification acceptances, all in
+name/formula versus CAS conflicts, before the validation partition was opened.
+Candidate v4 adds an independent identity-consistency choice in the SAME
+Decisions request. Both the category and identity evidence must pass the
+unchanged probability/margin gates. Identity refusal or uncertainty means
+UNKNOWN, without a Responses rejudgment. Cache hits must retain and revalidate
+both pieces of evidence. v3 remains frozen as `decisionsV3`. The voice v4 prompt
+also clarifies count questions and elimination of incompatible distractors.
+The original v3 errors and one provider 503 are retained in their own report.
+
+The tuning Responses classification result accepted 175/200, including 25
+intentional-abstention cases; all 150 answerable cases were already correct.
+Higher raw acceptance at zero wrong is mathematically impossible on that
+partition. This does not change the fixed corpus or the strict target.
+
 ## Explicit paid execution
 
 Use the protected main CI -> staging -> production release pipeline. Verify

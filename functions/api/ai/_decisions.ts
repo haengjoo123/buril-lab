@@ -8,8 +8,8 @@ export const DECISIONS_CONFIG_KEY = 'ai_decisions_config'
 export const MIN_CHOICE_PROBABILITY = 0.90
 export const MIN_CHOICE_MARGIN = 0.20
 export type DecisionFeature = 'voiceCandidate' | 'classification'
-export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v3', classification: 'classification:v3' } as const
-export type DecisionPolicyRevision = 'v1' | 'v2' | 'v3'
+export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v4', classification: 'classification:v4' } as const
+export type DecisionPolicyRevision = 'v1' | 'v2' | 'v3' | 'v4'
 export type DecisionsEnv = OpenAIResponsesEnv & RuntimeConfigEnv
 export interface DecisionContext {
   env: DecisionsEnv
@@ -47,6 +47,8 @@ export interface DecisionMetadata {
   confidence: number
   choiceProbability: number
   probabilities: Array<{ value: string; probability: number }>
+  identityCheck?: { choice: string | null; confidence: number; choiceProbability: number;
+    probabilities: Array<{ value: string; probability: number }> }
 }
 export interface ChoiceTask {
   policyVersion?: string
@@ -57,8 +59,14 @@ export interface ChoiceTask {
   abstain: string
   blockedChoices?: string[]
   safetyIdentifier: string
+  identityCheckInstructions?: string
 }
-export function parseDecision(payload: unknown, task: ChoiceTask) {
+export const IDENTITY_CHECK_NAME = 'classification_identity'
+export const IDENTITY_CHECK_CHOICES = [
+  { value: 'matching_identity', description: 'The recognized declared identity is coherent across all supplied identifiers; no unidentified mixture or contradictory field.' },
+  { value: 'review', description: 'Identifiers conflict, identity is unresolved, or the substance is an unidentified or contaminated mixture.' },
+]
+function parseSingleDecision(payload: unknown, task: ChoiceTask) {
   const parsed = resultSchema.parse(payload)
   const answer = parsed.answers[0]
   if (answer.name !== task.feature) throw new Error('invalid_answer_name')
@@ -77,6 +85,23 @@ export function parseDecision(payload: unknown, task: ChoiceTask) {
     confidence: answer.confidence, choiceProbability: selected, probabilities: answer.probabilities }
   return { choice: accepted ? answer.choice : null, proposedChoice: answer.choice, abstentionReason, decision, usage: parsed.usage, outcome: accepted ? 'accepted' : 'abstained' }
 }
+export function parseDecision(payload: unknown, task: ChoiceTask) {
+  if (!task.identityCheckInstructions) return parseSingleDecision(payload, task)
+  const parsed = resultSchema.extend({ answers: z.array(answerSchema).length(2) }).parse(payload)
+  const primary = parsed.answers.find(answer => answer.name === task.feature)
+  const identity = parsed.answers.find(answer => answer.name === IDENTITY_CHECK_NAME)
+  if (!primary || !identity) throw new Error('invalid_answer_name')
+  const result = parseSingleDecision({ ...parsed, answers: [primary] }, task)
+  const check = parseSingleDecision({ ...parsed, answers: [{ ...identity, name: task.feature }] }, {
+    ...task, choices: IDENTITY_CHECK_CHOICES, abstain: 'review', blockedChoices: undefined,
+  })
+  if (result.decision) result.decision.identityCheck = { choice: check.choice,
+    confidence: check.decision?.confidence ?? 0, choiceProbability: check.decision?.choiceProbability ?? 0,
+    probabilities: check.decision?.probabilities ?? [] }
+  if (!check.choice && result.choice) return { ...result, choice: null,
+    abstentionReason: check.outcome === 'refusal' ? 'identity_refusal' : 'identity_evidence', outcome: 'abstained' }
+  return result
+}
 export async function evaluateDecision(env: DecisionsEnv, task: ChoiceTask) {
   const apiKey = env.OPENAI_API_KEY?.trim()
   if (!apiKey) throw new Error('api_key_missing')
@@ -92,7 +117,9 @@ export async function evaluateDecision(env: DecisionsEnv, task: ChoiceTask) {
           method: 'POST', redirect: 'manual', signal: controller.signal,
           headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: DECISIONS_MODEL, safety_identifier: task.safetyIdentifier, input: task.input,
-            questions: [{ type: 'choice', name: task.feature, instructions: task.instructions, choices: task.choices }] }),
+            questions: [{ type: 'choice', name: task.feature, instructions: task.instructions, choices: task.choices },
+              ...(task.identityCheckInstructions ? [{ type: 'choice', name: IDENTITY_CHECK_NAME,
+                instructions: task.identityCheckInstructions, choices: IDENTITY_CHECK_CHOICES }] : [])] }),
         })
         if (!response.ok) {
           let code: unknown

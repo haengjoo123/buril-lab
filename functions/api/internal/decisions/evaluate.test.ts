@@ -5,6 +5,7 @@ import { createApiMiddleware } from '../../_middleware'
 // @ts-expect-error The CLI is intentionally authored as JavaScript.
 import { requestCase } from '../../../../scripts/decisions-remote.mjs'
 
+const identityAnswer = { type: 'choice', name: 'classification_identity', choice: 'matching_identity', confidence: 1, probabilities: [{ value: 'matching_identity', probability: 1 }, { value: 'review', probability: 0 }] }
 let state: { grant: { environment?: string; id: string; expiresAt: string; publicKey: { kty: string; crv: string; x: string }; caseIds: string[] }; privateKey: JWK }
 beforeEach(async () => {
   const pair = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true })
@@ -40,7 +41,7 @@ describe('signed remote evaluation through the real middleware and handler', () 
       expect(init.headers.Authorization).toBe('Bearer test-server-only-key')
       const body = JSON.parse(init.body)
       return Response.json({ model: 'gpt-6-luna', usage: { input_tokens: 10, output_tokens: 0 }, answers: [{ name: 'classification', type: 'choice', choice: 'ORGANIC_NON_HALOGEN', confidence: 0.1,
-        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'ORGANIC_NON_HALOGEN' ? 1 : 0 })) }] })
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'ORGANIC_NON_HALOGEN' ? 1 : 0 })) }, identityAnswer] })
     })
     vi.stubGlobal('fetch', provider)
     const result = await requestCase(state, 'classification-3-0', 'decisions', credentials, transport())
@@ -59,7 +60,7 @@ describe('signed remote evaluation through the real middleware and handler', () 
       const body = JSON.parse(init.body)
       expect(body.questions[0].choices.every((item: { description?: string }) => !item.description)).toBe(true)
       return Response.json({ model: 'gpt-6-luna', answers: [{ name: 'classification', type: 'choice', choice: 'UNKNOWN', confidence: 0.5,
-        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }] })
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }, ...(body.questions.length > 1 ? [identityAnswer] : [])] })
     })
     vi.stubGlobal('fetch', provider)
     const result = await requestCase(state, 'classification-3-0', 'decisionsV1', credentials, transport())
@@ -95,7 +96,7 @@ describe('signed remote evaluation through the real middleware and handler', () 
       expect(init.headers.Authorization).toBe('Bearer test-server-only-key')
       const body = JSON.parse(init.body)
       return Response.json({ model: 'gpt-6-luna', answers: [{ name: 'classification', type: 'choice', choice: 'UNKNOWN', confidence: 1,
-        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }] })
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }, identityAnswer] })
     })
     vi.stubGlobal('fetch', provider)
     const result = await requestCase(state, 'classification-3-0', 'decisions', {}, transport('production'))
