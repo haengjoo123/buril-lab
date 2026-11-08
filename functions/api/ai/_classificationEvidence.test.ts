@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { identityEvidenceBlocks, lookupClassificationIdentity, resetClassificationIdentityCache, strictFormulaKey } from './_classificationEvidence'
+import { classificationFormulaEvidence, identityEvidenceBlocks, lookupClassificationIdentity, resetClassificationIdentityCache, strictFormulaKey } from './_classificationEvidence'
 import { buildClassificationDecisionTask, prepareClassificationDecisionTask } from './classify'
 import { parseDecision } from './_decisions'
 
@@ -23,6 +23,10 @@ describe('classification CAS reference evidence', () => {
     expect(identityEvidenceBlocks({ casNumber: '7647-01-0', molecularFormula: 'HCl' }, evidence)).toBe(false)
     expect(identityEvidenceBlocks({ casNumber: '7647-01-0', molecularFormula: 'NaOH' }, evidence)).toBe(true)
     expect(identityEvidenceBlocks({ casNumber: '1310-73-2' }, evidence)).toBe(true)
+    expect(classificationFormulaEvidence('HCl', evidence)).toMatchObject({ comparison: 'equivalent', referenceElements: { Cl: 1, H: 1 } })
+    expect(classificationFormulaEvidence('NaOH', evidence).comparison).toBe('conflicting')
+    expect(classificationFormulaEvidence('', evidence)).toMatchObject({ comparison: 'not_supplied', referenceElements: { Cl: 1, H: 1 } })
+    expect(classificationFormulaEvidence('HCl', { status: 'not_supplied', cacheHit: false }).comparison).toBe('no_cas_to_compare')
   })
   it('blocks a mismatched formula regardless of a model assigning probability one', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => response()))

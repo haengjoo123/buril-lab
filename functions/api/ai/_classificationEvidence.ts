@@ -40,6 +40,15 @@ export function identityEvidenceBlocks(chemical: { casNumber?: string; molecular
   return !declared || !reference || declared !== reference
 }
 
+export function classificationFormulaEvidence(formula: string | undefined, evidence?: ClassificationIdentityEvidence) {
+  const declared = strictFormulaKey(formula)
+  const reference = evidence?.status === 'available' ? strictFormulaKey(evidence.molecularFormula) : null
+  return { comparison: !formula?.trim() ? 'not_supplied' : !declared ? 'unsupported_notation' : !reference
+    ? evidence?.status === 'not_supplied' ? 'no_cas_to_compare' : 'reference_unavailable' : declared === reference ? 'equivalent' : 'conflicting',
+    declaredComposition: declared, referenceComposition: reference,
+    referenceElements: reference ? Object.fromEntries(reference.split('|').map(part => { const [element, count] = part.split(':'); return [element, Number(count)] })) : null }
+}
+
 async function fetchIdentity(cas: string): Promise<ClassificationIdentityEvidence> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
