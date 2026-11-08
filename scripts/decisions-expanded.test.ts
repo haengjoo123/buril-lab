@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 // @ts-expect-error Shared corpus is JavaScript.
-import { expandedDecisionFixtures } from './decisions-expanded-fixtures.mjs'
+import { expandedDecisionFixtures, identityBoundaryFixtures } from './decisions-expanded-fixtures.mjs'
 // @ts-expect-error Standalone evaluator is JavaScript.
 import { analyzeExpanded, expandedManifest, runExpanded } from './decisions-expanded.mjs'
 // @ts-expect-error Standalone grant tool is JavaScript.
@@ -28,6 +28,12 @@ describe('expanded evaluation validity and execution', () => {
       expect(new Set(cases.map(item => item.scenario)).size).toBe(20)
     }
     expect(fixtures.every(item => item.humanReviewed === false)).toBe(true)
+  })
+  it('keeps same-formula identity conflicts separate from the frozen comparison denominator', () => {
+    const guards = identityBoundaryFixtures()
+    expect(guards).toHaveLength(4)
+    expect(guards.every((item: Fixture) => item.expected === null && !fixtures.some(f => f.id === item.id))).toBe(true)
+    expect(expandedManifest().sha256).toBe('c0d3cb5e939235006b673d9e851f4f3f82fad56ce11eaf4dffe31374dfce844e')
   })
   it('fixes the corpus before live results; ignores no failures and rejects changed labels', () => {
     const fixture = fixtures[0], ids = [fixture.id]

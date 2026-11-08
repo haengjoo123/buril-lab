@@ -122,3 +122,19 @@ export function expandedDecisionFixtures() {
   }))
   return [...voice, ...classification]
 }
+
+// Separate guard set: same elemental composition does not prove identity.
+// Authored before v5 live evaluation; never part of the 1,000-case denominator.
+export function identityBoundaryFixtures() {
+  return [
+    ['Ethanol', 'C2H6O', '115-10-6', 'Dimethyl ether'],
+    ['Acetone', 'C3H6O', '123-38-6', 'Propanal'],
+    ['Isopropanol', 'C3H8O', '71-23-8', '1-Propanol'],
+    ['n-Hexane', 'C6H14', '107-83-5', '2-Methylpentane'],
+  ].map(([name, molecularFormula, casNumber, referenceName], n) => ({
+    id: `identity-boundary-${n}`, feature: 'classification', expected: null,
+    input: { name, molecularFormula, casNumber }, referenceName,
+    identityReference: `https://pubchem.ncbi.nlm.nih.gov/compound/${casNumber}`,
+    provenance: 'synthetic-same-formula-different-identity', humanReviewed: false,
+  }))
+}

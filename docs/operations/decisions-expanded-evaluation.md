@@ -76,6 +76,12 @@ reference preparation runs inside waitUntil after the legacy response, so it
 does not add source latency to the user's response. Report reference cold/warm
 latency and unavailable counts separately from app cache and model errors.
 
+Four additional, separately reported identity-boundary guards pair a declared
+name with the CAS of a different isomer having the SAME molecular formula.
+The arithmetic formula gate alone cannot reject them. They test whether the
+model uses the readable reference identity, and are authored before v5 live
+evaluation. They do not change the frozen 2,000 inputs or their denominators.
+
 ## Explicit paid execution
 
 Use the protected main CI -> staging -> production release pipeline. Verify
