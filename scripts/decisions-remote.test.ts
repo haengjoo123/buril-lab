@@ -1,11 +1,12 @@
 import { mkdtemp, readFile, unlink, rmdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 // @ts-expect-error The remotely usable CLI is JavaScript.
 import { prepare, runRemote, requestCase, evaluationTarget } from './decisions-remote.mjs'
 let directory: string | undefined
 afterEach(async () => {
+  vi.restoreAllMocks()
   if (!directory) return
   await Promise.allSettled(['private.json', 'grant.json', 'report.json'].map(name => unlink(join(directory!, name))))
   await rmdir(directory)
@@ -13,6 +14,20 @@ afterEach(async () => {
 })
 const credentials = { clientId: 'test-access-id', clientSecret: 'test-access-secret' }
 describe('remote evaluation report retention', () => {
+  it('uses a single numeric timestamp for the strict fifteen-second JWT lifetime', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
+    await prepare(directory, ['classification-3-0'], 'production')
+    const state = JSON.parse(await readFile(join(directory, 'private.json'), 'utf8'))
+    const now = vi.spyOn(Date, 'now').mockReturnValue(2_999)
+    await requestCase(state, 'classification-3-0', 'probe', {}, async (_url: string, init: RequestInit) => {
+      const token = (init.headers as Record<string, string>).Authorization.slice(7)
+      const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+      expect(claims.iat).toBe(2)
+      expect(claims.exp).toBe(17)
+      expect(now).toHaveBeenCalledTimes(1)
+      return Response.json({ id: 'classification-3-0', backend: 'probe', error: false })
+    })
+  })
   it('checkpoints a completed backend and resumes explicitly without repeating it', async () => {
     directory = await mkdtemp(join(tmpdir(), 'buril-decisions-eval-'))
     await prepare(directory, ['classification-3-0'], 'production')
