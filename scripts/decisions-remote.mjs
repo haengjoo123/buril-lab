@@ -73,7 +73,8 @@ async function main() {
     }
     if (!ready) throw new Error('Grant not installed in time')
   }
-  await runRemote(state, value('--output'), credentials)
+  const rows = await runRemote(state, value('--output'), credentials)
+  if (rows.some(row => row.legacy.error || row.decisions.error)) throw new Error('Provider execution failed; report retained')
   console.log('Remote evaluation completed. Review the report; production remains unchanged.')
 }
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/decisions-remote.mjs')) main().catch(() => {

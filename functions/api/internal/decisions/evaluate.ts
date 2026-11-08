@@ -28,7 +28,8 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   const headers = { 'Cache-Control': 'no-store' }
   const respond = (data: unknown, status = 200) => json(data, { status, headers })
   if (context.env.APP_ENVIRONMENT !== 'staging') return respond({ code: 'NOT_FOUND' }, 404)
-  const token = context.request.headers.get('Authorization')?.replace(/^Bearer /, '')
+  const authorization = context.request.headers.get('Authorization')
+  const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null
   if (!token || token.length > 4096) return respond({ code: 'AUTH_REQUIRED' }, 401)
   let body: z.infer<typeof bodySchema>
   try {
