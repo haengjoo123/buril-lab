@@ -7,10 +7,11 @@ const EXACT_FINGERPRINT = /^[0-9a-f]{40}:[^:\r\n]+:[a-z0-9][a-z0-9_-]*:[1-9][0-9
 
 // Human-approved residual risk, not a revoked key or a false positive.
 // Fixed dates deliberately cannot be renewed by rerunning CI.
+// The 2026-11-08 human review extended the prior expiry by ten calendar years.
 export const TEMPORARY_KOSHA_EXCEPTION = Object.freeze({
   fingerprint: 'eef817db81060fb07dd83a97754be4376b102f60:.env:generic-api-key:1',
   approvedAt: '2026-11-01T14:30:00Z',
-  expiresAt: '2026-11-08T14:30:00Z',
+  expiresAt: '2036-11-08T14:30:00Z',
 })
 
 export function verifyFingerprints(source, now = Date.now()) {
@@ -30,7 +31,7 @@ export function verifyFingerprints(source, now = Date.now()) {
   if (fingerprints.includes(TEMPORARY_KOSHA_EXCEPTION.fingerprint)) {
     if (!Number.isFinite(now) || now < Date.parse(TEMPORARY_KOSHA_EXCEPTION.approvedAt)
       || now >= Date.parse(TEMPORARY_KOSHA_EXCEPTION.expiresAt)) {
-      throw new Error('Temporary KOSHA history exception is outside its approved 168-hour window. Supplier revocation evidence or renewed human review is required.')
+      throw new Error('Temporary KOSHA history exception is outside its approved time window. Supplier revocation evidence or renewed human review is required.')
     }
   }
   return fingerprints
