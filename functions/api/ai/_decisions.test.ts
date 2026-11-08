@@ -3,6 +3,7 @@ import { decisionMode, evaluateDecision, parseDecision, runDecisionTask, type Ch
 import { onRequestPost } from './classify'
 import { resolveCandidateWithOpenAI } from '../voice/_reagentAliases'
 
+const identityAnswer = { type: 'choice', name: 'classification_identity', choice: 'matching_identity', confidence: 1, probabilities: [{ value: 'matching_identity', probability: 1 }, { value: 'review', probability: 0 }] }
 const task: ChoiceTask = { feature: 'classification', input: 'sample', instructions: 'classify',
   choices: [{ value: 'ACID' }, { value: 'UNKNOWN' }], abstain: 'UNKNOWN', safetyIdentifier: 'hashed' }
 const config = (mode: string) => ({ voiceCandidate: mode, classification: mode, shadowSampleRate: 1, expiresAt: '2099-01-01T00:00:00Z' })
@@ -108,11 +109,11 @@ describe('feature integration', () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
       const body = JSON.parse(init!.body as string)
       return Response.json({ model: 'gpt-6-luna', answers: [{ type: 'choice', name: 'classification', choice: 'ACID', confidence: 0.4,
-        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'ACID' ? 0.99 : 0.01 / 9 })) }] })
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'ACID' ? 0.99 : 0.01 / 9 })) }, identityAnswer] })
     }))
     const response = await onRequestPost({ env: env('active'), data: { userId: 'user' },
       request: new Request('https://example.com/api/ai/classify', { method: 'POST', body: JSON.stringify({ chemical: { name: 'Hydrochloric acid' } }) }) })
-    expect(await response.json()).toMatchObject({ category: 'ACID', confidence: 0.4, reason: expect.any(String), responseSource: 'ai', decision: { choiceProbability: 0.99, policyVersion: 'classification:v3' } })
+    expect(await response.json()).toMatchObject({ category: 'ACID', confidence: 0.4, reason: expect.any(String), responseSource: 'ai', decision: { choiceProbability: 0.99, policyVersion: 'classification:v4' } })
   })
   it('does not resolve indistinguishable bottles even at high model probability', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {

@@ -31,9 +31,12 @@ describe('expanded evaluation validity and execution', () => {
   })
   it('fixes the corpus before live results; ignores no failures and rejects changed labels', () => {
     const fixture = fixtures[0], ids = [fixture.id]
-    const rows = ['legacy', 'decisionsV2', 'decisions'].map(backend => ({ ...fixture, backend, choice: fixture.expected, error: false, elapsedMs: 1 }))
+    const rows = ['legacy', 'decisionsV2', 'decisions'].map(backend => ({ ...fixture, backend, choice: fixture.expected, error: false, elapsedMs: 1,
+      usage: backend === 'legacy' ? { inputTokens: 123, outputTokens: 45 } : { input_tokens: 456, output_tokens: 0 } }))
     const report = analyzeExpanded(rows, ids)
     expect(report.complete).toBe(true)
+    expect(report.groups.all.voiceCandidate.legacy.usage).toMatchObject({ inputTokens: 123, outputTokens: 45 })
+    expect(report.groups.all.voiceCandidate.decisions.usage).toMatchObject({ inputTokens: 456, outputTokens: 0 })
     expect(report.groups.all.voiceCandidate.targetPassed).toBe(false) // equal adoption is not a win
     rows[2].error = true; rows[2].choice = null
     expect(analyzeExpanded(rows, ids).groups.all.voiceCandidate.decisions).toMatchObject({ errors: 1, abstained: 0, correct: 0 })

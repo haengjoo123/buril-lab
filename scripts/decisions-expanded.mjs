@@ -31,7 +31,7 @@ export function analyzeExpanded(records, ids = expandedDecisionFixtures().map(it
     const usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0 }
     for (const item of results) {
       const u = item.usage ?? {}
-      usage.inputTokens += u.input_tokens ?? 0; usage.outputTokens += u.output_tokens ?? 0
+      usage.inputTokens += u.input_tokens ?? u.inputTokens ?? 0; usage.outputTokens += u.output_tokens ?? u.outputTokens ?? 0
       usage.cachedTokens += u.input_tokens_details?.cached_tokens ?? 0; usage.cacheWriteTokens += u.input_tokens_details?.cache_write_tokens ?? 0
     }
     const answerable = cases.filter(item => item.expected !== null).length

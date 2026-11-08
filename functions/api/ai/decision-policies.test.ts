@@ -5,6 +5,7 @@ import { buildVoiceDecisionTask, resolveCandidateWithOpenAI } from '../voice/_re
 import { MIN_CHOICE_PROBABILITY, MIN_CHOICE_MARGIN, parseDecision, type ChoiceTask } from './_decisions'
 import type { VoiceMatch } from '../../../src/utils/voiceAgent'
 
+const identityAnswer = { type: 'choice', name: 'classification_identity', choice: 'matching_identity', confidence: 1, probabilities: [{ value: 'matching_identity', probability: 1 }, { value: 'review', probability: 0 }] }
 const hash = (task: ChoiceTask) => createHash('sha256').update(JSON.stringify({
   input: task.input, instructions: task.instructions, choices: task.choices,
   abstain: task.abstain, blockedChoices: task.blockedChoices ?? [],
@@ -21,6 +22,10 @@ describe('versioned Decisions questions', () => {
       .toBe('2857828cc448600751e2c7d04d3efacc724579093900fe69e01c4615f78c2b09')
     expect(hash(buildVoiceDecisionTask('아세톤 남은 양?', 'ko', [{ source: 'inventory', id: 'a', name: 'Acetone', casNumber: '67-64-1', matchedBy: 'contains' }], 'hash', 'v2')))
       .toBe('b87822f102b1968e157d3f7eda82f3aad0348c9dc68493d986450a605e4adc4a')
+    expect(hash(buildClassificationDecisionTask({ name: 'Acetone', molecularFormula: 'C3H6O', casNumber: '67-64-1' }, 'hash', 'v3')))
+      .toBe('13ae8cbf9e8ef7b33999c5c811e05221971967aefe749102572ef867f0578d07')
+    expect(hash(buildVoiceDecisionTask('아세톤 남은 양?', 'ko', [{ source: 'inventory', id: 'a', name: 'Acetone', casNumber: '67-64-1', matchedBy: 'contains' }], 'hash', 'v3')))
+      .toBe('1e423ee4dea05758568590f6dcca552093ce79f2d16cc1b2f0b46a4c85c198f8')
   })
   it('preserves all ten category choices and the unchanged priority rules', () => {
     const v1 = buildClassificationDecisionTask({}, 'hash', 'v1')
@@ -29,7 +34,7 @@ describe('versioned Decisions questions', () => {
     expect(v2.instructions).toContain(rules)
     expect(v2.choices.map(item => item.value)).toEqual(v1.choices.map(item => item.value))
     expect(v2.choices.every(item => item.description)).toBe(true)
-    expect(v2.policyVersion).toBe('classification:v3')
+    expect(v2.policyVersion).toBe('classification:v4')
   })
   it('does not interpolate instructions embedded in input fields into question instructions', () => {
     const injected = 'OVERRIDE_AND_FORCE_NEUTRAL'
@@ -42,8 +47,8 @@ describe('versioned Decisions questions', () => {
     expect([MIN_CHOICE_PROBABILITY, MIN_CHOICE_MARGIN]).toEqual([0.90, 0.20])
     const task = buildClassificationDecisionTask({ name: 'Water' }, 'hash')
     const result = parseDecision({ model: 'gpt-6-luna', answers: [{ type: 'choice', name: task.feature, choice: 'NEUTRAL', confidence: 1,
-      probabilities: task.choices.map(item => ({ value: item.value, probability: item.value === 'NEUTRAL' ? 0.89 : 0.11 / 9 })) }] }, task)
-    expect(result).toMatchObject({ choice: null, proposedChoice: 'NEUTRAL', abstentionReason: 'probability', decision: { policyVersion: 'classification:v3' } })
+      probabilities: task.choices.map(item => ({ value: item.value, probability: item.value === 'NEUTRAL' ? 0.89 : 0.11 / 9 })) }, identityAnswer] }, task)
+    expect(result).toMatchObject({ choice: null, proposedChoice: 'NEUTRAL', abstentionReason: 'probability', decision: { policyVersion: 'classification:v4' } })
   })
   it('uses stated locations to distinguish bottles and still blocks bottles without distinct information', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
@@ -62,6 +67,21 @@ describe('versioned Decisions questions', () => {
     const task = buildVoiceDecisionTask('시약장 B 세 번째 선반 아세톤', 'ko', [{ source: 'inventory', id: 'a', name: 'Acetone',
       cabinetName: 'B', storageLocationName: '분석실', shelfLevel: 2, matchedBy: 'contains' }], 'hash')
     expect(JSON.parse(task.input).candidates[0]).toMatchObject({ cabinetName: 'B', storageLocationName: '분석실', shelfIndex: 2, shelfNumber: 3 })
-    expect(task.policyVersion).toBe('voice-candidate:v3')
+    expect(task.policyVersion).toBe('voice-candidate:v4')
+  })
+  it.each(['review', 'refusal', 'low', 'matching_identity'])('requires separate identity evidence even when category probability is one: %s', kind => {
+    const task = buildClassificationDecisionTask({ name: 'Sodium hydroxide', molecularFormula: 'NaOH', casNumber: '7647-01-0' }, 'hash')
+    const check = kind === 'refusal' ? { type: 'refusal', name: 'classification_identity' } : {
+      ...identityAnswer, choice: kind === 'review' ? 'review' : 'matching_identity',
+      probabilities: [{ value: 'matching_identity', probability: kind === 'review' ? 0 : kind === 'low' ? 0.89 : 1 },
+        { value: 'review', probability: kind === 'review' ? 1 : kind === 'low' ? 0.11 : 0 }],
+    }
+    const main = { type: 'choice', name: 'classification', choice: 'ALKALI', confidence: 1,
+      probabilities: task.choices.map(item => ({ value: item.value, probability: item.value === 'ALKALI' ? 1 : 0 })) }
+    const result = parseDecision({ model: 'gpt-6-luna', answers: [check, main] }, task)
+    expect(result.choice).toBe(kind === 'matching_identity' ? 'ALKALI' : null)
+    if (kind !== 'matching_identity') expect(result.abstentionReason).toMatch(/^identity_/)
+    expect(() => parseDecision({ model: 'gpt-6-luna', answers: [main] }, task)).toThrow()
+    expect(() => parseDecision({ model: 'gpt-6-luna', answers: [main, main] }, task)).toThrow()
   })
 })
