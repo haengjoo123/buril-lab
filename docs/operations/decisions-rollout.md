@@ -33,9 +33,9 @@ Cloudflare의 스테이징·운영 Pages 프로젝트에 두 secret이 등록되
 
 ### Cloudflare 서버에서 원격 평가
 
-`POST /api/internal/decisions/evaluate`는 staging 환경에서만 동작한다. Cloudflare Access와 별도로, 1시간 이하의 공개키 grant 및 15초짜리 Ed25519 서명 JWT를 검증한다. 운영·grant 누락·만료·잘못된 서명·범위 밖 사례는 AI 호출 전에 거부한다. 요청에는 고정 합성 사례 ID와 backend만 들어간다. 사용자 프롬프트·재고·키를 전송하는 실행 경로가 아니다.
+`POST /api/internal/decisions/evaluate`는 staging 및 운영의 명시적인 임시 평가에 사용한다. 1시간 이하의 환경별 공개키 grant 및 15초짜리 Ed25519 서명 JWT를 검증한다. staging에는 기존 Cloudflare Access도 필요하다. 운영은 `https://burillab.com`에서만 허용하며, 유효한 production grant가 없으면 404다. grant 환경, JWT audience, 사례·backend 범위를 검증하고 preview 환경은 거부한다. 요청에는 고정 합성 사례 ID와 backend만 들어간다. 사용자 프롬프트·재고·키를 전송하는 실행 경로가 아니다.
 
-서버는 실제 제품 경로와 같은 질문 생성기·스키마를 사용하며, DB/분류 캐시/별칭 저장 없이 해당 API를 한 번만 호출한다. 기술적 오류는 502의 평가 실패로 기록하며 다른 API로 대체하지 않는다. 결과에는 ID, 모델, 판정, 서버 측 지연과 토큰 사용량만 반환한다. 원격 보고서는 별도 가격 적용 전까지 비용 미완결로 표시한다.
+서버는 실제 제품 경로와 같은 질문 생성기·스키마를 사용하며, DB/분류 캐시/별칭 저장 없이 해당 API를 한 번만 호출한다. 공급자 오류는 HTTP 200의 평가 결과 안에 `error:true`, `providerStatus`, 형식 제한한 `providerCode`로 기록하고 다른 API로 대체하지 않는다. 이는 Cloudflare edge의 비 JSON 5xx 처리가 진단 결과를 지우지 않게 하기 위한 전송 계약이다. 실패 결과가 있으면 workflow는 실패한다. 전송 자체의 실패는 부분 보고서의 `incompleteCase`에 남긴다. 결과에는 ID, 모델, 판정, 서버 측 지연과 토큰 사용량을 반환하고 공급자 오류 원문은 포함하지 않는다. 원격 보고서는 별도 가격 적용 전까지 비용 미완결로 표시한다.
 
 1. 기존 Web release 절차로 새 코드를 staging에 배포한다. production 승격은 평가에 필요하지 않다.
 2. main의 **Decisions remote evaluation** workflow를 실행한다. 최초에는 `smoke=true`로 음성·분류 각 1건(총 4 API 호출)을 선택한다.
@@ -51,6 +51,16 @@ workflow는 5분 동안 유료 호출이 없는 signed probe로 grant 설치를 
 5. 종료 후 등록한 grant ID가 현재 키와 같은지 확인하고 해당 키를 삭제한다. 등록·삭제는 기존 `runtime_config`, `ai_decisions_config`를 변경하지 않는다. grant는 만료되며 각 요청은 15초 후 재사용할 수 없다. 15초 이내 동일 서명 재전송을 강하게 중복 제거하는 저장소는 없으므로 클라이언트는 재시도·병렬 실행하지 않는다. 네트워크 응답을 잃은 경우 유료 호출이 이미 실행됐을 수 있다.
 
 로컬에서 Access 자격증명을 사용할 수 있다면 동일 CLI의 `--prepare <ignored-directory> --smoke`, 이후 `--state <directory>/private.json --output tmp/decisions-remote.json`을 사용한다. 개인키 파일을 Git이나 artifact에 포함하지 않는다. OpenAI 키는 로컬에 필요하지 않다.
+
+사용자가 운영 키 비교를 요청한 경우 아래처럼 로컬에서 production 전용 서명 상태를 준비한다. 기존 GitHub 평가 workflow는 staging 전용으로 유지한다. 운영 서버는 기존 secret을 사용하며 로컬에는 OpenAI 키가 필요 없다.
+
+```powershell
+node scripts/decisions-remote.mjs --prepare output/decisions-production-smoke --environment production --smoke
+npx wrangler kv key put ai_decisions_evaluation --namespace-id <검증한-production-namespace-id> --path output/decisions-production-smoke/grant.json --ttl 3600 --remote
+node scripts/decisions-remote.mjs --state output/decisions-production-smoke/private.json --output output/decisions-production-smoke/report.json --wait-grant
+```
+
+네 호출이 성공한 뒤에만 전체 평가로 확대한다. 종료 후 현재 grant ID가 해당 실행과 같은지 확인하고 운영의 `ai_decisions_evaluation`를 삭제한 뒤 로컬 `private.json`도 제거한다. KV 전파 후 서명 probe 거부와 미인증 404를 확인한다. `ai_decisions_config` 및 `runtime_config`와 서버 secret은 이 평가로 변경하지 않는다. 비교는 DB·재고·별칭·분류 캐시를 쓰지 않는 고정 합성 사례이며, 실제 사용자 shadow 관찰이나 독립 정답 평가를 대체하지 않는다.
 
 ```powershell
 node scripts/evaluate-decisions.mjs --live --fixtures <검토된-평가셋.json> --output tmp/decisions-evaluation.json --responses-input-per-million <입력요율> --responses-output-per-million <출력요율> --responses-cached-input-per-million <캐시입력요율>

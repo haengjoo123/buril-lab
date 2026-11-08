@@ -319,7 +319,8 @@ export function createApiMiddleware(dependencies: MiddlewareDependencies = {}): 
 
     // Evaluation uses a short-lived, public-key grant, never a Supabase JWT.
     if (policy.id === '/api/internal/decisions/evaluate') {
-      if (env.APP_ENVIRONMENT !== 'staging') return respond(json({ code: 'NOT_FOUND' }, { status: 404 }))
+      if (env.APP_ENVIRONMENT !== 'staging' && !(env.APP_ENVIRONMENT === 'production'
+        && new URL(request.url).origin === 'https://burillab.com')) return respond(json({ code: 'NOT_FOUND' }, { status: 404 }))
       try {
         const bytes = await readLimitedRequestBytes(request, getApiRequestBodyLimit(policy))
         return respond(await next(new Request(request, { body: bytes })))
