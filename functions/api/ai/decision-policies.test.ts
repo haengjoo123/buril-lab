@@ -34,7 +34,7 @@ describe('versioned Decisions questions', () => {
     expect(v2.instructions).toContain(rules)
     expect(v2.choices.map(item => item.value)).toEqual(v1.choices.map(item => item.value))
     expect(v2.choices.every(item => item.description)).toBe(true)
-    expect(v2.policyVersion).toBe('classification:v4')
+    expect(v2.policyVersion).toBe('classification:v5')
   })
   it('does not interpolate instructions embedded in input fields into question instructions', () => {
     const injected = 'OVERRIDE_AND_FORCE_NEUTRAL'
@@ -47,8 +47,8 @@ describe('versioned Decisions questions', () => {
     expect([MIN_CHOICE_PROBABILITY, MIN_CHOICE_MARGIN]).toEqual([0.90, 0.20])
     const task = buildClassificationDecisionTask({ name: 'Water' }, 'hash')
     const result = parseDecision({ model: 'gpt-6-luna', answers: [{ type: 'choice', name: task.feature, choice: 'NEUTRAL', confidence: 1,
-      probabilities: task.choices.map(item => ({ value: item.value, probability: item.value === 'NEUTRAL' ? 0.89 : 0.11 / 9 })) }, identityAnswer] }, task)
-    expect(result).toMatchObject({ choice: null, proposedChoice: 'NEUTRAL', abstentionReason: 'probability', decision: { policyVersion: 'classification:v4' } })
+      probabilities: task.choices.map(item => ({ value: item.value, probability: item.value === 'NEUTRAL' ? 0.89 : 0.11 / 9 })) }] }, task)
+    expect(result).toMatchObject({ choice: null, proposedChoice: 'NEUTRAL', abstentionReason: 'probability', decision: { policyVersion: 'classification:v5' } })
   })
   it('uses stated locations to distinguish bottles and still blocks bottles without distinct information', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
@@ -70,7 +70,7 @@ describe('versioned Decisions questions', () => {
     expect(task.policyVersion).toBe('voice-candidate:v4')
   })
   it.each(['review', 'refusal', 'low', 'matching_identity'])('requires separate identity evidence even when category probability is one: %s', kind => {
-    const task = buildClassificationDecisionTask({ name: 'Sodium hydroxide', molecularFormula: 'NaOH', casNumber: '7647-01-0' }, 'hash')
+    const task = buildClassificationDecisionTask({ name: 'Sodium hydroxide', molecularFormula: 'NaOH', casNumber: '7647-01-0' }, 'hash', 'v4')
     const check = kind === 'refusal' ? { type: 'refusal', name: 'classification_identity' } : {
       ...identityAnswer, choice: kind === 'review' ? 'review' : 'matching_identity',
       probabilities: [{ value: 'matching_identity', probability: kind === 'review' ? 0 : kind === 'low' ? 0.89 : 1 },

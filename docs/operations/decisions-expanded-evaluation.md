@@ -52,6 +52,30 @@ intentional-abstention cases; all 150 answerable cases were already correct.
 Higher raw acceptance at zero wrong is mathematically impossible on that
 partition. This does not change the fixed corpus or the strict target.
 
+The v4 tuning-only run also failed: classification accepted 92/200 with three
+wrong CAS-conflict acceptances, and only 89/150 answerable cases were correct.
+The extra model question is not used by the selected v5 classification policy.
+Voice remains at v4. No validation outcomes were opened during these changes.
+
+Classification v5 fetches public PubChem title/formula evidence for a supplied,
+checksum-valid CAS. It keeps the original fields intact and supplies the readable
+reference separately to the existing category question. Equivalent formula
+notations are normalized; a CAS/formula mismatch blocks every non-UNKNOWN choice
+at the server even if the model reports probability one. An unavailable,
+ambiguous or unsupported reference requires review, without guessing or silently
+correcting the input. Name-only inputs do not require a CAS. This is assistance
+input consistency, not verification of the actual container or disposal approval.
+
+Each reference lookup is a credential-free GET with a two-second total deadline,
+no redirects/retries, schema and 16 KiB body bounds. A bounded process-local cache
+holds only successful public identity facts for 15 minutes, never model results.
+Reference status/cache metadata accompanies accepted results and is revalidated
+on classification cache hits. No reference lookup occurs on legacy, an existing
+legacy classification-cache hit, or an unsampled shadow request. Sampled shadow
+reference preparation runs inside waitUntil after the legacy response, so it
+does not add source latency to the user's response. Report reference cold/warm
+latency and unavailable counts separately from app cache and model errors.
+
 ## Explicit paid execution
 
 Use the protected main CI -> staging -> production release pipeline. Verify

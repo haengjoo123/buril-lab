@@ -2,16 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose'
 import { onRequestPost, EVALUATION_AUDIENCE, PRODUCTION_EVALUATION_AUDIENCE, EVALUATION_PATH } from './evaluate'
 import { createApiMiddleware } from '../../_middleware'
+import { resetClassificationIdentityCache } from '../../ai/_classificationEvidence'
 // @ts-expect-error The CLI is intentionally authored as JavaScript.
 import { requestCase } from '../../../../scripts/decisions-remote.mjs'
 
-const identityAnswer = { type: 'choice', name: 'classification_identity', choice: 'matching_identity', confidence: 1, probabilities: [{ value: 'matching_identity', probability: 1 }, { value: 'review', probability: 0 }] }
 let state: { grant: { environment?: string; id: string; expiresAt: string; publicKey: { kty: string; crv: string; x: string }; caseIds: string[] }; privateKey: JWK }
 beforeEach(async () => {
+  resetClassificationIdentityCache()
   const pair = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true })
   const pub = await exportJWK(pair.publicKey)
   state = { grant: { id: crypto.randomUUID(), expiresAt: new Date(Date.now() + 600_000).toISOString(),
-    publicKey: { kty: pub.kty!, crv: pub.crv!, x: pub.x! }, caseIds: ['classification-3-0', 'voice-3-0'] }, privateKey: await exportJWK(pair.privateKey) }
+    publicKey: { kty: pub.kty!, crv: pub.crv!, x: pub.x! }, caseIds: ['classification-3-0', 'classification-3-1', 'voice-3-0'] }, privateKey: await exportJWK(pair.privateKey) }
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 const credentials = { clientId: 'access-id', clientSecret: 'test-access-only' }
@@ -37,17 +38,21 @@ describe('signed remote evaluation through the real middleware and handler', () 
   })
   it('evaluates Decisions with server-only credentials, returns usage, never falls back', async () => {
     const provider = vi.fn(async (url, init) => {
+      if (String(url).startsWith('https://pubchem.ncbi.nlm.nih.gov/')) {
+        expect(init.headers.Authorization).toBeUndefined()
+        return Response.json({ PropertyTable: { Properties: [{ CID: 180, Title: 'Acetone', MolecularFormula: 'C3H6O' }] } })
+      }
       expect(url).toBe('https://api.openai.com/v1/decisions')
       expect(init.headers.Authorization).toBe('Bearer test-server-only-key')
       const body = JSON.parse(init.body)
       return Response.json({ model: 'gpt-6-luna', usage: { input_tokens: 10, output_tokens: 0 }, answers: [{ name: 'classification', type: 'choice', choice: 'ORGANIC_NON_HALOGEN', confidence: 0.1,
-        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'ORGANIC_NON_HALOGEN' ? 1 : 0 })) }, identityAnswer] })
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'ORGANIC_NON_HALOGEN' ? 1 : 0 })) }] })
     })
     vi.stubGlobal('fetch', provider)
-    const result = await requestCase(state, 'classification-3-0', 'decisions', credentials, transport())
+    const result = await requestCase(state, 'classification-3-1', 'decisions', credentials, transport())
     expect(result).toMatchObject({ choice: 'ORGANIC_NON_HALOGEN', usage: { input_tokens: 10 }, error: false })
     expect(JSON.stringify(result)).not.toContain('test-server')
-    expect(provider).toHaveBeenCalledTimes(1)
+    expect(provider).toHaveBeenCalledTimes(2)
   })
   it('records HTTP 503 as an evaluation error without calling Responses', async () => {
     const provider = vi.fn().mockResolvedValue(new Response('', { status: 503 })); vi.stubGlobal('fetch', provider)
@@ -60,7 +65,7 @@ describe('signed remote evaluation through the real middleware and handler', () 
       const body = JSON.parse(init.body)
       expect(body.questions[0].choices.every((item: { description?: string }) => !item.description)).toBe(true)
       return Response.json({ model: 'gpt-6-luna', answers: [{ name: 'classification', type: 'choice', choice: 'UNKNOWN', confidence: 0.5,
-        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }, ...(body.questions.length > 1 ? [identityAnswer] : [])] })
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }] })
     })
     vi.stubGlobal('fetch', provider)
     const result = await requestCase(state, 'classification-3-0', 'decisionsV1', credentials, transport())
@@ -93,15 +98,16 @@ describe('signed remote evaluation through the real middleware and handler', () 
   it('runs production-only signed calls on the canonical host using only server credentials', async () => {
     state.grant.environment = 'production'
     const provider = vi.fn(async (_url, init) => {
+      if (String(_url).startsWith('https://pubchem.ncbi.nlm.nih.gov/')) return Response.json({ PropertyTable: { Properties: [{ CID: 180, Title: 'Acetone', MolecularFormula: 'C3H6O' }] } })
       expect(init.headers.Authorization).toBe('Bearer test-server-only-key')
       const body = JSON.parse(init.body)
       return Response.json({ model: 'gpt-6-luna', answers: [{ name: 'classification', type: 'choice', choice: 'UNKNOWN', confidence: 1,
-        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }, identityAnswer] })
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }] })
     })
     vi.stubGlobal('fetch', provider)
-    const result = await requestCase(state, 'classification-3-0', 'decisions', {}, transport('production'))
+    const result = await requestCase(state, 'classification-3-1', 'decisions', {}, transport('production'))
     expect(result).toMatchObject({ choice: null, error: false })
-    expect(provider).toHaveBeenCalledTimes(1)
+    expect(provider).toHaveBeenCalledTimes(2)
   })
   it('keeps production closed without a grant, on preview hosts and in disabled previews', async () => {
     vi.stubGlobal('fetch', vi.fn())
