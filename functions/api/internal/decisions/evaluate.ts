@@ -78,8 +78,12 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     }
     return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
       choice, model, elapsedMs: Date.now() - started, usage: usage ?? null, error: false, cacheHit: false })
-  } catch {
+  } catch (error) {
+    const reportedStatus = error && typeof error === 'object' && 'status' in error ? error.status : null
+    const decisionStatus = error instanceof Error ? /^http_([45]\d\d)$/.exec(error.message)?.[1] : null
+    const providerStatus = typeof reportedStatus === 'number' && reportedStatus >= 400 && reportedStatus <= 599
+      ? reportedStatus : decisionStatus ? Number(decisionStatus) : null
     return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
-      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', cacheHit: false }, 502)
+      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', providerStatus, cacheHit: false }, 502)
   }
 }
