@@ -7,10 +7,17 @@ import { summarize } from './evaluate-decisions.mjs'
 
 export const AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const ENDPOINT = 'https://staging.burillab.com/api/internal/decisions/evaluate'
+export function evaluationTarget(environment = 'staging') {
+  if (environment === 'staging') return { audience: AUDIENCE, endpoint: ENDPOINT, execution: 'cloudflare-staging' }
+  if (environment === 'production') return { audience: 'burillab:production:decisions-evaluation:v1',
+    endpoint: 'https://burillab.com/api/internal/decisions/evaluate', execution: 'cloudflare-production' }
+  throw new Error('Unknown evaluation environment')
+}
 
-export async function prepare(directory, ids = decisionFixtures().map(item => item.id)) {
+export async function prepare(directory, ids = decisionFixtures().map(item => item.id), environment = 'staging') {
+  evaluationTarget(environment)
   const { publicKey, privateKey } = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true })
-  const grant = { id: randomUUID(), publicKey: await exportJWK(publicKey), expiresAt: new Date(Date.now() + 3_600_000).toISOString(), caseIds: ids }
+  const grant = { id: randomUUID(), environment, publicKey: await exportJWK(publicKey), expiresAt: new Date(Date.now() + 3_600_000).toISOString(), caseIds: ids }
   // Only the three public JWK fields are admitted by the server schema.
   grant.publicKey = { kty: grant.publicKey.kty, crv: grant.publicKey.crv, x: grant.publicKey.x }
   await mkdir(directory, { recursive: true })
@@ -19,13 +26,15 @@ export async function prepare(directory, ids = decisionFixtures().map(item => it
   return grant
 }
 export async function requestCase(state, caseId, backend, credentials, fetchImpl = fetch) {
-  if (!credentials.clientId || !credentials.clientSecret) throw new Error('Missing Staging Access credentials')
+  const target = evaluationTarget(state.grant.environment)
+  const staging = target.execution === 'cloudflare-staging'
+  if (staging && (!credentials.clientId || !credentials.clientSecret)) throw new Error('Missing Staging Access credentials')
   const key = await importJWK(state.privateKey, 'EdDSA')
   const token = await new SignJWT({}).setProtectedHeader({ alg: 'EdDSA' }).setIssuer(state.grant.id)
-    .setAudience(AUDIENCE).setSubject(`${caseId}:${backend}`).setIssuedAt().setExpirationTime('15s').sign(key)
-  const response = await fetchImpl(ENDPOINT, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
+    .setAudience(target.audience).setSubject(`${caseId}:${backend}`).setIssuedAt().setExpirationTime('15s').sign(key)
+  const response = await fetchImpl(target.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
-      'CF-Access-Client-Id': credentials.clientId, 'CF-Access-Client-Secret': credentials.clientSecret },
+      ...(staging ? { 'CF-Access-Client-Id': credentials.clientId, 'CF-Access-Client-Secret': credentials.clientSecret } : {}) },
     body: JSON.stringify({ caseId, backend }) })
   if (!response.headers.get('content-type')?.includes('application/json')) throw new Error(`REMOTE_${response.status}_NON_JSON`)
   const result = await response.json()
@@ -34,6 +43,7 @@ export async function requestCase(state, caseId, backend, credentials, fetchImpl
   return result
 }
 export async function runRemote(state, output, credentials, fetchImpl = fetch) {
+  const { execution } = evaluationTarget(state.grant.environment)
   const rows = []
   await mkdir(dirname(resolve(output)), { recursive: true })
   for (const id of state.grant.caseIds) {
@@ -43,7 +53,7 @@ export async function runRemote(state, output, credentials, fetchImpl = fetch) {
       try { result = await requestCase(state, id, backend, credentials, fetchImpl) }
       catch (error) {
         const diagnostic = error instanceof Error && /^REMOTE_\d{3}_[A-Z_]+$/.test(error.message) ? error.message : 'REMOTE_TRANSPORT_FAILED'
-        await writeFile(output, JSON.stringify({ execution: 'cloudflare-staging', grantId: state.grant.id,
+        await writeFile(output, JSON.stringify({ execution, grantId: state.grant.id,
           summary: summarize(rows), rows, incompleteCase: { id, backend, diagnostic } }, null, 2))
         throw new Error(diagnostic)
       }
@@ -56,7 +66,7 @@ export async function runRemote(state, output, credentials, fetchImpl = fetch) {
         costUsd: null }
     }
     rows.push(row)
-    await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution: 'cloudflare-staging',
+    await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution,
       grantId: state.grant.id, summary: summarize(rows), rows }, null, 2))
   }
   return rows
@@ -66,7 +76,7 @@ async function main() {
   if (args.includes('--prepare')) {
     const directory = resolve(value('--prepare'))
     const ids = args.includes('--smoke') ? ['voice-3-0', 'classification-3-0'] : undefined
-    const grant = await prepare(directory, ids)
+    const grant = await prepare(directory, ids, args.includes('--environment') ? value('--environment') : 'staging')
     console.log(JSON.stringify({ publicGrant: resolve(directory, 'grant.json'), expiresAt: grant.expiresAt, cases: grant.caseIds.length }))
     return
   }

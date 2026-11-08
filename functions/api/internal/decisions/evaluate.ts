@@ -13,8 +13,10 @@ import { decisionFixtures } from '../../../../scripts/decisions-fixtures.mjs'
 export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
+export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
 const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisions', 'probe']) }).strict()
 const grantSchema = z.object({
+  environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
   publicKey: z.object({ kty: z.literal('OKP'), crv: z.literal('Ed25519'), x: z.string() }).strict(),
   caseIds: z.array(z.string().max(80)).min(1).max(400),
@@ -27,7 +29,17 @@ const fixtures = new Map((decisionFixtures() as Fixture[]).map(item => [item.id,
 export async function onRequestPost(context: { request: Request; env: Env }) {
   const headers = { 'Cache-Control': 'no-store' }
   const respond = (data: unknown, status = 200) => json(data, { status, headers })
-  if (context.env.APP_ENVIRONMENT !== 'staging') return respond({ code: 'NOT_FOUND' }, 404)
+  const production = context.env.APP_ENVIRONMENT === 'production'
+  if (context.env.APP_ENVIRONMENT !== 'staging' && !production) return respond({ code: 'NOT_FOUND' }, 404)
+  if (production && new URL(context.request.url).origin !== 'https://burillab.com') return respond({ code: 'NOT_FOUND' }, 404)
+  // Production is closed unless an operator installs an environment-bound,
+  // short-lived public grant in its own KV. Never export the server secrets.
+  let grant: z.infer<typeof grantSchema>
+  try {
+    grant = grantSchema.parse(await context.env.BURILLAB_RUNTIME_CONFIG?.get(EVALUATION_GRANT_KEY, 'json'))
+    const remaining = Date.parse(grant.expiresAt) - Date.now()
+    if (grant.environment !== context.env.APP_ENVIRONMENT || remaining <= 0 || remaining > 3_600_000) throw new Error('inactive_grant')
+  } catch { return respond({ code: production ? 'NOT_FOUND' : 'GRANT_DENIED' }, production ? 404 : 403) }
   const authorization = context.request.headers.get('Authorization')
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null
   if (!token || token.length > 4096) return respond({ code: 'AUTH_REQUIRED' }, 401)
@@ -38,12 +50,10 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     body = bodySchema.parse(JSON.parse(text))
   } catch { return respond({ code: 'INVALID_CASE' }, 400) }
   try {
-    const raw = await context.env.BURILLAB_RUNTIME_CONFIG?.get(EVALUATION_GRANT_KEY, 'json')
-    const grant = grantSchema.parse(raw)
-    const remaining = Date.parse(grant.expiresAt) - Date.now()
-    if (remaining <= 0 || remaining > 3_600_000 || !grant.caseIds.includes(body.caseId)) return respond({ code: 'GRANT_DENIED' }, 403)
+    if (!grant.caseIds.includes(body.caseId)) return respond({ code: 'GRANT_DENIED' }, 403)
     const key = await importJWK(grant.publicKey, 'EdDSA')
-    const { payload } = await jwtVerify(token, key, { algorithms: ['EdDSA'], issuer: grant.id, audience: EVALUATION_AUDIENCE, maxTokenAge: '15s' })
+    const { payload } = await jwtVerify(token, key, { algorithms: ['EdDSA'], issuer: grant.id,
+      audience: production ? PRODUCTION_EVALUATION_AUDIENCE : EVALUATION_AUDIENCE, maxTokenAge: '15s' })
     if (payload.sub !== `${body.caseId}:${body.backend}` || typeof payload.exp !== 'number' || typeof payload.iat !== 'number' || payload.exp - payload.iat > 15) return respond({ code: 'GRANT_DENIED' }, 403)
   } catch { return respond({ code: 'GRANT_DENIED' }, 403) }
   const fixture = fixtures.get(body.caseId)
