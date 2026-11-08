@@ -41,9 +41,16 @@ describe('Decisions request, validation and rollout', () => {
     vi.stubGlobal('fetch', fetch)
     await evaluateDecision(env('active'), task)
     const body = JSON.parse(fetch.mock.calls[0][1].body)
+    expect(fetch.mock.calls[0][1].redirect).toBe('manual')
     expect(body).toMatchObject({ model: 'gpt-6-luna', safety_identifier: 'hashed', questions: [{ name: 'classification', type: 'choice' }] })
     expect(body).not.toHaveProperty('store')
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it('normalizes whitespace in server keys before constructing HTTP headers', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json(payload()))
+    vi.stubGlobal('fetch', fetch)
+    await evaluateDecision({ ...env('active'), OPENAI_API_KEY: ' test-only\r\n' }, task)
+    expect(fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer test-only')
   })
   it.each([429, 500, 503])('falls back once for HTTP %i', async status => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status })))

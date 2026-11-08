@@ -49,7 +49,8 @@ export async function runRemote(state, output, credentials, fetchImpl = fetch) {
       }
       row.feature = result.feature; row.expected = result.expected
       const u = result.usage || {}
-      row[backend] = { choice: result.choice, elapsedMs: result.elapsedMs, error: result.error, providerStatus: result.providerStatus ?? null, model: result.model,
+      row[backend] = { choice: result.choice, elapsedMs: result.elapsedMs, error: result.error, providerStatus: result.providerStatus ?? null,
+        providerCode: result.providerCode ?? null, errorKind: result.errorKind ?? null, model: result.model,
         usage: { inputTokens: u.input_tokens ?? u.inputTokens ?? 0, outputTokens: u.output_tokens ?? u.outputTokens ?? 0,
           cachedTokens: u.input_tokens_details?.cached_tokens ?? 0, cacheWriteTokens: u.input_tokens_details?.cache_write_tokens ?? 0 },
         costUsd: null }

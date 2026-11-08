@@ -83,9 +83,12 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     const decisionStatus = error instanceof Error ? /^http_([45]\d\d)$/.exec(error.message)?.[1] : null
     const providerStatus = typeof reportedStatus === 'number' && reportedStatus >= 400 && reportedStatus <= 599
       ? reportedStatus : decisionStatus ? Number(decisionStatus) : null
+    const rawCode = error && typeof error === 'object' && 'code' in error ? error.code : null
+    const providerCode = typeof rawCode === 'string' && /^[a-zA-Z0-9_]{1,64}$/.test(rawCode) ? rawCode : null
+    const errorKind = error instanceof Error && ['TypeError', 'ZodError', 'AbortError', 'TimeoutError'].includes(error.name) ? error.name : 'provider_error'
     return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
       // The evaluation itself completed. Keep provider failures in its typed
       // result so an edge-generated 5xx page cannot erase diagnostic evidence.
-      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', providerStatus, cacheHit: false })
+      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', providerStatus, providerCode, errorKind, cacheHit: false })
   }
 }
