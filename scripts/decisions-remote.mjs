@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose'
-import { decisionFixtures } from './decisions-fixtures.mjs'
+import { decisionFixtures, decisionGuardFixtures, allDecisionFixtures } from './decisions-fixtures.mjs'
 import { summarize } from './evaluate-decisions.mjs'
 
 export const AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
@@ -48,46 +48,51 @@ export async function requestCase(state, caseId, backend, credentials, fetchImpl
   if (result.id !== caseId || result.backend !== backend || typeof result.error !== 'boolean') throw new Error(`REMOTE_${response.status}_INVALID_RESULT`)
   return result
 }
-export async function runRemote(state, output, credentials, fetchImpl = fetch, { resume = false } = {}) {
+export async function runRemote(state, output, credentials, fetchImpl = fetch, { resume = false, compareV1 = false } = {}) {
   const { execution } = evaluationTarget(state.grant.environment)
+  const backends = ['legacy', ...(compareV1 ? ['decisionsV1'] : []), 'decisions']
   let rows = [], partialRow
   if (resume) {
     const previous = JSON.parse(await readFile(output, 'utf8'))
     if (previous.grantId !== state.grant.id || previous.execution !== execution || !Array.isArray(previous.rows)
-      || previous.rows.some(row => !state.grant.caseIds.includes(row.id) || !row.legacy || !row.decisions)
+      || JSON.stringify(previous.backends ?? ['legacy', 'decisions']) !== JSON.stringify(backends)
+      || previous.rows.some(row => !state.grant.caseIds.includes(row.id) || !row.legacy || !row.decisions || (compareV1 && !row.decisionsV1))
       || new Set(previous.rows.map(row => row.id)).size !== previous.rows.length) throw new Error('Resume report does not match this grant')
     rows = previous.rows
     partialRow = previous.partialRow
   }
   await mkdir(dirname(resolve(output)), { recursive: true })
+  const progress = () => ({ evaluatedAt: new Date().toISOString(), execution, grantId: state.grant.id, backends,
+    summary: summarize(rows.filter(row => !row.id.startsWith('guard-'))),
+    guardSummary: summarize(rows.filter(row => row.id.startsWith('guard-'))), rows })
   for (const id of state.grant.caseIds) {
     if (rows.some(row => row.id === id)) continue
     const row = partialRow?.id === id ? partialRow : { id, cacheHit: false }
-    for (const backend of ['legacy', 'decisions']) {
+    for (const backend of backends) {
       if (row[backend]) continue // Explicit resume never repeats a recorded provider call.
       let result
       try { result = await requestCase(state, id, backend, credentials, fetchImpl) }
       catch (error) {
         const diagnostic = error instanceof Error && /^REMOTE_\d{3}_[A-Z_]+$/.test(error.message) ? error.message : 'REMOTE_TRANSPORT_FAILED'
-        await writeFile(output, JSON.stringify({ execution, grantId: state.grant.id,
-          summary: summarize(rows), rows, partialRow: row, incompleteCase: { id, backend, diagnostic,
+        await writeFile(output, JSON.stringify({ ...progress(), partialRow: row, incompleteCase: { id, backend, diagnostic,
             serverCode: error?.serverCode ?? null, tokenLifetimeSeconds: error?.tokenLifetimeSeconds ?? null, tokenAgeSeconds: error?.tokenAgeSeconds ?? null } }, null, 2))
         throw new Error(diagnostic)
       }
       row.feature = result.feature; row.expected = result.expected
+      row.suite = id.startsWith('guard-') ? 'guards' : 'comparison'
       const u = result.usage || {}
       row[backend] = { choice: result.choice, elapsedMs: result.elapsedMs, error: result.error, providerStatus: result.providerStatus ?? null,
         providerCode: result.providerCode ?? null, errorKind: result.errorKind ?? null, model: result.model,
+        policyVersion: result.policyVersion ?? null, proposedChoice: result.proposedChoice ?? null,
+        outcome: result.outcome ?? null, abstentionReason: result.abstentionReason ?? null, decision: result.decision ?? null,
         usage: { inputTokens: u.input_tokens ?? u.inputTokens ?? 0, outputTokens: u.output_tokens ?? u.outputTokens ?? 0,
           cachedTokens: u.input_tokens_details?.cached_tokens ?? 0, cacheWriteTokens: u.input_tokens_details?.cache_write_tokens ?? 0 },
         costUsd: null }
       // Persist each backend immediately, even if the next signed request is rejected.
-      await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution,
-        grantId: state.grant.id, summary: summarize(rows), rows, partialRow: row }, null, 2))
+      await writeFile(output, JSON.stringify({ ...progress(), partialRow: row }, null, 2))
     }
     rows.push(row)
-    await writeFile(output, JSON.stringify({ evaluatedAt: new Date().toISOString(), execution,
-      grantId: state.grant.id, summary: summarize(rows), rows }, null, 2))
+    await writeFile(output, JSON.stringify(progress(), null, 2))
   }
   return rows
 }
@@ -95,7 +100,9 @@ async function main() {
   const args = process.argv.slice(2), value = flag => args[args.indexOf(flag) + 1]
   if (args.includes('--prepare')) {
     const directory = resolve(value('--prepare'))
-    const ids = args.includes('--smoke') ? ['voice-3-0', 'classification-3-0'] : undefined
+    const ids = args.includes('--all') ? allDecisionFixtures().map(item => item.id)
+      : args.includes('--guards') ? decisionGuardFixtures().map(item => item.id)
+      : args.includes('--smoke') ? ['voice-3-0', 'classification-3-0'] : undefined
     const grant = await prepare(directory, ids, args.includes('--environment') ? value('--environment') : 'staging')
     console.log(JSON.stringify({ publicGrant: resolve(directory, 'grant.json'), expiresAt: grant.expiresAt, cases: grant.caseIds.length }))
     return
@@ -111,8 +118,8 @@ async function main() {
     }
     if (!ready) throw new Error('Grant not installed in time')
   }
-  const rows = await runRemote(state, value('--output'), credentials, fetch, { resume: args.includes('--resume') })
-  if (rows.some(row => row.legacy.error || row.decisions.error)) throw new Error('Provider execution failed; report retained')
+  const rows = await runRemote(state, value('--output'), credentials, fetch, { resume: args.includes('--resume'), compareV1: args.includes('--compare-v1') })
+  if (rows.some(row => row.legacy.error || row.decisions.error || row.decisionsV1?.error)) throw new Error('Provider execution failed; report retained')
   console.log('Remote evaluation completed. Review the report; production remains unchanged.')
 }
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/decisions-remote.mjs')) main().catch(error => {

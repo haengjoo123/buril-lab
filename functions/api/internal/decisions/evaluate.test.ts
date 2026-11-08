@@ -54,6 +54,19 @@ describe('signed remote evaluation through the real middleware and handler', () 
     expect(result).toMatchObject({ error: true, code: 'EVALUATION_PROVIDER_FAILED' })
     expect(provider).toHaveBeenCalledTimes(1)
   })
+  it('evaluates the frozen v1 policy separately and returns abstention evidence', async () => {
+    const provider = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body)
+      expect(body.questions[0].choices.every((item: { description?: string }) => !item.description)).toBe(true)
+      return Response.json({ model: 'gpt-6-luna', answers: [{ name: 'classification', type: 'choice', choice: 'UNKNOWN', confidence: 0.5,
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === 'UNKNOWN' ? 1 : 0 })) }] })
+    })
+    vi.stubGlobal('fetch', provider)
+    const result = await requestCase(state, 'classification-3-0', 'decisionsV1', credentials, transport())
+    expect(result).toMatchObject({ choice: null, proposedChoice: 'UNKNOWN', policyVersion: 'classification:v1',
+      abstentionReason: 'explicit_review', decision: { policyVersion: 'classification:v1', choiceProbability: 1 } })
+    expect(provider).toHaveBeenCalledTimes(1)
+  })
   it('blocks cross-environment grants, expired grants and non-granted fixture ids before provider calls', async () => {
     const provider = vi.fn(); vi.stubGlobal('fetch', provider)
     await expect(requestCase(state, 'classification-3-0', 'decisions', credentials, transport('production'))).rejects.toThrow()

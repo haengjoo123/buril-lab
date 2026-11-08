@@ -8,23 +8,23 @@ import { buildVoiceDecisionTask, buildVoiceLegacyPrompt, candidateResolutionSche
 import type { VoiceMatch } from '../../../../src/utils/voiceAgent'
 // Fixed synthetic fixtures only. No caller-provided prompt, inventory or credential is accepted.
 // @ts-expect-error Shared CLI fixtures are JavaScript.
-import { decisionFixtures } from '../../../../scripts/decisions-fixtures.mjs'
+import { allDecisionFixtures } from '../../../../scripts/decisions-fixtures.mjs'
 
 export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
-const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisions', 'probe']) }).strict()
+const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisions', 'probe']) }).strict()
 const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
   publicKey: z.object({ kty: z.literal('OKP'), crv: z.literal('Ed25519'), x: z.string() }).strict(),
-  caseIds: z.array(z.string().max(80)).min(1).max(400),
+  caseIds: z.array(z.string().max(80)).min(1).max(480),
 }).strict()
 interface Fixture { id: string; feature: 'classification' | 'voiceCandidate'; expected: string | null;
   input: { name?: string; molecularFormula?: string; casNumber?: string; text: string; language: 'ko' | 'en'; matches: VoiceMatch[] } }
 type Env = DecisionsEnv & { APP_ENVIRONMENT?: string }
-const fixtures = new Map((decisionFixtures() as Fixture[]).map(item => [item.id, item]))
+const fixtures = new Map((allDecisionFixtures() as Fixture[]).map(item => [item.id, item]))
 
 export async function onRequestPost(context: { request: Request; env: Env }) {
   const headers = { 'Cache-Control': 'no-store' }
@@ -63,12 +63,15 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   const started = Date.now()
   try {
     const safety = await createSafetyIdentifier(context.env, 'decisions-evaluation-synthetic')
-    const task = fixture.feature === 'classification' ? buildClassificationDecisionTask(fixture.input, safety)
-      : buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety)
-    if (body.backend === 'decisions') {
+    const revision = body.backend === 'decisionsV1' ? 'v1' : 'v2'
+    const task = fixture.feature === 'classification' ? buildClassificationDecisionTask(fixture.input, safety, revision)
+      : buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety, revision)
+    if (body.backend === 'decisions' || body.backend === 'decisionsV1') {
       const result = await evaluateDecision(context.env, task)
       return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
-        choice: result.choice, model: 'gpt-6-luna', policyVersion: result.decision?.policyVersion ?? null,
+        choice: result.choice, model: 'gpt-6-luna', policyVersion: task.policyVersion,
+        proposedChoice: result.proposedChoice, outcome: result.outcome, abstentionReason: result.abstentionReason,
+        decision: result.decision ?? null,
         elapsedMs: Date.now() - started, usage: result.usage ?? null, error: false, cacheHit: false })
     }
     const candidates = fixture.input.matches?.slice(0, 120).map(match => ({ candidateId: `${match.source}:${match.id}`, name: match.name,

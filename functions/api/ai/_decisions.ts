@@ -8,7 +8,8 @@ export const DECISIONS_CONFIG_KEY = 'ai_decisions_config'
 export const MIN_CHOICE_PROBABILITY = 0.90
 export const MIN_CHOICE_MARGIN = 0.20
 export type DecisionFeature = 'voiceCandidate' | 'classification'
-export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v1', classification: 'classification:v1' } as const
+export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v2', classification: 'classification:v2' } as const
+export type DecisionPolicyRevision = 'v1' | 'v2'
 export type DecisionsEnv = OpenAIResponsesEnv & RuntimeConfigEnv
 export interface DecisionContext {
   env: DecisionsEnv
@@ -48,6 +49,7 @@ export interface DecisionMetadata {
   probabilities: Array<{ value: string; probability: number }>
 }
 export interface ChoiceTask {
+  policyVersion?: string
   feature: DecisionFeature
   input: string
   instructions: string
@@ -60,7 +62,7 @@ export function parseDecision(payload: unknown, task: ChoiceTask) {
   const parsed = resultSchema.parse(payload)
   const answer = parsed.answers[0]
   if (answer.name !== task.feature) throw new Error('invalid_answer_name')
-  if (answer.type === 'refusal') return { choice: null, decision: undefined, usage: parsed.usage, outcome: 'refusal' }
+  if (answer.type === 'refusal') return { choice: null, proposedChoice: null, abstentionReason: 'refusal', decision: undefined, usage: parsed.usage, outcome: 'refusal' }
   const values = new Set(task.choices.map(item => item.value))
   const supplied = new Set(answer.probabilities.map(item => item.value))
   if (!values.has(answer.choice) || supplied.size !== answer.probabilities.length || supplied.size !== values.size
@@ -69,9 +71,11 @@ export function parseDecision(payload: unknown, task: ChoiceTask) {
   const selected = answer.probabilities.find(item => item.value === answer.choice)!.probability
   const runnerUp = Math.max(0, ...answer.probabilities.filter(item => item.value !== answer.choice).map(item => item.probability))
   const accepted = answer.choice !== task.abstain && !task.blockedChoices?.includes(answer.choice) && selected >= MIN_CHOICE_PROBABILITY && selected - runnerUp + 1e-12 >= MIN_CHOICE_MARGIN
-  const decision: DecisionMetadata = { model: parsed.model, policyVersion: DECISION_POLICIES[task.feature],
+  const abstentionReason = accepted ? null : answer.choice === task.abstain ? 'explicit_review'
+    : task.blockedChoices?.includes(answer.choice) ? 'duplicate_identity' : selected < MIN_CHOICE_PROBABILITY ? 'probability' : 'margin'
+  const decision: DecisionMetadata = { model: parsed.model, policyVersion: task.policyVersion ?? DECISION_POLICIES[task.feature],
     confidence: answer.confidence, choiceProbability: selected, probabilities: answer.probabilities }
-  return { choice: accepted ? answer.choice : null, decision, usage: parsed.usage, outcome: accepted ? 'accepted' : 'abstained' }
+  return { choice: accepted ? answer.choice : null, proposedChoice: answer.choice, abstentionReason, decision, usage: parsed.usage, outcome: accepted ? 'accepted' : 'abstained' }
 }
 export async function evaluateDecision(env: DecisionsEnv, task: ChoiceTask) {
   const apiKey = env.OPENAI_API_KEY?.trim()
@@ -104,7 +108,7 @@ export async function evaluateDecision(env: DecisionsEnv, task: ChoiceTask) {
 }
 export function logDecision(context: DecisionContext, task: ChoiceTask, fields: Record<string, unknown>) {
   console.info(JSON.stringify({ event: 'ai_decision', requestId: context.data?.requestId ?? null,
-    feature: task.feature, model: DECISIONS_MODEL, policyVersion: DECISION_POLICIES[task.feature], cacheHit: false, ...fields }))
+    feature: task.feature, model: DECISIONS_MODEL, policyVersion: task.policyVersion ?? DECISION_POLICIES[task.feature], cacheHit: false, ...fields }))
 }
 export async function runDecisionTask<T>(context: DecisionContext, task: ChoiceTask,
   legacy: (bounded: boolean) => Promise<T>, selection: (value: T) => string | null) {
