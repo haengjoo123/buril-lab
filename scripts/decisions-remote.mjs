@@ -30,7 +30,9 @@ export async function requestCase(state, caseId, backend, credentials, fetchImpl
   const staging = target.execution === 'cloudflare-staging'
   if (staging && (!credentials.clientId || !credentials.clientSecret)) throw new Error('Missing Staging Access credentials')
   const key = await importJWK(state.privateKey, 'EdDSA')
-  const issuedAt = Math.floor(Date.now() / 1000)
+  // Backdate slightly so a subsecond clock difference cannot put iat in the
+  // verifier's future. Lifetime remains exactly 15s, leaving 13s for transit.
+  const issuedAt = Math.floor(Date.now() / 1000) - 2
   const token = await new SignJWT({}).setProtectedHeader({ alg: 'EdDSA' }).setIssuer(state.grant.id)
     .setAudience(target.audience).setSubject(`${caseId}:${backend}`).setIssuedAt(issuedAt).setExpirationTime(issuedAt + 15).sign(key)
   const response = await fetchImpl(target.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
