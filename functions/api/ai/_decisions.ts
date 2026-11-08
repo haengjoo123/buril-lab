@@ -74,6 +74,8 @@ export function parseDecision(payload: unknown, task: ChoiceTask) {
   return { choice: accepted ? answer.choice : null, decision, usage: parsed.usage, outcome: accepted ? 'accepted' : 'abstained' }
 }
 export async function evaluateDecision(env: DecisionsEnv, task: ChoiceTask) {
+  const apiKey = env.OPENAI_API_KEY?.trim()
+  if (!apiKey) throw new Error('api_key_missing')
   // One deadline covers response headers AND body; never retry this POST.
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -82,11 +84,16 @@ export async function evaluateDecision(env: DecisionsEnv, task: ChoiceTask) {
       (async () => {
         const response = await fetch('https://api.openai.com/v1/decisions', {
           method: 'POST', redirect: 'error', signal: controller.signal,
-          headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: DECISIONS_MODEL, safety_identifier: task.safetyIdentifier, input: task.input,
             questions: [{ type: 'choice', name: task.feature, instructions: task.instructions, choices: task.choices }] }),
         })
-        if (!response.ok) { await response.body?.cancel(); throw new Error(`http_${response.status}`) }
+        if (!response.ok) {
+          let code: unknown
+          try { code = (await response.json() as { error?: { code?: unknown } }).error?.code } catch { /* Non-JSON errors have status only. */ }
+          throw Object.assign(new Error(`http_${response.status}`), { status: response.status,
+            code: typeof code === 'string' && /^[a-zA-Z0-9_]{1,64}$/.test(code) ? code : null })
+        }
         return parseDecision(await response.json(), task)
       })(),
       new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('timeout')) }, DECISIONS_TIMEOUT_MS) }),
