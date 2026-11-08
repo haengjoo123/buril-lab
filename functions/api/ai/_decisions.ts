@@ -83,7 +83,9 @@ export async function evaluateDecision(env: DecisionsEnv, task: ChoiceTask) {
     return await Promise.race([
       (async () => {
         const response = await fetch('https://api.openai.com/v1/decisions', {
-          method: 'POST', redirect: 'error', signal: controller.signal,
+          // workerd rejects redirect:"error" before sending any request.
+          // manual plus the !ok check rejects 3xx without forwarding secrets.
+          method: 'POST', redirect: 'manual', signal: controller.signal,
           headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: DECISIONS_MODEL, safety_identifier: task.safetyIdentifier, input: task.input,
             questions: [{ type: 'choice', name: task.feature, instructions: task.instructions, choices: task.choices }] }),

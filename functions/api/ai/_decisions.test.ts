@@ -41,6 +41,7 @@ describe('Decisions request, validation and rollout', () => {
     vi.stubGlobal('fetch', fetch)
     await evaluateDecision(env('active'), task)
     const body = JSON.parse(fetch.mock.calls[0][1].body)
+    expect(fetch.mock.calls[0][1].redirect).toBe('manual')
     expect(body).toMatchObject({ model: 'gpt-6-luna', safety_identifier: 'hashed', questions: [{ name: 'classification', type: 'choice' }] })
     expect(body).not.toHaveProperty('store')
     expect(fetch).toHaveBeenCalledTimes(1)
