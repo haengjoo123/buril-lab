@@ -10,7 +10,7 @@ import type { VoiceMatch } from '../../../../src/utils/voiceAgent'
 // @ts-expect-error Shared CLI fixtures are JavaScript.
 import { allDecisionFixtures } from '../../../../scripts/decisions-fixtures.mjs'
 // @ts-expect-error Shared fixed synthetic corpus is JavaScript.
-import { expandedDecisionFixtures, identityBoundaryFixtures } from '../../../../scripts/decisions-expanded-fixtures.mjs'
+import { expandedDecisionFixtures, expandedDecisionFixturesV1, identityBoundaryFixtures } from '../../../../scripts/decisions-expanded-fixtures.mjs'
 
 export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
@@ -21,12 +21,17 @@ const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
   publicKey: z.object({ kty: z.literal('OKP'), crv: z.literal('Ed25519'), x: z.string() }).strict(),
-  caseIds: z.array(z.string().max(80)).min(1).max(2480),
+  caseIds: z.array(z.string().max(80)).min(1).max(2484),
 }).strict()
 interface Fixture { id: string; feature: 'classification' | 'voiceCandidate'; expected: string | null;
   input: { name?: string; molecularFormula?: string; casNumber?: string; text: string; language: 'ko' | 'en'; matches: VoiceMatch[] } }
 type Env = DecisionsEnv & { APP_ENVIRONMENT?: string }
-const fixtures = new Map(([...allDecisionFixtures(), ...expandedDecisionFixtures(), ...identityBoundaryFixtures()] as Fixture[]).map(item => [item.id, item]))
+let fixtures: Map<string, Fixture> | undefined
+function evaluationFixtures() {
+  // Build the large fixed registry only after evaluation authorization. Normal
+  // app traffic and closed/unauthenticated evaluation calls do no fixture work.
+  return fixtures ??= new Map(([...allDecisionFixtures(), ...expandedDecisionFixtures(), ...expandedDecisionFixturesV1(), ...identityBoundaryFixtures()] as Fixture[]).map(item => [item.id, item]))
+}
 
 export async function onRequestPost(context: { request: Request; env: Env }) {
   const headers = { 'Cache-Control': 'no-store' }
@@ -58,7 +63,7 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
       audience: production ? PRODUCTION_EVALUATION_AUDIENCE : EVALUATION_AUDIENCE, maxTokenAge: '15s' })
     if (payload.sub !== `${body.caseId}:${body.backend}` || typeof payload.exp !== 'number' || typeof payload.iat !== 'number' || payload.exp - payload.iat > 15) return respond({ code: 'GRANT_DENIED' }, 403)
   } catch { return respond({ code: 'GRANT_DENIED' }, 403) }
-  const fixture = fixtures.get(body.caseId)
+  const fixture = evaluationFixtures().get(body.caseId)
   if (!fixture) return respond({ code: 'INVALID_CASE' }, 400)
   if (!context.env.OPENAI_API_KEY || !context.env.OPENAI_SAFETY_HMAC_SECRET) return respond({ code: 'AI_NOT_CONFIGURED' }, 503)
   if (body.backend === 'probe') return respond({ id: fixture.id, feature: fixture.feature, backend: 'probe', error: false, configured: true })

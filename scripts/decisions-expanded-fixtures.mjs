@@ -59,7 +59,7 @@ const tuningCas = new Set(['7647-01-0', '1310-73-2', '67-56-1', '67-64-1', '67-6
 const meta = material => ({ family: material.casNumber, split: tuningCas.has(material.casNumber) ? 'tuning' : 'validation',
   provenance: 'synthetic-explicit-assistance-contract-v1', humanReviewed: false, identityReference: material.identityReference })
 
-export function expandedDecisionFixtures() {
+export function expandedDecisionFixturesV1() {
   const voice = expandedMaterials.flatMap((material, n) => Array.from({ length: 20 }, (_, i) => {
     const { name, ko, casNumber } = material
     const target = (id, fields = {}) => ({ source: 'inventory', id, name, casNumber, brand: 'Alpha', matchedBy: 'contains', ...fields })
@@ -121,6 +121,38 @@ export function expandedDecisionFixtures() {
     return { ...meta(material), id: `expanded-classification-${n}-${i}`, feature: 'classification', scenario: scenarios[i], expected, input }
   }))
   return [...voice, ...classification]
+}
+
+function opaqueUuid(seed) {
+  let left = 2166136261, right = 2654435769
+  for (const char of seed) {
+    left = Math.imul(left ^ char.charCodeAt(0), 16777619) >>> 0
+    right = Math.imul(right ^ char.charCodeAt(0), 2246822519) >>> 0
+  }
+  const bytes = Array.from({ length: 16 }, () => {
+    left ^= left << 13; left ^= left >>> 17; left ^= left << 5
+    right = Math.imul(right ^ right >>> 15, 2246822519) >>> 0
+    return (left ^ right) & 255
+  })
+  bytes[6] = bytes[6] & 15 | 64; bytes[8] = bytes[8] & 63 | 128
+  const hex = bytes.map(value => value.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+// v1 exposed role labels in inventory IDs. Preserve it for audit/replay, and
+// use opaque IDs for ALL new comparisons. Remap only IDs and injection references;
+// selection meaning, candidate order/count, chemical inputs and abstentions stay fixed.
+export function expandedDecisionFixtures() {
+  return expandedDecisionFixturesV1().map(row => {
+    const id = row.id.replace('expanded-', 'expanded-v2-')
+    if (row.feature === 'classification') return { ...row, id, provenance: 'synthetic-explicit-assistance-contract-v2' }
+    const mapping = new Map(row.input.matches.map((match, i) => [`${match.source}:${match.id}`, `${match.source}:${opaqueUuid(`${id}:${i}`)}`]))
+    const replace = text => [...mapping].reduce((value, [oldId, newId]) => value.replaceAll(oldId, newId), text)
+    return { ...row, id, provenance: 'synthetic-explicit-assistance-contract-v2', expected: row.expected === null ? null : mapping.get(row.expected),
+      input: { ...row.input, text: replace(row.input.text), matches: row.input.matches.map(match => ({ ...match,
+        id: mapping.get(`${match.source}:${match.id}`).slice(match.source.length + 1), name: replace(match.name),
+      })) } }
+  })
 }
 
 // Separate guard set: same elemental composition does not prove identity.

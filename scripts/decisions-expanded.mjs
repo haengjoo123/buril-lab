@@ -6,7 +6,7 @@ import { prepare, requestCase } from './decisions-remote.mjs'
 
 export const expandedManifest = () => {
   const cases = expandedDecisionFixtures()
-  return { version: 'expanded-contract:v1', sha256: createHash('sha256').update(JSON.stringify(cases)).digest('hex'),
+  return { version: 'expanded-contract:v2', sha256: createHash('sha256').update(JSON.stringify(cases)).digest('hex'),
     cases: cases.length, materials: expandedMaterials.length, humanReviewed: false,
     counts: Object.fromEntries(['tuning', 'validation'].map(split => [split, Object.fromEntries(['voiceCandidate', 'classification'].map(feature =>
       [feature, cases.filter(item => item.feature === feature && item.split === split).length]))])) }
