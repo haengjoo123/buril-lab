@@ -67,6 +67,20 @@ describe('signed remote evaluation through the real middleware and handler', () 
       abstentionReason: 'explicit_review', decision: { policyVersion: 'classification:v1', choiceProbability: 1 } })
     expect(provider).toHaveBeenCalledTimes(1)
   })
+  it('admits only granted expanded cases and exposes the frozen v2 comparator', async () => {
+    state.grant.caseIds = ['expanded-voice-1-5']
+    const provider = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body)
+      expect(JSON.parse(body.input).candidates[0]).toHaveProperty('storageLocation')
+      expect(JSON.parse(body.input).candidates[0]).not.toHaveProperty('shelfNumber')
+      return Response.json({ model: 'gpt-6-luna', answers: [{ name: 'voiceCandidate', type: 'choice', choice: '__review__', confidence: 1,
+        probabilities: body.questions[0].choices.map((item: { value: string }) => ({ value: item.value, probability: item.value === '__review__' ? 1 : 0 })) }] })
+    })
+    vi.stubGlobal('fetch', provider)
+    expect(await requestCase(state, 'expanded-voice-1-5', 'decisionsV2', credentials, transport()))
+      .toMatchObject({ expected: 'inventory:target', choice: null, policyVersion: 'voice-candidate:v2' })
+    expect(provider).toHaveBeenCalledTimes(1)
+  })
   it('blocks cross-environment grants, expired grants and non-granted fixture ids before provider calls', async () => {
     const provider = vi.fn(); vi.stubGlobal('fetch', provider)
     await expect(requestCase(state, 'classification-3-0', 'decisions', credentials, transport('production'))).rejects.toThrow()
