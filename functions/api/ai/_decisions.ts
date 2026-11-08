@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { RuntimeConfigEnv } from '../_runtimeConfig'
 import type { OpenAIResponsesEnv } from './_openai'
+import type { ClassificationIdentityEvidence } from './_classificationEvidence'
 
 export const DECISIONS_MODEL = 'gpt-6-luna'
 export const DECISIONS_TIMEOUT_MS = 5_000
@@ -8,8 +9,8 @@ export const DECISIONS_CONFIG_KEY = 'ai_decisions_config'
 export const MIN_CHOICE_PROBABILITY = 0.90
 export const MIN_CHOICE_MARGIN = 0.20
 export type DecisionFeature = 'voiceCandidate' | 'classification'
-export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v4', classification: 'classification:v4' } as const
-export type DecisionPolicyRevision = 'v1' | 'v2' | 'v3' | 'v4'
+export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v4', classification: 'classification:v5' } as const
+export type DecisionPolicyRevision = 'v1' | 'v2' | 'v3' | 'v4' | 'v5'
 export type DecisionsEnv = OpenAIResponsesEnv & RuntimeConfigEnv
 export interface DecisionContext {
   env: DecisionsEnv
@@ -49,6 +50,7 @@ export interface DecisionMetadata {
   probabilities: Array<{ value: string; probability: number }>
   identityCheck?: { choice: string | null; confidence: number; choiceProbability: number;
     probabilities: Array<{ value: string; probability: number }> }
+  identityReference?: ClassificationIdentityEvidence
 }
 export interface ChoiceTask {
   policyVersion?: string
@@ -58,8 +60,10 @@ export interface ChoiceTask {
   choices: Array<{ value: string; description?: string }>
   abstain: string
   blockedChoices?: string[]
+  blockedReason?: string
   safetyIdentifier: string
   identityCheckInstructions?: string
+  identityReference?: ClassificationIdentityEvidence
 }
 export const IDENTITY_CHECK_NAME = 'classification_identity'
 export const IDENTITY_CHECK_CHOICES = [
@@ -80,9 +84,10 @@ function parseSingleDecision(payload: unknown, task: ChoiceTask) {
   const runnerUp = Math.max(0, ...answer.probabilities.filter(item => item.value !== answer.choice).map(item => item.probability))
   const accepted = answer.choice !== task.abstain && !task.blockedChoices?.includes(answer.choice) && selected >= MIN_CHOICE_PROBABILITY && selected - runnerUp + 1e-12 >= MIN_CHOICE_MARGIN
   const abstentionReason = accepted ? null : answer.choice === task.abstain ? 'explicit_review'
-    : task.blockedChoices?.includes(answer.choice) ? 'duplicate_identity' : selected < MIN_CHOICE_PROBABILITY ? 'probability' : 'margin'
+    : task.blockedChoices?.includes(answer.choice) ? task.blockedReason ?? 'duplicate_identity' : selected < MIN_CHOICE_PROBABILITY ? 'probability' : 'margin'
   const decision: DecisionMetadata = { model: parsed.model, policyVersion: task.policyVersion ?? DECISION_POLICIES[task.feature],
-    confidence: answer.confidence, choiceProbability: selected, probabilities: answer.probabilities }
+    confidence: answer.confidence, choiceProbability: selected, probabilities: answer.probabilities,
+    ...(task.identityReference ? { identityReference: task.identityReference } : {}) }
   return { choice: accepted ? answer.choice : null, proposedChoice: answer.choice, abstentionReason, decision, usage: parsed.usage, outcome: accepted ? 'accepted' : 'abstained' }
 }
 export function parseDecision(payload: unknown, task: ChoiceTask) {
@@ -138,12 +143,13 @@ export function logDecision(context: DecisionContext, task: ChoiceTask, fields: 
     feature: task.feature, model: DECISIONS_MODEL, policyVersion: task.policyVersion ?? DECISION_POLICIES[task.feature], cacheHit: false, ...fields }))
 }
 export async function runDecisionTask<T>(context: DecisionContext, task: ChoiceTask,
-  legacy: (bounded: boolean) => Promise<T>, selection: (value: T) => string | null) {
+  legacy: (bounded: boolean) => Promise<T>, selection: (value: T) => string | null, prepareTask?: () => Promise<ChoiceTask>) {
   const config = await decisionMode(context.env, task.feature)
   const evaluate = async () => {
     const started = Date.now()
     try {
-      const result = await evaluateDecision(context.env, task)
+      const evaluatedTask = prepareTask ? await prepareTask() : task
+      const result = await evaluateDecision(context.env, evaluatedTask)
       logDecision(context, task, { mode: config.mode, outcome: result.outcome, choice: result.choice,
         elapsedMs: Date.now() - started, usage: result.usage, fallbackReason: null })
       return result
