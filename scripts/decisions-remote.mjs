@@ -27,10 +27,10 @@ export async function requestCase(state, caseId, backend, credentials, fetchImpl
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
       'CF-Access-Client-Id': credentials.clientId, 'CF-Access-Client-Secret': credentials.clientSecret },
     body: JSON.stringify({ caseId, backend }) })
-  if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Remote evaluation is not deployed or Access denied')
+  if (!response.headers.get('content-type')?.includes('application/json')) throw new Error(`REMOTE_${response.status}_NON_JSON`)
   const result = await response.json()
-  if (response.status !== 200 && response.status !== 502) throw new Error(`Remote evaluation rejected (${response.status})`)
-  if (result.id !== caseId || result.backend !== backend || typeof result.error !== 'boolean') throw new Error('Invalid evaluation response')
+  if (response.status !== 200 && response.status !== 502) throw new Error(`REMOTE_${response.status}_REJECTED`)
+  if (result.id !== caseId || result.backend !== backend || typeof result.error !== 'boolean') throw new Error(`REMOTE_${response.status}_INVALID_RESULT`)
   return result
 }
 export async function runRemote(state, output, credentials, fetchImpl = fetch) {
@@ -39,7 +39,14 @@ export async function runRemote(state, output, credentials, fetchImpl = fetch) {
   for (const id of state.grant.caseIds) {
     const row = { id, cacheHit: false }
     for (const backend of ['legacy', 'decisions']) {
-      const result = await requestCase(state, id, backend, credentials, fetchImpl)
+      let result
+      try { result = await requestCase(state, id, backend, credentials, fetchImpl) }
+      catch (error) {
+        const diagnostic = error instanceof Error && /^REMOTE_\d{3}_[A-Z_]+$/.test(error.message) ? error.message : 'REMOTE_TRANSPORT_FAILED'
+        await writeFile(output, JSON.stringify({ execution: 'cloudflare-staging', grantId: state.grant.id,
+          summary: summarize(rows), rows, incompleteCase: { id, backend, diagnostic } }, null, 2))
+        throw new Error(diagnostic)
+      }
       row.feature = result.feature; row.expected = result.expected
       const u = result.usage || {}
       row[backend] = { choice: result.choice, elapsedMs: result.elapsedMs, error: result.error, providerStatus: result.providerStatus ?? null, model: result.model,
@@ -77,6 +84,7 @@ async function main() {
   if (rows.some(row => row.legacy.error || row.decisions.error)) throw new Error('Provider execution failed; report retained')
   console.log('Remote evaluation completed. Review the report; production remains unchanged.')
 }
-if (process.argv[1]?.replaceAll('\\', '/').endsWith('/decisions-remote.mjs')) main().catch(() => {
-  console.error('Remote evaluation failed. Check deployment, Access credentials, grant expiry and report. Secrets are not printed.'); process.exitCode = 1
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/decisions-remote.mjs')) main().catch(error => {
+  const diagnostic = error instanceof Error && /^REMOTE_\d{3}_[A-Z_]+$/.test(error.message) ? error.message : 'REMOTE_EXECUTION_FAILED'
+  console.error(`Remote evaluation failed (${diagnostic}). Check the retained report. Secrets are not printed.`); process.exitCode = 1
 })
