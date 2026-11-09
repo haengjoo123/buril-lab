@@ -602,7 +602,7 @@ describe('useWasteStore V2 batch isolation', () => {
                 identity: { status: 'verified', canonicalName: 'Hydrochloric acid', casNumber: '7647-01-0', equivalentPubchemCids: [], molecularFormula: 'HCl', evidence: [] },
                 hazard: { status: 'not_classified', hCodes: [], hazardStatements: [], pictograms: [], hazardFlags: [], sources: [], fetchedAt: new Date().toISOString() },
                 referencePh: { status: 'source_absent', source: 'kosha' },
-                phCatalog: { status: 'not_found', candidateIds: [], catalogVersion: 'test' },
+                phCatalog: { status: 'unmatched', candidateIds: [], catalogVersion: 'test' },
                 enrichmentVersion: 2,
             };
             return Response.json({ results: [result] });
