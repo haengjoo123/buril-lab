@@ -20,6 +20,7 @@ describe("personal tool database boundary", () => {
           "utf8"
         )
       );
+      await db.exec(readFileSync(new URL("../../../supabase/migrations/20261109013830_tool_table_service_grants.sql", import.meta.url), "utf8"));
       const id = "00000000-0000-4000-8000-000000000010",
         user1 = "00000000-0000-4000-8000-000000000001",
         user2 = "00000000-0000-4000-8000-000000000002";
