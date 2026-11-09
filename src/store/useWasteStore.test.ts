@@ -565,6 +565,55 @@ describe('useWasteStore V2 batch isolation', () => {
         expect(persisted.schemaVersion).toBe(6);
     });
 
+    it('keeps a label-confirmed identity and hazard review after failed automatic retries', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network unavailable')));
+            useWasteStore.getState().setScope('user-a', 'lab-a');
+            useWasteStore.getState().addToCart(cartItem('label-confirmed', 'Label-confirmed reagent'));
+            const component = useWasteStore.getState().batch.components[0];
+            useWasteStore.getState().updateComponent(component.cartLineId, {
+                identityConfidence: 'verified', identityConfirmedByUser: true,
+                hazardDataConfirmedByUser: true, materialForm: 'solid',
+            });
+            const refresh = useWasteStore.getState().refreshChemicalEnrichment();
+            await vi.runAllTimersAsync();
+            await refresh;
+            expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+                identityConfidence: 'verified', identityConfirmedByUser: true,
+                hazardDataConfirmedByUser: true, enrichmentRetryCount: 2,
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('requires fresh identity review when automatic evidence conflicts with the confirmed CAS', async () => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        useWasteStore.getState().addToCart(cartItem('cas-conflict', 'Label-confirmed reagent'));
+        const component = useWasteStore.getState().batch.components[0];
+        useWasteStore.getState().updateComponent(component.cartLineId, {
+            identityConfidence: 'verified', identityConfirmedByUser: true,
+        });
+        vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            const request = JSON.parse(String(init?.body)) as { items: Array<{ requestId: string }> };
+            const result: ChemicalEnrichmentResult = {
+                requestId: request.items[0].requestId, overallStatus: 'complete',
+                identity: { status: 'verified', canonicalName: 'Hydrochloric acid', casNumber: '7647-01-0', equivalentPubchemCids: [], molecularFormula: 'HCl', evidence: [] },
+                hazard: { status: 'not_classified', hCodes: [], hazardStatements: [], pictograms: [], hazardFlags: [], sources: [], fetchedAt: new Date().toISOString() },
+                referencePh: { status: 'source_absent', source: 'kosha' },
+                phCatalog: { status: 'not_found', candidateIds: [], catalogVersion: 'test' },
+                enrichmentVersion: 2,
+            };
+            return Response.json({ results: [result] });
+        }));
+        await useWasteStore.getState().refreshChemicalEnrichment();
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            identityConfidence: 'review_required', identityConfirmedByUser: false,
+            chemical: { casNumber: '67-64-1' },
+        });
+    });
+
     it('repairs a schema-5 component that has CAS and pH metadata but no hazard lookup result', async () => {
         const draft = createEmptyWasteBatch({
             id: 'partial-acetate', scopeKey: 'user-a:lab-a', userId: 'user-a', labId: 'lab-a',

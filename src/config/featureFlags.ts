@@ -15,7 +15,7 @@ export function isExplicitlyDisabled(value: string | undefined): boolean {
 }
 
 export const isWasteV2Enabled = !isExplicitlyDisabled(import.meta.env.VITE_ENABLE_WASTE_V2)
-/** Personal lab tools require the two 20261109 migrations before production enablement. */
+/** Personal lab tools require the 20261109 migrations before production enablement. */
 export const isLabToolsEnabled = import.meta.env.DEV || isExplicitlyEnabled(import.meta.env.VITE_ENABLE_LAB_TOOLS)
 /** Enable only after the additive import migration and AI endpoint are deployed. */
 export const isInventoryImportV2Enabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INVENTORY_IMPORT_V2)

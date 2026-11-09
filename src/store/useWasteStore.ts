@@ -613,6 +613,7 @@ const touchBatch = (batch: WasteBatchDraft): WasteBatchDraft => ({
 const componentEnrichmentFingerprint = (component: WasteComponent): string => JSON.stringify({
     chemical: component.chemical,
     identityConfidence: component.identityConfidence,
+    identityConfirmedByUser: component.identityConfirmedByUser,
     hazardFlags: component.hazardFlags,
     automaticHazardFlags: component.automaticHazardFlags,
     manualHazardFlags: component.manualHazardFlags,
@@ -746,9 +747,12 @@ const applyEnrichmentToComponent = (
         ...component,
         ...reanalysis,
         chemical,
-        identityConfidence: result.identity.status === 'verified' && !hasCasConflict
+        // A failed automatic lookup cannot undo the identity the user matched
+        // to the label. Conflicting CAS evidence still requires a fresh review.
+        identityConfidence: !hasCasConflict && (component.identityConfirmedByUser || result.identity.status === 'verified')
             ? 'verified'
             : 'review_required',
+        identityConfirmedByUser: hasCasConflict ? false : component.identityConfirmedByUser,
         ghsDataStatus,
         automaticHazardFlags,
         manualHazardFlags,
