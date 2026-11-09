@@ -1758,33 +1758,6 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_confirm_component_identity')}
                                                     </button>
                                                 )}
-                                                {activeStep === 'components' && isHazardLookupPending(component, isChemicalEnrichmentEnabled) && (
-                                                    <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-100" role="status">
-                                                        {t('waste_component_hazard_pending')}
-                                                    </p>
-                                                )}
-                                                {activeStep === 'components' && component.ghsDataStatus === 'verified' && (
-                                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                                        {t('waste_component_hazard_auto_verified')}
-                                                    </p>
-                                                )}
-                                                {activeStep === 'components' && needsHazardLabelCheck(component, isChemicalEnrichmentEnabled)
-                                                    && editingLineId !== component.cartLineId && (
-                                                    <div className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
-                                                        <p className="mb-2">{t(getHazardLookupMessageKey(component))}</p>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                openComponentEditor(component);
-                                                                flashElement(`waste-hazard-${component.cartLineId}`);
-                                                            }}
-                                                            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-orange-300 bg-white px-3 text-xs font-bold text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:bg-slate-950 dark:text-orange-200 dark:hover:bg-orange-950/60"
-                                                        >
-                                                            {t('waste_manual_hazard_open')}
-                                                            <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                                        </button>
-                                                    </div>
-                                                )}
                                             </div>
                                             {activeStep === 'components' && (
                                             <>
@@ -1812,6 +1785,38 @@ export const CartView: React.FC<CartViewProps> = ({
                                             </>
                                             )}
                                         </div>
+                                        {activeStep === 'components' && isHazardLookupPending(component, isChemicalEnrichmentEnabled) && (
+                                            <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-100" role="status">
+                                                {t('waste_component_hazard_pending')}
+                                            </p>
+                                        )}
+                                        {activeStep === 'components' && component.ghsDataStatus === 'verified' && (
+                                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                {t('waste_component_hazard_auto_verified')}
+                                            </p>
+                                        )}
+                                        {activeStep === 'components' && component.hazardDataConfirmedByUser && component.ghsDataStatus !== 'verified' && (
+                                            <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-200" role="status">
+                                                {t('waste_manual_hazard_saved')}
+                                            </p>
+                                        )}
+                                        {activeStep === 'components' && needsHazardLabelCheck(component, isChemicalEnrichmentEnabled)
+                                            && editingLineId !== component.cartLineId && (
+                                            <div className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
+                                                <p className="mb-2">{t(getHazardLookupMessageKey(component))}</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        openComponentEditor(component);
+                                                        flashElement(`waste-hazard-${component.cartLineId}`);
+                                                    }}
+                                                    className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-orange-300 bg-white px-3 text-xs font-bold text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:bg-slate-950 dark:text-orange-200 dark:hover:bg-orange-950/60"
+                                                >
+                                                    {t('waste_manual_hazard_open')}
+                                                    <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                                </button>
+                                            </div>
+                                        )}
                                         {activeStep === 'components' && component.sourceType === 'inventory' && component.inventoryId && (
                                             <label className="mt-3 block rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
                                                 <span className="flex flex-wrap items-center justify-between gap-2">
@@ -2201,9 +2206,13 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         </div>
                                                         <button
                                                             type="button"
-                                                            onClick={() => updateComponent(component.cartLineId, {
-                                                                hazardDataConfirmedByUser: true,
-                                                            })}
+                                                            onClick={() => {
+                                                                updateComponent(component.cartLineId, {
+                                                                    hazardDataConfirmedByUser: true,
+                                                                });
+                                                                setEditingLineId(null);
+                                                                flashElement(componentLineElementId(component.cartLineId), 'success');
+                                                            }}
                                                             className="mt-3 min-h-11 w-full rounded-lg bg-orange-600 px-3 text-sm font-bold text-white hover:bg-orange-700"
                                                         >
                                                             {t('waste_manual_hazard_confirm')}

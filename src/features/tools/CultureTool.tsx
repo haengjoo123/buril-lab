@@ -85,6 +85,216 @@ export default function CultureTool() {
     });
   return (
     <>
+      <p className="culture-identity">
+        <strong>{d.name || t("세포주 이름 미설정", "Unnamed cell line")}</strong>
+        <span className="tool-muted">
+          {t("최근 계대", "Latest passage")}: {d.passages.length ? `P${Math.max(...d.passages.map((p) => p.number))}` : "—"}
+        </span>
+      </p>
+      <div className="culture-overview" aria-label={t("배양 현황", "Culture overview")}>
+        <div>
+          <span>{d.profile.kind === "adherent" ? t("현재 confluence", "Current confluence") : t("현재 농도", "Current density")}</span>
+          <strong>{format(d.start)}{d.profile.kind === "adherent" ? "%" : ""}</strong>
+          {d.profile.kind === "suspension" && <span>cells/mL</span>}
+        </div>
+        <div>
+          <span>{t("계대 목표", "Passage target")}</span>
+          <strong>{format(d.target)}{d.profile.kind === "adherent" ? "%" : ""}</strong>
+          {d.profile.kind === "suspension" && <span>cells/mL</span>}
+        </div>
+        <div><span>{t("예상 소요 시간", "Estimated time")}</span><strong>{hours.value && d.start <= (d.profile.kind === "adherent" ? 100 : d.profile.maxDensity) && d.target <= (d.profile.kind === "adherent" ? 100 : d.profile.maxDensity) ? `${Number(hours.value.toFixed(1))} h` : "—"}</strong></div>
+      </div>
+      <Panel
+        title={t("성장 예측과 다음 계대", "Growth estimate and next passage")}
+      >
+        <p className="tool-muted">
+          {t(
+            "모델 예상치입니다. 실제 증식 측정값과 다를 수 있습니다.",
+            "Model estimate; actual growth may differ."
+          )}
+        </p>
+        <div className="tool-grid">
+          <Field
+            label={
+              d.profile.kind === "adherent"
+                ? t("현재 confluence (%)", "Current confluence (%)")
+                : "Current cells/mL"
+            }
+            value={d.start}
+            onChange={(v) => set({ ...d, start: Number(v) })}
+          />
+          <Field
+            label={
+              d.profile.kind === "adherent"
+                ? t("목표 confluence (%)", "Target confluence (%)")
+                : "Target cells/mL"
+            }
+            value={d.target}
+            onChange={(v) => set({ ...d, target: Number(v) })}
+          />
+        </div>
+        <Field
+          label={t("배가 시간 (h)", "Doubling time (h)")}
+          value={d.profile.doublingHours}
+          onChange={(v) => profile({ doublingHours: Number(v) })}
+        />
+        <ErrorMessage message={hours.error} />
+        {d.profile.kind === "adherent" && (d.start > 100 || d.target > 100) && (
+          <p className="tool-error">{t("Confluence는 100%를 넘을 수 없습니다.", "Confluence cannot exceed 100%.")}</p>
+        )}
+        <Result>{t("목표까지 예상 시간", "Estimated time to target")}: {hours.value && (d.profile.kind !== "adherent" || (d.start <= 100 && d.target <= 100)) ? `${format(hours.value)} h` : "—"}</Result>
+        {hours.value && d.profile.doublingHours > 0 && (d.profile.kind === "adherent" || d.profile.maxDensity > 0) && <svg
+          viewBox="0 0 500 160"
+          className="tool-plot"
+          role="img"
+          aria-label={t("예상 성장 곡선", "Estimated growth curve")}
+        >
+          <polyline
+            fill="none"
+            stroke="#2563eb"
+            strokeWidth="2"
+            points={Array.from({ length: 100 }, (_, i) => {
+              const cap =
+                  d.profile.kind === "adherent" ? 100 : d.profile.maxDensity,
+                y = Math.min(
+                  cap,
+                  d.start *
+                    2 **
+                      (((i / 99) * (hours.value ?? 48)) /
+                        d.profile.doublingHours)
+                );
+              return `${i * 5},${150 - (140 * y) / cap}`;
+            }).join(" ")}
+          />
+        </svg>}
+        <button
+          disabled={
+            !hours.value ||
+            d.start > (d.profile.kind === "adherent" ? 100 : d.profile.maxDensity) ||
+            d.target >
+              (d.profile.kind === "adherent" ? 100 : d.profile.maxDensity)
+          }
+          onClick={async () => {
+            try {
+              await enableNotifications();
+              setPermissionError("");
+            } catch (e) {
+              setPermissionError(String(e));
+            }
+            if (d.timer) setDeviceEnabled(ctx.repo.owner, d.timer.id, false);
+            const id = crypto.randomUUID();
+            set({
+              ...d,
+              timer: { id, end: Date.now() + hours.value! * 3600000 },
+            });
+            setDeviceEnabled(ctx.repo.owner, id, true);
+          }}
+        >
+          {t("예상 시점 타이머 시작", "Start target timer")}
+        </button>
+        <ErrorMessage message={permissionError} />
+        {d.timer && (
+          <>
+            <div className="tool-clock">
+              {clockText(Math.max(0, d.timer.end - now))}
+            </div>
+            <p>{new Date(d.timer.end).toLocaleString(t("ko-KR", "en-US"))}</p>
+            <DeviceToggle id={d.timer.id} />
+            <button
+              onClick={() => {
+                setDeviceEnabled(ctx.repo.owner, d.timer!.id, false);
+                set({ ...d, timer: null });
+              }}
+            >
+              {t("타이머 취소", "Cancel timer")}
+            </button>
+          </>
+        )}
+      </Panel>
+      <Panel title={t("계대 기록", "Passage history")}>
+        <div className="tool-grid">
+          <Field
+            type="text"
+            label={t("배지", "Medium")}
+            value={d.medium}
+            onChange={(medium) => set({ ...d, medium })}
+          />
+          <Field
+            type="text"
+            label={t("항생제", "Antibiotics")}
+            value={d.antibiotics}
+            onChange={(antibiotics) => set({ ...d, antibiotics })}
+          />
+          <Field
+            type="text"
+            label={t("배양 조건", "Culture conditions")}
+            value={d.conditions}
+            onChange={(conditions) => set({ ...d, conditions })}
+          />
+          <Field
+            type="text"
+            label={t("계대 메모", "Passage notes")}
+            value={d.passageNotes}
+            onChange={(passageNotes) => set({ ...d, passageNotes })}
+          />
+        </div>
+        <p className="tool-muted">{t("분주 계산에서 모든 용기를 완료하면 계산 결과도 함께 기록됩니다.", "Complete all vessel checks in the calculator to include the seeding results.")}</p>
+        <button
+          className="primary"
+          onClick={() =>
+            set({
+              ...d,
+              passages: [
+                ...d.passages,
+                {
+                  id: crypto.randomUUID(),
+                  number: d.passages.length ? Math.max(...d.passages.map((p) => p.number)) + 1 : 0,
+                  at: new Date().toISOString(),
+                  medium: d.medium,
+                  antibiotics: d.antibiotics,
+                  conditions: d.conditions,
+                  notes: d.passageNotes,
+                  snapshot: result.value?.valid && d.vessels.length > 0 && d.checked.length === d.vessels.length ? {
+                    profile: d.profile,
+                    concentration: d.concentration,
+                    available: d.available,
+                    vessels: d.vessels,
+                    result: result.value,
+                  } : null,
+                },
+              ],
+              checked: [],
+            })
+          }
+        >
+          {t("계대 기록 추가", "Add passage record")}
+        </button>
+        {d.passages.length >= d.maxPassages && (
+          <p className="tool-error">
+            {t("계대 한도에 도달했습니다.", "Passage limit reached.")}
+          </p>
+        )}
+        {[...d.passages].reverse().map((p) => (
+          <details className="tool-panel" key={p.id}>
+            <summary>
+              P{p.number} · {new Date(p.at).toLocaleString(t("ko-KR", "en-US"))}
+            </summary>
+            <p>
+              {p.medium} · {p.antibiotics} · {p.conditions}
+            </p>
+            <p>{p.notes}</p>
+            {p.snapshot != null && (
+              <details>
+                <summary>{t("저장된 분주 계산 보기", "View saved seeding calculation")}</summary>
+                <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 12 }}>
+                  {JSON.stringify(p.snapshot, null, 2)}
+                </pre>
+              </details>
+            )}
+          </details>
+        ))}
+      </Panel>
+<details className="culture-section"><summary>{t("세포주 설정", "Cell line profile")}</summary>
       <Panel title={t("세포주 설정", "Cell line profile")}>
         <div className="tool-grid">
           <Field
@@ -146,6 +356,8 @@ export default function CultureTool() {
           onChange={(notes) => set({ ...d, notes })}
         />
       </Panel>
+</details>
+<details className="culture-section"><summary>{t("분주 계산", "Seeding calculator")}</summary>
       <Panel title={t("분주 준비", "Seeding preparation")}>
         <div className="tool-grid">
           <Field
@@ -338,185 +550,7 @@ export default function CultureTool() {
           </>
         )}
       </Panel>
-      <Panel
-        title={t("성장 예측과 다음 계대", "Growth estimate and next passage")}
-      >
-        <p className="tool-muted">
-          {t(
-            "모델 예상치입니다. 실제 증식 측정값과 다를 수 있습니다.",
-            "Model estimate; actual growth may differ."
-          )}
-        </p>
-        <div className="tool-grid">
-          <Field
-            label={
-              d.profile.kind === "adherent"
-                ? t("현재 confluence (%)", "Current confluence (%)")
-                : "Current cells/mL"
-            }
-            value={d.start}
-            onChange={(v) => set({ ...d, start: Number(v) })}
-          />
-          <Field
-            label={
-              d.profile.kind === "adherent"
-                ? t("목표 confluence (%)", "Target confluence (%)")
-                : "Target cells/mL"
-            }
-            value={d.target}
-            onChange={(v) => set({ ...d, target: Number(v) })}
-          />
-        </div>
-        <ErrorMessage message={hours.error} />
-        <Result>{format(hours.value)} h</Result>
-        <svg
-          viewBox="0 0 500 160"
-          className="tool-plot"
-          role="img"
-          aria-label={t("예상 성장 곡선", "Estimated growth curve")}
-        >
-          <polyline
-            fill="none"
-            stroke="#2563eb"
-            strokeWidth="2"
-            points={Array.from({ length: 100 }, (_, i) => {
-              const cap =
-                  d.profile.kind === "adherent" ? 100 : d.profile.maxDensity,
-                y = Math.min(
-                  cap,
-                  d.start *
-                    2 **
-                      (((i / 99) * (hours.value ?? 48)) /
-                        d.profile.doublingHours)
-                );
-              return `${i * 5},${150 - (140 * y) / cap}`;
-            }).join(" ")}
-          />
-        </svg>
-        <button
-          disabled={
-            !hours.value ||
-            d.target >
-              (d.profile.kind === "adherent" ? 100 : d.profile.maxDensity)
-          }
-          onClick={async () => {
-            try {
-              await enableNotifications();
-              setPermissionError("");
-            } catch (e) {
-              setPermissionError(String(e));
-            }
-            const id = crypto.randomUUID();
-            set({
-              ...d,
-              timer: { id, end: Date.now() + hours.value! * 3600000 },
-            });
-            setDeviceEnabled(ctx.repo.owner, id, true);
-          }}
-        >
-          {t("예상 시점 타이머 시작", "Start target timer")}
-        </button>
-        <ErrorMessage message={permissionError} />
-        {d.timer && (
-          <>
-            <div className="tool-clock">
-              {clockText(Math.max(0, d.timer.end - now))}
-            </div>
-            <p>{new Date(d.timer.end).toLocaleString(t("ko-KR", "en-US"))}</p>
-            <DeviceToggle id={d.timer.id} />
-            <button
-              onClick={() => {
-                setDeviceEnabled(ctx.repo.owner, d.timer!.id, false);
-                set({ ...d, timer: null });
-              }}
-            >
-              {t("타이머 취소", "Cancel timer")}
-            </button>
-          </>
-        )}
-      </Panel>
-      <Panel title={t("계대 기록", "Passage history")}>
-        <div className="tool-grid">
-          <Field
-            type="text"
-            label={t("배지", "Medium")}
-            value={d.medium}
-            onChange={(medium) => set({ ...d, medium })}
-          />
-          <Field
-            type="text"
-            label={t("항생제", "Antibiotics")}
-            value={d.antibiotics}
-            onChange={(antibiotics) => set({ ...d, antibiotics })}
-          />
-          <Field
-            type="text"
-            label={t("배양 조건", "Culture conditions")}
-            value={d.conditions}
-            onChange={(conditions) => set({ ...d, conditions })}
-          />
-          <Field
-            type="text"
-            label={t("계대 메모", "Passage notes")}
-            value={d.passageNotes}
-            onChange={(passageNotes) => set({ ...d, passageNotes })}
-          />
-        </div>
-        <button
-          className="primary"
-          disabled={
-            !result.value?.valid ||
-            !d.vessels.length ||
-            d.checked.length !== d.vessels.length
-          }
-          onClick={() =>
-            set({
-              ...d,
-              passages: [
-                ...d.passages,
-                {
-                  id: crypto.randomUUID(),
-                  number: d.passages.length,
-                  at: new Date().toISOString(),
-                  medium: d.medium,
-                  antibiotics: d.antibiotics,
-                  conditions: d.conditions,
-                  notes: d.passageNotes,
-                  snapshot: {
-                    profile: d.profile,
-                    concentration: d.concentration,
-                    available: d.available,
-                    vessels: d.vessels,
-                    result: result.value,
-                  },
-                },
-              ],
-              checked: [],
-            })
-          }
-        >
-          {t("분주 결과로 계대 기록", "Record completed passage")}
-        </button>
-        {d.passages.length >= d.maxPassages && (
-          <p className="tool-error">
-            {t("계대 한도에 도달했습니다.", "Passage limit reached.")}
-          </p>
-        )}
-        {[...d.passages].reverse().map((p) => (
-          <details className="tool-panel" key={p.id}>
-            <summary>
-              P{p.number} · {new Date(p.at).toLocaleString(t("ko-KR", "en-US"))}
-            </summary>
-            <p>
-              {p.medium} · {p.antibiotics} · {p.conditions}
-            </p>
-            <p>{p.notes}</p>
-            <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
-              {JSON.stringify(p.snapshot, null, 2)}
-            </pre>
-          </details>
-        ))}
-      </Panel>
+</details>
     </>
   );
 }

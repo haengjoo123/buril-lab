@@ -5,13 +5,13 @@ const guides: Partial<Record<ToolId, [string[], string[]]>> = {
     [
       "세포주의 배양 방식과 doubling time을 설정하세요. 부착세포는 100% confluence에서의 밀도가 필요합니다.",
       "보유 세포 농도·부피를 입력하고 대상 용기를 추가하세요. 목표 방식은 농도, 용기당 세포수, 면적당 세포수, confluence 또는 split입니다.",
-      "계산표의 용기당 수량과 전체 사용량을 확인하세요. 분주 체크를 모두 완료하면 계대 기록을 남길 수 있습니다.",
+      "계대 기록은 바로 추가할 수 있습니다. 분주 계산에서 모든 용기를 완료하면 계산 결과도 함께 저장됩니다.",
       "성장 예측은 지수 성장 모델입니다. 타이머 시작 후 세포주 설정을 바꿔도 예약 시각은 유지됩니다.",
     ],
     [
       "Set culture type and doubling time. Adherent cultures also need density at 100% confluence.",
       "Enter stock concentration and volume, then add vessels. Choose concentration, cells per vessel, cells per area, confluence or split targets.",
-      "Check per-vessel and total amounts. Complete the dispensing checklist to record a passage.",
+      "Add passage records directly. Complete all vessel checks to include the seeding calculation.",
       "Growth is an exponential estimate. Starting a timer fixes its target time even if the profile changes.",
     ],
   ],
@@ -101,10 +101,10 @@ const guides: Partial<Record<ToolId, [string[], string[]]>> = {
   ],
   "plate-labelling": [
     [
-      "well을 여러 개 선택하고 시료·조건·반복·색상을 입력한 뒤 적용하세요. 플레이트 크기를 바꿔도 기존 배치는 보존됩니다.",
+      "웰을 누르면 저장된 내용을 편집할 수 있습니다. 다중 선택이나 행·열 머리글로 여러 웰을 선택하고 한 번에 적용하세요. 복사·붙여넣기 후에는 적용을 눌러 저장하세요. 플레이트 크기를 바꿔도 기존 배치는 보존됩니다.",
     ],
     [
-      "Select multiple wells, enter sample, condition, replicate and color, then apply. Existing labels are retained when changing plate size.",
+      "Select a well to edit its saved labels. Use multi-select or row and column headers to apply labels in bulk. After pasting, apply to save. Existing labels are retained when changing plate size.",
     ],
   ],
   "cell-counter": [

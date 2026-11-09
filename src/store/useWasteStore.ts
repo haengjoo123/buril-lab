@@ -23,7 +23,8 @@ import {
 } from '../utils/wasteBatch';
 import { deriveWizardMatrixFromComponents } from '../utils/wasteBatchWizard';
 import { searchHistoryService } from '../services/searchHistoryService';
-import { resolvePhCatalogIdentity } from '../features/phPrediction';
+import { resolvePhCatalogIdentity, PH_CATALOG_BY_ID, isPhCatalogRecordApproved } from '../features/phPrediction';
+import { formulaCompositionKey } from '../utils/chemicalFormula';
 import { analyzeChemical, detectChemicalMaterial } from '../utils/chemicalAnalyzer';
 import { chemicalFromEnrichment, enrichChemicals } from '../services/chemicalEnrichmentService';
 import { isChemicalEnrichmentEnabled } from '../config/featureFlags';
@@ -667,6 +668,42 @@ const shouldEnrichComponent = (component: WasteComponent, retryImmediately = fal
     return !Number.isFinite(attemptedAt) || Date.now() - attemptedAt >= 5 * 60 * 1000;
 };
 
+/** A deliberate exact-form selection supplies identity evidence, never GHS classifications. */
+const applyManualCatalogIdentity = (component: WasteComponent): WasteComponent => {
+    const record = PH_CATALOG_BY_ID.get(component.phCatalogId ?? '');
+    if (!record || !isPhCatalogRecordApproved(record.id) || !record.casNumber
+        || record.structureIdentity.kind !== 'pubchem') return component;
+    const cas = component.chemical.casNumber?.trim();
+    const formula = formulaCompositionKey(component.chemical.molecularFormula);
+    if ((!cas && !formula) || (cas && cas !== record.casNumber)
+        || (formula && formula !== formulaCompositionKey(record.formula))) return component;
+    const identityChanged = cas !== record.casNumber;
+    const needsRefresh = identityChanged || component.ghsDataStatus !== 'verified';
+    return {
+        ...component,
+        chemical: {
+            ...component.chemical,
+            casNumber: record.casNumber,
+            molecularFormula: record.formula,
+            molecularWeight: record.molecularWeight,
+            externalIdentifiers: {
+                pubchemCid: record.structureIdentity.pubchemCid,
+                standardInchiKey: record.structureIdentity.standardInchiKey,
+            },
+            ...(needsRefresh ? { hazardLookup: undefined, ghs: undefined } : {}),
+        },
+        identityConfidence: 'verified',
+        identityConfirmedByUser: true,
+        ...(needsRefresh ? {
+            ghsDataStatus: 'not_checked',
+            enrichmentVersion: 0,
+            enrichmentRetryCount: 0,
+            enrichmentLastAttemptAt: undefined,
+            ...(identityChanged ? { hazardDataConfirmedByUser: false } : {}),
+        } : {}),
+    };
+};
+
 const applyEnrichmentToComponent = (
     component: WasteComponent,
     result: ChemicalEnrichmentResult,
@@ -1208,9 +1245,13 @@ export const useWasteStore = create<WasteState>((set, get) => ({
     }),
 
     updateComponent: (cartLineId, patch) => set((state) => {
-        const components = state.batch.components.map((component) =>
-            component.cartLineId === cartLineId ? { ...component, ...patch } : component
-        );
+        const components = state.batch.components.map((component) => {
+            if (component.cartLineId !== cartLineId) return component;
+            const updated = { ...component, ...patch };
+            return patch.phCatalogId && patch.phCatalogMatch?.selection === 'manual'
+                ? applyManualCatalogIdentity(updated)
+                : updated;
+        });
         const volumeChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionVolume');
         // A form change can turn a component solid or drop its solution, so it re-derives the matrix too.
         const compositionChanged = Object.prototype.hasOwnProperty.call(patch, 'solutionContext')
