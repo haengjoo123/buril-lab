@@ -449,6 +449,8 @@ export interface WasteComponent extends CartItem {
     phCatalogId?: string;
     phCatalogMatch?: ChemicalPhCatalogMatch;
     enrichmentVersion?: number;
+    /** Incremented only by an explicit exact-form selection, not enrichment responses. */
+    identitySelectionRevision?: number;
     enrichmentLastAttemptAt?: string;
     enrichmentRetryCount?: number;
     /** Number of inventory containers represented by this line that are physically discarded. */
