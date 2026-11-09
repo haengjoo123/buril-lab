@@ -96,6 +96,57 @@ describe('useWasteStore V2 batch isolation', () => {
         vi.unstubAllGlobals();
     });
 
+    it.each(['', '7647-01-0'])('requeries GHS after exact catalog selection with initial CAS %s', async (initialCas) => {
+        useWasteStore.getState().setScope('user-a', 'lab-a');
+        const item = cartItem('catalog-hcl', 'Hydrochloric Acid', 'ACID');
+        item.chemical.casNumber = initialCas;
+        item.chemical.molecularFormula = 'HCl';
+        useWasteStore.getState().addToCart(item);
+        const component = useWasteStore.getState().batch.components[0];
+        const stale = { ...component, enrichmentVersion: 2, ghsDataStatus: 'lookup_failed' as const,
+            chemical: { ...component.chemical, hazardLookup: { status: 'identity_ambiguous' as const,
+                hCodes: [], hazardStatements: [], pictograms: [], hazardFlags: [], sources: [],
+                fetchedAt: '2026-11-09T00:00:00Z', algorithmVersion: 2 } } };
+        useWasteStore.setState((state) => ({ batch: { ...state.batch, components: [stale] }, cart: [stale] }));
+        useWasteStore.getState().updateComponent(component.cartLineId, {
+            phCatalogId: 'hydrochloric-acid',
+            phCatalogMatch: { status: 'matched', id: 'hydrochloric-acid', candidateIds: ['hydrochloric-acid'], catalogVersion: 'test', selection: 'manual' },
+        });
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            chemical: { casNumber: '7647-01-0' }, enrichmentVersion: 0, ghsDataStatus: 'not_checked',
+        });
+        expect(useWasteStore.getState().batch.components[0].chemical.hazardLookup).toBeUndefined();
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+            const request = JSON.parse(String(init?.body));
+            expect(request.items[0].casNumber).toBe('7647-01-0');
+            expect(request.items[0].pubchemCid).toBeGreaterThan(0);
+            const result: ChemicalEnrichmentResult = {
+                requestId: request.items[0].requestId, overallStatus: 'complete',
+                identity: { status: 'verified', canonicalName: 'Hydrochloric acid', casNumber: '7647-01-0', equivalentPubchemCids: [], molecularFormula: 'HCl', evidence: [] },
+                hazard: { status: 'classified', hCodes: ['H314'], hazardStatements: [], pictograms: [], hazardFlags: ['CORROSIVE'], sources: [], fetchedAt: new Date().toISOString() },
+                referencePh: { status: 'source_absent', source: 'kosha' },
+                phCatalog: { status: 'matched', id: 'hydrochloric-acid', candidateIds: ['hydrochloric-acid'], catalogVersion: 'test' }, enrichmentVersion: 2,
+            };
+            return Response.json({ results: [result] });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        await useWasteStore.getState().refreshChemicalEnrichment();
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(useWasteStore.getState().batch.components[0]).toMatchObject({
+            ghsDataStatus: 'verified', automaticHazardFlags: expect.arrayContaining(['CORROSIVE']),
+        });
+    });
+
+    it('does not replace an existing conflicting CAS through a catalog patch', () => {
+        useWasteStore.getState().addToCart(cartItem('acetone-catalog', 'Acetone'));
+        const component = useWasteStore.getState().batch.components[0];
+        useWasteStore.getState().updateComponent(component.cartLineId, {
+            phCatalogId: 'hydrochloric-acid',
+            phCatalogMatch: { status: 'matched', id: 'hydrochloric-acid', candidateIds: [], catalogVersion: 'test', selection: 'manual' },
+        });
+        expect(useWasteStore.getState().batch.components[0].chemical).toEqual(component.chemical);
+    });
+
     it('recomputes the automatic matrix and total when all concentrated components are confirmed as aqueous', () => {
         const acetate = cartItem('acetate', 'Sodium Acetate', 'NEUTRAL');
         acetate.chemical.casNumber = '127-09-3';

@@ -282,14 +282,11 @@ describe("tool input workflows", () => {
   });
   it("applies a sample to multiple wells and retains the annotations when changing plate size", async () => {
     const { element, getDoc } = await mount(<Plate />);
+    await act(() => element.querySelector<HTMLButtonElement>('[role="switch"]')!.click());
+    await act(() => element.querySelector<HTMLButtonElement>('[aria-label="A1"]')!.click());
+    await act(() => element.querySelector<HTMLButtonElement>('[aria-label="A2"]')!.click());
     await input(field(element, "Sample"), "Control");
-    await input(field(element, "Condition"), "Vehicle");
-    await act(() => {
-      element.querySelector<HTMLButtonElement>('[aria-label="A1 "]')!.click();
-    });
-    await act(() => {
-      element.querySelector<HTMLButtonElement>('[aria-label="A2 "]')!.click();
-    });
+    await input(field(element, "Condition / concentration"), "Vehicle");
     await act(() => button(element, "Apply to selected wells").click());
     const wells = getDoc().data.wells as Record<
       string,
@@ -304,4 +301,25 @@ describe("tool input workflows", () => {
     });
     expect((getDoc().data.wells as typeof wells).A1.sample).toBe("Control");
   });
+  it("loads a saved well, pastes its draft only on apply, and selects a whole row", async () => {
+    const saved = { sample: "Drug X", condition: "1 μM", replicate: "1", color: "#bfdbfe" };
+    const { element, getDoc } = await mount(<Plate />, { size: "24", wells: { A1: saved } });
+    const clickLabel = async (label: string) => act(() => {
+      element.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click();
+    });
+    await clickLabel("A1 · Drug X · 1 μM · 1");
+    expect(field(element, "Sample").value).toBe("Drug X");
+    await clickLabel("Copy content");
+    await clickLabel("A2");
+    expect(element.querySelectorAll('.tool-plate [aria-pressed="true"]')).toHaveLength(1);
+    expect(field(element, "Sample").value).toBe("");
+    await clickLabel("Paste");
+    expect((getDoc().data.wells as Record<string, unknown>).A2).toBeUndefined();
+    await act(() => button(element, "Apply to selected wells").click());
+    expect((getDoc().data.wells as Record<string, unknown>).A2).toEqual(saved);
+    await clickLabel("Select row B");
+    expect(element.querySelectorAll('.tool-plate [aria-pressed="true"]')).toHaveLength(6);
+    expect(element.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
+  });
+
 });

@@ -2909,3 +2909,62 @@
     min-height: 44px !important;
   }
 }
+
+.culture-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+.culture-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--tool-border, #cbd5e1);
+  border-radius: 12px;
+  background: var(--tool-panel, #fff);
+}
+.culture-overview span, .culture-overview strong { display: block; }
+.culture-overview span { color: var(--tool-muted, #64748b); font-size: .8rem; margin-bottom: 5px; }
+.culture-overview strong { overflow-wrap: anywhere; font-size: 1rem; }
+.culture-section { margin: 16px 0; border: 1px solid var(--tool-border, #e2e8f0); border-radius: 12px; background: var(--tool-panel, #fff); }
+.culture-section > summary { cursor: pointer; padding: 18px 22px; font-weight: 650; }
+.culture-section > .tool-panel { margin: 0; border: 0; border-top: 1px solid var(--tool-border, #e2e8f0); border-radius: 0; }
+
+.plate-controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.plate-controls .tool-field { min-width: 150px; margin-bottom: 0; }
+.plate-controls [aria-checked="true"] { color: #2563eb; border-color: #2563eb; }
+.plate-scroll { overflow-x: auto; padding: 4px; }
+.plate-labelled { overflow: visible; }
+.tools-workspace .plate-labelled .plate-axis { border: 0; border-radius: 6px; background: transparent; color: var(--tool-muted, #64748b); font-size: 13px; font-weight: 700; min-width: 0; min-height: 32px; aspect-ratio: auto; }
+.plate-labelled button[aria-pressed="true"] { box-shadow: 0 0 0 3px #2563eb; position: relative; z-index: 1; }
+.plate-well-id { display: block; font-size: 10px; opacity: .8; }
+.plate-well-label { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; font-weight: 600; }
+.plate-selection { max-height: 70px; overflow: auto; overflow-wrap: anywhere; font-size: .875rem; }
+.plate-editor { scroll-margin-top: 90px; }
+.tools-workspace .plate-list-well { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.plate-color-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1px solid #94a3b8; flex-shrink: 0; }
+.plate-selected-row { background: var(--tool-bg, #f8fafc); }
+.plate-selected-row .plate-list-well { border-color: #2563eb; }
+
+.tools-workspace .plate-editor > .tool-panel { padding: 16px; }
+.plate-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.tools-workspace .plate-editor-heading h2 { margin: 0; }
+.plate-editor-clipboard { display: flex; gap: 6px; }
+.tools-workspace .plate-editor-clipboard button { display: grid; place-items: center; min-height: 36px; width: 36px; padding: 6px; }
+.plate-editor-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px 12px; }
+.plate-editor-fields > :first-child, .plate-editor-fields > .tool-color-field { grid-column: 1 / -1; }
+.tools-workspace .plate-editor-fields .tool-field { margin: 0; gap: 4px; min-width: 0; font-size: 13px; }
+.tools-workspace .plate-editor-fields input[type="text"] { min-height: 42px; height: 42px; padding: 8px 10px; font-size: 16px; }
+.tools-workspace .plate-editor-fields .tool-color-field { margin: 0; padding: 0; min-width: 0; }
+.tools-workspace .plate-editor-fields .tool-color-field legend { font-size: 13px; margin-bottom: 5px; }
+.tools-workspace .plate-editor-fields .tool-color-options { gap: 6px; }
+.tools-workspace .plate-editor-fields .tool-color-swatch { width: 30px; height: 30px; min-width: 30px; min-height: 30px; border-radius: 8px; padding: 0; }
+.tools-workspace .plate-editor-fields .tool-custom-color { min-height: 30px; padding: 4px 7px; font-size: 12px; }
+.tools-workspace .plate-editor .tool-actions { margin: 12px 0 0; gap: 8px; }
+.plate-editor-status:empty { display: none; }
+.plate-editor-status:not(:empty) { margin: 10px 0 0; font-size: 13px; }
