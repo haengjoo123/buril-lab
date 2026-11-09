@@ -2,8 +2,8 @@
   "schema_version": 1,
   "environment": "staging",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 73,
-  "observed_on": "2026-10-18",
+  "expected_count": 74,
+  "observed_on": "2026-11-09",
   "entries": [
     {
       "cache_key": "authenticated_security_definer_function_executable_public_activate_waste_policy_v2_p_policy_version_id uuid",
@@ -1226,6 +1226,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_save_tool_document_p_id uuid, p_tool_id text, p_title text, p_data jsonb, p_engine_version text, p_expected_revision integer, p_deleted_at timestamp with time zone",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "save_tool_document",
+        "identity_arguments": "p_id uuid, p_tool_id text, p_title text, p_data jsonb, p_engine_version text, p_expected_revision integer, p_deleted_at timestamp with time zone",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "The owner-only save RPC checks auth.uid(), document owner, tool identity and expected revision. Direct table writes and anonymous/service execution are revoked. The exact callable boundary remains tracked for periodic review; cross-account and stale-write pgTAP checks cover the hosted implementation.",
+      "reviewed_by_role": "release_implementation_review",
+      "reviewed_at": "2026-11-09",
+      "expires_on": "2026-12-31",
+      "target_gate": "Personal tools RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_search_labs_search_query text",

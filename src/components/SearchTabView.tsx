@@ -1,5 +1,6 @@
 import { useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
 import { AdaptivePaneLayout } from './AdaptivePaneLayout';
+import logo from '../assets/burillab_app_icon.png';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, ChevronRight, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight, RotateCcw } from 'lucide-react';
@@ -208,10 +209,14 @@ export function SearchTabView({
   const [inventoryDraft, setInventoryDraft] = useState<{ product: MediaProduct; casNumber: string } | null>(null);
   const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.search);
   const layout = useAdaptiveLayout();
+  // Keep compact screens and segmented displays on their existing pane flow.
+  const isDesktopSearch = layout.viewport.width >= 1024 && layout.segments.length <= 1;
+  const isMobileSearch = layout.activeRegion.width < 600 && !layout.twoPane;
   const [closedResultQuery, setClosedResultQuery] = useState<string | null>(null);
   const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
   const hasOtherResults = mediaProducts.length > 0 || cabinetResults.length > 0;
   const hasSearchResults = Boolean(result) || hasOtherResults;
+  const desktopSearchState = hasSearchResults || isLoading ? 'results' : 'start';
   const showChemicalNotFoundNotice = !isLoading && !result && hasOtherResults && !!lastSearchQuery;
   const normalizedQuery = query.trim();
   const shouldShowAutocomplete =
@@ -263,13 +268,18 @@ export function SearchTabView({
     const viewport = window.visualViewport;
     const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportTop = viewport?.offsetTop ?? 0;
-    const formBottom = searchFormRef.current.getBoundingClientRect().bottom;
-    const panelBottom = searchFormRef.current.closest('[data-pane]')?.getBoundingClientRect().bottom ?? Infinity;
-    const availableHeight = Math.min(viewportTop + viewportHeight, layout.activeRegion.y + layout.activeRegion.height, panelBottom) - formBottom - 18;
+    const formRect = searchFormRef.current.getBoundingClientRect();
+    const formBottom = formRect.bottom;
+    const panelBottom = isDesktopSearch
+      ? searchFormRef.current.closest('.search-panes')?.getBoundingClientRect().bottom ?? Infinity
+      : searchFormRef.current.closest('[data-pane]')?.getBoundingClientRect().bottom ?? Infinity;
+    const availableHeight = isMobileSearch
+      ? formRect.top - Math.max(viewportTop, layout.bounds.y) - 16
+      : Math.min(viewportTop + viewportHeight, layout.activeRegion.y + layout.activeRegion.height, panelBottom) - formBottom - 18;
     const nextHeight = Math.max(0, Math.min(360, Math.floor(availableHeight)));
 
     setAutocompleteMaxHeight(nextHeight);
-  }, [layout.activeRegion]);
+  }, [isDesktopSearch, isMobileSearch, layout.activeRegion, layout.bounds.y]);
 
   const handleInputFocus = useCallback(() => {
     if (blurTimeoutRef.current !== null) {
@@ -279,10 +289,10 @@ export function SearchTabView({
 
     setSearchFocus(true);
     window.setTimeout(() => {
-      searchFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!isMobileSearch) searchFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       updateAutocompleteMaxHeight();
     }, 80);
-  }, [setSearchFocus, updateAutocompleteMaxHeight]);
+  }, [isMobileSearch, setSearchFocus, updateAutocompleteMaxHeight]);
 
   const handleInputBlur = useCallback(() => {
     blurTimeoutRef.current = window.setTimeout(() => {
@@ -579,11 +589,19 @@ export function SearchTabView({
       }}
     >
       <AdaptivePaneLayout onActivePaneChange={pane => (pane === 'primary' ? closeDetailPane() : setClosedResultQuery(null))} layout={layout} activePane={shouldShowDetailPane ? 'detail' : 'primary'}
-        onBack={closeDetailPane} className="search-panes flex h-full flex-col">
+        onBack={closeDetailPane} className="search-panes flex h-full flex-col"
+        data-desktop-search={isDesktopSearch} data-mobile-search={isMobileSearch} data-search-state={desktopSearchState}>
 
-        <div data-pane="primary" className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4"><div className="flex flex-col gap-6">
+        {isMobileSearch && !lastSearchQuery && !isLoading && !error && !wasteComponentSearchMode && <section className="search-mobile-welcome">
+          <img src={logo} alt="" className="h-12 w-12" />
+          <h2>{t('search_mobile_title')}</h2>
+          <p>{t('search_mobile_description')}</p>
+        </section>}
+
+        <div data-pane="primary" className="search-primary-pane min-h-0 min-w-0 flex-1 overflow-y-auto p-4"><div className="search-primary-content flex flex-col gap-6">
+      <div className="search-controls contents">
       {showOnboardingGuide && (
-        <div className={isSearchFocused ? 'hidden wide:block' : ''}>
+        <div className={`search-onboarding ${isSearchFocused ? 'hidden wide:block' : ''}`}>
           <OnboardingGuideCard
             icon={<Search className="h-5 w-5" />}
             title={t('onboarding_search_title')}
@@ -598,7 +616,7 @@ export function SearchTabView({
         </div>
       )}
 
-      {showHero && (
+      {showHero && !isMobileSearch && (
         <section className="mt-4 animate-in fade-in slide-in-from-top-2 duration-500 wide:hidden">
           <h2 className="text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 wide:text-4xl wide:tracking-tight">
             {t('app_subtitle_1')}<br />
@@ -610,23 +628,23 @@ export function SearchTabView({
         </section>
       )}
 
-      <section className="hidden wide:block">
-        <h2 className="text-4xl font-bold tracking-tight text-slate-950 dark:text-slate-100">
-          {t('tab_search')}
+      <section className={isDesktopSearch ? 'search-desktop-heading' : 'hidden wide:block'}>
+        <h2 className={isDesktopSearch ? 'text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-100' : 'text-4xl font-bold tracking-tight text-slate-950 dark:text-slate-100'}>
+          {t(isDesktopSearch ? 'search_desktop_title' : 'tab_search')}
         </h2>
         <p className="mt-3 text-base text-slate-600 dark:text-slate-400">
-          {t('app_desc')}
+          {t(isDesktopSearch ? 'search_desktop_description' : 'app_desc')}
         </p>
       </section>
 
       {wasteComponentSearchMode && (
         <div
           role="status"
-          className="flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100 sm:flex-row sm:items-center sm:justify-between"
+          className="search-notice flex flex-col items-start gap-2 border-b border-slate-200 pb-4 text-slate-900 dark:border-slate-800 dark:text-slate-100 sm:flex-row sm:justify-between"
         >
           <div>
-            <p className="font-bold">{t('waste_component_search_title')}</p>
-            <p className="mt-1 text-sm text-blue-800 dark:text-blue-200">
+            <p className="font-semibold">{t('waste_component_search_title')}</p>
+            <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
               {t('waste_component_search_desc')}
             </p>
           </div>
@@ -634,7 +652,7 @@ export function SearchTabView({
             <button
               type="button"
               onClick={onReturnToWasteBatch}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-slate-900 dark:text-blue-200 dark:hover:bg-blue-950"
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded text-sm font-medium text-blue-600 underline-offset-4 hover:underline dark:text-blue-400"
             >
               <ShoppingBag className="h-4 w-4" aria-hidden="true" />
               {t('waste_return_to_batch')}
@@ -647,15 +665,17 @@ export function SearchTabView({
         ref={searchFormRef}
         onSubmit={handleFormSubmit}
         data-onboarding-target="search-box"
-        className={`relative group z-20 ${isSearchFocused ? 'sticky top-3 wide:relative wide:top-auto' : ''}`}
+        className={`search-composer relative group z-20 ${!isDesktopSearch && !isMobileSearch && isSearchFocused ? 'sticky top-3 wide:relative wide:top-auto' : ''}`}
       >
         <div
-          className={`rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 wide:rounded-none wide:border-0 wide:bg-transparent wide:p-0 wide:shadow-none wide:group-focus-within:translate-y-0 wide:group-focus-within:shadow-none dark:wide:bg-transparent ${showErrorOutline
+          className={`search-composer-surface ${isDesktopSearch
+            ? 'rounded-[24px] border bg-slate-50/80 px-3 py-2 transition-colors group-focus-within:border-blue-300 group-focus-within:bg-white group-focus-within:ring-2 group-focus-within:ring-blue-100 dark:bg-slate-900/70 dark:group-focus-within:bg-slate-900 dark:group-focus-within:ring-blue-950'
+            : 'rounded-[1.5rem] border bg-white px-4 py-3 shadow-[0_14px_32px_-26px_rgba(15,23,42,0.24)] transition-all group-focus-within:-translate-y-0.5 group-focus-within:shadow-[0_20px_44px_-30px_rgba(37,99,235,0.22)] dark:bg-slate-800 wide:rounded-none wide:border-0 wide:bg-transparent wide:p-0 wide:shadow-none wide:group-focus-within:translate-y-0 wide:group-focus-within:shadow-none dark:wide:bg-transparent'} ${showErrorOutline
             ? 'border-red-300 dark:border-red-900/50'
-            : 'border-slate-100 dark:border-slate-700/70'
+            : isDesktopSearch ? 'border-slate-200 dark:border-slate-700' : 'border-slate-100 dark:border-slate-700/70'
             }`}
         >
-          <div className={`flex items-center gap-2 transition-colors wide:min-h-[76px] wide:gap-3 wide:rounded-[24px] wide:border wide:px-3 wide:py-2 ${
+          <div className={isDesktopSearch ? 'flex min-h-[60px] items-center gap-3' : `flex items-center gap-2 transition-colors wide:min-h-[76px] wide:gap-3 wide:rounded-[24px] wide:border wide:px-3 wide:py-2 ${
             showErrorOutline
               ? 'wide:border-red-200 wide:bg-red-50 dark:wide:border-red-900/60 dark:wide:bg-red-950/30'
               : 'wide:border-slate-200 wide:bg-slate-50/80 wide:ring-1 wide:ring-white wide:group-focus-within:border-blue-300 wide:group-focus-within:bg-white wide:group-focus-within:ring-blue-100 dark:wide:border-slate-700/70 dark:wide:bg-slate-900/70 dark:wide:ring-slate-700/50 dark:wide:group-focus-within:border-blue-500/60 dark:wide:group-focus-within:bg-slate-900 dark:wide:group-focus-within:ring-blue-500/20'
@@ -679,8 +699,9 @@ export function SearchTabView({
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
                 data-onboarding-target="search-input"
-              className="block h-10 w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] wide:h-14 wide:text-lg wide:text-slate-900 wide:placeholder:text-slate-400 dark:wide:text-slate-100 dark:wide:placeholder:text-slate-500"
+              className={isDesktopSearch ? 'block h-14 w-full bg-transparent text-lg font-medium text-slate-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500 dark:[color-scheme:dark]' : 'block h-10 w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] wide:h-14 wide:text-lg wide:text-slate-900 wide:placeholder:text-slate-400 dark:wide:text-slate-100 dark:wide:placeholder:text-slate-500'}
               placeholder={t('search_placeholder')}
+              aria-label={t('search_placeholder')}
               disabled={isLoading}
             />
             </div>
@@ -697,7 +718,7 @@ export function SearchTabView({
               </button>
             )}
             <div className="flex shrink-0 items-center gap-1">
-              {query.trim() && (
+              {(query.trim() || (isDesktopSearch && isLoading)) && (
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -726,7 +747,7 @@ export function SearchTabView({
         {/* Autocomplete Dropdown */}
         {shouldShowAutocomplete && (
           <div
-            className={`absolute top-full left-0 right-0 mt-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isSearchFocused ? '' : 'max-h-60'}`}
+            className={`search-suggestions absolute top-full left-0 right-0 mt-3 flex flex-col bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isSearchFocused ? '' : 'max-h-60'}`}
             style={isSearchFocused ? { maxHeight: `${autocompleteMaxHeight}px` } : undefined}
           >
             {isSuggestionsLoading && suggestions.length === 0 ? (
@@ -735,7 +756,7 @@ export function SearchTabView({
                 {t('search_loading_suggestions')}
               </div>
             ) : (
-              <ul className="max-h-full overflow-y-auto w-full">
+              <ul className="min-h-0 max-h-full overflow-y-auto w-full">
                 {suggestions.map((sug) => (
                   <li key={sug}>
                     <button
@@ -756,7 +777,7 @@ export function SearchTabView({
         {/* Recent searches while the input is focused and empty */}
         {shouldShowRecentDropdown && (
           <div
-            className="absolute top-full left-0 right-0 z-50 mt-3 flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg shadow-gray-200/50 animate-in fade-in slide-in-from-top-2 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/50"
+            className="search-suggestions absolute top-full left-0 right-0 z-50 mt-3 flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg shadow-gray-200/50 animate-in fade-in slide-in-from-top-2 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/50"
             style={{ maxHeight: `${autocompleteMaxHeight}px` }}
             // Keep the input focused while removing entries.
             onMouseDown={(event) => event.preventDefault()}
@@ -778,15 +799,37 @@ export function SearchTabView({
         )}
       </form>
 
+      {isDesktopSearch && desktopSearchState === 'start' && recentSearches.length > 0 && !shouldShowRecentDropdown && (
+        <section className="mt-4" aria-label={t('guide_example')}>
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('guide_example')}</h3>
+            <button type="button" onClick={onClearSearchHistory} className="rounded text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
+              {t('recent_clear')}
+            </button>
+          </div>
+          <ul className="flex flex-wrap gap-2">
+            {recentSearches.slice(0, 5).map(term => (
+              <li key={term} className="min-w-0 max-w-full">
+                <button type="button" onClick={() => handleHistorySelect(term)}
+                  className="inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-blue-700 dark:hover:text-blue-300">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                  <span className="truncate">{term}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {isAiAnalyzing && (
-        <div className="flex items-center gap-3 text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl text-sm animate-in fade-in slide-in-from-top-1 border border-purple-100 dark:border-purple-900/30">
-          <Loader2 className="w-5 h-5 animate-spin" />
+        <div role="status" className="search-message flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
           <span className="font-medium">{t('app_ai_analyzing')}</span>
         </div>
       )}
 
       {error && isNotFound ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 animate-in fade-in slide-in-from-top-1 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-300">
+        <div className="search-message text-sm text-slate-600 dark:text-slate-400">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
             <span className="min-w-0">{error}</span>
@@ -798,7 +841,7 @@ export function SearchTabView({
                   key={suggestion}
                   type="button"
                   onClick={() => handleSuggestionSelect(suggestion)}
-                  className="inline-flex min-h-9 max-w-full items-center rounded-full border border-blue-200 bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-50 active:bg-blue-100 dark:border-blue-900/60 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                  className="inline-flex min-h-9 max-w-full items-center rounded text-sm font-medium text-blue-600 underline-offset-4 hover:underline dark:text-blue-400"
                 >
                   <span className="truncate">{suggestion}</span>
                 </button>
@@ -807,28 +850,35 @@ export function SearchTabView({
           )}
         </div>
       ) : error ? (
-        <div role="alert" className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm animate-in fade-in slide-in-from-top-1 border border-red-100 dark:border-red-900/30">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span className="min-w-0 flex-1">{error}</span>
+        <div role="alert" className="search-message flex items-start gap-3 text-sm">
+          <AlertCircle className="mt-1 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+          <p className="leading-6 text-slate-600 dark:text-slate-400">{error}</p>
           {errorKind === 'technical' && onRetrySearch && (
             <button
               type="button"
               onClick={onRetrySearch}
               disabled={isLoading}
-              className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60 dark:border-red-900/60 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-950/40"
+              className="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded text-sm font-medium text-blue-600 underline-offset-4 hover:underline disabled:opacity-60 dark:text-blue-400"
             >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
               {t('search_retry')}
             </button>
           )}
+          </div>
         </div>
       ) : null}
+      </div>
 
+      <div className="search-results-list contents">
+      {isDesktopSearch && desktopSearchState === 'results' && (
+        <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">{t('search_desktop_results_title')}</h3>
+      )}
       {(result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
         <div className="flex flex-col gap-4">
           {showChemicalNotFoundNotice && (
-            <div className="flex items-start gap-2 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg text-sm border border-amber-100 dark:border-amber-900/40">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
               <span>{t('search_chemical_not_found_notice', { query: lastSearchQuery })}</span>
             </div>
           )}
@@ -864,8 +914,13 @@ export function SearchTabView({
           )}
 
           {result && <button type="button" onClick={() => setClosedResultQuery(null)}
-            className="min-h-11 rounded-xl border border-blue-200 p-4 text-left font-semibold text-blue-700 dark:text-blue-300">
-            {lastSearchQuery} · {t('search_results_chemical')}
+            aria-pressed={isDesktopSearch ? true : undefined}
+            className={isDesktopSearch ? 'order-first flex min-h-11 flex-col gap-1 rounded-r-lg border-l-4 border-blue-600 bg-blue-50 p-4 text-left text-slate-900 transition-colors hover:bg-blue-100 dark:border-blue-400 dark:bg-blue-950/40 dark:text-slate-100 dark:hover:bg-blue-950/60' : 'min-h-11 rounded-xl border border-blue-200 p-4 text-left font-semibold text-blue-700 dark:text-blue-300'}>
+            {isDesktopSearch ? <>
+              <span className="font-semibold">{result.chemical.name}</span>
+              {result.chemical.casNumber && <span className="text-xs text-slate-600 dark:text-slate-400">CAS {result.chemical.casNumber}</span>}
+              <span className="text-xs text-slate-500 dark:text-slate-400">{t('search_results_chemical')}</span>
+            </> : <>{lastSearchQuery} · {t('search_results_chemical')}</>}
           </button>}
 
           {mediaProducts.length > 0 && (
@@ -925,7 +980,7 @@ export function SearchTabView({
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          <section className="hidden wide:block">
+          {!isDesktopSearch && <section className="hidden wide:block">
             <div className="mb-4">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('search_preview_title')}</h3>
             </div>
@@ -940,10 +995,10 @@ export function SearchTabView({
                 </p>
               </div>
             </div>
-          </section>
+          </section>}
 
-          {recentSearches.length > 0 && !isSearchFocused && (
-            <section className="wide:hidden">
+          {recentSearches.length > 0 && !isSearchFocused && !isMobileSearch && (
+            <section className={isDesktopSearch ? 'hidden' : 'wide:hidden'}>
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('guide_example')}</h3>
                 <button
@@ -978,9 +1033,10 @@ export function SearchTabView({
           )}
         </div>
       )}
+      </div>
         </div>
 
-        <aside className="mt-5 hidden flex-col gap-5 wide:flex">
+        {!isDesktopSearch && <aside className="mt-5 hidden flex-col gap-5 wide:flex">
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('guide_example')}</h3>
@@ -1130,7 +1186,7 @@ export function SearchTabView({
               )}
             </section>
           )}
-        </aside>
+        </aside>}
         </div>
         <section ref={detailPaneRef} data-pane="detail" className="min-h-0 overflow-y-auto p-4">
           {result ? (
@@ -1156,8 +1212,12 @@ export function SearchTabView({
               <ResultSkeleton />
             </div>
           ) : (
-            <div className="flex h-full min-h-48 items-center justify-center text-center text-slate-500">
-              {t('search_preview_empty_desc')}
+            <div className={isDesktopSearch ? 'flex h-full min-h-48 flex-col items-center justify-center gap-3 p-8 text-center text-slate-500 dark:text-slate-400' : 'flex h-full min-h-48 items-center justify-center text-center text-slate-500'}>
+              {isDesktopSearch ? <>
+                <Search className="h-8 w-8 text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                <h3 className="font-semibold text-slate-700 dark:text-slate-300">{t('search_desktop_select_title')}</h3>
+                <p className="max-w-sm text-sm">{t('search_desktop_select_description')}</p>
+              </> : t('search_preview_empty_desc')}
             </div>
           )}
         </section>

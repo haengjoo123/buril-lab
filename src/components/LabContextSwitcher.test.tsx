@@ -79,17 +79,15 @@ describe('LabContextSwitcher segments', () => {
     expect(html).toMatch(/aria-pressed="true" aria-label="lab_personal_space"/)
     expect(html).toContain('lab_segment_personal')
     expect(html).toContain('lab_segment_lab')
-    expect(html).not.toContain('bg-blue-600')
   })
 
-  it('shows the current lab name in a filled lab segment that opens the lab list', () => {
+  it('shows the current lab name in the selected segment that opens the lab list', () => {
     labStoreState.current = { ...labStoreState.current, currentLabId: 'lab-b' }
     const html = renderToStaticMarkup(<LabContextSwitcher />)
 
     expect(html).toContain('Shared Instruments')
     expect(html).not.toContain('lab_segment_lab')
     expect(html).toMatch(/data-testid="lab-context-lab-segment"[^>]*aria-pressed="true"[^>]*aria-haspopup="menu"/)
-    expect(html).toContain('bg-blue-600')
   })
 })
 

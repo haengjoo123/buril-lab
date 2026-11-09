@@ -3,7 +3,7 @@
  * Manages Supabase Auth session state, sign in, sign up, and sign out.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
 import { postJson } from '../services/internalApi';
@@ -100,10 +100,28 @@ export function useAuth(): UseAuthReturn {
     }, []);
 
     const currentUserId = state.user?.id;
+    const previousToolOwner = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        const previous=previousToolOwner.current;
+        previousToolOwner.current=currentUserId;
+        if(previous&&previous!==currentUserId){
+            void Promise.all([import('../features/tools/repository'),import('../features/tools/notifications')])
+                .then(async ([{closeToolRepository},{cancelToolNotifications}])=>{
+                    await Promise.allSettled([closeToolRepository(previous),cancelToolNotifications(previous)]);
+                }).catch(()=>{/* Account isolation still prevents reads while cleanup is retried on sign-out. */});
+        }
+    },[currentUserId]);
 
     const signOut = useCallback(async () => {
         if (currentUserId) useInventoryHazardStore.getState().clearUser(currentUserId);
-        await supabase.auth.signOut();
+        try { if (currentUserId) {
+            const [{ closeToolRepository }, { cancelToolNotifications }] = await Promise.all([
+                import('../features/tools/repository'), import('../features/tools/notifications'),
+            ]);
+            await Promise.allSettled([closeToolRepository(currentUserId),cancelToolNotifications(currentUserId)]);
+        } } finally {
+            await supabase.auth.signOut();
+        }
     }, [currentUserId]);
 
     const deleteAccount = useCallback(async () => {

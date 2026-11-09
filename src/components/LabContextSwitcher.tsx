@@ -12,14 +12,11 @@ import { readLabJoinTarget, withoutLabJoinParams, type LabJoinTarget } from './l
 // so the switcher matches the 44px header buttons instead of growing to 50px on touch.
 const SEGMENT_BUTTON = 'group flex h-11 items-center rounded-xl p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400';
 const SEGMENT_PILL = 'flex h-full min-w-0 items-center gap-1.5 rounded-lg px-2 text-sm transition-colors @min-[11rem]:px-2.5';
-const SEGMENT_IDLE = 'font-medium text-slate-500 group-hover:bg-white/70 group-hover:text-slate-900 dark:text-slate-400 dark:group-hover:bg-slate-700/60 dark:group-hover:text-slate-100';
-const SEGMENT_PERSONAL_ACTIVE = 'bg-white font-semibold text-slate-900 shadow-sm ring-1 ring-slate-200 dark:bg-slate-950 dark:text-slate-100 dark:ring-slate-700';
-const SEGMENT_LAB_ACTIVE = 'bg-blue-600 font-semibold text-white shadow-sm group-hover:bg-blue-700';
-// Brief ring on the lab pill right after the user creates or joins a lab.
-const SEGMENT_LAB_ENTERED = 'ring-2 ring-emerald-400 dark:ring-emerald-300';
+const SEGMENT_IDLE = 'font-medium text-slate-400 group-hover:bg-slate-50 group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:bg-slate-800 dark:group-hover:text-slate-200';
+const SEGMENT_ACTIVE = 'bg-slate-100 font-semibold text-slate-800 group-hover:bg-slate-200/70 dark:bg-slate-800 dark:text-slate-100 dark:group-hover:bg-slate-700';
 // Width priority on phones: the current lab name first. The inactive segment stays icon-only
 // until the switcher is tablet-wide (container ≥ 18rem), and the active lab pill drops its
-// people icon below 13rem (the blue fill already says "lab"), so 320–390px phones show
+// people icon below 13rem (the lab name identifies the current context), so 320–390px phones show
 // 3–7 characters of the lab name instead of one.
 const INACTIVE_LABEL = 'hidden @min-[18rem]:inline';
 const ACTIVE_LAB_ICON = 'hidden h-4 w-4 shrink-0 @min-[13rem]:block';
@@ -92,7 +89,7 @@ export const LabContextSwitcher: React.FC = () => {
                 <div
                     role="group"
                     aria-label={t('lab_switcher_title')}
-                    className="inline-flex max-w-full min-w-0 items-center overflow-hidden rounded-xl bg-slate-100 align-middle dark:bg-slate-800"
+                    className="inline-flex max-w-full min-w-0 items-center align-middle"
                 >
                     <button
                         type="button"
@@ -102,7 +99,7 @@ export const LabContextSwitcher: React.FC = () => {
                         title={t('lab_personal_space')}
                         className={`${SEGMENT_BUTTON} shrink-0`}
                     >
-                        <span className={`${SEGMENT_PILL} ${isLab ? SEGMENT_IDLE : SEGMENT_PERSONAL_ACTIVE}`}>
+                        <span className={`${SEGMENT_PILL} ${isLab ? SEGMENT_IDLE : SEGMENT_ACTIVE}`}>
                             <User className="h-4 w-4 shrink-0" aria-hidden="true" />
                             <span className={isLab ? INACTIVE_LABEL : undefined}>{t('lab_segment_personal')}</span>
                         </span>
@@ -119,7 +116,7 @@ export const LabContextSwitcher: React.FC = () => {
                         aria-expanded={opensMenu ? isOpen : undefined}
                         className={`${SEGMENT_BUTTON} min-w-0`}
                     >
-                        <span className={`${SEGMENT_PILL} ${isLab ? SEGMENT_LAB_ACTIVE : SEGMENT_IDLE} ${showEntered ? SEGMENT_LAB_ENTERED : ''}`}>
+                        <span className={`${SEGMENT_PILL} ${isLab ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}>
                             <Users className={isLab ? ACTIVE_LAB_ICON : 'h-4 w-4 shrink-0'} aria-hidden="true" />
                             <span className={isLab
                                 ? 'min-w-0 max-w-[9rem] truncate whitespace-nowrap sm:max-w-[14rem] lg:max-w-[18rem]'

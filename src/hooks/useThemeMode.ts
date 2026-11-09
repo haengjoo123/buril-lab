@@ -1,9 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 
 const THEME_STORAGE_KEY = 'buril-theme';
 const THEME_CHANGE_EVENT = 'buril-theme-change';
 
 type ThemeChangeEvent = CustomEvent<{ isDarkMode: boolean }>;
+
+let themeTransitionFrame: number | null = null;
+
+const applyTheme = (isDarkMode: boolean) => {
+  const root = document.documentElement;
+  if (root.classList.contains('dark') === isDarkMode) return;
+
+  if (themeTransitionFrame !== null) window.cancelAnimationFrame(themeTransitionFrame);
+  root.setAttribute('data-theme-switching', '');
+  root.classList.toggle('dark', isDarkMode);
+  // Resolve the new palette before transitions are enabled again.
+  window.getComputedStyle(root).getPropertyValue('background-color');
+  themeTransitionFrame = window.requestAnimationFrame(() => {
+    themeTransitionFrame = window.requestAnimationFrame(() => {
+      root.removeAttribute('data-theme-switching');
+      themeTransitionFrame = null;
+    });
+  });
+};
 
 const getInitialDarkMode = () => {
   if (typeof window === 'undefined') return false;
@@ -18,8 +37,8 @@ const getInitialDarkMode = () => {
 export function useThemeMode() {
   const [isDarkMode, setIsDarkModeState] = useState(getInitialDarkMode);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDarkMode);
+  useLayoutEffect(() => {
+    applyTheme(isDarkMode);
     window.localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
     window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: { isDarkMode } }));
   }, [isDarkMode]);

@@ -1,8 +1,9 @@
-import { Building2, ClipboardList, Moon, Package, Rows3, Search, Settings, Sun } from 'lucide-react';
+import { Building2, ClipboardList, Moon, Package, Rows3, Search, Settings, Sun, FlaskConical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import logo from '../assets/burillab_app_icon.png';
 import type { AppTab } from '../hooks/useAppUiState';
 import { useThemeMode } from '../hooks/useThemeMode';
+import { isLabToolsEnabled } from '../config/featureFlags';
 
 interface DesktopSideNavProps {
   activeTab: AppTab;
@@ -55,7 +56,8 @@ export function DesktopSideNav({
     { tab: 'search', label: t('tab_search'), icon: Search },
     { tab: 'logs', label: t('tab_logs'), icon: ClipboardList },
     { tab: 'cabinet', label: t('tab_cabinet'), icon: Rows3 },
-    { tab: 'inventory', label: t('tab_inventory'), icon: Package, tone: 'emerald' },
+    { tab: 'inventory', label: t('tab_inventory'), icon: Package, tone: 'blue' },
+    { tab: 'tools', label: t('tab_tools'), icon: FlaskConical, visible: isLabToolsEnabled },
     // Same icon and accent as the admin tab in the mobile bottom nav.
     { tab: 'admin', label: t('tab_audit'), icon: Building2, tone: 'red', visible: isAdmin },
   ];

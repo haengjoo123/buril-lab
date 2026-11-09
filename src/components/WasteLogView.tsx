@@ -23,6 +23,7 @@ import { SegmentedControl, type SegmentedControlOption } from './SegmentedContro
 import { LogFilterMenu } from './LogFilterMenu';
 import { translateLocationName } from '../utils/i18nUtils';
 import { useAdaptiveLayout } from '../hooks/useAdaptiveLayout';
+import { useAdaptiveDialog } from '../hooks/useAdaptiveDialog';
 import { AdaptivePaneLayout } from './AdaptivePaneLayout';
 import {
     buildAuditEventDescription,
@@ -504,6 +505,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [searchParams, setSearchParams] = useSearchParams();
     const layout = useAdaptiveLayout();
     const isDesktop = layout.twoPane;
+    const isMobileLogs = layout.activeRegion.width < 600 && !layout.twoPane;
     const [activePane, setActivePane] = useState<'primary' | 'detail'>('primary');
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.logs);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
@@ -530,6 +532,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [linkedLog, setLinkedLog] = useState<WasteLogRecord | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchInput, setSearchInput] = useState('');
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const [activeTab, setActiveTab] = useState<LogViewTab>('recent');
     const [showContainers, setShowContainers] = useState(false);
     const containersVisible = isWasteContainersEnabled && showContainers;
@@ -542,6 +545,10 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [isExporting, setIsExporting] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+    const exportMenuRef = useRef<HTMLDivElement>(null);
+    const exportDialogRef = useRef<HTMLDivElement>(null);
+    useAdaptiveDialog(exportMenuRef, () => setIsExportMenuOpen(false), isExportMenuOpen);
+    useAdaptiveDialog(exportDialogRef, () => setIsExportDialogOpen(false), isExportDialogOpen);
     const [exportFormat, setExportFormat] = useState<ExportFormat>('excel');
     const [exportScope, setExportScope] = useState<ExportScope>('30d');
     const [customExportStartDate, setCustomExportStartDate] = useState('');
@@ -787,6 +794,12 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         setSearchQuery(searchInput.trim());
         // Enter는 키보드만 닫고 결과는 이미 반영되어 있다.
         e.currentTarget.querySelector('input')?.blur();
+    };
+
+    const clearSearch = () => {
+        setSearchInput('');
+        setSearchQuery('');
+        searchInputRef.current?.focus({ preventScroll: true });
     };
 
     const handleLoadMore = async () => {
@@ -1467,10 +1480,31 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
         );
     }
 
+    const renderLogFilters = () => <LogFilterMenu<LogDateRange>
+        compact={isMobileLogs}
+        range={activeTab === 'recent' ? {
+            value: dateRange,
+            options: rangeOptions,
+            onChange: setDateRange,
+            buttonLabel: rangeOptions.find(option => option.value === dateRange)?.label ?? '',
+        } : undefined}
+        sort={{
+            value: `${sortBy}-${sortOrder}`,
+            options: sortOptions,
+            defaultValue: 'created_at-desc',
+            onChange: value => {
+                const [by, order] = value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
+                setSortBy(by);
+                setSortOrder(order);
+            },
+        }}
+    />;
+
     return (
         <div className="h-full min-h-0">
-            <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={containersVisible ? { ...layout, twoPane: false, columns: undefined } : layout} activePane={containersVisible ? 'primary' : activePane} onBack={() => { setActivePane('primary'); setExpandedId(null); }} className="logs-panes flex h-full flex-col">
-                <div data-pane="primary" className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={containersVisible ? { ...layout, twoPane: false, columns: undefined } : layout} activePane={containersVisible ? 'primary' : activePane} onBack={() => { setActivePane('primary'); setExpandedId(null); }} data-mobile-logs={isMobileLogs} data-show-containers={containersVisible} className="logs-panes flex h-full flex-col">
+                <div data-pane="primary" className="logs-primary flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <div className="logs-toolbar contents">
             {showOnboardingGuide && (
                 <OnboardingGuideCard
                     icon={<History className="h-5 w-5" />}
@@ -1486,32 +1520,39 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             )}
 
             {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3 shrink-0">
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        {t('log_title')}
+            <div className="logs-header flex flex-wrap items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                    <h2 className="flex min-w-0 items-center gap-2 text-xl font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        {isMobileLogs && <History size={22} className="shrink-0 text-slate-500 dark:text-slate-400" />}
+                        <span className="truncate">{t('log_title')}</span>
                     </h2>
-                    {totalCount > 0 && (
-                        <span className="text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    {!containersVisible && (
+                        <span aria-live="polite" className="shrink-0 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {t('log_records_count', { count: activeTotalCount })}
                         </span>
                     )}
                 </div>
 
-                {totalCount > 0 && (
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                {isMobileLogs && !containersVisible && renderLogFilters()}
+                {totalCount > 0 && !containersVisible && (
                     <div className="relative ml-auto">
                         <button
+                            type="button"
+                            aria-label={isExporting ? t('log_exporting') : t('log_export')}
+                            aria-haspopup="dialog"
+                            aria-expanded={isExportMenuOpen}
                             onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
                             disabled={isExporting}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 shadow-sm whitespace-nowrap shrink-0"
+                            className="logs-export-button flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 shadow-sm whitespace-nowrap shrink-0"
                         >
                             {isExporting ? (
                                 <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
                             ) : (
                                 <Download className="w-4 h-4 shrink-0" />
                             )}
-                            <span className="mx-0.5">{isExporting ? t('log_exporting') : t('log_export', '내보내기')}</span>
-                            <ChevronDown className="w-3.5 h-3.5 ml-0.5 opacity-60" />
+                            <span className="logs-export-label mx-0.5">{isExporting ? t('log_exporting') : t('log_export', '내보내기')}</span>
+                            <ChevronDown className="logs-export-label w-3.5 h-3.5 ml-0.5 opacity-60" />
                         </button>
 
                         {isExportMenuOpen && (
@@ -1520,7 +1561,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                     className="adaptive-overlay fixed inset-0 z-40"
                                     onClick={() => setIsExportMenuOpen(false)}
                                 />
-                                <div className="absolute right-0 top-full mt-2 w-44 bg-white dark:bg-slate-800 rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.3)] border border-gray-100 dark:border-slate-700 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                                <div ref={exportMenuRef} role="dialog" aria-modal="true" aria-label={t('log_export')} tabIndex={-1} className="logs-export-menu absolute right-0 top-full mt-2 w-44 bg-white dark:bg-slate-800 rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_-4px_rgba(0,0,0,0.3)] border border-gray-100 dark:border-slate-700 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
                                     <button
                                         onClick={() => {
                                             openExportDialog('pdf');
@@ -1548,10 +1589,11 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         )}
                     </div>
                 )}
+                </div>
             </div>
 
             {/* 보기 전환 + 검색·필터: 모바일에서 두 줄로 묶어 목록이 더 위에서 시작하도록 한다. */}
-            <div className="flex flex-col gap-3">
+            <div className="logs-view-controls flex flex-col gap-3">
                 <SegmentedControl<LogViewSegment>
                     semantics="tabs"
                     fullWidth
@@ -1569,42 +1611,29 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                 />
 
                 {!containersVisible && (
-                    <div className="flex items-center gap-2">
-                        <form onSubmit={handleSearchSubmit} className="relative min-w-0 flex-1">
+                    <div className="logs-search-tools flex items-center gap-2">
+                        <form role="search" aria-label={t('log_title')} onSubmit={handleSearchSubmit} className="logs-search-dock relative min-w-0 flex-1">
                             <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
-                                type="text"
+                                ref={searchInputRef}
+                                type="search"
                                 enterKeyHint="search"
                                 value={searchInput}
                                 onChange={e => setSearchInput(e.target.value)}
-                                placeholder={t('log_search_placeholder')}
+                                placeholder={t(isMobileLogs ? 'log_search_mobile_placeholder' : 'log_search_placeholder')}
                                 aria-label={t('log_search_placeholder')}
                                 title={t('log_search_placeholder')}
-                                className="h-11 w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-600 dark:bg-slate-800"
+                                className="h-11 w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-11 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:border-slate-600 dark:bg-slate-800 [&::-webkit-search-cancel-button]:appearance-none"
                             />
+                            {searchInput && <button type="button" onClick={clearSearch} aria-label={t('log_search_clear')} className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><X size={18} /></button>}
                         </form>
-                        <LogFilterMenu<LogDateRange>
-                            range={activeTab === 'recent' ? {
-                                value: dateRange,
-                                options: rangeOptions,
-                                onChange: setDateRange,
-                                buttonLabel: rangeOptions.find((option) => option.value === dateRange)?.label ?? '',
-                            } : undefined}
-                            sort={{
-                                value: `${sortBy}-${sortOrder}`,
-                                options: sortOptions,
-                                defaultValue: 'created_at-desc',
-                                onChange: (value) => {
-                                    const [by, order] = value.split('-') as [WasteLogSortBy, 'asc' | 'desc'];
-                                    setSortBy(by);
-                                    setSortOrder(order);
-                                },
-                            }}
-                        />
+                        {!isMobileLogs && renderLogFilters()}
                     </div>
                 )}
             </div>
+            </div>
 
+            <div className="logs-results contents">
             {containersVisible ? (
                 <WasteContainersPanel
                     key={currentLabId ?? 'personal'}
@@ -1636,7 +1665,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         {t('log_archive_empty')}
                     </p>
                 ) : (
-                    <EmptyState variant={searchQuery ? 'logs_search' : 'logs'} />
+                    <EmptyState variant={searchQuery ? 'logs_search' : 'logs'} actions={searchQuery ? <button type="button" onClick={clearSearch} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><X size={16} />{t('log_search_clear')}</button> : undefined} />
                 )
             )}
 
@@ -1738,6 +1767,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                 </div>
             )}
             </>)}
+            </div>
                 </div>
 
                 <aside data-pane="detail" className="min-h-0 overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -1979,7 +2009,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
                         onClick={() => setIsExportDialogOpen(false)}
                     />
-                    <div className="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900">
+                    <div ref={exportDialogRef} role="dialog" aria-modal="true" aria-label={t('log_export_dialog_title')} tabIndex={-1} className="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900">
                         <div className="border-b border-slate-100 p-4 dark:border-slate-800">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
@@ -1997,6 +2027,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => setIsExportDialogOpen(false)}
+                                    aria-label={t('btn_close')}
                                     className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                                 >
                                     <X className="h-4 w-4" />

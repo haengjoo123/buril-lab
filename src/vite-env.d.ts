@@ -10,6 +10,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_PH_PREDICTION?: string
   readonly VITE_ENABLE_CHEMICAL_ENRICHMENT?: string
   readonly VITE_ENABLE_WASTE_CONTAINERS?: string
+  readonly VITE_ENABLE_LAB_TOOLS?: string
 }
 
 interface ImportMeta {

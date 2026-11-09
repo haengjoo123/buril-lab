@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const origin = 'https://burillab.com'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const flags = ['VITE_ENABLE_WASTE_V2', 'VITE_ENABLE_PH_PREDICTION',
-  'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS', 'VITE_ENABLE_WASTE_CONTAINERS']
+  'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS', 'VITE_ENABLE_WASTE_CONTAINERS', 'VITE_ENABLE_LAB_TOOLS']
 const hash = (value) => createHash('sha256').update(value).digest('hex')
 
 export function validateWebChanges(changedFiles, untrackedFiles, allowWebChanges) {
@@ -29,7 +29,8 @@ export function productionEnvironment(release, profile, bundle) {
   // Fail if the web bundling/key format changes instead of falling back to .env.
   if (keys.length !== 1) throw new Error('Expected one production publishable key.')
   const features = Object.fromEntries(flags.map((name) => {
-    const value = profile.features?.[name]
+    // Older deployed profiles predate tools; preserve the disabled release state.
+    const value = profile.features?.[name] ?? (name === 'VITE_ENABLE_LAB_TOOLS' ? 'false' : undefined)
     if (!['true', 'false'].includes(value)) throw new Error(`Missing production flag: ${name}`)
     return [name, value]
   }))

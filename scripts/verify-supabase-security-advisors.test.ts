@@ -300,9 +300,9 @@ describe('Supabase hosted Security Advisor contract', () => {
       schema_version: 1,
       environment: 'production',
       advisor_cli_version: '2.115.0',
-      expected_count: 73,
+      expected_count: 74,
       observed_on: '2026-08-24',
-      entries: Array.from({ length: 73 }, (_, index) => ({
+      entries: Array.from({ length: 74 }, (_, index) => ({
         ...structuredClone(entries[index % entries.length]),
         cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
       })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1),
@@ -310,7 +310,7 @@ describe('Supabase hosted Security Advisor contract', () => {
     baseline.entries[1].cache_key = baseline.entries[0].cache_key
     expect(() => validateBaseline(baseline, 'production', { today: '2026-08-24' })).toThrow()
 
-    baseline.entries = Array.from({ length: 73 }, (_, index) => ({
+    baseline.entries = Array.from({ length: 74 }, (_, index) => ({
       ...structuredClone(entries[index % entries.length]),
       cache_key: `${entries[index % entries.length].rule}_${String(index).padStart(3, '0')}`,
     })).sort((left, right) => left.cache_key < right.cache_key ? -1 : 1)
@@ -353,8 +353,8 @@ describe('Supabase hosted Security Advisor contract', () => {
 
   it('validates the full public-safe production and staging baselines', () => {
     expect(runStaticCheck({ today: '2026-08-24' })).toEqual([
-      { environment: 'production', findings: 73 },
-      { environment: 'staging', findings: 73 },
+      { environment: 'production', findings: 74 },
+      { environment: 'staging', findings: 74 },
     ])
 
     const production = loadBaseline('production', { today: '2026-08-24' })
@@ -380,9 +380,9 @@ describe('Supabase hosted Security Advisor contract', () => {
     const production = loadBaseline('production', { today: '2026-10-02' })
     const staging = loadBaseline('staging', { today: '2026-10-02' })
     const expected = buildProductionCabinetExpectation(production, staging, { today: '2026-10-02' })
-    expect(production.expected_count).toBe(73)
-    expect(production.observed_on).toBe('2026-10-18')
-    expect(expected).toMatchObject({ environment: 'production', expected_count: 73 })
+    expect(production.expected_count).toBe(74)
+    expect(production.observed_on).toBe('2026-11-09')
+    expect(expected).toMatchObject({ environment: 'production', expected_count: 74 })
     expect(() => compareObservedWithBaseline(expected, production.entries)).not.toThrow()
     expect(() => compareObservedWithBaseline(expected, production.entries.filter(entry => entry.object.name !== 'create_waste_container_v1'))).toThrow('missing=1')
     expect(() => compareObservedWithBaseline(expected, staging.entries)).not.toThrow()

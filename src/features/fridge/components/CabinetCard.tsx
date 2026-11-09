@@ -105,12 +105,15 @@ export function CabinetCard({
             <div className="flex min-w-0 flex-1 flex-col gap-3 lg:p-4">
                 <div className="flex min-w-0 items-start gap-3">
                     <div className="min-w-0 flex-1 overflow-hidden">
-                        <h3 className="flex min-w-0 flex-wrap items-center gap-2 text-base font-semibold text-slate-900 transition-colors group-hover:text-blue-600 dark:text-slate-100 dark:group-hover:text-blue-400">
-                            <span className="min-w-0 truncate">{cabinet.name}</span>
+                        <h3 className="flex min-w-0 items-center gap-2 text-base font-semibold text-slate-900 transition-colors group-hover:text-blue-600 dark:text-slate-100 dark:group-hover:text-blue-400 lg:flex-wrap">
+                            <span className="min-w-0 truncate" title={cabinet.name}>{cabinet.name}</span>
                             {cabinet.location && (
-                                <span className="flex shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                                    <MapPin className="h-3 w-3" />
-                                    {cabinet.location}
+                                <span
+                                    className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600 dark:bg-slate-700 dark:text-slate-300 lg:max-w-full"
+                                    title={cabinet.location}
+                                >
+                                    <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                    <span className="truncate">{cabinet.location}</span>
                                 </span>
                             )}
                         </h3>

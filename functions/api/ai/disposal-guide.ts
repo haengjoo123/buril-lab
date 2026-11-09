@@ -580,7 +580,7 @@ function buildDeterministicContent(
       : `${destination.name}을 사용하세요. 정확한 위치는 연구실 폐기 정책에서 확인하세요.`,
     '기관 정책과 SDS에서 지정한 보안경·보호복·적합성 확인된 보호장갑을 착용하세요.',
     ...(destination.labelInstructions.length > 0
-      ? destination.labelInstructions.map((instruction) => `라벨: ${instruction}`)
+      ? [`라벨에 기재: ${destination.labelInstructions.join(', ')}`]
       : ['용기 라벨에 주요 성분과 위험 특성을 기록하세요.']),
     '뚜껑을 확실히 닫고 용기 외부가 오염되지 않았는지 확인하세요.',
     '용기를 세운 상태로 2차 운반 용기에 담아 기관이 지정한 동선으로 이동하세요.',

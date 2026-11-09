@@ -5,7 +5,6 @@ import '../../src/index.css';
 import '../../src/locales/i18n';
 import { AdaptiveViewportProvider } from '../../src/components/AdaptiveViewportProvider';
 import { MainLayout } from '../../src/components/MainLayout';
-import { BottomTabNav } from '../../src/components/BottomTabNav';
 import { InventoryListView } from '../../src/features/inventory/InventoryListView';
 import { SearchTabView } from '../../src/components/SearchTabView';
 import { CartView } from '../../src/components/CartView';
@@ -34,6 +33,7 @@ import { serviceStubs } from './serviceStubs';
 const noop = () => {};
 const params = new URLSearchParams(location.search);
 const screen = params.get('screen') ?? 'inventory';
+const cartCount = params.get('emptyCart') === '1' ? 0 : 1;
 // ?quiet=1 (admin, ops): every source loads, but nothing needs handling.
 const quiet = params.get('quiet') === '1';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -88,7 +88,15 @@ const linkRequest: LabSafetyCenterLinkRequest = {
 
 inventoryService.getItems = async () => {
   document.documentElement.dataset.inventoryLoads = String(Number(document.documentElement.dataset.inventoryLoads ?? 0) + 1);
-  return screen === 'admin' ? labItems : [item];
+  if (screen === 'admin') return labItems;
+  if (params.get('inventoryRows') === 'many') return Array.from({ length: 24 }, (_, index) => ({
+    ...item,
+    id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`,
+    name: index === 0 ? item.name : `재고 확인용 시약 ${String(index + 1).padStart(2, '0')}`,
+    cas_number: index === 0 ? item.cas_number : null,
+    product_number: `INV-FIXTURE-${String(index + 1).padStart(2, '0')}`,
+  }));
+  return [item];
 };
 storageLocationService.getLocations = async () => [];
 cabinetService.getCabinets = async () => [];
@@ -290,8 +298,11 @@ const result: AnalysisResult = {
   chemical: { id: 'fixture-acetone', name: 'Acetone', casNumber: '67-64-1', molecularFormula: 'C3H6O', ghs: { signal: '', hazardStatements: [] } },
   category: 'ORGANIC_NON_HALOGEN', binColor: 'bg-blue-500', label: 'category_organic_non_halogen', reason: 'Fixture', isSafe: true,
 };
-useWasteStore.getState().addToCart(result);
-useFridgeStore.setState({ selectedReagentId: 'fixture-bottle', shelves: [{
+if (cartCount > 0) useWasteStore.getState().addToCart(result);
+useFridgeStore.setState({
+  selectedReagentId: params.get('focusShelf') === '1' ? null : 'fixture-bottle',
+  focusedShelfId: params.get('focusShelf') === '1' ? 'fixture-floor' : null,
+  shelves: [{
   id: 'fixture-floor', level: 0, dividers: [], items: [{
     id: 'fixture-bottle', reagentId: 'fixture-reagent', name: 'Cabinet reagent', shelfId: 'fixture-floor',
     position: 50, width: 8, template: 'A', isAcidic: false, isBasic: false, hCodes: [],
@@ -305,23 +316,32 @@ export function Fixture() {
   const [query, setQuery] = useState('');
   const [lastQuery, setLastQuery] = useState('');
   const [searchResult, setSearchResult] = useState<AnalysisResult | null>(null);
+  const [hasSearchError, setHasSearchError] = useState(params.get('searchError') === '1');
+  const [recentSearches, setRecentSearches] = useState(params.get('recents') === '1'
+    ? ['Acetone', '7664-93-9', '64-17-5', '557-21-1', '1185-53-1', '593-84-0'] : []);
+  const selectSearchTerm = (term: string) => { setQuery(term); setLastQuery(term); setSearchResult(result); };
   // Same wiring as App: the admin tab badge counts the overdue center request (1, or 0 with ?quiet=1).
   const adminAttentionCount = useLabAdminAttentionCount({ labId: isAdmin ? labId : null, isAdmin, activeTab: tab });
   useEffect(() => { document.documentElement.dataset.fixtureMounts = String(Number(document.documentElement.dataset.fixtureMounts ?? 0) + 1); }, []);
   return <>
-    <MainLayout activeTab={tab} isAdmin={isAdmin} onTabClick={setTab} onCartClick={() => setCartOpen(true)} cartCount={1} userEmail="fixture@example.invalid" onSignOut={noop}
+    <MainLayout activeTab={tab} isAdmin={isAdmin} onTabClick={setTab} onCartClick={() => setCartOpen(true)} cartCount={cartCount} userEmail="fixture@example.invalid" onSignOut={noop}
       adminAttentionCount={adminAttentionCount}
-      bottomNav={<BottomTabNav activeTab={tab} isAdmin={isAdmin} onTabClick={setTab} adminAttentionCount={adminAttentionCount} />}>
+      recentSearches={recentSearches} onRecentSearchClick={term => { setTab('search'); selectSearchTerm(term); }}
+      onRemoveRecentSearch={term => setRecentSearches(terms => terms.filter(value => value !== term))}>
       {tab === 'inventory' ? <InventoryListView userId="fixture-user" />
         : tab === 'cabinet' ? <FridgeView cabinetId="" />
         : tab === 'logs' ? <WasteLogView />
         : tab === 'admin' ? <LabAdminView onStartWasteBatch={async () => {}} />
-        : <SearchTabView cartCount={1} query={query} lastSearchQuery={lastQuery} result={searchResult}
-          isLoading={false} isAiAnalyzing={false} error={null} mediaProducts={[]} mediaBrands={[]} mediaCount={0}
-          cabinetResults={[]} showAllProducts={false} selectedBrand="" sortBy="name_asc" recentSearches={[]}
+        : <SearchTabView cartCount={cartCount} query={query} lastSearchQuery={lastQuery} result={searchResult}
+          isLoading={params.get('loading') === '1'} isAiAnalyzing={false}
+          error={hasSearchError ? '외부 화학 자료 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해 주세요.' : null}
+          errorKind={hasSearchError ? 'technical' : null} onRetrySearch={() => setHasSearchError(false)}
+          wasteComponentSearchMode={params.get('component') === '1'} onReturnToWasteBatch={() => setCartOpen(true)}
+          mediaProducts={[]} mediaBrands={[]} mediaCount={0}
+          cabinetResults={[]} showAllProducts={false} selectedBrand="" sortBy="name_asc" recentSearches={recentSearches}
           onQueryChange={setQuery} onSearchSubmit={event => { event?.preventDefault(); setLastQuery(query); setSearchResult(result); }}
-          onReset={() => setSearchResult(null)} onSuggestionClick={noop} onOpenScanner={noop} onClearSearchHistory={noop}
-          onRemoveSearchHistory={noop} onCabinetResultClick={async () => {}} onBrandChange={noop} onSortChange={noop}
+          onReset={() => { setQuery(''); setLastQuery(''); setSearchResult(null); }} onSuggestionClick={selectSearchTerm} onOpenScanner={noop} onOpenVoiceAgent={params.get('voice') === '1' ? noop : undefined} onClearSearchHistory={() => setRecentSearches([])}
+          onRemoveSearchHistory={term => setRecentSearches(terms => terms.filter(value => value !== term))} onCabinetResultClick={async () => {}} onBrandChange={noop} onSortChange={noop}
           onClearFilters={noop} onToggleShowAllProducts={noop} onNavigateToCabinet={noop} onOpenCart={() => setCartOpen(true)} />}
     </MainLayout>
     {cartOpen && <CartView onClose={() => setCartOpen(false)} onDisposed={noop} />}
