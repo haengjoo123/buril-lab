@@ -20,6 +20,7 @@ import {
 import { useFridgeStore } from '../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../types/fridge';
 import { AppSelect } from './AppSelect';
+import { StorageLocationIcon } from './StorageLocationIcon';
 import { ReagentDateFields } from './ReagentDateFields';
 import { QuantityStepper } from '../features/inventory/QuantityStepper';
 import { translateLocationName } from '../utils/i18nUtils';
@@ -576,12 +577,13 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                                         <button
                                             key={loc.id}
                                             onClick={() => setSelectedLocationId(loc.id)}
-                                            className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${selectedLocationId === loc.id
+                                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${selectedLocationId === loc.id
                                                 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/30'
                                                 : 'bg-gray-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
                                                 }`}
                                         >
-                                            {loc.icon} {translateLocationName(loc.name, t)}
+                                            <StorageLocationIcon icon={loc.icon} />
+                                            {translateLocationName(loc.name, t)}
                                         </button>
                                     ))}
 

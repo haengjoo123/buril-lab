@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { getLabAppScopedPath, labAppRoute } from '../utils/appRoutes';
 
-export type AppTab = 'search' | 'logs' | 'cabinet' | 'inventory' | 'admin';
+export type AppTab = 'search' | 'logs' | 'cabinet' | 'inventory' | 'admin' | 'tools';
 
 interface UseAppUiStateParams {
   pathname: string;
@@ -30,6 +30,7 @@ interface UseAppUiStateResult {
 
 function getActiveTab(pathname: string): AppTab {
   const appPathname = getLabAppScopedPath(pathname);
+  if (appPathname.startsWith('/tools')) return 'tools';
   if (appPathname.startsWith('/logs')) return 'logs';
   if (appPathname.startsWith('/cabinet')) return 'cabinet';
   if (appPathname.startsWith('/inventory')) return 'inventory';
@@ -83,7 +84,7 @@ export function useAppUiState({
   const handleTabClick = useCallback((tab: AppTab) => {
     if (!isAuthenticated && tab !== 'search') {
       const returnTo =
-        tab === 'logs'
+        tab === 'tools' ? labAppRoute('/tools') : tab === 'logs'
           ? labAppRoute('/logs')
           : tab === 'cabinet'
             ? lastCabinetIdRef.current
@@ -99,6 +100,9 @@ export function useAppUiState({
     }
 
     switch (tab) {
+      case 'tools':
+        navigate(labAppRoute('/tools'));
+        break;
       case 'search':
         if (activeTab === 'search') {
           requestSearchInputFocus();

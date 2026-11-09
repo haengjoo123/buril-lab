@@ -5,7 +5,6 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { requestAdaptiveBack } from './utils/adaptiveLayout';
 import { MainLayout } from './components/MainLayout';
 import { SearchTabView } from './components/SearchTabView';
-import { BottomTabNav } from './components/BottomTabNav';
 import { VoiceAgentSheet } from './components/VoiceAgentSheet';
 import { openVoiceAgentSheet } from './components/openVoiceAgentSheet';
 import { GatewayLanding } from './components/GatewayLanding';
@@ -15,7 +14,8 @@ import type { ScannerSelectionMeta } from './components/Scanner';
 
 import { CartView } from './components/CartView';
 import { WasteV2DisabledCartView } from './components/WasteV2DisabledCartView';
-import { isChemicalEnrichmentEnabled, isWasteV2Enabled } from './config/featureFlags';
+import { isWasteV2Enabled, isLabToolsEnabled } from './config/featureFlags';
+import { useWasteChemicalEnrichment } from './hooks/useWasteChemicalEnrichment';
 import { AuthView } from './components/AuthView';
 import { ResetPasswordView } from './components/ResetPasswordView';
 import { SafetyDisclaimer, hasCurrentSafetyAcknowledgement } from './components/SafetyDisclaimer';
@@ -80,6 +80,8 @@ const OpsConsoleView = lazy(() =>
 );
 
 const isNativeApp = Capacitor.isNativePlatform();
+const ToolsWorkspace = lazy(() => import('./features/tools/ToolsWorkspace'));
+const ToolsRuntime = lazy(() => import('./features/tools/ToolsRuntime'));
 const onboardingPlatform = isNativeApp ? 'native' : 'web';
 
 function TabContentFallback() {
@@ -112,7 +114,6 @@ function App() {
   const parkedBatchCount = useWasteStore((state) => state.parkedBatches.length);
   const wasteDraftCount = parkedBatchCount + (cart.length > 0 ? 1 : 0);
   const setWasteScope = useWasteStore((state) => state.setScope);
-  const refreshChemicalEnrichment = useWasteStore((state) => state.refreshChemicalEnrichment);
   const { recentSearches, addSearchHistory, removeSearchHistory, clearSearchHistory, loadSearchHistory } = useWasteStore();
   const [isSafetyAcknowledged, setIsSafetyAcknowledged] = useState(() => {
     try {
@@ -121,7 +122,6 @@ function App() {
       return false;
     }
   });
-  const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
   const [isAddingWasteComponent, setIsAddingWasteComponent] = useState(false);
   const [wasteComponentSearchRequestKey, setWasteComponentSearchRequestKey] = useState(0);
   const [scanSelection, setScanSelection] = useState<{
@@ -341,12 +341,6 @@ function App() {
   });
   const previousOnboardingTabRef = useRef(activeTab);
 
-  useEffect(() => {
-    if (activeTab !== 'search') {
-      setIsSearchInputFocused(false);
-    }
-  }, [activeTab]);
-
   const isLoginRoute = location.pathname === '/login';
   const isResetPasswordRoute = location.pathname === '/reset-password';
   const isPrivacyRoute = location.pathname === '/privacy';
@@ -366,10 +360,7 @@ function App() {
     setWasteScope(activeOnboardingUserId, currentLabId);
   }, [activeOnboardingUserId, currentLabId, setWasteScope]);
 
-  useEffect(() => {
-    if (!activeOnboardingUserId || !isChemicalEnrichmentEnabled) return;
-    void refreshChemicalEnrichment();
-  }, [activeOnboardingUserId, currentLabId, refreshChemicalEnrichment]);
+  useWasteChemicalEnrichment(activeOnboardingUserId, currentLabId);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
@@ -868,13 +859,12 @@ function App() {
     );
   }
 
-  const shouldHideMobileSearchChrome = activeTab === 'search' && isSearchInputFocused;
-
   return (
     <>
       <SafetyDisclaimer />
 
       {appToastElement}
+      {user?.id && (isLabToolsEnabled) && <Suspense fallback={null}><ToolsRuntime ownerId={user.id}/></Suspense>}
 
       {isWelcomeOpen && isOnboardingRemoteChecked && !isScanning && (
         <OnboardingMissionPanel
@@ -939,6 +929,7 @@ function App() {
       )}
 
       <MainLayout
+        hideLabSwitcher={activeTab === 'tools'}
         onLogoClick={handleReset}
         userEmail={user?.email}
         onSignOut={isAuthenticated ? signOut : undefined}
@@ -947,6 +938,12 @@ function App() {
         isAdmin={isAdmin}
         onTabClick={handleTabClick}
         adminAttentionCount={adminAttentionCount}
+        recentSearches={recentSearches}
+        onRecentSearchClick={(term) => {
+          setScanSelection(null);
+          navigateWithFreshFilters(term, 'history');
+        }}
+        onRemoveRecentSearch={removeSearchHistory}
         cartCount={wasteDraftCount}
         onCartClick={() => {
           if (!isAuthenticated) {
@@ -956,14 +953,11 @@ function App() {
 
           setIsCartOpen(true);
         }}
-        bottomNav={
-          shouldHideMobileSearchChrome ? null : (
-            <BottomTabNav activeTab={activeTab} isAdmin={isAdmin} onTabClick={handleTabClick} adminAttentionCount={adminAttentionCount} />
-          )
-        }
       >
         <Suspense fallback={<TabContentFallback />}>
-          {activeTab === 'cabinet' ? (
+          {activeTab === 'tools' && user?.id && isLabToolsEnabled ? (
+            <ToolsWorkspace key={`${user.id}:${location.pathname}`} ownerId={user.id}/>
+          ) : activeTab === 'cabinet' ? (
             <div className="h-full">
               {activeCabinetId ? (
                 <FridgeView
@@ -1124,7 +1118,6 @@ function App() {
               suggestions={suggestions}
               isSuggestionsLoading={isSuggestionsLoading}
               onClearSuggestions={clearSuggestions}
-              onSearchFocusChange={setIsSearchInputFocused}
               wasteComponentSearchMode={isAddingWasteComponent}
               searchFocusRequestKey={wasteComponentSearchRequestKey}
               inputFocusRequestKey={searchInputFocusKey}

@@ -527,12 +527,11 @@ export const FridgeScene: React.FC<FridgeSceneProps> = ({ children, compatMarks 
                 {children}
             </div>
 
-            {/*
-              카메라 조작은 지도 앱처럼 오른쪽 세로 열에 둔다. 하단은 편집 패널·배치 트레이가
-              올라오는 자리라 비워 두고, 세그먼트 줄(top-4 + 44px) 바로 아래에서 시작한다.
-            */}
+            {/* Camera actions share a bottom dock, separate from the mode switcher above. */}
             {isCameraOffFit && (
-                <div className="pointer-events-none absolute right-3 top-[4.5rem] z-20 flex flex-col items-end gap-2">
+                <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex justify-end">
+                  <div role="group" aria-label={t('cabinet_camera_controls')}
+                    className="pointer-events-auto inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-md backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
                     <button
                         type="button"
                         onClick={() => {
@@ -543,27 +542,32 @@ export const FridgeScene: React.FC<FridgeSceneProps> = ({ children, compatMarks 
                         }}
                         aria-label={t('adaptive_fit_view')}
                         title={t('adaptive_fit_view')}
-                        className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-md backdrop-blur transition-colors hover:bg-white hover:text-blue-600 animate-in fade-in zoom-in-90 duration-150 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300"
+                        className="flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-blue-600 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300"
                     >
                         <Scan size={18} aria-hidden="true" />
+                        <span>{t('adaptive_fit_view')}</span>
                     </button>
 
                     {/* 탑뷰 토글 - 선반 포커스 시에만 표시. 아이콘만으로는 뜻이 약해 글자를 함께 둔다. */}
                     {shelfFocusTarget && (
+                      <>
+                        <span aria-hidden="true" className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
                         <button
                             type="button"
                             onClick={() => setIsTopDownView(prev => !prev)}
                             aria-pressed={isTopDownView}
                             title={t('topdown_view')}
-                            className={`pointer-events-auto flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold shadow-md backdrop-blur transition-colors ${isTopDownView
-                                ? 'border-blue-700 bg-blue-600 text-white hover:bg-blue-700'
-                                : 'border-slate-200 bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300'
+                            className={`flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${isTopDownView
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'text-slate-700 hover:bg-slate-100 hover:text-blue-600 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-blue-300'
                                 }`}
                         >
                             {isTopDownView ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                             <span>{t('topdown_view')}</span>
                         </button>
+                      </>
                     )}
+                  </div>
                 </div>
             )}
         </div>

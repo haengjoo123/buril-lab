@@ -7,7 +7,6 @@ import {
     AlertTriangle,
     Archive,
     Check,
-    ChevronDown,
     ChevronRight,
     Edit3,
     ExternalLink,
@@ -95,6 +94,9 @@ import { AppSelect } from './AppSelect';
 import { CustomDialog } from './CustomDialog';
 import { WasteComponentRegulationChips } from './WasteComponentRegulationChips';
 import { FatalToxicityDilutionHint } from './FatalToxicityDilutionHint';
+import { DisposalGuidePanel } from './DisposalGuidePanel';
+import { isStandardLabelRequirement } from './disposalGuidePresentation';
+import { getHazardLookupMessageKey, isHazardLookupPending, needsHazardLabelCheck, shouldShowManualHazardPanel } from './cartHazardUi';
 import type {
     AmountUnit,
     ConcentrationUnit,
@@ -146,28 +148,6 @@ const BATCH_SECTION_IDS = {
 } as const;
 
 const componentLineElementId = (cartLineId: string): string => `waste-line-${cartLineId}`;
-
-/** The automatic hazard lookup has not answered yet, so there is nothing to confirm. */
-const isHazardLookupPending = (component: WasteComponent): boolean =>
-    isChemicalEnrichmentEnabled && !component.chemical.hazardLookup && !component.hazardDataConfirmedByUser;
-
-/** Hazard data must be checked on the label or SDS before the batch can be recorded. */
-const needsHazardLabelCheck = (component: WasteComponent): boolean =>
-    component.ghsDataStatus === 'lookup_failed'
-    && !component.hazardDataConfirmedByUser
-    && !isHazardLookupPending(component);
-
-const getHazardLookupMessageKey = (component: WasteComponent): string | null => {
-    const status = component.chemical.hazardLookup?.status;
-    if (!status) return null;
-    if (status === 'identity_ambiguous') {
-        // Once the user matched the component to its label, the form is no longer ambiguous to them.
-        return component.identityConfirmedByUser ? null : 'waste_component_hazard_identity_ambiguous';
-    }
-    return status === 'source_absent'
-        ? 'waste_component_hazard_source_absent'
-        : 'waste_component_hazard_lookup_failed';
-};
 
 interface ReceiptSummary {
     componentNames: string;
@@ -267,30 +247,6 @@ const normalizeSolutionVolumeMl = (value: number, unit: WasteSolutionVolumeUnit)
     if (unit === 'uL') return value / 1_000;
     return value;
 };
-
-const normalizePolicyPhrase = (value: string): string =>
-    value.toLocaleLowerCase().replace(/[\s·•:：,./()_-]/g, '');
-
-const STANDARD_LABEL_REQUIREMENTS = new Set([
-    '성분명',
-    '주요성분명',
-    '성분과양',
-    '주요위험',
-    '폐액전체량',
-    '대략적인양또는양모름',
-    'componentname',
-    'componentnames',
-    'componentsandamount',
-    'mainhazard',
-    'mainhazards',
-    'majorhazard',
-    'majorhazards',
-    'totalwasteamount',
-    'approximateamountorunknown',
-]);
-
-const isStandardLabelRequirement = (value: string): boolean =>
-    STANDARD_LABEL_REQUIREMENTS.has(normalizePolicyPhrase(value));
 
 const splitHazardLabel = (value: string): { code: string | null; description: string } => {
     const match = /^(H\d{3})\s*:\s*(.+)$/i.exec(value.trim());
@@ -1004,9 +960,6 @@ export const CartView: React.FC<CartViewProps> = ({
         }));
     };
 
-    const shouldShowManualHazardPanel = (component: WasteComponent): boolean =>
-        component.ghsDataStatus === 'lookup_failed' || Boolean(component.hazardDataConfirmedByUser);
-
     /** Bring the user to where a question is answered and highlight it. Never answers it. */
     const focusWizardTarget = (target: WizardFocusTarget) => {
         setShowAiDetail(false);
@@ -1021,7 +974,7 @@ export const CartView: React.FC<CartViewProps> = ({
             }
             if (target.openPanel) {
                 if (editingLineId !== component.cartLineId) openComponentEditor(component);
-                if (shouldShowManualHazardPanel(component)) {
+                if (shouldShowManualHazardPanel(component, isChemicalEnrichmentEnabled)) {
                     flashElement(`waste-hazard-${component.cartLineId}`);
                     return;
                 }
@@ -1805,38 +1758,31 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         {t('waste_confirm_component_identity')}
                                                     </button>
                                                 )}
-                                                {activeStep === 'components' && component.chemical.hazardLookup?.status === 'transient_error' && (component.enrichmentRetryCount ?? 0) < 2 && (
+                                                {activeStep === 'components' && isHazardLookupPending(component, isChemicalEnrichmentEnabled) && (
                                                     <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-100" role="status">
                                                         {t('waste_component_hazard_pending')}
                                                     </p>
                                                 )}
-                                                {activeStep === 'components' && isHazardLookupPending(component) && (
-                                                    <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900 dark:bg-blue-950/40 dark:text-blue-100" role="status">
-                                                        {t('waste_component_hazard_pending')}
+                                                {activeStep === 'components' && component.ghsDataStatus === 'verified' && (
+                                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                        {t('waste_component_hazard_auto_verified')}
                                                     </p>
                                                 )}
-                                                {activeStep === 'components' && needsHazardLabelCheck(component) && (
+                                                {activeStep === 'components' && needsHazardLabelCheck(component, isChemicalEnrichmentEnabled)
+                                                    && editingLineId !== component.cartLineId && (
                                                     <div className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs font-medium text-orange-900 dark:bg-orange-950/40 dark:text-orange-100" role="status">
-                                                        {getHazardLookupMessageKey(component) && (
-                                                            <p className="mb-2">{t(getHazardLookupMessageKey(component) as never)}</p>
-                                                        )}
-                                                        {/* Same confirmation as the button in the edit panel, one tap closer.
-                                                            Hidden while that panel is open so only one confirm button shows. */}
-                                                        {editingLineId !== component.cartLineId && (
+                                                        <p className="mb-2">{t(getHazardLookupMessageKey(component))}</p>
                                                         <button
                                                             type="button"
                                                             onClick={() => {
-                                                                updateComponent(component.cartLineId, {
-                                                                    hazardDataConfirmedByUser: true,
-                                                                });
-                                                                flashElement(componentLineElementId(component.cartLineId), 'success');
+                                                                openComponentEditor(component);
+                                                                flashElement(`waste-hazard-${component.cartLineId}`);
                                                             }}
                                                             className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-orange-300 bg-white px-3 text-xs font-bold text-orange-800 hover:bg-orange-100 dark:border-orange-800 dark:bg-slate-950 dark:text-orange-200 dark:hover:bg-orange-950/60"
                                                         >
-                                                            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                                            {t('waste_manual_hazard_confirm')}
+                                                            {t('waste_manual_hazard_open')}
+                                                            <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                                                         </button>
-                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -2208,7 +2154,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                                         </span>
                                                     </div>
                                                 )}
-                                                {activeStep === 'components' && shouldShowManualHazardPanel(component) && (
+                                                {activeStep === 'components' && shouldShowManualHazardPanel(component, isChemicalEnrichmentEnabled) && (
                                                     <fieldset
                                                         id={`waste-hazard-${component.cartLineId}`}
                                                         className={`rounded-xl border border-orange-200 bg-orange-50/70 p-3 dark:border-orange-900 dark:bg-orange-950/30${flashClass(`waste-hazard-${component.cartLineId}`)}`}
@@ -2217,6 +2163,9 @@ export const CartView: React.FC<CartViewProps> = ({
                                                             {t('waste_manual_hazard_title')}
                                                         </legend>
                                                         <p className="mb-2 text-xs leading-relaxed text-orange-900 dark:text-orange-200">
+                                                            {t(getHazardLookupMessageKey(component))}
+                                                        </p>
+                                                        <p className="mb-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
                                                             {t('waste_manual_hazard_help')}
                                                         </p>
                                                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -2560,11 +2509,6 @@ export const CartView: React.FC<CartViewProps> = ({
                                         {t(isSingleAsSuppliedProduct ? 'waste_as_supplied_matrix_title' : 'waste_matrix_title')}
                                     </h3>
                                 </div>
-                                {isSingleAsSuppliedProduct && (
-                                    <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-                                        {t('waste_as_supplied_matrix_help')}
-                                    </p>
-                                )}
                                 {batch.matrixSource === 'automatic' && !isMatrixEditing ? (
                                     <div className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-950 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-100 wide:min-h-14 wide:gap-3 wide:px-4 wide:py-3">
                                         <p className="font-semibold">
@@ -2582,6 +2526,11 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </div>
                                 ) : (
                                     <>
+                                        {isSingleAsSuppliedProduct && (
+                                            <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+                                                {t('waste_as_supplied_matrix_help')}
+                                            </p>
+                                        )}
                                         {batch.matrix === 'unknown' && previousMatrix && !wizard.matrixResolution.hasExplicitOrganic
                                             && !matrixContradictsComponentEvidence(previousMatrix, batch.components) && (
                                             <button
@@ -3095,60 +3044,6 @@ export const CartView: React.FC<CartViewProps> = ({
                                 <Sparkles className="h-4 w-4" aria-hidden="true" />
                                 {t('waste_ai_button')}
                             </button>
-                            {showAiDetail && aiError && (
-                                <div className="mt-3 text-sm text-purple-950 dark:text-purple-100">
-                                    <p>{t('waste_ai_unavailable')}</p>
-                                    <button onClick={requestAIGuide} className="mt-2 min-h-11 font-semibold underline">
-                                        {t('waste_record_retry')}
-                                    </button>
-                                </div>
-                            )}
-                            {showAiDetail && aiResult && (
-                                <div className="mt-3 space-y-4 text-sm text-purple-950 dark:text-purple-100">
-                                    {aiResult.availability === 'unavailable' && (
-                                        <p className="rounded-xl bg-white/60 p-3 font-medium dark:bg-slate-950/30">{t('waste_ai_unavailable')}</p>
-                                    )}
-                                    {(aiResult.availability !== 'unavailable' ||
-                                        aiResult.summary.trim() !== t('waste_ai_unavailable').trim()) && (
-                                        <p className="font-medium leading-relaxed">{aiResult.summary}</p>
-                                    )}
-                                    {aiResult.steps.length > 0 && (
-                                        <ol className="space-y-2">
-                                            {aiResult.steps.map((step, index) => (
-                                                <li key={`${step}-${index}`} className="flex gap-2">
-                                                    <span className="font-bold">{index + 1}.</span><span>{step}</span>
-                                                </li>
-                                            ))}
-                                        </ol>
-                                    )}
-                                    {aiResult.prohibitions.length > 0 && (
-                                        <div>
-                                            <h4 className="font-bold">{t('waste_ai_prohibitions')}</h4>
-                                            <ul className="mt-1 space-y-1">
-                                                {aiResult.prohibitions.map((item) => <li key={item}>• {item}</li>)}
-                                            </ul>
-                                        </div>
-                                    )}
-                                    {aiResult.evidence.length > 0 && (
-                                        <details>
-                                            <summary className="flex min-h-11 cursor-pointer items-center gap-2 font-semibold">
-                                                {t('waste_ai_evidence')} <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                                            </summary>
-                                            <ul className="space-y-1 text-xs">
-                                                {aiResult.evidence.map((evidence) => (
-                                                    <li key={evidence.id}>
-                                                        {evidence.reference?.startsWith('https://') ? (
-                                                            <a href={evidence.reference} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">
-                                                                {evidence.title}<ExternalLink className="h-3 w-3" aria-hidden="true" />
-                                                            </a>
-                                                        ) : evidence.title}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </details>
-                                    )}
-                                </div>
-                            )}
                         </section>
                     )}
 
@@ -3167,19 +3062,15 @@ export const CartView: React.FC<CartViewProps> = ({
                     )}
 
                     {showAiDetail && (
-                        <section className="rounded-xl border border-purple-200 bg-purple-50 p-3 dark:border-purple-900/60 dark:bg-purple-950/30 wide:rounded-2xl wide:p-4">
-                            <div className="flex items-center gap-2 text-purple-900 dark:text-purple-100">
-                                <Sparkles className="h-5 w-5" aria-hidden="true" />
-                                <h4 className="font-bold">{t('waste_ai_button')}</h4>
-                            </div>
+                        <section aria-label={t('waste_wizard_ai_title')}>
                             {aiLoading && (
-                                <div className="flex min-h-32 items-center justify-center gap-2 text-sm font-semibold text-purple-900 dark:text-purple-100">
+                                <div role="status" className="flex min-h-32 items-center justify-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
                                     <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
                                     {t('loading')}
                                 </div>
                             )}
                             {aiError && !aiLoading && (
-                                <div className="mt-3 text-sm text-purple-950 dark:text-purple-100">
+                                <div role="alert" className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700 dark:bg-slate-900 dark:text-slate-200">
                                     <p>{t('waste_ai_unavailable')}</p>
                                     <button onClick={requestAIGuide} className="mt-2 min-h-11 font-semibold underline">
                                         {t('waste_record_retry')}
@@ -3187,32 +3078,13 @@ export const CartView: React.FC<CartViewProps> = ({
                                 </div>
                             )}
                             {aiResult && !aiLoading && (
-                                <div className="mt-3 space-y-4 text-sm text-purple-950 dark:text-purple-100">
-                                    {aiResult.availability === 'unavailable' && (
-                                        <p className="rounded-xl bg-white/60 p-3 font-medium dark:bg-slate-950/30">{t('waste_ai_unavailable')}</p>
-                                    )}
-                                    {(aiResult.availability !== 'unavailable'
-                                        || aiResult.summary.trim() !== t('waste_ai_unavailable').trim()) && (
-                                        <p className="font-medium leading-relaxed">{aiResult.summary}</p>
-                                    )}
-                                    {aiResult.steps.length > 0 && (
-                                        <ol className="space-y-2">
-                                            {aiResult.steps.map((step, index) => (
-                                                <li key={`${step}-${index}`} className="flex gap-2">
-                                                    <span className="font-bold">{index + 1}.</span><span>{step}</span>
-                                                </li>
-                                            ))}
-                                        </ol>
-                                    )}
-                                    {aiResult.prohibitions.length > 0 && (
-                                        <div>
-                                            <h5 className="font-bold">{t('waste_ai_prohibitions')}</h5>
-                                            <ul className="mt-1 space-y-1">
-                                                {aiResult.prohibitions.map((item) => <li key={item}>· {item}</li>)}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </div>
+                                <DisposalGuidePanel
+                                    result={aiResult}
+                                    componentNames={labelComponentNames}
+                                    amount={labelAmount}
+                                    hazards={labelHazardItems.map(({ code, description }) => code ? `${code}: ${description}` : description)}
+                                    hazardsNeedReview={hasUnconfirmedHazardData}
+                                />
                             )}
                         </section>
                     )}

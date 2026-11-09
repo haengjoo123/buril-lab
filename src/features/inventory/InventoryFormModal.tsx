@@ -12,6 +12,7 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import type { ReagentPlacement, ReagentTemplateType } from '../../types/fridge';
 import { supabase } from '../../services/supabaseClient';
 import { AppSelect } from '../../components/AppSelect';
+import { StorageLocationIcon } from '../../components/StorageLocationIcon';
 import { CasSuggestionCard } from '../../components/CasSuggestionCard';
 import { ReagentDateFields } from '../../components/ReagentDateFields';
 import { readableImportAttributes } from './import/sourceAttributes';
@@ -711,7 +712,7 @@ export const InventoryFormModal: React.FC<Props> = ({
         
         const locName = translateLocationName(location.name, t);
         
-        return `${t('inventory_loc_other')} · ${location.icon} ${locName}`;
+        return `${t('inventory_loc_other')} · ${locName}`;
     };
 
     const currentLocationLabel = initialData
@@ -965,7 +966,7 @@ export const InventoryFormModal: React.FC<Props> = ({
                                                                 : `bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 ${fieldErrors.location ? 'border-red-300 dark:border-red-700' : 'border-slate-200 dark:border-slate-600'}`
                                                                 }`}
                                                         >
-                                                            <span aria-hidden="true">{location.icon}</span>
+                                                            <StorageLocationIcon icon={location.icon} />
                                                             {translateLocationName(location.name, t)}
                                                         </button>
                                                     );

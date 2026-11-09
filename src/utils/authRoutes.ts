@@ -1,6 +1,6 @@
 import { getLabAppScopedPath, isLabAppPath, isOpsPath, isSafetyCenterPath } from './appRoutes';
 
-const protectedLabAppPathPrefixes = ['/logs', '/cabinet', '/inventory', '/admin'];
+const protectedLabAppPathPrefixes = ['/logs', '/cabinet', '/inventory', '/admin', '/tools'];
 
 function matchesPathPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

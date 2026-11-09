@@ -1564,9 +1564,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     </div>
                 )}
 
-                {/* Place Mode Reagent Tray - 편집 패널처럼 열고 닫기 */}
+                {/* Keep the bottom camera dock clear when the placement tray is open. */}
                 {mode === 'PLACE' && (
-                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20 wide:bottom-0">
+                    <div className="absolute inset-x-0 bottom-24 flex flex-col items-center gap-2 pointer-events-none z-20 wide:bottom-20">
                         {isReagentTrayVisible ? (
                             <div className="relative bg-white/90 backdrop-blur pointer-events-auto p-4 rounded-xl shadow-lg border flex flex-col gap-2 max-w-full w-full mx-4 z-20">
                                 <button

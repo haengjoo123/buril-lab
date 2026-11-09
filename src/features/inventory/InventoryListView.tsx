@@ -5,7 +5,6 @@ import {
     Plus,
     Search,
     Archive,
-    MapPin,
     ChevronDown,
     Loader2,
     AlertTriangle,
@@ -44,6 +43,7 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
+import { InventoryMobileTools } from './InventoryMobileTools';
 import { exportImportAttributes, readableImportAttributes } from './import/sourceAttributes';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
 import { CustomDialog } from '../../components/CustomDialog';
@@ -56,6 +56,7 @@ import { getManufacturerDateLabelKey, hasManufacturerDate } from '../../utils/ma
 import { useFridgeStore } from '../../store/fridgeStore';
 import { OnboardingGuideCard } from '../../components/onboarding/OnboardingGuideCard';
 import { AppSelect } from '../../components/AppSelect';
+import { StorageLocationIcon } from '../../components/StorageLocationIcon';
 
 import { useLabStore } from '../../store/useLabStore';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
@@ -67,6 +68,7 @@ import {
 } from '../../utils/inventoryHazardClassifier';
 import { scanReagentLabel, type ReagentScanResult } from '../../services/aiReagentScanService';
 import { useAdaptiveLayout } from '../../hooks/useAdaptiveLayout';
+import { useAdaptiveDialog } from '../../hooks/useAdaptiveDialog';
 import { AdaptivePaneLayout } from '../../components/AdaptivePaneLayout';
 import { enrichChemicals } from '../../services/chemicalEnrichmentService';
 import {
@@ -243,6 +245,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
     const { currentLabId } = useLabStore();
     const layout = useAdaptiveLayout();
+    const isMobileInventory = layout.activeRegion.width < 600 && !layout.twoPane;
     const listLayout = useAdaptiveLayout();
     const [activePane, setActivePane] = useState<'primary' | 'detail'>('primary');
     const [items, setItems] = useState<InventoryItem[]>([]);
@@ -252,12 +255,17 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const [loadError, setLoadError] = useState<string | null>(null);
     const [loadedLabId, setLoadedLabId] = useState<string | null | undefined>(undefined);
     const [searchQuery, setSearchQuery] = useState('');
+    const inventorySearchRef = useRef<HTMLInputElement>(null);
     const [sortBy, setSortBy] = useState<InventorySortOption>('expiry_asc');
     const [hazardFilter, setHazardFilter] = useState<InventoryHazardFilter>('all');
     // ?filter=expired|expiring|attention (from the lab admin overview) narrows the list until the chip is removed.
     const [searchParams, setSearchParams] = useSearchParams();
     const expiryFilter = parseInventoryExpiryFilter(searchParams.get(INVENTORY_FILTER_PARAM));
     const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+    // Wide layouts expose registration in the header instead of the phone popup.
+    if (layout.twoPane && isAddMenuOpen) setIsAddMenuOpen(false);
+    const addMenuRef = useRef<HTMLDivElement>(null);
+    useAdaptiveDialog(addMenuRef, () => setIsAddMenuOpen(false), isAddMenuOpen);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
     const [initialDraft, setInitialDraft] = useState<Partial<CreateInventoryInput> | null>(null);
@@ -389,6 +397,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         setIsFormOpen(false);
         setIsCameraOpen(false);
         setIsCsvImportOpen(false);
+        setIsAddMenuOpen(false);
     }, [currentLabId]);
 
     useEffect(() => {
@@ -620,7 +629,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const bulkMoveLocationOptions = useMemo(() => (
         locations.map((loc) => ({
             value: loc.id,
-            label: `${loc.icon} ${translateLocationName(loc.name, t)}`,
+            label: (
+                <span className="flex min-w-0 items-center gap-1.5">
+                    <StorageLocationIcon icon={loc.icon} />
+                    <span className="truncate">{translateLocationName(loc.name, t)}</span>
+                </span>
+            ),
         }))
     ), [locations, t]);
 
@@ -653,13 +667,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             label: t('log_range_all'),
             value: items.length,
             Icon: Package,
-            tone: 'text-blue-600 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-300',
+            tone: 'text-slate-500 dark:text-slate-400',
         },
         {
             label: t('inventory_quantity'),
             value: totalInventoryQuantity,
             Icon: Archive,
-            tone: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-300',
+            tone: 'text-slate-500 dark:text-slate-400',
         },
         {
             label: t('inventory_hazard_special_high'),
@@ -1695,17 +1709,17 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 : '';
             const storageLabel = `${item.cabinet_name || t('inventory_cabinet_unassigned')}${shelfLabel ? ` · ${shelfLabel}` : ''}`;
             return (
-                <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800" title={storageLabel}>
+                <span className="inline-flex max-w-full items-center gap-1.5 overflow-hidden whitespace-nowrap py-1 text-xs font-medium text-slate-500 dark:text-slate-400" title={storageLabel}>
                     <Archive className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{storageLabel}</span>
                 </span>
             );
         }
 
-        const storageLabel = `${item.storage_location_icon || '📦'} ${translateLocationName(item.storage_location_name, t) || t('inventory_other_storage')}`;
+        const storageLabel = translateLocationName(item.storage_location_name, t) || t('inventory_other_storage');
         return (
-            <span className="inline-flex max-w-full items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800" title={storageLabel}>
-                <MapPin className="h-3.5 w-3.5 shrink-0" />
+            <span className="inline-flex max-w-full items-center gap-1.5 overflow-hidden whitespace-nowrap py-1 text-xs font-medium text-slate-500 dark:text-slate-400" title={storageLabel}>
+                <StorageLocationIcon icon={item.storage_location_icon} className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{storageLabel}</span>
             </span>
         );
@@ -1754,27 +1768,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         // A full bottle is the default state; only a low level is worth a badge.
         if (!isInventoryRemainingLow(val)) return null;
 
-        let colorClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400';
-        let barColor = 'bg-emerald-500';
-        let stage = 4;
-
-        if (val <= 10) {
-            colorClass = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-400';
-            barColor = 'bg-red-500';
-            stage = 1;
-        } else if (val <= 30) {
-            colorClass = 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400';
-            barColor = 'bg-orange-500';
-            stage = 2;
-        } else if (val <= 70) {
-            colorClass = 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
-            barColor = 'bg-blue-500';
-            stage = 3;
-        }
+        const stage = getInventoryRemainingStage(val);
+        const barColor = stage === 1 ? 'bg-red-500' : 'bg-orange-500';
 
         return (
             <span className="inline-flex min-w-[64px] flex-col gap-1 overflow-hidden align-middle">
-                <span className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-3xs font-bold ${colorClass} leading-none truncate whitespace-nowrap`}>
+                <span className="truncate whitespace-nowrap px-1.5 py-0.5 text-center text-3xs font-semibold leading-none text-slate-500 dark:text-slate-400">
                     {t(`inventory_remaining_stage_${stage}_label`)}
                 </span>
                 <span className="h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
@@ -1920,7 +1919,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             return `${item.cabinet_name || t('inventory_cabinet_unassigned')}${shelfLabel ? ` · ${shelfLabel}` : ''}`;
         }
 
-        return `${item.storage_location_icon || '📦'} ${translateLocationName(item.storage_location_name, t) || t('inventory_other_storage')}`;
+        return translateLocationName(item.storage_location_name, t) || t('inventory_other_storage');
     };
 
     const getGroupBorderClass = (group: InventoryGroup) => {
@@ -1947,14 +1946,14 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         const wasteBatchError = wasteBatchErrors[wasteBatchActionKey];
         const isHighlighted = highlightItemId === item.id;
         const surfaceClass = isHighlighted
-            ? 'bg-emerald-50 dark:bg-emerald-950/40'
+            ? 'bg-blue-50 dark:bg-blue-950/40'
             : nested
                 ? 'bg-slate-50/80 dark:bg-slate-900/30'
                 : 'bg-white dark:bg-slate-800';
         // The border colour must always be set outside table mode; otherwise it falls back to currentColor.
         const borderClass = isHighlighted
-            ? 'border-emerald-400 ring-2 ring-emerald-500/50 dark:border-emerald-500'
-            : `${cardBorderClass || 'border-slate-200 dark:border-slate-700'} ${selectedDesktopItemId === item.id ? 'table:border-emerald-400 table:ring-2 table:ring-emerald-500/30' : ''}`;
+            ? 'border-blue-400 ring-2 ring-blue-500/50 dark:border-blue-500'
+            : `${cardBorderClass || 'border-slate-200 dark:border-slate-700'} ${selectedDesktopItemId === item.id ? 'table:border-blue-400 table:ring-2 table:ring-blue-500/30' : ''}`;
 
         return (
             <div
@@ -1980,7 +1979,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     setSelectedDesktopItemId(item.id);
                     setActivePane('detail');
                 }}
-                className={`${nested ? 'rounded-2xl' : 'rounded-xl'} flex cursor-pointer flex-col gap-3 border px-4 pb-2 pt-4 shadow-sm transition-[background-color,border-color,box-shadow] duration-500 hover:border-emerald-300 dark:hover:border-emerald-600 ${surfaceClass} ${borderClass}`}
+                className={`${nested ? 'rounded-2xl' : 'rounded-xl'} flex cursor-pointer flex-col gap-2 border px-3 pb-1 pt-3 shadow-sm transition-[background-color,border-color,box-shadow] duration-500 hover:border-blue-300 dark:hover:border-blue-600 ${surfaceClass} ${borderClass}`}
             >
                 <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
@@ -1993,7 +1992,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                     type="checkbox"
                                     checked={selectedItemIds.includes(item.id)}
                                     onChange={() => toggleItemSelection(item.id)}
-                                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                 />
                                 {t('inventory_select_item')}
                             </label>
@@ -2016,7 +2015,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 {renderRemainingBadge(item)}
                             </span>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                             {renderShortExpiry(item)}
                             {item.cas_number && <span>{t('inventory_meta_cas')}: {item.cas_number}</span>}
                             {item.brand && <span>{item.brand}</span>}
@@ -2033,7 +2032,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             if (hazard.filterCategories.length === 0) return null;
                             const isSpecialHigh = hazard.filterCategories.includes('special_high');
                             return (
-                                <div className="mt-2 flex flex-wrap gap-1">
+                                <div className="mt-1.5 flex flex-wrap gap-1">
                                     {hazard.groupLabelKeys.map(key => (
                                         <span key={key} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-3xs font-semibold ${isSpecialHigh
                                             ? 'bg-red-50 text-red-600 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
@@ -2048,10 +2047,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         })()}
                     </div>
                     <div className="flex self-stretch shrink-0 flex-col items-end">
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
-                            {item.quantity >= 2
-                                ? t('inventory_group_total_quantity', { count: item.quantity })
-                                : t('inventory_quantity_count', { count: item.quantity })}
+                        <span className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                            {t('inventory_quantity_count', { count: item.quantity })}
                         </span>
                         {item.capacity && (
                             <span className="mt-auto pb-0.5 text-xs text-slate-400 dark:text-slate-500">
@@ -2060,8 +2057,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         )}
                     </div>
                 </div>
-                <div className="flex min-h-11 items-center justify-between gap-3 border-t border-slate-100 pt-2 dark:border-slate-700">
-                    <div className="flex h-11 min-w-0 flex-1 items-center">
+                <div className="flex min-h-9 items-center justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-center">
                         {renderStorageBadge(item)}
                     </div>
 
@@ -2075,7 +2072,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             }}
                             disabled={isDeleting || isBulkDeleting || isStartingWasteBatch}
                             aria-label={`${t('inventory_dispose_short')}: ${item.name}`}
-                            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                         >
                             {isStartingWasteBatch
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2130,7 +2127,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         }
                         toggleGroupExpanded(group.id);
                     }}
-                    className="p-4 flex flex-col gap-3 cursor-pointer"
+                    className="flex cursor-pointer flex-col gap-2 px-3 pb-1 pt-3"
                 >
                     <div className="flex justify-between items-start gap-3">
                         <div className="flex-1 min-w-0">
@@ -2148,7 +2145,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                         type="checkbox"
                                         checked={isAllSelected}
                                         onChange={() => toggleSelectionForIds(groupItemIds)}
-                                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                     />
                                     {t('inventory_select_item')}
                                 </label>
@@ -2173,7 +2170,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                      </span>
                                  )}
                             </div>
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 {group.uniqueCasNumbers.length === 1 && <span>{t('inventory_meta_cas')}: {group.uniqueCasNumbers[0]}</span>}
                                 {aliasCount > 0 && (
                                     <span>{t('inventory_group_alias_count', { count: aliasCount })}</span>
@@ -2184,10 +2181,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             </div>
                         </div>
                         <div className="flex flex-col items-end shrink-0">
-                            <span className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md">
-                                {group.totalQuantity >= 2
-                                    ? t('inventory_group_total_quantity', { count: group.totalQuantity })
-                                    : t('inventory_quantity_count', { count: group.totalQuantity })}
+                            <span className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                                {t('inventory_quantity_count', { count: group.totalQuantity })}
                             </span>
                             {uniqueCapacities.length === 1 && (
                                 <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">
@@ -2197,11 +2192,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
+                    <div className="flex min-h-9 items-center justify-between gap-3">
                         {hasSingleStorage ? (
                             renderStorageBadge(group.primaryItem)
                         ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                            <span className="inline-flex items-center gap-1.5 py-1 text-xs font-medium text-slate-500 dark:text-slate-400">
                                 <Package className="w-3.5 h-3.5" />
                                 {t('inventory_group_multi_storage', {
                                     first: uniqueStorageLabels[0],
@@ -2217,7 +2212,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                     event.stopPropagation();
                                     toggleGroupExpanded(group.id);
                                 }}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100"
+                                className="inline-flex h-9 shrink-0 items-center gap-1 px-2 text-xs font-medium text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-100"
                             >
                                 {t('inventory_group_detail_view')}
                                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -2262,7 +2257,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             <button
                                 type="button"
                                 onClick={handleOpenManualRegistration}
-                                className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
+                                className="inline-flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700"
                             >
                                 <PackagePlus className="h-4 w-4" />
                                 {t('inventory_add_menu_manual')}
@@ -2320,26 +2315,28 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     }
 
     return (
-        <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={layout} activePane={activePane} onBack={() => setActivePane('primary')} data-inventory-table={listLayout.bounds.width >= 640} className="inventory-panes flex h-full flex-col bg-slate-50 dark:bg-slate-900">
+        <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={layout} activePane={activePane} onBack={() => setActivePane('primary')} data-mobile-inventory={isMobileInventory} data-inventory-table={listLayout.bounds.width >= 640} className="inventory-panes flex h-full flex-col bg-slate-50 dark:bg-slate-900">
             {/* Header */}
-            <div data-pane="primary" className="inventory-header flex-shrink-0 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-800 table:col-start-1 table:row-start-1 table:overflow-y-auto table:[scrollbar-gutter:stable] table:border-b-0 table:border-r table:border-slate-200 table:bg-slate-50 table:px-6 table:pb-3 table:pt-6 dark:table:border-slate-800 dark:table:bg-slate-900">
+            <div data-pane="primary" className="inventory-header flex-shrink-0 border-b border-gray-200 bg-white px-4 pb-3 pt-4 dark:border-slate-700 dark:bg-slate-900 table:col-start-1 table:row-start-1 table:overflow-y-auto table:[scrollbar-gutter:stable] table:border-b-0 table:border-r table:border-slate-200 table:bg-slate-50 table:px-6 table:pb-3 table:pt-6 dark:table:border-slate-800 dark:table:bg-slate-900">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-3">
                         <h1 className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xl font-bold text-slate-800 dark:text-slate-100 table:text-2xl">
-                            <Package className="w-6 h-6 text-emerald-500" />
+                            <Package className="h-6 w-6 text-slate-500 dark:text-slate-400" />
                             {t('inventory_list_title')}
                         </h1>
                         <span
                             key={items.length}
                             aria-live="polite"
-                            className="inline-flex shrink-0 animate-[scan-queue-success_0.45s_ease-out] rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold tabular-nums text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-900/50"
+                            className="inline-flex shrink-0 text-sm font-medium tabular-nums text-slate-500 dark:text-slate-400"
                         >
-                            {t('log_records_count', { count: items.length })}
+                            {isMobileInventory && hasActiveFilters
+                                ? t('inventory_filtered_count', { count: visibleItems.length, total: items.length })
+                                : t('log_records_count', { count: items.length })}
                         </span>
                     </div>
                     <div
                         data-onboarding-target="inventory-tools"
-                        className="flex flex-wrap items-center gap-1.5 table:gap-2"
+                        className="inventory-header-tools flex flex-wrap items-center gap-1.5 table:gap-2"
                     >
                         {/*
                         <button
@@ -2355,7 +2352,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             onClick={handleOpenScanRegistration}
                             title={t('inventory_add_menu_scan')}
-                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30 wide:inline-flex"
+                            className="hidden h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 wide:inline-flex"
                         >
                             <Camera className="h-3.5 w-3.5" />
                             <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_scan')}</span>
@@ -2363,7 +2360,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <button
                             onClick={handleOpenManualRegistration}
                             title={t('inventory_add_menu_manual')}
-                            className="hidden h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 wide:inline-flex"
+                            className="hidden h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 wide:inline-flex"
                         >
                             <Plus className="h-3.5 w-3.5" />
                             <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_manual')}</span>
@@ -2373,7 +2370,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             disabled={visibleItems.length === 0}
                             title={t('inventory_excel_download_view')}
                             aria-label={t('inventory_excel_download_view')}
-                            className="flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-700 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 sm:px-3 sm:py-1.5 table:h-9 table:bg-white table:px-3 table:font-bold dark:table:bg-slate-900"
+                            className="inline-flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:px-3"
                         >
                             <Download className="w-4 h-4 table:w-3.5 table:h-3.5" />
                             <span className="hidden table:inline whitespace-nowrap">{t('inventory_excel_download_view')}</span>
@@ -2382,12 +2379,14 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             onClick={() => setIsCsvImportOpen(true)}
                             title={t('inventory_csv_manage_button')}
                             aria-label={t('inventory_csv_manage_button')}
-                            className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40 sm:px-3 sm:py-1.5 table:h-9 table:px-3 table:font-bold"
+                            className="inline-flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:px-3"
                         >
                             <Upload className="w-4 h-4 table:w-3.5 table:h-3.5" />
                             <span className="hidden table:inline whitespace-nowrap">{t('inventory_csv_manage_button')}</span>
                         </button>
                     </div>
+                    {isMobileInventory && <InventoryMobileTools canExport={visibleItems.length > 0} canSelect={items.length > 0}
+                        isSelectMode={isSelectMode} onExport={handleExportExcel} onImport={() => setIsCsvImportOpen(true)} onSelect={toggleSelectMode} />}
                 </div>
 
                 {showOnboardingGuide && (
@@ -2407,57 +2406,71 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 )}
 
                 {/* Search Bar */}
-                <div className="mt-4 relative table:hidden">
+                <div role="search" aria-label={t('inventory_list_title')} className="inventory-search-dock mt-4 relative table:hidden">
+                    <div className="inventory-search-field relative min-w-0 flex-1">
                     <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
+                        ref={inventorySearchRef}
                         type="search"
                         enterKeyHint="search"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        onFocus={() => setIsAddMenuOpen(false)}
                         onKeyDown={(event) => {
                             // Enter only dismisses the keyboard; results are already live.
                             if (event.key === 'Enter') event.currentTarget.blur();
                         }}
-                        placeholder={t('inventory_search_placeholder')}
+                        placeholder={t(isMobileInventory ? 'inventory_search_mobile_placeholder' : 'inventory_search_placeholder')}
                         aria-label={t('inventory_search_placeholder')}
-                        className="w-full h-[42px] pl-9 pr-11 border border-slate-200 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all [&::-webkit-search-cancel-button]:appearance-none"
+                        className="w-full h-[42px] pl-9 pr-11 border border-slate-200 dark:border-slate-700 rounded-xl text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-[border-color,box-shadow] [&::-webkit-search-cancel-button]:appearance-none"
                     />
                     {searchQuery && (
                         <button
                             type="button"
-                            onClick={() => setSearchQuery('')}
+                            onClick={() => { setSearchQuery(''); inventorySearchRef.current?.focus(); }}
                             aria-label={t('inventory_search_clear')}
                             className="absolute right-0.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
                         >
                             <X className="h-4 w-4" />
                         </button>
                     )}
+                    </div>
+                    {isMobileInventory && <button type="button" aria-label={t('inventory_add_menu_open')} aria-expanded={isAddMenuOpen}
+                        onClick={() => setIsAddMenuOpen(open => !open)}
+                        className={`inventory-register-button flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-colors ${isAddMenuOpen ? 'bg-slate-800 dark:bg-slate-200 dark:text-slate-900' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                        {isAddMenuOpen ? <X size={22} /> : <Plus size={24} />}
+                    </button>}
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-2 table:hidden">
+                <div className="inventory-filter-row mt-3 flex items-center justify-end gap-2 table:hidden">
                     <div className="flex items-center gap-2 min-w-0">
                         <AppSelect
                             value={hazardFilter}
                             onChange={(value) => setHazardFilter(value as InventoryHazardFilter)}
                             options={hazardFilterOptions}
-                            align="right"
+                            align={isMobileInventory ? 'left' : 'right'}
                             ariaLabel={t('inventory_hazard_filter')}
                             className="min-w-0 shrink"
-                            buttonClassName="min-w-0 max-w-[154px] bg-white dark:bg-slate-700 !h-[40px] !rounded-xl !shadow-sm !text-xs !py-0"
+                            buttonClassName={isMobileInventory
+                                ? 'min-w-0 bg-slate-50 dark:bg-slate-800 !h-[40px] !rounded-full !shadow-none !text-xs !py-0'
+                                : 'min-w-0 max-w-[154px] bg-white dark:bg-slate-800 !h-[40px] !rounded-xl !shadow-sm !text-xs !py-0'}
                             menuClassName="w-max min-w-[220px]"
                         />
                         <AppSelect
                             value={sortBy}
                             onChange={(value) => setSortBy(value as InventorySortOption)}
                             options={sortOptions}
+                            ariaLabel={t('inventory_sort_label')}
                             align="right"
                             className="min-w-0 shrink"
-                            buttonClassName="min-w-0 w-full bg-white dark:bg-slate-700 !h-[40px] !rounded-xl !shadow-sm !text-xs !py-0"
+                            buttonClassName={isMobileInventory
+                                ? 'min-w-0 w-full bg-slate-50 dark:bg-slate-800 !h-[40px] !rounded-full !shadow-none !text-xs !py-0'
+                                : 'min-w-0 w-full bg-white dark:bg-slate-800 !h-[40px] !rounded-xl !shadow-sm !text-xs !py-0'}
                             menuClassName="w-max min-w-[180px]"
                         />
                     </div>
                 </div>
                 {isSelectMode && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 table:hidden">
+                    <div className="inventory-bulk-controls mt-3 flex flex-wrap items-center gap-2 table:hidden">
                         <button
                             onClick={toggleSelectMode}
                             className="px-3 py-1.5 rounded-lg text-xs font-semibold border bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200"
@@ -2487,7 +2500,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 ? t('inventory_bulk_delete_running')
                                 : t('inventory_bulk_delete_btn', { count: selectedItemIds.length })}
                         </button>
-                        <div className="flex items-center gap-2">
+                        <div className="inventory-bulk-move flex items-center gap-2">
                             <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                                 <button
                                     onClick={() => setBulkMoveTargetType('cabinet')}
@@ -2501,7 +2514,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 <button
                                     onClick={() => setBulkMoveTargetType('other')}
                                     className={`px-2.5 py-1.5 text-xs font-semibold border-l border-slate-200 dark:border-slate-600 ${bulkMoveTargetType === 'other'
-                                        ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
                                         : 'bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200'
                                         }`}
                                 >
@@ -2534,7 +2547,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                     isBulkMoving ||
                                     (bulkMoveTargetType === 'other' ? !bulkMoveLocationId : !bulkMoveCabinetId)
                                 }
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                                 {isBulkMoving
                                     ? t('inventory_bulk_move_running')
@@ -2629,7 +2642,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder={t('inventory_search_placeholder')}
                                             aria-label={t('inventory_search_placeholder')}
-                                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm text-slate-900 shadow-sm transition-all focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 [&::-webkit-search-cancel-button]:appearance-none"
+                                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm text-slate-900 shadow-sm transition-all focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 [&::-webkit-search-cancel-button]:appearance-none"
                                         />
                                         {searchQuery && (
                                             <button
@@ -2665,7 +2678,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                         type="button"
                                         onClick={toggleSelectMode}
                                         className={`flex h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition-colors ${isSelectMode
-                                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                            ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300'
                                             : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
                                             }`}
                                     >
@@ -2678,7 +2691,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             {isSelectMode && (
                                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/50">
                                     <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />
                                         {t('inventory_selected_count', { count: selectedItemIds.length })}
                                     </span>
                                     <button
@@ -2718,7 +2731,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                             <button
                                                 onClick={() => setBulkMoveTargetType('other')}
                                                 className={`h-8 border-l border-slate-200 px-2.5 text-xs font-semibold dark:border-slate-700 ${bulkMoveTargetType === 'other'
-                                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
                                                     : 'bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-200'
                                                     }`}
                                             >
@@ -2751,7 +2764,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                 isBulkMoving ||
                                                 (bulkMoveTargetType === 'other' ? !bulkMoveLocationId : !bulkMoveCabinetId)
                                             }
-                                            className="h-8 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                            className="h-8 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
                                         >
                                             {isBulkMoving
                                                 ? t('inventory_bulk_move_running')
@@ -2830,9 +2843,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                     }}
                                                     className={`cursor-pointer transition-colors duration-500 ${
                                                         isHighlighted
-                                                            ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                                                            ? 'bg-blue-100 dark:bg-blue-900/40'
                                                             : isSelected
-                                                                ? 'bg-emerald-50/80 dark:bg-emerald-950/20'
+                                                                ? 'bg-blue-50/80 dark:bg-blue-950/20'
                                                                 : 'hover:bg-slate-50 dark:hover:bg-slate-800/70'
                                                     }`}
                                                 >
@@ -2846,7 +2859,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                                                 toggleItemSelection(item.id);
                                                             }}
                                                             onClick={(event) => event.stopPropagation()}
-                                                            className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                                         />
                                                     </td>
                                                     <td className="min-w-0 px-2 py-3">
@@ -2899,7 +2912,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             </div>
                         </div>
 
-                        <div className="space-y-3 table:hidden">
+                        <div className="space-y-2 table:hidden">
                             {visibleGroups.length > 0 ? (
                                 visibleGroups.map((group) => (
                                     group.cardCount > 1
@@ -3137,8 +3150,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 </div>
             </aside>
 
-            {/* FAB (the first-run empty state carries its own register buttons) */}
-            {isAddMenuOpen && items.length > 0 && (
+            {/* Registration actions open above the phone search dock. */}
+            {isAddMenuOpen && (
                 <>
                     <button
                         type="button"
@@ -3146,15 +3159,16 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         onClick={() => setIsAddMenuOpen(false)}
                         className="absolute inset-0 z-10 cursor-default bg-slate-900/5 dark:bg-black/10 wide:hidden"
                     />
-                    <div className="absolute bottom-40 right-5 z-20 flex max-w-[calc(100vw-2.5rem)] flex-col items-end gap-3 wide:hidden">
+                    <div ref={addMenuRef} role="dialog" aria-modal="true" aria-label={t('inventory_add_menu_open')} tabIndex={-1}
+                        className="inventory-register-actions absolute bottom-20 right-5 z-20 flex max-w-[calc(100vw-2.5rem)] flex-col items-end gap-3 wide:hidden">
                         <button
                             type="button"
                             onClick={handleOpenScanRegistration}
                             aria-label={t('inventory_add_menu_scan')}
-                            className="animate-slide-up flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 active:translate-y-0 dark:border-blue-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-blue-700 dark:hover:text-blue-300"
+                            className="animate-slide-up flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-slate-50 active:translate-y-0 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                         >
                             <span className="whitespace-nowrap">{t('inventory_add_menu_scan')}</span>
-                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/25">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-500 dark:text-slate-400">
                                 <Camera className="h-5 w-5" />
                             </span>
                         </button>
@@ -3162,11 +3176,11 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             type="button"
                             onClick={handleOpenManualRegistration}
                             aria-label={t('inventory_add_menu_manual')}
-                            className="animate-slide-up flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:text-emerald-700 active:translate-y-0 dark:border-emerald-900/50 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-emerald-700 dark:hover:text-emerald-300"
+                            className="animate-slide-up flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-slate-50 active:translate-y-0 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                             style={{ animationDelay: '60ms' }}
                         >
                             <span className="whitespace-nowrap">{t('inventory_add_menu_manual')}</span>
-                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-500 dark:text-slate-400">
                                 <PackagePlus className="h-5 w-5" />
                             </span>
                         </button>
@@ -3179,9 +3193,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 aria-label={t('inventory_add_menu_open')}
                 aria-expanded={isAddMenuOpen}
                 onClick={() => setIsAddMenuOpen((open) => !open)}
-                className={`absolute bottom-24 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 wide:hidden ${isAddMenuOpen
+                className={`inventory-register-fab absolute bottom-4 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 wide:hidden ${isAddMenuOpen
                     ? 'rotate-45 bg-slate-800 shadow-slate-900/20 hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white'
-                    : 'bg-emerald-500 shadow-emerald-500/30 hover:bg-emerald-600'
+                    : 'bg-blue-600 shadow-blue-600/20 hover:bg-blue-700'
                     }`}
             >
                 <Plus className="w-6 h-6" />
@@ -3200,7 +3214,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 <button
                     type="button"
                     onClick={() => setIsScanResultsOpen(true)}
-                    className="absolute bottom-24 left-5 z-30 flex h-14 items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 text-sm font-bold text-emerald-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-slate-800 dark:text-emerald-300 table:hidden"
+                    className="inventory-scan-resume absolute bottom-4 left-5 z-30 flex h-14 items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 text-sm font-bold text-emerald-700 shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-slate-800 dark:text-emerald-300 table:hidden"
                 >
                     <CheckCircle2 className="h-5 w-5" />
                     {t('inventory_scan_result_count', { count: scanResults.length })}

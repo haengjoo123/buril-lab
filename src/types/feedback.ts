@@ -3,7 +3,7 @@ export type FeedbackType = 'bug' | 'improvement' | 'general'
 export type FeedbackStatus = 'new' | 'in_progress' | 'resolved'
 
 /** App tab a feedback was sent from (`feedback.source_screen`, closed list = AppTab). */
-export type FeedbackSourceScreen = 'search' | 'logs' | 'cabinet' | 'inventory' | 'admin'
+export type FeedbackSourceScreen = 'search' | 'logs' | 'cabinet' | 'inventory' | 'admin' | 'tools'
 
 export interface FeedbackInboxItem {
   id: string

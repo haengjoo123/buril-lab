@@ -76,6 +76,24 @@ function openAIResponse(text: string) {
 }
 
 describe('disposal guide V3 response and safety boundary', () => {
+  it('keeps handling, recording, contact and SOP steps when the policy has many label fields', () => {
+    const labelInstructions = ['성분명', '주요 위험', '대략적인 양 또는 양 모름', '수거일', '연구실명', '담당자', '연락처', '관리번호']
+    const result = buildStructuredDisposalGuide({
+      ...readyInput,
+      policy: { stream: {
+        ...readyInput.policy!.streams![0],
+        labelInstructions,
+        handlerContact: '안전담당자 내선 1234',
+        sopUrl: 'https://example.com/approved-sop',
+      } },
+    })
+    for (const instruction of labelInstructions) expect(result.steps.join(' ')).toContain(instruction)
+    for (const text of ['보안경', '뚜껑', '2차 운반 용기', '처리 행동을 기록', '내선 1234', 'https://example.com/approved-sop']) {
+      expect(result.steps.join(' ')).toContain(text)
+    }
+    expect(result.steps).toHaveLength(8)
+  })
+
   it('extracts structured JSON from a fenced model response', () => {
     const parsed = parseDisposalGuideJson(`\n\`\`\`json\n{
       "summary": "안내",

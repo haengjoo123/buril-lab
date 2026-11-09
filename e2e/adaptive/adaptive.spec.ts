@@ -27,14 +27,15 @@ function adminAttentionName(count?: number): RegExp {
 }
 
 const pageErrors = new WeakMap<Page, string[]>();
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, baseURL }) => {
+  const fixtureOrigin = new URL(baseURL ?? 'http://127.0.0.1:4199').origin;
   const errors: string[] = [];
   pageErrors.set(page, errors);
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => localStorage.setItem('i18nextLng', 'ko'));
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
-    if (url.origin === 'http://127.0.0.1:4199') return route.continue();
+    if (url.origin === fixtureOrigin) return route.continue();
     if (url.origin === 'http://127.0.0.1:54321') {
       // No live credentials or remote writes; every service call is contained here.
       if (!['GET', 'HEAD', 'OPTIONS'].includes(route.request().method()) && /\/rest\/v1\/(inventory_items|cabinet_items|waste_logs|waste_log_items)$/.test(url.pathname)) {
@@ -51,7 +52,8 @@ test.beforeEach(async ({ page }) => {
 });
 test.afterEach(async ({ page }) => { expect(pageErrors.get(page)).toEqual([]); });
 
-test('cabinet editor draft and Canvas identity survive repeated resizing', async ({ page }) => {
+test('cabinet editor draft and Canvas identity survive repeated resizing', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 840, height: 850 });
   await page.goto(`${fixture}?screen=cabinet`);
   const detail = page.locator('.fridge-panes [data-pane="detail"]');
@@ -83,6 +85,43 @@ test('cabinet editor draft and Canvas identity survive repeated resizing', async
   await expect(fitView).toBeVisible();
   await fitView.click();
   await expect(fitView).toHaveCount(0);
+
+  // Both camera actions stay in the bottom dock, away from modes and the placement tray.
+  await page.goto(`${fixture}?screen=cabinet&focusShelf=1`);
+  const cameraControls = page.getByRole('group', { name: ko('cabinet_camera_controls'), exact: true });
+  const modes = page.getByRole('radiogroup', { name: '시약장 모드' });
+  await expect(cameraControls.getByRole('button')).toHaveCount(2);
+  for (const mode of ['cabinet_mode_view', 'cabinet_mode_place']) {
+    const option = modes.getByRole('radio', { name: ko(mode), exact: true });
+    if (await option.getAttribute('aria-checked') !== 'true') await option.click();
+    for (const width of [360, 840, 1280]) {
+      await page.setViewportSize({ width, height: 750 });
+      await expect(cameraControls).toBeVisible();
+      // Viewport providers, CSS layout and the WebGL canvas settle on separate frames in WebKit.
+      await expect.poll(async () => {
+        const dock = await cameraControls.boundingBox();
+        const switcher = await modes.boundingBox();
+        const canvas = await page.locator('canvas').boundingBox();
+        const tray = mode === 'cabinet_mode_place'
+          ? await page.getByRole('button', { name: ko('cabinet_reagent_tray_hide'), exact: true }).locator('..').boundingBox()
+          : null;
+        return {
+          separatedFromModes: Boolean(dock && switcher && dock.y > switcher.y + switcher.height + 44),
+          insideCanvas: Boolean(dock && canvas && dock.x + dock.width <= canvas.x + canvas.width),
+          atCanvasBottom: Boolean(dock && canvas && Math.abs(dock.y + dock.height - (canvas.y + canvas.height - 12)) <= 1),
+          clearOfTray: mode !== 'cabinet_mode_place' || Boolean(tray && dock && tray.y + tray.height < dock.y),
+        };
+      }).toEqual({ separatedFromModes: true, insideCanvas: true, atCanvasBottom: true, clearOfTray: true });
+      await expectNoHorizontalOverflow(page);
+    }
+  }
+  await page.setViewportSize({ width: 360, height: 850 });
+  const topView = cameraControls.getByRole('button', { name: ko('topdown_view'), exact: true });
+  await topView.click();
+  await expect(topView).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: testInfo.outputPath('camera-controls.png') });
+  await cameraControls.getByRole('button', { name: '화면 맞춤', exact: true }).click();
+  await expect(cameraControls).toHaveCount(0);
 });
 
 test('waste log auto selection stays on the list until explicitly opened', async ({ page }) => {
@@ -185,6 +224,122 @@ test('search result keeps its selection and input when narrowed', async ({ page 
   await page.setViewportSize({ width: 360, height: 750 });
   await page.getByRole('button', { name: '목록으로', exact: true }).click();
   await expect(search).toHaveValue('Acetone');
+});
+
+test('desktop search starts with compact history and an accessible empty batch', async ({ page, browserName }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${fixture}?screen=search&recents=1&emptyCart=1&voice=1`);
+  const panes = page.locator('.search-panes');
+  await expect(panes).toHaveAttribute('data-search-state', 'start');
+  await expect(page.getByRole('heading', { name: ko('search_desktop_title') })).toBeVisible();
+  await expect(page.locator('[data-pane="detail"]')).toBeHidden();
+  await expect(page.getByText(ko('search_preview_empty_title'), { exact: true })).toHaveCount(0);
+  await expect(page.locator('form').getByRole('button', { name: ko('btn_scan'), exact: true })).toBeVisible();
+  await expect(page.locator('form').getByRole('button', { name: ko('voice_agent_cta_speak'), exact: true })).toBeVisible();
+  await expect(page.locator('form button[type="submit"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: ko('btn_settings'), exact: true })).toHaveCount(1);
+  const history = page.getByRole('region', { name: ko('guide_example'), exact: true });
+  await expect(history.getByRole('listitem')).toHaveCount(5);
+  await page.locator('form input').focus();
+  const recentDropdown = page.locator('form ul');
+  await expect(recentDropdown).toBeVisible();
+  expect((await recentDropdown.boundingBox())!.height).toBeGreaterThan(150);
+  await page.getByRole('heading', { name: ko('search_desktop_title') }).click();
+  await expect(history).toBeVisible();
+  await page.screenshot({ path: `output/playwright/adaptive/search-desktop-start-${browserName}.png` });
+  for (const width of [1024, 1200, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(panes).toHaveAttribute('data-desktop-search', 'true');
+    await expectNoHorizontalOverflow(page);
+    const input = (await page.locator('form input').boundingBox())!;
+    expect(input.width).toBeGreaterThan(400);
+    expect(input.width).toBeLessThan(740);
+  }
+  await page.getByRole('banner').getByRole('button', { name: `${ko('cart_title')} 0`, exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('desktop search keeps one input above a narrow list and its detail', async ({ page, browserName }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${fixture}?screen=search&recents=1`);
+  const search = page.locator('form input');
+  await search.evaluate(input => input.setAttribute('data-original-search-input', 'true'));
+  await page.getByRole('region', { name: ko('guide_example'), exact: true }).getByRole('button', { name: 'Acetone', exact: true }).click();
+  const detail = page.locator('[data-pane="detail"]');
+  await expect(detail).toBeVisible();
+  await expect(detail).toContainText('Acetone');
+  await expect(search).toHaveCount(1);
+  for (const width of [1024, 1280, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const controls = (await page.locator('.search-controls').boundingBox())!;
+    const list = (await page.locator('.search-results-list').boundingBox())!;
+    const content = (await detail.boundingBox())!;
+    expect(controls.y + controls.height).toBeLessThanOrEqual(list.y + 1);
+    expect(list.width).toBeGreaterThanOrEqual(280);
+    expect(list.width).toBeLessThanOrEqual(360);
+    expect(content.x).toBeGreaterThan(list.x + list.width);
+    await expectNoHorizontalOverflow(page);
+  }
+  await page.screenshot({ path: `output/playwright/adaptive/search-desktop-results-${browserName}.png` });
+  await page.setViewportSize({ width: 430, height: 850 });
+  await expect(detail).toBeVisible();
+  await page.getByRole('button', { name: '목록으로', exact: true }).click();
+  await expect(search).toHaveValue('Acetone');
+  await expect(search).toHaveAttribute('data-original-search-input', 'true');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: ko('search_reset'), exact: true }).click();
+  await expect(page.locator('[data-pane="detail"]')).toBeHidden();
+  await expect(page.getByRole('heading', { name: ko('search_desktop_title') })).toBeVisible();
+  await expect(search).toHaveValue('');
+});
+
+test('desktop loading keeps the search toolbar and detail skeleton visible', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${fixture}?screen=search&loading=1`);
+  await expect(page.locator('.search-panes')).toHaveAttribute('data-search-state', 'results');
+  await expect(page.locator('form input')).toBeDisabled();
+  await expect(page.locator('form button[type="submit"]')).toBeVisible();
+  await expect(page.locator('[data-pane="detail"]')).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test('mobile drawer contains navigation and history while the composer stays below results', async ({ page, browserName }) => {
+  await page.setViewportSize({ width: 430, height: 850 });
+  await page.goto(`${fixture}?screen=search&recents=1&emptyCart=1`);
+  await expect(page.locator('.search-panes')).toHaveAttribute('data-desktop-search', 'false');
+  await expect(page.getByRole('button', { name: ko('btn_scan'), exact: true })).toBeVisible();
+  await expect(page.locator('form button[type="submit"]')).toHaveCount(0);
+  await expect(page.locator('.adaptive-bottom-nav')).toHaveCount(0);
+  await expect(page.getByRole('banner').getByRole('button', { name: `${ko('cart_title')} 0`, exact: true })).toBeVisible();
+  const search = page.locator('form input');
+  await search.evaluate(el => el.setAttribute('data-original-search-input', 'true'));
+  const menu = page.getByRole('button', { name: ko('nav_open_menu'), exact: true });
+  await menu.click();
+  const drawer = page.getByRole('dialog', { name: ko('nav_menu'), exact: true });
+  await expect(drawer.getByRole('listitem')).toHaveCount(6);
+  await expect(drawer.getByRole('navigation').getByRole('button')).toHaveCount(4);
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+  await expect(menu).toBeFocused();
+  await page.screenshot({ path: `output/playwright/adaptive/search-mobile-start-${browserName}.png` });
+  await menu.click();
+  await drawer.getByRole('button', { name: 'Acetone', exact: true }).click();
+  await expect(drawer).toHaveCount(0);
+  await expect(page.locator('[data-pane="detail"]')).toContainText('Acetone');
+  await expect(search).toBeVisible();
+  await expect(search).toHaveValue('Acetone');
+  await expect(search).toHaveAttribute('data-original-search-input', 'true');
+  for (const width of [320, 390, 599]) {
+    await page.setViewportSize({ width, height: 850 });
+    const formBox = (await page.locator('form').boundingBox())!;
+    const detailBox = (await page.locator('[data-pane="detail"]').boundingBox())!;
+    expect(detailBox.y + detailBox.height).toBeLessThanOrEqual(formBox.y);
+    expect(formBox.y + formBox.height).toBeLessThanOrEqual(850);
+    await expectNoHorizontalOverflow(page);
+  }
+  await page.getByRole('button', { name: '목록으로', exact: true }).click();
+  await expect(page.locator('form input')).toHaveValue('Acetone');
+  await expectNoHorizontalOverflow(page);
 });
 
 test('waste wizard and review use remaining space without duplicating the dialog', async ({ page }) => {

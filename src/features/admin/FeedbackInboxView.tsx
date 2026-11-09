@@ -26,6 +26,7 @@ const SOURCE_SCREEN_LABEL_KEYS: Record<FeedbackSourceScreen, string> = {
   cabinet: 'tab_cabinet',
   inventory: 'tab_inventory',
   admin: 'tab_audit',
+  tools: 'tab_tools',
 }
 
 function sourceScreenLabel(item: FeedbackInboxItem, t: (key: string) => string): string | null {

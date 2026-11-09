@@ -103,8 +103,8 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                 aria-expanded={isOpen}
                 aria-controls={isOpen ? menuId : undefined}
                 className={joinClasses(
-                    'w-full border bg-white text-left shadow-sm transition-all dark:bg-slate-800',
-                    'border-slate-200 hover:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-slate-600 dark:hover:border-emerald-500/70',
+                    'w-full border bg-white text-left shadow-sm transition-[border-color,box-shadow] dark:bg-slate-800',
+                    'border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/25 dark:border-slate-700 dark:hover:border-slate-600',
                     'flex items-center justify-between gap-2',
                     'disabled:cursor-not-allowed disabled:opacity-50',
                     sizeClasses,
@@ -127,7 +127,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                     aria-label={ariaLabel}
                     className={joinClasses(
                         'absolute top-full mt-2 min-w-full overflow-hidden border bg-white shadow-xl dark:bg-slate-800',
-                        'border-slate-200 dark:border-slate-600',
+                        'border-slate-200 dark:border-slate-700',
                         'rounded-xl z-[120]',
                         align === 'right' ? 'right-0' : 'left-0',
                         menuClassName
@@ -154,7 +154,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                                         'flex items-center justify-between gap-2',
                                         size === 'sm' ? 'text-xs' : 'text-sm',
                                         isSelected
-                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
                                             : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700/70',
                                         option.disabled && 'cursor-not-allowed opacity-50'
                                     )}

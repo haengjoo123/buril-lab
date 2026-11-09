@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Check, SlidersHorizontal } from 'lucide-react';
+import { Check, SlidersHorizontal, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SegmentedControl, type SegmentedControlOption } from './SegmentedControl';
+import { useAdaptiveDialog } from '../hooks/useAdaptiveDialog';
 
 interface LogFilterOption<T extends string> {
     value: T;
@@ -9,6 +10,7 @@ interface LogFilterOption<T extends string> {
 }
 
 interface LogFilterMenuProps<R extends string> {
+    compact?: boolean;
     /** Omit to hide the period section (e.g. on the archive tab). */
     range?: {
         value: R;
@@ -26,14 +28,15 @@ interface LogFilterMenuProps<R extends string> {
 }
 
 /**
- * Period and sort for the waste log list behind one compact button, so the
- * search field keeps the rest of the row on narrow screens. The button still
- * shows the current period, and a dot marks a non-default sort order.
+ * The phone sheet keeps period and sort within reach; larger screens use a popover.
+ * The trigger shows the period, with a dot for a non-default sort order.
  */
-export function LogFilterMenu<R extends string>({ range, sort }: LogFilterMenuProps<R>) {
+export function LogFilterMenu<R extends string>({ range, sort, compact = false }: LogFilterMenuProps<R>) {
     const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    useAdaptiveDialog(panelRef, () => setIsOpen(false), isOpen);
     const panelId = useId();
     const sortHeadingId = useId();
     const isSortCustomized = sort.value !== sort.defaultValue;
@@ -44,14 +47,9 @@ export function LogFilterMenu<R extends string>({ range, sort }: LogFilterMenuPr
         const onPointerDown = (event: PointerEvent) => {
             if (rootRef.current && !rootRef.current.contains(event.target as Node)) setIsOpen(false);
         };
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setIsOpen(false);
-        };
         document.addEventListener('pointerdown', onPointerDown);
-        document.addEventListener('keydown', onKeyDown);
         return () => {
             document.removeEventListener('pointerdown', onPointerDown);
-            document.removeEventListener('keydown', onKeyDown);
         };
     }, [isOpen]);
 
@@ -63,10 +61,11 @@ export function LogFilterMenu<R extends string>({ range, sort }: LogFilterMenuPr
                 type="button"
                 onClick={() => setIsOpen((open) => !open)}
                 aria-expanded={isOpen}
+                aria-haspopup="dialog"
                 aria-controls={isOpen ? panelId : undefined}
                 aria-label={`${t('log_filter_button')}: ${summary}`}
                 title={`${t('log_filter_button')}: ${summary}`}
-                className={`relative flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-semibold shadow-sm transition-colors ${isOpen
+                className={`relative flex h-11 items-center justify-center gap-1.5 border transition-colors ${compact ? 'rounded-full px-2.5 text-xs font-medium' : 'rounded-lg px-3 text-sm font-semibold shadow-sm'} ${isOpen
                     ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
                     : 'border-gray-200 bg-white text-slate-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
                     }`}
@@ -79,12 +78,21 @@ export function LogFilterMenu<R extends string>({ range, sort }: LogFilterMenuPr
             </button>
 
             {isOpen && (
-                <div
-                    id={panelId}
+                <div className={compact ? 'adaptive-overlay fixed z-[70] flex items-end justify-center' : 'absolute right-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-2rem)]'}>
+                {compact && <div className="absolute inset-0 bg-slate-950/30" onClick={() => setIsOpen(false)} />}
+                <div ref={panelRef} id={panelId}
                     role="dialog"
+                    aria-modal="true"
+                    tabIndex={-1}
                     aria-label={t('log_filter_button')}
-                    className="absolute right-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 bg-white p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.15)] animate-in fade-in zoom-in-95 duration-100 origin-top-right dark:border-slate-700 dark:bg-slate-800"
+                    className={compact
+                        ? 'logs-filter-sheet relative max-h-full w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-4 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100'
+                        : 'rounded-xl border border-gray-100 bg-white p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.15)] dark:border-slate-700 dark:bg-slate-800'}
                 >
+                    {compact && <div className="mb-3 flex items-center justify-between pl-1">
+                        <h3 className="text-base font-semibold">{t('log_filter_button')}</h3>
+                        <button type="button" onClick={() => setIsOpen(false)} aria-label={t('btn_close')} className="flex h-11 w-11 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={20} /></button>
+                    </div>}
                     {range && (
                         <div className="mb-3">
                             <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{t('log_range_label')}</p>
@@ -127,6 +135,7 @@ export function LogFilterMenu<R extends string>({ range, sort }: LogFilterMenuPr
                             );
                         })}
                     </div>
+                </div>
                 </div>
             )}
         </div>

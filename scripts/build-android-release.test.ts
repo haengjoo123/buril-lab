@@ -7,7 +7,7 @@ const profile = { commit: release.commit_sha, environment: 'production',
   supabase_url: 'https://zafxzidbtbryiksemlwc.supabase.co', features: {
     VITE_ENABLE_WASTE_V2: 'true', VITE_ENABLE_PH_PREDICTION: 'true',
     VITE_ENABLE_CHEMICAL_ENRICHMENT: 'true', VITE_ENABLE_SEARCH_ANALYTICS: 'false',
-    VITE_ENABLE_WASTE_CONTAINERS: 'true',
+    VITE_ENABLE_LAB_TOOLS: 'false', VITE_ENABLE_WASTE_CONTAINERS: 'true',
   } }
 const bundle = `${profile.supabase_url} sb_publishable_test_public_key`
 

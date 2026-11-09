@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Search, ClipboardList, Rows3, Package, Building2 } from 'lucide-react';
+import { Search, ClipboardList, Rows3, Package, Building2, FlaskConical } from 'lucide-react';
+import { isLabToolsEnabled } from '../config/featureFlags';
 import type { AppTab } from '../hooks/useAppUiState';
 
 interface BottomTabNavProps {
@@ -33,6 +34,7 @@ export function BottomTabNav({ activeTab, isAdmin, onTabClick, adminAttentionCou
     // Shelves for the cabinet so it no longer looks like the inventory package icon.
     { tab: 'cabinet', label: t('tab_cabinet'), icon: Rows3, onboardingTarget: 'nav-cabinet' },
     { tab: 'inventory', label: t('tab_inventory'), icon: Package, onboardingTarget: 'nav-inventory' },
+    ...(isLabToolsEnabled ? [{ tab: 'tools' as const, label: t('tab_tools'), icon: FlaskConical }] : []),
     ...(isAdmin ? [{ tab: 'admin' as const, label: t('tab_audit'), icon: Building2, tone: 'red' as const }] : []),
   ];
 
