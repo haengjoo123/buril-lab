@@ -621,6 +621,7 @@ const componentEnrichmentFingerprint = (component: WasteComponent): string => JS
     hazardDataConfirmedByUser: component.hazardDataConfirmedByUser,
     phCatalogId: component.phCatalogId,
     enrichmentVersion: component.enrichmentVersion,
+    identitySelectionRevision: component.identitySelectionRevision,
     enrichmentRetryCount: component.enrichmentRetryCount,
 });
 
@@ -681,6 +682,7 @@ const applyManualCatalogIdentity = (component: WasteComponent): WasteComponent =
     const needsRefresh = identityChanged || component.ghsDataStatus !== 'verified';
     return {
         ...component,
+        identitySelectionRevision: (component.identitySelectionRevision ?? 0) + 1,
         chemical: {
             ...component.chemical,
             casNumber: record.casNumber,

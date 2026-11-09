@@ -11,9 +11,7 @@ export function useWasteChemicalEnrichment(userId: string | null | undefined, la
         component.chemical.molecularFormula,
         component.chemical.externalIdentifiers?.pubchemCid,
         component.chemical.externalIdentifiers?.standardInchiKey,
-        component.phCatalogId,
-        component.phCatalogMatch?.selection,
-        component.enrichmentVersion ?? 0,
+        component.identitySelectionRevision ?? 0,
     ])));
     const refresh = useWasteStore((state) => state.refreshChemicalEnrichment);
     const pending = useRef<Promise<void>>(Promise.resolve());
