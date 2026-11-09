@@ -35,5 +35,5 @@
 - 계산 엔진은 UI와 분리하고 독립 기준값으로 검증한다. `engines.test.ts`, `interactions.test.tsx`, `screens.test.tsx` 참조.
 - 저장·충돌·RLS는 `repository.test.ts`, `database.test.ts`에서 검증한다. 개발 서버의 로컬 저장 성공을 서버 동기화 성공으로 표시하지 않는다.
 - 한국어/영어와 모바일·태블릿·데스크톱에서 같은 사용자 흐름을 제공한다. 기기별 네이티브 알림 코드는 연결하되 실기기 테스트는 사용자 요청에 따라 별도 수행하지 않는다.
-- SQL은 `database/lab-tools/`의 검토 후보이며 운영 DB에 적용하지 않았다. 기존 해시 고정 마이그레이션과 공개 절차를 우회하지 않는다. 운영 `VITE_ENABLE_LAB_TOOLS` 기본값은 `false`다.
+- SQL은 `supabase/migrations/20261109011725_personal_lab_tools.sql`과 `20261109011747_tool_images_account_deletion.sql`로 관리한다. Staging·운영에 적용 후 소유권·저장 충돌·이미지 접근 pgTAP 30개를 각 환경에서 통과했다. 기존 해시 고정 검증과 Quality·Staging 공개 절차를 유지하며, `VITE_ENABLE_LAB_TOOLS`를 두 환경에서 명시적으로 활성화한다.
 - 오프라인 초안은 문서 생성 없이 사용할 수 있도록 숨겨진 저장 상태로 관리한다. 개인 재사용 작업만 이름을 붙여 계정에 저장하며, 참조 자료는 문서를 만들지 않는다.
