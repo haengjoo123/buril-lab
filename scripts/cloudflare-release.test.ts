@@ -540,7 +540,29 @@ describe('Prep 0 Cloudflare release controls', () => {
     })).toThrow(/exactly true or false/)
   })
 
-  it.each([0, 4, 100])('reports only the rejected Gate0 enrichment count without changing its budget: %s', (blockedRequests) => {
+  it('allows the draft retry only with exact phase evidence and no record-view lookups', () => {
+    expect(verifyGate0EnrichmentIsolation({
+      featureFlag: 'true', blockedRequests: 4,
+      byPhase: { inventory: 1, batch: 3, record: 0, directLink: 0 },
+    })).toEqual({ featureEnabled: true, blockedRequests: 4 })
+    for (const byPhase of [
+      { inventory: 2, batch: 2, record: 0, directLink: 0 },
+      { inventory: 0, batch: 4, record: 0, directLink: 0 },
+      { inventory: 1, batch: 2, record: 1, directLink: 0 },
+      { inventory: 1, batch: 2, record: 0, directLink: 1 },
+    ]) {
+      expect(() => verifyGate0EnrichmentIsolation({ featureFlag: 'true', blockedRequests: 4, byPhase })).toThrow(/phase budget/)
+    }
+    expect(() => verifyGate0EnrichmentIsolation({
+      featureFlag: 'true', blockedRequests: 4,
+      byPhase: { inventory: 1, batch: 2, record: 0, directLink: 0 },
+    })).toThrow(/does not match the total/)
+    expect(() => verifyGate0EnrichmentIsolation({
+      featureFlag: 'true', blockedRequests: 4, byPhase: { batch: 4 },
+    })).toThrow(/incomplete/)
+  })
+
+  it.each([0, 4, 100])('reports only the rejected Gate0 enrichment count without phase evidence: %s', (blockedRequests) => {
     expect(() => verifyGate0EnrichmentIsolation({
       featureFlag: 'true',
       blockedRequests,

@@ -205,6 +205,7 @@ test('login → lab → inventory search → reviewed waste record → direct li
   verifyGate0EnrichmentIsolation({
     featureFlag: process.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
     blockedRequests: blockedEnrichmentRequests,
+    byPhase: blockedEnrichmentByPhase,
   })
   expect(
     unapprovedAccessHeaderRequests,
