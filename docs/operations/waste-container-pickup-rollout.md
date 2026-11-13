@@ -1,6 +1,16 @@
 # 폐액통 수거 요청 출시 절차
 
-상태: 저장소 준비 완료, Staging·운영 DB 미적용 (2026-11-13)
+상태: Staging·운영 DB 적용 및 검증 완료, 클라이언트 플래그 꺼짐 (2026-11-13)
+
+## 2026-11-13 적용 기록
+
+- Staging(이력 `20261113055518`)과 운영(이력 `20261113060422`)에 같은 SQL을 적용했다.
+- Staging에서 `waste_container_pickup_behavior.sql` 12건을 롤백 트랜잭션으로 실행해 모두 통과했고 시험 데이터는 남지 않았다.
+- 운영에서는 시험 데이터를 넣지 않았다. 카탈로그 조회로 열·제약·인덱스·트리거와 권한(anon 실행 불가, authenticated 직접 UPDATE 불가)을 확인했다.
+- 두 환경의 새 함수 본문 해시가 저장소 파일과 일치한다.
+- Staging Security Advisor는 74건에서 79건(이 migration의 RPC 3개와 일상점검 RPC 2개)으로 늘었고 다른 새 항목은 없었다. 운영은 Advisor API 대신 카탈로그로 확인했다: authenticated가 실행할 수 있는 SECURITY DEFINER 공개 함수가 59개에서 64개가 됐다. 운영 Advisor의 최종 대조는 Web release의 hosted 검사가 수행한다.
+- 두 환경의 기준선을 79건으로 갱신했다.
+- 적용 순서 기록: Staging을 먼저 적용한 뒤 운영 적용이 지연되어, 그 사이 Staging Web release 2건이 hosted Advisor 검사(74→79)에서 실패했다. 배포 전 검증 단계라 배포는 일어나지 않았다. 다음부터는 두 환경 적용과 기준선 갱신을 한 번에 진행한다.
 
 ## 검증 범위 (2026-11-13)
 
