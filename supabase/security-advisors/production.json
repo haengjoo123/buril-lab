@@ -2,7 +2,7 @@
   "schema_version": 1,
   "environment": "production",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 81,
+  "expected_count": 86,
   "observed_on": "2026-11-13",
   "entries": [
     {
@@ -212,6 +212,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_inventory_purchase_request_v1_p_lab_id uuid, p_item_name text, p_quantity integer, p_brand text, p_product_number text, p_cas_number text, p_package_size text, p_note text, p_source_inventory_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_inventory_purchase_request_v1",
+        "identity_arguments": "p_lab_id uuid, p_item_name text, p_quantity integer, p_brand text, p_product_number text, p_cas_number text, p_package_size text, p_note text, p_source_inventory_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "create_inventory_purchase_request_v1: authenticated callers are intentionally allowed through this RPC. Only a member of the lab may ask, a source inventory row must belong to that lab, and an open request for the same row is returned instead of duplicated. Fixed empty search_path; anon execution and direct client access to the table remain denied. Hosted pgTAP on staging covers the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "inventory purchase request RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_create_inventory_sds_document_v1_p_lab_id uuid, p_object_path text, p_file_name text, p_cas_number text, p_brand text, p_product_number text, p_revision_date date",
@@ -578,6 +604,32 @@
       "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_inventory_usage_counts_v1_p_lab_id uuid, p_days integer",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_inventory_usage_counts_v1",
+        "identity_arguments": "p_lab_id uuid, p_days integer",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "get_inventory_usage_counts_v1: authenticated callers are intentionally allowed through this RPC. A lab id requires membership; null returns only the caller's personal inventory. It returns counts and timestamps only, over at most 365 days. Fixed empty search_path; anon execution and direct client access to the table remain denied. Hosted pgTAP on staging covers the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "inventory purchase request RPC permission recheck"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_get_lab_members_target_lab_id uuid",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -940,6 +992,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_list_inventory_purchase_requests_v1_p_lab_id uuid, p_closed_days integer",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "list_inventory_purchase_requests_v1",
+        "identity_arguments": "p_lab_id uuid, p_closed_days integer",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "list_inventory_purchase_requests_v1: authenticated callers are intentionally allowed through this RPC. Only members of the lab may read its requests; closed requests are limited to at most 365 days and 500 rows. Fixed empty search_path; anon execution and direct client access to the table remain denied. Hosted pgTAP on staging covers the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "inventory purchase request RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_log_safety_center_export_p_center_id uuid, p_format text, p_datasets text[], p_lab_ids uuid[], p_filters jsonb, p_row_count integer",
@@ -1616,6 +1694,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_update_inventory_purchase_request_v1_p_id uuid, p_status text, p_note text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "update_inventory_purchase_request_v1",
+        "identity_arguments": "p_id uuid, p_status text, p_note text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "update_inventory_purchase_request_v1: authenticated callers are intentionally allowed through this RPC. Only lab members reach a request; transitions are fixed, and every step except the requester withdrawing an undecided request needs the lab admin. Fixed empty search_path; anon execution and direct client access to the table remain denied. Hosted pgTAP on staging covers the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "inventory purchase request RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_update_lab_member_role_target_lab_id uuid, target_user_id uuid, new_role text",
@@ -2329,6 +2433,53 @@
       "reason": "public.inventory_move_receipts은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있는 서버 전용 표임을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
       "reviewed_by_role": "internal_security_owner",
       "reviewed_at": "2026-08-24",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_inventory_purchase_requests",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "inventory_purchase_requests"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.inventory_purchase_requests은 브라우저 역할의 직접 DML을 모두 거부하고 service_role만 CRUD할 수 있으며, 클라이언트는 구매 요청 RPC로만 접근함을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-11-13",
       "expires_on": null,
       "target_gate": null
     },
