@@ -1,6 +1,6 @@
 # 부족 예상·구매 요청 출시 절차
 
-상태: Staging·운영 DB 적용 완료, 플래그 꺼짐 (2026-11-13 UTC)
+상태: Staging·운영 DB 적용, 플래그 켬, 운영 배포 완료 (2026-11-13 UTC, 커밋 `0b7e6232`)
 
 ## 적용 기록
 
@@ -8,7 +8,9 @@
 - 두 환경 모두 새 함수 7개(public 4·private 3)의 본문 해시와 권한이 일치한다. public RPC 4개는 `anon` 실행 불가, `authenticated`·`service_role` 실행 가능이다. private 함수는 클라이언트가 실행하지 못한다. 표는 RLS가 켜져 있고 정책은 0건이며, `anon`·`authenticated`는 직접 읽거나 쓰지 못한다.
 - Staging에서 `inventory_purchase_requests_behavior.sql` 10건을 실행해 모두 통과했다. 끝에서 일부러 예외를 일으켜 전체를 롤백했고, 시험용 사용자·연구실·요청·감사 기록과 pgTAP 확장이 남지 않았음을 다시 조회해 확인했다. 운영에는 시험 데이터를 넣지 않았다.
 - Hosted Security Advisor는 두 환경 모두 81 → 86건이다. 늘어난 것은 예상대로 `authenticated_security_definer_function_executable` WARN 4건(위 public RPC 4개)과 `rls_enabled_no_policy` INFO 1건(`inventory_purchase_requests`)뿐이다. `supabase/security-advisors/*.json`과 `EXPECTED_COUNTS`를 86으로 갱신했다. RPC 4건은 `temporary_open`(2026-12-31 만료, 다음 RPC 권한 재검토)이고, 표 1건은 서버 전용 기본 거부라 `accepted_design`이다.
-- 남은 일: 아래 "켜는 순서" 4단계(플래그·배포)와 "확인할 것"의 계정별 확인.
+- Staging과 운영 환경 변수 `VITE_ENABLE_PURCHASE_REQUESTS`를 `true`로 켰다. Staging 배포(run `43457823410`)는 Cloudflare Workers API 장애(HTTP 503)로 두 번 실패한 뒤 3번째 시도에 성공했다.
+- 운영 승격 전 운영 변수 `WEB_DATABASE_REVIEWED_SHA`를 `0b7e6232d3492b2f1121bae3f6b41dcc177e54f6`로 바꿨다. 이 값이 이전 커밋을 가리키면 migration이 바뀐 후보의 승격이 거부된다. 이후 운영 배포(run `43472718122`)가 성공했고, 두 빌드 모두 플래그가 `true`로 들어갔다.
+- 남은 일: "확인할 것"의 계정별 확인.
 
 플래그: `VITE_ENABLE_PURCHASE_REQUESTS` (기본 꺼짐)
 DB: `supabase/migrations/20261115090000_inventory_purchase_requests.sql`
