@@ -3,6 +3,7 @@ import type { AuditLog } from '../services/auditService';
 import { translateLocationName } from './i18nUtils';
 import { wasteStreamLabel } from './wasteLabels';
 import { containerStatusLabel } from '../features/wasteContainers/copy';
+import { purchaseCopy } from '../features/purchaseRequests/copy';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -66,6 +67,7 @@ const ENTITY_KEY: Record<string, string> = {
     lab_member: 'audit_entity_lab_member',
     safety_center_link: 'audit_entity_safety_center_link',
     waste_policy_override: 'audit_entity_waste_policy_override',
+    purchase_request: 'audit_entity_purchase_request',
 };
 
 /** Center link states (safety_center_lab_links.status) shown in link records. */
@@ -356,6 +358,10 @@ export const formatAuditValue = (
         if (key === 'status') {
             if (value === 'active' || value === 'sealed' || value === 'collected') {
                 return containerStatusLabel(value, locale);
+            }
+            // Steps only a purchase request takes; the shared ones read the same as a link's.
+            if (value === 'ordered' || value === 'received' || value === 'cancelled') {
+                return purchaseCopy(locale).status[value];
             }
             return LINK_STATUS_KEY[value] ? t(LINK_STATUS_KEY[value]) : t('common_unknown');
         }

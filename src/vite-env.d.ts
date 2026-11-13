@@ -18,6 +18,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_SDS_ATTACHMENTS?: string
   readonly VITE_ENABLE_DEVICE_REMINDERS?: string
   readonly VITE_ENABLE_HAZARD_REGISTER_EXPORT?: string
+  readonly VITE_ENABLE_PURCHASE_REQUESTS?: string
 }
 
 interface ImportMeta {

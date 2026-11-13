@@ -45,6 +45,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_SDS_ATTACHMENTS',
   'VITE_ENABLE_DEVICE_REMINDERS',
   'VITE_ENABLE_HAZARD_REGISTER_EXPORT',
+  'VITE_ENABLE_PURCHASE_REQUESTS',
 ] as const
 
 type AdminIdentity = {
@@ -578,6 +579,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_SDS_ATTACHMENTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_SDS_ATTACHMENTS),
     'import.meta.env.VITE_ENABLE_DEVICE_REMINDERS': JSON.stringify(explicitClientEnv.VITE_ENABLE_DEVICE_REMINDERS),
     'import.meta.env.VITE_ENABLE_HAZARD_REGISTER_EXPORT': JSON.stringify(explicitClientEnv.VITE_ENABLE_HAZARD_REGISTER_EXPORT),
+    'import.meta.env.VITE_ENABLE_PURCHASE_REQUESTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_PURCHASE_REQUESTS),
   },
   resolve: {
     alias: {

@@ -30,6 +30,11 @@ export type LabAdminLinkRequestInput = Pick<
 >;
 export type LabAdminInventoryInput = Pick<InventoryItem, 'id' | 'name' | 'expiry_date' | 'manufacturer_date_type'>;
 export type LabAdminMemberInput = SortableLabMember;
+/** A purchase request still waiting for the admin's decision. */
+export interface LabAdminPurchaseInput {
+  id: string;
+  createdAt: string;
+}
 
 /** One ignored DANGER storage warning. Deliberately carries no actor: the card is about things, not people. */
 export interface LabAdminDangerWarning {
@@ -72,6 +77,8 @@ export interface LabAdminTaskSources {
   dangerWarnings?: LabAdminDangerSummary | null;
   wasteContainers?: readonly LabAdminContainerInput[] | null;
   members?: readonly LabAdminMemberInput[] | null;
+  /** Undecided purchase requests. Absent when purchase requests are off. */
+  purchaseRequests?: readonly LabAdminPurchaseInput[] | null;
   joinPasswordNeedsChange?: boolean;
 }
 
@@ -144,6 +151,11 @@ export type LabAdminTask =
   | (LabAdminTaskBase & {
     kind: 'new_members';
     memberIds: string[];
+  })
+  | (LabAdminTaskBase & {
+    kind: 'purchase_request';
+    /** Whole days since the oldest undecided request. */
+    oldestDays: number;
   })
   | (LabAdminTaskBase & {
     kind: 'join_password';
@@ -357,6 +369,24 @@ function buildNewMemberTask(members: readonly LabAdminMemberInput[], now: number
   };
 }
 
+function buildPurchaseTask(requests: readonly LabAdminPurchaseInput[], now: number): LabAdminTask | null {
+  if (requests.length === 0) return null;
+  const ids = requests.map((request) => request.id).sort();
+  const oldest = requests.reduce((min, request) => {
+    const at = new Date(request.createdAt).getTime();
+    return Number.isNaN(at) ? min : Math.min(min, at);
+  }, now);
+  return {
+    kind: 'purchase_request',
+    // Keyed by the waiting requests: a new one after "이번 주 숨기기" shows the card again.
+    key: `purchase_request:${ids.length}:${shortHash(ids.join(','))}`,
+    severity: 'amber',
+    count: requests.length,
+    sortDays: null,
+    oldestDays: Math.max(0, Math.floor((now - oldest) / DAY_MS)),
+  };
+}
+
 const SEVERITY_RANK: Record<LabAdminTaskSeverity, number> = { red: 0, amber: 1, slate: 2 };
 
 /** red > amber > slate, then nearest due date (dated cards first), then larger count. */
@@ -393,6 +423,10 @@ export function buildLabAdminTasks(
   if (sources.members) {
     const newMembers = buildNewMemberTask(sources.members, now);
     if (newMembers) tasks.push(newMembers);
+  }
+  if (sources.purchaseRequests) {
+    const purchases = buildPurchaseTask(sources.purchaseRequests, now);
+    if (purchases) tasks.push(purchases);
   }
   if (sources.joinPasswordNeedsChange) {
     tasks.push({ kind: 'join_password', key: 'join_password', severity: 'amber', count: 1, sortDays: null });
