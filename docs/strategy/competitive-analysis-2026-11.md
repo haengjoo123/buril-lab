@@ -132,7 +132,7 @@
 
 ## 4. 출시 게이트와의 관계
 
-`docs/operations/gate0-release-status.md`와 `operations-safety-rollout.md`의 "현재 금지 상태"에 "SDS·바코드·알림·보고서·파일럿·유료 출시 기능 반영 금지"가 있다. 두 문서에 이 금지의 해제 조건은 적혀 있지 않다.
+`docs/operations/gate0-release-status.md`와 `operations-safety-rollout.md`의 "현재 금지 상태"에 "SDS·바코드·알림·보고서·파일럿·유료 출시 기능 반영 금지"가 있다. 두 문서에 이 금지의 해제 조건은 적혀 있지 않았다. 2026-11-13 제품 책임자가 SDS·바코드·알림·보고서 금지를 해제했다(파일럿·유료 출시 금지는 유지).
 
 - 금지 목록에 해당: 항목 1, 2(바코드), 3(알림), 7(보고서), 8(SDS)
 - QR에 의존해 간접 해당: 항목 5의 스캔 부분

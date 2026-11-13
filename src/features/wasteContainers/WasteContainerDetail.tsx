@@ -21,7 +21,7 @@ import { ContainerFillBar } from './ContainerFillBar';
 import { ContainerDialog, dialogInput, dialogPrimaryButton, dialogSecondaryButton } from './ContainerDialog';
 import { ContainerStatusChip } from './ContainerStatusChip';
 import { ContainerPickupSection } from './ContainerPickupSection';
-import { isContainerPickupRequestsEnabled } from '../../config/featureFlags';
+import { isContainerPickupRequestsEnabled, isQrLabelsEnabled } from '../../config/featureFlags';
 
 interface WasteContainerDetailProps {
     container: WasteContainer;
@@ -115,6 +115,7 @@ export const WasteContainerDetail: React.FC<WasteContainerDetailProps> = ({
                 prohibitions,
                 printedAt: new Date(),
                 partialContents: page?.truncated ?? false,
+                includeQr: isQrLabelsEnabled,
             });
             await downloadContainerLabelPdf(model);
         } catch (error) {

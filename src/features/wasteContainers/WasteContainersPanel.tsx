@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ChevronRight, Loader2, MapPin, Plus } from 'lucide-react';
 import {
     fetchWasteContainerTotals,
@@ -21,12 +21,16 @@ interface WasteContainersPanelProps {
     /** Lab admin, or the personal space owner. */
     canCollect: boolean;
     language: string;
+    /** Container to open once the list has loaded (from a scanned QR link). */
+    initialDetailId?: string | null;
+    /** Called when `initialDetailId` is not among this space's containers. */
+    onInitialDetailMissing?: () => void;
 }
 
 type FormState = ContainerFormState;
 const EMPTY_TOTALS: WasteContainerTotals = { depositCount: 0, totalMl: 0, hasUnknownAmounts: false };
 
-export const WasteContainersPanel: React.FC<WasteContainersPanelProps> = ({ labId, labName, canCollect, language }) => {
+export const WasteContainersPanel: React.FC<WasteContainersPanelProps> = ({ labId, labName, canCollect, language, initialDetailId, onInitialDetailMissing }) => {
     const copy = containerCopy(language);
     const [containers, setContainers] = useState<WasteContainer[] | null>(null);
     const [totals, setTotals] = useState<Record<string, WasteContainerTotals>>({});
@@ -35,6 +39,12 @@ export const WasteContainersPanel: React.FC<WasteContainersPanelProps> = ({ labI
     const [reloadToken, setReloadToken] = useState(0);
     const [form, setForm] = useState<FormState | null>(null);
     const [detailId, setDetailId] = useState<string | null>(null);
+    // A container passed in by a scanned link, opened once the list arrives.
+    const pendingInitialRef = useRef(initialDetailId ? initialDetailId.toLowerCase() : null);
+    const onMissingRef = useRef(onInitialDetailMissing);
+    useEffect(() => {
+        onMissingRef.current = onInitialDetailMissing;
+    });
 
     useEffect(() => {
         let cancelled = false;
@@ -45,6 +55,20 @@ export const WasteContainersPanel: React.FC<WasteContainersPanelProps> = ({ labI
                 setContainers(sortContainers(rows));
                 setTotals(nextTotals);
                 setError(null);
+                const wanted = pendingInitialRef.current;
+                if (wanted) {
+                    const found = rows.find((row) => row.id.toLowerCase() === wanted);
+                    if (found) {
+                        pendingInitialRef.current = null;
+                        setDetailId(found.id);
+                    } else if (!includeCollected) {
+                        // A collected container is hidden by default; look there before giving up.
+                        setIncludeCollected(true);
+                    } else {
+                        pendingInitialRef.current = null;
+                        onMissingRef.current?.();
+                    }
+                }
             })
             .catch((loadError) => {
                 console.error('Failed to load waste containers:', loadError);

@@ -34,6 +34,9 @@ import { useAppUiState, type AppTab } from './hooks/useAppUiState';
 import { useSearchFlow } from './hooks/useSearchFlow';
 import { useLabAdminAttentionCount } from './hooks/useLabAdminAttentionCount';
 import { useLabStore } from './store/useLabStore';
+import { isQrLabelsEnabled } from './config/featureFlags';
+import { qrTargetRoute, type QrTarget } from './features/qrLabels/qrPayload';
+import { useQrSpaceSwitch } from './features/qrLabels/useQrSpaceSwitch';
 import { useOnboardingStore, type OnboardingMissionKey } from './store/useOnboardingStore';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
@@ -134,6 +137,7 @@ function App() {
   const currentRole = myLabs.find((membership) => membership.lab_id === currentLabId)?.role;
   const isAdmin = currentRole === 'admin';
   const labsLoaded = useLabStore((state) => state.labsLoaded);
+  useQrSpaceSwitch(isQrLabelsEnabled);
   // Whether we know if the admin tab exists: personal space never has it; a lab needs its role.
   const isLabRoleResolved = !currentLabId || Boolean(currentRole) || labsLoaded;
   const { showToast: showAppToast, toastElement: appToastElement } = useActionToast();
@@ -751,6 +755,11 @@ function App() {
     });
   }, [navigate, navigateToLogin, navigateWithFreshFilters, session, setIsCartOpen]);
 
+  const handleQrCode = (target: QrTarget) => {
+    setIsScanning(false);
+    navigate(qrTargetRoute(target));
+  };
+
   const handleScan = (scannedText: string, selectionMeta: ScannerSelectionMeta) => {
     setIsScanning(false);
     setScanSelection({ searchTerm: scannedText, meta: selectionMeta });
@@ -889,6 +898,7 @@ function App() {
         }>
           <Scanner
             onScan={handleScan}
+            onCode={isQrLabelsEnabled ? handleQrCode : undefined}
             onClose={() => setIsScanning(false)}
             onManualInput={() => {
               setIsScanning(false);

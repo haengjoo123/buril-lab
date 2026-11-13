@@ -18,7 +18,9 @@ import {
 	X,
 	Trash2,
 	FlaskConical,
-	MoreHorizontal
+	MoreHorizontal,
+	QrCode,
+	ScanLine
 } from 'lucide-react';
 import {
     createInventoryOperationRequestId,
@@ -43,7 +45,13 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
-import { isInventoryImportV2Enabled } from '../../config/featureFlags';
+import { isInventoryImportV2Enabled, isQrLabelsEnabled } from '../../config/featureFlags';
+import { LabelPrintDialog } from '../qrLabels/LabelPrintDialog';
+import { StocktakeDialog, type StocktakeLocationOption } from '../qrLabels/StocktakeDialog';
+import { locationKeyOf, type StocktakeItem } from '../qrLabels/stocktake';
+import type { LabelSheetItem } from '../qrLabels/labelSheet';
+import { ITEM_PARAM, SPACE_PARAM } from '../qrLabels/qrPayload';
+import { qrCopy } from '../qrLabels/copy';
 import { InventoryMobileTools } from './InventoryMobileTools';
 import { exportImportAttributes, readableImportAttributes } from './import/sourceAttributes';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
@@ -290,6 +298,9 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const scanPendingTasksRef = useRef<{ id: string; imageSrc: string }[]>([]);
     const scanActiveCountRef = useRef(0);
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
+    const [labelPrintItems, setLabelPrintItems] = useState<LabelSheetItem[] | null>(null);
+    const [isStocktakeOpen, setIsStocktakeOpen] = useState(false);
+    const [qrNotice, setQrNotice] = useState<string | null>(null);
     const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [wasteBatchPendingKeys, setWasteBatchPendingKeys] = useState<string[]>([]);
@@ -928,6 +939,52 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             pendingScrollItemIdRef.current = null;
         }, INVENTORY_HIGHLIGHT_MS);
     }, []);
+
+    const qrText = qrCopy(i18n.language);
+    const qrItemId = isQrLabelsEnabled ? searchParams.get(ITEM_PARAM) : null;
+    const qrSpacePending = isQrLabelsEnabled && searchParams.has(SPACE_PARAM);
+    useEffect(() => {
+        if (!qrItemId || qrSpacePending || isLoading || loadedLabId !== currentLabId) return;
+        const found = items.find((candidate) => candidate.id.toLowerCase() === qrItemId.toLowerCase());
+        if (found) {
+            setQrNotice(null);
+            highlightItem(found.id);
+            setActivePane('detail');
+        } else {
+            setQrNotice(qrText.itemNotFound);
+        }
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete(ITEM_PARAM);
+            return next;
+        }, { replace: true });
+    }, [currentLabId, highlightItem, isLoading, items, loadedLabId, qrItemId, qrSpacePending, qrText.itemNotFound, setSearchParams]);
+
+    const storageLabelOf = useCallback((item: InventoryItem): string => (item.storage_type === 'cabinet'
+        ? `${item.cabinet_name || t('inventory_loc_cabinet')}${typeof item.shelf_level === 'number' ? ` (${t('inventory_shelf_level', { level: Number(item.shelf_level) + 1 })})` : ''}`
+        : (translateLocationName(item.storage_location_name || '', t) || t('inventory_loc_other'))), [t]);
+    const toLabelItem = (item: InventoryItem): LabelSheetItem => ({
+        id: item.id,
+        name: item.name,
+        casNumber: item.cas_number,
+        location: storageLabelOf(item),
+    });
+    const selectedItemsForLabels = items.filter((item) => selectedItemIds.includes(item.id)).map(toLabelItem);
+    const stocktakeItems = useMemo<StocktakeItem[]>(() => items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        casNumber: item.cas_number,
+        locationKey: locationKeyOf(item),
+        locationLabel: storageLabelOf(item),
+    })), [items, storageLabelOf]);
+    const stocktakeLocations = useMemo<StocktakeLocationOption[]>(() => {
+        const options: StocktakeLocationOption[] = [
+            ...cabinets.map((cabinet) => ({ key: `cabinet:${cabinet.id}`, label: cabinet.name })),
+            ...locations.map((location) => ({ key: `location:${location.id}`, label: translateLocationName(location.name, t) || location.name })),
+        ];
+        if (stocktakeItems.some((item) => item.locationKey === 'other')) options.push({ key: 'other', label: t('inventory_loc_other') });
+        return options;
+    }, [cabinets, locations, stocktakeItems, t]);
 
     // Bring a freshly saved item into view (expanding its group first) once it is rendered.
     useEffect(() => {
@@ -2374,6 +2431,18 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             <Plus className="h-3.5 w-3.5" />
                             <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_manual')}</span>
                         </button>
+                        {isQrLabelsEnabled && (
+                            <button
+                                onClick={() => setIsStocktakeOpen(true)}
+                                disabled={items.length === 0}
+                                title={qrText.stocktake}
+                                aria-label={qrText.stocktake}
+                                className="hidden h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:px-3 table:inline-flex"
+                            >
+                                <ScanLine className="w-4 h-4 table:w-3.5 table:h-3.5" />
+                                <span className="hidden table:inline whitespace-nowrap">{qrText.stocktake}</span>
+                            </button>
+                        )}
                         <button
                             onClick={handleExportExcel}
                             disabled={visibleItems.length === 0}
@@ -2395,7 +2464,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         </button>
                     </div>
                     {isMobileInventory && <InventoryMobileTools canExport={visibleItems.length > 0} canSelect={items.length > 0}
-                        isSelectMode={isSelectMode} onExport={handleExportExcel} onImport={() => setIsCsvImportOpen(true)} onSelect={toggleSelectMode} />}
+                        isSelectMode={isSelectMode} onExport={handleExportExcel} onImport={() => setIsCsvImportOpen(true)} onSelect={toggleSelectMode}
+                        stocktake={isQrLabelsEnabled && items.length > 0 ? { label: qrText.stocktake, run: () => setIsStocktakeOpen(true) } : undefined} />}
                 </div>
 
                 {showOnboardingGuide && (
@@ -2418,6 +2488,15 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 },
                             }}
                         />
+                    </div>
+                )}
+
+                {qrNotice && (
+                    <div role="status" className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                        <span className="break-keep">{qrNotice}</span>
+                        <button type="button" onClick={() => setQrNotice(null)} aria-label={qrText.close} className="shrink-0 rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/40">
+                            <X className="h-4 w-4" />
+                        </button>
                     </div>
                 )}
 
@@ -2516,6 +2595,16 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 ? t('inventory_bulk_delete_running')
                                 : t('inventory_bulk_delete_btn', { count: selectedItemIds.length })}
                         </button>
+                        {isQrLabelsEnabled && (
+                            <button
+                                type="button"
+                                onClick={() => setLabelPrintItems(selectedItemsForLabels)}
+                                disabled={selectedItemIds.length === 0}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700/50 text-slate-600 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                {qrText.printLabelsCount(selectedItemIds.length)}
+                            </button>
+                        )}
                         <div className="inventory-bulk-move flex items-center gap-2">
                             <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                                 <button
@@ -2733,6 +2822,16 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                             ? t('inventory_bulk_delete_running')
                                             : t('inventory_bulk_delete_btn', { count: selectedItemIds.length })}
                                     </button>
+                        {isQrLabelsEnabled && (
+                            <button
+                                type="button"
+                                onClick={() => setLabelPrintItems(selectedItemsForLabels)}
+                                disabled={selectedItemIds.length === 0}
+                                className="h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                            >
+                                {qrText.printLabelsCount(selectedItemIds.length)}
+                            </button>
+                        )}
                                     <div className="ml-auto flex min-w-0 items-center gap-2">
                                         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
                                             <button
@@ -3133,6 +3232,20 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                             className="fixed inset-0 z-10 cursor-default"
                                         />
                                         <div role="menu" className="absolute bottom-full right-0 z-20 mb-2 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                                            {isQrLabelsEnabled && (
+                                                <button
+                                                    type="button"
+                                                    role="menuitem"
+                                                    onClick={() => {
+                                                        setIsDetailMenuOpen(false);
+                                                        setLabelPrintItems([toLabelItem(selectedDesktopItem)]);
+                                                    }}
+                                                    className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                                                >
+                                                    <QrCode className="h-4 w-4" />
+                                                    {qrText.printLabels}
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
                                                 role="menuitem"
@@ -3322,6 +3435,23 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                 onSaved={handleFormSaved}
             />
 
+            {labelPrintItems && (
+                <LabelPrintDialog
+                    items={labelPrintItems}
+                    labId={currentLabId}
+                    language={i18n.language}
+                    onClose={() => setLabelPrintItems(null)}
+                />
+            )}
+            {isStocktakeOpen && (
+                <StocktakeDialog
+                    items={stocktakeItems}
+                    locations={stocktakeLocations}
+                    labId={currentLabId}
+                    language={i18n.language}
+                    onClose={() => setIsStocktakeOpen(false)}
+                />
+            )}
             <InventoryCsvImportModal
                 isOpen={isCsvImportOpen}
                 items={items}

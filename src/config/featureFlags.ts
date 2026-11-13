@@ -41,6 +41,8 @@ export const isContainerPickupRequestsEnabled = isWasteContainersEnabled
  * after the 20261113100000_lab_daily_inspections migration is applied.
  */
 export const isDailyInspectionEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_DAILY_INSPECTION)
+/** QR labels on inventory items and waste containers, QR scanning and stocktake. */
+export const isQrLabelsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_QR_LABELS)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

@@ -41,6 +41,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_CONTAINER_CONTENT_CHECK',
   'VITE_ENABLE_CONTAINER_PICKUP_REQUESTS',
   'VITE_ENABLE_DAILY_INSPECTION',
+  'VITE_ENABLE_QR_LABELS',
 ] as const
 
 type AdminIdentity = {
@@ -570,6 +571,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_CONTAINER_CONTENT_CHECK': JSON.stringify(explicitClientEnv.VITE_ENABLE_CONTAINER_CONTENT_CHECK),
     'import.meta.env.VITE_ENABLE_CONTAINER_PICKUP_REQUESTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_CONTAINER_PICKUP_REQUESTS),
     'import.meta.env.VITE_ENABLE_DAILY_INSPECTION': JSON.stringify(explicitClientEnv.VITE_ENABLE_DAILY_INSPECTION),
+    'import.meta.env.VITE_ENABLE_QR_LABELS': JSON.stringify(explicitClientEnv.VITE_ENABLE_QR_LABELS),
   },
   resolve: {
     alias: {

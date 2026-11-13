@@ -21,7 +21,7 @@ describe('Android production configuration', () => {
   })
   it('copies the deployed flags and keeps the import feature off for profiles that predate it', () => {
     expect(productionEnvironment(release, profile, bundle)).toMatchObject({
-      ...profile.features, VITE_ENABLE_INVENTORY_IMPORT_V2: 'false', VITE_ENABLE_CONTAINER_CONTENT_CHECK: 'false', VITE_ENABLE_CONTAINER_PICKUP_REQUESTS: 'false', VITE_ENABLE_DAILY_INSPECTION: 'false',
+      ...profile.features, VITE_ENABLE_INVENTORY_IMPORT_V2: 'false', VITE_ENABLE_CONTAINER_CONTENT_CHECK: 'false', VITE_ENABLE_CONTAINER_PICKUP_REQUESTS: 'false', VITE_ENABLE_DAILY_INSPECTION: 'false', VITE_ENABLE_QR_LABELS: 'false',
       VITE_INTERNAL_API_BASE_URL: 'https://burillab.com',
     })
   })
