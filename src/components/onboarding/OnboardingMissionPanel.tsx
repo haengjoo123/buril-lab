@@ -97,7 +97,7 @@ function getCopy(isKorean: boolean): Record<OnboardingMissionKey, MissionCopy> {
             inventory: {
                 eyebrow: 'Mission 4 / 4',
                 title: '재고 탭에서 운영 도구 확인하기',
-                description: '재고에서는 검색, CSV 등록, 일괄 이동을 처리합니다. 실제 변경은 명시적으로 실행할 때만 일어납니다.',
+                description: '재고에서는 검색, 기존 장부 가져오기, 일괄 이동을 처리합니다. 실제 변경은 명시적으로 실행할 때만 일어납니다.',
                 primaryAction: '재고로 이동',
                 doneLabel: '재고 허브 확인',
                 imageAlt: '기록과 재고 운영 예시',
@@ -135,7 +135,7 @@ function getCopy(isKorean: boolean): Record<OnboardingMissionKey, MissionCopy> {
         inventory: {
             eyebrow: 'Mission 4 / 4',
             title: 'Find the inventory operations hub',
-            description: 'Inventory handles search, CSV registration, and bulk moves. Changes only happen after explicit actions.',
+            description: 'Inventory handles search, importing your existing list, and bulk moves. Changes only happen after explicit actions.',
             primaryAction: 'Go to inventory',
             doneLabel: 'Inventory hub viewed',
             imageAlt: 'Inventory operations example',

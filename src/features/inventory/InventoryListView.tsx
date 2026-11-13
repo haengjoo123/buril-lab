@@ -43,6 +43,7 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
+import { isInventoryImportV2Enabled } from '../../config/featureFlags';
 import { InventoryMobileTools } from './InventoryMobileTools';
 import { exportImportAttributes, readableImportAttributes } from './import/sourceAttributes';
 import { CameraCaptureModal, type CameraCaptureQueueItem } from '../fridge/components/CameraCaptureModal';
@@ -2251,7 +2252,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             return (
                 <EmptyState
                     variant="inventory"
-                    hideDescription
+                    subtitle={t(isInventoryImportV2Enabled ? 'empty_inventory_import_hint_v2' : 'empty_inventory_import_hint')}
                     actions={(
                         <>
                             <button
@@ -2269,6 +2270,14 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             >
                                 <Camera className="h-4 w-4" />
                                 {t('inventory_add_menu_scan')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsCsvImportOpen(true)}
+                                className="inline-flex h-11 items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-800 dark:bg-slate-800 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                            >
+                                <Upload className="h-4 w-4" />
+                                {t('empty_inventory_import_action')}
                             </button>
                         </>
                     )}
@@ -2401,6 +2410,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 t('onboarding_inventory_point_3'),
                             ]}
                             onDismiss={() => markGuideSeen('inventory')}
+                            action={{
+                                label: t('onboarding_inventory_import_action'),
+                                onClick: () => {
+                                    markGuideSeen('inventory');
+                                    setIsCsvImportOpen(true);
+                                },
+                            }}
                         />
                     </div>
                 )}

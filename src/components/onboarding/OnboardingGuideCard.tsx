@@ -8,6 +8,8 @@ interface OnboardingGuideCardProps {
     description: string;
     points: string[];
     onDismiss: () => void;
+    /** Optional next step offered beside the acknowledge button. */
+    action?: { label: string; onClick: () => void };
     className?: string;
 }
 
@@ -17,6 +19,7 @@ export function OnboardingGuideCard({
     description,
     points,
     onDismiss,
+    action,
     className = '',
 }: OnboardingGuideCardProps) {
     const { t } = useTranslation();
@@ -57,7 +60,16 @@ export function OnboardingGuideCard({
                             ))}
                         </ul>
 
-                        <div className="mt-4 flex justify-end">
+                        <div className="mt-4 flex flex-wrap justify-end gap-2">
+                            {action && (
+                                <button
+                                    type="button"
+                                    onClick={action.onClick}
+                                    className="rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 transition-all hover:bg-blue-50 active:scale-95 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-950/30 sm:px-3.5 sm:py-2 sm:text-sm"
+                                >
+                                    {action.label}
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={onDismiss}
