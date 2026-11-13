@@ -12,7 +12,7 @@ import {
 import type { DisposalCategory } from '../types';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { PencilLine, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download, CheckCircle2, Cylinder } from 'lucide-react';
+import { PencilLine, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download, CheckCircle2, ClipboardCheck, Cylinder } from 'lucide-react';
 import { useLabStore } from '../store/useLabStore';
 import type { WasteLogSortBy } from '../services/wasteLogService';
 import { auditService, type AuditLog } from '../services/auditService';
@@ -33,7 +33,9 @@ import {
 } from '../utils/auditLogFormatting';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
 import { hazardFlagLabel, wasteStreamLabel, getCategoryColor } from '../utils/wasteLabels';
-import { isWasteContainersEnabled } from '../config/featureFlags';
+import { isDailyInspectionEnabled, isWasteContainersEnabled } from '../config/featureFlags';
+import { DailyInspectionPanel } from '../features/dailyInspection/DailyInspectionPanel';
+import { inspectionCopy } from '../features/dailyInspection/copy';
 import { WasteContainersPanel } from '../features/wasteContainers/WasteContainersPanel';
 import { containerCopy } from '../features/wasteContainers/copy';
 import { useAuth } from '../hooks/useAuth';
@@ -55,7 +57,7 @@ import {
 
 type LogDateRange = '7d' | '30d' | '90d' | 'all';
 type LogViewTab = 'recent' | 'archive';
-type LogViewSegment = LogViewTab | 'containers';
+type LogViewSegment = LogViewTab | 'containers' | 'inspection';
 type ExportFormat = 'pdf' | 'excel';
 type ExportScope = 'today' | '7d' | '30d' | '90d' | 'archive' | 'all' | 'custom';
 
@@ -535,7 +537,12 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [activeTab, setActiveTab] = useState<LogViewTab>('recent');
     const [showContainers, setShowContainers] = useState(false);
-    const containersVisible = isWasteContainersEnabled && showContainers;
+    const [showInspection, setShowInspection] = useState(false);
+    // Inspections belong to a lab, so the personal space never shows them.
+    const inspectionVisible = isDailyInspectionEnabled && Boolean(currentLabId) && showInspection;
+    const containersVisible = isWasteContainersEnabled && showContainers && !inspectionVisible;
+    /** A panel that replaces the log list and its search and filter controls. */
+    const sidePanelVisible = containersVisible || inspectionVisible;
     const [dateRange, setDateRange] = useState<LogDateRange>('30d');
     const [sortBy, setSortBy] = useState<WasteLogSortBy>('created_at');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -950,8 +957,12 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             const label = containerCopy(i18n.language).tab;
             options.push({ value: 'containers', label, title: label, icon: <Cylinder className="h-4 w-4" /> });
         }
+        if (isDailyInspectionEnabled && currentLabId) {
+            const label = inspectionCopy(i18n.language).tab;
+            options.push({ value: 'inspection', label, title: label, icon: <ClipboardCheck className="h-4 w-4" /> });
+        }
         return options;
-    }, [i18n.language, t]);
+    }, [currentLabId, i18n.language, t]);
 
     const canVoidLog = useCallback((log: WasteLogRecord) => {
         if (log.voided_at) return false;
@@ -1502,7 +1513,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
     return (
         <div className="h-full min-h-0">
-            <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={containersVisible ? { ...layout, twoPane: false, columns: undefined } : layout} activePane={containersVisible ? 'primary' : activePane} onBack={() => { setActivePane('primary'); setExpandedId(null); }} data-mobile-logs={isMobileLogs} data-show-containers={containersVisible} className="logs-panes flex h-full flex-col">
+            <AdaptivePaneLayout onActivePaneChange={setActivePane} layout={sidePanelVisible ? { ...layout, twoPane: false, columns: undefined } : layout} activePane={sidePanelVisible ? 'primary' : activePane} onBack={() => { setActivePane('primary'); setExpandedId(null); }} data-mobile-logs={isMobileLogs} data-show-containers={sidePanelVisible} className="logs-panes flex h-full flex-col">
                 <div data-pane="primary" className="logs-primary flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
             <div className="logs-toolbar contents">
             {showOnboardingGuide && (
@@ -1526,7 +1537,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                         {isMobileLogs && <History size={22} className="shrink-0 text-slate-500 dark:text-slate-400" />}
                         <span className="truncate">{t('log_title')}</span>
                     </h2>
-                    {!containersVisible && (
+                    {!sidePanelVisible && (
                         <span aria-live="polite" className="shrink-0 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {t('log_records_count', { count: activeTotalCount })}
                         </span>
@@ -1534,8 +1545,8 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                 </div>
 
                 <div className="ml-auto flex shrink-0 items-center gap-1">
-                {isMobileLogs && !containersVisible && renderLogFilters()}
-                {totalCount > 0 && !containersVisible && (
+                {isMobileLogs && !sidePanelVisible && renderLogFilters()}
+                {totalCount > 0 && !sidePanelVisible && (
                     <div className="relative ml-auto">
                         <button
                             type="button"
@@ -1598,8 +1609,13 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                     semantics="tabs"
                     fullWidth
                     ariaLabel={t('log_title')}
-                    value={containersVisible ? 'containers' : activeTab}
+                    value={inspectionVisible ? 'inspection' : containersVisible ? 'containers' : activeTab}
                     onChange={(value) => {
+                        if (value === 'inspection') {
+                            setShowInspection(true);
+                            return;
+                        }
+                        setShowInspection(false);
                         if (value === 'containers') {
                             setShowContainers(true);
                             return;
@@ -1610,7 +1626,7 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
                     options={logViewOptions}
                 />
 
-                {!containersVisible && (
+                {!sidePanelVisible && (
                     <div className="logs-search-tools flex items-center gap-2">
                         <form role="search" aria-label={t('log_title')} onSubmit={handleSearchSubmit} className="logs-search-dock relative min-w-0 flex-1">
                             <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1634,7 +1650,9 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             </div>
 
             <div className="logs-results contents">
-            {containersVisible ? (
+            {inspectionVisible ? (
+                <DailyInspectionPanel key={currentLabId ?? 'personal'} labId={currentLabId} language={i18n.language} />
+            ) : containersVisible ? (
                 <WasteContainersPanel
                     key={currentLabId ?? 'personal'}
                     labId={currentLabId}

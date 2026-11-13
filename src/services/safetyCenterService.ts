@@ -15,6 +15,7 @@ import type {
   SafetyCenterRequestPriority,
   SafetyCenterRequestStatus,
   SafetyCenterRiskItem,
+  SafetyCenterInspectionSummary,
   SafetyCenterWasteLog,
   SafetyCenterWastePickup,
 } from '../features/safety-center/types';
@@ -295,6 +296,20 @@ export const safetyCenterService = {
     }
 
     return (data ?? []) as SafetyCenterWastePickup[];
+  },
+
+  async getInspectionSummary(centerId: string, days = 30): Promise<SafetyCenterInspectionSummary[]> {
+    const { data, error } = await supabase.rpc('get_safety_center_inspection_summary_v1', {
+      p_center_id: centerId,
+      p_days: days,
+    });
+
+    if (error) {
+      throwUnlessMissingSchema(error);
+      return [];
+    }
+
+    return (data ?? []) as SafetyCenterInspectionSummary[];
   },
 
   async getAuditLogs(centerId: string, limit = 100): Promise<SafetyCenterAuditLog[]> {
