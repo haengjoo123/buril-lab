@@ -16,6 +16,7 @@ import type {
   SafetyCenterRequestStatus,
   SafetyCenterRiskItem,
   SafetyCenterWasteLog,
+  SafetyCenterWastePickup,
 } from '../features/safety-center/types';
 
 const SAFETY_CENTER_VERIFICATION_BUCKET = 'safety-center-verifications';
@@ -283,6 +284,17 @@ export const safetyCenterService = {
     }
 
     return (data ?? []) as SafetyCenterWasteLog[];
+  },
+
+  async getWastePickups(centerId: string): Promise<SafetyCenterWastePickup[]> {
+    const { data, error } = await supabase.rpc('get_safety_center_waste_pickups_v1', { p_center_id: centerId });
+
+    if (error) {
+      throwUnlessMissingSchema(error);
+      return [];
+    }
+
+    return (data ?? []) as SafetyCenterWastePickup[];
   },
 
   async getAuditLogs(centerId: string, limit = 100): Promise<SafetyCenterAuditLog[]> {

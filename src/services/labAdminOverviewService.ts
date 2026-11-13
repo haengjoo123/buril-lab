@@ -154,6 +154,8 @@ async function loadWasteContainersForOverview(labId: string): Promise<LabAdminCo
     status: container.status,
     location: container.location,
     sealedAt: container.sealedAt,
+    // Present only when the pickup columns were read, so the result is unchanged while the feature is off.
+    ...(container.pickupRequestedAt !== undefined ? { pickupRequestedAt: container.pickupRequestedAt } : {}),
     fillRatio: withDatabaseTotals(summarizeContainer(container, []), container.capacityMl, totals[container.id]).fillRatio,
   }));
 }

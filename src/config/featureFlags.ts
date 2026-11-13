@@ -30,6 +30,12 @@ export const isWasteContainersEnabled = isExplicitlyEnabled(import.meta.env.VITE
  */
 export const isContainerContentCheckEnabled = isWasteContainersEnabled
   && isExplicitlyEnabled(import.meta.env.VITE_ENABLE_CONTAINER_CONTENT_CHECK)
+/**
+ * Pickup requests for waste containers. Reads the pickup columns, so enable only
+ * after the 20261113090000_waste_container_pickup_requests migration is applied.
+ */
+export const isContainerPickupRequestsEnabled = isWasteContainersEnabled
+  && isExplicitlyEnabled(import.meta.env.VITE_ENABLE_CONTAINER_PICKUP_REQUESTS)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

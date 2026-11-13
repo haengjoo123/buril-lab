@@ -12,6 +12,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_WASTE_CONTAINERS?: string
   readonly VITE_ENABLE_LAB_TOOLS?: string
   readonly VITE_ENABLE_CONTAINER_CONTENT_CHECK?: string
+  readonly VITE_ENABLE_CONTAINER_PICKUP_REQUESTS?: string
 }
 
 interface ImportMeta {

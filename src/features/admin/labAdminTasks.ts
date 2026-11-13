@@ -58,6 +58,8 @@ export interface LabAdminContainerInput {
   status: WasteContainerStatus;
   location: string | null;
   sealedAt: string | null;
+  /** A member asked for this container to be collected. Absent when pickup requests are off. */
+  pickupRequestedAt?: string | null;
   /** Recorded volume / capacity from the database totals; null without a capacity. Not capped at 1. */
   fillRatio: number | null;
 }
@@ -127,7 +129,7 @@ export type LabAdminTask =
   })
   | (LabAdminTaskBase & {
     kind: 'waste_container';
-    reason: 'fill' | 'sealed';
+    reason: 'fill' | 'sealed' | 'pickup';
     containerId: string;
     label: string;
     streamCode: string;
@@ -136,6 +138,8 @@ export type LabAdminTask =
     fillPercent: number | null;
     /** Whole days since sealing for 'sealed'. */
     sealedDays: number | null;
+    /** Whole days since the request for 'pickup'. */
+    pickupDays?: number | null;
   })
   | (LabAdminTaskBase & {
     kind: 'new_members';
@@ -287,6 +291,21 @@ function buildContainerTasks(containers: readonly LabAdminContainerInput[], now:
       streamCode: container.streamCode,
       location: container.location,
     };
+    // A pickup request is the most direct signal, so it replaces the fill and sealed reminders.
+    if (container.pickupRequestedAt && container.status !== 'collected') {
+      const requestedAt = new Date(container.pickupRequestedAt).getTime();
+      if (!Number.isNaN(requestedAt)) {
+        return [{
+          ...base,
+          key: `waste_container:${container.id}:pickup`,
+          severity: 'amber',
+          reason: 'pickup',
+          fillPercent: null,
+          sealedDays: null,
+          pickupDays: Math.max(0, Math.floor((now - requestedAt) / DAY_MS)),
+        }];
+      }
+    }
     if (container.status === 'active' && container.fillRatio !== null && container.fillRatio >= FILL_WARNING_RATIO) {
       const isOver = container.fillRatio > 1;
       return [{
