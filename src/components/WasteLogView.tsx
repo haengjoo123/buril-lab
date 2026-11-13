@@ -33,7 +33,9 @@ import {
 } from '../utils/auditLogFormatting';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
 import { hazardFlagLabel, wasteStreamLabel, getCategoryColor } from '../utils/wasteLabels';
-import { isDailyInspectionEnabled, isWasteContainersEnabled } from '../config/featureFlags';
+import { isDailyInspectionEnabled, isQrLabelsEnabled, isWasteContainersEnabled } from '../config/featureFlags';
+import { CONTAINER_PARAM, SPACE_PARAM } from '../features/qrLabels/qrPayload';
+import { qrCopy } from '../features/qrLabels/copy';
 import { DailyInspectionPanel } from '../features/dailyInspection/DailyInspectionPanel';
 import { inspectionCopy } from '../features/dailyInspection/copy';
 import { WasteContainersPanel } from '../features/wasteContainers/WasteContainersPanel';
@@ -538,6 +540,22 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [activeTab, setActiveTab] = useState<LogViewTab>('recent');
     const [showContainers, setShowContainers] = useState(false);
     const [showInspection, setShowInspection] = useState(false);
+    const [qrContainerId, setQrContainerId] = useState<string | null>(null);
+    const [qrContainerMissing, setQrContainerMissing] = useState(false);
+    const scannedContainerId = isQrLabelsEnabled && isWasteContainersEnabled ? searchParams.get(CONTAINER_PARAM) : null;
+    const scannedSpacePending = isQrLabelsEnabled && searchParams.has(SPACE_PARAM);
+    useEffect(() => {
+        if (!scannedContainerId || scannedSpacePending) return;
+        setQrContainerId(scannedContainerId);
+        setQrContainerMissing(false);
+        setShowInspection(false);
+        setShowContainers(true);
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete(CONTAINER_PARAM);
+            return next;
+        }, { replace: true });
+    }, [scannedContainerId, scannedSpacePending, setSearchParams]);
     // Inspections belong to a lab, so the personal space never shows them.
     const inspectionVisible = isDailyInspectionEnabled && Boolean(currentLabId) && showInspection;
     const containersVisible = isWasteContainersEnabled && showContainers && !inspectionVisible;
@@ -1653,13 +1671,22 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
             {inspectionVisible ? (
                 <DailyInspectionPanel key={currentLabId ?? 'personal'} labId={currentLabId} language={i18n.language} />
             ) : containersVisible ? (
+                <>
+                {qrContainerMissing && (
+                    <p role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                        {qrCopy(i18n.language).containerNotFound}
+                    </p>
+                )}
                 <WasteContainersPanel
-                    key={currentLabId ?? 'personal'}
+                    key={`${currentLabId ?? 'personal'}:${qrContainerId ?? ''}`}
+                    initialDetailId={qrContainerId}
+                    onInitialDetailMissing={() => setQrContainerMissing(true)}
                     labId={currentLabId}
                     labName={myLabs.find((membership) => membership.lab_id === currentLabId)?.lab?.name ?? null}
                     canCollect={!currentLabId || myLabs.find((membership) => membership.lab_id === currentLabId)?.role === 'admin'}
                     language={i18n.language}
                 />
+                </>
             ) : (<>
             {/* Error */}
             {error && (

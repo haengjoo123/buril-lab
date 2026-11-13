@@ -2,6 +2,8 @@ import type { WasteContainer } from '../../services/wasteContainerService';
 import type { ContainerSummary } from './containerSummary';
 import { formatMassMg, formatVolumeMl } from './containerSummary';
 import { hazardFlagLabel, wasteStreamLabel } from '../../utils/wasteLabels';
+import { buildQrLink, spaceFor } from '../qrLabels/qrPayload';
+import { qrSvgDataUrl } from '../qrLabels/qrSvg';
 
 export const LABEL_MAX_COMPONENTS = 12;
 
@@ -14,6 +16,8 @@ export interface ContainerLabelContext {
     printedAt: Date;
     /** The deposit list behind the contents table was cut off. */
     partialContents?: boolean;
+    /** Print a QR link that opens this container in the app. */
+    includeQr?: boolean;
 }
 
 export interface ContainerLabelRow {
@@ -40,6 +44,8 @@ export interface ContainerLabelModel {
     footer: string;
     partialNote: string | null;
     fileName: string;
+    /** App link printed as a QR code; null when QR labels are off. */
+    qrLink: string | null;
 }
 
 const COPY = {
@@ -196,6 +202,7 @@ export function buildContainerLabelModel(
         cautions,
         footer: copy.footer,
         partialNote: context.partialContents ? copy.partial : null,
+        qrLink: context.includeQr ? buildQrLink({ kind: 'container', id: container.id, space: spaceFor(container.labId) }) : null,
         fileName: `${copy.filePrefix}_${sanitizeFileName(container.label)}_${formatLabelDate(context.printedAt)}.pdf`,
     };
 }
@@ -275,8 +282,15 @@ export function renderContainerLabelElement(model: ContainerLabelModel): HTMLEle
         wordBreak: 'keep-all',
         overflowWrap: 'anywhere',
     });
-    root.appendChild(el('p', { fontSize: '11px', letterSpacing: '0.08em', margin: '0', color: MUTED, fontWeight: '700' }, model.heading));
-    root.appendChild(el('h1', { fontSize: '26px', fontWeight: '800', margin: '4px 0 0', lineHeight: '1.2', wordBreak: 'break-word' }, model.containerLabel));
+    if (model.qrLink) {
+        root.style.position = 'relative';
+        const qr = el('img', { position: 'absolute', top: '6mm', right: '6mm', width: '24mm', height: '24mm' });
+        qr.src = qrSvgDataUrl(model.qrLink, { sizePx: 160 });
+        qr.alt = '';
+        root.appendChild(qr);
+    }
+    root.appendChild(el('p', { fontSize: '11px', letterSpacing: '0.08em', margin: '0', color: MUTED, fontWeight: '700', paddingRight: model.qrLink ? '27mm' : '0' }, model.heading));
+    root.appendChild(el('h1', { fontSize: '26px', fontWeight: '800', margin: '4px 0 0', lineHeight: '1.2', wordBreak: 'break-word', paddingRight: model.qrLink ? '27mm' : '0' }, model.containerLabel));
     root.appendChild(el('h2', { fontSize: '15px', margin: '4px 0 0', fontWeight: '700' }, model.streamName));
     if (model.statusText) {
         root.appendChild(el('p', {

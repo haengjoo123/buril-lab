@@ -24,6 +24,9 @@ import {
 } from '../services/aiReagentScanService';
 import type { ManufacturerDateType } from '../utils/manufacturerDate';
 import { useTranslation } from 'react-i18next';
+import { parseQrLink, type QrTarget } from '../features/qrLabels/qrPayload';
+import { useQrScan } from '../features/qrLabels/useQrScan';
+import { qrCopy } from '../features/qrLabels/copy';
 
 export interface ScannerSelectionMeta {
     scanSnapshot: ReagentScanResult;
@@ -35,6 +38,8 @@ export interface ScannerSelectionMeta {
 interface ScannerProps {
     onScan: (searchTerm: string, selectionMeta: ScannerSelectionMeta) => void;
     onClose: () => void;
+    /** When set, Buril Lab QR labels in view are recognised and handed over instead of running label OCR. */
+    onCode?: (target: QrTarget) => void;
     /** Close the scanner and type the name instead (offered when the camera can't be used). */
     onManualInput?: () => void;
 }
@@ -60,14 +65,16 @@ const FOCUSABLE_SELECTOR = [
     '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onManualInput }) => {
+export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onManualInput, onCode }) => {
     const dialogRef = useRef<HTMLDivElement>(null);
     const resultPanelRef = useRef<HTMLDivElement>(null);
     const webcamRef = useRef<Webcam>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    const qrText = qrCopy(i18n.language);
 
     const [state, setState] = useState<ScannerState>('camera');
+    const [foreignQr, setForeignQr] = useState(false);
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [scanResult, setScanResult] = useState<ReagentScanResult | null>(null);
     const [selectedField, setSelectedField] = useState<ReagentScanIdentityField | null>(null);
@@ -96,6 +103,20 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onManualInput
         onClose();
     }, [onClose, stopCamera]);
     useAdaptiveDialog(dialogRef, closeScanner, true, false);
+
+    useQrScan(
+        () => webcamRef.current?.video,
+        Boolean(onCode) && state === 'camera' && !cameraIssue,
+        (text) => {
+            const target = parseQrLink(text, [window.location.origin]);
+            if (!target) {
+                setForeignQr(true);
+                return;
+            }
+            stopCamera();
+            onCode?.(target);
+        },
+    );
 
     useEffect(() => {
         const dialog = dialogRef.current;
@@ -438,6 +459,11 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onManualInput
                             <div className="absolute inset-0 border-2 border-white/30 pointer-events-none flex items-center justify-center">
                                 <div className="w-80 h-48 border-2 border-yellow-400/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
                             </div>
+                        )}
+                        {onCode && !cameraIssue && (
+                            <p className="pointer-events-none absolute inset-x-3 top-3 rounded-lg bg-black/55 px-3 py-1.5 text-center text-xs font-medium text-white" role="status">
+                                {foreignQr ? qrText.scannerForeign : qrText.scannerHint}
+                            </p>
                         )}
                     </>
                 )}
