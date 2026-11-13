@@ -50,7 +50,7 @@ export const ContainerPickupSection: React.FC<ContainerPickupSectionProps> = ({ 
     };
 
     return (
-        <section className="rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+        <section className="rounded-xl border border-gray-100 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
             <h4 className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <Truck className="h-4 w-4" aria-hidden="true" />
                 {copy.pickupTitle}
@@ -78,18 +78,19 @@ export const ContainerPickupSection: React.FC<ContainerPickupSectionProps> = ({ 
             ) : (
                 <>
                     <p className="mt-1 break-keep text-sm text-slate-600 dark:text-slate-300">{copy.pickupHelp}</p>
-                    <label className="mt-3 block text-sm text-slate-600 dark:text-slate-300">
-                        <span>{copy.pickupNote}</span>
-                        <input
-                            value={note}
-                            onChange={(event) => setNote(event.target.value)}
-                            maxLength={500}
-                            placeholder={copy.pickupNotePlaceholder}
-                            disabled={busy || disabled}
-                            className={`${dialogInput} mt-1`}
-                        />
-                    </label>
-                    <div className="mt-3">
+                    {/* The note and the button share a row where there is room. */}
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                        <label className="block min-w-0 flex-1 text-sm text-slate-600 dark:text-slate-300">
+                            <span>{copy.pickupNote}</span>
+                            <input
+                                value={note}
+                                onChange={(event) => setNote(event.target.value)}
+                                maxLength={500}
+                                placeholder={copy.pickupNotePlaceholder}
+                                disabled={busy || disabled}
+                                className={`${dialogInput} mt-1`}
+                            />
+                        </label>
                         <button
                             type="button"
                             onClick={() => void run('request')}

@@ -31,14 +31,15 @@ interface DailyInspectionPanelProps {
 const HISTORY_DAYS = 14;
 const RESULT_ORDER: InspectionResult[] = ['ok', 'bad', 'na'];
 
+// One segmented control per item: the group carries the border, the chosen answer is filled.
 const resultButtonClass = (result: InspectionResult, selected: boolean): string => {
-    const base = 'min-h-10 flex-1 rounded-lg border px-2 text-sm font-medium transition-colors disabled:opacity-60 sm:flex-none sm:px-3';
+    const base = 'min-h-9 flex-1 rounded-md px-3 text-sm font-medium transition-colors disabled:opacity-60 sm:flex-none';
     if (!selected) {
-        return `${base} border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800`;
+        return `${base} text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700`;
     }
-    if (result === 'bad') return `${base} border-red-500 bg-red-50 text-red-800 dark:border-red-500 dark:bg-red-950/40 dark:text-red-100`;
-    if (result === 'na') return `${base} border-slate-400 bg-slate-100 text-slate-800 dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100`;
-    return `${base} border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-950/40 dark:text-emerald-100`;
+    if (result === 'bad') return `${base} bg-red-600 text-white dark:bg-red-500`;
+    if (result === 'na') return `${base} bg-slate-600 text-white dark:bg-slate-500`;
+    return `${base} bg-emerald-600 text-white dark:bg-emerald-500`;
 };
 
 type LoadState =
@@ -96,7 +97,7 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
 
     if (!labId) {
         return (
-            <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+            <p className="break-keep rounded-xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 {copy.labOnly}
             </p>
         );
@@ -158,10 +159,10 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
         : todayRecord.issueCount > 0 ? copy.todayIssues(todayRecord.issueCount) : copy.todayDone(todayRecord.inspectorName);
 
     return (
-        <div className="space-y-4">
-            <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+        <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-slate-700 dark:bg-slate-800">
+            <section className="p-4">
                 <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-slate-100">
-                    <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
+                    <ClipboardCheck className="h-5 w-5 text-slate-500 dark:text-slate-400" aria-hidden="true" />
                     {copy.title}
                 </h3>
                 <p className="mt-1 break-keep text-sm text-slate-600 dark:text-slate-300">{copy.intro}</p>
@@ -172,32 +173,26 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
                     role="status"
                 >
                     {todayRecord && todayRecord.issueCount === 0
-                        ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                        : <AlertCircle className="h-4 w-4" aria-hidden="true" />}
-                    {todayStatus}
+                        ? <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        : <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                    <span className="break-keep">{todayStatus}</span>
                 </p>
 
-                <div className="mt-4">
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                         {copy.historyTitle(HISTORY_DAYS)} · {copy.historyRate(recordedDays, HISTORY_DAYS)}
                     </p>
-                    <ol className="mt-2 flex flex-wrap gap-1.5" aria-label={copy.historyTitle(HISTORY_DAYS)}>
+                    {/* A quiet strip of recent days, oldest first; each dot names its date and result. */}
+                    <ol className="flex items-center gap-1" aria-label={copy.historyTitle(HISTORY_DAYS)}>
                         {[...days].reverse().map((day) => {
                             const label = day.status === 'missing'
                                 ? copy.historyMissing
                                 : day.status === 'issues' ? `${copy.historyIssues} (${day.issueCount})` : copy.historyDone;
                             const tone = day.status === 'missing'
-                                ? 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
-                                : day.status === 'issues'
-                                    ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200'
-                                    : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200';
+                                ? 'bg-slate-200 dark:bg-slate-600'
+                                : day.status === 'issues' ? 'bg-red-500' : 'bg-emerald-500';
                             return (
-                                <li
-                                    key={day.date}
-                                    title={`${day.date} · ${label}`}
-                                    className={`flex h-9 min-w-9 items-center justify-center rounded-lg border px-1 text-xs font-semibold tabular-nums ${tone}`}
-                                >
-                                    <span aria-hidden="true">{Number(day.date.slice(8, 10))}</span>
+                                <li key={day.date} title={`${day.date} · ${label}`} className={`h-2.5 w-2.5 rounded-full ${tone}`}>
                                     <span className="sr-only">{`${day.date} ${label}`}</span>
                                 </li>
                             );
@@ -207,9 +202,9 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
             </section>
 
             {INSPECTION_SECTIONS.map((section) => (
-                <section key={section.id} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{isKorean ? section.ko : section.en}</h4>
+                <section key={section.id} className="border-t border-slate-100 px-4 py-3 dark:border-slate-700">
+                    <div className="flex items-center justify-between gap-2">
+                        <h4 className="break-keep text-sm font-bold text-slate-900 dark:text-slate-100">{isKorean ? section.ko : section.en}</h4>
                         <button
                             type="button"
                             disabled={saving}
@@ -217,18 +212,22 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
                                 setMessage(null);
                                 setResults((current) => setSectionResult(current, section.id, 'na'));
                             }}
-                            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                            className="min-h-10 shrink-0 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                         >
                             {copy.sectionNa}
                         </button>
                     </div>
-                    <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+                    <ul className="divide-y divide-slate-100 dark:divide-slate-700/70">
                         {section.items.map((item) => {
                             const text = isKorean ? item.ko : item.en;
                             return (
-                                <li key={item.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                                <li key={item.id} className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                                     <span id={`inspection-${item.id}`} className="min-w-0 break-keep text-sm text-slate-800 dark:text-slate-200">{text}</span>
-                                    <div className="flex shrink-0 gap-1.5" role="radiogroup" aria-labelledby={`inspection-${item.id}`}>
+                                    <div
+                                        className="flex shrink-0 gap-0.5 rounded-lg border border-slate-200 p-0.5 dark:border-slate-600"
+                                        role="radiogroup"
+                                        aria-labelledby={`inspection-${item.id}`}
+                                    >
                                         {RESULT_ORDER.map((result) => {
                                             const selected = results[item.id] === result;
                                             return (
@@ -253,7 +252,7 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
                 </section>
             ))}
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+            <section className="border-t border-slate-100 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-900/40">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                     <span>{copy.note}</span>
                     <textarea
@@ -267,35 +266,36 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
                     />
                 </label>
 
-                <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
-                    <span className="tabular-nums">{copy.progress(progress.answered, progress.total)}</span>
-                    {progress.issues > 0 && <span className="font-semibold text-red-700 dark:text-red-300">{copy.issues(progress.issues)}</span>}
-                    {!progress.complete && <span className="text-amber-700 dark:text-amber-300">{copy.incomplete(progress.missing.length)}</span>}
-                </p>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                    {!progress.complete && (
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
+                        <span className="tabular-nums">{copy.progress(progress.answered, progress.total)}</span>
+                        {progress.issues > 0 && <span className="font-semibold text-red-700 dark:text-red-300">{copy.issues(progress.issues)}</span>}
+                        {!progress.complete && <span className="text-amber-700 dark:text-amber-300">{copy.incomplete(progress.missing.length)}</span>}
+                    </p>
+                    <div className="flex gap-2 sm:shrink-0">
+                        {!progress.complete && (
+                            <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => {
+                                    setMessage(null);
+                                    setResults((current) => fillUnansweredAsOk(current));
+                                }}
+                                className="inline-flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:flex-none"
+                            >
+                                {copy.fillOk}
+                            </button>
+                        )}
                         <button
                             type="button"
-                            disabled={saving}
-                            onClick={() => {
-                                setMessage(null);
-                                setResults((current) => fillUnansweredAsOk(current));
-                            }}
-                            className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                            disabled={!progress.complete || saving}
+                            onClick={() => void save()}
+                            className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
                         >
-                            {copy.fillOk}
+                            {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                            {saving ? copy.saving : todayRecord ? copy.update : copy.save}
                         </button>
-                    )}
-                    <button
-                        type="button"
-                        disabled={!progress.complete || saving}
-                        onClick={() => void save()}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                        {saving ? copy.saving : todayRecord ? copy.update : copy.save}
-                    </button>
+                    </div>
                 </div>
 
                 {message && (
