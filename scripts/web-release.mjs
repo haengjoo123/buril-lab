@@ -10,7 +10,7 @@ export const WORKFLOW = '.github/workflows/web-release.yml'
 export const MAX_AGE = 8 * 24 * 60 * 60 * 1000
 const SHA = /^[0-9a-f]{40}$/
 const REQUIRED_CHECKS = ['Application checks', 'Cloudflare release contract', 'Blank database interface', 'Gate 0 browser interface']
-export const FEATURE_FLAGS = ['VITE_ENABLE_WASTE_V2', 'VITE_ENABLE_PH_PREDICTION', 'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS', 'VITE_ENABLE_WASTE_CONTAINERS', 'VITE_ENABLE_LAB_TOOLS', 'VITE_ENABLE_INVENTORY_IMPORT_V2']
+export const FEATURE_FLAGS = ['VITE_ENABLE_WASTE_V2', 'VITE_ENABLE_PH_PREDICTION', 'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS', 'VITE_ENABLE_WASTE_CONTAINERS', 'VITE_ENABLE_LAB_TOOLS', 'VITE_ENABLE_INVENTORY_IMPORT_V2', 'VITE_ENABLE_CONTAINER_CONTENT_CHECK']
 
 export function featureProfile(env) {
   return Object.fromEntries(FEATURE_FLAGS.map((name) => {
