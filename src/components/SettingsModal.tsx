@@ -20,6 +20,8 @@ import {
 } from './SafetyDisclaimer';
 import { DELETION_UI_ENABLED } from '../config/deletion';
 import { MfaSettingsPanel } from './MfaSettingsPanel';
+import { ReminderSettingsPanel } from '../features/reminders/ReminderSettingsPanel';
+import { isDailyInspectionEnabled, isDeviceRemindersEnabled } from '../config/featureFlags';
 
 const onboardingPlatform = Capacitor.isNativePlatform() ? 'native' : 'web';
 
@@ -43,6 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
     const deleteConfirmPhrase = t('settings_delete_account_confirm_phrase');
 
     const { session, updatePassword, deleteAccount } = useAuth();
+    const currentLabId = useLabStore((state) => state.currentLabId);
     const isAuthenticated = authenticatedFromLayout ?? Boolean(session);
     const { isDarkMode, toggleThemeMode } = useThemeMode();
     const [dialogConfig, setDialogConfig] = React.useState<{
@@ -524,6 +527,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isAuthenticated: a
                         )}
 
                         {isAuthenticated && <MfaSettingsPanel />}
+
+                        {isAuthenticated && isDeviceRemindersEnabled && session?.user?.id && (
+                            <ReminderSettingsPanel
+                                userId={session.user.id}
+                                labId={currentLabId}
+                                language={i18n.language}
+                                inspectionAvailable={isDailyInspectionEnabled}
+                            />
+                        )}
 
                         <hr className="my-1.5 border-gray-100 dark:border-slate-800 sm:my-2" />
 

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { CheckCircle2, Download, MoreHorizontal, ScanLine, Upload, X } from 'lucide-react';
+import { CheckCircle2, Download, FileSpreadsheet, MoreHorizontal, ScanLine, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAdaptiveDialog } from '../../hooks/useAdaptiveDialog';
 
@@ -12,9 +12,11 @@ interface Props {
     onSelect: () => void;
     /** Shown when stocktake is available. */
     stocktake?: { label: string; run: () => void };
+    /** Shown when the prior hazard analysis list export is available. */
+    hazardRegister?: { label: string; run: () => void };
 }
 
-function ToolsSheet({ canExport, canSelect, isSelectMode, onExport, onImport, onSelect, stocktake, onClose }: Props & { onClose: () => void }) {
+function ToolsSheet({ canExport, canSelect, isSelectMode, onExport, onImport, onSelect, stocktake, hazardRegister, onClose }: Props & { onClose: () => void }) {
     const { t } = useTranslation();
     const ref = useRef<HTMLElement>(null);
     useAdaptiveDialog(ref, onClose);
@@ -23,6 +25,7 @@ function ToolsSheet({ canExport, canSelect, isSelectMode, onExport, onImport, on
         { label: t('inventory_csv_manage_button'), icon: Upload, run: onImport, disabled: false },
         { label: t(isSelectMode ? 'inventory_exit_select_mode' : 'inventory_enter_select_mode'), icon: CheckCircle2, run: onSelect, disabled: !canSelect },
         ...(stocktake ? [{ label: stocktake.label, icon: ScanLine, run: stocktake.run, disabled: false }] : []),
+        ...(hazardRegister ? [{ label: hazardRegister.label, icon: FileSpreadsheet, run: hazardRegister.run, disabled: false }] : []),
     ];
     return <div className="adaptive-overlay fixed z-[80] flex items-end justify-center">
         <div className="absolute inset-0 bg-slate-950/30" onClick={onClose} />

@@ -20,7 +20,8 @@ import {
 	FlaskConical,
 	MoreHorizontal,
 	QrCode,
-	ScanLine
+	ScanLine,
+	FileSpreadsheet
 } from 'lucide-react';
 import {
     createInventoryOperationRequestId,
@@ -45,7 +46,10 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
-import { isInventoryImportV2Enabled, isQrLabelsEnabled } from '../../config/featureFlags';
+import { isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isQrLabelsEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { buildRegisterRows, downloadHazardRegister } from '../hazardRegister/hazardRegister';
+import { hazardRegisterCopy } from '../hazardRegister/copy';
+import { InventorySdsSection } from '../inventorySds/InventorySdsSection';
 import { LabelPrintDialog } from '../qrLabels/LabelPrintDialog';
 import { StocktakeDialog, type StocktakeLocationOption } from '../qrLabels/StocktakeDialog';
 import { locationKeyOf, type StocktakeItem } from '../qrLabels/stocktake';
@@ -1413,6 +1417,47 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     };
 
     */
+    const [isExportingRegister, setIsExportingRegister] = useState(false);
+    const handleExportHazardRegister = async () => {
+        if (items.length === 0 || isExportingRegister) return;
+        const registerText = hazardRegisterCopy(i18n.language);
+        setIsExportingRegister(true);
+        try {
+            let sdsDocuments: Awaited<ReturnType<typeof import('../../services/inventorySdsService').fetchSdsDocuments>> = [];
+            const sdsService = isSdsAttachmentsEnabled ? await import('../../services/inventorySdsService') : null;
+            if (sdsService) sdsDocuments = await sdsService.fetchSdsDocuments(currentLabId).catch(() => []);
+            const rows = buildRegisterRows(items.map((item) => {
+                const ghsState = getInventoryGhsState(item);
+                return {
+                    name: item.name,
+                    casNumber: item.cas_number,
+                    brand: item.brand,
+                    quantity: typeof item.quantity === 'number' ? item.quantity : null,
+                    capacity: item.capacity,
+                    location: storageLabelOf(item),
+                    expiryDate: item.expiry_date,
+                    ghs: ghsState?.status === 'loaded'
+                        ? {
+                            hCodes: ghsState.snapshot.hCodes,
+                            signalWord: ghsState.snapshot.signalWord,
+                            pictograms: ghsState.snapshot.pictogramCodes,
+                            classified: ghsState.snapshot.status === 'classified',
+                        }
+                        : null,
+                    hazardGroups: classifyInventoryItemHazard(item).groupLabelKeys.map((key) => t(key)),
+                    hasSds: sdsService ? sdsService.matchSdsDocuments(sdsDocuments, { casNumber: item.cas_number, brand: item.brand, productNumber: item.product_number }).length > 0 : false,
+                };
+            }), registerText.row);
+            const spaceName = currentLabId ? (useLabStore.getState().myLabs.find((membership) => membership.lab_id === currentLabId)?.lab?.name ?? '') : t('lab_personal_space');
+            await downloadHazardRegister(rows, registerText.sheet, { space: spaceName, date: new Date() });
+        } catch (error) {
+            console.error('Failed to export the hazard analysis list:', error);
+            setQrNotice(registerText.failed);
+        } finally {
+            setIsExportingRegister(false);
+        }
+    };
+
     const handleExportExcel = async () => {
         if (visibleItems.length === 0) return;
         const { downloadRowsAsXlsx } = await import('../../utils/excelFiles');
@@ -2431,6 +2476,18 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             <Plus className="h-3.5 w-3.5" />
                             <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_manual')}</span>
                         </button>
+                        {isHazardRegisterExportEnabled && (
+                            <button
+                                onClick={() => void handleExportHazardRegister()}
+                                disabled={items.length === 0 || isExportingRegister}
+                                title={hazardRegisterCopy(i18n.language).buttonTitle}
+                                aria-label={hazardRegisterCopy(i18n.language).buttonTitle}
+                                className="hidden h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:px-3 table:inline-flex"
+                            >
+                                {isExportingRegister ? <Loader2 className="w-4 h-4 table:w-3.5 table:h-3.5 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 table:w-3.5 table:h-3.5" />}
+                                <span className="hidden table:inline whitespace-nowrap">{hazardRegisterCopy(i18n.language).button}</span>
+                            </button>
+                        )}
                         {isQrLabelsEnabled && (
                             <button
                                 onClick={() => setIsStocktakeOpen(true)}
@@ -2465,7 +2522,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     </div>
                     {isMobileInventory && <InventoryMobileTools canExport={visibleItems.length > 0} canSelect={items.length > 0}
                         isSelectMode={isSelectMode} onExport={handleExportExcel} onImport={() => setIsCsvImportOpen(true)} onSelect={toggleSelectMode}
-                        stocktake={isQrLabelsEnabled && items.length > 0 ? { label: qrText.stocktake, run: () => setIsStocktakeOpen(true) } : undefined} />}
+                        stocktake={isQrLabelsEnabled && items.length > 0 ? { label: qrText.stocktake, run: () => setIsStocktakeOpen(true) } : undefined}
+                        hazardRegister={isHazardRegisterExportEnabled && items.length > 0 ? { label: hazardRegisterCopy(i18n.language).button, run: () => void handleExportHazardRegister() } : undefined} />}
                 </div>
 
                 {showOnboardingGuide && (
@@ -3135,6 +3193,16 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             productNumber={selectedDesktopItem.product_number}
                             casNumber={selectedDesktopItem.cas_number}
                         />
+
+                        {isSdsAttachmentsEnabled && (
+                            <InventorySdsSection
+                                labId={currentLabId}
+                                casNumber={selectedDesktopItem.cas_number}
+                                brand={selectedDesktopItem.brand}
+                                productNumber={selectedDesktopItem.product_number}
+                                language={i18n.language}
+                            />
+                        )}
 
                         <ChemicalRegulationPanel casNumber={selectedDesktopItem.cas_number} />
 

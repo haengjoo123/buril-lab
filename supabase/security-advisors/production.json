@@ -2,7 +2,7 @@
   "schema_version": 1,
   "environment": "production",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 79,
+  "expected_count": 81,
   "observed_on": "2026-11-13",
   "entries": [
     {
@@ -214,6 +214,32 @@
       "target_gate": "관문 2 함수별 권한 검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_create_inventory_sds_document_v1_p_lab_id uuid, p_object_path text, p_file_name text, p_cas_number text, p_brand text, p_product_number text, p_revision_date date",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "create_inventory_sds_document_v1",
+        "identity_arguments": "p_lab_id uuid, p_object_path text, p_file_name text, p_cas_number text, p_brand text, p_product_number text, p_revision_date date",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "create_inventory_sds_document_v1: authenticated callers are intentionally allowed through this RPC. Only a member of the space may register, the object must already exist in that space's folder of the private inventory-sds bucket, and type and size are read from the stored object. Fixed empty search_path; anon execution and direct client DML remain denied. Hosted pgTAP on staging and an embedded-Postgres test cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "inventory SDS RPC permission recheck"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_create_lab_secure_p_name text, p_password text, p_nickname text, p_institution_type text, p_research_field text, p_institution_name text",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -342,6 +368,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "운영 6 기존 RPC 권한 Contract"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_delete_inventory_sds_document_v1_p_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "delete_inventory_sds_document_v1",
+        "identity_arguments": "p_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "delete_inventory_sds_document_v1: authenticated callers are intentionally allowed through this RPC. Rows outside the caller's space are indistinguishable from missing ones; in a lab only the uploader or a lab admin may delete. Fixed empty search_path; anon execution and direct client DML remain denied. Hosted pgTAP on staging and an embedded-Postgres test cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "inventory SDS RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_delete_user_",

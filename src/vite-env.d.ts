@@ -15,6 +15,9 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_CONTAINER_PICKUP_REQUESTS?: string
   readonly VITE_ENABLE_DAILY_INSPECTION?: string
   readonly VITE_ENABLE_QR_LABELS?: string
+  readonly VITE_ENABLE_SDS_ATTACHMENTS?: string
+  readonly VITE_ENABLE_DEVICE_REMINDERS?: string
+  readonly VITE_ENABLE_HAZARD_REGISTER_EXPORT?: string
 }
 
 interface ImportMeta {

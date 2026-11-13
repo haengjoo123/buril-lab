@@ -15,7 +15,7 @@ export interface ClaimedDeletionJob {
 }
 
 export interface DeletionFileTarget {
-  bucket: 'cabinets' | 'safety-center-verifications' | 'inventory-imports' | 'tool-images'
+  bucket: 'cabinets' | 'safety-center-verifications' | 'inventory-imports' | 'tool-images' | 'inventory-sds'
   path: string
 }
 
@@ -45,7 +45,7 @@ type RpcResult = { data: unknown; error: unknown }
 type AdminClient = ReturnType<typeof createClient>
 
 const ALLOWED_STAGES = new Set<DeletionStage>(['queued', 'database', 'storage', 'auth', 'finalize'])
-const ALLOWED_BUCKETS = new Set<DeletionFileTarget['bucket']>(['cabinets', 'safety-center-verifications', 'inventory-imports', 'tool-images'])
+const ALLOWED_BUCKETS = new Set<DeletionFileTarget['bucket']>(['cabinets', 'safety-center-verifications', 'inventory-imports', 'tool-images', 'inventory-sds'])
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)

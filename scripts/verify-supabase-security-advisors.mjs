@@ -7,7 +7,7 @@ import { RELEASE_ENVIRONMENTS } from './write-release-manifest.mjs'
 export const ADVISOR_CLI_VERSION = '2.115.0'
 export const BASELINE_ENVIRONMENTS = ['production', 'staging']
 // Both environments were observed after the waste-container migration.
-export const EXPECTED_COUNTS = Object.freeze({ production: 79, staging: 79 })
+export const EXPECTED_COUNTS = Object.freeze({ production: 81, staging: 81 })
 export const CABINET_ADVISOR_ADDITIONS = Object.freeze([
   ['commit_inventory_import_batch_v1', 'p_job_id uuid, p_revision integer, p_rows jsonb'],
   ['create_cabinet_v2', 'p_name text, p_location text, p_width integer, p_height integer, p_depth integer, p_lab_id uuid'],

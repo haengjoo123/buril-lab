@@ -43,6 +43,15 @@ export const isContainerPickupRequestsEnabled = isWasteContainersEnabled
 export const isDailyInspectionEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_DAILY_INSPECTION)
 /** QR labels on inventory items and waste containers, QR scanning and stocktake. */
 export const isQrLabelsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_QR_LABELS)
+/**
+ * Supplier SDS files on inventory items. Reads inventory_sds_documents, so enable
+ * only after the 20261114090000_inventory_sds_documents migration is applied.
+ */
+export const isSdsAttachmentsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_SDS_ATTACHMENTS)
+/** Local notifications on the native app for expiring reagents and the daily inspection. */
+export const isDeviceRemindersEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_DEVICE_REMINDERS)
+/** Draft chemical list export for the lab's prior hazard analysis (사전유해인자위험분석). */
+export const isHazardRegisterExportEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_HAZARD_REGISTER_EXPORT)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )
