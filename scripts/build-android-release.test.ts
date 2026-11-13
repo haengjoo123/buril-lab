@@ -19,11 +19,15 @@ describe('Android production configuration', () => {
     expect(validateWebChanges([], [], false).web_inputs_match_production).toBe(true)
     expect(() => validateWebChanges([], ['public/unreviewed.js'], true)).toThrow()
   })
-  it('copies the deployed flags and explicitly disables the unset import feature', () => {
+  it('copies the deployed flags and keeps the import feature off for profiles that predate it', () => {
     expect(productionEnvironment(release, profile, bundle)).toMatchObject({
-      ...profile.features, VITE_ENABLE_INVENTORY_IMPORT_V2: '',
+      ...profile.features, VITE_ENABLE_INVENTORY_IMPORT_V2: 'false',
       VITE_INTERNAL_API_BASE_URL: 'https://burillab.com',
     })
+  })
+  it('follows the deployed import flag once production records it', () => {
+    const deployed = { ...profile, features: { ...profile.features, VITE_ENABLE_INVENTORY_IMPORT_V2: 'true' } }
+    expect(productionEnvironment(release, deployed, bundle).VITE_ENABLE_INVENTORY_IMPORT_V2).toBe('true')
   })
   it('rejects mixed releases and staging configuration', () => {
     expect(() => productionEnvironment(release, { ...profile, commit: 'b'.repeat(40) }, bundle)).toThrow()

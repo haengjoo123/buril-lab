@@ -7,7 +7,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const origin = 'https://burillab.com'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const flags = ['VITE_ENABLE_WASTE_V2', 'VITE_ENABLE_PH_PREDICTION',
-  'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS', 'VITE_ENABLE_WASTE_CONTAINERS', 'VITE_ENABLE_LAB_TOOLS']
+  'VITE_ENABLE_CHEMICAL_ENRICHMENT', 'VITE_ENABLE_SEARCH_ANALYTICS', 'VITE_ENABLE_WASTE_CONTAINERS', 'VITE_ENABLE_LAB_TOOLS', 'VITE_ENABLE_INVENTORY_IMPORT_V2']
+// Flags added after older deployed profiles were written; absent means the release had them off.
+const lateFlags = ['VITE_ENABLE_LAB_TOOLS', 'VITE_ENABLE_INVENTORY_IMPORT_V2']
 const hash = (value) => createHash('sha256').update(value).digest('hex')
 
 export function validateWebChanges(changedFiles, untrackedFiles, allowWebChanges) {
@@ -29,8 +31,8 @@ export function productionEnvironment(release, profile, bundle) {
   // Fail if the web bundling/key format changes instead of falling back to .env.
   if (keys.length !== 1) throw new Error('Expected one production publishable key.')
   const features = Object.fromEntries(flags.map((name) => {
-    // Older deployed profiles predate tools; preserve the disabled release state.
-    const value = profile.features?.[name] ?? (name === 'VITE_ENABLE_LAB_TOOLS' ? 'false' : undefined)
+    // Older deployed profiles predate these flags; preserve the disabled release state.
+    const value = profile.features?.[name] ?? (lateFlags.includes(name) ? 'false' : undefined)
     if (!['true', 'false'].includes(value)) throw new Error(`Missing production flag: ${name}`)
     return [name, value]
   }))
@@ -41,8 +43,6 @@ export function productionEnvironment(release, profile, bundle) {
     VITE_SUPABASE_URL: profile.supabase_url,
     VITE_SUPABASE_ANON_KEY: keys[0],
     ...features,
-    // Not set by web-release.yml; prevent a developer's .env from enabling it.
-    VITE_ENABLE_INVENTORY_IMPORT_V2: '',
   }
 }
 
@@ -101,7 +101,7 @@ async function main() {
     auth_redirect_url: clientEnv.VITE_AUTH_REDIRECT_URL,
     supabase_url: profile.supabase_url,
     publishable_key_sha256: hash(clientEnv.VITE_SUPABASE_ANON_KEY),
-    features: { ...profile.features, VITE_ENABLE_INVENTORY_IMPORT_V2: 'false' },
+    features: Object.fromEntries(flags.map((name) => [name, clientEnv[name]])),
   }
   await writeFile('dist/android-release.json', `${JSON.stringify(manifest, null, 2)}\n`)
   execFileSync(process.execPath, ['node_modules/@capacitor/cli/bin/capacitor', 'sync', 'android'], {

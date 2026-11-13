@@ -727,10 +727,10 @@ export const translations = {
         onboarding_cabinet_detail_point_2: "배치 모드에서는 시약을 넣고, 스캔으로 자동 배치도 시도할 수 있습니다.",
         onboarding_cabinet_detail_point_3: "저장 상태와 호환성 경고를 보면서 구조를 안전하게 정리하세요.",
         onboarding_inventory_title: "재고 탭은 유지관리 허브입니다",
-        onboarding_inventory_desc: "검색, 수정, 만료 확인, 일괄 이동, CSV 등록까지 한 화면에서 처리합니다.",
+        onboarding_inventory_desc: "검색, 수정, 만료 확인, 일괄 이동, 기존 장부 가져오기까지 한 화면에서 처리합니다.",
         onboarding_inventory_point_1: "검색창으로 제품명, 브랜드, CAS, 제품번호를 빠르게 찾으세요.",
         onboarding_inventory_point_2: "카드를 길게 누르면 여러 항목을 선택해 일괄 이동·삭제를 할 수 있습니다.",
-        onboarding_inventory_point_3: "CSV 등록/다운로드 버튼으로 대량 등록이나 템플릿 작업을 시작하세요.",
+        onboarding_inventory_point_3: "쓰던 엑셀 장부가 있다면 하나씩 입력하지 말고 가져오기로 한 번에 옮기세요.",
 
         // Feedback
         feedback_btn: "앱 개선 제안하기",
@@ -1758,6 +1758,10 @@ export const translations = {
         // Empty States
         empty_inventory_title: "등록된 재고가 없습니다",
         empty_inventory_desc: "우측 하단 + 버튼으로 시약을 등록해보세요.",
+        empty_inventory_import_action: "기존 장부 가져오기",
+        empty_inventory_import_hint: "쓰던 엑셀·CSV 장부가 있다면 한 번에 옮길 수 있습니다.",
+        empty_inventory_import_hint_v2: "쓰던 엑셀 장부나 PDF, 장부 사진이 있다면 한 번에 옮길 수 있습니다.",
+        onboarding_inventory_import_action: "기존 장부 가져오기",
         empty_inventory_search_title: "검색 결과가 없습니다",
         empty_inventory_search_desc: "다른 키워드로 다시 검색해보세요.",
         empty_logs_title: "아직 폐기 기록이 없습니다",
@@ -3822,10 +3826,10 @@ export const translations = {
         onboarding_cabinet_detail_point_2: "In stock mode, place reagents manually or try scan-based auto placement.",
         onboarding_cabinet_detail_point_3: "Watch save status and compatibility warnings while organizing the layout.",
         onboarding_inventory_title: "Inventory is your maintenance hub",
-        onboarding_inventory_desc: "Search, edit, check expiry, bulk move items, and import CSV in one place.",
+        onboarding_inventory_desc: "Search, edit, check expiry, bulk move items, and import your existing list in one place.",
         onboarding_inventory_point_1: "Use the search bar to quickly find items by product name, brand, CAS, or product number.",
         onboarding_inventory_point_2: "Long-press a card to select multiple items for bulk move or deletion.",
-        onboarding_inventory_point_3: "Use the CSV button to start batch registration or template-based work.",
+        onboarding_inventory_point_3: "Already keep a spreadsheet? Import it in one go instead of typing items one by one.",
 
         // Feedback
         feedback_btn: "Suggest Improvements",
@@ -4852,6 +4856,10 @@ export const translations = {
         // Empty States
         empty_inventory_title: "No inventory registered",
         empty_inventory_desc: "Tap the + button to register your first reagent.",
+        empty_inventory_import_action: "Import existing list",
+        empty_inventory_import_hint: "Already keep an Excel or CSV list? Bring it over in one go.",
+        empty_inventory_import_hint_v2: "Already keep a spreadsheet, PDF, or photo of your list? Bring it over in one go.",
+        onboarding_inventory_import_action: "Import existing list",
         empty_inventory_search_title: "No results found",
         empty_inventory_search_desc: "Try searching with different keywords.",
         empty_logs_title: "No disposal records yet",

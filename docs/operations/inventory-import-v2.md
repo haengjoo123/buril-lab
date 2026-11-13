@@ -39,7 +39,7 @@ PDF.js의 문자표·표준 글꼴·이미지 디코더는 앱 빌드에 포함�
 
 1. 기존 Ops5~Ops11 적용 순서와 삭제 Worker 준비 조건을 먼저 충족한다. 기존 운영 DB에 기준선 SQL을 다시 실행하지 않는다.
 2. 새 증분 SQL을 별도 Staging 검증/배포 검토 대상으로 추가한다. 기존 Ops11의 고정 파일 목록·마이그레이션 해시·배포 검사를 임의로 완화하지 않는다. 현재의 과거 배포 묶음 검사에는 이 신규 변경이 포함되어 있지 않다.
-3. 비공개 `inventory-imports` 버킷과 RPC/RLS를 실제 Supabase Storage/REST로 검증한 뒤 `VITE_ENABLE_INVENTORY_IMPORT_V2=true`로 클라이언트를 빌드한다. 기본값은 false이며 기존 가져오기 화면으로 돌아갈 수 있다.
+3. 비공개 `inventory-imports` 버킷과 RPC/RLS를 실제 Supabase Storage/REST로 검증한 뒤 `VITE_ENABLE_INVENTORY_IMPORT_V2=true`로 클라이언트를 빌드한다. 기본값은 false이며 기존 가져오기 화면으로 돌아갈 수 있다. Web release는 GitHub 환경 변수 `VITE_ENABLE_INVENTORY_IMPORT_V2`를 빌드에 전달하고 값이 없으면 `false`로 빌드한다. 이 플래그는 Staging 증거의 기능 프로필에 포함되므로 운영 승격 시 Staging과 값이 다르면 중단된다. Android 빌드는 운영에 배포된 프로필의 값을 그대로 따른다.
 4. 사진 시범 적용 시 서버에 `INVENTORY_IMPORT_AI_ENABLED=true`, 기존 OpenAI 키/안전 식별자 설정을 적용한다. 가져오기 전용 설정은 아래와 같다. 다른 AI 기능의 기본값은 바꾸지 않는다.
 
 | 서버 설정 | 기본값 / 상한 |
