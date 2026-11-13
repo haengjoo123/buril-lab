@@ -29,8 +29,9 @@ export const EXPECTED_LEGACY_TESTS = [
   'waste_disposal_v2_verification.sql',
 ]
 export const EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
-export const EXPECTED_PERMISSION_TEST_SHA256 = '6289f43048b06b7dec104593e8f452431e4b11a9ac75af58af758204da5af89c'
+export const EXPECTED_PERMISSION_TEST_SHA256 = 'fba0946c4acbfe8f39d33dcd8f251a9a26554280045ae52b55bd803940f20c61'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
+  '20261114090000_inventory_sds_documents.sql': '9d080abbbb1d6d351e471663cb7886d1bce3f4e9a3854354b2439300fbc97e61',
   '20261113100000_lab_daily_inspections.sql': 'cc225a2d614950b9553f025a23ecad86cf61fa71dda4a88eb090af624a0a1f12',
   '20261113090000_waste_container_pickup_requests.sql': '6ffee92bffa35e5c489de9653ea40c9b7c682cba8dfb308da4980d2d9823998c',
   '20261109013830_tool_table_service_grants.sql': 'df3560ff8abd30f1635d170d4ea4fef90b78fa1f163e4b1f5519321d46e73759',
@@ -58,6 +59,7 @@ export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260904070000_ops11_deletion_worker.sql': '6e476e51dc55ed168fb51d590143ad7b752c74d937235bc4a248821a37c0e26c',
 })
 export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
+  'inventory_sds_documents_behavior.sql': 'df8b67890f7589012e448f89cb3ad6af1e91bd7b40ca4113fd044210fe9be8dd',
   'lab_daily_inspection_behavior.sql': '0231d3e8d292e5359fd7da184f08c60557f3ac3de399f029d8ded79f09100c48',
   'waste_container_pickup_behavior.sql': 'ea5d64a994d133d93604d6e3afe6afe7b2d66a7d284ef2ecbc997a03e41c74d2',
   'personal_lab_tools_behavior.sql': '91f01bb3b1863c9b582ad90b7ca92d6a565705b68a98be5c3b1151f5d3ba5669',

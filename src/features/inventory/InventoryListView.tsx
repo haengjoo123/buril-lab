@@ -45,7 +45,8 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
-import { isInventoryImportV2Enabled, isQrLabelsEnabled } from '../../config/featureFlags';
+import { isInventoryImportV2Enabled, isQrLabelsEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { InventorySdsSection } from '../inventorySds/InventorySdsSection';
 import { LabelPrintDialog } from '../qrLabels/LabelPrintDialog';
 import { StocktakeDialog, type StocktakeLocationOption } from '../qrLabels/StocktakeDialog';
 import { locationKeyOf, type StocktakeItem } from '../qrLabels/stocktake';
@@ -3135,6 +3136,16 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             productNumber={selectedDesktopItem.product_number}
                             casNumber={selectedDesktopItem.cas_number}
                         />
+
+                        {isSdsAttachmentsEnabled && (
+                            <InventorySdsSection
+                                labId={currentLabId}
+                                casNumber={selectedDesktopItem.cas_number}
+                                brand={selectedDesktopItem.brand}
+                                productNumber={selectedDesktopItem.product_number}
+                                language={i18n.language}
+                            />
+                        )}
 
                         <ChemicalRegulationPanel casNumber={selectedDesktopItem.cas_number} />
 
