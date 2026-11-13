@@ -98,6 +98,7 @@ const FIELD_KEY: Record<string, string> = {
     status: 'audit_field_waste_container_status',
     location: 'audit_field_waste_container_location',
     stream_code: 'audit_field_waste_container_stream',
+    pickup: 'audit_field_waste_container_pickup',
     role: 'audit_field_role',
     scope: 'audit_field_scope',
     center_name: 'audit_field_center_name',
@@ -349,6 +350,9 @@ export const formatAuditValue = (
 
     if (typeof value === 'string') {
         if (key === 'stream_code') return wasteStreamLabel(value, locale);
+        if (key === 'pickup') {
+            return t(value === 'requested' ? 'audit_value_pickup_requested' : 'audit_value_pickup_none');
+        }
         if (key === 'status') {
             if (value === 'active' || value === 'sealed' || value === 'collected') {
                 return containerStatusLabel(value, locale);

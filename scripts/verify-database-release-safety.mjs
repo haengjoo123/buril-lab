@@ -31,6 +31,7 @@ export const EXPECTED_LEGACY_TESTS = [
 export const EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
 export const EXPECTED_PERMISSION_TEST_SHA256 = '223521f9e26b2a0084d2e5b4f0b519f651160ce3bd80da8adcdbcbea7abd0615'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
+  '20261113090000_waste_container_pickup_requests.sql': '6ffee92bffa35e5c489de9653ea40c9b7c682cba8dfb308da4980d2d9823998c',
   '20261109013830_tool_table_service_grants.sql': 'df3560ff8abd30f1635d170d4ea4fef90b78fa1f163e4b1f5519321d46e73759',
   '20261109011725_personal_lab_tools.sql': '8f1f6f2869d9fe5f76fcb14a8e36d8d885a11dbeacec9c7de38c3bb6dbd79986',
   '20261109011747_tool_images_account_deletion.sql': '9d2f1ef262f4aeab6e52d9ffe54de3dd2063e9bf56566598abaa8021c983e2ac',
@@ -56,6 +57,7 @@ export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260904070000_ops11_deletion_worker.sql': '6e476e51dc55ed168fb51d590143ad7b752c74d937235bc4a248821a37c0e26c',
 })
 export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
+  'waste_container_pickup_behavior.sql': 'ea5d64a994d133d93604d6e3afe6afe7b2d66a7d284ef2ecbc997a03e41c74d2',
   'personal_lab_tools_behavior.sql': '91f01bb3b1863c9b582ad90b7ca92d6a565705b68a98be5c3b1151f5d3ba5669',
   'lab_admin_action_audit_behavior.sql': '13aebd30bbb0a9a77f0d5da59accbbc108151911a404ef1e428d4fd4768bd3f3',
   'admin_kpis_behavior.sql': 'ca772110e41e5b47602e4bca45c27b2f4d022a25b4376d2758a26eb02e3dfe6e',

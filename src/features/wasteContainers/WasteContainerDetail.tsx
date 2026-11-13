@@ -4,6 +4,7 @@ import {
     MAX_CONTAINER_DEPOSITS,
     fetchWasteContainerDeposits,
     fetchWasteContainerTotals,
+    keepPickupState,
     setWasteContainerStatus,
     toWasteContainerError,
     type WasteContainer,
@@ -19,6 +20,8 @@ import { containerCopy, containerErrorMessage, containerStatusLabel } from './co
 import { ContainerFillBar } from './ContainerFillBar';
 import { ContainerDialog, dialogInput, dialogPrimaryButton, dialogSecondaryButton } from './ContainerDialog';
 import { ContainerStatusChip } from './ContainerStatusChip';
+import { ContainerPickupSection } from './ContainerPickupSection';
+import { isContainerPickupRequestsEnabled } from '../../config/featureFlags';
 
 interface WasteContainerDetailProps {
     container: WasteContainer;
@@ -81,7 +84,7 @@ export const WasteContainerDetail: React.FC<WasteContainerDetailProps> = ({
         try {
             const updated = await setWasteContainerStatus(container.id, status, status === 'collected' ? collectNote : null);
             setCollectOpen(false);
-            onChanged(updated);
+            onChanged(keepPickupState(container, updated));
         } catch (error) {
             setActionError(containerErrorMessage(toWasteContainerError(error).code, language));
         } finally {
@@ -201,6 +204,10 @@ export const WasteContainerDetail: React.FC<WasteContainerDetailProps> = ({
                                 </ul>
                             )}
                         </section>
+
+                        {isContainerPickupRequestsEnabled && (
+                            <ContainerPickupSection container={container} language={language} disabled={busy !== null} onChanged={onChanged} />
+                        )}
 
                         <section className="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
                             <h4 className="text-sm font-medium text-slate-700 dark:text-slate-200">

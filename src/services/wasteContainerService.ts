@@ -8,6 +8,7 @@
 
 import { supabase } from './supabaseClient';
 import { useLabStore } from '../store/useLabStore';
+import { isContainerPickupRequestsEnabled } from '../config/featureFlags';
 import type { WasteHazardFlag, WasteStreamCode } from '../types';
 
 export type WasteContainerStatus = 'active' | 'sealed' | 'collected';
@@ -26,6 +27,9 @@ export interface WasteContainer {
     collectionNote: string | null;
     createdAt: string;
     updatedAt: string;
+    /** Pending pickup request. Undefined when the row was read without the pickup columns. */
+    pickupRequestedAt?: string | null;
+    pickupRequestNote?: string | null;
 }
 
 export interface WasteContainerDepositItem {
@@ -58,6 +62,8 @@ export interface WasteContainerInput {
 const CONTAINER_COLUMNS = [
     'id', 'lab_id', 'stream_code', 'label', 'location', 'capacity_ml', 'status',
     'started_at', 'sealed_at', 'collected_at', 'collection_note', 'created_at', 'updated_at',
+    // These columns exist only after the pickup migration, so they are read only behind its flag.
+    ...(isContainerPickupRequestsEnabled ? ['pickup_requested_at', 'pickup_request_note'] : []),
 ].join(',');
 
 /** Deposits fetched for one container; beyond this the detail and label say they are partial. */
@@ -158,7 +164,23 @@ export function normalizeWasteContainerRow(row: unknown): WasteContainer {
         collectionNote: asString(record.collection_note),
         createdAt: asString(record.created_at) ?? '',
         updatedAt: asString(record.updated_at) ?? '',
+        ...('pickup_requested_at' in record
+            ? {
+                pickupRequestedAt: asString(record.pickup_requested_at),
+                pickupRequestNote: asString(record.pickup_request_note),
+            }
+            : {}),
     };
+}
+
+/**
+ * The older container RPCs return rows without the pickup columns. Carry the
+ * known request over to such a row; collection always ends a request.
+ */
+export function keepPickupState(previous: WasteContainer, updated: WasteContainer): WasteContainer {
+    if (updated.pickupRequestedAt !== undefined) return updated;
+    if (updated.status === 'collected') return { ...updated, pickupRequestedAt: null, pickupRequestNote: null };
+    return { ...updated, pickupRequestedAt: previous.pickupRequestedAt, pickupRequestNote: previous.pickupRequestNote };
 }
 
 function assertUuid(value: string, fieldName: string): void {
@@ -304,6 +326,25 @@ function normalizeDepositRow(row: unknown): WasteContainerDeposit {
             })
             .sort((a, b) => a.lineNumber - b.lineNumber),
     };
+}
+
+/** Asks for the container to be collected. Asking again keeps the first request. */
+export async function requestWasteContainerPickup(id: string, note?: string | null): Promise<WasteContainer> {
+    assertUuid(id, 'containerId');
+    const { data, error } = await supabase.rpc('request_waste_container_pickup_v1', {
+        p_container_id: id,
+        p_note: cleanText(note, 500, 'Pickup note'),
+    });
+    if (error) throw toWasteContainerError(error);
+    return unwrapContainer(data);
+}
+
+/** Withdraws a pending pickup request (the requester or a lab admin). */
+export async function cancelWasteContainerPickup(id: string): Promise<WasteContainer> {
+    assertUuid(id, 'containerId');
+    const { data, error } = await supabase.rpc('cancel_waste_container_pickup_v1', { p_container_id: id });
+    if (error) throw toWasteContainerError(error);
+    return unwrapContainer(data);
 }
 
 export interface WasteContainerDepositPage {

@@ -63,7 +63,8 @@ import {
   useSafetyCenterSignOut,
 } from './safetyCenterShellContext';
 import { WastePolicyDistributionPanel } from './WastePolicyDistributionPanel';
-import { isWasteV2Enabled } from '../../config/featureFlags';
+import { isContainerPickupRequestsEnabled, isWasteV2Enabled } from '../../config/featureFlags';
+import { WastePickupPanel } from './WastePickupPanel';
 import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { AppSelect } from '../../components/AppSelect';
 import { useLabStore } from '../../store/useLabStore';
@@ -267,7 +268,7 @@ function EmptyPanel({ title, body }: { title: string; body: string }) {
 }
 
 export function SafetyCenterWorkspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const activeSection = getSafetyCenterSectionFromPath(location.pathname);
@@ -657,16 +658,21 @@ export function SafetyCenterWorkspace() {
             onExport={(format) => void exportDatasets(format, ['risks'])}
           />
         ) : activeSection === 'requests' ? (
-          <RequestsPage
-            requests={requests}
-            approvedLabs={approvedLabs}
-            canCreate={canManageCenter}
-            canManage={canManageCenter}
-            onOpenRequest={openRequestDraft}
-            onRequestsChanged={async () => {
-              setRequests(await safetyCenterService.getRequests(activeCenter.id));
-            }}
-          />
+          <>
+            {isContainerPickupRequestsEnabled && (
+              <WastePickupPanel centerId={activeCenter.id} language={i18n.language} />
+            )}
+            <RequestsPage
+              requests={requests}
+              approvedLabs={approvedLabs}
+              canCreate={canManageCenter}
+              canManage={canManageCenter}
+              onOpenRequest={openRequestDraft}
+              onRequestsChanged={async () => {
+                setRequests(await safetyCenterService.getRequests(activeCenter.id));
+              }}
+            />
+          </>
         ) : activeSection === 'exports' ? (
           <ExportsPage
             approvedLabs={approvedLabs}

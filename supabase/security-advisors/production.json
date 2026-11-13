@@ -2,8 +2,8 @@
   "schema_version": 1,
   "environment": "production",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 74,
-  "observed_on": "2026-11-09",
+  "expected_count": 79,
+  "observed_on": "2026-11-13",
   "entries": [
     {
       "cache_key": "authenticated_security_definer_function_executable_public_activate_waste_policy_v2_p_policy_version_id uuid",
@@ -82,6 +82,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_cancel_waste_container_pickup_v1_p_container_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "cancel_waste_container_pickup_v1",
+        "identity_arguments": "p_container_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "cancel_waste_container_pickup_v1: authenticated callers are intentionally allowed through this RPC. Access to the container scope is checked before any row lock, and only the requester, a lab admin or the personal owner may withdraw. Fixed empty search_path; anon execution and direct client DML remain denied. Hosted pgTAP on staging and an embedded-Postgres test cover the boundary. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_commit_inventory_import_batch_v1_p_job_id uuid, p_revision integer, p_rows jsonb",
@@ -630,6 +656,32 @@
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_inspection_summary_v1_p_center_id uuid, p_days integer",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_safety_center_inspection_summary_v1",
+        "identity_arguments": "p_center_id uuid, p_days integer",
+        "language": "sql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "get_safety_center_inspection_summary_v1: authenticated callers are intentionally allowed through this RPC. Rows are returned only to a member of an approved center through an approved link carrying the summary scope; it returns per-lab counts, never item results or notes, and the period is clamped to 92 days. Fixed empty search_path; anon execution and direct client DML remain denied. Hosted pgTAP on staging and an embedded-Postgres test cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "daily inspection RPC permission recheck"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_lab_candidates_p_center_id uuid, p_search text",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -732,6 +784,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_get_safety_center_waste_pickups_v1_p_center_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "get_safety_center_waste_pickups_v1",
+        "identity_arguments": "p_center_id uuid",
+        "language": "sql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "get_safety_center_waste_pickups_v1: authenticated callers are intentionally allowed through this RPC. Rows are returned only to a member of an approved center through an approved link carrying the waste_management scope; the requester identity is not returned. Fixed empty search_path; anon execution and direct client DML remain denied. Hosted pgTAP on staging and an embedded-Postgres test cover the boundary. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_is_lab_admin_target_lab_id uuid",
@@ -1098,6 +1176,32 @@
       "target_gate": "운영 9 역할·MFA와 함수 권한 검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_request_waste_container_pickup_v1_p_container_id uuid, p_note text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "request_waste_container_pickup_v1",
+        "identity_arguments": "p_container_id uuid, p_note text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "request_waste_container_pickup_v1: authenticated callers are intentionally allowed through this RPC. Access to the container scope is checked before any row lock, collected containers are rejected, a repeated request keeps the first one, and the free-text note stays out of audit rows. Fixed empty search_path; anon execution and direct client DML remain denied. Hosted pgTAP on staging and an embedded-Postgres test cover the boundary. Keep open until the next privileged RPC audit.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "privileged waste-container RPC audit"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_respond_safety_center_lab_link_p_link_id uuid, p_status text",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -1200,6 +1304,32 @@
       "reviewed_at": "2026-10-02",
       "expires_on": "2026-12-31",
       "target_gate": "캐비넷·재고 가져오기 함수별 권한 검토 및 hosted 회귀 검증"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_save_lab_daily_inspection_v1_p_lab_id uuid, p_checklist_version text, p_results jsonb, p_note text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "save_lab_daily_inspection_v1",
+        "identity_arguments": "p_lab_id uuid, p_checklist_version text, p_results jsonb, p_note text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "save_lab_daily_inspection_v1: authenticated callers are intentionally allowed through this RPC. Only a member of the lab may record; the server fixes the Korean calendar day, validates the result object and counts issues itself, and keeps one row per lab per day. Fixed empty search_path; anon execution and direct client DML remain denied. Hosted pgTAP on staging and an embedded-Postgres test cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-13",
+      "expires_on": "2026-12-31",
+      "target_gate": "daily inspection RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_save_safety_center_waste_policy_draft_v2_p_center_id uuid, p_version_label text, p_name text, p_streams jsonb, p_source_refs jsonb",

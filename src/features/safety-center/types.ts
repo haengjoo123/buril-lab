@@ -85,6 +85,24 @@ export interface SafetyCenterRiskItem {
   updated_at: string;
 }
 
+/** A container a linked lab asked this center to collect (get_safety_center_waste_pickups_v1). */
+export interface SafetyCenterWastePickup {
+  container_id: string;
+  lab_id: string;
+  lab_name: string;
+  stream_code: string;
+  label: string;
+  location: string | null;
+  capacity_ml: number | null;
+  status: 'active' | 'sealed' | 'collected';
+  sealed_at: string | null;
+  pickup_requested_at: string;
+  pickup_request_note: string | null;
+  deposit_count: number;
+  total_ml: number;
+  has_unknown_amounts: boolean;
+}
+
 export interface SafetyCenterWasteLog {
   id: string;
   lab_id: string;

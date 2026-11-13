@@ -169,6 +169,13 @@ function describeTask(task: LabAdminTask, t: TFunction, language: string): TaskT
             };
         case 'waste_container': {
             const detail = [task.label, wasteStreamLabel(task.streamCode, language), task.location].filter(Boolean).join(' · ');
+            if (task.reason === 'pickup') {
+                return {
+                    title: t('admin_overview_task_container_pickup'),
+                    meta: t('admin_overview_container_pickup_days', { days: task.pickupDays ?? 0 }),
+                    detail,
+                };
+            }
             if (task.reason === 'sealed') {
                 return {
                     title: t('admin_overview_task_container_sealed'),

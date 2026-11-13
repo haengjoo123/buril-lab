@@ -39,6 +39,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_SEARCH_ANALYTICS',
   'VITE_ENABLE_INVENTORY_IMPORT_V2',
   'VITE_ENABLE_CONTAINER_CONTENT_CHECK',
+  'VITE_ENABLE_CONTAINER_PICKUP_REQUESTS',
 ] as const
 
 type AdminIdentity = {
@@ -566,6 +567,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_SEARCH_ANALYTICS': JSON.stringify(explicitClientEnv.VITE_ENABLE_SEARCH_ANALYTICS),
     'import.meta.env.VITE_ENABLE_INVENTORY_IMPORT_V2': JSON.stringify(explicitClientEnv.VITE_ENABLE_INVENTORY_IMPORT_V2),
     'import.meta.env.VITE_ENABLE_CONTAINER_CONTENT_CHECK': JSON.stringify(explicitClientEnv.VITE_ENABLE_CONTAINER_CONTENT_CHECK),
+    'import.meta.env.VITE_ENABLE_CONTAINER_PICKUP_REQUESTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_CONTAINER_PICKUP_REQUESTS),
   },
   resolve: {
     alias: {
