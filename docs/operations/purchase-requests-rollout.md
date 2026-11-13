@@ -1,6 +1,14 @@
 # 부족 예상·구매 요청 출시 절차
 
-상태: 저장소 준비 완료, Staging·운영 DB 미적용 (2026-11-13)
+상태: Staging·운영 DB 적용 완료, 플래그 꺼짐 (2026-11-13 UTC)
+
+## 적용 기록
+
+- Staging(이력 `20261113154125`)과 운영(이력 `20261113154209`)에 같은 SQL을 연달아 적용했다. 적용 전 두 환경의 이력은 `inventory_sds_documents`까지 같았다.
+- 두 환경 모두 새 함수 7개(public 4·private 3)의 본문 해시와 권한이 일치한다. public RPC 4개는 `anon` 실행 불가, `authenticated`·`service_role` 실행 가능이다. private 함수는 클라이언트가 실행하지 못한다. 표는 RLS가 켜져 있고 정책은 0건이며, `anon`·`authenticated`는 직접 읽거나 쓰지 못한다.
+- Staging에서 `inventory_purchase_requests_behavior.sql` 10건을 실행해 모두 통과했다. 끝에서 일부러 예외를 일으켜 전체를 롤백했고, 시험용 사용자·연구실·요청·감사 기록과 pgTAP 확장이 남지 않았음을 다시 조회해 확인했다. 운영에는 시험 데이터를 넣지 않았다.
+- Hosted Security Advisor는 두 환경 모두 81 → 86건이다. 늘어난 것은 예상대로 `authenticated_security_definer_function_executable` WARN 4건(위 public RPC 4개)과 `rls_enabled_no_policy` INFO 1건(`inventory_purchase_requests`)뿐이다. `supabase/security-advisors/*.json`과 `EXPECTED_COUNTS`를 86으로 갱신했다. RPC 4건은 `temporary_open`(2026-12-31 만료, 다음 RPC 권한 재검토)이고, 표 1건은 서버 전용 기본 거부라 `accepted_design`이다.
+- 남은 일: 아래 "켜는 순서" 4단계(플래그·배포)와 "확인할 것"의 계정별 확인.
 
 플래그: `VITE_ENABLE_PURCHASE_REQUESTS` (기본 꺼짐)
 DB: `supabase/migrations/20261115090000_inventory_purchase_requests.sql`
