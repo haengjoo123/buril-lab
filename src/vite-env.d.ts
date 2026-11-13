@@ -13,6 +13,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_LAB_TOOLS?: string
   readonly VITE_ENABLE_CONTAINER_CONTENT_CHECK?: string
   readonly VITE_ENABLE_CONTAINER_PICKUP_REQUESTS?: string
+  readonly VITE_ENABLE_DAILY_INSPECTION?: string
 }
 
 interface ImportMeta {

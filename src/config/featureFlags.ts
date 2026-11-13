@@ -36,6 +36,11 @@ export const isContainerContentCheckEnabled = isWasteContainersEnabled
  */
 export const isContainerPickupRequestsEnabled = isWasteContainersEnabled
   && isExplicitlyEnabled(import.meta.env.VITE_ENABLE_CONTAINER_PICKUP_REQUESTS)
+/**
+ * Daily lab safety inspections. Reads lab_daily_inspections, so enable only
+ * after the 20261113100000_lab_daily_inspections migration is applied.
+ */
+export const isDailyInspectionEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_DAILY_INSPECTION)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

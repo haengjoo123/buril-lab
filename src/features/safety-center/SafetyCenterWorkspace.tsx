@@ -63,7 +63,8 @@ import {
   useSafetyCenterSignOut,
 } from './safetyCenterShellContext';
 import { WastePolicyDistributionPanel } from './WastePolicyDistributionPanel';
-import { isContainerPickupRequestsEnabled, isWasteV2Enabled } from '../../config/featureFlags';
+import { isContainerPickupRequestsEnabled, isDailyInspectionEnabled, isWasteV2Enabled } from '../../config/featureFlags';
+import { InspectionSummaryPanel } from './InspectionSummaryPanel';
 import { WastePickupPanel } from './WastePickupPanel';
 import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { AppSelect } from '../../components/AppSelect';
@@ -689,14 +690,19 @@ export function SafetyCenterWorkspace() {
             canManage={canManageCenter}
           />
         ) : (
-          <DashboardPage
-            summary={dashboardSummary}
-            riskItems={riskItems}
-            requests={requests}
-            auditLogs={auditLogs}
-            canCreateRequest={canManageCenter}
-            onOpenRequest={openRequestDraft}
-          />
+          <>
+            {isDailyInspectionEnabled && (
+              <InspectionSummaryPanel centerId={activeCenter.id} language={i18n.language} />
+            )}
+            <DashboardPage
+              summary={dashboardSummary}
+              riskItems={riskItems}
+              requests={requests}
+              auditLogs={auditLogs}
+              canCreateRequest={canManageCenter}
+              onOpenRequest={openRequestDraft}
+            />
+          </>
         )}
       </main>
 

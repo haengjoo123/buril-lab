@@ -103,6 +103,16 @@ export interface SafetyCenterWastePickup {
   has_unknown_amounts: boolean;
 }
 
+/** Per-lab daily inspection counts (get_safety_center_inspection_summary_v1). */
+export interface SafetyCenterInspectionSummary {
+  lab_id: string;
+  lab_name: string;
+  period_days: number;
+  inspected_days: number;
+  issue_days: number;
+  last_inspection_date: string | null;
+}
+
 export interface SafetyCenterWasteLog {
   id: string;
   lab_id: string;
