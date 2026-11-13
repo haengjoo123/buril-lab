@@ -24,6 +24,12 @@ export const isInventoryImportV2Enabled = isExplicitlyEnabled(import.meta.env.VI
  * 20261017090000_waste_containers migration is applied to that environment.
  */
 export const isWasteContainersEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_WASTE_CONTAINERS)
+/**
+ * Compares a deposit with the selected container's recorded contents before
+ * it is saved. Off unless a reviewed deployment explicitly enables it.
+ */
+export const isContainerContentCheckEnabled = isWasteContainersEnabled
+  && isExplicitlyEnabled(import.meta.env.VITE_ENABLE_CONTAINER_CONTENT_CHECK)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

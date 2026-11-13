@@ -1,4 +1,5 @@
 import type { WasteContainerErrorCode, WasteContainerStatus } from '../../services/wasteContainerService';
+import type { ContainerContentRuleId } from './containerContentCheck';
 
 const KO = {
     tab: '폐액통',
@@ -8,6 +9,15 @@ const KO = {
     pickerChoose: '실제로 붓는 폐액통을 선택하세요.',
     pickerLoadFailed: '폐액통 목록을 불러오지 못했습니다. 지금 저장하면 폐액통 연결 없이 기록됩니다.',
     retry: '다시 시도',
+    contentCheckLoading: '폐액통에 기록된 내용물과 대조하는 중입니다.',
+    contentCheckUnavailable: '폐액통의 기록을 불러오지 못해 기존 내용물과 대조하지 못했습니다. 붓기 전에 통의 내용물을 직접 확인하세요.',
+    contentCheckNoConflict: (count: number) => `이 통에 기록된 성분 ${count}종과 알려진 위험 조합은 없습니다.`,
+    contentCheckLimits: '기록된 투입과 정해진 규칙만 대조합니다. 기록하지 않은 투입은 반영되지 않으며, 안전을 보증하지 않습니다.',
+    contentCheckTruncated: '투입 기록이 많아 일부만 대조했습니다.',
+    contentCheckDangerTitle: '이 통에 이미 들어 있는 성분과 섞으면 위험합니다. 붓지 마세요.',
+    contentCheckWarningTitle: '이 통에 이미 들어 있는 성분과의 조합을 붓기 전에 확인하세요.',
+    contentCheckPair: (incoming: string, inContainer: string) => `지금 넣는 ${incoming} ↔ 통에 기록된 ${inContainer}`,
+    contentCheckMore: (count: number) => `외 ${count}건`,
     receiptContainer: '폐액통',
     statusActive: '사용 중',
     statusSealed: '봉인',
@@ -71,6 +81,15 @@ const EN: typeof KO = {
     pickerChoose: 'Choose the container you are pouring into.',
     pickerLoadFailed: 'Could not load containers. Saving now records the deposit without a container.',
     retry: 'Retry',
+    contentCheckLoading: 'Comparing with the contents recorded for this container.',
+    contentCheckUnavailable: 'Could not load this container\'s records, so nothing was compared. Check what is in the container before pouring.',
+    contentCheckNoConflict: (count: number) => `No known dangerous combination with the ${count} substance(s) recorded in this container.`,
+    contentCheckLimits: 'Only recorded deposits and a fixed set of rules are compared. Unrecorded additions are not covered, and this is not a safety guarantee.',
+    contentCheckTruncated: 'There are many deposits, so only part of them was compared.',
+    contentCheckDangerTitle: 'Dangerous with something already in this container. Do not pour.',
+    contentCheckWarningTitle: 'Check this combination with the container\'s contents before pouring.',
+    contentCheckPair: (incoming: string, inContainer: string) => `Adding ${incoming} ↔ recorded ${inContainer}`,
+    contentCheckMore: (count: number) => `and ${count} more`,
     receiptContainer: 'Container',
     statusActive: 'In use',
     statusSealed: 'Sealed',
@@ -168,6 +187,36 @@ const ERROR_EN: Record<WasteContainerErrorCode, string> = {
     not_found: 'Container not found. Refresh the list.',
     unknown: 'Could not complete the container action. Try again shortly.',
 };
+
+const CONTENT_RULE_KO: Record<ContainerContentRuleId, string> = {
+    pyrophoric: '자연발화성 물질은 다른 폐액과 함께 담으면 발화할 수 있습니다.',
+    self_reactive: '자기반응성 물질은 다른 폐액과 함께 담으면 분해·폭발할 수 있습니다.',
+    explosive: '폭발성 물질은 다른 폐액과 함께 담지 않습니다.',
+    oxidizer_flammable: '산화제와 인화성 물질이 만나면 발화·폭발할 수 있습니다.',
+    oxidizer_reactive: '산화제와 반응성 물질이 만나면 격렬히 반응할 수 있습니다.',
+    water_reactive_aqueous: '통에 물반응성 물질이 기록되어 있습니다. 수용액을 넣으면 가연성 가스나 열이 발생할 수 있습니다.',
+    water_reactive_unknown_matrix: '물반응성 물질입니다. 통 안에 수분이 있는지 기록으로는 알 수 없으니 직접 확인하세요.',
+    acid_cyanide: '산과 시안화물이 만나면 시안화수소 가스가 발생합니다.',
+    acid_sulfide: '산과 황화물이 만나면 황화수소 가스가 발생합니다.',
+    corrosive_cyanide_sulfide: '통에 부식성 물질이 기록되어 있습니다. 그 물질이 산이라면 독성 가스가 발생하므로 통의 pH를 확인하세요.',
+};
+
+const CONTENT_RULE_EN: Record<ContainerContentRuleId, string> = {
+    pyrophoric: 'A pyrophoric substance can ignite when stored with other waste.',
+    self_reactive: 'A self-reactive substance can decompose or explode when stored with other waste.',
+    explosive: 'Explosive substances are never combined with other waste.',
+    oxidizer_flammable: 'An oxidizer and a flammable substance can ignite or explode.',
+    oxidizer_reactive: 'An oxidizer and a reactive substance can react violently.',
+    water_reactive_aqueous: 'A water-reactive substance is recorded in this container. Adding an aqueous waste can release flammable gas or heat.',
+    water_reactive_unknown_matrix: 'This substance reacts with water. The records cannot tell whether the container holds water, so check it yourself.',
+    acid_cyanide: 'An acid and a cyanide release hydrogen cyanide gas.',
+    acid_sulfide: 'An acid and a sulfide release hydrogen sulfide gas.',
+    corrosive_cyanide_sulfide: 'A corrosive substance is recorded in this container. If it is an acid, toxic gas is released, so check the container pH.',
+};
+
+export function containerContentRuleMessage(ruleId: ContainerContentRuleId, language: string): string {
+    return (language.startsWith('ko') ? CONTENT_RULE_KO : CONTENT_RULE_EN)[ruleId];
+}
 
 export function containerErrorMessage(code: WasteContainerErrorCode, language: string): string {
     return (language.startsWith('ko') ? ERROR_KO : ERROR_EN)[code];

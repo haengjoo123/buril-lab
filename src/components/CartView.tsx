@@ -46,9 +46,13 @@ import {
     isChemicalEnrichmentEnabled,
     isPhPredictionEnabled,
     isWasteContainersEnabled,
+    isContainerContentCheckEnabled,
 } from '../config/featureFlags';
 import { useContainerSelection } from '../features/wasteContainers/useContainerSelection';
 import { ContainerDepositPicker } from '../features/wasteContainers/ContainerDepositPicker';
+import { ContainerContentCheckNotice } from '../features/wasteContainers/ContainerContentCheckNotice';
+import { toIncomingWaste } from '../features/wasteContainers/containerContentCheck';
+import { useContainerContentCheck } from '../features/wasteContainers/useContainerContentCheck';
 import { containerCopy, containerErrorMessage } from '../features/wasteContainers/copy';
 import { toWasteContainerError } from '../services/wasteContainerService';
 import {
@@ -606,6 +610,17 @@ export const CartView: React.FC<CartViewProps> = ({
         isWasteContainersEnabled && decision.decisionStatus === 'ready',
         decision.decisionStatus === 'ready' ? decision.streamCode : null,
         currentLabId ?? 'personal',
+    );
+    const incomingWaste = useMemo(
+        () => toIncomingWaste({ components: batch.components, matrix: batch.matrix }),
+        [batch.components, batch.matrix],
+    );
+    const selectedContainerId = containerSelection.selectedId;
+    const containerContentCheck = useContainerContentCheck(
+        isContainerContentCheckEnabled && containerSelection.enabled,
+        selectedContainerId,
+        selectedContainerId ? containerSelection.totals[selectedContainerId]?.depositCount ?? 0 : 0,
+        incomingWaste,
     );
     const isKorean = i18n.language.toLowerCase().startsWith('ko');
     const streamName = matchedStream
@@ -2888,6 +2903,7 @@ export const CartView: React.FC<CartViewProps> = ({
                                     </div>
                                 )}
                                 <ContainerDepositPicker selection={containerSelection} language={i18n.language} disabled={isSaving} />
+                                <ContainerContentCheckNotice check={containerContentCheck} language={i18n.language} />
                                 <div className="rounded-xl bg-white/60 p-3 dark:bg-slate-900/30">
                                     <dl className="grid gap-2 sm:grid-cols-[auto_1fr] sm:gap-x-4">
                                         <dt className="font-semibold text-slate-600 dark:text-slate-300">{t('waste_label_component_names')}</dt>
