@@ -34,7 +34,8 @@ import { useAppUiState, type AppTab } from './hooks/useAppUiState';
 import { useSearchFlow } from './hooks/useSearchFlow';
 import { useLabAdminAttentionCount } from './hooks/useLabAdminAttentionCount';
 import { useLabStore } from './store/useLabStore';
-import { isQrLabelsEnabled } from './config/featureFlags';
+import { isDailyInspectionEnabled, isDeviceRemindersEnabled, isQrLabelsEnabled } from './config/featureFlags';
+import { useReminderSync } from './features/reminders/useReminderSync';
 import { qrTargetRoute, type QrTarget } from './features/qrLabels/qrPayload';
 import { useQrSpaceSwitch } from './features/qrLabels/useQrSpaceSwitch';
 import { useOnboardingStore, type OnboardingMissionKey } from './store/useOnboardingStore';
@@ -138,6 +139,13 @@ function App() {
   const isAdmin = currentRole === 'admin';
   const labsLoaded = useLabStore((state) => state.labsLoaded);
   useQrSpaceSwitch(isQrLabelsEnabled);
+  useReminderSync({
+    enabled: isDeviceRemindersEnabled,
+    userId: user?.id ?? null,
+    labId: currentLabId,
+    language: i18n.language,
+    inspectionAvailable: isDailyInspectionEnabled,
+  });
   // Whether we know if the admin tab exists: personal space never has it; a lab needs its role.
   const isLabRoleResolved = !currentLabId || Boolean(currentRole) || labsLoaded;
   const { showToast: showAppToast, toastElement: appToastElement } = useActionToast();

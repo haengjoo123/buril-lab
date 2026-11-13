@@ -43,6 +43,8 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_DAILY_INSPECTION',
   'VITE_ENABLE_QR_LABELS',
   'VITE_ENABLE_SDS_ATTACHMENTS',
+  'VITE_ENABLE_DEVICE_REMINDERS',
+  'VITE_ENABLE_HAZARD_REGISTER_EXPORT',
 ] as const
 
 type AdminIdentity = {
@@ -574,6 +576,8 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_DAILY_INSPECTION': JSON.stringify(explicitClientEnv.VITE_ENABLE_DAILY_INSPECTION),
     'import.meta.env.VITE_ENABLE_QR_LABELS': JSON.stringify(explicitClientEnv.VITE_ENABLE_QR_LABELS),
     'import.meta.env.VITE_ENABLE_SDS_ATTACHMENTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_SDS_ATTACHMENTS),
+    'import.meta.env.VITE_ENABLE_DEVICE_REMINDERS': JSON.stringify(explicitClientEnv.VITE_ENABLE_DEVICE_REMINDERS),
+    'import.meta.env.VITE_ENABLE_HAZARD_REGISTER_EXPORT': JSON.stringify(explicitClientEnv.VITE_ENABLE_HAZARD_REGISTER_EXPORT),
   },
   resolve: {
     alias: {
