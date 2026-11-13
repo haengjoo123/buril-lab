@@ -50,6 +50,7 @@ function fakeLoaders(overrides: Partial<LabAdminSourceLoaders> = {}): LabAdminSo
     dangerWarnings: vi.fn(async () => ({ count: 0, latest: [] })),
     wasteContainers: vi.fn(async () => []),
     members: vi.fn(async () => []),
+    purchaseRequests: vi.fn(async () => []),
     ...overrides,
   };
 }

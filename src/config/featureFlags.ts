@@ -52,6 +52,8 @@ export const isSdsAttachmentsEnabled = isExplicitlyEnabled(import.meta.env.VITE_
 export const isDeviceRemindersEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_DEVICE_REMINDERS)
 /** Draft chemical list export for the lab's prior hazard analysis (사전유해인자위험분석). */
 export const isHazardRegisterExportEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_HAZARD_REGISTER_EXPORT)
+/** Low-stock forecast and purchase requests approved by the lab admin. Needs its migration. */
+export const isPurchaseRequestsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_PURCHASE_REQUESTS)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

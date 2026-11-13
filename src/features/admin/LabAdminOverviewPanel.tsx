@@ -17,6 +17,7 @@ import {
     MessageSquare,
     RefreshCw,
     Send,
+    ShoppingCart,
     Trash2,
     Users,
     XCircle,
@@ -45,6 +46,7 @@ import { labAppRoute } from '../../utils/appRoutes';
 import type { InventoryExpiryFilter } from '../inventory/inventoryExpiryFilter';
 import { wasteStreamLabel } from '../../utils/wasteLabels';
 import { containerCopy, containerErrorMessage } from '../wasteContainers/copy';
+import { PURCHASES_PARAM } from '../purchaseRequests/purchaseLink';
 import { getLinkScopeLabel, getRequestStatusLabel } from '../safety-center/safetyCenterUtils';
 import {
     EXPIRY_NAME_PREVIEW,
@@ -84,6 +86,7 @@ const SOURCE_LABEL_KEYS: Record<LabAdminSourceKey, string> = {
     dangerWarnings: 'admin_overview_source_danger',
     wasteContainers: 'admin_overview_source_waste',
     members: 'admin_overview_source_members',
+    purchaseRequests: 'admin_overview_source_purchases',
 };
 
 /** What a link scope lets a center see, in plain words (falls back to the short scope label). */
@@ -195,6 +198,11 @@ function describeTask(task: LabAdminTask, t: TFunction, language: string): TaskT
             return {
                 title: t('admin_overview_task_new_members', { count: task.count }),
                 meta: t('admin_overview_new_members_meta'),
+            };
+        case 'purchase_request':
+            return {
+                title: t('admin_overview_task_purchase', { count: task.count }),
+                meta: t('admin_overview_purchase_days', { days: task.oldestDays }),
             };
         case 'join_password':
             return {
@@ -402,6 +410,7 @@ export function LabAdminOverviewPanel({ onStartWasteBatch, onOpenNewMembers, ref
             dangerWarnings: readyValue(states, 'dangerWarnings'),
             wasteContainers: readyValue(states, 'wasteContainers'),
             members: readyValue(states, 'members'),
+            purchaseRequests: readyValue(states, 'purchaseRequests'),
             joinPasswordNeedsChange,
         }, checkedAt, snoozes);
     }, [checkedAt, joinPasswordNeedsChange, snoozes, states]);
@@ -692,6 +701,14 @@ export function LabAdminOverviewPanel({ onStartWasteBatch, onOpenNewMembers, ref
                     <button type="button" onClick={onOpenNewMembers} className={SECONDARY_BUTTON}>
                         <Users className="h-4 w-4" aria-hidden="true" />
                         {t('admin_overview_check_roles')}
+                    </button>
+                );
+                break;
+            case 'purchase_request':
+                primary = (
+                    <button type="button" onClick={() => navigate(`${labAppRoute('/inventory')}?${PURCHASES_PARAM}=1`)} className={SECONDARY_BUTTON}>
+                        <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                        {t('admin_overview_open_purchases')}
                     </button>
                 );
                 break;

@@ -12,7 +12,8 @@ import { inventoryService, type InventoryItem } from './inventoryService';
 import { labService } from './labService';
 import { fetchWasteContainerTotals, fetchWasteContainers } from './wasteContainerService';
 import { useLabStore } from '../store/useLabStore';
-import { isWasteContainersEnabled } from '../config/featureFlags';
+import { isPurchaseRequestsEnabled, isWasteContainersEnabled } from '../config/featureFlags';
+import { listPurchaseRequests } from './purchaseRequestService';
 import { canCommitLabRequest, type LabRequestToken } from '../utils/labRequestScope';
 import { hasManufacturerDate } from '../utils/manufacturerDate';
 import { summarizeContainer, withDatabaseTotals } from '../features/wasteContainers/containerSummary';
@@ -22,6 +23,7 @@ import type {
   LabAdminDangerSummary,
   LabAdminDangerWarning,
   LabAdminMemberInput,
+  LabAdminPurchaseInput,
 } from '../features/admin/labAdminTasks';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -37,6 +39,7 @@ export const LAB_ADMIN_SOURCE_KEYS = [
   'dangerWarnings',
   'wasteContainers',
   'members',
+  'purchaseRequests',
 ] as const;
 
 export type LabAdminSourceKey = (typeof LAB_ADMIN_SOURCE_KEYS)[number];
@@ -56,6 +59,7 @@ export interface LabAdminSourceValues {
   dangerWarnings: LabAdminDangerSummary;
   wasteContainers: LabAdminContainerInput[];
   members: LabAdminMemberInput[];
+  purchaseRequests: LabAdminPurchaseInput[];
 }
 
 export type LabAdminSourceResult<K extends LabAdminSourceKey = LabAdminSourceKey> =
@@ -66,10 +70,12 @@ export type LabAdminOverviewResults = { [K in LabAdminSourceKey]?: LabAdminSourc
 
 export type LabAdminSourceLoaders = { [K in LabAdminSourceKey]: (labId: string) => Promise<LabAdminSourceValues[K]> };
 
-/** The sources this build loads: waste containers only behind their feature flag. */
-export function getLabAdminSourceKeys(options: { wasteContainers?: boolean } = {}): LabAdminSourceKey[] {
+/** The sources this build loads: waste containers and purchase requests only behind their feature flags. */
+export function getLabAdminSourceKeys(options: { wasteContainers?: boolean; purchaseRequests?: boolean } = {}): LabAdminSourceKey[] {
   const includeContainers = options.wasteContainers ?? isWasteContainersEnabled;
-  return LAB_ADMIN_SOURCE_KEYS.filter((key) => key !== 'wasteContainers' || includeContainers);
+  const includePurchases = options.purchaseRequests ?? isPurchaseRequestsEnabled;
+  return LAB_ADMIN_SOURCE_KEYS.filter((key) => (key !== 'wasteContainers' || includeContainers)
+    && (key !== 'purchaseRequests' || includePurchases));
 }
 
 class LabChangedError extends Error {
@@ -174,6 +180,13 @@ export const labAdminSourceLoaders: LabAdminSourceLoaders = {
     // Only what the cards need: no emails or nicknames are kept on the overview.
     return members.map(({ user_id, role, joined_at }) => ({ user_id, role, joined_at }));
   },
+  purchaseRequests: async (labId) => {
+    // Only undecided requests matter here; closed ones are not fetched.
+    const requests = await listPurchaseRequests(labId, 0);
+    return requests
+      .filter((request) => request.status === 'requested')
+      .map(({ id, createdAt }) => ({ id, createdAt }));
+  },
 };
 
 async function settle<K extends LabAdminSourceKey>(
@@ -211,6 +224,7 @@ export function createLabAdminOverviewLoader(options: LabAdminOverviewLoaderOpti
     dangerWarnings: 0,
     wasteContainers: 0,
     members: 0,
+    purchaseRequests: 0,
   };
 
   return {

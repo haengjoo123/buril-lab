@@ -21,6 +21,7 @@ import {
 	MoreHorizontal,
 	QrCode,
 	ScanLine,
+	ShoppingCart,
 	FileSpreadsheet
 } from 'lucide-react';
 import {
@@ -46,7 +47,10 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
-import { isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isQrLabelsEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { PurchaseRequestsDialog } from '../purchaseRequests/PurchaseRequestsDialog';
+import { purchaseCopy } from '../purchaseRequests/copy';
+import { PURCHASES_PARAM } from '../purchaseRequests/purchaseLink';
 import { buildRegisterRows, downloadHazardRegister } from '../hazardRegister/hazardRegister';
 import { hazardRegisterCopy } from '../hazardRegister/copy';
 import { InventorySdsSection } from '../inventorySds/InventorySdsSection';
@@ -256,7 +260,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const { t, i18n } = useTranslation();
     const showOnboardingGuide = useOnboardingStore((state) => state.hasCompletedWelcome && !state.hasSkippedOnboarding && !state.seenGuides.inventory);
     const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
-    const { currentLabId } = useLabStore();
+    const { currentLabId, myLabs } = useLabStore();
+    const currentMembership = currentLabId ? myLabs.find((membership) => membership.lab_id === currentLabId) ?? null : null;
     const layout = useAdaptiveLayout();
     const isMobileInventory = layout.activeRegion.width < 600 && !layout.twoPane;
     const listLayout = useAdaptiveLayout();
@@ -304,6 +309,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
     const [labelPrintItems, setLabelPrintItems] = useState<LabelSheetItem[] | null>(null);
     const [isStocktakeOpen, setIsStocktakeOpen] = useState(false);
+    const [isPurchasesDialogOpen, setIsPurchasesDialogOpen] = useState(false);
     const [qrNotice, setQrNotice] = useState<string | null>(null);
     const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -945,6 +951,18 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
     }, []);
 
     const qrText = qrCopy(i18n.language);
+    const purchaseText = purchaseCopy(i18n.language);
+    // The admin inbox links here with ?purchases=1; the dialog stays open until closed.
+    const isPurchasesOpen = isPurchaseRequestsEnabled && (isPurchasesDialogOpen || searchParams.get(PURCHASES_PARAM) === '1');
+    const closePurchases = useCallback(() => {
+        setIsPurchasesDialogOpen(false);
+        if (!searchParams.has(PURCHASES_PARAM)) return;
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete(PURCHASES_PARAM);
+            return next;
+        }, { replace: true });
+    }, [searchParams, setSearchParams]);
     const qrItemId = isQrLabelsEnabled ? searchParams.get(ITEM_PARAM) : null;
     const qrSpacePending = isQrLabelsEnabled && searchParams.has(SPACE_PARAM);
     useEffect(() => {
@@ -2488,6 +2506,17 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                                 <span className="hidden table:inline whitespace-nowrap">{hazardRegisterCopy(i18n.language).button}</span>
                             </button>
                         )}
+                        {isPurchaseRequestsEnabled && (
+                            <button
+                                onClick={() => setIsPurchasesDialogOpen(true)}
+                                title={purchaseText.buttonTitle}
+                                aria-label={purchaseText.buttonTitle}
+                                className="hidden h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:px-3 table:inline-flex"
+                            >
+                                <ShoppingCart className="w-4 h-4 table:w-3.5 table:h-3.5" />
+                                <span className="hidden table:inline whitespace-nowrap">{purchaseText.button}</span>
+                            </button>
+                        )}
                         {isQrLabelsEnabled && (
                             <button
                                 onClick={() => setIsStocktakeOpen(true)}
@@ -2523,7 +2552,8 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     {isMobileInventory && <InventoryMobileTools canExport={visibleItems.length > 0} canSelect={items.length > 0}
                         isSelectMode={isSelectMode} onExport={handleExportExcel} onImport={() => setIsCsvImportOpen(true)} onSelect={toggleSelectMode}
                         stocktake={isQrLabelsEnabled && items.length > 0 ? { label: qrText.stocktake, run: () => setIsStocktakeOpen(true) } : undefined}
-                        hazardRegister={isHazardRegisterExportEnabled && items.length > 0 ? { label: hazardRegisterCopy(i18n.language).button, run: () => void handleExportHazardRegister() } : undefined} />}
+                        hazardRegister={isHazardRegisterExportEnabled && items.length > 0 ? { label: hazardRegisterCopy(i18n.language).button, run: () => void handleExportHazardRegister() } : undefined}
+                        purchases={isPurchaseRequestsEnabled ? { label: purchaseText.button, run: () => setIsPurchasesDialogOpen(true) } : undefined} />}
                 </div>
 
                 {showOnboardingGuide && (
@@ -3509,6 +3539,16 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                     labId={currentLabId}
                     language={i18n.language}
                     onClose={() => setLabelPrintItems(null)}
+                />
+            )}
+            {isPurchasesOpen && (
+                <PurchaseRequestsDialog
+                    items={items}
+                    labId={currentLabId}
+                    userId={currentMembership?.user_id ?? null}
+                    isAdmin={currentMembership?.role === 'admin'}
+                    language={i18n.language}
+                    onClose={closePurchases}
                 />
             )}
             {isStocktakeOpen && (
