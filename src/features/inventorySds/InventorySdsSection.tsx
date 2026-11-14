@@ -147,9 +147,12 @@ export const InventorySdsSection: React.FC<InventorySdsSectionProps> = ({ labId,
     };
 
     return (
-        <section className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <section className="rounded-lg border border-slate-200 p-3 text-left dark:border-slate-800">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{copy.title}</h4>
+                <h4 className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-slate-100">
+                    <FileText className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    {copy.title}
+                </h4>
                 {hasKey && (
                     <>
                         <input

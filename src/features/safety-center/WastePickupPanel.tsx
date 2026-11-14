@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, MapPin, Truck } from 'lucide-react';
+import { Loader2, MapPin } from 'lucide-react';
 import { safetyCenterService } from '../../services/safetyCenterService';
 import { wasteStreamLabel } from '../../utils/wasteLabels';
 import { containerCopy, containerStatusLabel } from '../wasteContainers/copy';
@@ -40,9 +40,8 @@ export const WastePickupPanel: React.FC<WastePickupPanelProps> = ({ centerId, la
     const state: PanelState = loaded?.centerId === centerId ? loaded.state : { status: 'loading' };
 
     return (
-        <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
-                <Truck className="h-4 w-4" aria-hidden="true" />
+        <section className="mb-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="flex items-center gap-2 text-base font-medium text-slate-950 dark:text-white">
                 {copy.centerPickupTitle}
                 {state.status === 'ready' && state.pickups.length > 0 && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
@@ -50,7 +49,7 @@ export const WastePickupPanel: React.FC<WastePickupPanelProps> = ({ centerId, la
                     </span>
                 )}
             </h3>
-            <p className="mt-1 break-keep text-xs text-slate-500 dark:text-slate-400">{copy.centerPickupHelp}</p>
+            <p className="mt-1 break-keep text-sm text-slate-500 dark:text-slate-400">{copy.centerPickupHelp}</p>
 
             {state.status === 'loading' && (
                 <p className="mt-3 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400" role="status">
