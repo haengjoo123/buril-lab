@@ -54,6 +54,11 @@ export const isDeviceRemindersEnabled = isExplicitlyEnabled(import.meta.env.VITE
 export const isHazardRegisterExportEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_HAZARD_REGISTER_EXPORT)
 /** Low-stock forecast and purchase requests approved by the lab admin. Needs its migration. */
 export const isPurchaseRequestsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_PURCHASE_REQUESTS)
+/**
+ * AI-drafted handling and storage notes (reagent_reference_drafts) on the reagent detail
+ * screen, always labelled as an unreviewed draft. Off unless a reviewed deployment enables it.
+ */
+export const isAiHandlingDraftsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_AI_HANDLING_DRAFTS)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

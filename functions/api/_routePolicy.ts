@@ -45,6 +45,7 @@ const GET_ROUTES = [
   '/api/chemicals/regulations',
   '/api/chemicals/suggest',
   '/api/kosha/msds',
+  '/api/reagents/handling-draft',
 ] as const
 
 const exactPolicies = new Map<string, ApiRoutePolicy>([
