@@ -44,6 +44,7 @@ interface ApprovedAliasRow {
   normalized_alias: string
   canonical_name: string
   cas_number: string | null
+  source_review_id: string | null
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -130,14 +131,19 @@ async function resolveApprovedAliases(
   if (!adminClient) return items
   const { data, error } = await adminClient
     .from('global_reagent_aliases')
-    .select('normalized_alias, canonical_name, cas_number')
+    .select('normalized_alias, canonical_name, cas_number, source_review_id')
     .eq('is_active', true)
     .in('normalized_alias', names)
   if (error) {
     console.warn('[chemicals/enrich] Approved alias resolution failed:', error.message)
     return items
   }
-  const aliases = new Map((data || []).map((row: ApprovedAliasRow) => [row.normalized_alias, row]))
+  // Only aliases a person approved through a review candidate may rewrite identity.
+  // AI-promoted aliases (source_review_id is null) stay name suggestions in /suggest;
+  // their AI-drafted CAS must never become identity or routing evidence.
+  const aliases = new Map((data || [])
+    .filter((row: ApprovedAliasRow) => Boolean(row.source_review_id))
+    .map((row: ApprovedAliasRow) => [row.normalized_alias, row]))
   return items.map((item) => {
     if (!item.name || item.casNumber || item.pubchemCid || item.standardInchiKey) return item
     const normalized = item.name.normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ')

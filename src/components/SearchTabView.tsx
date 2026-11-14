@@ -18,6 +18,7 @@ import { fetchWasteLogs, type WasteLogRecord } from '../services/wasteLogService
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
 import { wasteStreamLabel } from '../utils/wasteLabels';
 import type { SearchErrorKind } from '../hooks/useSearchFlow';
+import type { ChemicalFormChoice } from '../services/chemicalSuggestionService';
 import type { ScannerSelectionMeta } from './Scanner';
 
 type WasteLogChemicalEntry = Partial<CartItem> & {
@@ -126,6 +127,9 @@ interface SearchTabViewProps {
   onToggleShowAllProducts: () => void;
   onNavigateToCabinet: (cabinetId: string, itemId: string) => void;
   suggestions?: string[];
+  /** Forms to choose from when the typed name fits several reagents. */
+  formChoices?: ChemicalFormChoice[];
+  formChoicesQuery?: string;
   isSuggestionsLoading?: boolean;
   onClearSuggestions?: () => void;
   onRequireAuth?: () => void;
@@ -179,6 +183,8 @@ export function SearchTabView({
   onToggleShowAllProducts,
   onNavigateToCabinet,
   suggestions = [],
+  formChoices = [],
+  formChoicesQuery = '',
   isSuggestionsLoading = false,
   onClearSuggestions,
   onRequireAuth,
@@ -219,10 +225,12 @@ export function SearchTabView({
   const desktopSearchState = hasSearchResults || isLoading ? 'results' : 'start';
   const showChemicalNotFoundNotice = !isLoading && !result && hasOtherResults && !!lastSearchQuery;
   const normalizedQuery = query.trim();
+  // Choices fetched for an earlier keystroke must not gate the current query.
+  const activeFormChoices = formChoicesQuery && formChoicesQuery === normalizedQuery ? formChoices : [];
   const shouldShowAutocomplete =
     normalizedQuery.length >= 2 &&
     normalizedQuery !== lastSearchQuery &&
-    (suggestions.length > 0 || isSuggestionsLoading);
+    (suggestions.length > 0 || activeFormChoices.length > 0 || isSuggestionsLoading);
   const shouldShowRecentDropdown = isSearchFocused && !normalizedQuery && recentSearches.length > 0;
   const isSearchDropdownOpen = shouldShowAutocomplete || shouldShowRecentDropdown;
   const isNotFound = Boolean(error) && errorKind === 'not_found';
@@ -302,11 +310,16 @@ export function SearchTabView({
   }, [setSearchFocus]);
 
   const handleFormSubmit = useCallback((event?: FormEvent) => {
+    // A name that fits several reagents is never searched as-is: the person picks the form first.
+    if (activeFormChoices.length > 0) {
+      event?.preventDefault();
+      return;
+    }
     searchInputRef.current?.blur();
     setSearchFocus(false);
     setClosedResultQuery(null);
     onSearchSubmit(event);
-  }, [onSearchSubmit, setSearchFocus]);
+  }, [activeFormChoices.length, onSearchSubmit, setSearchFocus]);
 
   const handleSuggestionSelect = useCallback((term: string) => {
     searchInputRef.current?.blur();
@@ -750,7 +763,27 @@ export function SearchTabView({
             className={`search-suggestions absolute top-full left-0 right-0 mt-3 flex flex-col bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isSearchFocused ? '' : 'max-h-60'}`}
             style={isSearchFocused ? { maxHeight: `${autocompleteMaxHeight}px` } : undefined}
           >
-            {isSuggestionsLoading && suggestions.length === 0 ? (
+            {activeFormChoices.length > 0 && (
+              <section aria-labelledby="search-form-choice-title" className="shrink-0 border-b border-gray-100 px-4 py-3 dark:border-slate-700/50">
+                <h3 id="search-form-choice-title" className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('search_form_choice_title')}</h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('search_form_choice_hint')}</p>
+                <ul className="mt-2 flex flex-col gap-1">
+                  {activeFormChoices.map((choice) => (
+                    <li key={choice.name}>
+                      <button
+                        type="button"
+                        className="flex w-full min-w-0 flex-col items-start rounded-lg border border-slate-200 px-3 py-2 text-left transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:hover:border-blue-700 dark:hover:bg-slate-700/50"
+                        onClick={() => handleSuggestionSelect(choice.name)}
+                      >
+                        <span className="max-w-full truncate text-sm font-medium text-slate-800 dark:text-slate-100">{choice.name}</span>
+                        {choice.nameEn && <span className="max-w-full truncate text-xs text-slate-500 dark:text-slate-400">{choice.nameEn}</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {activeFormChoices.length > 0 && suggestions.length === 0 ? null : isSuggestionsLoading && suggestions.length === 0 ? (
               <div className="p-4 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 {t('search_loading_suggestions')}

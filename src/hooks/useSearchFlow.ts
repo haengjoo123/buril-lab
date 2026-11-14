@@ -4,7 +4,7 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { TFunction } from 'i18next';
 import { searchChemical } from '../services/searchService';
 import { getSearchErrorMessageKey } from '../utils/searchErrorMessage';
-import { fetchChemicalSuggestions } from '../services/chemicalSuggestionService';
+import { fetchChemicalSuggestionResult, type ChemicalFormChoice } from '../services/chemicalSuggestionService';
 import { cabinetService, type CabinetSearchResult } from '../services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from '../services/mediaProductService';
 import { analyzeChemical } from '../utils/chemicalAnalyzer';
@@ -55,6 +55,10 @@ interface UseSearchFlowResult {
   handleReset: () => void;
   navigateWithFreshFilters: (rawQuery: string, channel?: SearchAnalyticsChannel) => void;
   suggestions: string[];
+  /** Forms to pick from when the typed name fits several reagents. */
+  formChoices: ChemicalFormChoice[];
+  /** The trimmed query the form choices belong to. */
+  formChoicesQuery: string;
   isSuggestionsLoading: boolean;
   clearSuggestions: () => void;
   currentSearchEventId: string | null;
@@ -86,6 +90,8 @@ export function useSearchFlow({
 
   // Autocomplete states
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [formChoices, setFormChoices] = useState<ChemicalFormChoice[]>([]);
+  const [formChoicesQuery, setFormChoicesQuery] = useState('');
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const searchSequenceRef = useRef(0);
   const referencePhRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -332,6 +338,7 @@ export function useSearchFlow({
     // Don't search if query is too short, or if it matches the last executed search (meaning the user already searched it)
     if (trimmedQuery.length < 2 || (isLastSearch && !isNotFoundQuery)) {
       setSuggestions([]);
+      setFormChoices([]);
       setIsSuggestionsLoading(false);
       return;
     }
@@ -342,13 +349,16 @@ export function useSearchFlow({
     const timer = setTimeout(async () => {
       setIsSuggestionsLoading(true);
       try {
-        const newSuggestions = await fetchChemicalSuggestions(trimmedQuery, 5, controller.signal);
+        const next = await fetchChemicalSuggestionResult(trimmedQuery, 5, controller.signal);
         if (isActive) {
-          setSuggestions(newSuggestions);
+          setSuggestions(next.suggestions);
+          setFormChoices(next.formChoices);
+          setFormChoicesQuery(trimmedQuery);
         }
       } catch {
         if (isActive) {
           setSuggestions([]);
+          setFormChoices([]);
         }
       } finally {
         if (isActive) {
@@ -366,6 +376,7 @@ export function useSearchFlow({
 
   const clearSuggestions = useCallback(() => {
     setSuggestions([]);
+    setFormChoices([]);
   }, []);
 
   const handleBrandChange = useCallback((brand: string) => {
@@ -461,6 +472,8 @@ export function useSearchFlow({
     handleReset,
     navigateWithFreshFilters,
     suggestions,
+    formChoices,
+    formChoicesQuery,
     isSuggestionsLoading,
     clearSuggestions,
     currentSearchEventId,
