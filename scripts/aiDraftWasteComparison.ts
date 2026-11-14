@@ -10,6 +10,11 @@
  *     There is no standard scenario for these, so the matrix comes only from the engine's
  *     own component inference; when it cannot infer one the draft is held (matrix needed).
  * AI values are used only on the comparison side. The engine code is imported, never changed.
+ *
+ * Conditional comparison (reported separately, never counted as a ready decision): for a
+ * matrix-required draft the engine is run once per candidate matrix, as if a user had picked
+ * it, on the same verified evidence. Every candidate is run regardless of the AI draft; the
+ * AI matrix only selects which of those results to read for the "at the AI matrix" figures.
  */
 import type { ChemicalEnrichmentResult, WasteBatchDraft, WasteMatrix, WasteStreamCode } from '../src/types';
 import {
@@ -84,6 +89,23 @@ const amountFor = (matrix: WasteMatrix) => {
 };
 
 /**
+ * Matrices a user can pick for a single reagent. mixed_biphasic needs a second phase, which a
+ * single-reagent draft does not have, so it is not a candidate.
+ */
+export const CONDITIONAL_MATRICES = Object.freeze([
+    'aqueous', 'organic_non_halogenated', 'organic_halogenated', 'solid_slurry',
+] as const satisfies readonly WasteMatrix[]);
+export type ConditionalMatrix = typeof CONDITIONAL_MATRICES[number];
+
+export interface ConditionalResult {
+    matrix: ConditionalMatrix;
+    status: 'ready' | 'needs_input' | 'blocked';
+    stream?: WasteStreamCode;
+    reasons: string[];
+    missingFields: string[];
+}
+
+/**
  * Build the engine batch from a cached enrichment result the way the app does: the same
  * Chemical projection and component builder, with no AI value and no assumed scenario.
  * Returns the batch with matrix `unknown` when the engine cannot infer one.
@@ -105,6 +127,42 @@ export function batchForEnrichmentResult(id: string, cas: string, result: Chemic
         ...(matrix ? { totalAmount: amountFor(matrix) } : {}),
     };
 }
+
+/** Run the engine once per candidate matrix, each as a user-selected matrix on the same batch. */
+export function conditionalResults(batch: WasteBatchDraft): ConditionalResult[] {
+    return CONDITIONAL_MATRICES.map((matrix) => {
+        const decision = analyzeWasteBatch({ ...batch, matrix, matrixSource: 'user', totalAmount: amountFor(matrix) });
+        return {
+            matrix,
+            status: decision.decisionStatus,
+            ...(decision.decisionStatus === 'ready' ? { stream: decision.streamCode } : {}),
+            reasons: decision.blockingReasons.map((reason) => reason.code),
+            missingFields: decision.missingFields.map((field) => String(field)),
+        };
+    });
+}
+
+/** How the AI draft relates to the conditional engine results. */
+export type ConditionalVerdict =
+    | 'match_at_ai_matrix'       // ready at the AI matrix and the stream fits the AI category
+    | 'mismatch_at_ai_matrix'    // ready at the AI matrix, stream does not fit
+    | 'held_at_ai_matrix'        // the engine holds the reagent even at the AI matrix
+    | 'no_ai_matrix';            // AI matrix unknown, mixed_biphasic or missing; or category unmapped
+
+export function conditionalVerdict(draft: AiWasteDraft, results: readonly ConditionalResult[], aiExpectedStreams: readonly WasteStreamCode[]): ConditionalVerdict {
+    const atAi = results.find((result) => result.matrix === draft.wasteMatrix);
+    if (!atAi || aiExpectedStreams.length === 0) return 'no_ai_matrix';
+    if (atAi.status !== 'ready' || !atAi.stream) return 'held_at_ai_matrix';
+    return aiExpectedStreams.includes(atAi.stream) ? 'match_at_ai_matrix' : 'mismatch_at_ai_matrix';
+}
+
+/** The stream when every candidate matrix is ready with the same stream (the matrix does not matter). */
+export function matrixIndependentStream(results: readonly ConditionalResult[]): WasteStreamCode | undefined {
+    const [first] = results;
+    if (!first?.stream || results.some((result) => result.status !== 'ready' || result.stream !== first.stream)) return undefined;
+    return first.stream;
+}
+
 export type MismatchKind = 'matrix' | 'stream' | 'unmapped_category';
 
 export interface ComparisonRow {
@@ -125,6 +183,26 @@ export interface ComparisonRow {
     engineMissingFields?: string[];
     aiExpectedStreams: readonly WasteStreamCode[];
     mismatches: MismatchKind[];
+    /** Matrix-required drafts only: engine results per candidate matrix. Not a decision. */
+    conditional?: ConditionalResult[];
+    conditionalVerdict?: ConditionalVerdict;
+}
+
+export interface ConditionalSummary {
+    /** Matrix-required drafts run once per candidate matrix. */
+    evaluated: number;
+    byVerdict: Record<ConditionalVerdict, number>;
+    /** Every candidate matrix ready with the same stream. */
+    matrixIndependent: number;
+    matrixIndependentMatches: number;
+    matrixIndependentMismatches: number;
+    /** Some candidate matrix gives a stream that fits the AI category. */
+    aiCategoryReachable: number;
+    /** No candidate matrix gives a stream that fits the AI category (category mapped). */
+    aiCategoryUnreachable: number;
+    /** Engine stream at the AI matrix → AI category, for mismatch_at_ai_matrix. */
+    mismatchPairs: Record<string, number>;
+    heldAtAiMatrixReasons: Record<string, number>;
 }
 
 export interface ComparisonSummary {
@@ -147,6 +225,8 @@ export interface ComparisonSummary {
     mismatchByKind: Record<MismatchKind, number>;
     heldReasons: Record<string, number>;
     heldMissingFields: Record<string, number>;
+    /** Conditional per-matrix results; separate from the ready figures above. */
+    conditional: ConditionalSummary;
     categoryMapping: Readonly<Record<string, readonly WasteStreamCode[]>>;
 }
 
@@ -176,6 +256,7 @@ function compareWithEnrichment(
         aiExpectedStreams,
     };
     if (batch.matrix === 'unknown') {
+        const conditional = conditionalResults(batch);
         return {
             ...evidence,
             bucket: 'held',
@@ -183,6 +264,8 @@ function compareWithEnrichment(
             engineReasons: [MATRIX_REQUIRED],
             engineMissingFields: ['matrix'],
             mismatches: [],
+            conditional,
+            conditionalVerdict: conditionalVerdict(draft, conditional, aiExpectedStreams),
         };
     }
     const decision = analyzeWasteBatch(batch);
@@ -238,6 +321,48 @@ export function compareDraft(
 
 const increment = (counts: Record<string, number>, key: string) => { counts[key] = (counts[key] ?? 0) + 1; };
 
+function summarizeConditional(rows: readonly ComparisonRow[]): ConditionalSummary {
+    const summary: ConditionalSummary = {
+        evaluated: 0,
+        byVerdict: { match_at_ai_matrix: 0, mismatch_at_ai_matrix: 0, held_at_ai_matrix: 0, no_ai_matrix: 0 },
+        matrixIndependent: 0,
+        matrixIndependentMatches: 0,
+        matrixIndependentMismatches: 0,
+        aiCategoryReachable: 0,
+        aiCategoryUnreachable: 0,
+        mismatchPairs: {},
+        heldAtAiMatrixReasons: {},
+    };
+    for (const row of rows) {
+        if (!row.conditional || !row.conditionalVerdict) continue;
+        summary.evaluated += 1;
+        summary.byVerdict[row.conditionalVerdict] += 1;
+        const expected = row.aiExpectedStreams;
+        const independent = matrixIndependentStream(row.conditional);
+        if (independent) {
+            summary.matrixIndependent += 1;
+            if (expected.length > 0) {
+                if (expected.includes(independent)) summary.matrixIndependentMatches += 1;
+                else summary.matrixIndependentMismatches += 1;
+            }
+        }
+        if (expected.length > 0) {
+            if (row.conditional.some((result) => result.stream && expected.includes(result.stream))) summary.aiCategoryReachable += 1;
+            else summary.aiCategoryUnreachable += 1;
+        }
+        const atAi = row.conditional.find((result) => result.matrix === row.draft.wasteMatrix);
+        if (row.conditionalVerdict === 'mismatch_at_ai_matrix' && atAi?.stream) {
+            increment(summary.mismatchPairs, `${atAi.stream} → ${row.draft.labWasteCategory}`);
+        }
+        if (row.conditionalVerdict === 'held_at_ai_matrix' && atAi) {
+            for (const key of new Set([...atAi.reasons, ...atAi.missingFields.map((field) => `missing:${field}`)])) {
+                increment(summary.heldAtAiMatrixReasons, key);
+            }
+        }
+    }
+    return summary;
+}
+
 export function runAiDraftWasteComparison(
     drafts: readonly AiWasteDraft[],
     goldenRows: readonly WasteGoldenSetV2Row[],
@@ -266,6 +391,7 @@ export function runAiDraftWasteComparison(
         mismatchByKind: { matrix: 0, stream: 0, unmapped_category: 0 },
         heldReasons: {},
         heldMissingFields: {},
+        conditional: summarizeConditional(rows),
         categoryMapping: AI_CATEGORY_STREAMS,
     };
     for (const row of rows) {
@@ -309,6 +435,36 @@ export function heldCsv(rows: readonly ComparisonRow[]): string {
             row.draft.nameKo, row.draft.casNumber, row.engineStatus, row.engineReasons, row.engineMissingFields,
             row.engineMatrix, row.engineStream, row.draft.wasteMatrix, row.draft.labWasteCategory, row.draft.reasoning,
             row.evidenceSource, row.goldenId, row.pubchemCid,
+        ]),
+    );
+}
+
+const CONDITIONAL_VERDICT_LABELS: Record<ConditionalVerdict, string> = {
+    match_at_ai_matrix: 'AI 매트릭스에서 일치',
+    mismatch_at_ai_matrix: 'AI 매트릭스에서 불일치',
+    held_at_ai_matrix: 'AI 매트릭스에서도 보류',
+    no_ai_matrix: 'AI 매트릭스·분류로 비교 불가',
+};
+
+const conditionalCell = (result: ConditionalResult | undefined) => {
+    if (!result) return '';
+    if (result.status === 'ready') return result.stream;
+    const why = [...result.reasons, ...result.missingFields.map((field) => `입력 필요:${field}`)];
+    return `${result.status}${why.length ? ` (${why.join(' ')})` : ''}`;
+};
+
+/** Conditional per-matrix engine results: "if the matrix were X, the engine would say Y". Not a decision. */
+export function conditionalCsv(rows: readonly ComparisonRow[]): string {
+    return toCsv(
+        ['시약명', '영문명', 'CAS', '조건부 판정', 'AI 매트릭스', 'AI 분류', 'AI 분류에 맞는 stream',
+            ...CONDITIONAL_MATRICES.map((matrix) => `엔진(${matrix} 가정)`), '매트릭스 무관 stream',
+            'AI reasoning', 'AI hazard_flags', 'PubChem CID', 'GHS 상태', 'AI 검수 판정'],
+        rows.filter((row) => row.conditional && row.conditionalVerdict).map((row) => [
+            row.draft.nameKo, row.draft.nameEn, row.draft.casNumber, CONDITIONAL_VERDICT_LABELS[row.conditionalVerdict!],
+            row.draft.wasteMatrix, row.draft.labWasteCategory, row.aiExpectedStreams,
+            ...CONDITIONAL_MATRICES.map((matrix) => conditionalCell(row.conditional!.find((result) => result.matrix === matrix))),
+            matrixIndependentStream(row.conditional!), row.draft.reasoning, row.draft.hazardFlags,
+            row.pubchemCid, row.hazardStatus, row.draft.verifyOverall,
         ]),
     );
 }

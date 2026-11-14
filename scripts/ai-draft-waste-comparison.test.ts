@@ -10,7 +10,12 @@ import type { WasteGoldenSetV2Row } from '../src/features/wasteGoldenSet/schema'
 import type { ChemicalEnrichmentResult } from '../src/types';
 import {
     AI_CATEGORY_STREAMS,
+    CONDITIONAL_MATRICES,
     MATRIX_REQUIRED,
+    conditionalCsv,
+    conditionalVerdict,
+    matrixIndependentStream,
+    type ConditionalResult,
     heldCsv,
     mismatchCsv,
     noEvidenceCsv,
@@ -164,6 +169,55 @@ describe('AI draft vs waste engine comparison', () => {
         expect(heldCsv(rows)).toContain(MATRIX_REQUIRED);
     });
 
+    it('runs a matrix-required reagent once per candidate matrix, separately from the ready figures', () => {
+        const nacl = enrichment(SODIUM_CHLORIDE, { name: 'sodium chloride', formula: 'ClNa', hazardStatus: 'not_classified', hCodes: [] });
+        const { rows, summary } = runAiDraftWasteComparison(
+            [draft({ casNumber: SODIUM_CHLORIDE, wasteMatrix: 'solid_slurry', labWasteCategory: '고상 시약 폐기물' })],
+            [],
+            cacheOf(nacl),
+        );
+        const [row] = rows;
+        expect(row.conditional?.map((result) => result.matrix)).toEqual([...CONDITIONAL_MATRICES]);
+        expect(row.conditionalVerdict).toBeDefined();
+        // The conditional results never become a ready decision.
+        expect(row).toMatchObject({ bucket: 'held', mismatches: [] });
+        expect(row.engineStatus).toBeUndefined();
+        expect(summary).toMatchObject({ engineReady: 0, readyMatches: 0, readyMismatches: 0 });
+        expect(summary.conditional.evaluated).toBe(1);
+        expect(summary.conditional.byVerdict[row.conditionalVerdict!]).toBe(1);
+        const csv = conditionalCsv(rows);
+        expect(csv.split('\r\n').filter(Boolean)).toHaveLength(2);
+        expect(csv).toContain('엔진(solid_slurry 가정)');
+    });
+
+    it('runs every candidate matrix whatever the AI draft says', () => {
+        const cache = cacheOf(enrichment(SODIUM_CHLORIDE, { name: 'sodium chloride', formula: 'ClNa', hazardStatus: 'not_classified', hCodes: [] }));
+        const plain = runAiDraftWasteComparison([draft({ casNumber: SODIUM_CHLORIDE })], [], cache).rows[0];
+        const loaded = runAiDraftWasteComparison([draft({
+            casNumber: SODIUM_CHLORIDE, wasteMatrix: 'organic_halogenated', labWasteCategory: '시안 함유 폐액', hazardFlags: ['cyanide', 'oxidizer'],
+        })], [], cache).rows[0];
+        expect(loaded.conditional).toEqual(plain.conditional);
+        expect(plain.conditionalVerdict).toBe('no_ai_matrix');
+    });
+
+    it('reads the AI matrix only to pick which conditional result to compare', () => {
+        const results: ConditionalResult[] = [
+            { matrix: 'aqueous', status: 'ready', stream: 'AQUEOUS_OTHER', reasons: [], missingFields: [] },
+            { matrix: 'organic_non_halogenated', status: 'ready', stream: 'ORGANIC_NON_HALOGENATED', reasons: [], missingFields: [] },
+            { matrix: 'organic_halogenated', status: 'blocked', reasons: ['x'], missingFields: [] },
+            { matrix: 'solid_slurry', status: 'ready', stream: 'SOLID_CONTAMINATED', reasons: [], missingFields: [] },
+        ];
+        const solid = AI_CATEGORY_STREAMS['고상 시약 폐기물'];
+        expect(conditionalVerdict(draft({ wasteMatrix: 'solid_slurry' }), results, solid)).toBe('match_at_ai_matrix');
+        expect(conditionalVerdict(draft({ wasteMatrix: 'aqueous' }), results, solid)).toBe('mismatch_at_ai_matrix');
+        expect(conditionalVerdict(draft({ wasteMatrix: 'organic_halogenated' }), results, solid)).toBe('held_at_ai_matrix');
+        expect(conditionalVerdict(draft({ wasteMatrix: 'unknown' }), results, solid)).toBe('no_ai_matrix');
+        expect(conditionalVerdict(draft({ wasteMatrix: 'solid_slurry' }), results, [])).toBe('no_ai_matrix');
+        expect(matrixIndependentStream(results)).toBeUndefined();
+        const allSame = results.map((result) => ({ ...result, status: 'ready' as const, stream: 'REACTIVE_OXIDIZER' as const }));
+        expect(matrixIndependentStream(allSame)).toBe('REACTIVE_OXIDIZER');
+    });
+
     it('does not use cache entries without a verified identity, a definite GHS answer or a matching CAS', () => {
         const drafts = ['1-1-1', '2-2-2', '3-3-3', '4-4-4'].map((casNumber) => draft({ casNumber }));
         const { rows, summary } = runAiDraftWasteComparison(drafts, [], cacheOf(
@@ -209,6 +263,7 @@ reportDescribe('AI draft waste comparison report', () => {
         writeFileSync(path.join(outputDirectory!, 'mismatches.csv'), mismatchCsv(rows));
         writeFileSync(path.join(outputDirectory!, 'held.csv'), heldCsv(rows));
         writeFileSync(path.join(outputDirectory!, 'no-verified-evidence.csv'), noEvidenceCsv(rows));
+        writeFileSync(path.join(outputDirectory!, 'conditional-by-matrix.csv'), conditionalCsv(rows));
         writeFileSync(path.join(outputDirectory!, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
         console.log(JSON.stringify(summary, null, 2));
         expect(summary.totalDrafts).toBe(drafts.length);
