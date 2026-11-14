@@ -32,6 +32,7 @@ export const EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879
 export const EXPECTED_PERMISSION_TEST_SHA256 = '831b845d4e0a127d628558fa9162aadc01420988044d11b05e5130dbd2832073'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20261115120000_ai_incompatibility_review_candidates.sql': '52cc01d0f35bca3cf71cbdb38b69af1ee177d9804d752643d5cf425289a72106',
+  '20261115130000_review_candidate_refresh_keeps_ai_evidence.sql': '04115cf2324d4f12232a0f3c223ecdf85333d8071eba5e922d4ce8827ae6fd5d',
   '20261115110000_ai_alias_form_choice_guard.sql': 'a09f14ad317fa17628c93767337cd59a6cf60f32dd384b5fafd17495b2e443ad',
   '20261115100100_ai_alias_bulk_promotion.sql': 'd305786a2d55c4b0c32ea04331e63424fe1e3757147f72d8b0b4c29b8f4fcdb5',
   '20261115100000_reagent_reference_drafts.sql': 'd6d88238b9aab2b71cd29948c2f5486b7754138db964a0d95b670057283b659d',
