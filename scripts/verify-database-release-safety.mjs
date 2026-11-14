@@ -29,8 +29,13 @@ export const EXPECTED_LEGACY_TESTS = [
   'waste_disposal_v2_verification.sql',
 ]
 export const EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
-export const EXPECTED_PERMISSION_TEST_SHA256 = 'e1d29a755ab76d063a13292c6c932ad962fe885e944ad2abdab3c22fe493da82'
+export const EXPECTED_PERMISSION_TEST_SHA256 = '831b845d4e0a127d628558fa9162aadc01420988044d11b05e5130dbd2832073'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
+  '20261115120000_ai_incompatibility_review_candidates.sql': '52cc01d0f35bca3cf71cbdb38b69af1ee177d9804d752643d5cf425289a72106',
+  '20261115130000_review_candidate_refresh_keeps_ai_evidence.sql': '04115cf2324d4f12232a0f3c223ecdf85333d8071eba5e922d4ce8827ae6fd5d',
+  '20261115110000_ai_alias_form_choice_guard.sql': 'a09f14ad317fa17628c93767337cd59a6cf60f32dd384b5fafd17495b2e443ad',
+  '20261115100100_ai_alias_bulk_promotion.sql': 'd305786a2d55c4b0c32ea04331e63424fe1e3757147f72d8b0b4c29b8f4fcdb5',
+  '20261115100000_reagent_reference_drafts.sql': 'd6d88238b9aab2b71cd29948c2f5486b7754138db964a0d95b670057283b659d',
   '20261115090000_inventory_purchase_requests.sql': 'a1d1a867fc6074d236cb651d9dd67ac22b1d35264264fe1deeeda42c9382138e',
   '20261114090000_inventory_sds_documents.sql': '9d080abbbb1d6d351e471663cb7886d1bce3f4e9a3854354b2439300fbc97e61',
   '20261113100000_lab_daily_inspections.sql': 'cc225a2d614950b9553f025a23ecad86cf61fa71dda4a88eb090af624a0a1f12',
@@ -60,6 +65,8 @@ export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
   '20260904070000_ops11_deletion_worker.sql': '6e476e51dc55ed168fb51d590143ad7b752c74d937235bc4a248821a37c0e26c',
 })
 export const EXPECTED_ACTIVE_PERMISSION_TESTS = Object.freeze({
+  'ai_incompatibility_candidates_behavior.sql': '911ed484a2e162bc6782607a5bc9818fdf6a976cc36836f4a33176f45eb8c674',
+  'ai_reagent_reference_drafts_behavior.sql': '37560fbb26e7c2a072cf5be8e88f02bf2514959e303930786c9ad254c0bcb52e',
   'inventory_purchase_requests_behavior.sql': '0bb30a685d2a1245278f6ffe5771f8001f6fc696a0eec8e197dd7cbfe75bbd8a',
   'inventory_sds_documents_behavior.sql': 'df8b67890f7589012e448f89cb3ad6af1e91bd7b40ca4113fd044210fe9be8dd',
   'lab_daily_inspection_behavior.sql': '0231d3e8d292e5359fd7da184f08c60557f3ac3de399f029d8ded79f09100c48',

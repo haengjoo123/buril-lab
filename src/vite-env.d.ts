@@ -19,6 +19,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_DEVICE_REMINDERS?: string
   readonly VITE_ENABLE_HAZARD_REGISTER_EXPORT?: string
   readonly VITE_ENABLE_PURCHASE_REQUESTS?: string
+  readonly VITE_ENABLE_AI_HANDLING_DRAFTS?: string
 }
 
 interface ImportMeta {

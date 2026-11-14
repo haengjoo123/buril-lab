@@ -47,7 +47,7 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
-import { isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { isAiHandlingDraftsEnabled, isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
 import { PurchaseRequestsDialog } from '../purchaseRequests/PurchaseRequestsDialog';
 import { purchaseCopy } from '../purchaseRequests/copy';
 import { PURCHASES_PARAM } from '../purchaseRequests/purchaseLink';
@@ -68,6 +68,7 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { SdsLinkList } from '../../components/SdsLinkList';
 import { ChemicalRegulationPanel } from '../../components/ChemicalRegulationPanel';
+import { ReagentHandlingDraftPanel } from '../../components/ReagentHandlingDraftPanel';
 import { getExpiryStatus, getExpiryBadgeClasses, getExpiryCardBorderClass } from '../../utils/expiryStatus';
 import { getManufacturerDateLabelKey, hasManufacturerDate } from '../../utils/manufacturerDate';
 import { useFridgeStore } from '../../store/fridgeStore';
@@ -3235,6 +3236,13 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         )}
 
                         <ChemicalRegulationPanel casNumber={selectedDesktopItem.cas_number} />
+
+                        {isAiHandlingDraftsEnabled && (
+                            <ReagentHandlingDraftPanel
+                                casNumber={selectedDesktopItem.cas_number}
+                                name={selectedDesktopItem.cas_number ? null : selectedDesktopItem.name}
+                            />
+                        )}
 
                         {readableImportAttributes(selectedDesktopItem.source_attributes).length > 0 && <details className="rounded-lg border p-3 dark:border-slate-700"><summary className="text-sm font-semibold">{t('inv_imported_source_info')}</summary><dl className="mt-2 space-y-1 text-xs">{readableImportAttributes(selectedDesktopItem.source_attributes).map((a, index) => <div key={index} className="break-words"><dt className="inline font-semibold">{a.label}: </dt><dd className="inline">{a.value || '—'}</dd></div>)}</dl></details>}
                     </div>

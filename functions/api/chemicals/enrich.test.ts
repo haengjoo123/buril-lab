@@ -150,7 +150,12 @@ describe('POST /api/chemicals/enrich', () => {
     aliasQuery.select.mockReturnValue(aliasQuery)
     aliasQuery.eq.mockReturnValue(aliasQuery)
     aliasQuery.in.mockResolvedValue({
-      data: [{ normalized_alias: '빙초산', canonical_name: 'Acetic acid', cas_number: '64-19-7' }],
+      data: [{
+        normalized_alias: '빙초산',
+        canonical_name: 'Acetic acid',
+        cas_number: '64-19-7',
+        source_review_id: '33333333-3333-4333-8333-333333333333',
+      }],
       error: null,
     })
     mocks.createChemicalCacheAdminClient.mockReturnValue({
@@ -162,6 +167,28 @@ describe('POST /api/chemicals/enrich', () => {
       expect.objectContaining({ name: 'Acetic acid', casNumber: '64-19-7' }),
       expect.anything(),
     )
+  })
+
+  it('never rewrites identity from an AI-promoted alias without a review', async () => {
+    const aliasQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      in: vi.fn(),
+    }
+    aliasQuery.select.mockReturnValue(aliasQuery)
+    aliasQuery.eq.mockReturnValue(aliasQuery)
+    aliasQuery.in.mockResolvedValue({
+      data: [{ normalized_alias: 'dcm', canonical_name: '디클로로메탄', cas_number: '75-09-2', source_review_id: null }],
+      error: null,
+    })
+    mocks.createChemicalCacheAdminClient.mockReturnValue({
+      from: vi.fn(() => aliasQuery),
+    })
+    const request = context({ items: [{ requestId: 'one', name: 'DCM' }] })
+    expect((await onRequestPost(request.value)).status).toBe(200)
+    const [item] = mocks.enrichChemicalItem.mock.calls[0]
+    expect(item).toMatchObject({ name: 'DCM' })
+    expect(item).not.toHaveProperty('casNumber')
   })
 
   it('returns a fresh server cache hit without repeating upstream enrichment', async () => {

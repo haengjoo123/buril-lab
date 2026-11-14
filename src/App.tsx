@@ -191,6 +191,8 @@ function App() {
     handleReset,
     navigateWithFreshFilters,
     suggestions,
+    formChoices,
+    formChoicesQuery,
     isSuggestionsLoading,
     clearSuggestions,
     currentSearchEventId,
@@ -1134,6 +1136,8 @@ function App() {
               onToggleShowAllProducts={() => setShowAllProducts(!showAllProducts)}
               onNavigateToCabinet={handleNavigateToCabinet}
               suggestions={suggestions}
+              formChoices={formChoices}
+              formChoicesQuery={formChoicesQuery}
               isSuggestionsLoading={isSuggestionsLoading}
               onClearSuggestions={clearSuggestions}
               wasteComponentSearchMode={isAddingWasteComponent}

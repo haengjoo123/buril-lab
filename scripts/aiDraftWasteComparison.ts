@@ -55,6 +55,8 @@ export const AI_CATEGORY_STREAMS: Readonly<Record<string, readonly WasteStreamCo
     '산화제 폐액(별도 수거)': ['REACTIVE_OXIDIZER'],
     '과산화물·반응성 물질(전문업체 처리)': ['REACTIVE_OXIDIZER', 'SPECIAL_REVIEW'],
     '고상 시약 폐기물': ['SOLID_CONTAMINATED'],
+    // AQUEOUS_OTHER is the collected "기타 수계 폐액" stream; the engine never routes to the drain.
+    // A match here means the same stream family only. aiDrainClaims counts these drafts separately.
     '희석 후 일반 배출 가능': ['AQUEOUS_OTHER'],
     '실린더 반납': ['SPECIAL_REVIEW'],
     '기타 특수 폐기물(확인필요)': ['SPECIAL_REVIEW'],
@@ -215,6 +217,8 @@ export interface ComparisonSummary {
     unusableCacheEntries: number;
     noVerifiedEvidence: number;
     noCas: number;
+    /** Drafts whose AI category allows drain disposal; the engine always collects aqueous waste. */
+    aiDrainClaims: number;
     engineReady: number;
     engineNeedsInput: number;
     engineBlocked: number;
@@ -382,6 +386,7 @@ export function runAiDraftWasteComparison(
             && row.draft.casNumber && enrichmentCache.has(row.draft.casNumber)).length,
         noVerifiedEvidence: rows.filter((row) => row.bucket === 'no_verified_evidence').length,
         noCas: drafts.filter((draft) => !draft.casNumber).length,
+        aiDrainClaims: drafts.filter((draft) => draft.labWasteCategory === '희석 후 일반 배출 가능').length,
         engineReady: rows.filter((row) => row.engineStatus === 'ready').length,
         engineNeedsInput: rows.filter((row) => row.engineStatus === 'needs_input').length,
         engineBlocked: rows.filter((row) => row.engineStatus === 'blocked').length,
