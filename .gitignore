@@ -57,6 +57,8 @@ git_log*.txt
 lint_*.txt
 scene_changes*.txt
 tmp_results*.txt
+# AI draft vs waste engine comparison (contains Staging draft data)
+/output/ai-draft-waste-comparison/
 
 # Local agent/browser and service state
 /.codex-tmp/

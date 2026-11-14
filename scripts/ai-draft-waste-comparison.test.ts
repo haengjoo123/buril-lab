@@ -103,9 +103,9 @@ describe('AI draft vs waste engine comparison', () => {
         const { rows, summary } = runAiDraftWasteComparison([
             draft({ casNumber: golden!.casNumber, wasteMatrix: 'mixed_biphasic', labWasteCategory: '생물학적 폐기물', hazardFlags: ['oxidizer'] }),
             draft({ casNumber: '0000-00-0' }),
-            draft({ nameKo: '혼합물' }),
+            draft({ nameKo: '혼합물', labWasteCategory: '희석 후 일반 배출 가능' }),
         ], goldenRows);
-        expect(summary).toMatchObject({ totalDrafts: 3, withVerifiedEvidence: 1, noVerifiedEvidence: 2, noCas: 1 });
+        expect(summary).toMatchObject({ totalDrafts: 3, withVerifiedEvidence: 1, noVerifiedEvidence: 2, noCas: 1, aiDrainClaims: 1 });
         expect(rows[0].goldenId).toBe(golden!.id);
         expect(rows[0].engineMatrix).toBe(golden!.scenario.matrix);
         expect(rows[1].bucket).toBe('no_verified_evidence');
