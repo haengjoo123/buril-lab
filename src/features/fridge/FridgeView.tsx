@@ -37,10 +37,20 @@ import {
     checkCabinetCompatibility,
     checkCabinetReviewConflicts,
 } from '../../utils/storageCompatibilityChecker';
-import { AmberBottleIcon, GlassBottleIcon, PlasticContainerIcon, SquareBottleIcon } from './components/ContainerTypeIcons';
 
 const FridgeScene = lazy(() =>
     import('./FridgeScene').then((module) => ({ default: module.FridgeScene }))
+);
+const ReagentModelPreview = lazy(() => import('./components/ReagentModelPreview'));
+
+const ReagentPreviewFallback = ({ width, height }: { width: number; height: number }) => (
+    <div
+        className="flex items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
+        style={{ width, height }}
+        aria-hidden="true"
+    >
+        <Loader2 className="h-4 w-4 animate-spin" />
+    </div>
 );
 
 const SceneLoadingFallback = () => (
@@ -51,13 +61,6 @@ const SceneLoadingFallback = () => (
     </div>
 );
 
-/** Static container icons: one WebGL context for the cabinet only, none per tray tile. */
-const CONTAINER_ICONS: Record<ReagentTemplateType, { icon: LucideIcon; className: string }> = {
-    A: { icon: AmberBottleIcon, className: 'text-amber-700 dark:text-amber-400' },
-    B: { icon: PlasticContainerIcon, className: 'text-slate-500 dark:text-slate-300' },
-    C: { icon: GlassBottleIcon, className: 'text-cyan-700 dark:text-cyan-400' },
-    D: { icon: SquareBottleIcon, className: 'text-slate-600 dark:text-slate-400' },
-};
 
 type ToastTone = 'success' | 'error' | 'info';
 
@@ -1655,7 +1658,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         </div>
                                     </div>
                                     {genericContainers.map((item, idx) => {
-                                        const { icon: ContainerIcon, className: iconClassName } = CONTAINER_ICONS[item.type];
                                         return (
                                             <div
                                                 key={idx}
@@ -1663,7 +1665,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                                 className={`min-w-[90px] h-[100px] flex flex-col items-center justify-end gap-1 px-2 py-1.5 bg-white border rounded-lg hover:shadow-md hover:border-blue-300 cursor-pointer transition-all shrink-0 group relative ${draggedTemplate?.name === item.name ? 'ring-2 ring-blue-500 ring-offset-1 bg-blue-50' : ''}`}
                                             >
                                                 <div className="flex h-16 w-[60px] items-center justify-center group-hover:scale-105 transition-transform origin-bottom">
-                                                    <ContainerIcon className={`h-12 w-12 ${iconClassName}`} strokeWidth={1.5} aria-hidden="true" />
+                                                    <Suspense fallback={<ReagentPreviewFallback width={60} height={64} />}>
+                                                        <ReagentModelPreview type={item.type} width={60} height={64} />
+                                                    </Suspense>
                                                 </div>
                                                 <div className="w-full text-center">
                                                     <span className="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">
@@ -2160,7 +2164,6 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                     )}
                                     <div className="grid grid-cols-4 gap-2">
                                         {containerTypeOptions.map(opt => {
-                                            const { icon: ContainerIcon, className: iconClassName } = CONTAINER_ICONS[opt.type];
                                             return (
                                                 <button
                                                     key={opt.type}
@@ -2172,7 +2175,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                                         }`}
                                                 >
                                                     <span className="flex h-11 w-9 items-center justify-center">
-                                                        <ContainerIcon className={`h-8 w-8 ${iconClassName}`} strokeWidth={1.5} aria-hidden="true" />
+                                                        <Suspense fallback={<ReagentPreviewFallback width={36} height={44} />}>
+                                                            <ReagentModelPreview type={opt.type} width={36} height={44} />
+                                                        </Suspense>
                                                     </span>
                                                     <span className="text-center leading-tight">{opt.label}</span>
                                                 </button>
