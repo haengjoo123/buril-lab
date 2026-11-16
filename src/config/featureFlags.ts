@@ -64,6 +64,12 @@ export const isAiHandlingDraftsEnabled = isExplicitlyEnabled(import.meta.env.VIT
  * legal basis folded away. Off keeps the original classification list.
  */
 export const isRegulationActionsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_REGULATION_ACTIONS)
+/**
+ * Lab-wide 화학물질관리법 classification (inventory filter, hazard list column).
+ * Calls /api/chemicals/regulations-batch, whose database cache needs the
+ * 20261116090000_regulation_source_cache migration in that environment.
+ */
+export const isRegulationBatchEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_REGULATION_BATCH)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

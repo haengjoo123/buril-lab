@@ -21,6 +21,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_PURCHASE_REQUESTS?: string
   readonly VITE_ENABLE_AI_HANDLING_DRAFTS?: string
   readonly VITE_ENABLE_REGULATION_ACTIONS?: string
+  readonly VITE_ENABLE_REGULATION_BATCH?: string
 }
 
 interface ImportMeta {

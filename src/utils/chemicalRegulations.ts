@@ -48,6 +48,14 @@ export type ChemicalRegulationLookup =
   | { status: 'not_found' }
   | { status: 'unavailable' }
 
+/** One CAS number in a batch lookup; `pending` was not looked up yet and should be asked again. */
+export type ChemicalRegulationBatchResult = ChemicalRegulationLookup | { status: 'pending' }
+
+export interface ChemicalRegulationBatchResponse {
+  /** Keyed by normalized CAS number; invalid input is left out. */
+  results: Record<string, ChemicalRegulationBatchResult>
+}
+
 // Checked in order: "인체급성유해성물질" must not fall through to a broader match.
 const CATEGORY_PATTERNS: ReadonlyArray<[RegExp, ChemicalRegulationCategory]> = [
   [/금지/, 'banned'],

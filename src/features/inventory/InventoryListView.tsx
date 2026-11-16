@@ -47,7 +47,11 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
-import { isAiHandlingDraftsEnabled, isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { isAiHandlingDraftsEnabled, isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isRegulationBatchEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { useChemicalRegulationMap } from '../../hooks/useChemicalRegulationMap';
+import { loadChemicalRegulations } from '../../services/chemicalRegulationService';
+import { normalizeCasNumber } from '../../utils/casNumber';
+import { hazardousRegulationEntries, type ChemicalRegulationLookup } from '../../utils/chemicalRegulations';
 import { PurchaseRequestsDialog } from '../purchaseRequests/PurchaseRequestsDialog';
 import { purchaseCopy } from '../purchaseRequests/copy';
 import { PURCHASES_PARAM } from '../purchaseRequests/purchaseLink';
@@ -111,7 +115,8 @@ import {
 
 type BulkMoveTargetType = 'other' | 'cabinet';
 type InventorySortOption = 'expiry_asc' | 'location_asc' | 'name_asc' | 'remaining_asc' | 'created_at_desc' | 'created_at_asc';
-type InventoryHazardFilter = 'all' | InventoryHazardFilterCategory;
+/** `regulated`: any 화학물질관리법 class that counts toward 정밀안전진단 (허가·제한·금지·유해화학물질). */
+type InventoryHazardFilter = 'all' | InventoryHazardFilterCategory | 'regulated';
 type InventoryGroup = {
     id: string;
     items: InventoryItem[];
@@ -558,6 +563,20 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         })
     ), [getInventoryGhsHCodes, getInventoryGhsStatus]);
 
+    // Lab-wide 화관법 classification, filled in as the batch lookup answers.
+    const regulationCasNumbers = useMemo(() => items.map((item) => item.cas_number), [items]);
+    const regulationMap = useChemicalRegulationMap(regulationCasNumbers, isRegulationBatchEnabled && Boolean(userId));
+    const isRegulatedItem = useCallback((item: InventoryItem) => {
+        const cas = normalizeCasNumber(item.cas_number);
+        const lookup = cas ? regulationMap.get(cas) : undefined;
+        return lookup?.status === 'found' && hazardousRegulationEntries(lookup.record).length > 0;
+    }, [regulationMap]);
+    const matchesHazardFilter = useCallback((item: InventoryItem, filter: InventoryHazardFilter) => {
+        if (filter === 'all') return true;
+        if (filter === 'regulated') return isRegulatedItem(item);
+        return classifyInventoryItemHazard(item).filterCategories.includes(filter);
+    }, [classifyInventoryItemHazard, isRegulatedItem]);
+
     const searchMatcher = useMemo(() => createInventorySearchMatcher(searchQuery), [searchQuery]);
 
     const filteredItems = useMemo(() => {
@@ -568,9 +587,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         }
 
         if (hazardFilter !== 'all') {
-            result = result.filter(item => (
-                classifyInventoryItemHazard(item).filterCategories.includes(hazardFilter)
-            ));
+            result = result.filter(item => matchesHazardFilter(item, hazardFilter));
         }
 
         if (expiryFilter) {
@@ -581,7 +598,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         }
 
         return result;
-    }, [items, searchMatcher, hazardFilter, classifyInventoryItemHazard, expiryFilter]);
+    }, [items, searchMatcher, hazardFilter, matchesHazardFilter, expiryFilter]);
 
     const hazardFilterCounts = useMemo(() => {
         const counts: Record<InventoryHazardFilterCategory, number> = {
@@ -607,6 +624,17 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             inventoryHazardRuntime[entryKey],
         ) !== 'resolved';
     }).length, [currentLabId, inventoryHazardRuntime, inventoryHazardSnapshots, items, userId]);
+    const regulationCounts = useMemo(() => {
+        let regulated = 0;
+        let unknown = 0;
+        for (const item of items) {
+            const cas = normalizeCasNumber(item.cas_number);
+            if (!cas) continue;
+            if (!regulationMap.has(cas)) unknown += 1;
+            else if (isRegulatedItem(item)) regulated += 1;
+        }
+        return { regulated, unknown };
+    }, [isRegulatedItem, items, regulationMap]);
     const hazardSummary = hazardFilterCounts.special_high;
     const hazardFilterOptions = useMemo(() => {
         const label = (key: string, count: number) => `${t(key)} (${formatInventoryHazardCount(count, unresolvedHazardCount)})`;
@@ -617,8 +645,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             { value: 'corrosive', label: label('inventory_hazard_corrosive', hazardFilterCounts.corrosive) },
             { value: 'toxic', label: label('inventory_hazard_toxic', hazardFilterCounts.toxic) },
             { value: 'other_managed', label: label('inventory_hazard_other_managed', hazardFilterCounts.other_managed) },
+            ...(isRegulationBatchEnabled && userId ? [{
+                value: 'regulated',
+                label: `${t('inventory_hazard_regulated')} (${formatInventoryHazardCount(regulationCounts.regulated, regulationCounts.unknown)})`,
+            }] : []),
         ];
-    }, [hazardFilterCounts, t, unresolvedHazardCount]);
+    }, [hazardFilterCounts, regulationCounts, t, unresolvedHazardCount, userId]);
 
     // 만료/위치 우선으로 빠르게 확인할 수 있게 화면 전용 정렬 목록을 만든다.
     const visibleItems = useMemo(() => {
@@ -1058,8 +1090,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             setItems((prev) => (prev.some((candidate) => candidate.id === created.id) ? prev : [created, ...prev]));
             // A filter that hides the new item would make the save look like it did nothing.
             const hiddenBySearch = Boolean(searchMatcher && !searchMatcher(created));
-            const hiddenByHazard = hazardFilter !== 'all'
-                && !classifyInventoryItemHazard(created).filterCategories.includes(hazardFilter);
+            const hiddenByHazard = !matchesHazardFilter(created, hazardFilter);
             const hiddenByExpiry = expiryFilter !== null && !matchesInventoryExpiryFilter(
                 getExpiryStatus(getTrackedManufacturerDate(created))?.level,
                 expiryFilter,
@@ -1445,9 +1476,25 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             let sdsDocuments: Awaited<ReturnType<typeof import('../../services/inventorySdsService').fetchSdsDocuments>> = [];
             const sdsService = isSdsAttachmentsEnabled ? await import('../../services/inventorySdsService') : null;
             if (sdsService) sdsDocuments = await sdsService.fetchSdsDocuments(currentLabId).catch(() => []);
+            // A few quick rounds fill in what the list has not looked up yet; the rest is marked "조회 전".
+            const regulations: Map<string, ChemicalRegulationLookup> | null = isRegulationBatchEnabled && userId
+                ? new Map([
+                    ...regulationMap,
+                    ...await loadChemicalRegulations(items.map((item) => item.cas_number ?? ''), { maxRounds: 3, retryDelayMs: 1_500 })
+                        .catch(() => new Map<string, ChemicalRegulationLookup>()),
+                ])
+                : null;
+            const regulationClassesOf = (cas: string | null): string[] | null | undefined => {
+                if (!regulations) return undefined;
+                const normalized = normalizeCasNumber(cas);
+                const lookup = normalized ? regulations.get(normalized) : undefined;
+                if (!lookup) return null;
+                return lookup.status === 'found' ? hazardousRegulationEntries(lookup.record).map((entry) => entry.typeName) : [];
+            };
             const rows = buildRegisterRows(items.map((item) => {
                 const ghsState = getInventoryGhsState(item);
                 return {
+                    regulationClasses: regulationClassesOf(item.cas_number),
                     name: item.name,
                     casNumber: item.cas_number,
                     brand: item.brand,

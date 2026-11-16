@@ -192,6 +192,7 @@ const PROTECTED_API_PATTERNS = [
   /^\/api\/voice\//,
   /^\/api\/reagents\//,
   /^\/api\/waste\//,
+  /^\/api\/chemicals\/regulations-batch$/,
 ] as const
 
 export function isProtectedApiPath(path: string): boolean {
