@@ -130,11 +130,26 @@ function normalizeName(value: string): string {
   return value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
+const HTML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" }
+
+/** KOSHA chemNameKor sometimes carries markup such as "디클로로메탄 <br/>( 관용명 : 이염화메틸렌 )". */
+export function cleanKoshaName(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(amp|lt|gt|quot|apos|nbsp|#39);/g, (_, entity: string) => HTML_ENTITIES[entity])
+    .replace(/\s+/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .trim()
+}
+
 function identityFromItem(item: Record<string, unknown>): KoshaIdentity | null {
   const casNumber = normalizeCasNumber(String(item.casNo ?? ''))
   const rawChemId = String(item.chemId ?? '').trim()
   if (!casNumber || !/^\d{1,12}$/.test(rawChemId)) return null
-  const localizedName = typeof item.chemNameKor === 'string' ? item.chemNameKor.trim() : undefined
+  const localizedName = cleanKoshaName(item.chemNameKor) || undefined
   return {
     casNumber,
     chemId: rawChemId.padStart(6, '0'),
@@ -143,7 +158,7 @@ function identityFromItem(item: Record<string, unknown>): KoshaIdentity | null {
 }
 
 function exactNameMatches(candidate: string, expected: string): boolean {
-  const normalizedCandidate = candidate.normalize('NFKC').trim()
+  const normalizedCandidate = cleanKoshaName(candidate.normalize('NFKC'))
   const normalizedExpected = expected.normalize('NFKC').trim()
   if (normalizedCandidate === normalizedExpected) return true
   const beforeParen = normalizedCandidate.split('(')[0].trim()
@@ -169,7 +184,7 @@ export async function searchKoshaNames(
   if (response.kind !== 'ok') return []
   return Array.from(new Set(
     parseKoshaItems(response.data)
-      .map((item) => typeof item.chemNameKor === 'string' ? item.chemNameKor.trim() : '')
+      .map((item) => cleanKoshaName(item.chemNameKor))
       .filter(Boolean),
   )).slice(0, limit)
 }
