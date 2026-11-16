@@ -20,6 +20,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_HAZARD_REGISTER_EXPORT?: string
   readonly VITE_ENABLE_PURCHASE_REQUESTS?: string
   readonly VITE_ENABLE_AI_HANDLING_DRAFTS?: string
+  readonly VITE_ENABLE_REGULATION_ACTIONS?: string
 }
 
 interface ImportMeta {
