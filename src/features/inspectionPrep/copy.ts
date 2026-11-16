@@ -1,0 +1,113 @@
+const KO = {
+    menu: '점검·보고 자료',
+    menuTitle: '점검·보고 자료 내려받기',
+    prep: '점검 대비 자료 묶음',
+    prepTitle: '정기점검·실태조사 대비 자료 묶음(엑셀) 내려받기',
+    failed: '점검 대비 자료를 만들지 못했습니다.',
+    fileName: (date: string) => `점검대비자료_${date}.xlsx`,
+    sheets: {
+        summary: '요약',
+        chemicals: '화학물질 보유',
+        inspections: '일상점검 기록',
+        cabinets: '보관 점검',
+        containers: '폐액통 현황',
+        guide: '안내',
+    },
+    title: (lab: string, date: string) => `점검 대비 자료 · ${lab} · ${date}`,
+    summaryHeaders: ['항목', '내용'],
+    summary: {
+        lab: '연구실',
+        date: '기준일',
+        reagents: '보유 시약(목록 줄 수)',
+        regulated: '화관법 규제물질(CAS 종 수)',
+        accident: '사고대비물질(CAS 종 수)',
+        diagnosis: '정밀안전진단',
+        diagnosisYes: '대상 · 2년마다 1회 이상(연구실안전법 시행령 제11조)',
+        diagnosisUnknown: '화관법 규제물질 없음 · 산안법 유해인자·독성가스 취급 여부는 따로 확인',
+        inspections: (days: number) => `일상점검(최근 ${days}일)`,
+        inspectionsValue: (recorded: number, issues: number, last: string | null) =>
+            `기록 ${recorded}일 · 불량이 있던 날 ${issues}일 · 마지막 기록 ${last ?? '없음'}`,
+        sds: 'SDS 파일 보관',
+        sdsValue: (stored: number, total: number) => `${total}줄 중 ${stored}줄`,
+        locks: '시약장 잠금장치',
+        locksValue: (yes: number, no: number, unset: number, exposed: number) =>
+            `있음 ${yes} · 없음 ${no} · 미설정 ${unset} · 잠금 없는 곳의 독성·발암성 물질 ${exposed}개`,
+        containers: '폐액통',
+        containersValue: (active: number, sealed: number, attention: number) => `사용 중 ${active} · 봉인 ${sealed} · 확인 필요 ${attention}`,
+        notIncluded: '포함 안 됨(기능 꺼짐)',
+    },
+    chemicalsActionHeader: '화관법상 할 일',
+    inspectionHeaders: ['점검일', '점검자', '불량 수', '불량 항목', '지시·특이사항', '점검표 버전'],
+    cabinetHeaders: ['시약장', '위치', '잠금장치', '잠금 보관이 필요한 물질 수'],
+    lockText: { yes: '있음', no: '없음', unset: '미설정' },
+    containerHeaders: ['라벨', '폐액 종류', '상태', '채움(%)', '보관 위치', '봉인일'],
+    containerStatus: { active: '사용 중', sealed: '봉인', collected: '수거됨' } as Record<string, string>,
+    guide: [
+        '안내',
+        '이 파일은 버릴랩에 기록된 재고·일상점검·시약장·폐액통 정보를 한 번에 모은 점검 대비 자료입니다. 정기점검·정밀안전진단·실태조사 준비에 참고하세요.',
+        '법정 서식을 대신하지 않습니다. 제출 서식, 보존 기간, 대상 여부는 현행 「연구실 안전점검 및 정밀안전진단에 관한 지침」, 「연구실 사전유해인자위험분석 실시에 관한 지침」과 소속 기관 안내를 따르세요.',
+        '일상점검표는 작성한 다음 해 첫날부터 1년간 보존합니다(점검지침 제17조).',
+        '"화관법상 할 일"은 한국환경공단 화학물질 분류와 법령 원문(2026-11-16 확인)을 바탕으로 합니다. 혼합물은 농도에 따라 해당하지 않을 수 있습니다.',
+        '분류를 아직 조회하지 못한 물질은 "조회 전"으로 표시됩니다. 재고 화면에서 시약을 열면 다시 조회합니다.',
+    ],
+};
+
+const EN: typeof KO = {
+    menu: 'Inspection files',
+    menuTitle: 'Download inspection and report files',
+    prep: 'Inspection prep bundle',
+    prepTitle: 'Download a workbook to prepare for inspections and surveys',
+    failed: 'Could not create the inspection prep bundle.',
+    fileName: (date: string) => `inspection-prep-${date}.xlsx`,
+    sheets: {
+        summary: 'Summary',
+        chemicals: 'Chemicals',
+        inspections: 'Daily inspections',
+        cabinets: 'Storage',
+        containers: 'Waste containers',
+        guide: 'Guide',
+    },
+    title: (lab: string, date: string) => `Inspection prep · ${lab} · ${date}`,
+    summaryHeaders: ['Item', 'Value'],
+    summary: {
+        lab: 'Lab',
+        date: 'As of',
+        reagents: 'Reagents (list rows)',
+        regulated: 'Chemicals Control Act regulated (distinct CAS)',
+        accident: 'Accident-preparedness substances (distinct CAS)',
+        diagnosis: 'Detailed safety diagnosis',
+        diagnosisYes: 'Required at least every 2 years (Lab Safety Act Enforcement Decree, Art. 11)',
+        diagnosisUnknown: 'No Chemicals Control Act class found; check OSHA hazardous agents and toxic gases separately',
+        inspections: (days: number) => `Daily inspections (last ${days} days)`,
+        inspectionsValue: (recorded: number, issues: number, last: string | null) =>
+            `${recorded} day(s) recorded · ${issues} with issues · last ${last ?? 'none'}`,
+        sds: 'SDS files',
+        sdsValue: (stored: number, total: number) => `${stored} of ${total} rows`,
+        locks: 'Cabinet locks',
+        locksValue: (yes: number, no: number, unset: number, exposed: number) =>
+            `yes ${yes} · no ${no} · unset ${unset} · ${exposed} toxic or carcinogenic reagent(s) without a lock`,
+        containers: 'Waste containers',
+        containersValue: (active: number, sealed: number, attention: number) => `in use ${active} · sealed ${sealed} · to check ${attention}`,
+        notIncluded: 'Not included (feature off)',
+    },
+    chemicalsActionHeader: 'Chemicals Control Act actions',
+    inspectionHeaders: ['Date', 'Inspector', 'Issues', 'Issue items', 'Instructions and remarks', 'Checklist version'],
+    cabinetHeaders: ['Cabinet', 'Location', 'Lock', 'Reagents that belong behind a lock'],
+    lockText: { yes: 'Yes', no: 'No', unset: 'Unset' },
+    containerHeaders: ['Label', 'Waste stream', 'Status', 'Fill (%)', 'Location', 'Sealed'],
+    containerStatus: { active: 'In use', sealed: 'Sealed', collected: 'Collected' },
+    guide: [
+        'Guide',
+        'This workbook gathers the inventory, daily inspections, cabinets and waste containers recorded in Buril Lab to prepare for periodic inspections, detailed safety diagnoses and surveys.',
+        'It does not replace the official forms. Follow the notices in force and your institution for forms, retention and applicability.',
+        'Daily inspection records are kept for one year from the first day of the following year.',
+        'Chemicals Control Act actions come from the Korea Environment Corporation classification checked against the legal text. A mixture may fall below a threshold.',
+        'Substances not looked up yet are marked accordingly; opening the reagent in the inventory looks them up again.',
+    ],
+};
+
+export type InspectionPrepCopy = typeof KO;
+
+export function inspectionPrepCopy(language: string): InspectionPrepCopy {
+    return language.startsWith('ko') ? KO : EN;
+}

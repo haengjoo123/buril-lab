@@ -14,11 +14,13 @@ interface Props {
     stocktake?: { label: string; run: () => void };
     /** Shown when the prior hazard analysis list export is available. */
     hazardRegister?: { label: string; run: () => void };
+    /** Shown in a lab when the inspection prep bundle is available. */
+    inspectionPrep?: { label: string; run: () => void };
     /** Shown when the low-stock forecast and purchase requests are available. */
     purchases?: { label: string; run: () => void };
 }
 
-function ToolsSheet({ canExport, canSelect, isSelectMode, onExport, onImport, onSelect, stocktake, hazardRegister, purchases, onClose }: Props & { onClose: () => void }) {
+function ToolsSheet({ canExport, canSelect, isSelectMode, onExport, onImport, onSelect, stocktake, hazardRegister, inspectionPrep, purchases, onClose }: Props & { onClose: () => void }) {
     const { t } = useTranslation();
     const ref = useRef<HTMLElement>(null);
     useAdaptiveDialog(ref, onClose);
@@ -28,6 +30,7 @@ function ToolsSheet({ canExport, canSelect, isSelectMode, onExport, onImport, on
         { label: t(isSelectMode ? 'inventory_exit_select_mode' : 'inventory_enter_select_mode'), icon: CheckCircle2, run: onSelect, disabled: !canSelect },
         ...(stocktake ? [{ label: stocktake.label, icon: ScanLine, run: stocktake.run, disabled: false }] : []),
         ...(hazardRegister ? [{ label: hazardRegister.label, icon: FileSpreadsheet, run: hazardRegister.run, disabled: false }] : []),
+        ...(inspectionPrep ? [{ label: inspectionPrep.label, icon: FileSpreadsheet, run: inspectionPrep.run, disabled: false }] : []),
         ...(purchases ? [{ label: purchases.label, icon: ShoppingCart, run: purchases.run, disabled: false }] : []),
     ];
     return <div className="adaptive-overlay fixed z-[80] flex items-end justify-center">

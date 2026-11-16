@@ -49,7 +49,16 @@ import {
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
 import { isAiHandlingDraftsEnabled, isCabinetLockRulesEnabled, isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isRegulationBatchEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
 import { requiresLockedStorage } from '../../utils/storageCompatibilityChecker';
-import { hasObligation } from '../../utils/regulationObligations';
+import { hasObligation, obligationsForEntries } from '../../utils/regulationObligations';
+import { isDailyInspectionEnabled, isInspectionPrepExportEnabled, isWasteContainersEnabled } from '../../config/featureFlags';
+import { buildInspectionPrepSheets, downloadInspectionPrep } from '../inspectionPrep/inspectionPrep';
+import { inspectionPrepCopy } from '../inspectionPrep/copy';
+import { buildContainerTasks } from '../admin/labAdminTasks';
+import { wasteStreamLabel } from '../../utils/wasteLabels';
+
+/** Days of daily inspection records in the inspection prep bundle. */
+const INSPECTION_PREP_DAYS = 90;
+const REPORT_BUTTON_CLASS = 'hidden h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:px-3 table:inline-flex';
 import { useChemicalRegulationMap } from '../../hooks/useChemicalRegulationMap';
 import { loadChemicalRegulations } from '../../services/chemicalRegulationService';
 import { normalizeCasNumber } from '../../utils/casNumber';
@@ -1482,54 +1491,64 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
 
     */
     const [isExportingRegister, setIsExportingRegister] = useState(false);
+    // The header scrolls sideways (overflow auto), so the menu is placed with fixed coordinates.
+    const [reportMenuAnchor, setReportMenuAnchor] = useState<{ top: number; right: number } | null>(null);
+    const currentSpaceName = () => (currentLabId
+        ? (useLabStore.getState().myLabs.find((membership) => membership.lab_id === currentLabId)?.lab?.name ?? '')
+        : t('lab_personal_space'));
+    /** Rows of the hazard-analysis list, also the chemicals sheet of the inspection prep bundle. */
+    const collectRegisterRows = async () => {
+        const registerText = hazardRegisterCopy(i18n.language);
+        let sdsDocuments: Awaited<ReturnType<typeof import('../../services/inventorySdsService').fetchSdsDocuments>> = [];
+        const sdsService = isSdsAttachmentsEnabled ? await import('../../services/inventorySdsService') : null;
+        if (sdsService) sdsDocuments = await sdsService.fetchSdsDocuments(currentLabId).catch(() => []);
+        // A few quick rounds fill in what the list has not looked up yet; the rest is marked "조회 전".
+        const regulations: Map<string, ChemicalRegulationLookup> | null = isRegulationBatchEnabled && userId
+            ? new Map([
+                ...regulationMap,
+                ...await loadChemicalRegulations(items.map((item) => item.cas_number ?? ''), { maxRounds: 3, retryDelayMs: 1_500 })
+                    .catch(() => new Map<string, ChemicalRegulationLookup>()),
+            ])
+            : null;
+        const regulationClassesOf = (cas: string | null): string[] | null | undefined => {
+            if (!regulations) return undefined;
+            const normalized = normalizeCasNumber(cas);
+            const lookup = normalized ? regulations.get(normalized) : undefined;
+            if (!lookup) return null;
+            return lookup.status === 'found' ? hazardousRegulationEntries(lookup.record).map((entry) => entry.typeName) : [];
+        };
+        const rows = buildRegisterRows(items.map((item) => {
+            const ghsState = getInventoryGhsState(item);
+            return {
+                regulationClasses: regulationClassesOf(item.cas_number),
+                name: item.name,
+                casNumber: item.cas_number,
+                brand: item.brand,
+                quantity: typeof item.quantity === 'number' ? item.quantity : null,
+                capacity: item.capacity,
+                location: storageLabelOf(item),
+                expiryDate: item.expiry_date,
+                ghs: ghsState?.status === 'loaded'
+                    ? {
+                        hCodes: ghsState.snapshot.hCodes,
+                        signalWord: ghsState.snapshot.signalWord,
+                        pictograms: ghsState.snapshot.pictogramCodes,
+                        classified: ghsState.snapshot.status === 'classified',
+                    }
+                    : null,
+                hazardGroups: classifyInventoryItemHazard(item).groupLabelKeys.map((key) => t(key)),
+                hasSds: sdsService ? sdsService.matchSdsDocuments(sdsDocuments, { casNumber: item.cas_number, brand: item.brand, productNumber: item.product_number }).length > 0 : false,
+            };
+        }), registerText.row);
+        return { rows, regulations, sdsTracked: Boolean(sdsService), registerText };
+    };
     const handleExportHazardRegister = async () => {
         if (items.length === 0 || isExportingRegister) return;
         const registerText = hazardRegisterCopy(i18n.language);
         setIsExportingRegister(true);
         try {
-            let sdsDocuments: Awaited<ReturnType<typeof import('../../services/inventorySdsService').fetchSdsDocuments>> = [];
-            const sdsService = isSdsAttachmentsEnabled ? await import('../../services/inventorySdsService') : null;
-            if (sdsService) sdsDocuments = await sdsService.fetchSdsDocuments(currentLabId).catch(() => []);
-            // A few quick rounds fill in what the list has not looked up yet; the rest is marked "조회 전".
-            const regulations: Map<string, ChemicalRegulationLookup> | null = isRegulationBatchEnabled && userId
-                ? new Map([
-                    ...regulationMap,
-                    ...await loadChemicalRegulations(items.map((item) => item.cas_number ?? ''), { maxRounds: 3, retryDelayMs: 1_500 })
-                        .catch(() => new Map<string, ChemicalRegulationLookup>()),
-                ])
-                : null;
-            const regulationClassesOf = (cas: string | null): string[] | null | undefined => {
-                if (!regulations) return undefined;
-                const normalized = normalizeCasNumber(cas);
-                const lookup = normalized ? regulations.get(normalized) : undefined;
-                if (!lookup) return null;
-                return lookup.status === 'found' ? hazardousRegulationEntries(lookup.record).map((entry) => entry.typeName) : [];
-            };
-            const rows = buildRegisterRows(items.map((item) => {
-                const ghsState = getInventoryGhsState(item);
-                return {
-                    regulationClasses: regulationClassesOf(item.cas_number),
-                    name: item.name,
-                    casNumber: item.cas_number,
-                    brand: item.brand,
-                    quantity: typeof item.quantity === 'number' ? item.quantity : null,
-                    capacity: item.capacity,
-                    location: storageLabelOf(item),
-                    expiryDate: item.expiry_date,
-                    ghs: ghsState?.status === 'loaded'
-                        ? {
-                            hCodes: ghsState.snapshot.hCodes,
-                            signalWord: ghsState.snapshot.signalWord,
-                            pictograms: ghsState.snapshot.pictogramCodes,
-                            classified: ghsState.snapshot.status === 'classified',
-                        }
-                        : null,
-                    hazardGroups: classifyInventoryItemHazard(item).groupLabelKeys.map((key) => t(key)),
-                    hasSds: sdsService ? sdsService.matchSdsDocuments(sdsDocuments, { casNumber: item.cas_number, brand: item.brand, productNumber: item.product_number }).length > 0 : false,
-                };
-            }), registerText.row);
-            const spaceName = currentLabId ? (useLabStore.getState().myLabs.find((membership) => membership.lab_id === currentLabId)?.lab?.name ?? '') : t('lab_personal_space');
-            await downloadHazardRegister(rows, registerText.sheet, { space: spaceName, date: new Date() });
+            const { rows } = await collectRegisterRows();
+            await downloadHazardRegister(rows, registerText.sheet, { space: currentSpaceName(), date: new Date() });
         } catch (error) {
             console.error('Failed to export the hazard analysis list:', error);
             setQrNotice(registerText.failed);
@@ -1537,6 +1556,79 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
             setIsExportingRegister(false);
         }
     };
+    const handleExportInspectionPrep = async () => {
+        if (!currentLabId || isExportingRegister) return;
+        const prepText = inspectionPrepCopy(i18n.language);
+        setIsExportingRegister(true);
+        try {
+            const labId = currentLabId;
+            const [register, inspections, cabinetLocks, containers] = await Promise.all([
+                collectRegisterRows(),
+                isDailyInspectionEnabled
+                    ? import('../../services/dailyInspectionService').then((service) => service.fetchRecentDailyInspections(labId, INSPECTION_PREP_DAYS)).catch(() => null)
+                    : Promise.resolve(null),
+                isCabinetLockRulesEnabled
+                    ? import('../../services/labSafetySignalService').then((service) => service.loadCabinetLockSummary(labId)).catch(() => null)
+                    : Promise.resolve(null),
+                isWasteContainersEnabled
+                    ? import('../../services/labAdminOverviewService').then((service) => service.loadWasteContainersForOverview(labId)).catch(() => null)
+                    : Promise.resolve(null),
+            ]);
+            const regulated = register.regulations
+                ? [...register.regulations.values()].filter((lookup) => lookup.status === 'found' && hazardousRegulationEntries(lookup.record).length > 0)
+                : null;
+            const language = i18n.language.startsWith('ko') ? 'ko' : 'en';
+            const built = buildInspectionPrepSheets({
+                labName: currentSpaceName(),
+                date: new Date(),
+                periodDays: INSPECTION_PREP_DAYS,
+                register: { rows: register.rows, copy: register.registerText.sheet },
+                actionsByCas: register.regulations
+                    ? new Map([...register.regulations].flatMap(([cas, lookup]) => (lookup.status === 'found'
+                        ? [[cas, obligationsForEntries(lookup.record.entries).map((obligation) => obligation.text[language]).join('\n')] as const]
+                        : [])))
+                    : null,
+                regulatedCasCount: regulated ? regulated.length : null,
+                accidentCasCount: regulated
+                    ? regulated.filter((lookup) => lookup.status === 'found' && lookup.record.entries.some((entry) => entry.category === 'accident_preparedness')).length
+                    : null,
+                sdsTracked: register.sdsTracked,
+                inspections,
+                cabinets: isCabinetLockRulesEnabled
+                    ? cabinets.map((cabinet) => ({ id: cabinet.id, name: cabinet.name, location: cabinet.location ?? null, locked: cabinet.locked ?? null }))
+                    : null,
+                cabinetLocks,
+                containers: containers
+                    ? { list: containers, attentionCount: buildContainerTasks(containers, Date.now()).length, streamLabel: (code) => wasteStreamLabel(code, i18n.language) }
+                    : null,
+            }, prepText, language);
+            const date = new Date();
+            await downloadInspectionPrep(built, {
+                guideSheetName: prepText.sheets.guide,
+                fileName: prepText.fileName(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`),
+            });
+        } catch (error) {
+            console.error('Failed to export the inspection prep bundle:', error);
+            setQrNotice(prepText.failed);
+        } finally {
+            setIsExportingRegister(false);
+        }
+    };
+    // Report files share one header slot (and the mobile tools sheet).
+    const reportActions = [
+        ...(isHazardRegisterExportEnabled ? [{
+            label: hazardRegisterCopy(i18n.language).button,
+            title: hazardRegisterCopy(i18n.language).buttonTitle,
+            disabled: items.length === 0,
+            run: () => void handleExportHazardRegister(),
+        }] : []),
+        ...(isInspectionPrepExportEnabled && currentLabId ? [{
+            label: inspectionPrepCopy(i18n.language).prep,
+            title: inspectionPrepCopy(i18n.language).prepTitle,
+            disabled: false,
+            run: () => void handleExportInspectionPrep(),
+        }] : []),
+    ];
 
     const handleExportExcel = async () => {
         if (visibleItems.length === 0) return;
@@ -2556,17 +2648,72 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                             <Plus className="h-3.5 w-3.5" />
                             <span className="hidden whitespace-nowrap table:inline">{t('inventory_add_menu_manual')}</span>
                         </button>
-                        {isHazardRegisterExportEnabled && (
+                        {/* One slot for report files: a plain button for one export, a small menu for two. */}
+                        {reportActions.length === 1 && (
                             <button
-                                onClick={() => void handleExportHazardRegister()}
-                                disabled={items.length === 0 || isExportingRegister}
-                                title={hazardRegisterCopy(i18n.language).buttonTitle}
-                                aria-label={hazardRegisterCopy(i18n.language).buttonTitle}
-                                className="hidden h-9 min-w-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:px-3 table:inline-flex"
+                                onClick={reportActions[0].run}
+                                disabled={reportActions[0].disabled || isExportingRegister}
+                                title={reportActions[0].title}
+                                aria-label={reportActions[0].title}
+                                className={REPORT_BUTTON_CLASS}
                             >
                                 {isExportingRegister ? <Loader2 className="w-4 h-4 table:w-3.5 table:h-3.5 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 table:w-3.5 table:h-3.5" />}
-                                <span className="hidden table:inline whitespace-nowrap">{hazardRegisterCopy(i18n.language).button}</span>
+                                <span className="hidden table:inline whitespace-nowrap">{reportActions[0].label}</span>
                             </button>
+                        )}
+                        {reportActions.length > 1 && (
+                            <div className="relative hidden table:block">
+                                <button
+                                    type="button"
+                                    onClick={(event) => {
+                                        const rect = event.currentTarget.getBoundingClientRect();
+                                        setReportMenuAnchor((open) => (open ? null : { top: rect.bottom + 4, right: window.innerWidth - rect.right }));
+                                    }}
+                                    disabled={isExportingRegister}
+                                    title={inspectionPrepCopy(i18n.language).menuTitle}
+                                    aria-haspopup="menu"
+                                    aria-expanded={reportMenuAnchor !== null}
+                                    className={REPORT_BUTTON_CLASS}
+                                >
+                                    {isExportingRegister ? <Loader2 className="w-4 h-4 table:w-3.5 table:h-3.5 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 table:w-3.5 table:h-3.5" />}
+                                    <span className="whitespace-nowrap">{inspectionPrepCopy(i18n.language).menu}</span>
+                                    <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
+                                {reportMenuAnchor && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            tabIndex={-1}
+                                            aria-hidden="true"
+                                            onClick={() => setReportMenuAnchor(null)}
+                                            className="fixed inset-0 z-40 cursor-default"
+                                        />
+                                        <div
+                                            role="menu"
+                                            style={{ top: reportMenuAnchor.top, right: reportMenuAnchor.right }}
+                                            className="fixed z-50 min-w-[13rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-800"
+                                        >
+                                            {reportActions.map((action) => (
+                                                <button
+                                                    key={action.label}
+                                                    type="button"
+                                                    role="menuitem"
+                                                    disabled={action.disabled}
+                                                    title={action.title}
+                                                    onClick={() => {
+                                                        setReportMenuAnchor(null);
+                                                        action.run();
+                                                    }}
+                                                    className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                                                >
+                                                    <FileSpreadsheet className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                                                    {action.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         )}
                         {isPurchaseRequestsEnabled && (
                             <button
@@ -2615,6 +2762,7 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         isSelectMode={isSelectMode} onExport={handleExportExcel} onImport={() => setIsCsvImportOpen(true)} onSelect={toggleSelectMode}
                         stocktake={isQrLabelsEnabled && items.length > 0 ? { label: qrText.stocktake, run: () => setIsStocktakeOpen(true) } : undefined}
                         hazardRegister={isHazardRegisterExportEnabled && items.length > 0 ? { label: hazardRegisterCopy(i18n.language).button, run: () => void handleExportHazardRegister() } : undefined}
+                        inspectionPrep={isInspectionPrepExportEnabled && currentLabId ? { label: inspectionPrepCopy(i18n.language).prep, run: () => void handleExportInspectionPrep() } : undefined}
                         purchases={isPurchaseRequestsEnabled ? { label: purchaseText.button, run: () => setIsPurchasesDialogOpen(true) } : undefined} />}
                 </div>
 

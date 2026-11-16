@@ -129,6 +129,27 @@ export interface RegisterSheetCopy {
     fileName: (date: string) => string;
 }
 
+/**
+ * The automatic columns of the list, shared with the inspection prep bundle.
+ * The 화학물질관리법 column sits right after the app hazard groups (the 10th
+ * automatic column) when the rows carry it.
+ */
+export function registerColumns(rows: readonly RegisterRow[], copy: Pick<RegisterSheetCopy, 'headers' | 'regulationHeader'>) {
+    const withRegulation = rows.some((row) => row.regulation !== undefined);
+    const insertRegulation = <T,>(values: T[], value: T): T[] => (
+        withRegulation ? [...values.slice(0, 10), value, ...values.slice(10)] : values
+    );
+    return {
+        withRegulation,
+        headers: insertRegulation(copy.headers, copy.regulationHeader),
+        widths: insertRegulation([6, 28, 13, 14, 12, 18, 8, 42, 18, 18, 12, 8, 12], 22),
+        values: (row: RegisterRow): Array<string | number> => insertRegulation<string | number>([
+            row.index, row.name, row.casNumber, row.brand, row.holding, row.location, row.signalWord,
+            row.hazardStatements, row.pictograms, row.hazardGroups, row.ghsStatus, row.sds, row.expiryDate,
+        ], row.regulation ?? ''),
+    };
+}
+
 export async function downloadHazardRegister(rows: readonly RegisterRow[], copy: RegisterSheetCopy, meta: { space: string; date: Date }): Promise<void> {
     const { Workbook } = await import('exceljs');
     const workbook = new Workbook();
@@ -137,12 +158,8 @@ export async function downloadHazardRegister(rows: readonly RegisterRow[], copy:
     const sheet = workbook.addWorksheet(copy.sheetName);
     sheet.addRow([copy.title(meta.space, date)]).font = { bold: true, size: 13 };
     sheet.addRow([]);
-    // The 화학물질관리법 column sits right after the app hazard groups (the 10th automatic column).
-    const withRegulation = rows.some((row) => row.regulation !== undefined);
-    const insertRegulation = <T,>(values: T[], value: T): T[] => (
-        withRegulation ? [...values.slice(0, 10), value, ...values.slice(10)] : values
-    );
-    const automaticHeaders = insertRegulation(copy.headers, copy.regulationHeader);
+    const columns = registerColumns(rows, copy);
+    const automaticHeaders = columns.headers;
     const header = sheet.addRow([...automaticHeaders, ...copy.manualHeaders]);
     header.font = { bold: true };
     header.eachCell((cell, column) => {
@@ -150,16 +167,11 @@ export async function downloadHazardRegister(rows: readonly RegisterRow[], copy:
         cell.alignment = { wrapText: true, vertical: 'middle' };
     });
     for (const row of rows) {
-        const added = sheet.addRow([
-            ...insertRegulation<string | number>([
-                row.index, row.name, row.casNumber, row.brand, row.holding, row.location, row.signalWord,
-                row.hazardStatements, row.pictograms, row.hazardGroups, row.ghsStatus, row.sds, row.expiryDate,
-            ], row.regulation ?? ''),
-            ...copy.manualHeaders.map(() => ''),
-        ]);
+        const added = sheet.addRow([...columns.values(row), ...copy.manualHeaders.map(() => '')]);
         added.alignment = { wrapText: true, vertical: 'top' };
     }
-    const widths = [...insertRegulation([6, 28, 13, 14, 12, 18, 8, 42, 18, 18, 12, 8, 12], 22), ...copy.manualHeaders.map(() => 16)];
+    const withRegulation = columns.withRegulation;
+    const widths = [...columns.widths, ...copy.manualHeaders.map(() => 16)];
     widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
     sheet.views = [{ state: 'frozen', ySplit: 3 }];
 
