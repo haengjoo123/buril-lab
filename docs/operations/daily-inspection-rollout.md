@@ -9,7 +9,7 @@
 - 운영에서는 시험 데이터를 넣지 않았다. 카탈로그 조회로 테이블·RLS 정책·제약·트리거와 권한(anon 접근 불가, authenticated는 SELECT만)을 확인했다. 공개 테이블은 두 환경 모두 57개다.
 - 두 환경의 새 함수 본문 해시가 저장소 파일과 일치한다.
 - Security Advisor 기준선은 수거 요청 migration과 함께 79건으로 갱신했다(이 migration의 RPC 2개 포함). 경과는 `waste-container-pickup-rollout.md`의 적용 기록을 따른다.
-- 점검 항목 문구의 고시 원문 대조는 아직 하지 않았다. 플래그를 켜기 전에 필요하다.
+- 2026-11-16에 점검 항목 문구를 과학기술정보통신부고시 제2024-40호 별표2와 대조했다. 문구가 다른 6개 항목을 고치고 `kr-daily-v2`로 올렸다(`docs/operations/regulation-obligations-sources.md` 4절).
 
 ## 무엇이 바뀌나
 
@@ -23,7 +23,7 @@
 ## 점검 항목의 출처와 한계
 
 - 항목은 `src/features/dailyInspection/checklist.ts`에 있다. 「연구실 안전점검 및 정밀안전진단에 관한 지침」 일상점검표의 구역(일반·기계기구·전기·화공·소방·가스·생물)과 항목 구성을 따라 작성했다.
-- **문구는 고시 원문과 대조하지 않았다.** 플래그를 켜기 전에 현행 고시의 일상점검표와 항목·문구를 대조해야 한다.
+- 문구는 2026-11-16에 현행 고시의 일상점검표와 대조했다. 고시가 바뀌면 다시 대조하고 `CHECKLIST_VERSION`을 올린다.
 - 항목을 추가·삭제하거나 뜻을 바꾸면 `CHECKLIST_VERSION`을 올린다. 저장된 결과는 항목 id로 기록되고 버전이 함께 남는다.
 - 화면의 안내 문구는 이 기록이 법정 서식이나 보존 의무를 대신한다고 말하지 않는다. 기록의 법적 효력과 보존 기간은 기관 지침에 따라 확인해야 한다.
 
@@ -52,7 +52,7 @@
 
 ## 출시 순서
 
-1. 점검 항목과 문구를 현행 고시의 일상점검표와 대조한다.
+1. 점검 항목과 문구가 현행 고시의 일상점검표와 같은지 확인한다(2026-11-16 대조 완료).
 2. PR의 `Blank database interface` 검사 통과를 확인한다.
 3. Staging DB에 migration을 적용하고 `supabase test db supabase/tests`를 실행한다.
 4. Hosted Security Advisor를 실행한다. `authenticated_security_definer_function_executable` WARN이 2건(위 public RPC 2개) 늘어야 한다. 검토 뒤 `supabase/security-advisors/*.json`과 `EXPECTED_COUNTS`를 실제 관측값으로 갱신한다. 이번 변경은 이 기준을 미리 고치지 않았다.

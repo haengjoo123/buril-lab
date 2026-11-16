@@ -47,6 +47,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_HAZARD_REGISTER_EXPORT',
   'VITE_ENABLE_PURCHASE_REQUESTS',
   'VITE_ENABLE_AI_HANDLING_DRAFTS',
+  'VITE_ENABLE_REGULATION_ACTIONS',
 ] as const
 
 type AdminIdentity = {
@@ -582,6 +583,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_HAZARD_REGISTER_EXPORT': JSON.stringify(explicitClientEnv.VITE_ENABLE_HAZARD_REGISTER_EXPORT),
     'import.meta.env.VITE_ENABLE_PURCHASE_REQUESTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_PURCHASE_REQUESTS),
     'import.meta.env.VITE_ENABLE_AI_HANDLING_DRAFTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_AI_HANDLING_DRAFTS),
+    'import.meta.env.VITE_ENABLE_REGULATION_ACTIONS': JSON.stringify(explicitClientEnv.VITE_ENABLE_REGULATION_ACTIONS),
   },
   resolve: {
     alias: {

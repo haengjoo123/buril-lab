@@ -59,6 +59,11 @@ export const isPurchaseRequestsEnabled = isExplicitlyEnabled(import.meta.env.VIT
  * screen, always labelled as an unreviewed draft. Off unless a reviewed deployment enables it.
  */
 export const isAiHandlingDraftsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_AI_HANDLING_DRAFTS)
+/**
+ * Shows 화학물질관리법 classes as the handling actions they require, with the
+ * legal basis folded away. Off keeps the original classification list.
+ */
+export const isRegulationActionsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_REGULATION_ACTIONS)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )
