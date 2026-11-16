@@ -1,4 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { StoredRegulationLookup } from './_regulationLookup'
+
+const readStoredRegulations = vi.fn<(env: unknown, cas: readonly string[]) => Promise<Map<string, StoredRegulationLookup>>>(
+  async () => new Map(),
+)
+const storeRegulations = vi.fn<(env: unknown, lookups: ReadonlyArray<readonly [string, StoredRegulationLookup]>) => Promise<void>>(
+  async () => {},
+)
+vi.mock('./_regulationLookup', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./_regulationLookup')>(),
+  readStoredRegulations: (env: unknown, cas: readonly string[]) => readStoredRegulations(env, cas),
+  storeRegulations: (env: unknown, lookups: ReadonlyArray<readonly [string, StoredRegulationLookup]>) => storeRegulations(env, lookups),
+}))
+
 import { onRequestGet } from './regulations'
 
 const kecoPayload = {
@@ -31,6 +45,8 @@ describe('GET /api/chemicals/regulations', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+    readStoredRegulations.mockClear()
+    storeRegulations.mockClear()
   })
 
   it('rejects an invalid CAS number without calling upstream', async () => {
@@ -163,5 +179,29 @@ describe('GET /api/chemicals/regulations', () => {
     expect(upstream).not.toHaveBeenCalled()
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     await expect(response.json()).resolves.toEqual({ status: 'not_found' })
+  })
+
+  it('answers from the database cache and warms the edge without calling upstream', async () => {
+    const stored = { status: 'found', record: { casNumber: '7647-01-0', entries: [{ category: 'accident_preparedness', typeName: '사고대비물질' }] } } as const
+    readStoredRegulations.mockResolvedValueOnce(new Map([['7647-01-0', stored]]))
+    const { put } = stubCache()
+    const upstream = vi.fn()
+    vi.stubGlobal('fetch', upstream)
+
+    const response = await onRequestGet({ request: request('7647-01-0'), env: { KECO_API_KEY: 'key' } })
+
+    await expect(response.json()).resolves.toEqual(stored)
+    expect(upstream).not.toHaveBeenCalled()
+    expect((put.mock.calls[0][1] as Response).headers.get('Cache-Control')).toBe('public, s-maxage=604800')
+  })
+
+  it('stores a definitive upstream answer in the database cache', async () => {
+    stubCache()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(kecoPayload), { status: 200 })))
+
+    await onRequestGet({ request: request('7647-01-0'), env: { KECO_API_KEY: 'key' } })
+
+    expect(storeRegulations).toHaveBeenCalledTimes(1)
+    expect(storeRegulations.mock.calls[0][1]).toEqual([['7647-01-0', expect.objectContaining({ status: 'found' })]])
   })
 })

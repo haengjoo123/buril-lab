@@ -22,6 +22,11 @@ export interface RegisterItem {
     /** App hazard groups such as flammable or toxic, already translated. */
     hazardGroups: string[];
     hasSds: boolean;
+    /**
+     * 화학물질관리법 class names (허가·제한·금지·유해화학물질) when the lab-wide
+     * lookup is on: [] for none, null while unknown. Undefined leaves the column out.
+     */
+    regulationClasses?: string[] | null;
 }
 
 export interface RegisterRow {
@@ -38,6 +43,8 @@ export interface RegisterRow {
     ghsStatus: string;
     sds: string;
     expiryDate: string;
+    /** Present only when the 화학물질관리법 column is included. */
+    regulation?: string;
 }
 
 export interface RegisterCopy {
@@ -50,6 +57,7 @@ export interface RegisterCopy {
     sdsNo: string;
     signalDanger: string;
     signalWarning: string;
+    regulationNone: string;
 }
 
 const signalText = (value: string | null | undefined, copy: RegisterCopy): string => {
@@ -84,6 +92,10 @@ export function buildRegisterRows(items: readonly RegisterItem[], copy: Register
                 : !item.ghs ? copy.statusPending
                     : codes.length > 0 ? copy.statusLoaded : copy.statusNotClassified;
             const capacities = [...new Set(item.capacities)];
+            const regulation = item.regulationClasses === undefined ? undefined
+                : !item.casNumber ? copy.statusNoCas
+                    : item.regulationClasses === null ? copy.statusPending
+                        : item.regulationClasses.length > 0 ? [...new Set(item.regulationClasses)].join(', ') : copy.regulationNone;
             return {
                 index: index + 1,
                 name: item.name,
@@ -98,6 +110,7 @@ export function buildRegisterRows(items: readonly RegisterItem[], copy: Register
                 ghsStatus: status,
                 sds: item.hasSds ? copy.sdsYes : copy.sdsNo,
                 expiryDate: item.expiryDate?.slice(0, 10) ?? '',
+                ...(regulation === undefined ? {} : { regulation }),
             };
         });
 }
@@ -107,6 +120,10 @@ export interface RegisterSheetCopy {
     guideSheetName: string;
     title: (space: string, date: string) => string;
     headers: string[];
+    /** Inserted after the app hazard groups column when rows carry a regulation value. */
+    regulationHeader: string;
+    /** Guide line explaining the regulation column, added only with it. */
+    regulationGuide: string;
     manualHeaders: string[];
     guide: string[];
     fileName: (date: string) => string;
@@ -120,26 +137,36 @@ export async function downloadHazardRegister(rows: readonly RegisterRow[], copy:
     const sheet = workbook.addWorksheet(copy.sheetName);
     sheet.addRow([copy.title(meta.space, date)]).font = { bold: true, size: 13 };
     sheet.addRow([]);
-    const header = sheet.addRow([...copy.headers, ...copy.manualHeaders]);
+    // The 화학물질관리법 column sits right after the app hazard groups (the 10th automatic column).
+    const withRegulation = rows.some((row) => row.regulation !== undefined);
+    const insertRegulation = <T,>(values: T[], value: T): T[] => (
+        withRegulation ? [...values.slice(0, 10), value, ...values.slice(10)] : values
+    );
+    const automaticHeaders = insertRegulation(copy.headers, copy.regulationHeader);
+    const header = sheet.addRow([...automaticHeaders, ...copy.manualHeaders]);
     header.font = { bold: true };
     header.eachCell((cell, column) => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: column > copy.headers.length ? 'FFFFF7ED' : 'FFF1F5F9' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: column > automaticHeaders.length ? 'FFFFF7ED' : 'FFF1F5F9' } };
         cell.alignment = { wrapText: true, vertical: 'middle' };
     });
     for (const row of rows) {
         const added = sheet.addRow([
-            row.index, row.name, row.casNumber, row.brand, row.holding, row.location, row.signalWord,
-            row.hazardStatements, row.pictograms, row.hazardGroups, row.ghsStatus, row.sds, row.expiryDate,
+            ...insertRegulation<string | number>([
+                row.index, row.name, row.casNumber, row.brand, row.holding, row.location, row.signalWord,
+                row.hazardStatements, row.pictograms, row.hazardGroups, row.ghsStatus, row.sds, row.expiryDate,
+            ], row.regulation ?? ''),
             ...copy.manualHeaders.map(() => ''),
         ]);
         added.alignment = { wrapText: true, vertical: 'top' };
     }
-    const widths = [6, 28, 13, 14, 12, 18, 8, 42, 18, 18, 12, 8, 12, ...copy.manualHeaders.map(() => 16)];
+    const widths = [...insertRegulation([6, 28, 13, 14, 12, 18, 8, 42, 18, 18, 12, 8, 12], 22), ...copy.manualHeaders.map(() => 16)];
     widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
     sheet.views = [{ state: 'frozen', ySplit: 3 }];
 
     const guide = workbook.addWorksheet(copy.guideSheetName);
-    copy.guide.forEach((line, index) => {
+    // The regulation note goes just before the closing "not the official form" line.
+    const guideLines = withRegulation ? [...copy.guide.slice(0, -1), copy.regulationGuide, ...copy.guide.slice(-1)] : copy.guide;
+    guideLines.forEach((line, index) => {
         const row = guide.addRow([line]);
         if (index === 0) row.font = { bold: true, size: 13 };
         row.alignment = { wrapText: true };

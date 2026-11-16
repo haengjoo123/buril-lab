@@ -26,6 +26,7 @@ const POST_ROUTES = [
   '/api/analytics/search-event',
   '/api/analytics/user-delete',
   '/api/chemicals/enrich',
+  '/api/chemicals/regulations-batch',
   '/api/cabinets/image-urls',
   '/api/gemini/classify',
   '/api/gemini/disposal-guide',

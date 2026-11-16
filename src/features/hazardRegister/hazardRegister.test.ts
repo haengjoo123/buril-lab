@@ -49,5 +49,25 @@ describe('prior hazard analysis list', () => {
         expect(en.sheet.headers).toHaveLength(13);
         expect(copy.sheet.manualHeaders.length).toBeGreaterThan(0);
         expect(copy.sheet.guide.join(' ')).toContain('법정 서식을 대신하지 않습니다');
+        expect(copy.sheet.guide.join(' ')).toContain('연구종료일부터 3년');
+        expect(copy.sheet.regulationGuide).toContain('정밀안전진단');
+    });
+
+    it('fills the 화관법 column only when the lab-wide lookup supplied it', () => {
+        const rows = buildRegisterRows([
+            item({ name: 'Formalin', casNumber: '50-00-0', regulationClasses: ['제한물질', '인체등유해성물질', '제한물질'] }),
+            item({ name: 'Acetone', regulationClasses: [] }),
+            item({ name: 'Ethanol', casNumber: '64-17-5', regulationClasses: null }),
+            item({ name: 'Mixture', casNumber: null, regulationClasses: null }),
+        ], copy.row);
+        expect(Object.fromEntries(rows.map((row) => [row.name, row.regulation]))).toEqual({
+            Formalin: '제한물질, 인체등유해성물질',
+            Acetone: '해당 없음',
+            Ethanol: '조회 전(확인 필요)',
+            Mixture: 'CAS 없음(확인 필요)',
+        });
+
+        const [withoutLookup] = buildRegisterRows([item({})], copy.row);
+        expect('regulation' in withoutLookup).toBe(false);
     });
 });
