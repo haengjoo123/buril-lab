@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Trash2, Edit2, MapPin, Camera, ClipboardList, History, ArrowRight, MoreVertical, Beaker } from 'lucide-react';
+import { Trash2, Edit2, MapPin, Camera, ClipboardList, History, ArrowRight, MoreVertical, Beaker, Lock } from 'lucide-react';
 import type { Cabinet } from '../../../services/cabinetService';
+import { isCabinetLockRulesEnabled } from '../../../config/featureFlags';
 import { useTranslation } from 'react-i18next';
 
 interface CabinetCardProps {
@@ -107,6 +108,9 @@ export function CabinetCard({
                     <div className="min-w-0 flex-1 overflow-hidden">
                         <h3 className="flex min-w-0 items-center gap-2 text-base font-semibold text-slate-900 transition-colors group-hover:text-blue-600 dark:text-slate-100 dark:group-hover:text-blue-400 lg:flex-wrap">
                             <span className="min-w-0 truncate" title={cabinet.name}>{cabinet.name}</span>
+                            {isCabinetLockRulesEnabled && cabinet.locked === true && (
+                                <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-label={t('cabinet_card_locked')} role="img" />
+                            )}
                             {cabinet.location && (
                                 <span
                                     className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600 dark:bg-slate-700 dark:text-slate-300 lg:max-w-full"

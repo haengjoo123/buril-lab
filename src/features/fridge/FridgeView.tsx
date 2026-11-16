@@ -35,8 +35,11 @@ import { createCabinetLayoutSnapshot } from '../../utils/cabinetLayoutHistory';
 import {
     buildCabinetCompatMarks,
     checkCabinetCompatibility,
+    checkCabinetContainment,
     checkCabinetReviewConflicts,
 } from '../../utils/storageCompatibilityChecker';
+import { isCabinetLockRulesEnabled, isRegulationBatchEnabled } from '../../config/featureFlags';
+import { useRegulatedLockRequired } from '../../hooks/useChemicalRegulationMap';
 
 const FridgeScene = lazy(() =>
     import('./FridgeScene').then((module) => ({ default: module.FridgeScene }))
@@ -293,9 +296,18 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
     });
     const storageCompatWarningMap = React.useMemo(() => checkCabinetCompatibility(shelves), [shelves]);
     const storageCompatReviewMap = React.useMemo(() => checkCabinetReviewConflicts(shelves), [shelves]);
+    // Only a cabinet recorded as having no lock is checked, so unset cabinets cost nothing.
+    const cabinetLocked = useFridgeStore(s => s.cabinetLocked);
+    const checkLock = isCabinetLockRulesEnabled && cabinetLocked === false;
+    const cabinetCasNumbers = React.useMemo(() => shelves.flatMap(shelf => shelf.items.map(item => item.casNo)), [shelves]);
+    const isRegulatedLockRequired = useRegulatedLockRequired(cabinetCasNumbers, checkLock && isRegulationBatchEnabled);
+    const storageContainmentMap = React.useMemo(
+        () => checkCabinetContainment(shelves, checkLock ? false : null, item => isRegulatedLockRequired(item.casNo)),
+        [checkLock, isRegulatedLockRequired, shelves]
+    );
     const storageCompatMarks = React.useMemo(
-        () => buildCabinetCompatMarks(storageCompatWarningMap, storageCompatReviewMap),
-        [storageCompatWarningMap, storageCompatReviewMap]
+        () => buildCabinetCompatMarks(storageCompatWarningMap, storageCompatReviewMap, storageContainmentMap),
+        [storageCompatWarningMap, storageCompatReviewMap, storageContainmentMap]
     );
     const storageCompatIssueCount = React.useMemo(() => {
         let count = 0;
@@ -305,8 +317,11 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
         storageCompatReviewMap.forEach((conflicts) => {
             count += conflicts.length;
         });
+        storageContainmentMap.forEach((findings) => {
+            count += findings.length;
+        });
         return count;
-    }, [storageCompatWarningMap, storageCompatReviewMap]);
+    }, [storageCompatWarningMap, storageCompatReviewMap, storageContainmentMap]);
 
     // The detail fields start closed for a new reagent and open when one already has a value.
     if (pendingPlacement !== detailsPlacement) {
@@ -1409,6 +1424,7 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                     reopenToken={storageCompatBannerReopenToken}
                     warningMap={storageCompatWarningMap}
                     reviewMap={storageCompatReviewMap}
+                    containmentMap={storageContainmentMap}
                     onFocusIssue={handleFocusCompatibilityIssue}
                     onAutoArrange={() => void handleBuildCompatibilityPreview()}
                     isAutoArrangeBusy={isBuildingCompatibilityPlan || isApplyingCompatibilityPlan}

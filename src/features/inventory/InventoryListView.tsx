@@ -47,7 +47,9 @@ import {
     parseInventoryExpiryFilter,
 } from './inventoryExpiryFilter';
 import { InventoryCsvImportModal } from './InventoryCsvImportModal';
-import { isAiHandlingDraftsEnabled, isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isRegulationBatchEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { isAiHandlingDraftsEnabled, isCabinetLockRulesEnabled, isHazardRegisterExportEnabled, isInventoryImportV2Enabled, isPurchaseRequestsEnabled, isQrLabelsEnabled, isRegulationBatchEnabled, isSdsAttachmentsEnabled } from '../../config/featureFlags';
+import { requiresLockedStorage } from '../../utils/storageCompatibilityChecker';
+import { hasObligation } from '../../utils/regulationObligations';
 import { useChemicalRegulationMap } from '../../hooks/useChemicalRegulationMap';
 import { loadChemicalRegulations } from '../../services/chemicalRegulationService';
 import { normalizeCasNumber } from '../../utils/casNumber';
@@ -571,6 +573,18 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
         const lookup = cas ? regulationMap.get(cas) : undefined;
         return lookup?.status === 'found' && hazardousRegulationEntries(lookup.record).length > 0;
     }, [regulationMap]);
+    // A cabinet recorded as having no lock holding a reagent that belongs behind one.
+    const needsLockedCabinet = useCallback((item: InventoryItem) => {
+        if (!isCabinetLockRulesEnabled || item.storage_type !== 'cabinet' || !item.cabinet_id) return false;
+        if (cabinets.find((cabinet) => cabinet.id === item.cabinet_id)?.locked !== false) return false;
+        const cas = normalizeCasNumber(item.cas_number);
+        const lookup = cas ? regulationMap.get(cas) : undefined;
+        return requiresLockedStorage({
+            groups: classifyInventoryItemHazard(item).groups,
+            hCodes: getInventoryGhsHCodes(item),
+            regulatedLockRequired: lookup?.status === 'found' && hasObligation(lookup.record.entries, 'store_locked'),
+        });
+    }, [cabinets, classifyInventoryItemHazard, getInventoryGhsHCodes, regulationMap]);
     const matchesHazardFilter = useCallback((item: InventoryItem, filter: InventoryHazardFilter) => {
         if (filter === 'all') return true;
         if (filter === 'regulated') return isRegulatedItem(item);
@@ -3231,6 +3245,12 @@ export const InventoryListView: React.FC<InventoryListViewProps> = ({ userId, on
                         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                             <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('inventory_csv_table_storage')}</h4>
                             <div className="mt-3">{renderStorageBadge(selectedDesktopItem)}</div>
+                            {needsLockedCabinet(selectedDesktopItem) && (
+                                <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+                                    <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                    {t('inventory_storage_needs_lock')}
+                                </p>
+                            )}
                         </div>
 
                         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">

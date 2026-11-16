@@ -8,6 +8,7 @@ import { useFridgeStore } from '../../store/fridgeStore';
 import { CabinetCard } from './components/CabinetCard';
 import { CustomDialog } from '../../components/CustomDialog';
 import { CabinetFormDialog } from './components/CabinetFormDialog';
+import { isCabinetLockRulesEnabled } from '../../config/featureFlags';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { ImageActionMenu } from './components/ImageActionMenu';
 import { ActivityLogModal } from './components/ActivityLogModal';
@@ -90,6 +91,8 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
         cabinetId?: string;
         initialName?: string;
         initialLocation?: string;
+        /** Undefined hides the lock choice (flag off). */
+        initialLocked?: boolean | null;
     }>({
         isOpen: false,
         mode: 'create'
@@ -524,7 +527,8 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             isOpen: true,
             mode: 'create',
             initialName: '',
-            initialLocation: ''
+            initialLocation: '',
+            initialLocked: isCabinetLockRulesEnabled ? null : undefined,
         });
     };
 
@@ -535,15 +539,20 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
             mode: 'edit',
             cabinetId: cabinet.id,
             initialName: cabinet.name,
-            initialLocation: cabinet.location || ''
+            initialLocation: cabinet.location || '',
+            initialLocked: isCabinetLockRulesEnabled ? (cabinet.locked ?? null) : undefined,
         });
     };
 
-    const handleFormConfirm = async (name: string, location?: string) => {
+    const handleFormConfirm = async (name: string, location?: string, locked?: boolean | null) => {
         try {
             setIsCreating(true);
             if (formDialogConfig.mode === 'create') {
                 const created = await cabinetService.createCabinet(name, location);
+                // create_cabinet_v2 takes no lock value; a chosen one is saved right after.
+                if (created?.id && typeof locked === 'boolean') {
+                    await cabinetService.updateCabinet(created.id, { locked });
+                }
                 if (created?.id) {
                     // A new cabinet is empty: open it ready to place reagents.
                     closeFormDialog();
@@ -552,7 +561,11 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                     return;
                 }
             } else if (formDialogConfig.mode === 'edit' && formDialogConfig.cabinetId) {
-                await cabinetService.updateCabinet(formDialogConfig.cabinetId, { name, location });
+                await cabinetService.updateCabinet(formDialogConfig.cabinetId, {
+                    name,
+                    location,
+                    ...(locked === undefined ? {} : { locked }),
+                });
                 cabinetService.logActivity(
                     formDialogConfig.cabinetId,
                     'update',
@@ -959,6 +972,7 @@ export function CabinetListView({ onSelectCabinet }: CabinetListViewProps) {
                 description={formDialogConfig.mode === 'create' ? t('cabinet_create_desc') : undefined}
                 initialName={formDialogConfig.initialName}
                 initialLocation={formDialogConfig.initialLocation}
+                initialLocked={formDialogConfig.initialLocked}
                 onConfirm={handleFormConfirm}
                 isLoading={isCreating}
             />

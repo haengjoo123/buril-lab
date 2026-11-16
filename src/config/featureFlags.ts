@@ -70,6 +70,11 @@ export const isRegulationActionsEnabled = isExplicitlyEnabled(import.meta.env.VI
  * 20261116090000_regulation_source_cache migration in that environment.
  */
 export const isRegulationBatchEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_REGULATION_BATCH)
+/**
+ * Cabinet lock setting and the "toxic reagent in a cabinet without a lock"
+ * storage warning. Reads cabinets.locked, added by 20261116100000_cabinet_locked.
+ */
+export const isCabinetLockRulesEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_CABINET_LOCK_RULES)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )
