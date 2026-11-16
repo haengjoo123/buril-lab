@@ -23,6 +23,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_REGULATION_ACTIONS?: string
   readonly VITE_ENABLE_REGULATION_BATCH?: string
   readonly VITE_ENABLE_CABINET_LOCK_RULES?: string
+  readonly VITE_ENABLE_INSPECTION_HINTS?: string
 }
 
 interface ImportMeta {

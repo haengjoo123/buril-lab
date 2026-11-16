@@ -12,7 +12,20 @@ import { inventoryService, type InventoryItem } from './inventoryService';
 import { labService } from './labService';
 import { fetchWasteContainerTotals, fetchWasteContainers } from './wasteContainerService';
 import { useLabStore } from '../store/useLabStore';
-import { isPurchaseRequestsEnabled, isWasteContainersEnabled } from '../config/featureFlags';
+import {
+  isCabinetLockRulesEnabled,
+  isDailyInspectionEnabled,
+  isInspectionHintsEnabled,
+  isPurchaseRequestsEnabled,
+  isRegulationBatchEnabled,
+  isWasteContainersEnabled,
+} from '../config/featureFlags';
+import { fetchRecentDailyInspections } from './dailyInspectionService';
+import { loadCabinetLockSummary } from './labSafetySignalService';
+import { loadChemicalRegulations } from './chemicalRegulationService';
+import { INSPECTION_LOOKBACK_DAYS, type CabinetLockSummary } from '../features/dailyInspection/labSafetySignals';
+import { hazardousRegulationEntries } from '../utils/chemicalRegulations';
+import { normalizeCasNumber } from '../utils/casNumber';
 import { listPurchaseRequests } from './purchaseRequestService';
 import { canCommitLabRequest, type LabRequestToken } from '../utils/labRequestScope';
 import { hasManufacturerDate } from '../utils/manufacturerDate';
@@ -40,6 +53,8 @@ export const LAB_ADMIN_SOURCE_KEYS = [
   'wasteContainers',
   'members',
   'purchaseRequests',
+  'dailyInspections',
+  'cabinetLocks',
 ] as const;
 
 export type LabAdminSourceKey = (typeof LAB_ADMIN_SOURCE_KEYS)[number];
@@ -50,6 +65,11 @@ export interface LabAdminInventorySummary {
   casMissingCount: number;
   /** Only items with a manufacturer-printed date: the expiry card needs nothing else. */
   datedItems: InventoryItem[];
+  /**
+   * Distinct CAS numbers with a 화관법 class that makes the lab subject to 정밀안전진단
+   * (허가·제한·금지·유해화학물질). Undefined when not looked up; null when the lookup failed.
+   */
+  regulatedCasCount?: number | null;
 }
 
 export interface LabAdminSourceValues {
@@ -60,6 +80,8 @@ export interface LabAdminSourceValues {
   wasteContainers: LabAdminContainerInput[];
   members: LabAdminMemberInput[];
   purchaseRequests: LabAdminPurchaseInput[];
+  dailyInspections: Array<{ inspectionDate: string }>;
+  cabinetLocks: CabinetLockSummary;
 }
 
 export type LabAdminSourceResult<K extends LabAdminSourceKey = LabAdminSourceKey> =
@@ -70,12 +92,32 @@ export type LabAdminOverviewResults = { [K in LabAdminSourceKey]?: LabAdminSourc
 
 export type LabAdminSourceLoaders = { [K in LabAdminSourceKey]: (labId: string) => Promise<LabAdminSourceValues[K]> };
 
-/** The sources this build loads: waste containers and purchase requests only behind their feature flags. */
-export function getLabAdminSourceKeys(options: { wasteContainers?: boolean; purchaseRequests?: boolean } = {}): LabAdminSourceKey[] {
-  const includeContainers = options.wasteContainers ?? isWasteContainersEnabled;
-  const includePurchases = options.purchaseRequests ?? isPurchaseRequestsEnabled;
-  return LAB_ADMIN_SOURCE_KEYS.filter((key) => (key !== 'wasteContainers' || includeContainers)
-    && (key !== 'purchaseRequests' || includePurchases));
+/** The sources this build loads: the optional ones only behind their feature flags. */
+export function getLabAdminSourceKeys(options: {
+  wasteContainers?: boolean;
+  purchaseRequests?: boolean;
+  dailyInspections?: boolean;
+  cabinetLocks?: boolean;
+} = {}): LabAdminSourceKey[] {
+  const included: Partial<Record<LabAdminSourceKey, boolean>> = {
+    wasteContainers: options.wasteContainers ?? isWasteContainersEnabled,
+    purchaseRequests: options.purchaseRequests ?? isPurchaseRequestsEnabled,
+    dailyInspections: options.dailyInspections ?? (isInspectionHintsEnabled && isDailyInspectionEnabled),
+    cabinetLocks: options.cabinetLocks ?? (isInspectionHintsEnabled && isCabinetLockRulesEnabled),
+  };
+  return LAB_ADMIN_SOURCE_KEYS.filter((key) => included[key] ?? true);
+}
+
+/** Distinct regulated CAS numbers for the status tile; a few quick lookup rounds at most. */
+async function countRegulatedCasNumbers(items: readonly InventoryItem[]): Promise<number | null> {
+  const casNumbers = [...new Set(items.map((item) => normalizeCasNumber(item.cas_number)).filter((cas): cas is string => Boolean(cas)))];
+  if (casNumbers.length === 0) return 0;
+  try {
+    const lookups = await loadChemicalRegulations(casNumbers, { maxRounds: 3 });
+    return [...lookups.values()].filter((lookup) => lookup.status === 'found' && hazardousRegulationEntries(lookup.record).length > 0).length;
+  } catch {
+    return null;
+  }
 }
 
 class LabChangedError extends Error {
@@ -148,7 +190,7 @@ export async function fetchLabDangerWarnings(labId: string, now: number = Date.n
   return { count: typeof count === 'number' ? count : rows.length, latest: rows };
 }
 
-async function loadWasteContainersForOverview(labId: string): Promise<LabAdminContainerInput[]> {
+export async function loadWasteContainersForOverview(labId: string): Promise<LabAdminContainerInput[]> {
   assertCurrentLab(labId);
   // Collected containers are excluded: they need nothing more.
   const containers = await fetchWasteContainers();
@@ -171,7 +213,10 @@ export const labAdminSourceLoaders: LabAdminSourceLoaders = {
   linkRequests: (labId) => safetyCenterService.getLabLinkRequests(labId),
   inventory: async (labId) => {
     assertCurrentLab(labId);
-    return summarizeInventoryForOverview(await inventoryService.getItems());
+    const items = await inventoryService.getItems();
+    const summary = summarizeInventoryForOverview(items);
+    if (!(isInspectionHintsEnabled && isRegulationBatchEnabled)) return summary;
+    return { ...summary, regulatedCasCount: await countRegulatedCasNumbers(items) };
   },
   dangerWarnings: (labId) => fetchLabDangerWarnings(labId),
   wasteContainers: loadWasteContainersForOverview,
@@ -187,6 +232,12 @@ export const labAdminSourceLoaders: LabAdminSourceLoaders = {
       .filter((request) => request.status === 'requested')
       .map(({ id, createdAt }) => ({ id, createdAt }));
   },
+  dailyInspections: async (labId) => {
+    // Only the dates matter here; one extra day covers today.
+    const records = await fetchRecentDailyInspections(labId, INSPECTION_LOOKBACK_DAYS + 1);
+    return records.map(({ inspectionDate }) => ({ inspectionDate }));
+  },
+  cabinetLocks: (labId) => loadCabinetLockSummary(labId),
 };
 
 async function settle<K extends LabAdminSourceKey>(
@@ -225,6 +276,8 @@ export function createLabAdminOverviewLoader(options: LabAdminOverviewLoaderOpti
     wasteContainers: 0,
     members: 0,
     purchaseRequests: 0,
+    dailyInspections: 0,
+    cabinetLocks: 0,
   };
 
   return {

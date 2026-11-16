@@ -39,6 +39,13 @@ const KO = {
     centerIssueDays: '불량이 있던 날',
     centerLast: '마지막 기록',
     centerNever: '기록 없음',
+    hintSource: '연구실 기록 기준',
+    hintOpen: '보기',
+    hints: {
+        lockMissing: (count: number) => `잠금장치 없는 시약장에 독성·발암성 물질 ${count}개`,
+        lockUnset: (count: number) => `독성·발암성 물질이 있는 시약장 ${count}개의 잠금 여부가 기록되지 않았어요`,
+        containers: (count: number) => `확인할 폐액통 ${count}개(80% 이상 찼거나, 봉인 후 오래됐거나, 수거 요청됨)`,
+    },
 };
 
 const EN: typeof KO = {
@@ -79,6 +86,13 @@ const EN: typeof KO = {
     centerIssueDays: 'Days with issues',
     centerLast: 'Last record',
     centerNever: 'No record',
+    hintSource: 'From lab records',
+    hintOpen: 'View',
+    hints: {
+        lockMissing: (count: number) => `${count} toxic or carcinogenic reagent(s) in cabinets without a lock`,
+        lockUnset: (count: number) => `${count} cabinet(s) with toxic or carcinogenic reagents have no lock recorded`,
+        containers: (count: number) => `${count} waste container(s) to check (80% full, sealed for long, or pickup requested)`,
+    },
 };
 
 export type InspectionCopy = typeof KO;

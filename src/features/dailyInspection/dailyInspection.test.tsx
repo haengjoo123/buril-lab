@@ -129,4 +129,23 @@ describe('DailyInspectionPanel', () => {
         expect(html.match(/aria-checked="true"/g)).toHaveLength(INSPECTION_ITEM_IDS.length);
         expect(html).toContain('14일 중 1일 기록');
     });
+
+    it('shows a lab-data hint under the items it speaks to without choosing an answer', () => {
+        const html = renderToStaticMarkup(
+            <DailyInspectionPanel
+                labId="11111111-1111-4111-8111-111111111111"
+                language="ko"
+                initialRecords={[]}
+                hints={{ chemical_toxic: { count: 2, text: '잠금장치 없는 시약장에 독성·발암성 물질 2개', target: { kind: 'cabinet', cabinetId: 'c1' } } }}
+                onOpenHint={() => {}}
+            />,
+        );
+        expect(html.match(/잠금장치 없는 시약장에 독성·발암성 물질 2개/g)).toHaveLength(1);
+        expect(html).toContain('보기');
+        // Same checklist: no extra rows, and nothing is answered for the inspector.
+        expect(html.match(/role="radiogroup"/g)).toHaveLength(INSPECTION_ITEM_IDS.length);
+        expect(html).not.toMatch(/aria-checked="true"/);
+        const toxicItem = html.slice(html.indexOf('id="inspection-chemical_toxic"'), html.indexOf('role="radiogroup" aria-labelledby="inspection-chemical_toxic"'));
+        expect(toxicItem).toContain('잠금장치 없는 시약장');
+    });
 });

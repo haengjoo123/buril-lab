@@ -51,6 +51,8 @@ function fakeLoaders(overrides: Partial<LabAdminSourceLoaders> = {}): LabAdminSo
     wasteContainers: vi.fn(async () => []),
     members: vi.fn(async () => []),
     purchaseRequests: vi.fn(async () => []),
+    dailyInspections: vi.fn(async () => []),
+    cabinetLocks: vi.fn(async () => ({ unlocked: [], unset: [] })),
     ...overrides,
   };
 }
@@ -164,6 +166,12 @@ describe('source loaders', () => {
   it('only lists waste containers when the feature is on', () => {
     expect(getLabAdminSourceKeys({ wasteContainers: false })).not.toContain('wasteContainers');
     expect(getLabAdminSourceKeys({ wasteContainers: true })).toContain('wasteContainers');
+  });
+
+  it('only lists the inspection and cabinet lock sources when their features are on', () => {
+    expect(getLabAdminSourceKeys()).not.toContain('dailyInspections');
+    expect(getLabAdminSourceKeys()).not.toContain('cabinetLocks');
+    expect(getLabAdminSourceKeys({ dailyInspections: true, cabinetLocks: true })).toEqual(expect.arrayContaining(['dailyInspections', 'cabinetLocks']));
   });
 
   it('refuses to read another lab through the store-scoped services', async () => {

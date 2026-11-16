@@ -7,6 +7,11 @@ import { hasManufacturerDate } from '../../utils/manufacturerDate';
 import { calendarDateToUtcMs, parseCalendarDate } from '../../utils/dateValidation';
 import { getRequestDueState } from './safetyRequestDue';
 import { isNewLabMember, type SortableLabMember } from './labMemberSort';
+import {
+  MISSING_WEEKDAYS_THRESHOLD,
+  missingInspectionWeekdays,
+  type CabinetLockSummary,
+} from '../dailyInspection/labSafetySignals';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -80,6 +85,10 @@ export interface LabAdminTaskSources {
   /** Undecided purchase requests. Absent when purchase requests are off. */
   purchaseRequests?: readonly LabAdminPurchaseInput[] | null;
   joinPasswordNeedsChange?: boolean;
+  /** Recent daily inspection dates (KST). Absent when inspection hints are off. */
+  dailyInspections?: ReadonlyArray<{ inspectionDate: string }> | null;
+  /** Cabinets holding reagents that belong behind a lock. Absent when cabinet lock rules are off. */
+  cabinetLocks?: CabinetLockSummary | null;
 }
 
 export type LabAdminExpiryLevel = 'expired' | 'critical' | 'warning';
@@ -159,6 +168,22 @@ export type LabAdminTask =
   })
   | (LabAdminTaskBase & {
     kind: 'join_password';
+  })
+  | (LabAdminTaskBase & {
+    kind: 'daily_inspection_missing';
+    /** Weekdays in the last 7 days without a record, newest first. */
+    missingDates: string[];
+  })
+  | (LabAdminTaskBase & {
+    kind: 'cabinet_locks';
+    /** unlocked: recorded as having no lock; unset: lock not recorded yet. */
+    reason: 'unlocked' | 'unset';
+    /** The cabinet with the most such reagents, opened by the card. */
+    cabinetId: string;
+    cabinetName: string;
+    cabinetCount: number;
+    /** Reagents that belong behind a lock across those cabinets. */
+    reagentCount: number;
   });
 
 export type LabAdminTaskKind = LabAdminTask['kind'];
@@ -292,7 +317,8 @@ function buildLinkTasks(links: readonly LabAdminLinkRequestInput[]): LabAdminTas
     }));
 }
 
-function buildContainerTasks(containers: readonly LabAdminContainerInput[], now: number): LabAdminTask[] {
+/** Containers that need attention (full, sealed long, pickup requested); also counted by the daily inspection hint. */
+export function buildContainerTasks(containers: readonly LabAdminContainerInput[], now: number): LabAdminTask[] {
   return containers.flatMap((container): LabAdminTask[] => {
     const base = {
       kind: 'waste_container' as const,
@@ -369,6 +395,39 @@ function buildNewMemberTask(members: readonly LabAdminMemberInput[], now: number
   };
 }
 
+function buildInspectionTask(records: ReadonlyArray<{ inspectionDate: string }>, now: number): LabAdminTask | null {
+  const missingDates = missingInspectionWeekdays(records, now);
+  if (missingDates.length < MISSING_WEEKDAYS_THRESHOLD) return null;
+  return {
+    kind: 'daily_inspection_missing',
+    // One more missed day is new information: a card hidden this week comes back.
+    key: `daily_inspection_missing:${missingDates.length}`,
+    severity: 'amber',
+    count: missingDates.length,
+    sortDays: null,
+    missingDates,
+  };
+}
+
+function buildCabinetLockTask(summary: CabinetLockSummary): LabAdminTask | null {
+  const reason = summary.unlocked.length > 0 ? 'unlocked' : summary.unset.length > 0 ? 'unset' : null;
+  if (!reason) return null;
+  const groups = reason === 'unlocked' ? summary.unlocked : summary.unset;
+  const reagentCount = groups.reduce((sum, group) => sum + group.count, 0);
+  return {
+    kind: 'cabinet_locks',
+    key: `cabinet_locks:${reason}:${groups.length}:${reagentCount}`,
+    severity: 'amber',
+    count: reagentCount,
+    sortDays: null,
+    reason,
+    cabinetId: groups[0].cabinetId,
+    cabinetName: groups[0].cabinetName,
+    cabinetCount: groups.length,
+    reagentCount,
+  };
+}
+
 function buildPurchaseTask(requests: readonly LabAdminPurchaseInput[], now: number): LabAdminTask | null {
   if (requests.length === 0) return null;
   const ids = requests.map((request) => request.id).sort();
@@ -427,6 +486,14 @@ export function buildLabAdminTasks(
   if (sources.purchaseRequests) {
     const purchases = buildPurchaseTask(sources.purchaseRequests, now);
     if (purchases) tasks.push(purchases);
+  }
+  if (sources.dailyInspections) {
+    const inspection = buildInspectionTask(sources.dailyInspections, now);
+    if (inspection) tasks.push(inspection);
+  }
+  if (sources.cabinetLocks) {
+    const locks = buildCabinetLockTask(sources.cabinetLocks);
+    if (locks) tasks.push(locks);
   }
   if (sources.joinPasswordNeedsChange) {
     tasks.push({ kind: 'join_password', key: 'join_password', severity: 'amber', count: 1, sortDays: null });

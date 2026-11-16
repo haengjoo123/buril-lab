@@ -10,7 +10,7 @@ vi.mock('react-i18next', () => ({
     i18n: { language: 'ko', changeLanguage: vi.fn() },
   }),
 }))
-const flags = vi.hoisted(() => ({ isWasteV2Enabled: true }))
+const flags = vi.hoisted(() => ({ isWasteV2Enabled: true, isInspectionHintsEnabled: false, isDailyInspectionEnabled: false, isCabinetLockRulesEnabled: false, isRegulationBatchEnabled: false }))
 vi.mock('../../config/featureFlags', () => flags)
 vi.mock('../../components/WastePolicySettingsPanel', () => ({ WastePolicySettingsPanel: () => <p>waste-panel</p> }))
 vi.mock('./GlobalAuditLogsView', () => ({ GlobalAuditLogsView: () => <p>activity-panel</p> }))
