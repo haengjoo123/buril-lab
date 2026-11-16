@@ -80,6 +80,8 @@ export const isCabinetLockRulesEnabled = isExplicitlyEnabled(import.meta.env.VIT
  * matching admin to-dos and 화관법 status line. No database changes of its own.
  */
 export const isInspectionHintsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INSPECTION_HINTS)
+/** One workbook gathering inventory, inspections, cabinets and containers for an inspection (no database changes). */
+export const isInspectionPrepExportEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INSPECTION_PREP_EXPORT)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )
