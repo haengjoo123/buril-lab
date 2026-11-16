@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, ClipboardCheck, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardCheck, Info, Loader2 } from 'lucide-react';
+import type { InspectionHint, InspectionHintTarget } from './labSafetySignals';
 import {
     MAX_INSPECTION_NOTE_LENGTH,
     fetchRecentDailyInspections,
@@ -26,6 +27,9 @@ interface DailyInspectionPanelProps {
     language: string;
     /** Records already at hand (a fixture or a parent that loaded them); skips the first fetch. */
     initialRecords?: DailyInspectionRecord[];
+    /** One line of lab data under the items it speaks to. Never picks an answer. */
+    hints?: Partial<Record<string, InspectionHint>>;
+    onOpenHint?: (target: InspectionHintTarget) => void;
 }
 
 const HISTORY_DAYS = 14;
@@ -48,7 +52,7 @@ type LoadState =
     | { status: 'ready'; records: DailyInspectionRecord[] };
 
 /** Records today's daily lab safety inspection and shows recent days. */
-export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labId, language, initialRecords }) => {
+export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labId, language, initialRecords, hints, onOpenHint }) => {
     const copy = inspectionCopy(language);
     const isKorean = language.startsWith('ko');
     const initialToday = initialRecords?.find((record) => record.inspectionDate === kstDateString()) ?? null;
@@ -220,9 +224,27 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
                     <ul className="divide-y divide-slate-100 dark:divide-slate-700/70">
                         {section.items.map((item) => {
                             const text = isKorean ? item.ko : item.en;
+                            const hint = hints?.[item.id];
                             return (
                                 <li key={item.id} className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                                    <span id={`inspection-${item.id}`} className="min-w-0 break-keep text-sm text-slate-800 dark:text-slate-200">{text}</span>
+                                    <div className="min-w-0">
+                                        <span id={`inspection-${item.id}`} className="break-keep text-sm text-slate-800 dark:text-slate-200">{text}</span>
+                                        {hint && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onOpenHint?.(hint.target)}
+                                                disabled={!onOpenHint}
+                                                className="mt-1 flex items-start gap-1 text-left text-xs text-amber-700 hover:text-amber-900 disabled:cursor-default dark:text-amber-300 dark:hover:text-amber-200"
+                                            >
+                                                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                                <span>
+                                                    <span className="sr-only">{copy.hintSource}: </span>
+                                                    {hint.text}
+                                                    {onOpenHint && <span className="ml-1 font-semibold underline underline-offset-2">{copy.hintOpen}</span>}
+                                                </span>
+                                            </button>
+                                        )}
+                                    </div>
                                     <div
                                         className="flex shrink-0 gap-0.5 rounded-lg border border-slate-200 p-0.5 dark:border-slate-600"
                                         role="radiogroup"

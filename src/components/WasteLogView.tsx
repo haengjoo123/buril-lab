@@ -11,7 +11,7 @@ import {
 } from '../services/wasteLogService';
 import type { DisposalCategory } from '../types';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PencilLine, ChevronDown, ChevronUp, Loader2, AlertCircle, Search, History, X, FileText, FileSpreadsheet, Download, CheckCircle2, ClipboardCheck, Cylinder } from 'lucide-react';
 import { useLabStore } from '../store/useLabStore';
 import type { WasteLogSortBy } from '../services/wasteLogService';
@@ -37,6 +37,9 @@ import { isDailyInspectionEnabled, isQrLabelsEnabled, isWasteContainersEnabled }
 import { CONTAINER_PARAM, SPACE_PARAM } from '../features/qrLabels/qrPayload';
 import { qrCopy } from '../features/qrLabels/copy';
 import { DailyInspectionPanel } from '../features/dailyInspection/DailyInspectionPanel';
+import { useInspectionHints } from '../features/dailyInspection/useInspectionHints';
+import { LOG_VIEW_PARAM } from '../features/dailyInspection/inspectionLink';
+import { labAppRoute } from '../utils/appRoutes';
 import { inspectionCopy } from '../features/dailyInspection/copy';
 import { WasteContainersPanel } from '../features/wasteContainers/WasteContainersPanel';
 import { containerCopy } from '../features/wasteContainers/copy';
@@ -540,6 +543,20 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
     const [activeTab, setActiveTab] = useState<LogViewTab>('recent');
     const [showContainers, setShowContainers] = useState(false);
     const [showInspection, setShowInspection] = useState(false);
+    const navigate = useNavigate();
+    // `?view=inspection` (the admin overview's link) opens the daily inspection directly.
+    const requestedLogView = searchParams.get(LOG_VIEW_PARAM);
+    useEffect(() => {
+        if (requestedLogView !== 'inspection') return;
+        setShowContainers(false);
+        setShowInspection(true);
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete(LOG_VIEW_PARAM);
+            return next;
+        }, { replace: true });
+    }, [requestedLogView, setSearchParams]);
+    const inspectionHints = useInspectionHints(currentLabId, i18n.language);
     const [qrContainerId, setQrContainerId] = useState<string | null>(null);
     const [qrContainerMissing, setQrContainerMissing] = useState(false);
     const scannedContainerId = isQrLabelsEnabled && isWasteContainersEnabled ? searchParams.get(CONTAINER_PARAM) : null;
@@ -1669,7 +1686,20 @@ export const WasteLogView: React.FC<WasteLogViewProps> = ({
 
             <div className="logs-results contents">
             {inspectionVisible ? (
-                <DailyInspectionPanel key={currentLabId ?? 'personal'} labId={currentLabId} language={i18n.language} />
+                <DailyInspectionPanel
+                    key={currentLabId ?? 'personal'}
+                    labId={currentLabId}
+                    language={i18n.language}
+                    hints={inspectionHints}
+                    onOpenHint={(target) => {
+                        if (target.kind === 'containers') {
+                            setShowInspection(false);
+                            setShowContainers(true);
+                            return;
+                        }
+                        navigate(labAppRoute(`/cabinet?id=${encodeURIComponent(target.cabinetId)}`));
+                    }}
+                />
             ) : containersVisible ? (
                 <>
                 {qrContainerMissing && (

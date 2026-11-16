@@ -50,6 +50,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_REGULATION_ACTIONS',
   'VITE_ENABLE_REGULATION_BATCH',
   'VITE_ENABLE_CABINET_LOCK_RULES',
+  'VITE_ENABLE_INSPECTION_HINTS',
 ] as const
 
 type AdminIdentity = {
@@ -588,6 +589,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_REGULATION_ACTIONS': JSON.stringify(explicitClientEnv.VITE_ENABLE_REGULATION_ACTIONS),
     'import.meta.env.VITE_ENABLE_REGULATION_BATCH': JSON.stringify(explicitClientEnv.VITE_ENABLE_REGULATION_BATCH),
     'import.meta.env.VITE_ENABLE_CABINET_LOCK_RULES': JSON.stringify(explicitClientEnv.VITE_ENABLE_CABINET_LOCK_RULES),
+    'import.meta.env.VITE_ENABLE_INSPECTION_HINTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_INSPECTION_HINTS),
   },
   resolve: {
     alias: {

@@ -11,7 +11,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 vi.mock('../../locales/i18n', () => ({ default: { t: (key: string) => key } }))
-const flags = vi.hoisted(() => ({ isWasteContainersEnabled: false, isWasteV2Enabled: true, isPurchaseRequestsEnabled: false }))
+const flags = vi.hoisted(() => ({ isWasteContainersEnabled: false, isWasteV2Enabled: true, isPurchaseRequestsEnabled: false, isInspectionHintsEnabled: false, isDailyInspectionEnabled: false, isCabinetLockRulesEnabled: false, isRegulationBatchEnabled: false }))
 vi.mock('../../config/featureFlags', () => flags)
 vi.mock('../../services/supabaseClient', () => {
   const builder: Record<string, unknown> = {}

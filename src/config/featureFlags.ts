@@ -75,6 +75,11 @@ export const isRegulationBatchEnabled = isExplicitlyEnabled(import.meta.env.VITE
  * storage warning. Reads cabinets.locked, added by 20261116100000_cabinet_locked.
  */
 export const isCabinetLockRulesEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_CABINET_LOCK_RULES)
+/**
+ * Daily inspection hints from lab data (cabinet locks, waste containers) and the
+ * matching admin to-dos and 화관법 status line. No database changes of its own.
+ */
+export const isInspectionHintsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INSPECTION_HINTS)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

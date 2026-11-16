@@ -9,6 +9,7 @@ import {
     Building2,
     CheckCircle2,
     ChevronDown,
+    ClipboardCheck,
     FlaskConical,
     KeyRound,
     Loader2,
@@ -43,6 +44,7 @@ import {
     type LabAdminSourceValues,
 } from '../../services/labAdminOverviewService';
 import { labAppRoute } from '../../utils/appRoutes';
+import { dailyInspectionRoute } from '../dailyInspection/inspectionLink';
 import type { InventoryExpiryFilter } from '../inventory/inventoryExpiryFilter';
 import { wasteStreamLabel } from '../../utils/wasteLabels';
 import { containerCopy, containerErrorMessage } from '../wasteContainers/copy';
@@ -87,6 +89,8 @@ const SOURCE_LABEL_KEYS: Record<LabAdminSourceKey, string> = {
     wasteContainers: 'admin_overview_source_waste',
     members: 'admin_overview_source_members',
     purchaseRequests: 'admin_overview_source_purchases',
+    dailyInspections: 'admin_overview_source_inspections',
+    cabinetLocks: 'admin_overview_source_cabinet_locks',
 };
 
 /** What a link scope lets a center see, in plain words (falls back to the short scope label). */
@@ -209,7 +213,35 @@ function describeTask(task: LabAdminTask, t: TFunction, language: string): TaskT
                 title: t('admin_overview_task_join_password'),
                 detail: t('admin_overview_join_password_detail'),
             };
+        case 'daily_inspection_missing':
+            return {
+                title: t('admin_overview_task_inspection_missing', { count: task.missingDates.length }),
+                meta: t('admin_overview_inspection_missing_meta'),
+                detail: task.missingDates.map(formatMonthDay).join(', '),
+            };
+        case 'cabinet_locks':
+            return task.reason === 'unlocked'
+                ? {
+                    title: t('admin_overview_task_cabinet_unlocked', { count: task.reagentCount }),
+                    meta: task.cabinetCount > 1
+                        ? t('admin_overview_cabinets_more', { name: task.cabinetName, count: task.cabinetCount - 1 })
+                        : task.cabinetName,
+                    detail: t('admin_overview_cabinet_lock_basis'),
+                }
+                : {
+                    title: t('admin_overview_task_cabinet_lock_unset', { count: task.cabinetCount }),
+                    meta: t('admin_overview_cabinet_lock_unset_meta', { count: task.reagentCount }),
+                    detail: task.cabinetCount > 1
+                        ? t('admin_overview_cabinets_more', { name: task.cabinetName, count: task.cabinetCount - 1 })
+                        : task.cabinetName,
+                };
     }
+}
+
+/** "2026-11-13" → "11/13" in either language; the card only needs month and day. */
+function formatMonthDay(date: string): string {
+    const [, month, day] = date.split('-').map(Number);
+    return month && day ? `${month}/${day}` : date;
 }
 
 interface ReplyDialogProps {
@@ -411,6 +443,8 @@ export function LabAdminOverviewPanel({ onStartWasteBatch, onOpenNewMembers, ref
             wasteContainers: readyValue(states, 'wasteContainers'),
             members: readyValue(states, 'members'),
             purchaseRequests: readyValue(states, 'purchaseRequests'),
+            dailyInspections: readyValue(states, 'dailyInspections'),
+            cabinetLocks: readyValue(states, 'cabinetLocks'),
             joinPasswordNeedsChange,
         }, checkedAt, snoozes);
     }, [checkedAt, joinPasswordNeedsChange, snoozes, states]);
@@ -712,6 +746,22 @@ export function LabAdminOverviewPanel({ onStartWasteBatch, onOpenNewMembers, ref
                     </button>
                 );
                 break;
+            case 'daily_inspection_missing':
+                primary = (
+                    <button type="button" onClick={() => navigate(dailyInspectionRoute())} className={SECONDARY_BUTTON}>
+                        <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                        {t('admin_overview_open_inspection')}
+                    </button>
+                );
+                break;
+            case 'cabinet_locks':
+                primary = (
+                    <button type="button" onClick={() => navigate(labAppRoute(`/cabinet?id=${encodeURIComponent(task.cabinetId)}`))} className={SECONDARY_BUTTON}>
+                        <Lock className="h-4 w-4" aria-hidden="true" />
+                        {t('admin_overview_open_cabinet')}
+                    </button>
+                );
+                break;
             case 'join_password':
                 primary = (
                     <button type="button" onClick={() => setIsLabSettingsOpen(true)} className={SECONDARY_BUTTON}>
@@ -877,7 +927,13 @@ export function LabAdminOverviewPanel({ onStartWasteBatch, onOpenNewMembers, ref
                                 : undefined}
                             tone={inventory && inventory.casMissingCount > 0 ? 'attention' : 'neutral'}
                             Icon={FlaskConical}
-                        />
+                        >
+                            {typeof inventory?.regulatedCasCount === 'number' && inventory.regulatedCasCount > 0 && (
+                                <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
+                                    {t('admin_overview_stat_regulated', { count: inventory.regulatedCasCount })}
+                                </p>
+                            )}
+                        </StatTile>
                         <div className={isWide ? '' : 'col-span-2'}>
                             <StatTile
                                 label={t('cmp_lsc_linked_centers')}
