@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  cleanKoshaName,
   resolveKoshaIdentityByCas,
   resolveKoshaIdentityByExactName,
   resolveKoshaReferencePh,
+  searchKoshaNames,
 } from './_kosha'
 
 function xmlItems(items: string): string {
@@ -62,5 +64,17 @@ describe('server-only KOSHA identity and reference pH', () => {
       { KOSHA_API_KEY: 'test' },
       fetchMock,
     )).resolves.toMatchObject({ status: 'source_absent', source: 'kosha' })
+  })
+
+  it('strips markup KOSHA leaves in Korean chemical names', async () => {
+    expect(cleanKoshaName('디클로로메탄 <br/>( 관용명 : 이염화메틸렌 )')).toBe('디클로로메탄 (관용명 : 이염화메틸렌)')
+    expect(cleanKoshaName('A<BR>B &amp; C<span>D</span>')).toBe('A B & CD')
+    expect(cleanKoshaName(undefined)).toBe('')
+    const fetchMock = vi.fn(async () => new Response(xmlItems([
+      '<item><chemId>1</chemId><chemNameKor>디클로로메탄 &lt;br/&gt;( 관용명 : 이염화메틸렌 )</chemNameKor><casNo>75-09-2</casNo></item>',
+      '<item><chemId>2</chemId><chemNameKor>디클로로메탄</chemNameKor><casNo>75-09-2</casNo></item>',
+    ].join('')))) as typeof fetch
+    await expect(searchKoshaNames('염화메틸렌', 5, { KOSHA_API_KEY: 'test' }, fetchMock))
+      .resolves.toEqual(['디클로로메탄 (관용명 : 이염화메틸렌)', '디클로로메탄'])
   })
 })
