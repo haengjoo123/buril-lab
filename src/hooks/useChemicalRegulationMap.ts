@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { loadChemicalRegulations } from '../services/chemicalRegulationService'
 import { normalizeCasNumber } from '../utils/casNumber'
 import type { ChemicalRegulationLookup } from '../utils/chemicalRegulations'
+import { hasObligation } from '../utils/regulationObligations'
 
 const EMPTY = new Map<string, ChemicalRegulationLookup>()
 
@@ -37,4 +38,21 @@ export function useChemicalRegulationMap(
   }, [casKey, enabled])
 
   return enabled ? known : EMPTY
+}
+
+/**
+ * Whether a CAS number's 화관법 classes carry the locked-storage duty, from the
+ * lab-wide lookup. Unknown CAS numbers answer false; the trusted GHS groups
+ * still decide for them in requiresLockedStorage.
+ */
+export function useRegulatedLockRequired(
+  rawCasNumbers: readonly (string | null | undefined)[],
+  enabled: boolean,
+): (casNumber: string | null | undefined) => boolean {
+  const regulations = useChemicalRegulationMap(rawCasNumbers, enabled)
+  return useMemo(() => (casNumber: string | null | undefined) => {
+    const cas = normalizeCasNumber(casNumber)
+    const lookup = cas ? regulations.get(cas) : undefined
+    return lookup?.status === 'found' && hasObligation(lookup.record.entries, 'store_locked')
+  }, [regulations])
 }

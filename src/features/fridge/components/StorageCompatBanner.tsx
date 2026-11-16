@@ -9,6 +9,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, Layers, Loader2, ShieldAlert, X 
 import { useTranslation } from 'react-i18next';
 import { useFridgeStore } from '../../../store/fridgeStore';
 import type {
+    StorageContainmentFinding,
     StorageReviewConflict,
     StorageWarning,
 } from '../../../utils/storageCompatibilityChecker';
@@ -18,6 +19,8 @@ interface StorageCompatBannerProps {
     warningMap: Map<string, StorageWarning[]>;
     /** Pairs whose GHS data is missing but whose names suggest a conflict. */
     reviewMap: Map<string, StorageReviewConflict[]>;
+    /** Single reagents the cabinet itself does not suit (e.g. no lock). */
+    containmentMap?: Map<string, StorageContainmentFinding[]>;
     onFocusIssue: (itemIds: string[]) => void;
     onAutoArrange?: () => void;
     isAutoArrangeBusy?: boolean;
@@ -28,10 +31,12 @@ type IssueKind = 'danger' | 'warning' | 'review';
 interface IssueRow {
     key: string;
     kind: IssueKind;
-    itemA: string;
-    itemB: string;
+    /** "A ↔ B" for a pair, or the reagent and what is wrong with its cabinet. */
+    title: string;
     messageKey: string;
     itemIds: string[];
+    /** Moving bottles apart fixes pair rows; a cabinet without a lock needs another cabinet. */
+    arrangeable: boolean;
 }
 
 const KIND_STYLES: Record<IssueKind, { row: string; chip: string; icon: string }> = {
@@ -62,6 +67,7 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({
     reopenToken = 0,
     warningMap,
     reviewMap,
+    containmentMap,
     onFocusIssue,
     onAutoArrange,
     isAutoArrangeBusy = false,
@@ -80,18 +86,26 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({
                 ...(warningMap.get(shelf.id) ?? []).map((warning, index) => ({
                     key: `w-${warning.ruleId}-${index}`,
                     kind: (warning.severity === 'DANGER' ? 'danger' : 'warning') as IssueKind,
-                    itemA: warning.itemA,
-                    itemB: warning.itemB,
+                    title: `${warning.itemA} ↔ ${warning.itemB}`,
                     messageKey: warning.messageKey,
                     itemIds: warning.itemIds,
+                    arrangeable: true,
+                })),
+                ...(containmentMap?.get(shelf.id) ?? []).map((finding) => ({
+                    key: `c-${finding.ruleId}-${finding.itemId}`,
+                    kind: 'warning' as IssueKind,
+                    title: t('storage_locked_row_title', { name: finding.itemName }),
+                    messageKey: finding.messageKey,
+                    itemIds: [finding.itemId],
+                    arrangeable: false,
                 })),
                 ...(reviewMap.get(shelf.id) ?? []).map((conflict, index) => ({
                     key: `r-${conflict.ruleId}-${index}`,
                     kind: 'review' as IssueKind,
-                    itemA: conflict.itemA,
-                    itemB: conflict.itemB,
+                    title: `${conflict.itemA} ↔ ${conflict.itemB}`,
                     messageKey: conflict.messageKey,
                     itemIds: conflict.itemIds,
+                    arrangeable: true,
                 })),
             ];
             return { shelf, rows };
@@ -183,7 +197,7 @@ export const StorageCompatBanner: React.FC<StorageCompatBannerProps> = ({
                                 </div>
                             ))}
                         </div>
-                        {onAutoArrange && (
+                        {onAutoArrange && rowsByShelf.some(({ rows }) => rows.some(row => row.arrangeable)) && (
                             <div className="border-t border-black/5 p-2 dark:border-white/5">
                                 <button
                                     type="button"
@@ -223,7 +237,7 @@ const IssueRowButton: React.FC<{ row: IssueRow; onClick: () => void }> = ({ row,
                         {t(KIND_LABEL_KEYS[row.kind])}
                     </span>
                     <span className="min-w-0 truncate font-semibold text-slate-700 dark:text-slate-200">
-                        {row.itemA} ↔ {row.itemB}
+                        {row.title}
                     </span>
                 </div>
                 <p className="line-clamp-2 leading-relaxed text-slate-600 dark:text-slate-300">

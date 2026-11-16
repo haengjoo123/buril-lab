@@ -739,6 +739,7 @@ export function checkCabinetReviewConflicts(
 export function buildCabinetCompatMarks(
     warningMap: Map<string, StorageWarning[]>,
     reviewMap: Map<string, StorageReviewConflict[]>,
+    containmentMap: Map<string, StorageContainmentFinding[]> = new Map(),
 ): Map<string, StorageCompatMark> {
     const marks = new Map<string, StorageCompatMark>();
     warningMap.forEach(warnings => warnings.forEach(warning => {
@@ -747,12 +748,90 @@ export function buildCabinetCompatMarks(
             if (marks.get(id) !== 'danger') marks.set(id, mark);
         });
     }));
+    containmentMap.forEach(findings => findings.forEach(finding => {
+        if (marks.get(finding.itemId) !== 'danger') marks.set(finding.itemId, 'warning');
+    }));
     reviewMap.forEach(conflicts => conflicts.forEach(conflict => {
         conflict.itemIds.forEach(id => {
             if (!marks.has(id)) marks.set(id, 'review');
         });
     }));
     return marks;
+}
+
+// ════════════════════════════════════════════
+// Single reagent vs. its cabinet
+// ════════════════════════════════════════════
+
+/**
+ * One reagent that its cabinet does not suit, as opposed to a pair rule.
+ * Basis: 연구실 일상점검표 화공안전 "발암물질, 독성물질 등 유해화학물질의 격리보관 및
+ * 시건장치 사용 여부" (docs/operations/regulation-obligations-sources.md).
+ */
+/**
+ * Kept out of the `ruleId: '…'` literals on purpose: those are the pair rules that
+ * analyticsService sends as storage_warning_ignored and the admin KPI migration
+ * allowlists. A containment finding is shown only and never sent.
+ */
+export const LOCKED_STORAGE_RULE_ID = 'locked_storage_required' as const;
+
+export interface StorageContainmentFinding {
+    ruleId: typeof LOCKED_STORAGE_RULE_ID;
+    itemId: string;
+    itemName: string;
+    messageKey: string;
+}
+
+/** Trusted toxic groups that the daily inspection expects behind a lock. */
+const LOCKED_STORAGE_GROUPS: ReadonlySet<StorageGroup> = new Set([
+    'ACUTE_TOXIC', 'TOXIC_CYANIDE', 'TOXIC_SULFIDE', 'TOXIC_AZIDE',
+]);
+/** GHS carcinogen category 1 (H350, H350i). */
+const CARCINOGEN_H_CODE = /^H350/i;
+
+/**
+ * Whether a reagent belongs behind a lock: a trusted toxic storage group, a
+ * category 1 carcinogen, or a 화관법 class that carries the locked-storage duty.
+ * Name guesses never count; they stay review signals.
+ */
+export function requiresLockedStorage(input: {
+    groups: readonly StorageGroup[];
+    hCodes?: readonly string[];
+    regulatedLockRequired?: boolean;
+}): boolean {
+    if (input.regulatedLockRequired) return true;
+    if (input.groups.some(group => LOCKED_STORAGE_GROUPS.has(group))) return true;
+    return (input.hCodes ?? []).some(code => CARCINOGEN_H_CODE.test(code));
+}
+
+/**
+ * Reagents that need a locked cabinet, for a cabinet explicitly recorded as
+ * having no lock. An unset lock (null/undefined) never produces a finding, so
+ * existing cabinets stay quiet until someone records them.
+ */
+export function checkCabinetContainment(
+    shelves: ReadonlyArray<{ id: string; items: ReagentPlacement[] }>,
+    cabinetLocked: boolean | null | undefined,
+    isRegulatedLockRequired: (item: ReagentPlacement) => boolean = () => false,
+): Map<string, StorageContainmentFinding[]> {
+    const results = new Map<string, StorageContainmentFinding[]>();
+    if (cabinetLocked !== false) return results;
+    for (const shelf of shelves) {
+        const findings = shelf.items
+            .filter(item => requiresLockedStorage({
+                groups: classifyStoragePlacement(item).groups,
+                hCodes: item.hCodes,
+                regulatedLockRequired: isRegulatedLockRequired(item),
+            }))
+            .map(item => ({
+                ruleId: LOCKED_STORAGE_RULE_ID,
+                itemId: item.id,
+                itemName: item.name,
+                messageKey: 'storage_locked_required',
+            }));
+        if (findings.length > 0) results.set(shelf.id, findings);
+    }
+    return results;
 }
 
 /**

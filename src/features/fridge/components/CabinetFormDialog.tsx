@@ -10,9 +10,17 @@ interface CabinetFormDialogProps {
     description?: string;
     initialName?: string;
     initialLocation?: string;
-    onConfirm: (name: string, location?: string) => void;
+    /** Shows the lock choice when defined; null means not decided yet. */
+    initialLocked?: boolean | null;
+    onConfirm: (name: string, location?: string, locked?: boolean | null) => void;
     isLoading?: boolean;
 }
+
+const LOCK_OPTIONS: ReadonlyArray<{ value: boolean | null; labelKey: string }> = [
+    { value: true, labelKey: 'cabinet_form_lock_yes' },
+    { value: false, labelKey: 'cabinet_form_lock_no' },
+    { value: null, labelKey: 'cabinet_form_lock_unknown' },
+];
 
 export function CabinetFormDialog({
     isOpen,
@@ -21,25 +29,29 @@ export function CabinetFormDialog({
     description,
     initialName = '',
     initialLocation = '',
+    initialLocked,
     onConfirm,
     isLoading = false
 }: CabinetFormDialogProps) {
     const { t } = useTranslation();
     const [name, setName] = useState(initialName);
     const [location, setLocation] = useState(initialLocation);
+    const [locked, setLocked] = useState<boolean | null>(initialLocked ?? null);
+    const showLock = initialLocked !== undefined;
 
     useEffect(() => {
         if (isOpen) {
             setName(initialName);
             setLocation(initialLocation);
+            setLocked(initialLocked ?? null);
         }
-    }, [isOpen, initialName, initialLocation]);
+    }, [isOpen, initialName, initialLocation, initialLocked]);
 
     if (!isOpen) return null;
 
     const handleConfirm = () => {
         if (!name.trim()) return;
-        onConfirm(name.trim(), location.trim() || undefined);
+        onConfirm(name.trim(), location.trim() || undefined, showLock ? locked : undefined);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -99,6 +111,33 @@ export function CabinetFormDialog({
                                 className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400"
                             />
                         </div>
+                        {showLock && (
+                            <fieldset>
+                                <legend className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                    {t('cabinet_form_lock_label')}
+                                </legend>
+                                <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800" role="radiogroup">
+                                    {LOCK_OPTIONS.map((option) => {
+                                        const selected = locked === option.value;
+                                        return (
+                                            <button
+                                                key={String(option.value)}
+                                                type="button"
+                                                role="radio"
+                                                aria-checked={selected}
+                                                onClick={() => setLocked(option.value)}
+                                                className={`min-h-10 rounded-lg text-sm font-medium transition-colors ${selected
+                                                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                                                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                                            >
+                                                {t(option.labelKey)}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('cabinet_form_lock_hint')}</p>
+                            </fieldset>
+                        )}
                     </div>
                 </div>
 

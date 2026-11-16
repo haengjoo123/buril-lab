@@ -18,7 +18,9 @@ import { auditService, type AuditLog } from '../../services/auditService';
 import type { ReagentTemplateType } from '../../types/fridge';
 import { CONTAINER_BASE_WIDTHS } from './ReagentItem';
 import { getExpiryStatus, getExpiryBadgeClasses } from '../../utils/expiryStatus';
-import { classifyStoragePlacement, checkShelfCompatibility, getStorageGroupLabels } from '../../utils/storageCompatibilityChecker';
+import { classifyStoragePlacement, checkShelfCompatibility, getStorageGroupLabels, requiresLockedStorage } from '../../utils/storageCompatibilityChecker';
+import { isCabinetLockRulesEnabled, isRegulationBatchEnabled } from '../../config/featureFlags';
+import { useRegulatedLockRequired } from '../../hooks/useChemicalRegulationMap';
 import { AlertTriangle, FlaskConical, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { searchChemical } from '../../services/searchService';
 import { ReagentDateFields } from '../../components/ReagentDateFields';
@@ -142,6 +144,18 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
         }
         return null;
     }, [selectedReagentId, shelves]);
+    // Same rule as the cabinet banner: only a cabinet recorded as having no lock is checked.
+    const cabinetLocked = useFridgeStore(s => s.cabinetLocked);
+    const checkLock = isCabinetLockRulesEnabled && cabinetLocked === false;
+    const isRegulatedLockRequired = useRegulatedLockRequired(
+        React.useMemo(() => [selectedItem?.casNo], [selectedItem?.casNo]),
+        checkLock && isRegulationBatchEnabled,
+    );
+    const needsLockedCabinet = Boolean(selectedItem && checkLock && requiresLockedStorage({
+        groups: classifyStoragePlacement(selectedItem).groups,
+        hCodes: selectedItem.hCodes,
+        regulatedLockRequired: isRegulatedLockRequired(selectedItem.casNo),
+    }));
     const casSuggestion = useCasSuggestion({
         enabled: Boolean(selectedReagentId && showModalContent),
         inputName: name,
@@ -1107,7 +1121,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                     : shelfWarnings.slice(0, STORAGE_WARNING_PREVIEW_LIMIT);
                                 const hiddenShelfWarningCount = Math.max(0, shelfWarnings.length - STORAGE_WARNING_PREVIEW_LIMIT);
 
-                                if (groupLabels.length === 0 && shelfWarnings.length === 0 && !storageClassification.needsReview) return null;
+                                if (groupLabels.length === 0 && shelfWarnings.length === 0 && !storageClassification.needsReview && !needsLockedCabinet) return null;
 
                                 return (
                                     <div className="flex flex-col gap-2 border-t border-slate-200 pt-2 dark:border-slate-800">
@@ -1124,6 +1138,13 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
                                                         </span>
                                                     ))}
                                                 </div>
+                                            </div>
+                                        )}
+
+                                        {needsLockedCabinet && (
+                                            <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-2xs leading-relaxed text-amber-700 dark:border-amber-500/40 dark:bg-amber-950/35 dark:text-amber-200">
+                                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                                                <span>{t('storage_locked_required')}</span>
                                             </div>
                                         )}
 

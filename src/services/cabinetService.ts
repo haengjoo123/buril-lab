@@ -20,6 +20,8 @@ export interface Cabinet {
     created_at: string;
     user_id: string;
     lab_id?: string;
+    /** Lock fitted: null/undefined unset, true yes, false no (20261116100000). */
+    locked?: boolean | null;
 }
 
 export interface CabinetDimensions {
@@ -113,7 +115,7 @@ export const cabinetService = {
         return data as Cabinet;
     },
 
-    async updateCabinet(id: string, updates: { name?: string; location?: string; width?: number; height?: number; depth?: number; }): Promise<void> {
+    async updateCabinet(id: string, updates: { name?: string; location?: string; width?: number; height?: number; depth?: number; locked?: boolean | null; }): Promise<void> {
         const { error } = await supabase
             .from('cabinets')
             .update(updates)
@@ -185,7 +187,7 @@ export const cabinetService = {
         }
     },
 
-    async getCabinetDetails(cabinetId: string): Promise<{ shelves: ShelfData[], cabinetName: string, width: number, height: number, depth: number }> {
+    async getCabinetDetails(cabinetId: string): Promise<{ shelves: ShelfData[], cabinetName: string, width: number, height: number, depth: number, locked: boolean | null }> {
         const request = (readRequests.get(cabinetId) ?? 0) + 1;
         readRequests.set(cabinetId, request);
         const { data, error } = await supabase.rpc('get_cabinet_state_v2', { p_cabinet_id: cabinetId });
@@ -241,7 +243,9 @@ export const cabinetService = {
             cabinetName: cabinetData?.name || '',
             width: cabinetData?.width ?? 5,
             height: cabinetData?.height ?? 9,
-            depth: cabinetData?.depth ?? 2
+            depth: cabinetData?.depth ?? 2,
+            // Absent before the 20261116100000 migration: treated as unset.
+            locked: typeof cabinetData?.locked === 'boolean' ? cabinetData.locked : null,
         };
     },
 

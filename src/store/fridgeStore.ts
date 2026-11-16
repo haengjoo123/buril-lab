@@ -62,6 +62,8 @@ interface FridgeStore extends FridgeState {
     sortShelves: (criteria: 'name' | 'type') => void;
     cabinetId: string | null;
     cabinetName: string;
+    /** Lock recorded for the open cabinet: null when unset or before the migration. */
+    cabinetLocked: boolean | null;
     isLoadingCabinet: boolean;
     loadedCabinetId: string | null;
     cabinetSaveError: string | null;
@@ -220,6 +222,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
     highlightedItemId: null,
     cabinetId: null,
     cabinetName: '',
+    cabinetLocked: null,
     isLoadingCabinet: false,
     loadedCabinetId: null,
     cabinetSaveError: null,
@@ -270,6 +273,7 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             cabinetAspectRatio: null,
             cabinetId,
             cabinetName: isSameCabinet ? previousState.cabinetName : '',
+            cabinetLocked: isSameCabinet ? previousState.cabinetLocked : null,
             shelves: isSameCabinet ? previousState.shelves : [],
             isBuildingCompatibilityPlan: false,
             isApplyingCompatibilityPlan: false,
@@ -280,12 +284,13 @@ export const useFridgeStore = create<FridgeStore>((set, get) => ({
             ...resetCompatibilityPlanPreview(),
         });
         try {
-            const { shelves, cabinetName, width, height, depth } = await cabinetService.getCabinetDetails(cabinetId);
+            const { shelves, cabinetName, width, height, depth, locked } = await cabinetService.getCabinetDetails(cabinetId);
             if (requestSequence !== cabinetLoadSequence || get().cabinetId !== cabinetId) return;
             set({
                 shelves,
                 loadedCabinetId: cabinetId,
                 cabinetName,
+                cabinetLocked: locked,
                 cabinetWidth: width,
                 cabinetHeight: height,
                 cabinetDepth: depth,
