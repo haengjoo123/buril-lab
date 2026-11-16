@@ -768,8 +768,15 @@ export function buildCabinetCompatMarks(
  * Basis: 연구실 일상점검표 화공안전 "발암물질, 독성물질 등 유해화학물질의 격리보관 및
  * 시건장치 사용 여부" (docs/operations/regulation-obligations-sources.md).
  */
+/**
+ * Kept out of the `ruleId: '…'` literals on purpose: those are the pair rules that
+ * analyticsService sends as storage_warning_ignored and the admin KPI migration
+ * allowlists. A containment finding is shown only and never sent.
+ */
+export const LOCKED_STORAGE_RULE_ID = 'locked_storage_required' as const;
+
 export interface StorageContainmentFinding {
-    ruleId: 'locked_storage_required';
+    ruleId: typeof LOCKED_STORAGE_RULE_ID;
     itemId: string;
     itemName: string;
     messageKey: string;
@@ -817,7 +824,7 @@ export function checkCabinetContainment(
                 regulatedLockRequired: isRegulatedLockRequired(item),
             }))
             .map(item => ({
-                ruleId: 'locked_storage_required' as const,
+                ruleId: LOCKED_STORAGE_RULE_ID,
                 itemId: item.id,
                 itemName: item.name,
                 messageKey: 'storage_locked_required',
