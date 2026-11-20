@@ -107,7 +107,7 @@ export function verifiedVoiceBlocks(text: string, candidates: VoiceMatch[]): str
     named.length > 1 ||
     form === 'ambiguous' ||
     ((shelves.length > 0 || cas.length > 0 || form !== null) &&
-      /\b(?:not|except|exclude|excluding|instead|either|or|between)\b|말고|제외|아닌|아니라|않은|또는|혹은|대신|부터|사이|[0-9]\s*[-~–]\s*[0-9]+\s*(?:번|번째)?\s*선반|\bshelf\s*\d+\s*[-~/]\s*\d+/u.test(
+      /\b(?:not|except|exclude|excluding|instead|either|or|between)\b|말고|제외|아닌|아니라|않은|또는|혹은|대신|부터|(?:^|\s)사이(?:에서|에|의)?(?=$|[\s,.?!])|[0-9]\s*[-~–]\s*[0-9]+\s*(?:번|번째)?\s*선반|\bshelf\s*\d+\s*[-~/]\s*\d+/u.test(
         query,
       ))
   return candidates

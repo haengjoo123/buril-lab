@@ -64,6 +64,8 @@ describe('verified bottle selection', () => {
     expect(verifiedVoiceBlocks('trihydrate', [a, b])).toEqual(['inventory:a'])
     expect(verifiedVoiceBlocks('이수화물 시약', [a, b])).toEqual(['inventory:a', 'inventory:b'])
     expect(verifiedVoiceBlocks('3수화물', [a, b])).toEqual(['inventory:a'])
+    expect(verifiedVoiceBlocks('3번째 선반에 있는 사이클로헥사논', [a, b])).toEqual(['inventory:b'])
+    expect(verifiedVoiceBlocks('3번 선반 사이에 둔 재고', [a, b])).toHaveLength(2)
     expect(verifiedVoiceBlocks('hydrated reagent', [a, b])).toEqual(['inventory:a'])
     expect(verifiedVoiceBlocks('except shelf 3', [a, b])).toHaveLength(2)
     expect(verifiedVoiceBlocks('shelf 2 or shelf 3', [a, b])).toHaveLength(2)
