@@ -87,7 +87,7 @@ describe('signed remote evaluation through the real middleware and handler', () 
       .toMatchObject({ expected: 'inventory:target', choice: null, policyVersion: 'voice-candidate:v2' })
     expect(provider).toHaveBeenCalledTimes(1)
   })
-  it('sends both real provider adapters identical classification evidence and blocks an inconsistent formula in both', async () => {
+  it.each([['decisionsTrial', 'responsesMatched', 'classification:v7'], ['decisionsTrialV8', 'responsesMatchedV8', 'classification:v8']])('sends identical evidence for %s and its Responses control, and blocks an inconsistent formula', async (trial, matched, policyVersion) => {
     const id = 'paired-1-class-0-19'
     state.grant.caseIds = [id]
     let decisionEvidence: unknown, responseEvidence: unknown, decisionChoices: unknown, responseChoices: unknown
@@ -106,13 +106,23 @@ describe('signed remote evaluation through the real middleware and handler', () 
         content: [{ type: 'output_text', annotations: [], text: JSON.stringify({ category: 'ACID', confidence: 1, reason: 'test' }) }] }] })
     })
     vi.stubGlobal('fetch', provider)
-    const d = await requestCase(state, id, 'decisionsTrial', credentials, transport())
-    const r = await requestCase(state, id, 'responsesMatched', credentials, transport())
-    expect(d).toMatchObject({ choice: null, proposedChoice: 'ACID', abstentionReason: 'reference_identity', error: false })
-    expect(r).toMatchObject({ choice: null, proposedChoice: 'ACID', inputDigest: d.inputDigest, error: false })
+    const d = await requestCase(state, id, trial, credentials, transport())
+    const r = await requestCase(state, id, matched, credentials, transport())
+    expect(d).toMatchObject({ choice: null, proposedChoice: 'ACID', abstentionReason: 'reference_identity', policyVersion, error: false })
+    expect(r).toMatchObject({ choice: null, proposedChoice: 'ACID', inputDigest: d.inputDigest, policyVersion, error: false })
     expect(responseEvidence).toEqual(decisionEvidence)
     expect(responseChoices).toEqual(decisionChoices)
     expect(provider).toHaveBeenCalledTimes(2)
+  })
+  it('rejects classification v8 arms for voice before either provider is contacted', async () => {
+    const id = 'paired-1-voice-0-0'
+    state.grant.caseIds = [id]
+    const provider = vi.fn()
+    vi.stubGlobal('fetch', provider)
+    for (const backend of ['responsesMatchedV8', 'decisionsTrialV8']) {
+      await expect(requestCase(state, id, backend, credentials, transport())).rejects.toThrow('REMOTE_400_REJECTED')
+    }
+    expect(provider).not.toHaveBeenCalled()
   })
   it('blocks cross-environment grants, expired grants and non-granted fixture ids before provider calls', async () => {
     const provider = vi.fn(); vi.stubGlobal('fetch', provider)

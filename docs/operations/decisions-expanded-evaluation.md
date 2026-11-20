@@ -184,3 +184,12 @@ acceptances, more correct acceptances than both Responses controls, at least as
 many as current Decisions, and complete comparisons without provider errors.
 Report raw adoption and latency alongside correct adoption. Production rollout
 and independent review remain separate decisions.
+
+The classification v8 comparison appends a short clarification about solid
+inorganic acids and hydroxides only for labels with those cues. It preserves
+the v6 question for other inputs. The original v7 comparison is reproducible.
+Pass `--class-v8` to both the classification run and the final summary to
+select `responsesMatchedV8` and `decisionsTrialV8`. The existing grouped
+voice run can be combined with this classification phase. Reports validate
+the feature-specific policy, comparison arms, frozen inputs and reference
+hashes before combining their rows. The application defaults remain v4/v6.
