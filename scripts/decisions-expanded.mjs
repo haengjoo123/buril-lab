@@ -13,8 +13,8 @@ export const expandedManifest = () => {
 }
 const percentile = (values, p) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * p) - 1] ?? null
 
-export function analyzeExpanded(records, ids = expandedDecisionFixtures().map(item => item.id), backends = ['legacy', 'decisionsV2', 'decisions']) {
-  const registry = new Map(expandedDecisionFixtures().map(item => [item.id, item]))
+export function analyzeExpanded(records, ids = expandedDecisionFixtures().map(item => item.id), backends = ['legacy', 'decisionsV2', 'decisions'], suite = undefined) {
+  const registry = new Map((suite?.fixtures ?? expandedDecisionFixtures()).map(item => [item.id, item]))
   if (new Set(ids).size !== ids.length || ids.some(id => !registry.has(id))) throw new Error('Unknown or duplicate expected cases')
   const seen = new Set()
   for (const result of records) {
@@ -54,7 +54,7 @@ export function analyzeExpanded(records, ids = expandedDecisionFixtures().map(it
       higherRawAdoptionFeasibleAtZeroWrong: legacy?.recorded === cases.length ? cases.filter(item => item.expected !== null).length > legacy.accepted : null,
     }]
   }))]))
-  return { manifest: expandedManifest(), cases: ids.length, backends, results: records.length,
+  return { manifest: suite?.manifest ?? expandedManifest(), cases: ids.length, backends, results: records.length,
     complete: records.length === ids.length * backends.length, groups, productionReady: false,
     limitations: ['Synthetic contract labels, not independently human-reviewed disposal decisions.',
       'Zero observed wrong acceptances does not guarantee zero real-world errors.', 'Real-user shadow and sequential activation gates remain separate.'] }
@@ -63,18 +63,18 @@ export function analyzeExpanded(records, ids = expandedDecisionFixtures().map(it
 // A journal persists each completed call, including provider errors. No automatic
 // retry. Explicit resume skips every recorded call and preserves transport failures.
 export async function runExpanded(state, output, { split = 'all', concurrency = 4, resume = false,
-  backends = ['legacy', 'decisionsV2', 'decisions'], fetchImpl = fetch, intervalMs = 250 } = {}) {
+  backends = ['legacy', 'decisionsV2', 'decisions'], fetchImpl = fetch, intervalMs = 250, suite = undefined } = {}) {
   if (!['all', 'tuning', 'validation'].includes(split) || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('Invalid execution options')
-  const cases = expandedDecisionFixtures().filter(item => state.grant.caseIds.includes(item.id) && (split === 'all' || item.split === split))
+  const cases = (suite?.fixtures ?? expandedDecisionFixtures()).filter(item => state.grant.caseIds.includes(item.id) && (split === 'all' || item.split === split))
   if (!cases.length) throw new Error('No granted cases')
   const ids = cases.map(item => item.id), journal = `${output}.ndjson`, metadata = `${output}.manifest.json`
-  const expected = { grantId: state.grant.id, manifest: expandedManifest(), split, backends, ids }
+  const expected = { grantId: state.grant.id, manifest: suite?.manifest ?? expandedManifest(), split, backends, ids }
   await mkdir(dirname(resolve(output)), { recursive: true })
   let records = []
   if (resume) {
     if (JSON.stringify(JSON.parse(await readFile(metadata, 'utf8'))) !== JSON.stringify(expected)) throw new Error('Resume manifest mismatch')
     records = (await readFile(journal, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line))
-    analyzeExpanded(records, ids, backends)
+    analyzeExpanded(records, ids, backends, suite)
   } else {
     await writeFile(metadata, JSON.stringify(expected), { flag: 'wx' })
     await writeFile(journal, '', { flag: 'wx' })
@@ -104,7 +104,7 @@ export async function runExpanded(state, output, { split = 'all', concurrency = 
   }
   await Promise.all(Array.from({ length: concurrency }, worker)); await writes
   const report = { evaluatedAt: new Date().toISOString(), execution: 'cloudflare-production', grantId: state.grant.id,
-    ...analyzeExpanded(records, ids, backends), records }
+    ...analyzeExpanded(records, ids, backends, suite), records }
   await writeFile(`${output}.tmp`, JSON.stringify(report, null, 2)); await rename(`${output}.tmp`, output)
   if (failed) throw new Error('Transport failure; journal retained. Explicit resume required.')
   return report

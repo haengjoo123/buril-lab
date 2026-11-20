@@ -1,4 +1,4 @@
-import { runDecisionTask, type DecisionContext, type DecisionPolicyRevision } from '../ai/_decisions'
+import { runDecisionTask, type ChoiceTask, type DecisionContext, type DecisionPolicyRevision } from '../ai/_decisions'
 import { XMLParser } from 'fast-xml-parser'
 import { z } from 'zod'
 import {
@@ -446,20 +446,39 @@ export async function resolveCandidateWithOpenAI(
 ): Promise<CandidateAliasResolution | null> {
   if (!matches.length || !env.OPENAI_API_KEY?.trim()) return null
   const task = buildVoiceDecisionTask(rawInput, language, matches, safetyIdentifier)
-  const candidates = JSON.parse(task.input).candidates as Array<{ candidateId: string; name: string; brand: string; productNumber: string; casNumber: string; storageType: string }>
   const result = await runDecisionTask({ ...context, env }, task,
     bounded => resolveLegacyCandidate(env, rawInput, language, matches, safetyIdentifier, bounded),
     value => value && value.confidence >= 0.72 ? value.candidateId : null)
   if (result.backend === 'legacy') return result.value
-  if (!result.value.choice) return null
-  const selected = candidates.find(item => item.candidateId === result.value.choice)!
-  const identity = (item: typeof selected) => JSON.stringify({ ...item, candidateId: '' })
-  if (candidates.filter(item => identity(item) === identity(selected)).length > 1) return null
+  const id = result.value.choice
+  if (!id || task.blockedChoices?.includes(id) || !matches.slice(0, MAX_MATCH_CANDIDATES).some(match => getMatchKey(match) === id)) return null
   // The Decisions acceptance gate has already run; the legacy caller threshold is not a Decisions threshold.
-  return { candidateId: selected.candidateId, confidence: result.value.decision!.confidence, decisionAccepted: true, queryAliases: [] }
+  return { candidateId: id, confidence: result.value.decision!.confidence, decisionAccepted: true, queryAliases: [] }
 }
 
-export function buildVoiceDecisionTask(rawInput: string, language: VoiceLanguage, matches: VoiceMatch[], safetyIdentifier: string, revision: DecisionPolicyRevision = 'v4') {
+export function buildVoiceDecisionTask(rawInput: string, language: VoiceLanguage, matches: VoiceMatch[], safetyIdentifier: string, revision: DecisionPolicyRevision = 'v4'): ChoiceTask {
+  if (revision === 'v5') {
+    const base = buildVoiceDecisionTask(rawInput, language, matches, safetyIdentifier, 'v4')
+    const { candidates } = JSON.parse(base.input) as {
+      candidates: Array<{ candidateId: string; name: string; casNumber: string } & Record<string, string | number | null>>
+    }
+    type Bottle = Omit<typeof candidates[number], 'name' | 'casNumber'>
+    const groups = new Map<string, { name: string; casNumber: string; bottles: Bottle[] }>()
+    for (const { name, casNumber, ...bottle } of candidates) {
+      // Keep the complete label, including isomer, hydrate and grade. Never
+      // merge conflicting labels or infer equivalence from a missing CAS.
+      const key = normalizeCasNumber(casNumber) ? JSON.stringify([casNumber, name]) : bottle.candidateId
+      const group = groups.get(key) ?? { name, casNumber, bottles: [] }
+      group.bottles.push(bottle)
+      groups.set(key, group)
+    }
+    return { ...base, policyVersion: 'voice-candidate:v5',
+      input: JSON.stringify({ query: rawInput, language, groups: [...groups.values()] }),
+      instructions: base.instructions +
+        '\nEach group gives a label and CAS shared by its listed bottles. Use both to find the requested material, then apply every stated room, shelf, cabinet, brand or product selector to the individual bottles. Choose the original candidateId only if exactly one bottle across all groups fits. Grouping is for readability; the number of groups or bottles is not evidence.',
+      choices: base.choices.map(item => item.value === base.abstain ? item : { value: item.value }),
+    }
+  }
   const candidates = matches.slice(0, MAX_MATCH_CANDIDATES).map(match => ({
     candidateId: getMatchKey(match), name: match.name, brand: match.brand || '',
     productNumber: match.productNumber || '', casNumber: match.casNumber || '', storageType: match.storageType || '',

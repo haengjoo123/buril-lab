@@ -5,18 +5,21 @@ import { createSafetyIdentifier, parseOpenAIResponse } from '../../ai/_openai'
 import { evaluateDecision, type DecisionsEnv } from '../../ai/_decisions'
 import { buildClassificationDecisionTask, prepareClassificationDecisionTask, buildClassificationPrompt, classificationSchema, CLASSIFICATION_MAX_OUTPUT_TOKENS } from '../../ai/classify'
 import { buildVoiceDecisionTask, buildVoiceLegacyPrompt, candidateResolutionSchema, VOICE_CANDIDATE_MAX_OUTPUT_TOKENS } from '../../voice/_reagentAliases'
+import { fixedIdentityEvidence, matchedResponses, pairedInputDigest } from './_pairedControl'
 import type { VoiceMatch } from '../../../../src/utils/voiceAgent'
 // Fixed synthetic fixtures only. No caller-provided prompt, inventory or credential is accepted.
 // @ts-expect-error Shared CLI fixtures are JavaScript.
 import { allDecisionFixtures } from '../../../../scripts/decisions-fixtures.mjs'
 // @ts-expect-error Shared fixed synthetic corpus is JavaScript.
 import { expandedDecisionFixtures, expandedDecisionFixturesV1, identityBoundaryFixtures } from '../../../../scripts/decisions-expanded-fixtures.mjs'
+// @ts-expect-error Fixed JavaScript fixtures are also used by the offline runner.
+import { pairedFixtureById } from '../../../../scripts/decisions-paired-fixtures.mjs'
 
 export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
-const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'probe']) }).strict()
+const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'responsesMatched', 'decisionsTrial', 'probe']) }).strict()
 const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
@@ -63,7 +66,8 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
       audience: production ? PRODUCTION_EVALUATION_AUDIENCE : EVALUATION_AUDIENCE, maxTokenAge: '15s' })
     if (payload.sub !== `${body.caseId}:${body.backend}` || typeof payload.exp !== 'number' || typeof payload.iat !== 'number' || payload.exp - payload.iat > 15) return respond({ code: 'GRANT_DENIED' }, 403)
   } catch { return respond({ code: 'GRANT_DENIED' }, 403) }
-  const fixture = evaluationFixtures().get(body.caseId)
+  const pairedFixture = pairedFixtureById(body.caseId) as Fixture | null
+  const fixture = pairedFixture ?? evaluationFixtures().get(body.caseId)
   if (!fixture) return respond({ code: 'INVALID_CASE' }, 400)
   if (!context.env.OPENAI_API_KEY || !context.env.OPENAI_SAFETY_HMAC_SECRET) return respond({ code: 'AI_NOT_CONFIGURED' }, 503)
   if (body.backend === 'probe') return respond({ id: fixture.id, feature: fixture.feature, backend: 'probe', error: false, configured: true })
@@ -71,15 +75,31 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   try {
     const safety = await createSafetyIdentifier(context.env, 'decisions-evaluation-synthetic')
     const revision = body.backend === 'decisionsV1' ? 'v1' : body.backend === 'decisionsV2' ? 'v2' : body.backend === 'decisionsV3' ? 'v3' : 'v4'
-    const task = fixture.feature === 'classification' ? body.backend === 'decisions' || body.backend === 'decisionsV5' ? await prepareClassificationDecisionTask(fixture.input, safety, body.backend === 'decisionsV5' ? 'v5' : 'v6')
-      : buildClassificationDecisionTask(fixture.input, safety, revision)
-      : buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety, revision)
+    const trial = body.backend === 'decisionsTrial' || body.backend === 'responsesMatched'
+    const classRevision = trial ? 'v7' : body.backend === 'decisions' ? 'v6' : body.backend === 'decisionsV5' ? 'v5' : revision
+    const prepareTask = () => {
+      if (fixture.feature === 'voiceCandidate') {
+        return buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety, trial ? 'v5' : revision)
+      }
+      if (classRevision === 'v5' || classRevision === 'v6' || classRevision === 'v7') {
+        if (pairedFixture) return buildClassificationDecisionTask(fixture.input, safety, classRevision, fixedIdentityEvidence(fixture.input.casNumber))
+        return prepareClassificationDecisionTask(fixture.input, safety, classRevision)
+      }
+      return buildClassificationDecisionTask(fixture.input, safety, classRevision)
+    }
     if (body.backend !== 'legacy') {
+      const task = await prepareTask()
+      const evidence = trial ? { inputDigest: await pairedInputDigest(task) } : {}
+      if (body.backend === 'responsesMatched') {
+        const result = await matchedResponses(context.env, task)
+        return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
+          ...result, ...evidence, elapsedMs: Date.now() - started, error: false, cacheHit: false })
+      }
       const result = await evaluateDecision(context.env, task)
       return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
         choice: result.choice, model: 'gpt-6-luna', policyVersion: task.policyVersion,
         proposedChoice: result.proposedChoice, outcome: result.outcome, abstentionReason: result.abstentionReason,
-        decision: result.decision ?? null,
+        decision: result.decision ?? null, ...evidence,
         elapsedMs: Date.now() - started, usage: result.usage ?? null, error: false, cacheHit: false })
     }
     const candidates = fixture.input.matches?.slice(0, 120).map(match => ({ candidateId: `${match.source}:${match.id}`, name: match.name,

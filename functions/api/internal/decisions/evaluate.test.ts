@@ -87,6 +87,33 @@ describe('signed remote evaluation through the real middleware and handler', () 
       .toMatchObject({ expected: 'inventory:target', choice: null, policyVersion: 'voice-candidate:v2' })
     expect(provider).toHaveBeenCalledTimes(1)
   })
+  it('sends both real provider adapters identical classification evidence and blocks an inconsistent formula in both', async () => {
+    const id = 'paired-1-class-0-19'
+    state.grant.caseIds = [id]
+    let decisionEvidence: unknown, responseEvidence: unknown, decisionChoices: unknown, responseChoices: unknown
+    const provider = vi.fn(async (url, init) => {
+      const body = JSON.parse(init.body)
+      if (String(url).endsWith('/decisions')) {
+        decisionEvidence = JSON.parse(body.input)
+        decisionChoices = body.questions[0].choices
+        return Response.json({ model: 'gpt-6-luna', answers: [{ type: 'choice', name: 'classification', choice: 'ACID', confidence: 1,
+          probabilities: body.questions[0].choices.map((c: { value: string }) => ({ value: c.value, probability: c.value === 'ACID' ? 1 : 0 })) }] })
+      }
+      const shared = JSON.parse(body.input[1].content)
+      responseEvidence = shared.evidence
+      responseChoices = shared.choices
+      return Response.json({ id: 'resp_test', model: 'gpt-6-luna', status: 'completed', output: [{ type: 'message', role: 'assistant',
+        content: [{ type: 'output_text', annotations: [], text: JSON.stringify({ category: 'ACID', confidence: 1, reason: 'test' }) }] }] })
+    })
+    vi.stubGlobal('fetch', provider)
+    const d = await requestCase(state, id, 'decisionsTrial', credentials, transport())
+    const r = await requestCase(state, id, 'responsesMatched', credentials, transport())
+    expect(d).toMatchObject({ choice: null, proposedChoice: 'ACID', abstentionReason: 'reference_identity', error: false })
+    expect(r).toMatchObject({ choice: null, proposedChoice: 'ACID', inputDigest: d.inputDigest, error: false })
+    expect(responseEvidence).toEqual(decisionEvidence)
+    expect(responseChoices).toEqual(decisionChoices)
+    expect(provider).toHaveBeenCalledTimes(2)
+  })
   it('blocks cross-environment grants, expired grants and non-granted fixture ids before provider calls', async () => {
     const provider = vi.fn(); vi.stubGlobal('fetch', provider)
     await expect(requestCase(state, 'classification-3-0', 'decisions', credentials, transport('production'))).rejects.toThrow()

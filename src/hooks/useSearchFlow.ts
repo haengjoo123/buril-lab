@@ -7,7 +7,7 @@ import { getSearchErrorMessageKey } from '../utils/searchErrorMessage';
 import { fetchChemicalSuggestionResult, type ChemicalFormChoice } from '../services/chemicalSuggestionService';
 import { cabinetService, type CabinetSearchResult } from '../services/cabinetService';
 import { searchMediaProductsAdvanced, type MediaProduct, type SortOption } from '../services/mediaProductService';
-import { analyzeChemical } from '../utils/chemicalAnalyzer';
+import { analyzeChemical, needsAiClassification } from '../utils/chemicalAnalyzer';
 import { classifyChemicalWithAI } from '../services/aiClassificationService';
 import type { AnalysisResult } from '../types';
 import { getLabAppScopedPath, labAppRoute } from '../utils/appRoutes';
@@ -184,8 +184,7 @@ export function useSearchFlow({
         let analysis = analyzeChemical(chemicalData);
 
         // 규칙 기반 분류 실패 시에만 AI 분류를 보조로 사용한다.
-        if (analysis.category === 'UNKNOWN' &&
-          analysis.materialProfile?.kind !== 'possible_ionic_organic_material') {
+        if (needsAiClassification(analysis)) {
           setIsAiAnalyzing(true);
           try {
             const aiResult = await classifyChemicalWithAI(chemicalData);

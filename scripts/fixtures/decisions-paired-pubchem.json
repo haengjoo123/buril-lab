@@ -1,0 +1,502 @@
+{
+  "5329-14-6": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "5329-14-6",
+    "cid": 5987,
+    "title": "Sulfamic Acid",
+    "molecularFormula": "H3NO3S",
+    "checkedAt": "2026-11-20T15:39:32.098Z",
+    "cacheHit": false
+  },
+  "13460-50-9": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "13460-50-9",
+    "cid": 24492,
+    "title": "Boric acid (HBO2)",
+    "molecularFormula": "BHO2",
+    "checkedAt": "2026-11-20T15:39:32.785Z",
+    "cacheHit": false
+  },
+  "10193-36-9": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10193-36-9",
+    "cid": 14942,
+    "title": "Orthosilicic acid",
+    "molecularFormula": "H4O4Si",
+    "checkedAt": "2026-11-20T15:39:33.854Z",
+    "cacheHit": false
+  },
+  "7783-03-1": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7783-03-1",
+    "cid": 1152,
+    "title": "Tungstic acid",
+    "molecularFormula": "H2O4W",
+    "checkedAt": "2026-11-20T15:39:34.931Z",
+    "cacheHit": false
+  },
+  "2466-09-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "2466-09-3",
+    "cid": 1023,
+    "title": "Pyrophosphoric acid",
+    "molecularFormula": "H4O7P2",
+    "checkedAt": "2026-11-20T15:39:35.496Z",
+    "cacheHit": false
+  },
+  "10380-08-2": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10380-08-2",
+    "cid": 983,
+    "title": "Triphosphoric acid",
+    "molecularFormula": "H5O10P3",
+    "checkedAt": "2026-11-20T15:41:26.164Z",
+    "cacheHit": false
+  },
+  "10035-10-6": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10035-10-6",
+    "cid": 260,
+    "title": "Hydrogen Bromide",
+    "molecularFormula": "BrH",
+    "checkedAt": "2026-11-20T15:39:37.496Z",
+    "cacheHit": false
+  },
+  "10034-85-2": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10034-85-2",
+    "cid": 24841,
+    "title": "Hydrogen iodide",
+    "molecularFormula": "HI",
+    "checkedAt": "2026-11-20T15:39:38.522Z",
+    "cacheHit": false
+  },
+  "18480-07-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "18480-07-4",
+    "cid": 87672,
+    "title": "Strontium hydroxide",
+    "molecularFormula": "H2O2Sr",
+    "checkedAt": "2026-11-20T15:39:39.672Z",
+    "cacheHit": false
+  },
+  "1310-82-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "1310-82-3",
+    "cid": 62393,
+    "title": "Rubidium hydroxide",
+    "molecularFormula": "HORb",
+    "checkedAt": "2026-11-20T15:39:40.268Z",
+    "cacheHit": false
+  },
+  "21351-79-1": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "21351-79-1",
+    "cid": 62750,
+    "title": "Cesium hydroxide",
+    "molecularFormula": "CsHO",
+    "checkedAt": "2026-11-20T15:39:41.288Z",
+    "cacheHit": false
+  },
+  "57-55-6": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "57-55-6",
+    "cid": 1030,
+    "title": "Propylene Glycol",
+    "molecularFormula": "C3H8O2",
+    "checkedAt": "2026-11-20T15:39:42.219Z",
+    "cacheHit": false
+  },
+  "56-81-5": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "56-81-5",
+    "cid": 753,
+    "title": "Glycerol",
+    "molecularFormula": "C3H8O3",
+    "checkedAt": "2026-11-20T15:39:43.231Z",
+    "cacheHit": false
+  },
+  "107-21-1": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "107-21-1",
+    "cid": 174,
+    "title": "Ethylene Glycol",
+    "molecularFormula": "C2H6O2",
+    "checkedAt": "2026-11-20T15:39:44.358Z",
+    "cacheHit": false
+  },
+  "71-36-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "71-36-3",
+    "cid": 263,
+    "title": "1-Butanol",
+    "molecularFormula": "C4H10O",
+    "checkedAt": "2026-11-20T15:39:45.503Z",
+    "cacheHit": false
+  },
+  "78-92-2": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "78-92-2",
+    "cid": 6568,
+    "title": "(+-)-2-Butanol",
+    "molecularFormula": "C4H10O",
+    "checkedAt": "2026-11-20T15:39:46.507Z",
+    "cacheHit": false
+  },
+  "78-83-1": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "78-83-1",
+    "cid": 6560,
+    "title": "Isobutanol",
+    "molecularFormula": "C4H10O",
+    "checkedAt": "2026-11-20T15:39:47.534Z",
+    "cacheHit": false
+  },
+  "75-65-0": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "75-65-0",
+    "cid": 6386,
+    "title": "tert-Butanol",
+    "molecularFormula": "C4H10O",
+    "checkedAt": "2026-11-20T15:39:48.469Z",
+    "cacheHit": false
+  },
+  "78-93-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "78-93-3",
+    "cid": 6569,
+    "title": "Methyl Ethyl Ketone",
+    "molecularFormula": "C4H8O",
+    "checkedAt": "2026-11-20T15:39:49.408Z",
+    "cacheHit": false
+  },
+  "108-94-1": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "108-94-1",
+    "cid": 7967,
+    "title": "Cyclohexanone",
+    "molecularFormula": "C6H10O",
+    "checkedAt": "2026-11-20T15:39:50.399Z",
+    "cacheHit": false
+  },
+  "123-86-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "123-86-4",
+    "cid": 31272,
+    "title": "Butyl Acetate",
+    "molecularFormula": "C6H12O2",
+    "checkedAt": "2026-11-20T15:39:51.425Z",
+    "cacheHit": false
+  },
+  "110-19-0": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "110-19-0",
+    "cid": 8038,
+    "title": "Isobutyl Acetate",
+    "molecularFormula": "C6H12O2",
+    "checkedAt": "2026-11-20T15:39:52.448Z",
+    "cacheHit": false
+  },
+  "79-20-9": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "79-20-9",
+    "cid": 6584,
+    "title": "Methyl Acetate",
+    "molecularFormula": "C3H6O2",
+    "checkedAt": "2026-11-20T15:39:53.383Z",
+    "cacheHit": false
+  },
+  "108-86-1": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "108-86-1",
+    "cid": 7961,
+    "title": "Bromobenzene",
+    "molecularFormula": "C6H5Br",
+    "checkedAt": "2026-11-20T15:39:54.377Z",
+    "cacheHit": false
+  },
+  "462-06-6": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "462-06-6",
+    "cid": 10008,
+    "title": "Fluorobenzene",
+    "molecularFormula": "C6H5F",
+    "checkedAt": "2026-11-20T15:39:55.319Z",
+    "cacheHit": false
+  },
+  "109-69-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "109-69-3",
+    "cid": 8005,
+    "title": "Butyl Chloride",
+    "molecularFormula": "C4H9Cl",
+    "checkedAt": "2026-11-20T15:39:56.245Z",
+    "cacheHit": false
+  },
+  "78-86-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "78-86-4",
+    "cid": 6563,
+    "title": "2-Chlorobutane",
+    "molecularFormula": "C4H9Cl",
+    "checkedAt": "2026-11-20T15:39:56.807Z",
+    "cacheHit": false
+  },
+  "78-76-2": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "78-76-2",
+    "cid": 6554,
+    "title": "2-Bromobutane",
+    "molecularFormula": "C4H9Br",
+    "checkedAt": "2026-11-20T15:39:57.466Z",
+    "cacheHit": false
+  },
+  "7778-80-5": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7778-80-5",
+    "cid": 24507,
+    "title": "Potassium Sulfate",
+    "molecularFormula": "K2O4S",
+    "checkedAt": "2026-11-20T15:39:58.020Z",
+    "cacheHit": false
+  },
+  "13463-67-7": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "13463-67-7",
+    "cid": 26042,
+    "title": "Titanium dioxide",
+    "molecularFormula": "O2Ti",
+    "checkedAt": "2026-11-20T15:39:58.592Z",
+    "cacheHit": false
+  },
+  "1314-23-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "1314-23-4",
+    "cid": 62395,
+    "title": "Zirconium dioxide",
+    "molecularFormula": "O2Zr",
+    "checkedAt": "2026-11-20T15:39:59.207Z",
+    "cacheHit": false
+  },
+  "7789-75-5": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7789-75-5",
+    "cid": 84512,
+    "title": "Calcium Fluoride",
+    "molecularFormula": "CaF2",
+    "checkedAt": "2026-11-20T15:39:59.820Z",
+    "cacheHit": false
+  },
+  "7758-87-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7758-87-4",
+    "cid": 24456,
+    "title": "Tricalcium Phosphate",
+    "molecularFormula": "Ca3O8P2",
+    "checkedAt": "2026-11-20T15:40:00.434Z",
+    "cacheHit": false
+  },
+  "1314-36-9": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "1314-36-9",
+    "cid": 159374,
+    "title": "Yttrium oxide",
+    "molecularFormula": "O3Y2",
+    "checkedAt": "2026-11-20T15:40:01.050Z",
+    "cacheHit": false
+  },
+  "10101-52-7": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10101-52-7",
+    "cid": 61775,
+    "title": "Silicic acid, zirconium(4+) salt",
+    "molecularFormula": "O4SiZr",
+    "checkedAt": "2026-11-20T15:40:01.662Z",
+    "cacheHit": false
+  },
+  "7733-02-0": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7733-02-0",
+    "cid": 24424,
+    "title": "Zinc Sulfate",
+    "molecularFormula": "O4SZn",
+    "checkedAt": "2026-11-20T15:40:02.277Z",
+    "cacheHit": false
+  },
+  "557-34-6": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "557-34-6",
+    "cid": 11192,
+    "title": "Zinc Acetate",
+    "molecularFormula": "C4H6O4Zn",
+    "checkedAt": "2026-11-20T15:40:02.892Z",
+    "cacheHit": false
+  },
+  "7786-81-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7786-81-4",
+    "cid": 24586,
+    "title": "Nickel Sulfate",
+    "molecularFormula": "NiO4S",
+    "checkedAt": "2026-11-20T15:40:03.507Z",
+    "cacheHit": false
+  },
+  "10101-97-0": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10101-97-0",
+    "cid": 5284429,
+    "title": "Nickel sulfate hexahydrate",
+    "molecularFormula": "H12NiO10S",
+    "checkedAt": "2026-11-20T15:40:04.130Z",
+    "cacheHit": false
+  },
+  "7727-43-7": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7727-43-7",
+    "cid": 24414,
+    "title": "Barium Sulfate",
+    "molecularFormula": "BaO4S",
+    "checkedAt": "2026-11-20T15:40:05.145Z",
+    "cacheHit": false
+  },
+  "1314-98-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "1314-98-3",
+    "cid": 9833931,
+    "title": "Zinc Sulfide",
+    "molecularFormula": "SZn",
+    "checkedAt": "2026-11-20T15:40:06.172Z",
+    "cacheHit": false
+  },
+  "1317-40-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "1317-40-4",
+    "cid": 165914,
+    "title": "Copper sulfide (CuS)",
+    "molecularFormula": "CuS",
+    "checkedAt": "2026-11-20T15:40:07.192Z",
+    "cacheHit": false
+  },
+  "7631-99-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7631-99-4",
+    "cid": 24268,
+    "title": "Sodium Nitrate",
+    "molecularFormula": "NNaO3",
+    "checkedAt": "2026-11-20T15:40:08.117Z",
+    "cacheHit": false
+  },
+  "10124-37-5": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10124-37-5",
+    "cid": 24963,
+    "title": "Calcium nitrate",
+    "molecularFormula": "CaN2O6",
+    "checkedAt": "2026-11-20T15:40:09.240Z",
+    "cacheHit": false
+  },
+  "10377-60-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10377-60-3",
+    "cid": 25212,
+    "title": "Magnesium nitrate",
+    "molecularFormula": "MgN2O6",
+    "checkedAt": "2026-11-20T15:40:10.189Z",
+    "cacheHit": false
+  },
+  "7786-30-3": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "7786-30-3",
+    "cid": 5360315,
+    "title": "Magnesium Chloride",
+    "molecularFormula": "Cl2Mg",
+    "checkedAt": "2026-11-20T15:40:11.126Z",
+    "cacheHit": false
+  },
+  "10043-52-4": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "10043-52-4",
+    "cid": 5284359,
+    "title": "Calcium Chloride",
+    "molecularFormula": "CaCl2",
+    "checkedAt": "2026-11-20T15:40:12.111Z",
+    "cacheHit": false
+  },
+  "71-41-0": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "71-41-0",
+    "cid": 6276,
+    "title": "1-Pentanol",
+    "molecularFormula": "C5H12O",
+    "checkedAt": "2026-11-20T15:40:13.169Z",
+    "cacheHit": false
+  },
+  "6032-29-7": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "6032-29-7",
+    "cid": 22386,
+    "title": "2-Pentanol",
+    "molecularFormula": "C5H12O",
+    "checkedAt": "2026-11-20T15:40:14.176Z",
+    "cacheHit": false
+  },
+  "584-02-1": {
+    "status": "available",
+    "source": "pubchem",
+    "casNumber": "584-02-1",
+    "cid": 11428,
+    "title": "3-Pentanol",
+    "molecularFormula": "C5H12O",
+    "checkedAt": "2026-11-20T15:40:14.724Z",
+    "cacheHit": false
+  }
+}

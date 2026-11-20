@@ -25,7 +25,7 @@ import { AlertTriangle, FlaskConical, BookOpen, ChevronDown, ChevronUp } from 'l
 import { searchChemical } from '../../services/searchService';
 import { ReagentDateFields } from '../../components/ReagentDateFields';
 import { hasManufacturerDate, type ManufacturerDateType } from '../../utils/manufacturerDate';
-import { analyzeChemical } from '../../utils/chemicalAnalyzer';
+import { analyzeChemical, needsAiClassification } from '../../utils/chemicalAnalyzer';
 import { classifyChemicalWithAI } from '../../services/aiClassificationService';
 import { ResultCard } from '../../components/ResultCard';
 import type { AnalysisResult } from '../../types';
@@ -651,8 +651,7 @@ export const ReagentEditPanel: React.FC<ReagentEditPanelProps> = ({
             const chemicalData = await searchChemical(query);
             if (chemicalData) {
                 let analysis = analyzeChemical(chemicalData);
-                if (analysis.category === 'UNKNOWN' &&
-                    analysis.materialProfile?.kind !== 'possible_ionic_organic_material') {
+                if (needsAiClassification(analysis)) {
                     const aiResult = await classifyChemicalWithAI(chemicalData);
                     if (aiResult) {
                         analysis = { ...analysis, ...aiResult };
