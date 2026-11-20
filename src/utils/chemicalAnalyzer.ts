@@ -862,6 +862,10 @@ const buildResult = (
     };
 };
 
+export function needsAiClassification(analysis: Pick<AnalysisResult, 'category' | 'materialProfile'>): boolean {
+    return analysis.category === 'UNKNOWN' && analysis.materialProfile?.kind !== 'possible_ionic_organic_material';
+}
+
 export interface AnalyzeChemicalOptions {
     /**
      * Classify as if the fatal acute-toxicity precedence did not exist. Used

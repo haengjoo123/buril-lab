@@ -123,7 +123,7 @@ export function expandedDecisionFixturesV1() {
   return [...voice, ...classification]
 }
 
-function opaqueUuid(seed) {
+export function opaqueUuid(seed) {
   let left = 2166136261, right = 2654435769
   for (const char of seed) {
     left = Math.imul(left ^ char.charCodeAt(0), 16777619) >>> 0

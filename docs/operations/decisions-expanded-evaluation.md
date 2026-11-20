@@ -147,3 +147,40 @@ the signed probe is rejected and unauthenticated production requests return
 404, and remove local signing keys. Keep only reports and public metadata.
 An offline pass does not replace independent human labels or the required real
 24-hour/100-case shadow and sequential activation observations.
+
+## Prospective matched-input comparison (November 21, 2026)
+
+Run `node scripts/evaluate-paired-decisions.mjs --manifest` for the frozen
+cohort of 1,000 voice cases and 1,000 classification cases. The 50 target CAS
+numbers are disjoint from the November 9 cohort. The contract labels are
+synthetic. Public PubChem records verify chemical identity independently of the
+model and are pinned so both providers receive identical facts. The measured
+classification stage excludes reference lookup time.
+
+The signed evaluation handler accepts four arms. `legacy` is the existing
+Responses request, `decisions` the existing v4/v6 decisions,
+`responsesMatched` the Responses contract with the trial's full evidence,
+and `decisionsTrial` the grouped bottle or ranked classification question.
+The latter two share their evidence, instructions, choices and deterministic
+blocks. Successful pairs must have matching input digests. Thresholds apply to
+the API's own output: 0.90 choice probability and 0.20 margin for Decisions,
+and the original Responses acceptance contract for that control. The 0.85
+voice sensitivity analysis re-scores the same distribution once offline.
+
+Use the production grant procedure in [the rollout guide](decisions-rollout.md).
+For each feature (`voiceCandidate`, then `classification`), prepare a fresh
+grant with `node scripts/evaluate-paired-decisions.mjs --prepare <private-dir> --feature <feature>`.
+Install only its public grant. Run
+`node scripts/evaluate-paired-decisions.mjs --state <private-dir>/private.json --feature <feature> --output <phase.json>`.
+The journal records each completed call, including provider errors. Use
+`--resume` explicitly for an interrupted run. Revoke each grant and verify a
+signed probe is rejected before removing its temporary signing files.
+
+Combine the phases using `node scripts/evaluate-paired-decisions.mjs --summarize --voice <voice.json> --classification <class.json> --output <report.json>`.
+The primary classification group consists of the 523 cases admitted by the
+shared application rule, including 393 answerable cases. The report includes
+all 1,000 for diagnosis. For each primary group, success requires zero wrong
+acceptances, more correct acceptances than both Responses controls, at least as
+many as current Decisions, and complete comparisons without provider errors.
+Report raw adoption and latency alongside correct adoption. Production rollout
+and independent review remain separate decisions.

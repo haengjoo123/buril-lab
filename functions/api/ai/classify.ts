@@ -1,4 +1,4 @@
-import { runDecisionTask, parseDecision, decisionMode, DECISIONS_MODEL, DECISION_POLICIES, logDecision, type DecisionContext, type DecisionMetadata, type DecisionPolicyRevision } from './_decisions'
+import { runDecisionTask, parseDecision, decisionMode, DECISIONS_MODEL, DECISION_POLICIES, logDecision, type ChoiceTask, type DecisionContext, type DecisionMetadata, type DecisionPolicyRevision } from './_decisions'
 import { z } from 'zod'
 import { classificationFormulaEvidence, identityEvidenceBlocks, identityEvidenceSchema, lookupClassificationIdentity, type ClassificationIdentityEvidence } from './_classificationEvidence'
 import { json } from '../_shared/json'
@@ -256,8 +256,26 @@ const categoryDescriptions: Record<ValidCategory, string> = {
   UNKNOWN: 'Identity is unidentified, conflicting, or a mixture whose category cannot be resolved from the supplied evidence; no category fits.',
 }
 
-export function buildClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: DecisionPolicyRevision = 'v6', identityReference?: ClassificationIdentityEvidence) {
+const priorityDescriptions = {
+  ...categoryDescriptions,
+  ACID: 'Rule 6: a recognized free inorganic acid, including a weak acid or an acid supplied as crystals or powder. First exclude rules 1–5. An acid salt is a distinct identity.',
+  ALKALI: 'Rule 7: a recognized free inorganic base, including one supplied as crystals or powder. First exclude rules 1–6.',
+  SOLID_WASTE: 'Rule 8 applies only after rules 1–7 have all been excluded. Ordinary powders, crystals, sand, beads and resin qualify here only if no earlier family fits. A solid free inorganic acid still belongs to rule 6.',
+}
+
+export function buildClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: DecisionPolicyRevision = 'v6', identityReference?: ClassificationIdentityEvidence): ChoiceTask {
   const rules = buildClassificationPrompt({}).split('Strict Rules for Assignment:')[1].split('Return ONLY')[0]
+  if (revision === 'v7') {
+    const base = buildClassificationDecisionTask(chemical, safetyIdentifier, 'v6', identityReference)
+    const ordered = rules.replace(/^6\..+$/m, '6. ACID. ' + priorityDescriptions.ACID)
+      .replace(/^7\..+$/m, '7. ALKALI. ' + priorityDescriptions.ALKALI)
+      .replace(/^8\..+$/m, '8. SOLID_WASTE. ' + priorityDescriptions.SOLID_WASTE)
+    return { ...base, policyVersion: 'classification:v7',
+      instructions: base.instructions.replace(rules, ordered) +
+        '\nFor a coherent identity, stop at the first applicable rule; a second applicable lower-ranked description does not create an alternative. When identity conflicts or remains unresolved, select UNKNOWN before ranking categories.',
+      choices: VALID_CATEGORIES.map(value => ({ value, description: priorityDescriptions[value] })),
+    }
+  }
   return {
     feature: 'classification' as const, input: ['v5', 'v6'].includes(revision) ? JSON.stringify({ chemical, casReference: identityReference ?? { status: 'not_supplied', cacheHit: false },
       ...(revision === 'v6' ? { formulaEvidence: classificationFormulaEvidence(chemical.molecularFormula, identityReference) } : {}) }) : JSON.stringify(chemical),
@@ -313,6 +331,6 @@ export function buildClassificationDecisionTask(chemical: ChemicalInput, safetyI
   }
 }
 
-export async function prepareClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: 'v5' | 'v6' = 'v6') {
+export async function prepareClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: 'v5' | 'v6' | 'v7' = 'v6') {
   return buildClassificationDecisionTask(chemical, safetyIdentifier, revision, await lookupClassificationIdentity(chemical.casNumber))
 }
