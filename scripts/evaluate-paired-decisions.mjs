@@ -8,10 +8,14 @@ import { analyzeExpanded, runExpanded } from './decisions-expanded.mjs'
 import { prepare } from './decisions-remote.mjs'
 
 const arms = ['legacy', 'decisions', 'responsesMatched', 'decisionsTrial']
+const classificationV8Arms = ['legacy', 'decisions', 'responsesMatchedV8', 'decisionsTrialV8']
+const featureArms = (feature, manifest) => feature === 'classification' && manifest.classificationPolicy === 'classification:v8'
+  ? classificationV8Arms : arms
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const read = async path => JSON.parse(await readFile(path, 'utf8'))
 
-export async function pairedSuite() {
+export async function pairedSuite(classRevision = 'v7') {
+  if (!['v7', 'v8'].includes(classRevision)) throw new Error('Unknown classification comparison')
   const fixtures = pairedDecisionFixtures()
   const references = await read(new URL('./fixtures/decisions-paired-pubchem.json', import.meta.url))
   const rules = await build({ entryPoints: [fileURLToPath(new URL('../src/utils/chemicalAnalyzer.ts', import.meta.url))],
@@ -21,7 +25,7 @@ export async function pairedSuite() {
     needsAiClassification(analyzeChemical({ id: fixture.id, ...fixture.input }))).map(fixture => fixture.id)
   const manifest = { version: 'paired-contract:v1', sha256: digest(fixtures), referencesSha256: digest(references),
     eligibleSha256: digest(eligibleIds), cases: fixtures.length, classificationEligible: eligibleIds.length,
-    humanReviewed: false, model: 'gpt-6-luna', voicePolicy: 'voice-candidate:v5', classificationPolicy: 'classification:v7',
+    humanReviewed: false, model: 'gpt-6-luna', voicePolicy: 'voice-candidate:v5', classificationPolicy: 'classification:' + classRevision,
     probability: .90, secondaryVoiceProbability: .85, margin: .20 }
   if (manifest.sha256 !== 'd9d4f41caf1f17e0c31345981534a01b6d98c48f2b7488798db629bf6c9f35a1' ||
       manifest.referencesSha256 !== 'b75c71cdd76c18aa1b1014a5c8b5538ba8a0090bbd3068a93d08438ea383201f' ||
@@ -53,8 +57,14 @@ function summarizeRows(rows) {
     held: successful.length - accepted.length, errors: rows.length - successful.length, p50Ms: q(.5), p95Ms: q(.95) }
 }
 
-export function summarizePaired(suite, records) {
+export function summarizePaired(suite, rawRecords) {
   const ids = suite.fixtures.map(f => f.id)
+  // The archived voice phase and the new classification phase use different signed backend names.
+  const records = rawRecords.map(row => {
+    const index = featureArms(row.feature, suite.manifest).indexOf(row.backend)
+    if (index < 0) throw new Error('Unexpected backend for feature and policy: ' + row.backend)
+    return { ...row, backend: arms[index] }
+  })
   const complete = analyzeExpanded(records, ids, arms, suite)
   if (!complete.complete) throw new Error('Paired matrix incomplete')
   const byId = new Map(records.map(row => [row.id + '/' + row.backend, row]))
@@ -86,6 +96,7 @@ export function summarizePaired(suite, records) {
     arms.every(arm => group[arm].errors === 0) && group[trial].correct > Math.max(group.legacy.correct, group.responsesMatched.correct) &&
     group[trial].correct >= group.decisions.correct
   return { recorded: records.length, manifest: suite.manifest, groups,
+    signedBackends: Object.fromEntries(['voiceCandidate', 'classification'].map(f => [f, featureArms(f, suite.manifest)])),
     pairedSuccess: { voice: commonSuccess(voice), classificationEligible: commonSuccess(eligible) },
     byScenario: Object.fromEntries([...new Set(suite.fixtures.map(f => f.feature + '/' + f.scenario))].map(key =>
       [key, table(suite.fixtures.filter(f => f.feature + '/' + f.scenario === key))])),
@@ -99,11 +110,18 @@ export function summarizePaired(suite, records) {
 async function main() {
   const args = process.argv.slice(2)
   const arg = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined
-  const suite = await pairedSuite()
+  const suite = await pairedSuite(args.includes('--class-v8') ? 'v8' : 'v7')
   if (args.includes('--manifest')) { console.log(JSON.stringify(suite.manifest)); return }
   if (args.includes('--summarize')) {
     const phases = await Promise.all([read(arg('--voice')), read(arg('--classification'))])
-    if (phases.some(p => p.manifest.sha256 !== suite.manifest.sha256 || !p.complete)) throw new Error('Invalid phase')
+    for (const [index, feature] of ['voiceCandidate', 'classification'].entries()) {
+      const phase = phases[index]
+      const policy = feature === 'classification' ? 'classificationPolicy' : 'voicePolicy'
+      if (!phase.complete || phase.execution !== 'cloudflare-production' || phase.records.some(r => r.feature !== feature) ||
+          ['sha256', 'referencesSha256', 'eligibleSha256', 'model', 'probability', 'margin', 'secondaryVoiceProbability', policy]
+            .some(key => phase.manifest[key] !== suite.manifest[key]) ||
+          JSON.stringify(phase.backends) !== JSON.stringify(featureArms(feature, suite.manifest))) throw new Error('Invalid phase: ' + feature)
+    }
     const final = summarizePaired(suite, phases.flatMap(p => p.records))
     await writeFile(arg('--output'), JSON.stringify(final, null, 2))
     console.log(JSON.stringify({ recorded: final.recorded, passed: final.passed })); return
@@ -118,7 +136,7 @@ async function main() {
   if (!arg('--state') || !arg('--output')) throw new Error('Supply state and output')
   const state = await read(arg('--state'))
   if (state.grant.environment !== 'production' || JSON.stringify(state.grant.caseIds) !== JSON.stringify(ids)) throw new Error('Grant does not match the feature')
-  const report = await runExpanded(state, arg('--output'), { suite, backends: arms, resume: args.includes('--resume') })
+  const report = await runExpanded(state, arg('--output'), { suite, backends: featureArms(feature, suite.manifest), resume: args.includes('--resume') })
   console.log(JSON.stringify({ complete: report.complete, calls: report.results }))
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => {

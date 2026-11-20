@@ -1,6 +1,6 @@
 import { runDecisionTask, parseDecision, decisionMode, DECISIONS_MODEL, DECISION_POLICIES, logDecision, type ChoiceTask, type DecisionContext, type DecisionMetadata, type DecisionPolicyRevision } from './_decisions'
 import { z } from 'zod'
-import { classificationFormulaEvidence, identityEvidenceBlocks, identityEvidenceSchema, lookupClassificationIdentity, type ClassificationIdentityEvidence } from './_classificationEvidence'
+import { classificationFormulaEvidence, identityEvidenceBlocks, identityEvidenceSchema, lookupClassificationIdentity, strictFormulaKey, type ClassificationIdentityEvidence } from './_classificationEvidence'
 import { json } from '../_shared/json'
 import { readAICache, stableCacheKey, writeAICache, type AICacheEnv } from './_cache'
 import {
@@ -263,7 +263,26 @@ const priorityDescriptions = {
   SOLID_WASTE: 'Rule 8 applies only after rules 1–7 have all been excluded. Ordinary powders, crystals, sand, beads and resin qualify here only if no earlier family fits. A solid free inorganic acid still belongs to rule 6.',
 }
 
+// This selects explanatory wording only. The provider still evaluates the full identity and all ten choices.
+function hasAcidOrBaseFormCue(chemical: ChemicalInput, reference?: ClassificationIdentityEvidence): boolean {
+  const name = chemical.name?.normalize('NFKC') ?? ''
+  const acid = /\bacid\b|[가-힣]+산(?![가-힣])/iu.test(name)
+  const solidHydroxide = /\bhydroxide\b|수산화/iu.test(name) && /\b(?:powder(?:ed)?|crystal(?:s|line)?|pellets?|solid)\b|분말|결정|펠릿|고체/iu.test(name)
+  if (!acid && !solidHydroxide) return false
+  if (/\bsalt\b|산염/iu.test(name)) return false
+  const formula = strictFormulaKey(chemical.molecularFormula) ??
+    (reference?.status === 'available' ? strictFormulaKey(reference.molecularFormula) : null)
+  return !formula || (!/(?:^|\|)C:/.test(formula) && /(?:^|\|)H:/.test(formula) && /(?:^|\|)O:/.test(formula))
+}
+
 export function buildClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: DecisionPolicyRevision = 'v6', identityReference?: ClassificationIdentityEvidence): ChoiceTask {
+  if (revision === 'v8') {
+    const base = buildClassificationDecisionTask(chemical, safetyIdentifier, 'v6', identityReference)
+    const task = { ...base, policyVersion: 'classification:v8' }
+    if (!hasAcidOrBaseFormCue(chemical, identityReference)) return task
+    return { ...task, instructions: base.instructions +
+      '\nAfter rules 1–5, an identified free inorganic acid belongs to rule 6 even when weak, crystalline or powdered. An identified inorganic hydroxide base belongs to rule 7 even as a solid. Rule 8 covers ordinary solids after these families. Read a salt as its own identity.' }
+  }
   const rules = buildClassificationPrompt({}).split('Strict Rules for Assignment:')[1].split('Return ONLY')[0]
   if (revision === 'v7') {
     const base = buildClassificationDecisionTask(chemical, safetyIdentifier, 'v6', identityReference)
@@ -331,6 +350,6 @@ export function buildClassificationDecisionTask(chemical: ChemicalInput, safetyI
   }
 }
 
-export async function prepareClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: 'v5' | 'v6' | 'v7' = 'v6') {
+export async function prepareClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: 'v5' | 'v6' | 'v7' | 'v8' = 'v6') {
   return buildClassificationDecisionTask(chemical, safetyIdentifier, revision, await lookupClassificationIdentity(chemical.casNumber))
 }

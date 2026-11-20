@@ -19,7 +19,7 @@ export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
-const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'responsesMatched', 'decisionsTrial', 'probe']) }).strict()
+const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'responsesMatched', 'decisionsTrial', 'responsesMatchedV8', 'decisionsTrialV8', 'probe']) }).strict()
 const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
@@ -69,19 +69,22 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   const pairedFixture = pairedFixtureById(body.caseId) as Fixture | null
   const fixture = pairedFixture ?? evaluationFixtures().get(body.caseId)
   if (!fixture) return respond({ code: 'INVALID_CASE' }, 400)
+  const classV8 = body.backend === 'responsesMatchedV8' || body.backend === 'decisionsTrialV8'
+  if (classV8 && fixture.feature !== 'classification') return respond({ code: 'INVALID_CASE' }, 400)
   if (!context.env.OPENAI_API_KEY || !context.env.OPENAI_SAFETY_HMAC_SECRET) return respond({ code: 'AI_NOT_CONFIGURED' }, 503)
   if (body.backend === 'probe') return respond({ id: fixture.id, feature: fixture.feature, backend: 'probe', error: false, configured: true })
   const started = Date.now()
   try {
     const safety = await createSafetyIdentifier(context.env, 'decisions-evaluation-synthetic')
     const revision = body.backend === 'decisionsV1' ? 'v1' : body.backend === 'decisionsV2' ? 'v2' : body.backend === 'decisionsV3' ? 'v3' : 'v4'
-    const trial = body.backend === 'decisionsTrial' || body.backend === 'responsesMatched'
-    const classRevision = trial ? 'v7' : body.backend === 'decisions' ? 'v6' : body.backend === 'decisionsV5' ? 'v5' : revision
+    const matched = body.backend === 'responsesMatched' || body.backend === 'responsesMatchedV8'
+    const trial = matched || body.backend === 'decisionsTrial' || classV8
+    const classRevision = classV8 ? 'v8' : trial ? 'v7' : body.backend === 'decisions' ? 'v6' : body.backend === 'decisionsV5' ? 'v5' : revision
     const prepareTask = () => {
       if (fixture.feature === 'voiceCandidate') {
         return buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety, trial ? 'v5' : revision)
       }
-      if (classRevision === 'v5' || classRevision === 'v6' || classRevision === 'v7') {
+      if (classRevision === 'v5' || classRevision === 'v6' || classRevision === 'v7' || classRevision === 'v8') {
         if (pairedFixture) return buildClassificationDecisionTask(fixture.input, safety, classRevision, fixedIdentityEvidence(fixture.input.casNumber))
         return prepareClassificationDecisionTask(fixture.input, safety, classRevision)
       }
@@ -90,7 +93,7 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     if (body.backend !== 'legacy') {
       const task = await prepareTask()
       const evidence = trial ? { inputDigest: await pairedInputDigest(task) } : {}
-      if (body.backend === 'responsesMatched') {
+      if (matched) {
         const result = await matchedResponses(context.env, task)
         return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
           ...result, ...evidence, elapsedMs: Date.now() - started, error: false, cacheHit: false })

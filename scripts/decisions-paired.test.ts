@@ -6,7 +6,7 @@ import type { VoiceMatch } from '../src/utils/voiceAgent'
 // @ts-expect-error The same fixed cases are read by the CLI and the signed evaluation handler.
 import { pairedFixtureById } from './decisions-paired-fixtures.mjs'
 // @ts-expect-error The standalone evaluation CLI is JavaScript.
-import { pairedSuite, replayVoice85 } from './evaluate-paired-decisions.mjs'
+import { pairedSuite, replayVoice85, summarizePaired } from './evaluate-paired-decisions.mjs'
 
 describe('prospective Decisions comparison', () => {
   it('binds the labels, public evidence and actual AI gate before the paid run', async () => {
@@ -50,5 +50,32 @@ describe('prospective Decisions comparison', () => {
     for (const reason of ['duplicate_identity', 'explicit_review', 'refusal', 'margin']) expect(replayVoice85({ ...row, abstentionReason: reason }).choice).toBeNull()
     expect(replayVoice85({ ...row, error: true }).choice).toBeNull()
     expect(replayVoice85({ ...row, feature: 'classification' }).choice).toBeNull()
+  })
+  it('limits v8 wording to the acid or solid hydroxide boundary while preserving evidence and hard blocks', () => {
+    const materials = [
+      { name: 'Gypsum powder', molecularFormula: 'CaSO4·2H2O', cue: false },
+      { name: 'Acetic acid', molecularFormula: 'CH3COOH', cue: false },
+      { name: 'Hydrochloric acid', molecularFormula: 'HCl', cue: false },
+      { name: 'Copper sulfate crystals', cue: false },
+      { name: 'Organic acid sodium salt', cue: false },
+      { name: '붕산 결정', molecularFormula: 'H3BO3', cue: true },
+      { name: '수산화나트륨 분말', molecularFormula: 'NaOH', cue: true },
+      { name: 'Phosphoric acid', cue: true },
+    ]
+    for (const { cue, ...chemical } of materials) {
+      const base = buildClassificationDecisionTask(chemical, 'test', 'v6')
+      const trial = buildClassificationDecisionTask(chemical, 'test', 'v8')
+      expect({ ...trial, instructions: base.instructions, policyVersion: base.policyVersion }).toEqual(base)
+      expect(trial.policyVersion).toBe('classification:v8')
+      expect(trial.instructions.startsWith(base.instructions)).toBe(true)
+      expect(trial.instructions !== base.instructions).toBe(cue)
+    }
+    expect(buildClassificationDecisionTask({ name: 'Inorganic acid powder', casNumber: 'invalid' }, 'test', 'v8').blockedChoices).toHaveLength(9)
+  })
+  it('rejects mixed revisions even for recorded provider errors', async () => {
+    const suite = await pairedSuite('v8')
+    expect(suite.manifest.classificationPolicy).toBe('classification:v8')
+    expect(() => summarizePaired(suite, [{ feature: 'classification', backend: 'decisionsTrial', error: true }])).toThrow('Unexpected backend')
+    expect(() => summarizePaired(suite, [{ feature: 'voiceCandidate', backend: 'responsesMatchedV8', error: true }])).toThrow('Unexpected backend')
   })
 })
