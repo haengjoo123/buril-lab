@@ -10,6 +10,7 @@ export const MIN_CHOICE_PROBABILITY = 0.90
 export const MIN_CHOICE_MARGIN = 0.20
 export type DecisionFeature = 'voiceCandidate' | 'classification'
 export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v4', classification: 'classification:v6' } as const
+export const SELECTION_POLICIES = { voiceCandidate: 'verified-responses-v1', classification: 'identity-routed-v1' } as const
 export type DecisionPolicyRevision = 'v1' | 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v8'
 export type DecisionsEnv = OpenAIResponsesEnv & RuntimeConfigEnv
 export interface DecisionContext {
@@ -23,12 +24,16 @@ const configSchema = z.object({
   classification: modeSchema,
   shadowSampleRate: z.number().min(0).max(1),
   expiresAt: z.iso.datetime({ offset: true }),
+  policies: z.object({
+    voiceCandidate: z.literal(SELECTION_POLICIES.voiceCandidate).optional(),
+    classification: z.literal(SELECTION_POLICIES.classification).optional(),
+  }).strict().optional(),
 })
 export async function decisionMode(env: DecisionsEnv, feature: DecisionFeature) {
   try {
     const parsed = configSchema.safeParse(await env.BURILLAB_RUNTIME_CONFIG?.get(DECISIONS_CONFIG_KEY, 'json'))
     if (!parsed.success || Date.parse(parsed.data.expiresAt) <= Date.now()) return { mode: 'legacy' as const, sampleRate: 0 }
-    return { mode: parsed.data[feature], sampleRate: parsed.data.shadowSampleRate }
+    return { mode: parsed.data[feature], sampleRate: parsed.data.shadowSampleRate, policy: parsed.data.policies?.[feature] }
   } catch { return { mode: 'legacy' as const, sampleRate: 0 } }
 }
 const probability = z.number().finite().min(0).max(1)
@@ -64,6 +69,17 @@ export interface ChoiceTask {
   safetyIdentifier: string
   identityCheckInstructions?: string
   identityReference?: ClassificationIdentityEvidence
+  provider?: 'responses' | 'decisions'
+  minimumProbability?: 0.85
+}
+export interface ChoiceResult {
+  choice: string | null
+  proposedChoice: string | null
+  outcome: string
+  abstentionReason: string | null
+  decision?: DecisionMetadata
+  confidence?: number
+  usage?: Record<string, unknown> | null
 }
 export const IDENTITY_CHECK_NAME = 'classification_identity'
 export const IDENTITY_CHECK_CHOICES = [
@@ -82,9 +98,10 @@ function parseSingleDecision(payload: unknown, task: ChoiceTask) {
     || Math.abs(answer.probabilities.reduce((sum, item) => sum + item.probability, 0) - 1) > 0.001) throw new Error('invalid_distribution')
   const selected = answer.probabilities.find(item => item.value === answer.choice)!.probability
   const runnerUp = Math.max(0, ...answer.probabilities.filter(item => item.value !== answer.choice).map(item => item.probability))
-  const accepted = answer.choice !== task.abstain && !task.blockedChoices?.includes(answer.choice) && selected >= MIN_CHOICE_PROBABILITY && selected - runnerUp + 1e-12 >= MIN_CHOICE_MARGIN
+  const minimum = task.minimumProbability ?? MIN_CHOICE_PROBABILITY
+  const accepted = answer.choice !== task.abstain && !task.blockedChoices?.includes(answer.choice) && selected >= minimum && selected - runnerUp + 1e-12 >= MIN_CHOICE_MARGIN
   const abstentionReason = accepted ? null : answer.choice === task.abstain ? 'explicit_review'
-    : task.blockedChoices?.includes(answer.choice) ? task.blockedReason ?? 'duplicate_identity' : selected < MIN_CHOICE_PROBABILITY ? 'probability' : 'margin'
+    : task.blockedChoices?.includes(answer.choice) ? task.blockedReason ?? 'duplicate_identity' : selected < minimum ? 'probability' : 'margin'
   const decision: DecisionMetadata = { model: parsed.model, policyVersion: task.policyVersion ?? DECISION_POLICIES[task.feature],
     confidence: answer.confidence, choiceProbability: selected, probabilities: answer.probabilities,
     ...(task.identityReference ? { identityReference: task.identityReference } : {}) }
@@ -143,21 +160,23 @@ export function logDecision(context: DecisionContext, task: ChoiceTask, fields: 
     feature: task.feature, model: DECISIONS_MODEL, policyVersion: task.policyVersion ?? DECISION_POLICIES[task.feature], cacheHit: false, ...fields }))
 }
 export async function runDecisionTask<T>(context: DecisionContext, task: ChoiceTask,
-  legacy: (bounded: boolean) => Promise<T>, selection: (value: T) => string | null, prepareTask?: () => Promise<ChoiceTask>) {
-  const config = await decisionMode(context.env, task.feature)
+  legacy: (bounded: boolean) => Promise<T>, selection: (value: T) => string | null, prepareTask?: () => Promise<ChoiceTask>,
+  options: { config?: Awaited<ReturnType<typeof decisionMode>>; evaluate?: (env: DecisionsEnv, task: ChoiceTask) => Promise<ChoiceResult> } = {}) {
+  const config = options.config ?? await decisionMode(context.env, task.feature)
   const evaluate = async () => {
     const started = Date.now()
+    let evaluatedTask = task
     try {
-      const evaluatedTask = prepareTask ? await prepareTask() : task
-      const result = await evaluateDecision(context.env, evaluatedTask)
-      logDecision(context, task, { mode: config.mode, outcome: result.outcome, choice: result.choice,
+      if (prepareTask) evaluatedTask = await prepareTask()
+      const result: ChoiceResult = await (options.evaluate ?? evaluateDecision)(context.env, evaluatedTask)
+      logDecision(context, evaluatedTask, { mode: config.mode, provider: evaluatedTask.provider ?? 'decisions', outcome: result.outcome, choice: result.choice,
         elapsedMs: Date.now() - started, usage: result.usage, fallbackReason: null, abstentionReason: result.abstentionReason,
         referenceStatus: evaluatedTask.identityReference?.status ?? null,
         referenceCacheHit: evaluatedTask.identityReference?.cacheHit ?? null })
-      return result
+      return { ...result, provider: evaluatedTask.provider ?? 'decisions', identityReference: evaluatedTask.identityReference }
     } catch (error) {
       const reason = error instanceof Error && /^http_\d+$|^timeout$|^invalid_/.test(error.message) ? error.message : 'technical_error'
-      logDecision(context, task, { mode: config.mode, outcome: 'error', elapsedMs: Date.now() - started, fallbackReason: reason })
+      logDecision(context, evaluatedTask, { mode: config.mode, provider: evaluatedTask.provider, outcome: 'error', elapsedMs: Date.now() - started, fallbackReason: reason })
       throw new Error(reason)
     }
   }
@@ -172,6 +191,10 @@ export async function runDecisionTask<T>(context: DecisionContext, task: ChoiceT
     }
     return { backend: 'legacy' as const, value }
   }
-  try { return { backend: 'decisions' as const, value: await evaluate() } }
-  catch { return { backend: 'legacy' as const, value: await legacy(true) } }
+  try { return { backend: options.evaluate ? 'candidate' as const : 'decisions' as const, value: await evaluate() } }
+  catch {
+    // Opt-in selection chooses one provider for the request. An error ends in user review.
+    if (options.evaluate) return { backend: 'unavailable' as const }
+    return { backend: 'legacy' as const, value: await legacy(true) }
+  }
 }

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>버릴랩 독립 정답 검토</title>
+<style>
+:root{font:16px/1.55 "Atkinson Hyperlegible Next",system-ui,sans-serif;color:#152d30;background:#f6f8f6}body{margin:0}main{max-width:940px;margin:auto;padding:24px}h1{font-size:1.65rem}h2{font-size:1.25rem}section,details{padding:18px;margin:14px 0;border:1px solid #c9d5d0;border-radius:8px;background:white}label{display:block;margin:8px 0}input,select,button{font:inherit;max-width:100%;padding:5px 8px}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #176c61}#answers{max-height:44vh;overflow:auto}#answers label{padding:6px;border-bottom:1px solid #e1e8e3}nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap}pre{font:inherit;white-space:pre-wrap}.muted{color:#46615c}small{word-break:break-all}
+</style>
+<main><h1>음성 재고 선택과 보조 분류 정답 검토</h1>
+<p>사례마다 발화와 재고 또는 입력 라벨을 읽고 정답을 기록하세요. 구분할 근거가 부족하거나 식별 정보가 충돌하면 ‘사용자 확인’을 선택하세요. 검토를 마치기 어려운 사례는 ‘미검토’로 두세요.</p>
+<details><summary>보조 분류 기준과 검토 방법</summary><p>물질 신원이 일치할 때 서비스의 분류 규칙을 순서대로 적용하세요. 확인한 근거를 메모할 수 있습니다. 이 검토는 폐기·혼합·보관 승인을 부여하지 않습니다.</p>
+<ol><li>반응성·산화성 물질과 질산·과염소산 예외</li><li>시안화물 또는 황화물</li><li>지정 금속 성분 Ag, Cd, Pb, Hg, Cr, As, Ni, Cu, Zn, Ba</li><li>탄소와 할로겐을 포함한 유기물</li><li>할로겐이 없는 탄소 함유 물질</li><li>무기산</li><li>무기 염기</li><li>앞선 분류에 해당하지 않는 일반 고형물</li><li>순수한 물이나 명확히 확인된 무해한 무기 수용액</li><li>해결할 수 없는 신원·분류는 사용자 확인</li></ol></details>
+<nav><label>기능 <select id="feature"><option value="voiceCandidate">음성 재고 선택</option><option value="classification">보조 분류</option></select></label><span id="progress" role="status"></span></nav>
+<section><small id="caseId"></small><h2 id="query"></h2><pre id="identity"></pre><a id="reference" target="_blank" rel="noreferrer">입력된 CAS로 PubChem 조회</a>
+<label id="filterWrap">재고 후보 검색 <input id="filter" type="search"></label><div id="answers"></div>
+<label>검토 메모 <input id="note" maxlength="500"></label>
+<nav><button type="button" id="prev">이전</button><button type="button" id="next">다음</button><button type="button" id="unseen">다음 미검토</button></nav></section>
+<section><label>검토자 이름 또는 식별자 <input id="reviewer" maxlength="100"></label>
+<label><input type="checkbox" id="attest"> 모델의 예측을 보지 않고 표시한 사례의 정답을 직접 확인했습니다.</label>
+<nav><button type="button" id="download">검토 파일 저장</button><label>저장한 검토 불러오기 <input id="restore" type="file" accept=".json"></label></nav>
+<p class="muted">중간 진행도 저장할 수 있습니다. 기능별 1,000건을 모두 확인하면 그 기능의 정답을 고정할 수 있습니다.</p><p id="status" role="status"></p></section></main>
+<script type="application/json" id="inputs">__BLIND_PACK__</script>
+<script>
+'use strict';
+const pack=JSON.parse(document.getElementById('inputs').textContent), el=id=>document.getElementById(id)
+const storageKey='burillab-review-'+pack.inputDigest+'-'+pack.referencesDigest
+let labels={}, position=0
+const names={REACTIVE:'반응성',CYANIDE:'시안·황화물',HEAVY_METAL:'지정 금속',ORGANIC_HALOGEN:'할로겐 유기물',ORGANIC_NON_HALOGEN:'비할로겐 유기물',ACID:'무기산',ALKALI:'무기 염기',SOLID_WASTE:'일반 고형물',NEUTRAL:'중성'}
+const selected=()=>pack.cases.filter(c=>c.feature===el('feature').value)
+const snapshot=()=>({version:1,inputDigest:pack.inputDigest,referencesDigest:pack.referencesDigest,reviewer:el('reviewer').value.trim(),attested:el('attest').checked,labels})
+function restore(data){if(data.version!==1||data.inputDigest!==pack.inputDigest||data.referencesDigest!==pack.referencesDigest||!data.labels||typeof data.labels!=='object'||Array.isArray(data.labels))throw Error('다른 평가 파일입니다.');labels=data.labels;el('reviewer').value=data.reviewer||'';el('attest').checked=data.attested===true}
+function persist(){try{localStorage.setItem(storageKey,JSON.stringify(snapshot()))}catch{el('status').textContent='중간 진행을 파일로 저장하세요.'}}
+try{const cached=localStorage.getItem(storageKey);if(cached)restore(JSON.parse(cached))}catch{}
+function choose(c,value){if(value===undefined)delete labels[c.id];else labels[c.id]={choice:value,note:el('note').value};el('attest').checked=false;persist();draw()}
+function option(c,value,title){const label=document.createElement('label'),radio=document.createElement('input');radio.type='radio';radio.name='decision';radio.checked=labels[c.id]?.choice===value;radio.onchange=()=>choose(c,value);label.append(radio,document.createTextNode(' '+title));el('answers').append(label)}
+function draw(){const all=selected(),c=all[position],voice=c.feature==='voiceCandidate'
+ el('progress').textContent=(position+1)+' / '+all.length+' · 검토 완료 '+all.filter(x=>Object.hasOwn(labels,x.id)).length+'건'
+ el('caseId').textContent=c.id;el('query').textContent=voice?c.input.text:c.input.name;el('answers').replaceChildren()
+ el('filterWrap').hidden=!voice;el('identity').textContent=voice?'':('기재 분자식 '+(c.input.molecularFormula||'미기재')+' · 기재 CAS '+(c.input.casNumber||'미기재'))
+ const reference=el('reference');reference.hidden=voice||!c.input.casNumber;if(!reference.hidden)reference.href='https://pubchem.ncbi.nlm.nih.gov/#query='+encodeURIComponent(c.input.casNumber);else reference.removeAttribute('href')
+ el('note').value=labels[c.id]?.note||'';option(c,undefined,'미검토');option(c,null,'사용자 확인')
+ if(voice){const term=el('filter').value.toLowerCase();for(const m of c.input.matches){
+ const display=[m.name,m.casNumber,m.brand,m.productNumber,m.storageLocationName,m.cabinetName,Number.isInteger(m.shelfLevel)?(m.shelfLevel+1)+'번 선반':'선반 미기재',m.source+':'+m.id].filter(Boolean).join(' · ')
+ if(!term||display.toLowerCase().includes(term))option(c,m.source+':'+m.id,display)
+ }}else for(const [v,t] of Object.entries(names))option(c,v,t+' ('+v+')')
+}
+function move(n){position=n;el('filter').value='';draw()}
+el('prev').onclick=()=>move(Math.max(0,position-1));el('next').onclick=()=>move(Math.min(selected().length-1,position+1))
+el('unseen').onclick=()=>{const all=selected();for(let i=1;i<=all.length;i++){const n=(position+i)%all.length;if(!Object.hasOwn(labels,all[n].id)){move(n);return}}el('status').textContent='이 기능의 검토를 모두 기록했습니다.'}
+el('feature').onchange=()=>move(0);el('filter').oninput=draw
+el('note').oninput=()=>{const entry=labels[selected()[position].id];if(entry){entry.note=el('note').value;persist()}}
+el('reviewer').oninput=persist;el('attest').onchange=persist
+el('download').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='burillab-human-review.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+el('restore').onchange=async e=>{try{const f=e.target.files[0];if(!f)return;restore(JSON.parse(await f.text()));persist();move(0);el('status').textContent='검토 기록을 불러왔습니다.'}catch{el('status').textContent='이 평가에 맞는 검토 파일을 선택하세요.'}}
+draw()
+</script></html>

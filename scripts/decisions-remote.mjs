@@ -14,10 +14,12 @@ export function evaluationTarget(environment = 'staging') {
   throw new Error('Unknown evaluation environment')
 }
 
-export async function prepare(directory, ids = decisionFixtures().map(item => item.id), environment = 'staging') {
+export async function prepare(directory, ids = decisionFixtures().map(item => item.id), environment = 'staging', reviewDigest) {
   evaluationTarget(environment)
+  if (reviewDigest !== undefined && !/^[a-f0-9]{64}$/.test(reviewDigest)) throw new Error('Invalid review digest')
   const { publicKey, privateKey } = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true })
-  const grant = { id: randomUUID(), environment, publicKey: await exportJWK(publicKey), expiresAt: new Date(Date.now() + 3_600_000).toISOString(), caseIds: ids }
+  const grant = { id: randomUUID(), environment, publicKey: await exportJWK(publicKey), expiresAt: new Date(Date.now() + 3_600_000).toISOString(), caseIds: ids,
+    ...(reviewDigest ? { reviewDigest } : {}) }
   // Only the three public JWK fields are admitted by the server schema.
   grant.publicKey = { kty: grant.publicKey.kty, crv: grant.publicKey.crv, x: grant.publicKey.x }
   await mkdir(directory, { recursive: true })

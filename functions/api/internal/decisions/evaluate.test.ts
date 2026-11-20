@@ -5,8 +5,10 @@ import { createApiMiddleware } from '../../_middleware'
 import { resetClassificationIdentityCache } from '../../ai/_classificationEvidence'
 // @ts-expect-error The CLI is intentionally authored as JavaScript.
 import { requestCase } from '../../../../scripts/decisions-remote.mjs'
+// @ts-expect-error Fixed review inputs are shared by the CLI and the signed handler.
+import { blindReviewFixtures } from '../../../../scripts/decisions-review-fixtures.mjs'
 
-let state: { grant: { environment?: string; id: string; expiresAt: string; publicKey: { kty: string; crv: string; x: string }; caseIds: string[] }; privateKey: JWK }
+let state: { grant: { environment?: string; reviewDigest?: string; id: string; expiresAt: string; publicKey: { kty: string; crv: string; x: string }; caseIds: string[] }; privateKey: JWK }
 beforeEach(async () => {
   resetClassificationIdentityCache()
   const pair = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true })
@@ -30,6 +32,21 @@ function transport(environment = 'staging') {
   }
 }
 describe('signed remote evaluation through the real middleware and handler', () => {
+  it('requires a sealed review for blind cases and keeps labels off the wire', async () => {
+    const blind = blindReviewFixtures().find((f: { feature: string }) => f.feature === 'voiceCandidate')
+    state.grant.caseIds.push(blind.id)
+    const provider = vi.fn(async () => Response.json({ model: 'gpt-6-luna',
+      answers: [{ type: 'refusal', name: 'voiceCandidate' }] }))
+    vi.stubGlobal('fetch', provider)
+    await expect(requestCase(state, blind.id, 'probe', credentials, transport())).rejects.toMatchObject({serverCode: 'REVIEW_REQUIRED'})
+    state.grant.reviewDigest = 'b'.repeat(64)
+    await expect(requestCase(state, blind.id, 'classificationRouted', credentials, transport())).rejects.toMatchObject({serverCode: 'INVALID_CASE'})
+    expect(provider).not.toHaveBeenCalled()
+    const result = await requestCase(state, blind.id, 'voiceVerifiedDecisions85', credentials, transport())
+    expect(result).toMatchObject({ error: false, provider: 'decisions', choice: null, policyVersion: 'voice:verified-decisions85:v1' })
+    expect(result).not.toHaveProperty('expected')
+    expect(provider).toHaveBeenCalledTimes(1)
+  })
   it('runs a configured probe without provider calls or database access', async () => {
     const provider = vi.fn(); vi.stubGlobal('fetch', provider)
     const result = await requestCase(state, 'classification-3-0', 'probe', credentials, transport())

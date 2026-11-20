@@ -1,4 +1,7 @@
-import { runDecisionTask, type ChoiceTask, type DecisionContext, type DecisionPolicyRevision } from '../ai/_decisions'
+import { decisionMode, runDecisionTask, SELECTION_POLICIES, type ChoiceTask, type DecisionContext, type DecisionPolicyRevision } from '../ai/_decisions'
+import { candidateResolutionSchema, VOICE_CANDIDATE_MAX_OUTPUT_TOKENS, evaluateSelectionPolicy } from '../ai/_choiceResponses'
+export { candidateResolutionSchema, VOICE_CANDIDATE_MAX_OUTPUT_TOKENS } from '../ai/_choiceResponses'
+import { verifiedVoiceBlocks } from './_candidateConstraints'
 import { XMLParser } from 'fast-xml-parser'
 import { z } from 'zod'
 import {
@@ -44,7 +47,6 @@ const KOSHA_CAS_SEARCH_CONDITION = 1
 const MAX_MATCH_CANDIDATES = 120
 const MAX_GENERATED_ALIASES = 10
 export const VOICE_ALIAS_MAX_OUTPUT_TOKENS = 500
-export const VOICE_CANDIDATE_MAX_OUTPUT_TOKENS = 500
 export const VOICE_REFERENCE_TIMEOUT_MS = 5_000
 export const VOICE_REFERENCE_MAX_BYTES = 256 * 1024
 const xmlParser = new XMLParser({
@@ -65,11 +67,6 @@ interface KoshaSearchItem {
 
 const reagentAliasesSchema = z.object({
   aliases: z.array(z.string().min(1).max(120)).max(MAX_GENERATED_ALIASES),
-})
-export const candidateResolutionSchema = z.object({
-  candidateId: z.string().max(200),
-  confidence: z.number().min(0).max(1),
-  queryAliases: z.array(z.string().min(1).max(120)).max(MAX_GENERATED_ALIASES),
 })
 const pubchemPropertiesSchema = z.object({
   PropertyTable: z.object({ Properties: z.array(z.object({
@@ -445,15 +442,30 @@ export async function resolveCandidateWithOpenAI(
   matches: VoiceMatch[], safetyIdentifier: string, context?: Omit<DecisionContext, 'env'>,
 ): Promise<CandidateAliasResolution | null> {
   if (!matches.length || !env.OPENAI_API_KEY?.trim()) return null
-  const task = buildVoiceDecisionTask(rawInput, language, matches, safetyIdentifier)
+  const config = await decisionMode(env, 'voiceCandidate')
+  const verified = config.mode !== 'legacy' && config.policy === SELECTION_POLICIES.voiceCandidate
+  const task = verified ? buildVerifiedVoiceTask(rawInput, language, matches, safetyIdentifier, 'responses')
+    : buildVoiceDecisionTask(rawInput, language, matches, safetyIdentifier)
   const result = await runDecisionTask({ ...context, env }, task,
     bounded => resolveLegacyCandidate(env, rawInput, language, matches, safetyIdentifier, bounded),
-    value => value && value.confidence >= 0.72 ? value.candidateId : null)
+    value => value && value.confidence >= 0.72 ? value.candidateId : null, undefined,
+    { config, evaluate: verified ? evaluateSelectionPolicy : undefined })
   if (result.backend === 'legacy') return result.value
+  if (result.backend === 'unavailable') return null
   const id = result.value.choice
   if (!id || task.blockedChoices?.includes(id) || !matches.slice(0, MAX_MATCH_CANDIDATES).some(match => getMatchKey(match) === id)) return null
   // The Decisions acceptance gate has already run; the legacy caller threshold is not a Decisions threshold.
-  return { candidateId: id, confidence: result.value.decision!.confidence, decisionAccepted: true, queryAliases: [] }
+  return { candidateId: id, confidence: result.value.decision?.confidence ?? result.value.confidence ?? 0,
+    decisionAccepted: result.value.provider === 'decisions', queryAliases: [] }
+}
+
+export function buildVerifiedVoiceTask(rawInput: string, language: VoiceLanguage, matches: VoiceMatch[], safetyIdentifier: string,
+  provider: 'responses' | 'decisions'): ChoiceTask {
+  const offered = matches.slice(0, MAX_MATCH_CANDIDATES)
+  const base = buildVoiceDecisionTask(rawInput, language, offered, safetyIdentifier, 'v5')
+  return { ...base, provider, policyVersion: provider === 'responses' ? 'voice:verified-responses:v1' : 'voice:verified-decisions85:v1',
+    ...(provider === 'decisions' ? { minimumProbability: 0.85 as const } : {}),
+    blockedChoices: [...new Set([...(base.blockedChoices ?? []), ...verifiedVoiceBlocks(rawInput, offered)])], blockedReason: 'inventory_constraint' }
 }
 
 export function buildVoiceDecisionTask(rawInput: string, language: VoiceLanguage, matches: VoiceMatch[], safetyIdentifier: string, revision: DecisionPolicyRevision = 'v4'): ChoiceTask {

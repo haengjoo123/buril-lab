@@ -14,15 +14,19 @@ const featureArms = (feature, manifest) => feature === 'classification' && manif
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const read = async path => JSON.parse(await readFile(path, 'utf8'))
 
+export async function ruleEligibleIds(fixtures) {
+  const rules = await build({ entryPoints: [fileURLToPath(new URL('../src/utils/chemicalAnalyzer.ts', import.meta.url))],
+    bundle: true, platform: 'node', format: 'esm', write: false })
+  const { analyzeChemical, needsAiClassification } = await import('data:text/javascript;base64,' + Buffer.from(rules.outputFiles[0].contents).toString('base64'))
+  return fixtures.filter(fixture => fixture.feature === 'classification' &&
+    needsAiClassification(analyzeChemical({ id: fixture.id, ...fixture.input }))).map(fixture => fixture.id)
+}
+
 export async function pairedSuite(classRevision = 'v7') {
   if (!['v7', 'v8'].includes(classRevision)) throw new Error('Unknown classification comparison')
   const fixtures = pairedDecisionFixtures()
   const references = await read(new URL('./fixtures/decisions-paired-pubchem.json', import.meta.url))
-  const rules = await build({ entryPoints: [fileURLToPath(new URL('../src/utils/chemicalAnalyzer.ts', import.meta.url))],
-    bundle: true, platform: 'node', format: 'esm', write: false })
-  const { analyzeChemical, needsAiClassification } = await import('data:text/javascript;base64,' + Buffer.from(rules.outputFiles[0].contents).toString('base64'))
-  const eligibleIds = fixtures.filter(fixture => fixture.feature === 'classification' &&
-    needsAiClassification(analyzeChemical({ id: fixture.id, ...fixture.input }))).map(fixture => fixture.id)
+  const eligibleIds = await ruleEligibleIds(fixtures)
   const manifest = { version: 'paired-contract:v1', sha256: digest(fixtures), referencesSha256: digest(references),
     eligibleSha256: digest(eligibleIds), cases: fixtures.length, classificationEligible: eligibleIds.length,
     humanReviewed: false, model: 'gpt-6-luna', voicePolicy: 'voice-candidate:v5', classificationPolicy: 'classification:' + classRevision,

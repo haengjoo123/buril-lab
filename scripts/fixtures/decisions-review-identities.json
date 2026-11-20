@@ -1,0 +1,406 @@
+{
+  "checkedAt": "2026-11-20T17:40:20.401Z",
+  "source": "PubChem PUG REST by CAS; molecular identity only",
+  "materials": [
+    {
+      "name": "Citric acid anhydrous",
+      "ko": "무수 시트르산",
+      "casNumber": "77-92-9",
+      "molecularFormula": "C6H8O7",
+      "cid": 311,
+      "title": "Citric Acid"
+    },
+    {
+      "name": "Citric acid monohydrate",
+      "ko": "시트르산 일수화물",
+      "casNumber": "5949-29-1",
+      "molecularFormula": "C6H10O8",
+      "cid": 22230,
+      "title": "2-Hydroxy-1,2,3-propanetricarboxylic acid hydrate (1:1)"
+    },
+    {
+      "name": "Adipic acid",
+      "ko": "아디프산",
+      "casNumber": "124-04-9",
+      "molecularFormula": "C6H10O4",
+      "cid": 196,
+      "title": "Adipic Acid"
+    },
+    {
+      "name": "Succinic acid",
+      "ko": "숙신산",
+      "casNumber": "110-15-6",
+      "molecularFormula": "C4H6O4",
+      "cid": 1110,
+      "title": "Succinic Acid"
+    },
+    {
+      "name": "Glutaric acid",
+      "ko": "글루타르산",
+      "casNumber": "110-94-1",
+      "molecularFormula": "C5H8O4",
+      "cid": 743,
+      "title": "Glutaric Acid"
+    },
+    {
+      "name": "Malonic acid",
+      "ko": "말론산",
+      "casNumber": "141-82-2",
+      "molecularFormula": "C3H4O4",
+      "cid": 867,
+      "title": "Malonic Acid"
+    },
+    {
+      "name": "Maleic acid",
+      "ko": "말레산",
+      "casNumber": "110-16-7",
+      "molecularFormula": "C4H4O4",
+      "cid": 444266,
+      "title": "Maleic Acid"
+    },
+    {
+      "name": "Fumaric acid",
+      "ko": "푸마르산",
+      "casNumber": "110-17-8",
+      "molecularFormula": "C4H4O4",
+      "cid": 444972,
+      "title": "Fumaric Acid"
+    },
+    {
+      "name": "Salicylic acid",
+      "ko": "살리실산",
+      "casNumber": "69-72-7",
+      "molecularFormula": "C7H6O3",
+      "cid": 338,
+      "title": "Salicylic Acid"
+    },
+    {
+      "name": "Benzoic acid",
+      "ko": "벤조산",
+      "casNumber": "65-85-0",
+      "molecularFormula": "C7H6O2",
+      "cid": 243,
+      "title": "Benzoic Acid"
+    },
+    {
+      "name": "L-Ascorbic acid",
+      "ko": "아스코르브산",
+      "casNumber": "50-81-7",
+      "molecularFormula": "C6H8O6",
+      "cid": 54670067,
+      "title": "L-Ascorbic Acid"
+    },
+    {
+      "name": "Glycine",
+      "ko": "글리신",
+      "casNumber": "56-40-6",
+      "molecularFormula": "C2H5NO2",
+      "cid": 750,
+      "title": "Glycine"
+    },
+    {
+      "name": "Beta-alanine",
+      "ko": "베타알라닌",
+      "casNumber": "107-95-9",
+      "molecularFormula": "C3H7NO2",
+      "cid": 239,
+      "title": "Beta-Alanine"
+    },
+    {
+      "name": "L-Alanine",
+      "ko": "L-알라닌",
+      "casNumber": "56-41-7",
+      "molecularFormula": "C3H7NO2",
+      "cid": 5950,
+      "title": "L-Alanine"
+    },
+    {
+      "name": "L-Proline",
+      "ko": "L-프롤린",
+      "casNumber": "147-85-3",
+      "molecularFormula": "C5H9NO2",
+      "cid": 145742,
+      "title": "L-Proline"
+    },
+    {
+      "name": "L-Valine",
+      "ko": "L-발린",
+      "casNumber": "72-18-4",
+      "molecularFormula": "C5H11NO2",
+      "cid": 6287,
+      "title": "L-Valine"
+    },
+    {
+      "name": "L-Serine",
+      "ko": "L-세린",
+      "casNumber": "56-45-1",
+      "molecularFormula": "C3H7NO3",
+      "cid": 5951,
+      "title": "L-Serine"
+    },
+    {
+      "name": "L-Threonine",
+      "ko": "L-트레오닌",
+      "casNumber": "72-19-5",
+      "molecularFormula": "C4H9NO3",
+      "cid": 6288,
+      "title": "L-Threonine"
+    },
+    {
+      "name": "L-Glutamic acid",
+      "ko": "글루탐산",
+      "casNumber": "56-86-0",
+      "molecularFormula": "C5H9NO4",
+      "cid": 33032,
+      "title": "L-Glutamic Acid"
+    },
+    {
+      "name": "L-Aspartic acid",
+      "ko": "아스파르트산",
+      "casNumber": "56-84-8",
+      "molecularFormula": "C4H7NO4",
+      "cid": 5960,
+      "title": "L-Aspartic Acid"
+    },
+    {
+      "name": "Diethylene glycol",
+      "ko": "디에틸렌글리콜",
+      "casNumber": "111-46-6",
+      "molecularFormula": "C4H10O3",
+      "cid": 8117,
+      "title": "Diethylene Glycol"
+    },
+    {
+      "name": "Triethylene glycol",
+      "ko": "트리에틸렌글리콜",
+      "casNumber": "112-27-6",
+      "molecularFormula": "C6H14O4",
+      "cid": 8172,
+      "title": "Triethylene Glycol"
+    },
+    {
+      "name": "D-Mannitol",
+      "ko": "만니톨",
+      "casNumber": "69-65-8",
+      "molecularFormula": "C6H14O6",
+      "cid": 6251,
+      "title": "Mannitol"
+    },
+    {
+      "name": "D-Sorbitol",
+      "ko": "소르비톨",
+      "casNumber": "50-70-4",
+      "molecularFormula": "C6H14O6",
+      "cid": 5780,
+      "title": "Sorbitol"
+    },
+    {
+      "name": "D-Xylose",
+      "ko": "자일로스",
+      "casNumber": "58-86-6",
+      "molecularFormula": "C5H10O5",
+      "cid": 135191,
+      "title": "D-Xylose"
+    },
+    {
+      "name": "D-Fructose",
+      "ko": "프럭토스",
+      "casNumber": "57-48-7",
+      "molecularFormula": "C6H12O6",
+      "cid": 2723872,
+      "title": "D-Fructose"
+    },
+    {
+      "name": "Molybdic acid",
+      "ko": "몰리브덴산",
+      "casNumber": "7782-91-4",
+      "molecularFormula": "H2MoO4",
+      "cid": 82208,
+      "title": "Molybdic acid"
+    },
+    {
+      "name": "Phosphorous acid",
+      "ko": "아인산",
+      "casNumber": "13598-36-2",
+      "molecularFormula": "H3O3P",
+      "cid": 407,
+      "title": "Phosphonic acid"
+    },
+    {
+      "name": "Hypophosphorous acid",
+      "ko": "차아인산",
+      "casNumber": "6303-21-5",
+      "molecularFormula": "H3O2P",
+      "cid": 4124402,
+      "title": "Phosphinic Acid"
+    },
+    {
+      "name": "Telluric acid",
+      "ko": "텔루르산",
+      "casNumber": "7803-68-1",
+      "molecularFormula": "H6O6Te",
+      "cid": 62686,
+      "title": "Telluric acid (H6TeO6)"
+    },
+    {
+      "name": "Selenous acid",
+      "ko": "아셀렌산",
+      "casNumber": "7783-00-8",
+      "molecularFormula": "H2O3Se",
+      "cid": 1091,
+      "title": "Selenious Acid"
+    },
+    {
+      "name": "Aluminium hydroxide powder",
+      "ko": "수산화알루미늄 분말",
+      "casNumber": "21645-51-2",
+      "molecularFormula": "AlH3O3",
+      "cid": 10176082,
+      "title": "Aluminum Hydroxide"
+    },
+    {
+      "name": "Iron(III) hydroxide",
+      "ko": "수산화철(III)",
+      "casNumber": "1309-33-7",
+      "molecularFormula": "FeH3O3",
+      "cid": 73964,
+      "title": "Ferric Hydroxide"
+    },
+    {
+      "name": "Copper(II) hydroxide powder",
+      "ko": "수산화구리(II) 분말",
+      "casNumber": "20427-59-2",
+      "molecularFormula": "CuH2O2",
+      "cid": 164826,
+      "title": "Copper dihydroxide"
+    },
+    {
+      "name": "Zinc hydroxide powder",
+      "ko": "수산화아연 분말",
+      "casNumber": "20427-58-1",
+      "molecularFormula": "H2O2Zn",
+      "cid": 9812759,
+      "title": "Zinc Hydroxide"
+    },
+    {
+      "name": "Barium hydroxide octahydrate",
+      "ko": "수산화바륨 팔수화물",
+      "casNumber": "12230-71-6",
+      "molecularFormula": "BaH18O10",
+      "cid": 17749109,
+      "title": "Barium hydroxide, octahydrate"
+    },
+    {
+      "name": "Magnesium sulfate heptahydrate",
+      "ko": "황산마그네슘 칠수화물",
+      "casNumber": "10034-99-8",
+      "molecularFormula": "H14MgO11S",
+      "cid": 24843,
+      "title": "Magnesium Sulfate Heptahydrate"
+    },
+    {
+      "name": "Copper(II) sulfate pentahydrate",
+      "ko": "황산구리(II) 오수화물",
+      "casNumber": "7758-99-8",
+      "molecularFormula": "CuH10O9S",
+      "cid": 24463,
+      "title": "Copper sulfate pentahydrate"
+    },
+    {
+      "name": "Calcium chloride dihydrate",
+      "ko": "염화칼슘 이수화물",
+      "casNumber": "10035-04-8",
+      "molecularFormula": "CaCl2H4O2",
+      "cid": 6093260,
+      "title": "Calcium chloride, dihydrate"
+    },
+    {
+      "name": "Sodium acetate anhydrous",
+      "ko": "무수 아세트산나트륨",
+      "casNumber": "127-09-3",
+      "molecularFormula": "C2H3NaO2",
+      "cid": 517045,
+      "title": "Sodium Acetate"
+    },
+    {
+      "name": "Sodium acetate trihydrate",
+      "ko": "아세트산나트륨 삼수화물",
+      "casNumber": "6131-90-4",
+      "molecularFormula": "C2H9NaO5",
+      "cid": 23665404,
+      "title": "Sodium Acetate Trihydrate"
+    },
+    {
+      "name": "Magnesium chloride hexahydrate",
+      "ko": "염화마그네슘 육수화물",
+      "casNumber": "7791-18-6",
+      "molecularFormula": "Cl2H12MgO6",
+      "cid": 24644,
+      "title": "Magnesium chloride hexahydrate"
+    },
+    {
+      "name": "Potassium dihydrogen phosphate",
+      "ko": "인산이수소칼륨",
+      "casNumber": "7778-77-0",
+      "molecularFormula": "H2KO4P",
+      "cid": 516951,
+      "title": "Monobasic potassium phosphate"
+    },
+    {
+      "name": "Dipotassium hydrogen phosphate",
+      "ko": "인산수소이칼륨",
+      "casNumber": "7758-11-4",
+      "molecularFormula": "HK2O4P",
+      "cid": 24450,
+      "title": "Potassium Phosphate, Dibasic"
+    },
+    {
+      "name": "Sodium bicarbonate",
+      "ko": "탄산수소나트륨",
+      "casNumber": "144-55-8",
+      "molecularFormula": "CHNaO3",
+      "cid": 516892,
+      "title": "Sodium Bicarbonate"
+    },
+    {
+      "name": "Potassium bicarbonate",
+      "ko": "탄산수소칼륨",
+      "casNumber": "298-14-6",
+      "molecularFormula": "CHKO3",
+      "cid": 516893,
+      "title": "Potassium Bicarbonate"
+    },
+    {
+      "name": "L-Leucine",
+      "ko": "L-류신",
+      "casNumber": "61-90-5",
+      "title": "L-Leucine",
+      "cid": 6106,
+      "molecularFormula": "C6H13NO2"
+    },
+    {
+      "name": "Calcium lactate pentahydrate",
+      "ko": "젖산칼슘 오수화물",
+      "casNumber": "5743-47-5",
+      "molecularFormula": "C6H20CaO11",
+      "cid": 165341,
+      "title": "Calcium Lactate Pentahydrate"
+    },
+    {
+      "name": "Potassium sorbate",
+      "ko": "소르브산칼륨",
+      "casNumber": "24634-61-5",
+      "molecularFormula": "C6H7KO2",
+      "cid": 23676745,
+      "title": "Potassium Sorbate"
+    },
+    {
+      "name": "Sodium benzoate",
+      "ko": "벤조산나트륨",
+      "casNumber": "532-32-1",
+      "molecularFormula": "C7H5NaO2",
+      "cid": 517055,
+      "title": "Sodium Benzoate"
+    }
+  ]
+}
