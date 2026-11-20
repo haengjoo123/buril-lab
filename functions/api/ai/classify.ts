@@ -1,4 +1,5 @@
-import { runDecisionTask, parseDecision, decisionMode, DECISIONS_MODEL, DECISION_POLICIES, SELECTION_POLICIES, logDecision, type ChoiceTask, type DecisionContext, type DecisionMetadata, type DecisionPolicyRevision } from './_decisions'
+import { runDecisionTask, parseDecision, decisionMode, DECISIONS_MODEL, DECISION_POLICIES, SELECTION_POLICIES, CLASSIFICATION_CONSTRAINT_POLICY, logDecision, type ChoiceTask, type DecisionContext, type DecisionMetadata, type DecisionPolicyRevision } from './_decisions'
+import { classificationConstraints } from './_classificationConstraints'
 import { classificationSchema, CLASSIFICATION_MAX_OUTPUT_TOKENS, evaluateSelectionPolicy, VALID_CATEGORIES } from './_choiceResponses'
 export { classificationSchema, CLASSIFICATION_MAX_OUTPUT_TOKENS, VALID_CATEGORIES } from './_choiceResponses'
 import { classificationFormulaEvidence, identityEvidenceBlocks, identityEvidenceSchema, lookupClassificationIdentity, strictFormulaKey, type ClassificationIdentityEvidence } from './_classificationEvidence'
@@ -177,7 +178,8 @@ Return ONLY a JSON object matching this exact shape. Do not wrap it in Markdown 
 The category value must be exactly one of the allowed category names. The reason may explain your decision and may mention alternatives, but it must not replace the exact category field.`
 }
 
-export function generateDecisionsClassificationCacheKey(chemical: ChemicalInput, routed = false): string {
+export function generateDecisionsClassificationCacheKey(chemical: ChemicalInput, routed: boolean | 'v2' = false): string {
+  if (routed === 'v2') return stableCacheKey('classify:routed:v2', { chemical, model: DECISIONS_MODEL, policy: CLASSIFICATION_CONSTRAINT_POLICY })
   if (routed) return stableCacheKey('classify:routed:v1', { chemical, model: DECISIONS_MODEL, policy: SELECTION_POLICIES.classification })
   return stableCacheKey('classify:decisions:v1', { chemical, model: DECISIONS_MODEL, policy: DECISION_POLICIES.classification })
 }
@@ -193,12 +195,13 @@ export const onRequestPost = async (context: { request: Request; env: Env; data?
   if (['casNumber', 'molecularFormula'].some(key => chemical[key as keyof ChemicalInput] != null && typeof chemical[key as keyof ChemicalInput] !== 'string')) {
     return json({ error: 'Chemical identifiers must be strings.' }, { status: 400 })
   }
-  const routed = config.policy === SELECTION_POLICIES.classification
+  const version = config.policy === CLASSIFICATION_CONSTRAINT_POLICY ? 'v2' : 'v1'
+  const routed = config.policy === SELECTION_POLICIES.classification || version === 'v2'
   const safety = await createSafetyIdentifier(context.env, getRequestUserId(context.data))
-  const makeTask = (evidence?: ClassificationIdentityEvidence) => routed ? buildRoutedClassificationTask(chemical, safety, evidence)
+  const makeTask = (evidence?: ClassificationIdentityEvidence) => routed ? buildRoutedClassificationTask(chemical, safety, evidence, version)
     : buildClassificationDecisionTask(chemical, safety, 'v6', evidence)
   const task = makeTask()
-  const cacheKey = generateDecisionsClassificationCacheKey(chemical, routed)
+  const cacheKey = generateDecisionsClassificationCacheKey(chemical, version === 'v2' ? 'v2' : routed)
   type Cached = ClassificationResponsePayload & { decision?: DecisionMetadata; provider?: 'decisions' | 'responses';
     policyVersion?: string; identityReference?: ClassificationIdentityEvidence }
   if (config.mode === 'active') {
@@ -210,7 +213,8 @@ export const onRequestPost = async (context: { request: Request; env: Env; data?
       const validRoute = !routed || (evidence.success && (Boolean(chemical.casNumber?.trim()) === (evidence.data.status === 'available')) &&
         cached?.provider === cachedTask.provider &&
         cached?.policyVersion === cachedTask.policyVersion && !identityEvidenceBlocks(chemical, evidence.data))
-      if (cached && classificationSchema.safeParse(cached).success && cached.category !== 'UNKNOWN' && validRoute) {
+      if (cached && classificationSchema.safeParse(cached).success && cached.category !== 'UNKNOWN' && validRoute &&
+          !cachedTask.blockedChoices?.includes(cached.category)) {
         if (routed && cachedTask.provider === 'responses') cacheAccepted = cached.decision === undefined
         else if (cached.decision && cached.decision.policyVersion === cachedTask.policyVersion) {
           const verified = parseDecision({ model: cached.decision.model, answers: [{ type: 'choice', name: task.feature,
@@ -276,9 +280,18 @@ function hasAcidOrBaseFormCue(chemical: ChemicalInput, reference?: Classificatio
   return !formula || (!/(?:^|\|)C:/.test(formula) && /(?:^|\|)H:/.test(formula) && /(?:^|\|)O:/.test(formula))
 }
 
-export function buildRoutedClassificationTask(chemical: ChemicalInput, safetyIdentifier: string, reference?: ClassificationIdentityEvidence): ChoiceTask {
-  return { ...buildClassificationDecisionTask(chemical, safetyIdentifier, 'v6', reference),
-    policyVersion: 'classification:identity-routed:v1', provider: hasAcidOrBaseFormCue(chemical, reference) ? 'decisions' : 'responses' }
+export function buildRoutedClassificationTask(chemical: ChemicalInput, safetyIdentifier: string, reference?: ClassificationIdentityEvidence,
+  version: 'v1' | 'v2' = 'v1'): ChoiceTask {
+  const cue = hasAcidOrBaseFormCue(chemical, reference)
+  if (version === 'v1') return { ...buildClassificationDecisionTask(chemical, safetyIdentifier, 'v6', reference),
+    policyVersion: 'classification:identity-routed:v1', provider: cue ? 'decisions' : 'responses' }
+  const evidence = classificationConstraints(chemical, reference, cue)
+  const base = buildClassificationDecisionTask(chemical, safetyIdentifier, evidence.supportedForm ? 'v8' : 'v6', reference)
+  return { ...base, policyVersion: 'classification:identity-routed:v2', provider: cue && !evidence.supportedForm ? 'decisions' : 'responses',
+    instructions: evidence.hasListedMetal ? base.instructions +
+      '\nFor an explicitly named listed-metal salt, including a joined Korean salt name, apply rules 1 and 2 first, then rule 3. A carbon-containing counterion does not move that salt into an organic family. A metal sulfide is covered by rule 2.' : base.instructions,
+    blockedChoices: [...new Set([...(base.blockedChoices ?? []), ...evidence.blocked])],
+    blockedReason: base.blockedChoices?.length ? base.blockedReason : 'declared_composition' }
 }
 
 export function buildClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: DecisionPolicyRevision = 'v6', identityReference?: ClassificationIdentityEvidence): ChoiceTask {

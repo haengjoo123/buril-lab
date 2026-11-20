@@ -78,7 +78,14 @@ export function sealReview(pack, feature, review) {
   return { ...payload, reviewDigest: hash(payload) }
 }
 
-async function suiteFor(feature, corpus, file) {
+function armsFor(feature, manifest) {
+  if (feature === 'classification' && manifest.policies[2] === 'classification:identity-routed:v2') {
+    return ['legacy', 'decisions', 'classificationRoutedV2']
+  }
+  return evaluationArms[feature]
+}
+async function suiteFor(feature, corpus, file, classV2 = false) {
+  if (classV2 && feature !== 'classification') throw Error('--class-v2 requires classification')
   if (!Object.hasOwn(evaluationArms, feature)) throw Error('Select voiceCandidate or classification')
   let fixtures, manifest, eligibleIds
   if (corpus === 'regression') {
@@ -130,13 +137,13 @@ async function suiteFor(feature, corpus, file) {
       policies:
         feature === 'voiceCandidate'
           ? ['legacy', 'voice:verified-responses:v1', 'voice:verified-decisions85:v1']
-          : ['legacy', 'classification:v6', 'classification:identity-routed:v1'],
+          : ['legacy', 'classification:v6', classV2 ? 'classification:identity-routed:v2' : 'classification:identity-routed:v1'],
     },
   }
 }
 
 export function metrics(report, suite, feature) {
-  const arms = evaluationArms[feature],
+  const arms = armsFor(feature, suite.manifest),
     ids = suite.fixtures.map((f) => f.id)
   if (
     report.execution !== 'cloudflare-production' ||
@@ -160,7 +167,7 @@ export function metrics(report, suite, feature) {
     if (
       row.backend === 'voiceVerifiedResponses' ||
       row.backend === 'voiceVerifiedDecisions85' ||
-      row.backend === 'classificationRouted'
+      row.backend === 'classificationRouted' || row.backend === 'classificationRoutedV2'
     ) {
       if (
         !/^[a-f0-9]{64}$/.test(row.inputDigest) ||
@@ -227,7 +234,7 @@ export function metrics(report, suite, feature) {
         ? Object.fromEntries(
             ['responses', 'decisions'].map((p) => [
               p,
-              summarize(primary.map((id) => key.get(id + '/classificationRouted')).filter((r) => r.provider === p)),
+              summarize(primary.map((id) => key.get(id + '/' + arms[2])).filter((r) => r.provider === p)),
             ]),
           )
         : undefined,
@@ -275,7 +282,7 @@ async function main() {
     console.log(JSON.stringify({ feature, cases: sealed.labels.length, reviewDigest: sealed.reviewDigest }))
     return
   }
-  const suite = await suiteFor(feature, arg('--corpus'), arg('--labels')),
+  const suite = await suiteFor(feature, arg('--corpus'), arg('--labels'), args.includes('--class-v2')),
     ids = suite.fixtures.map((f) => f.id)
   if (args.includes('--prepare')) {
     const grant = await prepare(arg('--prepare'), ids, 'production', suite.manifest.reviewDigest)
@@ -298,7 +305,7 @@ async function main() {
     throw Error('Grant scope does not match evaluation')
   const report = await runExpanded(state, out, {
     suite,
-    backends: evaluationArms[feature],
+    backends: armsFor(feature, suite.manifest),
     resume: args.includes('--resume'),
   })
   const result = metrics(report, suite, feature)

@@ -23,7 +23,7 @@ export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
-const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'responsesMatched', 'decisionsTrial', 'responsesMatchedV8', 'decisionsTrialV8', 'voiceVerifiedResponses', 'voiceVerifiedDecisions85', 'classificationRouted', 'probe']) }).strict()
+const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'responsesMatched', 'decisionsTrial', 'responsesMatchedV8', 'decisionsTrialV8', 'voiceVerifiedResponses', 'voiceVerifiedDecisions85', 'classificationRouted', 'classificationRoutedV2', 'probe']) }).strict()
 const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
@@ -77,13 +77,14 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   if (!fixture) return respond({ code: 'INVALID_CASE' }, 400)
   if (reviewFixture && !grant.reviewDigest) return respond({ code: 'REVIEW_REQUIRED' }, 403)
   if (reviewFixture && !['probe', 'legacy', ...(fixture.feature === 'voiceCandidate'
-    ? ['voiceVerifiedResponses', 'voiceVerifiedDecisions85'] : ['decisions', 'classificationRouted'])].includes(body.backend)) {
+    ? ['voiceVerifiedResponses', 'voiceVerifiedDecisions85'] : ['decisions', 'classificationRouted', 'classificationRoutedV2'])].includes(body.backend)) {
     return respond({ code: 'INVALID_CASE' }, 400)
   }
   const classV8 = body.backend === 'responsesMatchedV8' || body.backend === 'decisionsTrialV8'
   if (classV8 && fixture.feature !== 'classification') return respond({ code: 'INVALID_CASE' }, 400)
   const verifiedVoice = body.backend === 'voiceVerifiedResponses' || body.backend === 'voiceVerifiedDecisions85'
-  if ((verifiedVoice && fixture.feature !== 'voiceCandidate') || (body.backend === 'classificationRouted' && fixture.feature !== 'classification')) return respond({ code: 'INVALID_CASE' }, 400)
+  const routedClass = body.backend === 'classificationRouted' || body.backend === 'classificationRoutedV2'
+  if ((verifiedVoice && fixture.feature !== 'voiceCandidate') || (routedClass && fixture.feature !== 'classification')) return respond({ code: 'INVALID_CASE' }, 400)
   if (!context.env.OPENAI_API_KEY || !context.env.OPENAI_SAFETY_HMAC_SECRET) return respond({ code: 'AI_NOT_CONFIGURED' }, 503)
   if (body.backend === 'probe') return respond({ id: fixture.id, feature: fixture.feature, backend: 'probe', error: false, configured: true })
   const started = Date.now()
@@ -91,10 +92,11 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   try {
     const safety = await createSafetyIdentifier(context.env, 'decisions-evaluation-synthetic')
     const pinned = () => fixedIdentityEvidence(fixture.input.casNumber, reviewFixture ? 'review' : 'paired')
-    if (verifiedVoice || body.backend === 'classificationRouted') {
+    if (verifiedVoice || routedClass) {
       const task = verifiedVoice ? buildVerifiedVoiceTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety,
         body.backend === 'voiceVerifiedResponses' ? 'responses' : 'decisions') :
-        buildRoutedClassificationTask(fixture.input, safety, pairedFixture || reviewFixture ? pinned() : await lookupClassificationIdentity(fixture.input.casNumber))
+        buildRoutedClassificationTask(fixture.input, safety, pairedFixture || reviewFixture ? pinned() : await lookupClassificationIdentity(fixture.input.casNumber),
+          body.backend === 'classificationRoutedV2' ? 'v2' : 'v1')
       selectedProvider = task.provider
       const evaluated = await evaluateSelectionPolicy(context.env, task)
       return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,

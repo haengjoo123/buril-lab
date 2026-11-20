@@ -11,6 +11,7 @@ export const MIN_CHOICE_MARGIN = 0.20
 export type DecisionFeature = 'voiceCandidate' | 'classification'
 export const DECISION_POLICIES = { voiceCandidate: 'voice-candidate:v4', classification: 'classification:v6' } as const
 export const SELECTION_POLICIES = { voiceCandidate: 'verified-responses-v1', classification: 'identity-routed-v1' } as const
+export const CLASSIFICATION_CONSTRAINT_POLICY = 'identity-routed-v2'
 export type DecisionPolicyRevision = 'v1' | 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v8'
 export type DecisionsEnv = OpenAIResponsesEnv & RuntimeConfigEnv
 export interface DecisionContext {
@@ -26,7 +27,7 @@ const configSchema = z.object({
   expiresAt: z.iso.datetime({ offset: true }),
   policies: z.object({
     voiceCandidate: z.literal(SELECTION_POLICIES.voiceCandidate).optional(),
-    classification: z.literal(SELECTION_POLICIES.classification).optional(),
+    classification: z.enum([SELECTION_POLICIES.classification, CLASSIFICATION_CONSTRAINT_POLICY]).optional(),
   }).strict().optional(),
 })
 export async function decisionMode(env: DecisionsEnv, feature: DecisionFeature) {
