@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { onRequestPost } from './classify'
+import { buildRoutedClassificationTask, generateDecisionsClassificationCacheKey, onRequestPost } from './classify'
 import { onRequestPost as mobile } from '../gemini/classify'
 import { resetClassificationIdentityCache } from './_classificationEvidence'
 const cache = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }))
@@ -8,7 +8,7 @@ vi.mock('./_cache', async (original) => ({
   readAICache: cache.read,
   writeAICache: cache.write,
 }))
-const ctx = (chemical: object, mode = 'active', jobs: Promise<unknown>[] = []) => ({
+const ctx = (chemical: object, mode = 'active', jobs: Promise<unknown>[] = [], policy = 'identity-routed-v1') => ({
   env: {
     OPENAI_API_KEY: 'test',
     OPENAI_SAFETY_HMAC_SECRET: 'test',
@@ -16,7 +16,7 @@ const ctx = (chemical: object, mode = 'active', jobs: Promise<unknown>[] = []) =
       get: async () => ({
         voiceCandidate: 'legacy',
         classification: mode,
-        policies: { classification: 'identity-routed-v1' },
+        policies: { classification: policy },
         shadowSampleRate: 1,
         expiresAt: '2099-01-01T00:00:00Z',
       }),
@@ -130,4 +130,25 @@ it('leaves the legacy result and its cache in charge in shadow', async () => {
   expect(jobs).toHaveLength(1)
   expect(cache.write).toHaveBeenCalledTimes(1)
   expect(cache.write.mock.calls[0][2]).toMatch(/^classify:v3:/)
+})
+it('applies the new composed policy at the public alias, rejects stale organic cache entries and asks for review after a contradiction', async () => {
+  const chemical = { name: '무수 아세트산아연' }
+  expect(generateDecisionsClassificationCacheKey(chemical, 'v2')).not.toBe(
+    generateDecisionsClassificationCacheKey(chemical, true),
+  )
+  const task = buildRoutedClassificationTask(chemical, 'test', { status: 'not_supplied', cacheHit: false }, 'v2')
+  cache.read.mockResolvedValue({
+    category: 'ORGANIC_NON_HALOGEN',
+    confidence: 1,
+    reason: 'old',
+    provider: 'responses',
+    policyVersion: task.policyVersion,
+    identityReference: task.identityReference,
+  })
+  const remote = vi.fn(api)
+  vi.stubGlobal('fetch', remote)
+  const result = await (await mobile(ctx(chemical, 'active', [], 'identity-routed-v2'))).json()
+  expect(result).toMatchObject({ category: 'UNKNOWN', responseSource: 'ai' })
+  expect(remote).toHaveBeenCalledTimes(1)
+  expect(cache.write).not.toHaveBeenCalled()
 })
