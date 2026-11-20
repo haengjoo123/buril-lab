@@ -3,8 +3,10 @@ import { z } from 'zod'
 import { json } from '../../_shared/json'
 import { createSafetyIdentifier, parseOpenAIResponse } from '../../ai/_openai'
 import { evaluateDecision, type DecisionsEnv } from '../../ai/_decisions'
-import { buildClassificationDecisionTask, prepareClassificationDecisionTask, buildClassificationPrompt, classificationSchema, CLASSIFICATION_MAX_OUTPUT_TOKENS } from '../../ai/classify'
-import { buildVoiceDecisionTask, buildVoiceLegacyPrompt, candidateResolutionSchema, VOICE_CANDIDATE_MAX_OUTPUT_TOKENS } from '../../voice/_reagentAliases'
+import { buildClassificationDecisionTask, buildRoutedClassificationTask, prepareClassificationDecisionTask, buildClassificationPrompt, classificationSchema, CLASSIFICATION_MAX_OUTPUT_TOKENS } from '../../ai/classify'
+import { buildVoiceDecisionTask, buildVerifiedVoiceTask, buildVoiceLegacyPrompt, candidateResolutionSchema, VOICE_CANDIDATE_MAX_OUTPUT_TOKENS } from '../../voice/_reagentAliases'
+import { evaluateSelectionPolicy } from '../../ai/_choiceResponses'
+import { lookupClassificationIdentity } from '../../ai/_classificationEvidence'
 import { fixedIdentityEvidence, matchedResponses, pairedInputDigest } from './_pairedControl'
 import type { VoiceMatch } from '../../../../src/utils/voiceAgent'
 // Fixed synthetic fixtures only. No caller-provided prompt, inventory or credential is accepted.
@@ -14,19 +16,22 @@ import { allDecisionFixtures } from '../../../../scripts/decisions-fixtures.mjs'
 import { expandedDecisionFixtures, expandedDecisionFixturesV1, identityBoundaryFixtures } from '../../../../scripts/decisions-expanded-fixtures.mjs'
 // @ts-expect-error Fixed JavaScript fixtures are also used by the offline runner.
 import { pairedFixtureById } from '../../../../scripts/decisions-paired-fixtures.mjs'
+// @ts-expect-error Fixed blind cases are shared with the local reviewer and scorer.
+import { reviewFixtureById } from '../../../../scripts/decisions-review-fixtures.mjs'
 
 export const EVALUATION_PATH = '/api/internal/decisions/evaluate'
 export const EVALUATION_GRANT_KEY = 'ai_decisions_evaluation'
 export const EVALUATION_AUDIENCE = 'burillab:staging:decisions-evaluation:v1'
 export const PRODUCTION_EVALUATION_AUDIENCE = 'burillab:production:decisions-evaluation:v1'
-const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'responsesMatched', 'decisionsTrial', 'responsesMatchedV8', 'decisionsTrialV8', 'probe']) }).strict()
+const bodySchema = z.object({ caseId: z.string().max(80), backend: z.enum(['legacy', 'decisionsV1', 'decisionsV2', 'decisionsV3', 'decisionsV4', 'decisionsV5', 'decisions', 'responsesMatched', 'decisionsTrial', 'responsesMatchedV8', 'decisionsTrialV8', 'voiceVerifiedResponses', 'voiceVerifiedDecisions85', 'classificationRouted', 'probe']) }).strict()
 const grantSchema = z.object({
   environment: z.enum(['staging', 'production']).default('staging'),
   id: z.uuid(), expiresAt: z.iso.datetime({ offset: true }),
+  reviewDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   publicKey: z.object({ kty: z.literal('OKP'), crv: z.literal('Ed25519'), x: z.string() }).strict(),
   caseIds: z.array(z.string().max(80)).min(1).max(2484),
 }).strict()
-interface Fixture { id: string; feature: 'classification' | 'voiceCandidate'; expected: string | null;
+interface Fixture { id: string; feature: 'classification' | 'voiceCandidate'; expected?: string | null;
   input: { name?: string; molecularFormula?: string; casNumber?: string; text: string; language: 'ko' | 'en'; matches: VoiceMatch[] } }
 type Env = DecisionsEnv & { APP_ENVIRONMENT?: string }
 let fixtures: Map<string, Fixture> | undefined
@@ -67,15 +72,35 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     if (payload.sub !== `${body.caseId}:${body.backend}` || typeof payload.exp !== 'number' || typeof payload.iat !== 'number' || payload.exp - payload.iat > 15) return respond({ code: 'GRANT_DENIED' }, 403)
   } catch { return respond({ code: 'GRANT_DENIED' }, 403) }
   const pairedFixture = pairedFixtureById(body.caseId) as Fixture | null
-  const fixture = pairedFixture ?? evaluationFixtures().get(body.caseId)
+  const reviewFixture = reviewFixtureById(body.caseId) as Fixture | null
+  const fixture = pairedFixture ?? reviewFixture ?? evaluationFixtures().get(body.caseId)
   if (!fixture) return respond({ code: 'INVALID_CASE' }, 400)
+  if (reviewFixture && !grant.reviewDigest) return respond({ code: 'REVIEW_REQUIRED' }, 403)
+  if (reviewFixture && !['probe', 'legacy', ...(fixture.feature === 'voiceCandidate'
+    ? ['voiceVerifiedResponses', 'voiceVerifiedDecisions85'] : ['decisions', 'classificationRouted'])].includes(body.backend)) {
+    return respond({ code: 'INVALID_CASE' }, 400)
+  }
   const classV8 = body.backend === 'responsesMatchedV8' || body.backend === 'decisionsTrialV8'
   if (classV8 && fixture.feature !== 'classification') return respond({ code: 'INVALID_CASE' }, 400)
+  const verifiedVoice = body.backend === 'voiceVerifiedResponses' || body.backend === 'voiceVerifiedDecisions85'
+  if ((verifiedVoice && fixture.feature !== 'voiceCandidate') || (body.backend === 'classificationRouted' && fixture.feature !== 'classification')) return respond({ code: 'INVALID_CASE' }, 400)
   if (!context.env.OPENAI_API_KEY || !context.env.OPENAI_SAFETY_HMAC_SECRET) return respond({ code: 'AI_NOT_CONFIGURED' }, 503)
   if (body.backend === 'probe') return respond({ id: fixture.id, feature: fixture.feature, backend: 'probe', error: false, configured: true })
   const started = Date.now()
+  let selectedProvider: 'responses' | 'decisions' | undefined
   try {
     const safety = await createSafetyIdentifier(context.env, 'decisions-evaluation-synthetic')
+    const pinned = () => fixedIdentityEvidence(fixture.input.casNumber, reviewFixture ? 'review' : 'paired')
+    if (verifiedVoice || body.backend === 'classificationRouted') {
+      const task = verifiedVoice ? buildVerifiedVoiceTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety,
+        body.backend === 'voiceVerifiedResponses' ? 'responses' : 'decisions') :
+        buildRoutedClassificationTask(fixture.input, safety, pairedFixture || reviewFixture ? pinned() : await lookupClassificationIdentity(fixture.input.casNumber))
+      selectedProvider = task.provider
+      const evaluated = await evaluateSelectionPolicy(context.env, task)
+      return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
+        ...evaluated, provider: task.provider, model: 'gpt-6-luna', policyVersion: task.policyVersion,
+        inputDigest: await pairedInputDigest(task), elapsedMs: Date.now() - started, error: false, cacheHit: false })
+    }
     const revision = body.backend === 'decisionsV1' ? 'v1' : body.backend === 'decisionsV2' ? 'v2' : body.backend === 'decisionsV3' ? 'v3' : 'v4'
     const matched = body.backend === 'responsesMatched' || body.backend === 'responsesMatchedV8'
     const trial = matched || body.backend === 'decisionsTrial' || classV8
@@ -85,7 +110,7 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
         return buildVoiceDecisionTask(fixture.input.text, fixture.input.language, fixture.input.matches, safety, trial ? 'v5' : revision)
       }
       if (classRevision === 'v5' || classRevision === 'v6' || classRevision === 'v7' || classRevision === 'v8') {
-        if (pairedFixture) return buildClassificationDecisionTask(fixture.input, safety, classRevision, fixedIdentityEvidence(fixture.input.casNumber))
+        if (pairedFixture || reviewFixture) return buildClassificationDecisionTask(fixture.input, safety, classRevision, pinned())
         return prepareClassificationDecisionTask(fixture.input, safety, classRevision)
       }
       return buildClassificationDecisionTask(fixture.input, safety, classRevision)
@@ -133,6 +158,6 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     return respond({ id: fixture.id, feature: fixture.feature, backend: body.backend, expected: fixture.expected,
       // The evaluation itself completed. Keep provider failures in its typed
       // result so an edge-generated 5xx page cannot erase diagnostic evidence.
-      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', providerStatus, providerCode, errorKind, cacheHit: false })
+      choice: null, elapsedMs: Date.now() - started, error: true, code: 'EVALUATION_PROVIDER_FAILED', provider: selectedProvider, providerStatus, providerCode, errorKind, cacheHit: false })
   }
 }

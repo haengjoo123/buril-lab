@@ -19,6 +19,7 @@ export interface ParsedOpenAIResponse<T> {
 export const DEFAULT_OPENAI_RESPONSES_MODEL = 'gpt-6-luna'
 export const OPENAI_RESPONSES_TIMEOUT_MS = 20_000
 export const OPENAI_RESPONSES_MAX_RETRIES = 2
+export class OpenAIResponseRefusal extends Error {}
 
 export function resolveOpenAIResponsesModel(env: OpenAIResponsesEnv): string {
   return env.OPENAI_RESPONSES_MODEL?.trim() || DEFAULT_OPENAI_RESPONSES_MODEL
@@ -133,9 +134,8 @@ export async function parseOpenAIResponse<T>(
       item.type === 'message'
       && item.content.some((content) => content.type === 'refusal')
     ))
-    throw new Error(refused
-      ? 'OpenAI refused the structured response.'
-      : 'OpenAI returned no structured response.')
+    if (refused) throw new OpenAIResponseRefusal('OpenAI refused the structured response.')
+    throw new Error('OpenAI returned no structured response.')
   }
 
   return {

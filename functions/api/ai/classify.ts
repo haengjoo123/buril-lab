@@ -1,5 +1,6 @@
-import { runDecisionTask, parseDecision, decisionMode, DECISIONS_MODEL, DECISION_POLICIES, logDecision, type ChoiceTask, type DecisionContext, type DecisionMetadata, type DecisionPolicyRevision } from './_decisions'
-import { z } from 'zod'
+import { runDecisionTask, parseDecision, decisionMode, DECISIONS_MODEL, DECISION_POLICIES, SELECTION_POLICIES, logDecision, type ChoiceTask, type DecisionContext, type DecisionMetadata, type DecisionPolicyRevision } from './_decisions'
+import { classificationSchema, CLASSIFICATION_MAX_OUTPUT_TOKENS, evaluateSelectionPolicy, VALID_CATEGORIES } from './_choiceResponses'
+export { classificationSchema, CLASSIFICATION_MAX_OUTPUT_TOKENS, VALID_CATEGORIES } from './_choiceResponses'
 import { classificationFormulaEvidence, identityEvidenceBlocks, identityEvidenceSchema, lookupClassificationIdentity, strictFormulaKey, type ClassificationIdentityEvidence } from './_classificationEvidence'
 import { json } from '../_shared/json'
 import { readAICache, stableCacheKey, writeAICache, type AICacheEnv } from './_cache'
@@ -14,19 +15,6 @@ import {
 
 type Env = AICacheEnv & OpenAIResponsesEnv & DecisionContext['env']
 
-export const VALID_CATEGORIES = [
-  'ACID',
-  'ALKALI',
-  'NEUTRAL',
-  'ORGANIC_HALOGEN',
-  'ORGANIC_NON_HALOGEN',
-  'HEAVY_METAL',
-  'CYANIDE',
-  'REACTIVE',
-  'SOLID_WASTE',
-  'UNKNOWN',
-] as const
-export const CLASSIFICATION_MAX_OUTPUT_TOKENS = 400
 
 type ValidCategory = typeof VALID_CATEGORIES[number]
 
@@ -46,11 +34,6 @@ interface ClassificationResponsePayload {
   reason: string
 }
 
-export const classificationSchema = z.object({
-  category: z.enum(VALID_CATEGORIES),
-  confidence: z.number().min(0).max(1),
-  reason: z.string().min(1).max(500),
-})
 
 function isValidCategory(value: unknown): value is ValidCategory {
   return typeof value === 'string' && (VALID_CATEGORIES as readonly string[]).includes(value)
@@ -194,7 +177,8 @@ Return ONLY a JSON object matching this exact shape. Do not wrap it in Markdown 
 The category value must be exactly one of the allowed category names. The reason may explain your decision and may mention alternatives, but it must not replace the exact category field.`
 }
 
-export function generateDecisionsClassificationCacheKey(chemical: ChemicalInput): string {
+export function generateDecisionsClassificationCacheKey(chemical: ChemicalInput, routed = false): string {
+  if (routed) return stableCacheKey('classify:routed:v1', { chemical, model: DECISIONS_MODEL, policy: SELECTION_POLICIES.classification })
   return stableCacheKey('classify:decisions:v1', { chemical, model: DECISIONS_MODEL, policy: DECISION_POLICIES.classification })
 }
 
@@ -209,23 +193,37 @@ export const onRequestPost = async (context: { request: Request; env: Env; data?
   if (['casNumber', 'molecularFormula'].some(key => chemical[key as keyof ChemicalInput] != null && typeof chemical[key as keyof ChemicalInput] !== 'string')) {
     return json({ error: 'Chemical identifiers must be strings.' }, { status: 400 })
   }
-  const task = buildClassificationDecisionTask(chemical, await createSafetyIdentifier(context.env, getRequestUserId(context.data)))
-  const cacheKey = generateDecisionsClassificationCacheKey(chemical)
-  type Cached = ClassificationResponsePayload & { decision: DecisionMetadata }
+  const routed = config.policy === SELECTION_POLICIES.classification
+  const safety = await createSafetyIdentifier(context.env, getRequestUserId(context.data))
+  const makeTask = (evidence?: ClassificationIdentityEvidence) => routed ? buildRoutedClassificationTask(chemical, safety, evidence)
+    : buildClassificationDecisionTask(chemical, safety, 'v6', evidence)
+  const task = makeTask()
+  const cacheKey = generateDecisionsClassificationCacheKey(chemical, routed)
+  type Cached = ClassificationResponsePayload & { decision?: DecisionMetadata; provider?: 'decisions' | 'responses';
+    policyVersion?: string; identityReference?: ClassificationIdentityEvidence }
   if (config.mode === 'active') {
     const cached = await readAICache<Cached>(context.env, 'classify', cacheKey)
     let cacheAccepted = false
     try {
-      const evidence = identityEvidenceSchema.safeParse(cached?.decision?.identityReference)
-      const cachedTask = buildClassificationDecisionTask(chemical, task.safetyIdentifier, 'v6', evidence.success ? evidence.data : undefined)
-      cacheAccepted = Boolean(cached && classificationSchema.safeParse(cached).success && cached.decision?.policyVersion === DECISION_POLICIES.classification
-        && parseDecision({ model: cached.decision.model, answers: [
-          { type: 'choice', name: task.feature, choice: cached.category, confidence: cached.decision.confidence, probabilities: cached.decision.probabilities },
-        ] }, cachedTask).choice === cached.category)
+      const evidence = identityEvidenceSchema.safeParse(cached?.decision?.identityReference ?? cached?.identityReference)
+      const cachedTask = makeTask(evidence.data)
+      const validRoute = !routed || (evidence.success && (Boolean(chemical.casNumber?.trim()) === (evidence.data.status === 'available')) &&
+        cached?.provider === cachedTask.provider &&
+        cached?.policyVersion === cachedTask.policyVersion && !identityEvidenceBlocks(chemical, evidence.data))
+      if (cached && classificationSchema.safeParse(cached).success && cached.category !== 'UNKNOWN' && validRoute) {
+        if (routed && cachedTask.provider === 'responses') cacheAccepted = cached.decision === undefined
+        else if (cached.decision && cached.decision.policyVersion === cachedTask.policyVersion) {
+          const verified = parseDecision({ model: cached.decision.model, answers: [{ type: 'choice', name: task.feature,
+            choice: cached.category, confidence: cached.decision.confidence, probabilities: cached.decision.probabilities }] }, cachedTask)
+          cacheAccepted = verified.choice === cached.category && verified.decision?.choiceProbability === cached.decision.choiceProbability &&
+            cached.confidence === cached.decision.confidence
+        }
+      }
     } catch { /* Corrupt or stale cache is a miss. */ }
     if (cached && cacheAccepted) {
-      logDecision(context, task, { mode: 'active', outcome: 'accepted', cacheHit: true, choice: cached.category })
-      return json({ ...cached, responseSource: 'cache' })
+      logDecision(context, task, { mode: 'active', provider: cached.provider ?? 'decisions', outcome: 'accepted', cacheHit: true, choice: cached.category })
+      const { category, confidence, reason, decision } = cached
+      return json({ category, confidence, reason, ...(decision ? { decision } : {}), responseSource: 'cache' })
     }
   } else {
     const cached = await readAICache<ClassificationCachePayload>(context.env, 'classify', generateClassificationCacheKey(chemical))
@@ -234,12 +232,15 @@ export const onRequestPost = async (context: { request: Request; env: Env; data?
   const result = await runDecisionTask(context, task, async bounded => {
     const response = await legacyClassify({ ...context, request: context.request.clone(), bounded })
     return await response.json() as ClassificationResponsePayload & { responseSource: string }
-  }, value => value.category === 'UNKNOWN' ? null : value.category, () => prepareClassificationDecisionTask(chemical, task.safetyIdentifier))
+  }, value => value.category === 'UNKNOWN' ? null : value.category, async () => makeTask(await lookupClassificationIdentity(chemical.casNumber)),
+  { config, evaluate: routed ? evaluateSelectionPolicy : undefined })
   if (result.backend === 'legacy') return json(result.value)
+  if (result.backend === 'unavailable') return json({ category: 'UNKNOWN', confidence: 0, reason: 'AI 보조 분류이며 최종 확인이 필요합니다.', responseSource: 'deterministic' })
   const category = (result.value.choice ?? 'UNKNOWN') as ValidCategory
-  const payload = { category, confidence: result.value.decision?.confidence ?? 0,
+  const payload = { category, confidence: result.value.decision?.confidence ?? result.value.confidence ?? 0,
     reason: 'AI 보조 분류이며 최종 확인이 필요합니다.', ...(result.value.decision ? { decision: result.value.decision } : {}) }
-  if (category !== 'UNKNOWN') await writeAICache(context.env, 'classify', cacheKey, payload)
+  if (category !== 'UNKNOWN') await writeAICache(context.env, 'classify', cacheKey, routed
+    ? { ...payload, provider: result.value.provider, policyVersion: task.policyVersion, identityReference: result.value.identityReference } : payload)
   return json({ ...payload, responseSource: 'ai' })
 }
 
@@ -263,7 +264,7 @@ const priorityDescriptions = {
   SOLID_WASTE: 'Rule 8 applies only after rules 1–7 have all been excluded. Ordinary powders, crystals, sand, beads and resin qualify here only if no earlier family fits. A solid free inorganic acid still belongs to rule 6.',
 }
 
-// This selects explanatory wording only. The provider still evaluates the full identity and all ten choices.
+// The frozen cue selects the v8 wording or the routed policy's provider, never a category.
 function hasAcidOrBaseFormCue(chemical: ChemicalInput, reference?: ClassificationIdentityEvidence): boolean {
   const name = chemical.name?.normalize('NFKC') ?? ''
   const acid = /\bacid\b|[가-힣]+산(?![가-힣])/iu.test(name)
@@ -273,6 +274,11 @@ function hasAcidOrBaseFormCue(chemical: ChemicalInput, reference?: Classificatio
   const formula = strictFormulaKey(chemical.molecularFormula) ??
     (reference?.status === 'available' ? strictFormulaKey(reference.molecularFormula) : null)
   return !formula || (!/(?:^|\|)C:/.test(formula) && /(?:^|\|)H:/.test(formula) && /(?:^|\|)O:/.test(formula))
+}
+
+export function buildRoutedClassificationTask(chemical: ChemicalInput, safetyIdentifier: string, reference?: ClassificationIdentityEvidence): ChoiceTask {
+  return { ...buildClassificationDecisionTask(chemical, safetyIdentifier, 'v6', reference),
+    policyVersion: 'classification:identity-routed:v1', provider: hasAcidOrBaseFormCue(chemical, reference) ? 'decisions' : 'responses' }
 }
 
 export function buildClassificationDecisionTask(chemical: ChemicalInput, safetyIdentifier: string, revision: DecisionPolicyRevision = 'v6', identityReference?: ClassificationIdentityEvidence): ChoiceTask {

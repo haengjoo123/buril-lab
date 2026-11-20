@@ -193,3 +193,49 @@ select `responsesMatchedV8` and `decisionsTrialV8`. The existing grouped
 voice run can be combined with this classification phase. Reports validate
 the feature-specific policy, comparison arms, frozen inputs and reference
 hashes before combining their rows. The application defaults remain v4/v6.
+
+## 음성 재고 검증과 보조 분류 분기
+
+운영 KV의 `ai_decisions_config`에서 기존 모드와 표본 비율을 사용한다. 선택적인 `policies`에
+`{"voiceCandidate":"verified-responses-v1","classification":"identity-routed-v1"}`를 지정하면 각 기능의
+`shadow` 또는 `active` 요청에 새 정책이 적용된다. 정책 선택을 생략한 기존 설정은 음성 v4·분류 v6을
+사용한다. 설정 누락·오류·만료 시 두 기능 모두 `legacy`로 동작한다. 해당 기능의 모드를 `legacy`로
+되돌리고 KV 전파 후 처리 로그의 모드와 공개 배포 버전을 확인하면 복구할 수 있다.
+
+- 음성 검색은 기존 연구실 후보 최대 120개를 같은 라벨·CAS의 병으로 묶어 Responses에 한 번 전달한다.
+  반환된 ID가 후보에 속하고 기존 신뢰도 기준 0.72를 통과해야 한다. 명시된 선반, 이름과 CAS, 무수·수화 상태가
+  충돌하거나 병을 구분할 단서가 부족하면 사용자 확인을 반환한다. 같은 입력의 Decisions 비교 기준은
+  선택 확률 0.85와 차순위 차이 0.20이다. 이 비교 경로는 서명된 평가에서만 호출한다.
+- 보조 분류는 기존 규칙과 예외를 먼저 적용한다. 규칙에서 AI가 필요한 경우 기존 산·수산화물 단서가 있으면
+  Decisions v6(선택 확률 0.90, 차이 0.20), 그 외에는 같은 식별 근거를 담은 Responses를 한 번 호출한다.
+  CAS가 주어지면 그 CAS의 참조와 제공된 분자식의 일치를 검사한다. 보류·거부·기술적 실패는 음성 후보 확인 또는
+  `UNKNOWN`으로 끝난다. 채택한 분류만 `classify:routed:v1`에 저장한다. 최종 폐기·보관 검토는 기존 흐름을 따른다.
+- `shadow`는 기존 결과를 반환하고 표본에서만 후보 정책을 백그라운드로 비교한다. 후보 계산은 별칭과 분류 캐시에
+  쓰지 않는다. 운영 비교·전환 기준은 [배포 절차](decisions-rollout.md)를 따른다. 평가용 KV 키는 `ai_decisions_evaluation`이다.
+
+### 독립 정답과 운영 키 비교
+
+저장소 루트에서 아래 명령을 실행한다. `--pack`은 외부 모델 호출 없이 새 물질 50종에 대해 기능별
+1,000건의 입력과 독립 검토용 HTML을 생성한다. 검토자가 정답·사용자 확인을 직접 선택하고 이름과
+확인란을 입력한 뒤 JSON을 내보낸다. 미검토 항목이 남은 기능은 봉인할 수 없다. 생성된 자료의
+해시는 입력, 공개 식별 정보, 정답에 각각 연결된다. 모델 응답이나 기존 폐기 골든셋은 정답으로 쓰지 않는다.
+
+```sh
+node scripts/evaluate-verified-routing.mjs --pack review-pack
+node scripts/evaluate-verified-routing.mjs --seal human-review.json --feature voiceCandidate --output voice.labels.json
+node scripts/evaluate-verified-routing.mjs --corpus reviewed --feature voiceCandidate --labels voice.labels.json --prepare PRIVATE_DIRECTORY
+node scripts/evaluate-verified-routing.mjs --corpus reviewed --feature voiceCandidate --labels voice.labels.json --state PRIVATE_DIRECTORY/private.json --output voice.json
+```
+
+보조 분류는 같은 명령의 기능을 `classification`으로 지정하고 별도의 봉인 파일·권한·출력을 사용한다.
+운영자는 기존 원격 평가 절차대로 공개 `grant.json`만 운영 KV에 최대 1시간 등록하고 무료 `probe` 후
+KV 전파를 확인한다. 서버는 만료 시각·서명·사례 ID·기능·백엔드를 확인한다. 독립 자료에는 정답 해시가
+등록된 권한이 필요하고 정답은 서버로 전송되지 않는다. 완료 후 권한을 제거하고 서명·미서명 요청의 404를
+확인한 다음 전용 임시 서명 파일을 삭제한다. `private.json`은 원본 운영 API 키를 포함하지 않는다.
+
+기존 합성 회귀 비교는 `--corpus regression`으로 같은 명령을 실행하고 `--labels`를 생략한다.
+명시 실행 시 기능마다 3,000건을 서명된 서버에서 호출한다. 연결 단절 후 같은 권한과 입력으로
+`--resume`을 사용하면 기록된 요청을 건너뛴다. 모델 오류도 측정 결과에 포함한다.
+출력 옆 `.metrics.json`은 세 경로별 정답 채택·오선택·보류·오류·p50·p95·토큰 사용량을 기록한다.
+분류의 주 지표는 실제 규칙이 AI 호출을 허용한 사례이며 전체 1,000건과 세 경로의 공통 성공 집합도 제공한다.
+점수를 다시 계산하려면 `--state` 대신 `--score 기존결과.json`과 새 출력 경로를 지정한다.

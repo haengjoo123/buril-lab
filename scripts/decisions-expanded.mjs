@@ -56,7 +56,7 @@ export function analyzeExpanded(records, ids = expandedDecisionFixtures().map(it
   }))]))
   return { manifest: suite?.manifest ?? expandedManifest(), cases: ids.length, backends, results: records.length,
     complete: records.length === ids.length * backends.length, groups, productionReady: false,
-    limitations: ['Synthetic contract labels, not independently human-reviewed disposal decisions.',
+    limitations: [suite?.manifest.reviewDigest ? 'Independent labels apply to these generated review scenarios.' : 'Synthetic contract labels, not independently human-reviewed disposal decisions.',
       'Zero observed wrong acceptances does not guarantee zero real-world errors.', 'Real-user shadow and sequential activation gates remain separate.'] }
 }
 
@@ -68,6 +68,9 @@ export async function runExpanded(state, output, { split = 'all', concurrency = 
   const cases = (suite?.fixtures ?? expandedDecisionFixtures()).filter(item => state.grant.caseIds.includes(item.id) && (split === 'all' || item.split === split))
   if (!cases.length) throw new Error('No granted cases')
   const ids = cases.map(item => item.id), journal = `${output}.ndjson`, metadata = `${output}.manifest.json`
+  const reviewed = suite?.manifest.reviewDigest
+  if (reviewed && reviewed !== state.grant.reviewDigest) throw new Error('Grant does not match sealed human review')
+  const localLabels = reviewed ? new Map(cases.map(f => [f.id, f.expected])) : null
   const expected = { grantId: state.grant.id, manifest: suite?.manifest ?? expandedManifest(), split, backends, ids }
   await mkdir(dirname(resolve(output)), { recursive: true })
   let records = []
@@ -92,6 +95,10 @@ export async function runExpanded(state, output, { split = 'all', concurrency = 
       if (failed) break
       try {
         const result = await requestCase(state, job.id, job.backend, {}, fetchImpl)
+        if (localLabels) {
+          if (Object.hasOwn(result, 'expected') || !localLabels.has(result.id)) throw new Error('Unexpected remote blind label')
+          result.expected = localLabels.get(result.id)
+        }
         await persist(result)
         if (records.length % 100 === 0) console.log(JSON.stringify({ completedCalls: records.length, targetCalls: ids.length * backends.length }))
       } catch (error) {
