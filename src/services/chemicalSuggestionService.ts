@@ -43,11 +43,3 @@ export async function fetchChemicalSuggestionResult(
     formChoices: readFormChoices(response.formChoices),
   }
 }
-
-export async function fetchChemicalSuggestions(
-  query: string,
-  limit = 5,
-  signal?: AbortSignal,
-): Promise<string[]> {
-  return (await fetchChemicalSuggestionResult(query, limit, signal)).suggestions
-}

@@ -232,10 +232,6 @@ export function getHazardCategoryLabel(category: InventoryHazardFilterCategory):
   return i18n.t(HAZARD_CATEGORY_LABELS[category]);
 }
 
-export function getHazardCategoryFlag(category: InventoryHazardFilterCategory): SafetyCenterHazardFlag {
-  return HAZARD_FLAG_BY_CATEGORY[category];
-}
-
 export function assessRiskItem(item: SafetyCenterRiskItem): RiskItemAssessment {
   const flags: SafetyCenterRiskFlag[] = [];
   const hazard = classifyInventoryHazard(asInventoryItem(item), {

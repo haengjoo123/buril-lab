@@ -91,7 +91,6 @@ interface OnboardingState {
     setActiveUser: (userId: string | null) => void;
     applyRemoteOnboardingProgress: (userId: string, progress: OnboardingRemoteProgress) => void;
     openWelcome: () => void;
-    completeWelcome: () => void;
     finishOnboarding: () => void;
     skipOnboarding: () => void;
     resetOnboarding: () => void;
@@ -259,7 +258,6 @@ export const useOnboardingStore = create<OnboardingState>()(
                     hasSkippedOnboarding: false,
                     currentMission: getNextIncompleteMission(state.completedMissions),
                 })),
-            completeWelcome: () => get().finishOnboarding(),
             finishOnboarding: () =>
                 set((state) => {
                     const nextSnapshot = createCompletedSnapshot(toSnapshot(state));

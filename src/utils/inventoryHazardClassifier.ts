@@ -137,13 +137,3 @@ export function classifyInventoryHazard(
         groupLabelKeys: groups.map(g => LABEL_KEYS[g] || '').filter(Boolean),
     };
 }
-
-/**
- * Quick check whether an inventory item is classified as hazardous.
- */
-export function isHazardousItem(
-    item: InventoryItem,
-    options: InventoryHazardClassificationOptions = {},
-): boolean {
-    return classifyInventoryHazard(item, options).level === 'high';
-}
