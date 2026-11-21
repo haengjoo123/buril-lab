@@ -3,7 +3,7 @@ import { CabinetTrash } from './components/CabinetTrash';
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { ReagentEditPanel } from './ReagentEditPanel';
 import { useFridgeStore } from '../../store/fridgeStore';
-import { AlertCircle, Box, Camera, ChevronDown, ChevronUp, Info, Layers, Minus, MoreVertical, PencilRuler, Plus, Ratio, SplitSquareVertical, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, Trash2, X, Undo2, Redo2, type LucideIcon } from 'lucide-react';
+import { AlertCircle, Atom, Box, Camera, ChevronDown, ChevronUp, Factory, FlaskConical, Info, Layers, Minus, MoreVertical, PencilRuler, Plus, Ratio, SplitSquareVertical, Tag, ArrowLeft, Save, Loader2, ScanLine, CheckCircle2, ShieldAlert, Trash2, X, Undo2, Redo2, type LucideIcon } from 'lucide-react';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useTranslation } from 'react-i18next';
 import { CustomDialog } from '../../components/CustomDialog';
@@ -1800,7 +1800,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
 
                         {/* CAS 번호 */}
                         <div className="flex flex-col gap-1">
-                            <label className="text-xs font-semibold text-gray-600">🧬 {t('reagent_cas_label')}</label>
+                            <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                                <Atom aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.25} />
+                                {t('reagent_cas_label')}
+                            </label>
                             <input
                                 type="text"
                                 value={placementCas}
@@ -1869,8 +1872,9 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                         {/* 용량 */}
                         <div className="grid grid-cols-1 gap-3">
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
-                                    🧪 {t('reagent_capacity_label')}
+                                <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                                    <FlaskConical aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.25} />
+                                    {t('reagent_capacity_label')}
                                 </label>
                                 <input
                                     type="text"
@@ -1947,7 +1951,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                     {/* 브랜드 + 제품번호 */}
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-xs font-semibold text-gray-600">📦 {t('inventory_brand')}</label>
+                                            <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                                                <Factory aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.25} />
+                                                {t('inventory_brand')}
+                                            </label>
                                             <input
                                                 type="text"
                                                 value={placementBrand}
@@ -1957,7 +1964,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <label className="text-xs font-semibold text-gray-600">🏷 {t('inventory_product_number')}</label>
+                                            <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                                                <Tag aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.25} />
+                                                {t('inventory_product_number')}
+                                            </label>
                                             <input
                                                 type="text"
                                                 value={placementProductNumber}
@@ -2149,7 +2159,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                 {/* Brand + Product Number */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1">
-                                        <label className="text-xs font-semibold text-gray-600">📦 {t('inventory_brand')}</label>
+                                        <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                                                <Factory aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.25} />
+                                                {t('inventory_brand')}
+                                            </label>
                                         <input
                                             type="text"
                                             value={scanBrand}
@@ -2159,7 +2172,10 @@ export const FridgeView: React.FC<FridgeViewProps> = ({ cabinetId, onBack, onSta
                                         />
                                     </div>
                                     <div className="flex flex-col gap-1">
-                                        <label className="text-xs font-semibold text-gray-600">🏷 {t('inventory_product_number')}</label>
+                                        <label className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                                                <Tag aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.25} />
+                                                {t('inventory_product_number')}
+                                            </label>
                                         <input
                                             type="text"
                                             value={scanProductNumber}

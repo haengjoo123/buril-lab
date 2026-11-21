@@ -100,10 +100,7 @@ export const WasteContainersPanel: React.FC<WasteContainersPanelProps> = ({ labI
 
     return (
         <div className="flex flex-col gap-4">
-            <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-slate-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-slate-200">
-                <div className="font-medium">{copy.infoTitle}</div>
-                <div className="mt-1 break-keep text-slate-600 dark:text-slate-300">{copy.infoBody}</div>
-            </div>
+            <p className="break-keep text-sm text-slate-500 dark:text-slate-400">{copy.infoBody}</p>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="inline-flex min-h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
