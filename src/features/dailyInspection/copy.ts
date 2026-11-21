@@ -4,7 +4,7 @@ import type { InspectionResult } from './inspectionSummary';
 const KO = {
     tab: '일상점검',
     title: '오늘의 일상점검',
-    intro: '실험을 시작하기 전에 항목을 확인하고 기록하세요. 하루에 한 건이 남고, 같은 날 다시 저장하면 그날 기록을 고칩니다.',
+    intro: '실험을 시작하기 전에 항목을 확인하고 기록하세요.',
     labOnly: '일상점검은 연구실 공간에서 기록합니다. 위에서 연구실을 선택하세요.',
     loading: '점검 기록을 불러오는 중입니다.',
     loadFailed: '점검 기록을 불러오지 못했습니다.',
@@ -51,7 +51,7 @@ const KO = {
 const EN: typeof KO = {
     tab: 'Daily check',
     title: "Today's daily inspection",
-    intro: 'Check the items before starting work and record the result. One record is kept per day; saving again the same day updates it.',
+    intro: 'Check the items before starting work and record the result.',
     labOnly: 'Daily inspections are recorded in a lab space. Choose a lab above.',
     loading: 'Loading inspection records.',
     loadFailed: 'Could not load inspection records.',

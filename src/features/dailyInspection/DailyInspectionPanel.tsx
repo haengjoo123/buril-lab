@@ -163,7 +163,9 @@ export const DailyInspectionPanel: React.FC<DailyInspectionPanelProps> = ({ labI
         : todayRecord.issueCount > 0 ? copy.todayIssues(todayRecord.issueCount) : copy.todayDone(todayRecord.inspectorName);
 
     return (
-        <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-slate-700 dark:bg-slate-800">
+        // shrink-0: 이 패널은 flex 세로 스크롤 영역 안에 놓인다. overflow-hidden이면 최소 높이가 0이 되어
+        // 화면 높이에 맞춰 줄어들며 아래 항목이 잘리므로, 내용 높이를 유지하고 부모가 스크롤하게 한다.
+        <div className="shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-slate-700 dark:bg-slate-800">
             <section className="p-4">
                 <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-slate-100">
                     <ClipboardCheck className="h-5 w-5 text-slate-500 dark:text-slate-400" aria-hidden="true" />

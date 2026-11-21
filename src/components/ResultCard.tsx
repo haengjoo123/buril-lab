@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import type { AnalysisResult } from '../types';
-import { AlertTriangle, Plus, FileText, Sparkles, ChevronDown, PackagePlus } from 'lucide-react';
+import { AlertTriangle, Plus, FileText, Sparkles, ChevronDown, PackagePlus, Search } from 'lucide-react';
 import { useWasteStore } from '../store/useWasteStore';
 import { useTranslation } from 'react-i18next';
 import { getPictogramCode, getPictogramUrl, translateGHS } from '../data/ghsCodes';
@@ -26,6 +26,8 @@ interface ResultCardProps {
     headerAccessory?: React.ReactNode;
     scanSelectionMeta?: ScannerSelectionMeta;
     sourceSearchEventId?: string;
+    /** 이름만으로 물질 형태를 확정하지 못했을 때, 라벨의 CAS 번호로 다시 검색하도록 검색창을 연다. */
+    onSearchByCas?: () => void;
 }
 
 const compactReasonKeyByCategory: Partial<Record<AnalysisResult['category'], string>> = {
@@ -79,6 +81,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     headerAccessory,
     scanSelectionMeta,
     sourceSearchEventId,
+    onSearchByCas,
 }) => {
     const { chemical, reason, isSafe, category, label } = result;
     const addToCart = useWasteStore((state) => state.addToCart);
@@ -201,7 +204,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     return (
         <div
             data-onboarding-target="result-card"
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg overflow-clip border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500"
+            className="bg-white dark:bg-slate-900 rounded-2xl overflow-clip border border-gray-100 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500"
         >
             {/* Header: Chemical Info */}
             <div className="p-5 bg-slate-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700">
@@ -272,11 +275,42 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                     {t('result_solution_notice_short' as any)}
                 </p>
 
-                {hazardLookupPresentation && (
+                {hazardLookupPresentation && (chemical.hazardLookup?.status === 'identity_ambiguous' ? (
+                    // 경고만 하지 않고 다음 행동(CAS 재검색, MSDS 확인)을 바로 누를 수 있게 둔다.
+                    <div role="status" className={`mb-4 w-full rounded-xl border p-4 text-left ${hazardLookupPresentation.className}`}>
+                        <p className="flex items-center gap-2 text-sm font-semibold">
+                            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                            {t('result_identity_ambiguous_title' as any)}
+                        </p>
+                        <p className="mt-1.5 break-keep text-sm leading-relaxed opacity-90">
+                            {t('result_identity_ambiguous_body' as any)}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {onSearchByCas && (
+                                <button
+                                    type="button"
+                                    onClick={onSearchByCas}
+                                    className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-orange-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-slate-950"
+                                >
+                                    <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                    {t('result_identity_ambiguous_search_cas' as any)}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => setIsMsdsOpen(true)}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-orange-300 bg-white px-3 text-sm font-semibold text-orange-800 transition-colors hover:bg-orange-100 dark:border-orange-800 dark:bg-slate-900 dark:text-orange-200 dark:hover:bg-orange-950/50"
+                            >
+                                <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                {t('result_identity_ambiguous_open_msds' as any)}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
                     <div className={`mb-4 w-full rounded-xl border p-3 text-left text-sm font-medium ${hazardLookupPresentation.className}`}>
                         <p>{t(hazardLookupPresentation.translationKey as any)}</p>
                     </div>
-                )}
+                ))}
 
                 {referencePh !== undefined && (
                     <p className="mb-4 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -374,7 +408,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
             {/* Sticky action bar: stays at the bottom of the scrolling pane/modal so the main
                 action is always one tap away. overflow-clip (not hidden) on the card keeps sticky working. */}
-            <div className="sticky bottom-0 z-10 border-t border-gray-100 bg-white/95 px-3 py-3 shadow-[0_-10px_24px_-18px_rgba(15,23,42,0.35)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+            <div className="sticky bottom-0 z-10 border-t border-gray-100 bg-white/95 px-3 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
                 <div className="flex w-full items-stretch gap-2">
                     {secondaryBtnText && (
                         <button
@@ -399,7 +433,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                         type="button"
                         onClick={handleAddClick}
                         data-onboarding-target="add-to-list-button"
-                        className="flex min-h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-center text-sm font-bold leading-snug text-white shadow-lg shadow-blue-200 transition-colors hover:bg-blue-700 active:bg-blue-800 dark:shadow-blue-900/20"
+                        className="flex min-h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-center text-sm font-bold leading-snug text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
                     >
                         <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
                         {t(hasActiveBatch

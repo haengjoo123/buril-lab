@@ -412,8 +412,11 @@ export const isHydrogenCyanide = (chemical: Pick<Chemical, 'casNumber' | 'molecu
     chemical.casNumber?.trim() === HYDROGEN_CYANIDE_CAS ||
     isFormulaExactly(chemical.molecularFormula ?? '', ['HCN', 'CHN']);
 
+// PubChem returns Hill-notation formulas (HCl -> ClH, H2SO4 -> H2O4S), so both
+// spellings must match or a known acid falls through to the weaker name check.
 const INORGANIC_ACID_FORMULAS = [
     'HCL', 'HBR', 'HI', 'HF', 'H2SO4', 'HNO3', 'H3PO4', 'HCLO4',
+    'CLH', 'BRH', 'FH', 'H2O4S', 'H3O4P', 'CLHO4',
 ] as const;
 
 /**

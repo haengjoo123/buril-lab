@@ -948,7 +948,7 @@ export function SearchTabView({
 
           {result && <button type="button" onClick={() => setClosedResultQuery(null)}
             aria-pressed={isDesktopSearch ? true : undefined}
-            className={isDesktopSearch ? 'order-first flex min-h-11 flex-col gap-1 rounded-r-lg border-l-4 border-blue-600 bg-blue-50 p-4 text-left text-slate-900 transition-colors hover:bg-blue-100 dark:border-blue-400 dark:bg-blue-950/40 dark:text-slate-100 dark:hover:bg-blue-950/60' : 'min-h-11 rounded-xl border border-blue-200 p-4 text-left font-semibold text-blue-700 dark:text-blue-300'}>
+            className={isDesktopSearch ? 'order-first flex min-h-11 flex-col gap-1 rounded-xl bg-blue-50 p-4 text-left text-slate-900 transition-colors hover:bg-blue-100/70 dark:bg-blue-950/40 dark:text-slate-100 dark:hover:bg-blue-950/60' : 'min-h-11 rounded-xl border border-blue-200 p-4 text-left font-semibold text-blue-700 dark:text-blue-300'}>
             {isDesktopSearch ? <>
               <span className="font-semibold">{result.chemical.name}</span>
               {result.chemical.casNumber && <span className="text-xs text-slate-600 dark:text-slate-400">CAS {result.chemical.casNumber}</span>}
@@ -1233,6 +1233,7 @@ export function SearchTabView({
               onRequireAuth={onRequireAuth}
               onRegisterInventory={wasteComponentSearchMode ? undefined : handleRegisterResultInventory}
               headerAccessory={ownedCabinetChips}
+              onSearchByCas={queueSearchInputFocus}
             />
           ) : isLoading ? (
             <div className="flex flex-col gap-3">

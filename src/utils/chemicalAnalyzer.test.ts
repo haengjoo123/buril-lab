@@ -521,3 +521,15 @@ describe('analyzeChemical organic-cation thiocyanates', () => {
         expect(result.category).toBe('HEAVY_METAL');
     });
 });
+
+describe('analyzeChemical inorganic acid formulas in Hill notation', () => {
+    it.each([
+        ['Hydrochloric acid', 'ClH'],
+        ['Sulfuric acid', 'H2O4S'],
+        ['Phosphoric acid', 'H3O4P'],
+    ])('routes %s (%s) by its formula, not only by its name', (name, molecularFormula) => {
+        const result = analyzeChemical({ id: name, name, casNumber: '', molecularFormula });
+        expect(result.category).toBe('ACID');
+        expect(result.reason).toBe('reason_acid_formula');
+    });
+});

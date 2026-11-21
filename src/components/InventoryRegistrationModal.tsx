@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Package, MapPin, Plus, Check, Loader2, ArrowRight } from 'lucide-react';
+import { X, Package, MapPin, MapPinned, Plus, Check, Loader2, ArrowRight, Rows3 } from 'lucide-react';
 import { analyticsService } from '../services/analyticsService';
 import type { MediaProduct } from '../services/mediaProductService';
 import type { Cabinet } from '../services/cabinetService';
@@ -537,21 +537,23 @@ export const InventoryRegistrationModal: React.FC<InventoryRegistrationModalProp
                         <div className="grid grid-cols-2 gap-2 mb-3">
                             <button
                                 onClick={() => setStorageType('cabinet')}
-                                className={`px-4 py-3 rounded-xl border text-sm font-medium transition-all ${storageType === 'cabinet'
+                                className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all ${storageType === 'cabinet'
                                     ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20'
                                     : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-gray-300 dark:hover:border-slate-600'
                                     }`}
                             >
-                                📦 {t('inventory_storage_cabinet')}
+                                <Rows3 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                {t('inventory_storage_cabinet')}
                             </button>
                             <button
                                 onClick={() => setStorageType('other')}
-                                className={`px-4 py-3 rounded-xl border text-sm font-medium transition-all ${storageType === 'other'
+                                className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all ${storageType === 'other'
                                     ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20'
                                     : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-gray-300 dark:hover:border-slate-600'
                                     }`}
                             >
-                                📍 {t('inventory_storage_other')}
+                                <MapPinned className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                {t('inventory_storage_other')}
                             </button>
                         </div>
 
