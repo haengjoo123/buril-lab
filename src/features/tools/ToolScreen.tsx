@@ -9,6 +9,8 @@ const Dilution = lazy(() => import("./DilutionTool")),
   ImageEditor = lazy(() => import("./ImageTool")),
   Culture = lazy(() => import("./CultureTool")),
   CellCounter = lazy(() => import("./CellCounterTool")),
+  Primer = lazy(() => import("./PrimerTool")),
+  NucleicAcid = lazy(() => import("./NucleicAcidTool")),
   Timer = lazy(() => import("./TimerTool")),
   Alarm = lazy(() => import("./AlarmTool")),
   Counter = lazy(() => import("./CounterTool")),
@@ -43,6 +45,10 @@ export default function ToolScreen({ id }: { id: ToolId }) {
       return <Culture />;
     case "cell-counter":
       return <CellCounter />;
+    case "primer":
+      return <Primer />;
+    case "nucleic-acid":
+      return <NucleicAcid />;
     case "timer":
       return <Timer />;
     case "stopwatch":

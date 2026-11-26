@@ -14,6 +14,7 @@ import ToolGuide from "./ToolGuide";
 import ToolScreen from "./ToolScreen";
 import { duplicateData } from "./work";
 import { readHandoff } from "./handoff";
+import { recordToolUsage } from "./usage";
 
 class ToolBoundary extends Component<
   { children: ReactNode; fallback: (error: string) => ReactNode },
@@ -78,6 +79,7 @@ export default function ToolHost({
       if (record.draft) await repo.saveDraft(record.doc.id, name.trim());
       else await repo.update(record.doc.id, { title: name.trim() });
       setNaming(false);
+      recordToolUsage(id, "save");
       // Replace, not push: the entry being left is the tool's blank quick-use
       // address, and going back to it would open a new empty draft as if the
       // work just saved had been lost.

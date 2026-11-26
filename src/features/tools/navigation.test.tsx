@@ -13,7 +13,8 @@ vi.mock("../../locales/i18n", () => ({
 vi.mock("../../services/supabaseClient", () => ({ supabase: {} }));
 const repo = vi.hoisted(() => {
   const listeners = new Set<() => void>();
-  return {
+  const store = {
+    version: 0,
     owner: "owner",
     ready: true,
     hydrated: true,
@@ -36,7 +37,10 @@ const repo = vi.hoisted(() => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    emit: () => listeners.forEach((listener) => listener()),
+    emit: () => {
+      store.version += 1;
+      listeners.forEach((listener) => listener());
+    },
     localOnlyDocuments: () => ({ documents: [], drafts: [] }),
     flush: vi.fn(async () => {}),
     discard: vi.fn(async () => {}),
@@ -44,6 +48,7 @@ const repo = vi.hoisted(() => {
     update: vi.fn(),
     create: vi.fn(async () => ({})),
   };
+  return store;
 });
 vi.mock("./repository", () => ({
   toolWorkspaceId: () => "timer-workspace",
@@ -119,5 +124,48 @@ it("waits for the first pull before creating a fixed-id workspace", async () => 
     host.remove();
     repo.items = cached;
     repo.hydrated = true;
+  }
+});
+it("opens the existing draft instead of creating another, and drops empty spares", async () => {
+  const cached = repo.items;
+  const draft = (id: string, generation: number) => ({
+    status: "local",
+    draft: true,
+    generation,
+    doc: {
+      id,
+      owner_id: "owner",
+      tool_id: "dilution",
+      title: "Dilution",
+      data: {},
+      revision: 0,
+      updated_at: "2026-11-27T00:00:00.000Z",
+    },
+  });
+  repo.items = [draft("spare", 1), draft("edited", 3)];
+  repo.create.mockClear();
+  repo.discard.mockClear();
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/tools/dilution"]}>
+          <ToolsWorkspace ownerId="owner" />
+        </MemoryRouter>
+      );
+      await import("./DilutionTool");
+    });
+    const created = repo.create.mock.calls.filter(
+      (call: unknown[]) => call[0] === "dilution"
+    );
+    expect(created).toHaveLength(0);
+    expect(repo.discard).toHaveBeenCalledWith("spare");
+    expect(repo.discard).not.toHaveBeenCalledWith("edited");
+  } finally {
+    await act(() => root.unmount());
+    host.remove();
+    repo.items = cached;
   }
 });

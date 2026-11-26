@@ -1,24 +1,39 @@
-import { useId, useRef, useState } from "react";
-import { Check, ChevronDown, Copy, Search, X } from "lucide-react";
-import { searchChemical } from "../../services/searchService";
-import type { Chemical } from "../../types";
-import { convertUnit } from "./units";
+import { useContext, useId } from "react";
+import { X } from "lucide-react";
+import ReagentLookup, { type Reagent } from "./ReagentLookup";
+import { parseNumber } from "./format";
 import {
-  molarityBaseUnits,
+  fromMolarityBase,
   molarityTargets,
   molarityUnits,
+  molecularWeightText,
+  pureMass,
   solveMolarity,
+  storeMolecularWeight,
+  toMolarityBase,
   type MolarityBasis,
   type MolarityTarget,
 } from "./molarity";
-import { useToolData, useText, ErrorMessage, calculate, format } from "./ui";
+import {
+  ToolContext,
+  useToolData,
+  useText,
+  ErrorMessage,
+  CopyButton,
+  HandoffBanner,
+  calculate,
+  need,
+  format,
+  plainNumber,
+} from "./ui";
 
-type Reagent = Pick<Chemical, "name" | "casNumber" | "molecularFormula"> & {
-  molecularWeight: number;
-};
+/** A number inside a sentence: as the screen shows it, without grouping. */
+const plain = (value: number) => plainNumber(value, 7);
+
 export default function MolarityTool() {
-  const t = useText();
-  const id = useId();
+  const t = useText(),
+    id = useId(),
+    ctx = useContext(ToolContext);
   const [d, set] = useToolData({
     basis: "mass" as MolarityBasis,
     solve: "concentration" as MolarityTarget,
@@ -33,16 +48,13 @@ export default function MolarityTool() {
     amountUnit: "mmol",
     massConcentration: "1",
     massConcentrationUnit: "mg/mL",
-    query: "",
     reagent: null as Reagent | null,
-    recentReagents: [] as Reagent[],
+    // Added after the first release; work saved before then opens with these.
+    // `mw` itself stays in g/mol whatever the unit (see storeMolecularWeight).
+    mwUnit: "g/mol",
+    mwTyped: "",
+    purity: "100",
   });
-  const [found, setFound] = useState<Reagent | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState("");
-  const [copyError, setCopyError] = useState("");
-  const request = useRef(0);
   const basis = d.basis in molarityTargets ? d.basis : "mass";
   const target = molarityTargets[basis].includes(d.solve)
     ? d.solve
@@ -55,32 +67,49 @@ export default function MolarityTool() {
     amount: t("몰수", "Amount"),
     massConcentration: t("질량농도", "Mass concentration"),
   };
-  const valueOf = (key: MolarityTarget) => d[key];
-  const unitOf = (key: MolarityTarget) =>
-    key === "mw" ? "g/mol" : d[`${key}Unit`];
+  const purityLabel = t("순도", "Purity");
+  const unitOf = (key: MolarityTarget) => {
+    const unit = d[`${key}Unit`];
+    return molarityUnits[key].includes(unit) ? unit : molarityUnits[key][0];
+  };
+  const mwText = molecularWeightText(d.mw, unitOf("mw"), d.mwTyped);
+  // The text in each field, in that field's unit.
+  const valueOf = (key: MolarityTarget) => (key === "mw" ? mwText : d[key]);
   const required = molarityTargets[basis].filter((key) => key !== target);
-  const missing = required.some((key) => !valueOf(key).trim());
+  // Purity belongs to a weighed mass, so only the mass basis asks for it.
+  const weighed = basis === "mass";
+  const missing = [
+    ...required.filter((key) => !valueOf(key).trim()).map((key) => labels[key]),
+    ...(weighed && !d.purity.trim() ? [purityLabel] : []),
+  ];
   const result = calculate(() => {
-    if (missing) return undefined;
-    const values = Object.fromEntries(
-      molarityTargets[basis].map((key) => [
-        key,
-        key === target
-          ? 0
-          : key === "mw"
-          ? Number(d.mw)
-          : convertUnit(
-              Number(valueOf(key)),
-              unitOf(key),
-              molarityBaseUnits[key]
-            ),
-      ])
-    ) as Record<MolarityTarget, number>;
-    const base = solveMolarity(basis, target, values);
-    return target === "mw"
-      ? base
-      : convertUnit(base, molarityBaseUnits[target], unitOf(target));
+    // Each quantity of this basis in the unit on screen (the inputs as they
+    // were typed, the result as calculated) and in the engine's base unit.
+    const quantity = {} as Record<MolarityTarget, number>,
+      values = {} as Record<MolarityTarget, number>;
+    for (const key of required) {
+      quantity[key] = need(valueOf(key));
+      values[key] = toMolarityBase(key, quantity[key], unitOf(key));
+    }
+    const purity = weighed ? need(d.purity) : 100;
+    const base = solveMolarity(basis, target, values, purity);
+    const shown = fromMolarityBase(target, base, unitOf(target));
+    quantity[target] = shown;
+    return {
+      base,
+      shown,
+      purity,
+      quantity,
+      pure: weighed && purity !== 100 ? pureMass(quantity.mass, purity) : null,
+    };
   });
+  const r = result.value;
+  const list = (names: string[]) =>
+    names.length > 1
+      ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`
+      : names.join("");
+  const corrected = weighed && (parseNumber(d.purity) ?? 100) !== 100;
+  const purityTerm = t("순도", "purity");
   const formula =
     basis === "amount"
       ? target === "amount"
@@ -94,6 +123,14 @@ export default function MolarityTool() {
         : target === "mw"
         ? "MW = ρ / C"
         : "C = ρ / MW"
+      : corrected
+      ? target === "mass"
+        ? `m = C × MW × V / ${purityTerm}`
+        : target === "volume"
+        ? `V = m × ${purityTerm} / (C × MW)`
+        : target === "mw"
+        ? `MW = m × ${purityTerm} / (C × V)`
+        : `C = m × ${purityTerm} / (MW × V)`
       : target === "mass"
       ? "m = C × MW × V"
       : target === "volume"
@@ -101,81 +138,79 @@ export default function MolarityTool() {
       : target === "mw"
       ? "MW = m / (C × V)"
       : "C = m / (MW × V)";
-  const applyReagent = (reagent: Reagent) => {
-    set((old) => ({
-      ...old,
-      mw: String(reagent.molecularWeight),
-      reagent,
-      recentReagents: [
-        reagent,
-        ...old.recentReagents.filter(
-          (r) => r.casNumber !== reagent.casNumber || r.name !== reagent.name
-        ),
-      ].slice(0, 8),
-    }));
-    setFound(null);
-    setError("");
-    setCopied("");
-  };
-  const lookup = async () => {
-    const current = ++request.current;
-    setBusy(true);
-    setError("");
-    setFound(null);
-    try {
-      const chemical = await searchChemical(d.query);
-      if (current !== request.current) return;
-      if (
-        chemical?.molecularWeight &&
-        Number.isFinite(chemical.molecularWeight) &&
-        chemical.molecularWeight > 0
-      ) {
-        setFound({
-          name: chemical.name,
-          casNumber: chemical.casNumber,
-          molecularFormula: chemical.molecularFormula,
-          molecularWeight: chemical.molecularWeight,
-        });
-      } else
-        setError(
-          t(
-            "분자량을 찾지 못했습니다. 시약 라벨의 값을 직접 입력하세요.",
-            "Molecular weight unavailable. Enter the value on the reagent label."
-          )
-        );
-    } catch {
-      if (current === request.current)
-        setError(
-          t(
-            "시약을 검색하지 못했습니다. 연결을 확인하거나 분자량을 직접 입력하세요.",
-            "Reagent search failed. Check your connection or enter molecular weight manually."
-          )
-        );
-    } finally {
-      if (current === request.current) setBusy(false);
-    }
-  };
-  const changeUnit = (key: MolarityTarget, unit: string) => {
-    if (key === "mw") return;
-    const value = valueOf(key),
-      previousUnit = unitOf(key);
-    const converted = value.trim()
-      ? calculate(() => convertUnit(Number(value), previousUnit, unit)).value
-      : undefined;
-    set((old) => ({
-      ...old,
+  // A unit change keeps the number that was typed; the result follows.
+  const changeUnit = (key: MolarityTarget, unit: string) =>
+    set({
+      ...d,
       [`${key}Unit`]: unit,
-      ...(converted != null
-        ? { [key]: String(Number(converted.toPrecision(12))) }
+      // The same number is another weight now, not the linked reagent's.
+      ...(key === "mw"
+        ? { ...storeMolecularWeight(mwText, unit), reagent: null }
         : {}),
-    }));
-    setCopied("");
-  };
-  const resultText =
-    result.value != null ? `${format(result.value)} ${unitOf(target)}` : "";
+    });
+  const withUnit = (key: MolarityTarget) =>
+    r ? `${plain(r.quantity[key])} ${unitOf(key)}` : "";
+  const name = d.reagent?.name ?? "";
+  // How to make the solution, for the bases that describe making one.
+  let sentence = "";
+  if (r && weighed && r.quantity.mass > 0) {
+    const impure = r.purity !== 100;
+    const what = [
+      impure ? `순도 ${plain(r.purity)}%` : "",
+      name || (impure ? "시약" : ""),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    sentence = t(
+      `${what && `${what} `}${withUnit("mass")}을 달아 최종 부피 ${withUnit(
+        "volume"
+      )}가 되도록 녹입니다. (${withUnit("concentration")})`,
+      `Weigh ${withUnit("mass")}${name && ` of ${name}`}${
+        impure ? ` (${plain(r.purity)}% purity)` : ""
+      } and dissolve to a final volume of ${withUnit("volume")} (${withUnit(
+        "concentration"
+      )}).`
+    );
+  } else if (r && basis === "amount" && r.quantity.amount > 0)
+    sentence = t(
+      `${withUnit("amount")}을 최종 부피 ${withUnit(
+        "volume"
+      )}가 되도록 녹입니다. (${withUnit("concentration")})`,
+      `Dissolve ${withUnit("amount")} to a final volume of ${withUnit(
+        "volume"
+      )} (${withUnit("concentration")}).`
+    );
+  // Every basis has a molar concentration, typed or calculated.
+  const molar = r ? r.quantity.concentration : null;
 
   return (
     <div className="tool-molarity">
+      <HandoffBanner
+        accepts={["molecular-weight"]}
+        onApply={(offer) => {
+          const kilodaltons = offer.unit.trim().toLowerCase() === "kda",
+            mwUnit = kilodaltons ? "kDa" : "g/mol";
+          set((old) => {
+            // The weight is an input from here on, on a basis that uses one.
+            const nextBasis = old.basis === "amount" ? "mass" : old.basis;
+            return {
+              ...old,
+              basis: nextBasis,
+              solve:
+                old.solve === "mw" ||
+                !molarityTargets[nextBasis]?.includes(old.solve)
+                  ? "concentration"
+                  : old.solve,
+              ...storeMolecularWeight(plainNumber(offer.value), mwUnit),
+              mwUnit,
+              reagent: {
+                name: offer.label,
+                molecularWeight: kilodaltons ? offer.value * 1000 : offer.value,
+              },
+            };
+          });
+        }}
+      />
       <div
         className="tool-molarity-bases"
         role="group"
@@ -191,16 +226,15 @@ export default function MolarityTool() {
           <button
             key={key}
             aria-pressed={basis === key}
-            onClick={() => {
+            onClick={() =>
               set({
                 ...d,
                 basis: key,
                 solve: molarityTargets[key].includes(target)
                   ? target
                   : "concentration",
-              });
-              setCopied("");
-            }}
+              })
+            }
           >
             {label}
           </button>
@@ -216,10 +250,7 @@ export default function MolarityTool() {
                   key={key}
                   type="button"
                   aria-pressed={target === key}
-                  onClick={() => {
-                    set({ ...d, solve: key });
-                    setCopied("");
-                  }}
+                  onClick={() => set({ ...d, solve: key })}
                 >
                   {labels[key]}
                 </button>
@@ -236,37 +267,66 @@ export default function MolarityTool() {
                 <div className="tool-molarity-control">
                   <input
                     id={`${id}-${key}`}
-                    type="number"
-                    step="any"
-                    min="0"
+                    className="tool-molarity-number"
+                    type="text"
                     inputMode="decimal"
-                    aria-label={labels[key]}
+                    autoComplete="off"
+                    aria-invalid={
+                      valueOf(key).trim() !== "" &&
+                      parseNumber(valueOf(key)) == null
+                    }
                     value={valueOf(key)}
-                    onChange={(event) => {
+                    onChange={(event) =>
                       set({
                         ...d,
-                        [key]: event.target.value,
-                        ...(key === "mw" ? { reagent: null } : {}),
-                      });
-                      setCopied("");
-                    }}
+                        ...(key === "mw"
+                          ? {
+                              ...storeMolecularWeight(
+                                event.target.value,
+                                unitOf("mw")
+                              ),
+                              reagent: null,
+                            }
+                          : { [key]: event.target.value }),
+                      })
+                    }
                   />
-                  {key === "mw" ? (
-                    <span className="tool-molarity-fixed-unit">g/mol</span>
-                  ) : (
-                    <select
-                      aria-label={`${labels[key]} ${t("단위", "unit")}`}
-                      value={unitOf(key)}
-                      onChange={(event) => changeUnit(key, event.target.value)}
-                    >
-                      {molarityUnits[key].map((unit) => (
-                        <option key={unit}>{unit}</option>
-                      ))}
-                    </select>
-                  )}
+                  <select
+                    aria-label={`${labels[key]} ${t("단위", "unit")}`}
+                    value={unitOf(key)}
+                    onChange={(event) => changeUnit(key, event.target.value)}
+                  >
+                    {molarityUnits[key].map((unit) => (
+                      <option key={unit}>{unit}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             ))}
+            {weighed && (
+              <div className="tool-molarity-quantity">
+                <label htmlFor={`${id}-purity`}>
+                  <span>{purityLabel}</span>
+                </label>
+                <div className="tool-molarity-control">
+                  <input
+                    id={`${id}-purity`}
+                    className="tool-molarity-number"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    aria-invalid={
+                      d.purity.trim() !== "" && parseNumber(d.purity) == null
+                    }
+                    value={d.purity}
+                    onChange={(event) =>
+                      set({ ...d, purity: event.target.value })
+                    }
+                  />
+                  <span className="tool-molarity-fixed-unit">%</span>
+                </div>
+              </div>
+            )}
           </div>
           {basis !== "massConcentration" && (
             <p className="tool-muted tool-molarity-volume-note">
@@ -276,81 +336,26 @@ export default function MolarityTool() {
               )}
             </p>
           )}
+          {weighed && (
+            <p className="tool-muted tool-molarity-volume-note">
+              {t(
+                "수화물은 라벨에 인쇄된 화학식량(FW)을 분자량으로 입력하면 결정수가 반영됩니다.",
+                "For a hydrate, enter the formula weight (FW) printed on the label as the molecular weight; it includes the water."
+              )}
+            </p>
+          )}
           {basis !== "amount" && target !== "mw" && (
-            <details className="tool-molarity-lookup">
-              <summary>
-                <Search size={17} />
-                <span>
-                  {t("시약에서 분자량 찾기", "Find reagent molecular weight")}
-                </span>
-                <ChevronDown size={16} />
-              </summary>
-              <div className="tool-molarity-lookup-body">
-                <form
-                  className="tool-molarity-search"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void lookup();
-                  }}
-                >
-                  <input
-                    type="search"
-                    aria-label={t("시약 검색", "Search reagent")}
-                    placeholder={t("시약명·화학식·CAS", "Name, formula or CAS")}
-                    value={d.query}
-                    onChange={(event) => {
-                      request.current++;
-                      setBusy(false);
-                      setFound(null);
-                      setError("");
-                      set({ ...d, query: event.target.value });
-                    }}
-                  />
-                  <button type="submit" disabled={busy || !d.query.trim()}>
-                    {busy ? t("검색 중…", "Searching…") : t("검색", "Search")}
-                  </button>
-                </form>
-                <ErrorMessage message={error} />
-                {found && (
-                  <div className="tool-molarity-found">
-                    <strong>{found.name}</strong>
-                    <span>
-                      {[found.molecularFormula, found.casNumber]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                    <div>
-                      <b>{format(found.molecularWeight)} g/mol</b>
-                      <button onClick={() => applyReagent(found)}>
-                        {t("이 분자량 적용", "Use this molecular weight")}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {d.recentReagents.length > 0 && (
-                  <div className="tool-molarity-recents">
-                    <p className="tool-muted">
-                      {t("최근 사용한 시약", "Recent reagents")}
-                    </p>
-                    {d.recentReagents.map((reagent, i) => (
-                      <button
-                        key={`${reagent.casNumber}-${i}`}
-                        onClick={() => applyReagent(reagent)}
-                      >
-                        <span>{reagent.name}</span>
-                        <span>{format(reagent.molecularWeight)} g/mol</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <p className="tool-muted">
-                  {t(
-                    "시약의 수화물·염 형태와 라벨 분자량을 확인한 뒤 적용하세요.",
-                    "Check the hydrate or salt form and molecular weight on your reagent label."
-                  )}
-                </p>
-              </div>
-            </details>
+            <ReagentLookup
+              onApply={(reagent) =>
+                set((old) => ({
+                  ...old,
+                  mw: plainNumber(reagent.molecularWeight),
+                  mwUnit: "g/mol",
+                  mwTyped: "",
+                  reagent,
+                }))
+              }
+            />
           )}
           {d.reagent && basis !== "amount" && target !== "mw" && (
             <div className="tool-molarity-selected">
@@ -375,79 +380,89 @@ export default function MolarityTool() {
           className="tool-molarity-result"
           aria-label={t("계산 결과", "Calculation result")}
         >
-          <div className="tool-molarity-result-heading">
+          <div className="tool-molarity-result-heading tool-molarity-heading">
             <h2>{labels[target]}</h2>
-            <button
-              disabled={!resultText}
-              aria-label={t("결과 복사", "Copy result")}
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(resultText);
-                  setCopied(resultText);
-                  setCopyError("");
-                } catch {
-                  setCopyError(
-                    t(
-                      "복사하지 못했습니다. 결과를 선택해 복사하세요.",
-                      "Could not copy. Select the result to copy it."
-                    )
-                  );
-                }
-              }}
-            >
-              {copied === resultText && resultText ? (
-                <Check size={18} />
-              ) : (
-                <Copy size={18} />
-              )}
-            </button>
+            {r && (
+              <CopyButton
+                text={`${plainNumber(r.shown)} ${unitOf(target)}`}
+                label={t("결과 복사", "Copy result")}
+              />
+            )}
           </div>
           <div className="tool-molarity-answer">
             <output aria-label={t("계산 결과", "Calculation result")}>
-              {result.value != null ? format(result.value) : "—"}
+              {r ? format(r.shown) : "—"}
             </output>
-            {target === "mw" ? (
-              <span>g/mol</span>
-            ) : (
-              <select
-                aria-label={t("결과 단위", "Result unit")}
-                value={unitOf(target)}
-                onChange={(event) => changeUnit(target, event.target.value)}
-              >
-                {molarityUnits[target].map((unit) => (
-                  <option key={unit}>{unit}</option>
-                ))}
-              </select>
-            )}
+            <select
+              aria-label={t("결과 단위", "Result unit")}
+              value={unitOf(target)}
+              onChange={(event) => changeUnit(target, event.target.value)}
+            >
+              {molarityUnits[target].map((unit) => (
+                <option key={unit}>{unit}</option>
+              ))}
+            </select>
           </div>
           <ErrorMessage message={result.error} />
-          <ErrorMessage message={copyError} />
-          {missing && (
-            <p className="tool-muted">
+          {result.incomplete && (
+            <p className="tool-muted" role="status">
               {t(
-                "입력값을 채우면 바로 계산됩니다.",
-                "Fill in the inputs to calculate instantly."
+                `${missing.join(", ")} 값을 입력하면 바로 계산됩니다.`,
+                `Enter the ${list(
+                  missing.map((label) => label.toLowerCase())
+                )} to calculate instantly.`
               )}
             </p>
           )}
-          {copied === resultText && resultText && (
-            <p role="status" className="tool-muted">
-              {t("결과를 복사했습니다.", "Result copied.")}
+          {r?.pure != null && (
+            <p className="tool-muted tool-molarity-note">
+              {t(
+                `순도 ${format(r.purity)}% 반영 · 순수 용질 ${format(
+                  r.pure
+                )} ${unitOf("mass")}`,
+                `Corrected for ${format(
+                  r.purity
+                )}% purity · pure solute ${format(r.pure)} ${unitOf("mass")}`
+              )}
             </p>
           )}
-          {result.value != null && target !== "mw" && (
+          {r && (
             <dl className="tool-molarity-equivalents">
               {molarityUnits[target]
                 .filter((unit) => unit !== unitOf(target))
                 .map((unit) => (
                   <div key={unit}>
                     <dt>{unit}</dt>
-                    <dd>
-                      {format(convertUnit(result.value!, unitOf(target), unit))}
-                    </dd>
+                    <dd>{format(fromMolarityBase(target, r.base, unit))}</dd>
                   </div>
                 ))}
             </dl>
+          )}
+          {sentence && (
+            <div className="tool-molarity-sentence">
+              <p>{sentence}</p>
+              <CopyButton
+                text={sentence}
+                label={t("제조 방법 복사", "Copy instruction")}
+              />
+            </div>
+          )}
+          {ctx?.sendTo && molar != null && molar > 0 && (
+            <div className="tool-actions">
+              <button
+                onClick={() =>
+                  ctx.sendTo?.("dilution", {
+                    kind: "concentration",
+                    value: Number(plainNumber(molar)),
+                    unit: unitOf("concentration"),
+                    label: name || labels.concentration,
+                    source: "molarity",
+                  })
+                }
+              >
+                {t("이 용액을 희석", "Dilute this solution")}
+              </button>
+            </div>
           )}
         </section>
       </div>

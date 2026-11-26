@@ -13,7 +13,14 @@ import type { ToolRepository } from "./repository";
 import type { Handoff, HandoffKind } from "./handoff";
 import { exportBlobPartAsFile } from "../../utils/fileExport";
 import i18n from "../../locales/i18n";
-import { exportFileName, parseNumber, plainNumber } from "./format";
+import {
+  exportFileName,
+  IncompleteInput,
+  need,
+  parseNumber,
+  plainNumber,
+  tsv,
+} from "./format";
 import { Check, Copy, X } from "lucide-react";
 export const ToolContext = createContext<{
   doc: ToolDocument;
@@ -148,16 +155,20 @@ export function CheckButton({
   checked,
   onChange,
   children,
+  label,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
-  children: ReactNode;
+  children?: ReactNode;
+  /** Accessible name when the visible text does not say what is checked. */
+  label?: string;
 }) {
   return (
     <button
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-label={label}
       className={`tool-check-button ${checked ? "checked" : ""}`}
       onClick={() => onChange(!checked)}
     >
@@ -245,14 +256,25 @@ const errorTranslations: Record<string, string> = {
   "Enter a non-negative speed or force":
     "0 이상의 회전수 또는 원심력을 입력하세요.",
   "Target exceeds stock concentration": "목표 농도가 원액 농도보다 높습니다.",
+  "Stock volume exceeds final volume": "원액 부피가 최종 부피보다 큽니다.",
+  "Dilution factor must be at least 1": "희석배수는 1 이상으로 입력하세요.",
+  "Purity must be between 0 and 100":
+    "순도는 0보다 크고 100 이하인 값으로 입력하세요.",
   "Invalid unit or value": "단위 또는 값을 확인하세요.",
   "Incompatible dimensions": "서로 변환할 수 없는 단위입니다.",
   "Molecular weight required": "양수 분자량을 입력하세요.",
   "Density (g/mL) required": "양수 밀도(g/mL)를 입력하세요.",
   "Below absolute zero": "절대영도보다 낮은 온도입니다.",
   "Invalid counts": "세포 수는 0 이상의 정수로 입력하세요.",
+  "Count must be a whole number from 0 to 9,999,999":
+    "0 이상 9,999,999 이하의 정수를 입력하세요.",
   "Invalid amount": "조성과 수량을 확인하세요.",
   "Reaction count must be an integer": "반응 수는 1 이상의 정수로 입력하세요.",
+  "Overage must be zero or more": "여유량은 0 이상으로 입력하세요.",
+  "Final concentration exceeds the stock":
+    "최종 농도가 원액 농도보다 높습니다.",
+  "Components exceed the reaction volume":
+    "성분 부피의 합이 반응 부피보다 큽니다.",
   "Concentration must be positive": "농도는 0보다 커야 합니다.",
   "Invalid concentration or volume": "농도와 부피를 확인하세요.",
   "Vessel count must be an integer": "용기 수는 정수여야 합니다.",
@@ -291,6 +313,14 @@ const errorTranslations: Record<string, string> = {
   "Enable exact alarms in system settings":
     "시스템 설정에서 정확한 알람을 허용하세요.",
   "Local storage failed": "기기 저장에 실패했습니다. 저장 공간을 확인하세요.",
+  "Enter a sequence": "서열을 입력하세요.",
+  "Sequence may contain only A, C, G and T":
+    "서열에는 A, C, G, T만 쓸 수 있습니다.",
+  "Sequence needs at least 2 bases": "서열은 2염기 이상이어야 합니다.",
+  "Length must be a whole number": "길이는 정수로 입력하세요.",
+  "Permanent delete is not available yet":
+    "영구 삭제를 아직 사용할 수 없습니다. 잠시 후 다시 시도하세요.",
+  "Connect to delete permanently": "영구 삭제는 온라인 상태에서 할 수 있습니다.",
   "Unsupported recurrence rule":
     "지원하지 않는 반복 규칙입니다. 일·주·월 반복과 종료일을 지원합니다.",
   "Unsupported timezone or all-day ICS format":
@@ -309,7 +339,7 @@ export function ErrorMessage({ message }: { message: string }) {
   // "Enter x" asks for an equation variable. Only a bare name is rewritten:
   // any other English sentence starting with "Enter" needs its own entry
   // above rather than a Korean suffix glued onto English words.
-  const variable = raw.match(/^Enter ([A-Za-z_]\w*)$/);
+  const variable = raw.match(/^Enter ([\p{L}_][\p{L}\p{N}_]*)$/u);
   const translated =
     errorTranslations[raw] ??
     (variable ? `${variable[1]} 값을 입력하세요.` : raw);
@@ -331,25 +361,9 @@ export const format = (n: number | null | undefined) =>
         i18n.language?.startsWith("ko") ? "ko-KR" : "en-US",
         { maximumSignificantDigits: 7 }
       ).format(n);
-/**
- * Thrown by `need` when a field is still empty. `calculate` reports it as
- * `incomplete` instead of an error: an empty field is a value yet to be
- * entered, and the screen should ask for it rather than complain.
- */
-export class IncompleteInput extends Error {
-  constructor() {
-    super("Incomplete input");
-    this.name = "IncompleteInput";
-  }
-}
-/** A required field's value as a number. Empty is incomplete, not zero. */
-export function need(raw: string | number | null | undefined): number {
-  if (raw == null || (typeof raw === "string" && !raw.trim()))
-    throw new IncompleteInput();
-  const value = typeof raw === "number" ? raw : parseNumber(raw);
-  if (value == null || !Number.isFinite(value)) throw Error("Invalid number");
-  return value;
-}
+// `need`, `IncompleteInput` and `tsv` live in format.ts so calculation engines
+// can use them without importing UI code.
+export { need, IncompleteInput, tsv };
 export { plainNumber };
 /** Copies text; false when the browser refuses (permissions, insecure page). */
 export async function copyText(text: string) {
@@ -647,11 +661,16 @@ export function CopyButton({
   text,
   label,
   children,
+  disabled = false,
+  className = "",
 }: {
   text: string | (() => string);
   /** Accessible name when the button shows only the icon. */
   label?: string;
   children?: ReactNode;
+  /** Nothing to copy yet. The button stays in place so the layout does not jump. */
+  disabled?: boolean;
+  className?: string;
 }) {
   const t = useText();
   const [state, setState] = useState<"" | "done" | "failed">("");
@@ -661,7 +680,8 @@ export function CopyButton({
     <>
       <button
         type="button"
-        className="tool-copy"
+        className={`tool-copy ${className}`.trim()}
+        disabled={disabled}
         aria-label={children ? undefined : label ?? t("복사", "Copy")}
         onClick={async () => {
           const copied = await copyText(

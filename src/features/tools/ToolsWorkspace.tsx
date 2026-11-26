@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { isToolId, toolById, type ToolCategory } from "./registry";
@@ -13,6 +13,8 @@ import { useText, ErrorMessage, download } from "./ui";
 import "./tools.css";
 import { isLabToolsEnabled } from "../../config/featureFlags";
 import { touchRecent } from "./catalog";
+import { pickRecord, spareDrafts } from "./records";
+import { recordToolUsage } from "./usage";
 import { readPreferences, updatePreferences } from "./preferences";
 import ToolCatalog from "./ToolCatalog";
 import SavedWorkList from "./SavedWorkList";
@@ -28,12 +30,15 @@ function ToolHeader({
   record,
   repo,
   showsStatus,
+  savable,
 }: {
   back: string | null;
   title: string;
   record: ToolRecord | undefined;
   repo: ToolRepository;
   showsStatus: boolean;
+  /** Whether this tool's draft can be kept as named work. */
+  savable: boolean;
 }) {
   const t = useText();
   const [open, setOpen] = useState(false);
@@ -41,10 +46,15 @@ function ToolHeader({
   const [status, detail] = {
     draft: [
       t("이 기기에만 보관", "On this device only"),
-      t(
-        "입력은 이 기기에 보관됩니다. 작업 저장을 선택하면 계정에 보관할 수 있습니다.",
-        "Inputs are kept on this device. Save work to keep a named copy in your account."
-      ),
+      savable
+        ? t(
+            "입력은 이 기기에 보관됩니다. 작업 저장을 선택하면 계정에 보관할 수 있습니다.",
+            "Inputs are kept on this device. Save work to keep a named copy in your account."
+          )
+        : t(
+            "입력은 이 기기에만 보관되며 로그아웃하면 지워집니다.",
+            "Inputs are kept on this device only and are cleared when you sign out."
+          ),
     ],
     saving: [
       t("저장 중", "Saving"),
@@ -168,15 +178,16 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
   const t = useText(),
     location = useLocation(),
     navigate = useNavigate();
-  const [repo] = useState(() => getToolRepository(ownerId)),
-    [, refresh] = useState(0);
+  const [repo] = useState(() => getToolRepository(ownerId));
+  // Re-renders on every repository change, including one that happens after
+  // the first render but before this component has subscribed.
+  useSyncExternalStore(repo.subscribe, () => repo.version);
   const [query, setQuery] = useState(""),
     [favoritesOnly, setFavoritesOnly] = useState(false),
     [error, setError] = useState("");
   const initializing = useRef(new Set<string>()),
     root = useRef<HTMLDivElement>(null),
     visited = useRef("");
-  useEffect(() => repo.subscribe(() => refresh((n) => n + 1)), [repo]);
   const parts = location.pathname.split("/").filter(Boolean),
     id = parts[2] ?? "",
     documentId = parts[3],
@@ -206,16 +217,7 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
         !row.doc.data._workspace
     )
     .map((row) => row.doc);
-  const record = repo.items.find(
-    (row) =>
-      !row.doc.deleted_at &&
-      row.doc.tool_id === id &&
-      (documentId
-        ? row.doc.id === documentId
-        : workspace
-        ? row.doc.data._workspace === true
-        : row.draft)
-  );
+  const record = pickRecord(repo.items, id, documentId, workspace);
   const preferences = readPreferences(repo);
   const title = tool ? t(tool.ko, tool.en) : t("실험 도구", "Lab tools");
   // A new page starts at its top with the heading focused, as a full page
@@ -242,7 +244,9 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
       reference ||
       savedView ||
       documentId ||
-      record ||
+      // Looked up now, not taken from the render: the cache may have finished
+      // loading since, and creating a draft then would hide the real one.
+      pickRecord(repo.items, id, undefined, workspace) ||
       initializing.current.has(id)
     )
       return;
@@ -279,8 +283,17 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
     workspace,
     ownerId,
   ]);
+  // Empty drafts left beside the one in use (see `pickRecord`) are removed.
+  useEffect(() => {
+    if (!repo.ready || !record?.draft) return;
+    for (const spare of spareDrafts(repo.items, id, record))
+      void repo.discard(spare.doc.id);
+  }, [repo, repo.ready, id, record]);
   // Opening a tool moves it to the head of "recently used". Waits for the
   // first pull like any other write to a fixed-id document.
+  useEffect(() => {
+    if (isToolId(id)) recordToolUsage(id, "open");
+  }, [id]);
   useEffect(() => {
     if (!repo.hydrated || !isToolId(id)) return;
     const { recent } = readPreferences(repo);
@@ -324,6 +337,7 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
           }`}
           record={record}
           repo={repo}
+          savable={tool?.kind === "project"}
           showsStatus={
             !!id && !reference && !savedView && repo.ready && !!(record || repo.error)
           }

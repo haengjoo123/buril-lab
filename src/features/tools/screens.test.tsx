@@ -5,6 +5,7 @@ import { ToolContext, ErrorMessage, csv, calculate, need } from "./ui";
 import { tools, type ToolDocument, type ToolId } from "./registry";
 import type { ToolRepository } from "./repository";
 import Equation from "./EquationTool";
+import CalculatorTool from "./CalculatorTool";
 import Calibration from "./CalibrationTool";
 import Culture from "./CultureTool";
 import ImageEditor from "./ImageTool";
@@ -30,6 +31,8 @@ import {
   nextAlarm,
   type Clock,
 } from "./clock";
+import PrimerTool from "./PrimerTool";
+import NucleicAcidTool from "./NucleicAcidTool";
 import { codons, aminoAcids } from "./library";
 import { elementNamesKo } from "./elementNames";
 const locale = vi.hoisted(() => ({ language: "ko" }));
@@ -53,11 +56,13 @@ describe("tool screen coverage", () => {
     "image-measurer": <ImageEditor />,
     "cell-culture": <Culture />,
     "cell-counter": <CellCounterTool />,
+    primer: <PrimerTool />,
+    "nucleic-acid": <NucleicAcidTool />,
     timer: <TimerTool />,
     stopwatch: <TimerTool stopwatch />,
     alarm: <AlarmTool />,
     counter: <CounterTool />,
-    calculator: <Equation calculator />,
+    calculator: <CalculatorTool />,
     "unit-converter": <UnitTool />,
     "custom-equation": <Equation />,
     "calibration-curve": <Calibration />,
@@ -180,6 +185,7 @@ describe("tool screen coverage", () => {
     expect(shown("Enter non-negative values")).toContain("0 이상의 값");
     // An equation variable is the one case that is composed.
     expect(shown("Enter rate_1")).toContain("rate_1 값을 입력하세요.");
+    expect(shown("Enter 농도")).toContain("농도 값을 입력하세요.");
     // An untranslated sentence is shown as written, not half-translated.
     expect(shown("Enter the missing thing")).toContain(
       ">Enter the missing thing<"

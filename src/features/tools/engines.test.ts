@@ -4,7 +4,7 @@ import { tools } from "./registry";
 import { searchTools, touchRecent, mergeRecent } from "./catalog";
 import { evaluateExpression, parseExpression } from "./expression";
 import { convertUnit, convertCentrifuge } from "./units";
-import { dilution, molarity, seeding, growthHours, cellCount } from "./labMath";
+import { dilution, seeding, growthHours, cellCount } from "./labMath";
 import { fitCalibration } from "./calibration";
 import {
   measure,
@@ -12,7 +12,14 @@ import {
   colorFraction,
   colorCoverage,
 } from "./geometry";
-import { plainNumber, parseNumber, exportFileName } from "./format";
+import {
+  plainNumber,
+  parseNumber,
+  exportFileName,
+  need,
+  IncompleteInput,
+  tsv,
+} from "./format";
 import {
   exportICS,
   importICS,
@@ -85,8 +92,7 @@ describe("laboratory calculations", () => {
     expect(() => convertUnit(1, "M", "g/L")).toThrow();
     expect(() => convertUnit(-300, "°C", "K")).toThrow();
   });
-  it("computes molarity and hemocytometer results", () => {
-    expect(molarity(58.44, 58.44, 1)).toBe(1);
+  it("computes hemocytometer results", () => {
     expect(cellCount([100, 100], [0, 0], 2, 0.0001)).toMatchObject({
       concentration: 2000000,
       viability: 100,
@@ -463,15 +469,22 @@ describe("tool list search and recently used", () => {
     expect(touchRecent(many, "x", 99)).toHaveLength(8);
     expect(mergeRecent(undefined, "junk")).toEqual([]);
   });
-  it("keeps every tool id the server accepts, and no other", () => {
-    const sql = readFileSync(
-      "supabase/migrations/20261109011725_personal_lab_tools.sql",
-      "utf8"
+  it("syncs only tool ids the server accepts", () => {
+    const allowedIn = (file: string) =>
+      [
+        ...readFileSync(`supabase/migrations/${file}`, "utf8")
+          .match(/tool_id in \(([^)]+)\)/)![1]
+          .matchAll(/'([^']+)'/g),
+      ].map((m) => m[1]);
+    // The newest migration lists exactly the tools in the registry.
+    expect(tools.map((tool) => tool.id).sort()).toEqual(
+      allowedIn("20261127090000_lab_tools_usage_and_purge.sql").sort()
     );
-    const allowed = [...sql.match(/tool_id in \(([^)]+)\)/)![1].matchAll(/'([^']+)'/g)]
-      .map((m) => m[1])
-      .sort();
-    expect(tools.map((tool) => tool.id).sort()).toEqual(allowed);
+    // A tool the first, already-applied list does not have must not send
+    // documents yet: it stays device-only until the newer migration is live.
+    const deployed = allowedIn("20261109011725_personal_lab_tools.sql");
+    for (const tool of tools)
+      if (!deployed.includes(tool.id)) expect(tool.kind, tool.id).toBe("quick");
   });
 });
 describe("typed numbers and export names", () => {
@@ -494,5 +507,22 @@ describe("typed numbers and export names", () => {
     expect(exportFileName("plate-labelling", " Run 3 / A:B ", "png", at)).toBe(
       "buril-plate-labelling-Run-3-A-B-20261127-0905.png"
     );
+  });
+});
+describe("values shared with engines and spreadsheets", () => {
+  it("reads a required value and tells empty from wrong", () => {
+    expect(need("2.5")).toBe(2.5);
+    expect(need(0)).toBe(0);
+    expect(() => need("")).toThrow(IncompleteInput);
+    expect(() => need(null)).toThrow(IncompleteInput);
+    expect(() => need("abc")).toThrow("Invalid number");
+  });
+  it("writes rows as tab-separated text without breaking cells", () => {
+    expect(
+      tsv([
+        ["Name", "Total"],
+        ["Buffer" + "\t" + "A", 4.35 * 100],
+      ])
+    ).toBe("Name\tTotal\nBuffer A\t435");
   });
 });

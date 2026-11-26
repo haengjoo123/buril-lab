@@ -6,6 +6,7 @@ import { ToolContext } from "./ui";
 import type { ToolDocument } from "./registry";
 import type { ToolRepository } from "./repository";
 import Equation from "./EquationTool";
+import CalculatorTool from "./CalculatorTool";
 import Plate from "./PlateTool";
 import UnitTool from "./UnitTool";
 import CounterTool from "./CounterTool";
@@ -160,7 +161,7 @@ describe("tool input workflows", () => {
         .value
     ).toBe("3");
   });
-  it("prepares a 10 mM solution, preserves quantities on unit changes and supports mole-based calculations", async () => {
+  it("prepares a 10 mM solution, keeps typed numbers on unit changes and supports mole-based calculations", async () => {
     const { element } = await mount(<MolarityTool />);
     const select = async (label: string, value: string) =>
       act(() => {
@@ -171,12 +172,17 @@ describe("tool input workflows", () => {
         control.dispatchEvent(new Event("change", { bubbles: true }));
       });
     await act(() => button(element, "Mass").click());
-    await input(field(element, "Molarity"), "0.01");
-    await input(field(element, "Final volume"), "0.1");
+    await input(field(element, "Molarity"), "10");
+    await input(field(element, "Final volume"), "100");
+    // 10 M × 58.44 g/mol × 100 L while the units are still M and L.
+    expect(element.querySelector("output")?.textContent).toBe("58,440");
+    // A unit change never rewrites the number; the result follows the unit.
     await select("Molarity unit", "mM");
     expect(field(element, "Molarity").value).toBe("10");
     await select("Final volume unit", "mL");
     expect(field(element, "Final volume").value).toBe("100");
+    // 0.01 M × 58.44 g/mol × 0.1 L = 0.05844 g.
+    expect(element.querySelector("output")?.textContent).toBe("0.05844");
     await select("Result unit", "mg");
     expect(element.querySelector("output")?.textContent).toBe("58.44");
     await act(() => button(element, "From moles").click());
@@ -188,7 +194,7 @@ describe("tool input workflows", () => {
     await input(field(element, "Amount"), "0");
     expect(element.querySelector("output")?.textContent).toBe("0");
   });
-  it("previews a matched reagent before applying its molecular weight and reuses it from recent reagents", async () => {
+  it("previews a matched reagent before applying its molecular weight and unlinks it when the weight is edited", async () => {
     vi.mocked(searchChemical).mockResolvedValueOnce({
       id: "water",
       name: "Water",
@@ -210,18 +216,17 @@ describe("tool input workflows", () => {
     expect(
       element.querySelector(".tool-molarity-found")?.textContent
     ).toContain("7732-18-5");
-    expect(getDoc().data.mw).toBe("58.44");
+    // Finding a reagent changes nothing until it is applied. (The search
+    // text is no longer kept in the document, so the field is what to check.)
+    expect(field(element, "Molecular weight").value).toBe("58.44");
     await act(() => button(element, "Use this molecular weight").click());
     expect(getDoc().data.mw).toBe("18.015");
-    expect(getDoc().data.recentReagents).toHaveLength(1);
+    expect(getDoc().data.reagent).toMatchObject({ name: "Water" });
+    // Recent reagents belong to the account now (ReagentLookup), not to this
+    // document; molarity.interactions.test.tsx covers reusing one.
+    expect(getDoc().data.recentReagents).toBeUndefined();
     await input(field(element, "Molecular weight"), "20");
     expect(getDoc().data.reagent).toBeNull();
-    await act(() =>
-      element
-        .querySelector<HTMLButtonElement>(".tool-molarity-recents button")!
-        .click()
-    );
-    expect(getDoc().data.mw).toBe("18.015");
   });
   it("filters conversion units and asks for molecular weight only when needed", async () => {
     const { element } = await mount(<UnitTool />);
@@ -256,7 +261,7 @@ describe("tool input workflows", () => {
     vi.unstubAllGlobals();
   });
   it("continues a calculation from an answer without floating-point residue", async () => {
-    const { element, getDoc } = await mount(<Equation calculator />, {
+    const { element, getDoc } = await mount(<CalculatorTool />, {
       expression: "0.1+0.2",
     });
     await act(() => button(element, "=").click());

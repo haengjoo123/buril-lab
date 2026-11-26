@@ -42,3 +42,36 @@ export function parseNumber(raw: string): number | null {
   const value = Number(normal);
   return Number.isFinite(value) ? value : null;
 }
+
+/**
+ * Thrown by `need` when a field is still empty. `calculate` (ui.tsx) reports
+ * it as `incomplete` instead of an error: an empty field is a value yet to be
+ * entered, and the screen should ask for it rather than complain.
+ */
+export class IncompleteInput extends Error {
+  constructor() {
+    super("Incomplete input");
+    this.name = "IncompleteInput";
+  }
+}
+/** A required field's value as a number. Empty is incomplete, not zero. */
+export function need(raw: string | number | null | undefined): number {
+  if (raw == null || (typeof raw === "string" && !raw.trim()))
+    throw new IncompleteInput();
+  const value = typeof raw === "number" ? raw : parseNumber(raw);
+  if (value == null || !Number.isFinite(value)) throw Error("Invalid number");
+  return value;
+}
+/** Rows as tab-separated text, the form spreadsheets take on paste. */
+export const tsv = (rows: (string | number)[][]) =>
+  rows
+    .map((row) =>
+      row
+        .map((cell) =>
+          typeof cell === "number"
+            ? plainNumber(cell)
+            : String(cell).replace(/[\t\r\n]+/g, " ")
+        )
+        .join("\t")
+    )
+    .join("\n");

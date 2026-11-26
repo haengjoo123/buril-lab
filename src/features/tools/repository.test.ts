@@ -11,6 +11,8 @@ const cloud = vi.hoisted(() => ({
   rpcWaiting: 0,
   rpcCalls: 0,
   pulls: 0,
+  purgeAvailable: true,
+  removed: [] as string[],
 }));
 vi.mock("../../services/supabaseClient", () => ({
   supabase: {
@@ -20,7 +22,24 @@ vi.mock("../../services/supabaseClient", () => ({
         return { data: { user: { id: cloud.owner } } };
       },
     },
-    rpc: async (_name: string, p: Record<string, unknown>) => {
+    storage: {
+      from: () => ({
+        remove: async (paths: string[]) => {
+          cloud.removed.push(...paths);
+          return { data: null, error: null };
+        },
+      }),
+    },
+    rpc: async (name: string, p: Record<string, unknown>) => {
+      if (name === "purge_tool_document") {
+        const target = cloud.docs.get(String(p.p_id));
+        if (!cloud.purgeAvailable)
+          return { error: { code: "PGRST202", message: "missing" }, data: null };
+        if (!target?.deleted_at)
+          return { error: { code: "P0002", message: "not in trash" }, data: null };
+        cloud.docs.delete(String(p.p_id));
+        return { data: null, error: null };
+      }
       cloud.rpcCalls += 1;
       if (cloud.rpcGate) {
         cloud.rpcWaiting += 1;
@@ -40,6 +59,7 @@ vi.mock("../../services/supabaseClient", () => ({
         schema_version: 1,
         engine_version: "1",
         updated_at: new Date().toISOString(),
+        deleted_at: (p.p_deleted_at as string | null) ?? null,
       };
       cloud.docs.set(id, doc);
       return { data: doc, error: null };
@@ -98,6 +118,8 @@ beforeEach(async () => {
   cloud.rpcWaiting = 0;
   cloud.rpcCalls = 0;
   cloud.pulls = 0;
+  cloud.purgeAvailable = true;
+  cloud.removed = [];
   vi.stubGlobal("navigator", {
     get onLine() {
       return cloud.online;
@@ -433,8 +455,11 @@ describe("batched writes", () => {
     );
     expect(cloud.rpcCalls - sent).toBe(1);
     expect(cloud.pulls).toBe(pulled);
+    // An explicit sync fetches; if a push is still in flight it runs right after.
     await repo.sync();
-    expect(cloud.pulls).toBe(pulled + 1);
+    await vi.waitFor(() => expect(cloud.pulls).toBe(pulled + 1), {
+      timeout: 4000,
+    });
     repo.close();
   });
   it("writes pending edits to the device at once when asked", async () => {
@@ -476,6 +501,80 @@ describe("batched writes", () => {
     await reopened.init();
     expect(reopened.items.map((row) => row.doc.title)).toEqual(["Keep"]);
     reopened.close();
+    repo.close();
+  });
+});
+describe("permanent delete", () => {
+  const trashed = async (repo: ToolRepository, data = {}) => {
+    // A second document made right after another waits for the follow-up
+    // sync (about a second), hence the longer limits.
+    const doc = await repo.create("gel-blot", "Old gel", data);
+    await vi.waitFor(() => expect(cloud.docs.has(doc.id)).toBe(true), {
+      timeout: 4000,
+    });
+    await repo.update(doc.id, { deleted_at: new Date().toISOString() });
+    await vi.waitFor(
+      () => expect(cloud.docs.get(doc.id)?.deleted_at).toBeTruthy(),
+      { timeout: 4000 }
+    );
+    return doc;
+  };
+  it("removes trashed work from the server, this device and its image", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const doc = await trashed(repo, { asset: "img-1" });
+    await repo.purge(doc.id);
+    expect(cloud.docs.has(doc.id)).toBe(false);
+    expect(cloud.removed).toEqual(["u1/img-1"]);
+    expect(repo.items.some((row) => row.doc.id === doc.id)).toBe(false);
+    const reopened = new ToolRepository("u1");
+    await reopened.init();
+    expect(reopened.items.some((row) => row.doc.id === doc.id)).toBe(false);
+    reopened.close();
+    repo.close();
+  });
+  it("keeps an image a duplicate still shows, and refuses work that is not in the trash", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const copy = await repo.create("gel-blot", "Copy", { asset: "img-1" });
+    const doc = await trashed(repo, { asset: "img-1" });
+    await repo.purge(copy.id); // not trashed: nothing happens
+    expect(repo.items.some((row) => row.doc.id === copy.id)).toBe(true);
+    await repo.purge(doc.id);
+    expect(cloud.removed).toEqual([]);
+    expect(cloud.docs.has(doc.id)).toBe(false);
+    repo.close();
+  });
+  it("says so when the server cannot purge yet, and leaves the work in the trash", async () => {
+    cloud.purgeAvailable = false;
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const doc = await trashed(repo);
+    await expect(repo.purge(doc.id)).rejects.toThrow(
+      "Permanent delete is not available yet"
+    );
+    expect(repo.items.some((row) => row.doc.id === doc.id)).toBe(true);
+    expect(cloud.docs.has(doc.id)).toBe(true);
+    repo.close();
+  });
+  it("forgets work that was purged on another device", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const kept = await repo.create("notes", "Kept", {});
+    const gone = await repo.create("notes", "Purged elsewhere", {});
+    await vi.waitFor(() => expect(cloud.docs.size).toBe(2), { timeout: 4000 });
+    await vi.waitFor(
+      () =>
+        expect(repo.items.every((row) => row.status === "synced")).toBe(true),
+      { timeout: 4000 }
+    );
+    cloud.docs.delete(gone.id);
+    await repo.sync();
+    expect(repo.items.map((row) => row.doc.id)).toEqual([kept.id]);
+    // An empty answer is not taken as "everything was deleted".
+    cloud.docs.clear();
+    await repo.sync();
+    expect(repo.items.map((row) => row.doc.id)).toEqual([kept.id]);
     repo.close();
   });
 });

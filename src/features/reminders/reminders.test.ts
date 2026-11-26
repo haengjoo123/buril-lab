@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { remindersCopy } from './copy';
+import { NOTIFICATION_BUDGET, notificationId, toolNotificationBudget } from './deviceNotifications';
 import { DEFAULT_REMINDER_SETTINGS, MAX_EXPIRY_REMINDERS, kstMorning, localTimeForKstHour, normalizeReminderSettings, planReminders } from './reminderPlan';
 
 const copy = remindersCopy('ko').reminder;
@@ -48,6 +49,26 @@ describe('reminder planning', () => {
             expect.objectContaining({ key: 'inspection:daily', at: null, dailyAtKstHour: 9 }),
         ]);
         expect(planReminders([{ id: 'a', name: 'A', expiryDate: '2027-01-01' }], DEFAULT_REMINDER_SETTINGS, copy, { now: NOW })).toEqual([]);
+    });
+
+    it('leaves room for lab tool alerts within the 64 notifications iOS keeps pending', () => {
+        const { iosPendingLimit, expiryReminders, inspectionReminders, tools } = NOTIFICATION_BUDGET;
+        expect(iosPendingLimit).toBe(64);
+        expect(expiryReminders + inspectionReminders + tools).toBeLessThanOrEqual(64);
+        expect(toolNotificationBudget('ios')).toBe(tools);
+        expect(MAX_EXPIRY_REMINDERS).toBe(expiryReminders);
+        // With every reminder switched on and more bottles than fit, the plan stays within its share.
+        const items = Array.from({ length: 80 }, (_, index) => ({
+            id: String(index),
+            name: `R${index}`,
+            expiryDate: new Date(Date.UTC(2027, 0, 1 + index)).toISOString().slice(0, 10),
+        }));
+        const planned = planReminders(items, { expiry: true, leadDays: [7, 0], dailyInspection: true }, copy, { now: NOW, inspectionAvailable: true });
+        expect(planned).toHaveLength(expiryReminders + inspectionReminders);
+        expect(planned.length + toolNotificationBudget('ios')).toBeLessThanOrEqual(64);
+        // Both features draw notification ids from the same hash; reminders keep theirs apart with a prefix.
+        expect(notificationId('reminder:inspection:daily')).toBe(notificationId('reminder:inspection:daily'));
+        expect(notificationId('reminder:inspection:daily')).not.toBe(notificationId('inspection:daily'));
     });
 
     it('cleans stored settings and converts the Korean hour to device time', () => {

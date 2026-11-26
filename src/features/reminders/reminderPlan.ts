@@ -5,8 +5,10 @@
  *
  * Reminders fire at 09:00 Korea time. iOS keeps at most 64 pending local
  * notifications per app and lab tool timers use part of that, so the number
- * of expiry reminders is capped and the soonest win.
+ * of expiry reminders is capped (see NOTIFICATION_BUDGET) and the soonest win.
  */
+import { NOTIFICATION_BUDGET } from './deviceNotifications';
+
 export interface ReminderSettings {
     expiry: boolean;
     /** Days before the expiry date to remind; 0 is the expiry day itself. */
@@ -20,7 +22,7 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
     dailyInspection: false,
 };
 
-export const MAX_EXPIRY_REMINDERS = 30;
+export const MAX_EXPIRY_REMINDERS = NOTIFICATION_BUDGET.expiryReminders;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REMIND_HOUR_KST = 9;

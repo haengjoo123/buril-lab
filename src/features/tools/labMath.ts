@@ -13,24 +13,30 @@ export function dilution(
   if (target > stock) throw Error("Target exceeds stock concentration");
   if (!Number.isInteger(steps) || steps < 1 || steps > 100)
     throw Error("Steps: 1–100");
-  if (steps > 1 && factor <= 1)
+  if (steps > 1 && !(factor > 1 && Number.isFinite(factor)))
     throw Error("Serial dilution factor must exceed 1");
-  return {
-    stockVolume: (target * volume) / stock,
-    diluentVolume: volume - (target * volume) / stock,
-    factor: stock / target,
-    series: Array.from({ length: steps }, (_, i) => ({
+  const stockVolume = (target * volume) / stock,
+    transfer = steps > 1 ? volume / factor : 0;
+  // Tube 1 is made from the stock at the target concentration. Every later
+  // tube takes `transfer` from the tube before it, so each tube but the last
+  // ends up short of that much.
+  const series = Array.from({ length: steps }, (_, i) => {
+    const taken = i === 0 ? stockVolume : transfer;
+    return {
       step: i + 1,
       concentration: target / factor ** i,
-      transferVolume: volume / factor,
-      diluentVolume: volume - volume / factor,
-    })),
+      transferVolume: taken,
+      diluentVolume: volume - taken,
+      remainingVolume: i === steps - 1 ? volume : volume - transfer,
+    };
+  });
+  return {
+    stockVolume,
+    diluentVolume: volume - stockVolume,
+    factor: stock / target,
+    series,
+    totalDiluent: series.reduce((sum, row) => sum + row.diluentVolume, 0),
   };
-}
-export function molarity(massG: number, mw: number, volumeL: number) {
-  positive(mw, volumeL);
-  if (massG < 0 || !Number.isFinite(massG)) throw Error("Invalid mass");
-  return massG / mw / volumeL;
 }
 export function mixAmounts(
   rows: { name: string; amount: number; unit: string }[],

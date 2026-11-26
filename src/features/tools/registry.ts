@@ -19,8 +19,9 @@ interface ToolMeta {
   /** Other words people search by, in either language. */
   keywords: readonly string[];
 }
-// The ids are also the server's allowed `tool_id` values (CHECK constraint in
-// the personal_lab_tools migration). A new id needs a migration first.
+// A tool whose documents reach the server (workspace, project) must have its id
+// in the server's `tool_id` CHECK constraint, so a new synced id needs a
+// migration first. `engines.test.ts` checks this against the migration files.
 export const tools = [
   {
     id: "dilution",
@@ -111,6 +112,29 @@ export const tools = [
     descKo: "수동 계수와 생존율",
     descEn: "Manual counts and viability",
     keywords: ["혈구계", "혈구계산판", "hemocytometer", "Neubauer", "트리판", "trypan", "생존율", "viability"],
+  },
+  // The two tools below are newer than the server's first list of tool ids.
+  // They are `quick` (device-only, nothing sent) until the migration that adds
+  // their ids has been applied; then they can become `project`.
+  {
+    id: "primer",
+    category: "Lab",
+    kind: "quick",
+    ko: "프라이머 · 올리고",
+    en: "Primer / Oligo",
+    descKo: "Tm · GC · 분자량 · 원액",
+    descEn: "Tm, GC, molecular weight and stocks",
+    keywords: ["Tm", "annealing", "올리고", "oligo", "PCR", "역상보", "reverse complement", "재현탁", "resuspend"],
+  },
+  {
+    id: "nucleic-acid",
+    category: "Lab",
+    kind: "quick",
+    ko: "핵산 정량",
+    en: "Nucleic Acid",
+    descKo: "A260 농도 · 몰 환산 · 라이게이션",
+    descEn: "A260, moles and ligation",
+    keywords: ["A260", "A280", "NanoDrop", "나노드롭", "pmol", "카피 수", "copy number", "ligation", "라이게이션", "DNA", "RNA"],
   },
   {
     id: "timer",

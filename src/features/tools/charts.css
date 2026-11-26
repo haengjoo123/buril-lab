@@ -1,0 +1,549 @@
+/*
+ * Charts for the lab tools. Colours are the validated reference palette
+ * (categorical order blue, orange, aqua, yellow, magenta, green; one-hue blue
+ * ramp for magnitude; blue ↔ red for polarity), stepped separately for the dark
+ * surface. Text always uses the ink tokens, never a series colour.
+ */
+.tools-workspace,
+.tool-chart {
+  --chart-surface: var(--tool-panel, #ffffff);
+  --chart-ink: #0b0b0b;
+  --chart-ink-2: #52514e;
+  --chart-muted: #6f6d68;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-other: #898781;
+  --chart-negative: #d03b3b;
+  --chart-track: #cde2fb;
+  --chart-good: #0ca30c;
+  --chart-warning: #fab219;
+  --chart-critical: #d03b3b;
+  /* One hue, more is darker; the lightest step recedes toward the surface. */
+  --chart-seq-0: #cde2fb;
+  --chart-seq-1: #9ec5f4;
+  --chart-seq-2: #6da7ec;
+  --chart-seq-3: #3987e5;
+  --chart-seq-4: #256abf;
+  --chart-seq-5: #184f95;
+  --chart-seq-6: #0d366b;
+}
+.tool-chart {
+  margin: 0 0 18px;
+  color: var(--chart-ink);
+  font-variant-numeric: tabular-nums;
+}
+.dark .tools-workspace,
+.dark .tool-chart {
+  --chart-ink: #f0efec;
+  --chart-ink-2: #c3c2b7;
+  --chart-muted: #a3a199;
+  --chart-grid: #2a3550;
+  --chart-axis: #475569;
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #0ca30c;
+  --chart-other: #898781;
+  --chart-negative: #e66767;
+  --chart-track: #1c3a63;
+  /* On a dark surface more is lighter; the darkest step is the one that recedes. */
+  --chart-seq-0: #0d366b;
+  --chart-seq-1: #184f95;
+  --chart-seq-2: #256abf;
+  --chart-seq-3: #3987e5;
+  --chart-seq-4: #6da7ec;
+  --chart-seq-5: #9ec5f4;
+  --chart-seq-6: #cde2fb;
+}
+.tool-chart > figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-bottom: 10px;
+}
+.tool-chart > figcaption > strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+.tool-chart > figcaption > span,
+.tool-chart-note {
+  font-size: 12px;
+  color: var(--chart-ink-2);
+}
+.tool-chart-note {
+  margin: 8px 0 0;
+}
+
+/* ---- Fills by palette slot. Labels inside a fill are white, or near-black on yellow. ---- */
+.tool-chart-fill-1 { background: var(--chart-1); fill: var(--chart-1); color: #fff; }
+.tool-chart-fill-2 { background: var(--chart-2); fill: var(--chart-2); color: #fff; }
+.tool-chart-fill-3 { background: var(--chart-3); fill: var(--chart-3); color: #fff; }
+.tool-chart-fill-4 { background: var(--chart-4); fill: var(--chart-4); color: #0b0b0b; }
+.tool-chart-fill-5 { background: var(--chart-5); fill: var(--chart-5); color: #fff; }
+.tool-chart-fill-6 { background: var(--chart-6); fill: var(--chart-6); color: #fff; }
+.tool-chart-fill-other { background: var(--chart-other); fill: var(--chart-other); color: #fff; }
+
+/* ---- Legend: a swatch names each series; the text stays in ink. ---- */
+.tool-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--chart-ink-2);
+}
+.tool-chart-legend > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tool-chart-legend i {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.tool-chart-legend i[data-shape="line"] {
+  height: 2px;
+  width: 16px;
+  border-radius: 1px;
+}
+.tool-chart-legend i[data-shape="dot"] {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.tool-chart-legend b {
+  font-weight: 600;
+  color: var(--chart-ink);
+}
+
+/* ---- Segmented bar: one whole split into parts. 2px of surface separates the blocks. ---- */
+.tool-chart-segments {
+  display: flex;
+  gap: 2px;
+  height: 28px;
+}
+.tool-chart-segments[data-thin] {
+  height: 8px;
+}
+.tool-chart-seg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 3px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  outline: none;
+}
+.tool-chart-segments[data-thin] > .tool-chart-seg {
+  padding: 0;
+  border-radius: 999px;
+}
+.tool-chart-seg:hover,
+.tool-chart-seg:focus-visible {
+  filter: brightness(1.12);
+}
+.tool-chart-seg:focus-visible {
+  box-shadow: 0 0 0 2px var(--chart-surface), 0 0 0 4px var(--chart-ink);
+}
+
+/* ---- Tooltip shared by bars, segments and cells: the value leads. ---- */
+[data-chart-tip] {
+  position: relative;
+}
+[data-chart-tip]:hover::after,
+[data-chart-tip]:focus-visible::after {
+  content: attr(data-chart-tip);
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.35;
+  white-space: pre;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgb(15 23 42 / 22%);
+}
+.dark [data-chart-tip]:hover::after,
+.dark [data-chart-tip]:focus-visible::after {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+[data-chart-tip][data-tip-edge="start"]::after {
+  left: 0;
+  transform: none;
+}
+[data-chart-tip][data-tip-edge="end"]::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* ---- Meter: one ratio against a limit. The track is a lighter step of the fill's hue. ---- */
+.tool-chart-meter-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--chart-ink-2);
+}
+.tool-chart-meter-head > strong {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--chart-ink);
+}
+.tool-chart-meter-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chart-track);
+}
+.tool-chart-meter-track > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--chart-1);
+  transition: width 0.25s ease;
+}
+.tool-chart-meter[data-tone="good"] .tool-chart-meter-track { background: #cfecd0; }
+.tool-chart-meter[data-tone="good"] .tool-chart-meter-track > span { background: var(--chart-good); }
+.tool-chart-meter[data-tone="warning"] .tool-chart-meter-track { background: #fdebc2; }
+.tool-chart-meter[data-tone="warning"] .tool-chart-meter-track > span { background: var(--chart-warning); }
+.tool-chart-meter[data-tone="critical"] .tool-chart-meter-track { background: #f6d2d2; }
+.tool-chart-meter[data-tone="critical"] .tool-chart-meter-track > span { background: var(--chart-critical); }
+.dark .tool-chart-meter[data-tone="good"] .tool-chart-meter-track { background: #14401a; }
+.dark .tool-chart-meter[data-tone="warning"] .tool-chart-meter-track { background: #4a3a10; }
+.dark .tool-chart-meter[data-tone="critical"] .tool-chart-meter-track { background: #4a1c1c; }
+.tool-chart-meter-track > i {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--chart-ink);
+  box-shadow: 0 0 0 2px var(--chart-surface);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool-chart-meter-track > span {
+    transition: none;
+  }
+}
+
+/* ---- Bar list: a name, a bar and a figure per row, bars on one baseline. ---- */
+.tool-chart-bars {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+.tool-chart-bars > span:nth-child(3n + 1) {
+  color: var(--chart-ink-2);
+  overflow-wrap: anywhere;
+}
+.tool-chart-bars > span:nth-child(3n) {
+  font-weight: 600;
+  text-align: right;
+}
+.tool-chart-bar-track {
+  position: relative;
+  height: 14px;
+  outline: none;
+}
+.tool-chart-bar-track > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--chart-1);
+}
+.tool-chart-bar-track[data-muted] > i {
+  background: var(--chart-other);
+}
+.tool-chart-bar-track[data-negative] > i {
+  border-radius: 4px 0 0 4px;
+  background: var(--chart-negative);
+}
+.tool-chart-bar-track > b {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--chart-axis);
+}
+.tool-chart-bar-track:focus-visible {
+  box-shadow: 0 0 0 2px var(--chart-surface), 0 0 0 4px var(--chart-ink);
+  border-radius: 4px;
+}
+@media (max-width: 480px) {
+  /* The bar drops under the name where the row is narrow. */
+  .tool-chart-bars {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+  .tool-chart-bars > .tool-chart-bar-track {
+    grid-column: 1 / -1;
+    order: 1;
+  }
+  .tool-chart-bars[data-rows] {
+    row-gap: 4px;
+  }
+}
+
+/* ---- Plot (line / scatter) ---- */
+.tool-chart-plot {
+  position: relative;
+}
+.tool-chart-plot > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  outline: none;
+  touch-action: pan-y;
+}
+.tool-chart-plot > svg:focus-visible {
+  box-shadow: 0 0 0 2px var(--chart-ink);
+  border-radius: 6px;
+}
+.tool-chart-plot text {
+  fill: var(--chart-muted);
+  font-size: 11px;
+}
+.tool-chart-plot .tool-chart-axis-title {
+  fill: var(--chart-ink-2);
+  font-size: 12px;
+}
+.tool-chart-plot .tool-chart-label {
+  fill: var(--chart-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tool-chart-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+.tool-chart-baseline {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+}
+.tool-chart-rule {
+  stroke: var(--chart-ink-2);
+  stroke-width: 1;
+}
+.tool-chart-crosshair {
+  stroke: var(--chart-ink-2);
+  stroke-width: 1;
+}
+.tool-chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.tool-chart-area {
+  opacity: 0.1;
+  stroke: none;
+}
+.tool-chart-dot {
+  stroke: var(--chart-surface);
+  stroke-width: 2;
+}
+.tool-chart-stroke-1 { stroke: var(--chart-1); }
+.tool-chart-stroke-2 { stroke: var(--chart-2); }
+.tool-chart-stroke-3 { stroke: var(--chart-3); }
+.tool-chart-stroke-4 { stroke: var(--chart-4); }
+.tool-chart-stroke-5 { stroke: var(--chart-5); }
+.tool-chart-stroke-6 { stroke: var(--chart-6); }
+.tool-chart-stroke-other { stroke: var(--chart-other); }
+.tool-chart-tooltip {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  min-width: 96px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgb(15 23 42 / 22%);
+}
+.dark .tool-chart-tooltip {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.tool-chart-tooltip > em {
+  display: block;
+  margin-bottom: 2px;
+  font-style: normal;
+  opacity: 0.75;
+}
+.tool-chart-tooltip > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.tool-chart-tooltip > span > i {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+.tool-chart-tooltip > span > b {
+  font-weight: 650;
+}
+
+/* ---- Heat cells and their scale: one hue, light to dark (reversed on the dark surface). ---- */
+.tool-chart-heat-0 { background: var(--chart-seq-0) !important; color: #0b0b0b !important; }
+.tool-chart-heat-1 { background: var(--chart-seq-1) !important; color: #0b0b0b !important; }
+.tool-chart-heat-2 { background: var(--chart-seq-2) !important; color: #0b0b0b !important; }
+.tool-chart-heat-3 { background: var(--chart-seq-3) !important; color: #ffffff !important; }
+.tool-chart-heat-4 { background: var(--chart-seq-4) !important; color: #ffffff !important; }
+.tool-chart-heat-5 { background: var(--chart-seq-5) !important; color: #ffffff !important; }
+.tool-chart-heat-6 { background: var(--chart-seq-6) !important; color: #ffffff !important; }
+.dark .tool-chart-heat-0,
+.dark .tool-chart-heat-1,
+.dark .tool-chart-heat-2 { color: #ffffff !important; }
+.dark .tool-chart-heat-3 { color: #ffffff !important; }
+.dark .tool-chart-heat-4,
+.dark .tool-chart-heat-5,
+.dark .tool-chart-heat-6 { color: #0b0b0b !important; }
+.tool-chart-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--chart-ink-2);
+}
+.tool-chart-scale > div {
+  display: flex;
+  gap: 2px;
+}
+.tool-chart-scale > div > i {
+  width: 22px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* ---- Transfer chain: vessels in a row and what moves between them. ---- */
+.tool-chart-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tool-chart-chain > li {
+  display: flex;
+  align-items: flex-start;
+}
+.tool-chart-chain-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 68px;
+  text-align: center;
+}
+.tool-chart-chain-vessel {
+  display: grid;
+  place-items: center;
+  min-width: 38px;
+  height: 46px;
+  padding: 0 6px;
+  border: 1px solid var(--chart-axis);
+  border-radius: 4px 4px 16px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--chart-ink);
+}
+.tool-chart-chain-node > b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--chart-ink);
+  font-variant-numeric: tabular-nums;
+}
+.tool-chart-chain-node > small {
+  font-size: 12px;
+  color: var(--chart-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.tool-chart-chain-move {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 46px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--chart-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.tool-chart-chain-move > em {
+  font-style: normal;
+  white-space: nowrap;
+}
+.tool-chart-chain-move > i {
+  font-style: normal;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--chart-muted);
+}
+.tool-chart-chain + .tool-chart-scale {
+  margin-top: 12px;
+}
+
+/* ---- Table view: every value a chart shows is also here. ---- */
+.tool-chart-table {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.tool-chart-table > summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--chart-ink-2);
+  font-size: 12px;
+}
+.tool-chart-table table {
+  margin-top: 8px;
+}
+
+/* A small key in a series colour, for marking the same entity elsewhere on the page. */
+.tool-chart-key {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--chart-surface);
+}

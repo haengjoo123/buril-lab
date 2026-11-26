@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { notificationId } from '../tools/notifications';
+import { notificationId } from './deviceNotifications';
 import { localTimeForKstHour, normalizeReminderSettings, type PlannedReminder, type ReminderSettings } from './reminderPlan';
 
 const STORAGE_PREFIX = 'buril-reminders:v1:';

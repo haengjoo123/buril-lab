@@ -84,6 +84,9 @@ const PERSIST_DELAY_MS = 400;
 const PERSIST_MAX_WAIT_MS = 2000;
 const SYNC_DELAY_MS = 1500;
 const SYNC_MAX_WAIT_MS = 10000;
+// The API returns at most this many rows per request by default; a full page
+// may be a truncated answer.
+const PULL_ROW_CAP = 1000;
 const messageOf = (e: unknown) =>
   e && typeof e === "object" && "message" in e ? String(e.message) : String(e);
 const dbPromise = () =>
@@ -202,8 +205,15 @@ export class ToolRepository {
       this.listeners.delete(listener);
     };
   };
+  /**
+   * Bumped on every change. A subscriber compares it after subscribing, so a
+   * change that lands between its first read and its subscription is not
+   * missed (the cache finishing its load right then used to be).
+   */
+  version = 0;
   private emit() {
     this.items = [...this.items];
+    this.version += 1;
     this.listeners.forEach((l) => l());
   }
   private async persist(item: Local) {
@@ -390,6 +400,69 @@ export class ToolRepository {
     void this.sync();
   }
   /**
+   * Forgets documents that were permanently deleted on another device: synced
+   * here, unchanged since, and no longer on the server. Skipped when the
+   * server's answer may be incomplete (the API's row cap) or is empty while
+   * this device holds synced work, where a wrong guess would delete it.
+   */
+  private async dropPurged(server: ToolDocument[]) {
+    const present = new Set(server.map((doc) => doc.id));
+    const gone = this.items.filter(
+      (i) =>
+        !i.draft &&
+        !i.dirty &&
+        !i.remote &&
+        i.doc.revision > 0 &&
+        !present.has(i.doc.id)
+    );
+    if (!gone.length || !server.length || server.length >= PULL_ROW_CAP) return;
+    this.items = this.items.filter((i) => !gone.includes(i));
+    for (const item of gone) await dbWrite("documents", item.doc.id);
+  }
+  /**
+   * Permanently deletes work that is in the trash, on the server and here.
+   * The image it holds goes too, unless another document (a duplicate) still
+   * shows the same image.
+   */
+  async purge(id: string) {
+    const item = this.items.find((i) => i.doc.id === id);
+    if (!item || item.draft || !item.doc.deleted_at || this.closed) return;
+    const forget = async () => {
+      this.items = this.items.filter((i) => i.doc.id !== id);
+      await dbWrite("documents", id);
+      for (const asset of await dbRead<Asset>("assets"))
+        if (asset.owner === this.owner && asset.document === id)
+          await dbWrite("assets", asset.id);
+      this.emit();
+    };
+    // Never reached the server: there is nothing to delete there.
+    if (item.doc.revision === 0) return forget();
+    if (!navigator.onLine) throw Error("Connect to delete permanently");
+    // The server must know the document is in the trash before it will purge it.
+    if (item.dirty) await this.sync({ pull: false });
+    if (this.items.find((i) => i.doc.id === id)?.dirty)
+      throw Error("Connect to delete permanently");
+    const image = item.doc.data.asset;
+    if (
+      typeof image === "string" &&
+      image &&
+      !this.items.some((i) => i.doc.id !== id && i.doc.data.asset === image)
+    )
+      // Best effort: a leftover image is removed with the account at the latest.
+      await supabase.storage
+        .from("tool-images")
+        .remove([`${this.owner}/${image}`])
+        .catch(() => undefined);
+    const { error } = await supabase.rpc("purge_tool_document", { p_id: id });
+    if (error) {
+      // The function arrives with a migration applied separately from the app.
+      if (["PGRST202", "42883"].includes(String(error.code)))
+        throw Error("Permanent delete is not available yet");
+      throw Error(messageOf(error));
+    }
+    await forget();
+  }
+  /**
    * Removes a device-only draft for good. Only drafts: anything the server
    * knows about is trashed through `update`, never dropped locally.
    */
@@ -537,6 +610,7 @@ export class ToolRepository {
           .order("updated_at", { ascending: false });
         if (error) throw error;
         if (this.closed) return;
+        await this.dropPurged((data ?? []) as ToolDocument[]);
         for (const doc of (data ?? []) as ToolDocument[]) {
           const local = this.items.find((i) => i.doc.id === doc.id);
           if (local?.dirty || local?.remote) continue;

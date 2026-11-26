@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { FolderOpen, Plus, Search } from "lucide-react";
 import type { ToolDocument, ToolId } from "./registry";
 import type { ToolRepository } from "./repository";
-import { useText } from "./ui";
+import { useText, ErrorMessage } from "./ui";
 import { duplicateData } from "./work";
 
 /** One tool's named work: open, rename, duplicate, trash and restore. */
@@ -19,7 +19,9 @@ export default function SavedWorkList({
   const [query, setQuery] = useState(""),
     [sort, setSort] = useState<"recent" | "name">("recent"),
     [renaming, setRenaming] = useState(""),
-    [name, setName] = useState("");
+    [name, setName] = useState(""),
+    [purging, setPurging] = useState(""),
+    [error, setError] = useState("");
   const all = repo.items
     .filter(
       (row) =>
@@ -190,10 +192,48 @@ export default function SavedWorkList({
                   >
                     {t("복원", "Restore")}
                   </button>
+                  <button
+                    aria-label={`${doc.title} ${t(
+                      "영구 삭제",
+                      "Delete permanently"
+                    )}`}
+                    onClick={() => {
+                      setError("");
+                      setPurging(doc.id);
+                    }}
+                  >
+                    {t("영구 삭제", "Delete permanently")}
+                  </button>
                 </div>
+                {purging === doc.id && (
+                  <div className="tool-inline-confirm" role="alert">
+                    <span>
+                      {t(
+                        "이 작업과 포함된 이미지를 계정과 모든 기기에서 지웁니다. 되돌릴 수 없습니다.",
+                        "This removes the work and its image from your account and every device. It cannot be undone."
+                      )}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        setPurging("");
+                        try {
+                          await repo.purge(doc.id);
+                        } catch (e) {
+                          setError(String(e));
+                        }
+                      }}
+                    >
+                      {t("영구 삭제", "Delete permanently")}
+                    </button>
+                    <button onClick={() => setPurging("")}>
+                      {t("취소", "Cancel")}
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
+          <ErrorMessage message={error} />
         </details>
       )}
     </>
