@@ -1,6 +1,6 @@
 # 검색창 에이전트 모드 출시 절차
 
-상태: 1단계(틀과 기본 조회), 2단계(안전·규제 현황과 재고 목록), 3단계(측정), 4단계(기록 제안), 5단계(폐액 배치 한 문장 구성) 구현, 미배포. 빌드 플래그와 런타임 스위치 모두 꺼짐. 3단계 migration은 Staging·운영 DB 미적용 (2026-11-27).
+상태: 1단계(틀과 기본 조회), 2단계(안전·규제 현황과 재고 목록), 3단계(측정), 4단계(기록 제안), 5단계(폐액 배치 한 문장 구성) 구현, 미배포. 빌드 플래그와 런타임 스위치 모두 꺼짐. 3단계 migration은 Staging(이력 `20261126210743`)과 운영(이력 `20261126211223`)에 적용 완료(2026-11-27). Advisor 기준은 두 환경 모두 88건으로 갱신했다. 이 기준이 main에 병합되기 전에는 main에서 하는 Staging·운영 배포의 Advisor 검사가 실패한다.
 
 플래그: `VITE_ENABLE_AGENT_MODE` (기본 꺼짐)
 런타임 스위치: 환경별 `BURILLAB_RUNTIME_CONFIG` KV의 **별도 키** `agent_mode_config` (없으면 꺼짐)
@@ -138,8 +138,13 @@ order by created_at desc limit 200;
 
 1. 개인정보처리방침(2026-11-27 갱신분: 에이전트 모드에 입력한 문장의 AI 전송, 이용 기록, 처리하지 못한 요청의 문장 저장)이 기능보다 먼저 또는 함께 배포돼야 한다. 문구는 이 저장소에 들어 있다. `APP_STORE_PRIVACY_DISCLOSURE.md`의 "에이전트 모드" 절에 따라 두 스토어 응답도 고친다.
 2. migration `20261127090000_agent_query_events.sql`을 Staging과 운영 DB에 연달아 적용한다(두 환경의 이력이 어긋나면 배포 검사가 막는다). 적용하지 않아도 에이전트는 동작하지만 기록이 남지 않는다.
-   - 적용 뒤 Hosted Security Advisor를 실행한다: `npm run security:supabase-advisors:hosted -- --environment staging`. 이 migration만으로 2건이 늘어야 한다(저장소 기준은 86건): `rls_enabled_no_policy` INFO 1건(`agent_query_events`), `authenticated_security_definer_function_executable` WARN 1건(`record_agent_query_event_v1`). 그 밖의 항목이 늘었으면 멈추고 원인을 확인한다. 검토 뒤 `supabase/security-advisors/*.json`과 `EXPECTED_COUNTS`를 실제 관측값으로 갱신한다. 이번 변경은 이 기준을 미리 고치지 않았다.
+   - 적용 뒤 Hosted Security Advisor를 실행한다: `npm run security:supabase-advisors:hosted -- --environment staging`. 이 migration만으로 2건이 늘어야 한다(적용 전 기준은 86건): `rls_enabled_no_policy` INFO 1건(`agent_query_events`), `authenticated_security_definer_function_executable` WARN 1건(`record_agent_query_event_v1`). 그 밖의 항목이 늘었으면 멈추고 원인을 확인한다. 검토 뒤 `supabase/security-advisors/*.json`과 `EXPECTED_COUNTS`를 실제 관측값으로 갱신한다(2026-11-27에 88건으로 갱신, 아래 기록).
    - `supabase/tests/baseline_permissions.sql`의 public 테이블 수는 63개(service_role 63, authenticated 41, anon 24)로 고쳤다.
+   - 기준 파일은 한 환경만 고칠 수 없다. 정적 검사(`npm run security:supabase-advisors`, quality CI)가 운영 기준과 Staging 기준이 같은지 확인하고, Staging 배포(`deploy-staging.yml`)와 웹 릴리스(`web-release.yml`)는 Hosted 검사를 통과해야 진행한다. 그래서 두 환경에 모두 적용한 뒤 두 파일을 함께 고친다.
+   - Staging 적용 기록(2026-11-27): Supabase MCP `apply_migration`으로 저장소 파일 내용을 그대로 적용했고 이력은 `20261126210743 agent_query_events`다. 적용 전 public 테이블 62개, Advisor 86건(INFO 16, WARN 70). 적용 뒤 public 테이블 63개, Advisor 88건(INFO 17, WARN 71)이며 늘어난 것은 위의 2건뿐이다. RLS 켜짐·정책 0개, 테이블 권한은 service_role만, 함수는 authenticated·service_role만 실행(anon 불가), `search_path=""`, 사용자 삭제 시 함께 삭제·연구실 삭제 시 null. 함수 본문 md5가 저장소와 같다(`c5d3ba968b9ed0b982b7e4e97215166c`). pgTAP 파일과 같은 11개 검사를 한 트랜잭션에서 실행해 모두 통과했고, 마지막에 일부러 오류를 내 되돌린 뒤 시험 사용자·연구실·기록이 0건임을 다시 확인했다(Staging에는 pgtap 확장이 없어 plpgsql로 옮겨 실행).
+   - 운영 적용 기록(2026-11-27): 같은 방법으로 적용했고 이력은 `20261126211223 agent_query_events`다. 적용 전 public 테이블 62개, Advisor 86건. 적용 뒤 public 테이블 63개, Advisor 88건(INFO 17, WARN 71)이며 늘어난 것은 Staging과 같은 2건뿐이다. 구조·권한·함수 본문 md5가 Staging과 같다. 운영에서는 시험 데이터를 쓰는 동작 검사를 하지 않았다.
+   - 기준 갱신: `supabase/security-advisors/production.json`·`staging.json`에 2건씩 넣고 `EXPECTED_COUNTS`를 88/88로 올렸다. 두 항목의 기술 정보(cache_key, object, evidence)는 `scripts/supabase-security-advisor-permissions.sql`을 두 객체로 좁혀 두 환경에서 실행한 결과(두 환경 동일)를 검사 스크립트의 함수로 변환해 만들었다. 표는 `accepted_design`(서버 전용 기본 거부), 함수는 `temporary_open`(2026-12-31 만료, 다음 RPC 권한 재검토). Hosted 검사(`npm run security:supabase-advisors:hosted`)는 로컬에 토큰이 없어 돌리지 않았고, 배포 workflow에서 처음 돈다.
+   - 이 PR은 `supabase/migrations/`를 바꾸므로 운영 웹 승격 전에 `WEB_DATABASE_REVIEWED_SHA`를 최종 main 후보 SHA로 설정해야 한다(`scripts/web-release.mjs`의 `assertPromotion`).
 3. Staging KV에 스위치를 넣는다. 기존 `runtime_config`와 `ai_decisions_config`는 건드리지 않는다.
 
    ```json
