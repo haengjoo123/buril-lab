@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, vi } from "vitest";
-import { ToolContext } from "./ui";
+import { ToolContext, ErrorMessage, csv } from "./ui";
 import { tools, type ToolDocument } from "./registry";
 import type { ToolRepository } from "./repository";
 import Equation from "./EquationTool";
@@ -147,6 +147,27 @@ describe("tool screen coverage", () => {
     expect(remainingTime(c, 35000)).toBe(30000);
     expect(remainingTime(c, 100000)).toBe(0);
     expect(elapsedTime(c, 35000)).toBe(31000);
+  });
+  it("writes numeric CSV cells without floating-point residue", () => {
+    expect(csv([["Total", 4.35 * 100, "µL"]])).toBe(
+      '﻿"Total","435","µL"'
+    );
+  });
+  it("translates every message instead of gluing Korean onto English words", () => {
+    locale.language = "ko";
+    const shown = (message: string) =>
+      renderToStaticMarkup(<ErrorMessage message={message} />);
+    expect(shown("Error: Enter a positive rotor radius")).toContain(
+      "로터 반지름"
+    );
+    expect(shown("Enter a non-negative speed or force")).not.toContain("speed");
+    expect(shown("Enter non-negative values")).toContain("0 이상의 값");
+    // An equation variable is the one case that is composed.
+    expect(shown("Enter rate_1")).toContain("rate_1 값을 입력하세요.");
+    // An untranslated sentence is shown as written, not half-translated.
+    expect(shown("Enter the missing thing")).toContain(
+      ">Enter the missing thing<"
+    );
   });
   it("restarts a finished countdown from its full duration, not the paused remainder", () => {
     const idle: Clock = {

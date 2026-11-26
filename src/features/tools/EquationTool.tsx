@@ -10,6 +10,7 @@ import {
   Result,
   ErrorMessage,
   calculate,
+  copyText,
   format,
 } from "./ui";
 interface Data {
@@ -34,7 +35,7 @@ function EquationEditor({ calculator = false }: { calculator?: boolean }) {
     notes: "",
     history: [],
   });
-  const [copy, setCopy] = useState(false),
+  const [copy, setCopy] = useState<"" | "done" | "failed">(""),
     [showKeys, setShowKeys] = useState(false);
   const parsed = calculate(() => parseExpression(d.expression)),
     evaluation = calculate(() =>
@@ -136,7 +137,22 @@ function EquationEditor({ calculator = false }: { calculator?: boolean }) {
                 {k}
               </button>
             ))}
-            <button onClick={() => expression(d.expression.slice(0, -1))}>
+            <button
+              aria-label={t("한 글자 지우기", "Backspace")}
+              onClick={() => {
+                // Deletes at the caret (or the selection), like the keys insert.
+                const { start, end } = cursor.current,
+                  from = start === end ? Math.max(0, start - 1) : start;
+                expression(
+                  d.expression.slice(0, from) + d.expression.slice(end)
+                );
+                cursor.current = { start: from, end: from };
+                requestAnimationFrame(() => {
+                  inputRef.current?.focus();
+                  inputRef.current?.setSelectionRange(from, from);
+                });
+              }}
+            >
               ⌫
             </button>
           </div>
@@ -238,7 +254,17 @@ function EquationEditor({ calculator = false }: { calculator?: boolean }) {
           </Panel>
         )}
         <Panel title={t("결과", "Result")}>
-          <ErrorMessage message={error} />
+          <ErrorMessage
+            message={
+              error ||
+              (copy === "failed"
+                ? t(
+                    "복사할 수 없습니다. 결과를 선택해 복사하세요.",
+                    "Could not copy. Select the result to copy it."
+                  )
+                : "")
+            }
+          />
           <Result>{shown}</Result>
           {result && (
             <p className="tool-muted">
@@ -249,13 +275,16 @@ function EquationEditor({ calculator = false }: { calculator?: boolean }) {
             <button
               disabled={!result}
               onClick={async () => {
-                await navigator.clipboard.writeText(
+                const copied = await copyText(
                   `${result?.substituted} = ${shown}`
                 );
-                setCopy(true);
+                setCopy(copied ? "done" : "failed");
+                if (copied) setTimeout(() => setCopy(""), 2000);
               }}
             >
-              {copy ? t("복사됨", "Copied") : t("결과 복사", "Copy result")}
+              {copy === "done"
+                ? t("복사됨", "Copied")
+                : t("결과 복사", "Copy result")}
             </button>
             {calculator && (
               <button

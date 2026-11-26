@@ -1,7 +1,15 @@
 import { useRef, useState } from "react";
 import { Copy, Delete } from "lucide-react";
 import { evaluateExpression } from "./expression";
-import { useText, useToolData, ErrorMessage, calculate, format } from "./ui";
+import {
+  useText,
+  useToolData,
+  ErrorMessage,
+  calculate,
+  copyText,
+  format,
+  plainNumber,
+} from "./ui";
 export default function CalculatorTool() {
   const t = useText(),
     [d, set] = useToolData({
@@ -32,19 +40,23 @@ export default function CalculatorTool() {
   };
   const equals = () => {
     if (!result.value) return;
+    // The answer becomes the next expression, so it is written without
+    // floating-point residue (0.1 + 0.2 continues from 0.3).
+    const answer = plainNumber(result.value.result);
     set({
       ...d,
-      expression: String(result.value.result),
-      history: [`${d.expression} = ${result.value.result}`, ...d.history].slice(
-        0,
-        100
-      ),
+      expression: answer,
+      history: [`${d.expression} = ${answer}`, ...d.history].slice(0, 100),
     });
-    cursor.current = {
-      start: String(result.value.result).length,
-      end: String(result.value.result).length,
-    };
+    cursor.current = { start: answer.length, end: answer.length };
   };
+  const copyFailed = () =>
+    setCopyError(
+      t(
+        "복사할 수 없습니다. 결과를 선택해 복사하세요.",
+        "Could not copy. Select the result to copy it."
+      )
+    );
   return (
     <section className="tool-calculator">
       <div className="tool-calculator-mode">
@@ -76,6 +88,10 @@ export default function CalculatorTool() {
         <span>{t("계산식", "Expression")}</span>
         <input
           ref={input}
+          // Every keypad press refocuses this field to place the caret; without
+          // this a phone would raise its own keyboard over the keypad each
+          // time. A hardware keyboard still types here.
+          inputMode="none"
           aria-label={t("계산식", "Expression")}
           className="tool-calculator-input"
           value={d.expression}
@@ -101,17 +117,9 @@ export default function CalculatorTool() {
           aria-label={t("결과 복사", "Copy result")}
           disabled={!result.value}
           onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(String(result.value!.result));
+            if (await copyText(plainNumber(result.value!.result)))
               setCopyError("");
-            } catch {
-              setCopyError(
-                t(
-                  "복사할 수 없습니다. 결과를 선택해 복사하세요.",
-                  "Could not copy. Select the result to copy it."
-                )
-              );
-            }
+            else copyFailed();
           }}
         >
           <Copy size={18} />
@@ -226,7 +234,10 @@ export default function CalculatorTool() {
               </button>
               <button
                 aria-label={t("내역 복사", "Copy history entry")}
-                onClick={() => navigator.clipboard.writeText(line)}
+                onClick={async () => {
+                  if (await copyText(line)) setCopyError("");
+                  else copyFailed();
+                }}
               >
                 <Copy size={16} />
               </button>

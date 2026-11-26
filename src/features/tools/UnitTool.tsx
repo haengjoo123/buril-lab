@@ -6,7 +6,9 @@ import {
   Select,
   ErrorMessage,
   calculate,
+  copyText,
   format,
+  plainNumber,
   useText,
   useToolData,
 } from "./ui";
@@ -163,7 +165,8 @@ export default function UnitTool() {
                 ...d,
                 from: d.to,
                 to: d.from,
-                value: result.value == null ? d.value : String(result.value),
+                value:
+                  result.value == null ? d.value : plainNumber(result.value),
               });
               setCopied(false);
             }}
@@ -224,20 +227,19 @@ export default function UnitTool() {
               aria-label={t("결과 복사", "Copy result")}
               disabled={result.value == null}
               onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(
-                    `${result.value} ${toLabel}`
-                  );
+                if (
+                  result.value != null &&
+                  (await copyText(`${plainNumber(result.value)} ${toLabel}`))
+                ) {
                   setCopied(true);
                   setCopyError("");
-                } catch {
+                } else
                   setCopyError(
                     t(
                       "복사하지 못했습니다. 결과를 선택해 복사하세요.",
                       "Could not copy. Select and copy the result."
                     )
                   );
-                }
               }}
             >
               {copied ? <Check size={19} /> : <Copy size={19} />}

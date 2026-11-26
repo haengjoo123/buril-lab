@@ -4,6 +4,7 @@ import { convertUnit, convertCentrifuge } from "./units";
 import { dilution, molarity, seeding, growthHours, cellCount } from "./labMath";
 import { fitCalibration } from "./calibration";
 import { measure, colorFraction, colorCoverage } from "./geometry";
+import { plainNumber } from "./format";
 import {
   exportICS,
   importICS,
@@ -252,6 +253,23 @@ describe("image geometry", () => {
         0
       )
     ).toBe(0.5);
+  });
+});
+describe("plain numbers for copy and export", () => {
+  it("drops binary floating-point residue and grouping", () => {
+    expect(plainNumber(convertUnit(1, "mL", "µL"))).toBe("1000");
+    expect(plainNumber(0.1 + 0.2)).toBe("0.3");
+    expect(plainNumber(1234567.5)).toBe("1234567.5");
+    expect(plainNumber(1e-9)).toBe("1e-9");
+    expect(plainNumber(NaN)).toBe("NaN");
+  });
+  it("names the value a centrifuge conversion is missing", () => {
+    expect(() => convertCentrifuge(1000, "RPM", 0)).toThrow(
+      "Enter a positive rotor radius"
+    );
+    expect(() => convertCentrifuge(-1, "RPM", 8)).toThrow(
+      "Enter a non-negative speed or force"
+    );
   });
 });
 describe("calendar interoperability", () => {

@@ -12,6 +12,7 @@ import CounterTool from "./CounterTool";
 import { TimerTool } from "./TimeTools";
 import CalibrationTool from "./CalibrationTool";
 import MolarityTool from "./MolarityTool";
+import { DilutionTool, MixTool, CellCounterTool } from "./CalculationTools";
 import { searchChemical } from "../../services/searchService";
 vi.mock("../../services/searchService", () => ({ searchChemical: vi.fn() }));
 vi.mock("react-i18next", () => ({
@@ -235,6 +236,110 @@ describe("tool input workflows", () => {
     expect(element.querySelector("output")?.textContent).toContain("180");
     await act(() => button(element, "Swap").click());
     expect(element.querySelector("output")?.textContent).toContain("1");
+  });
+  it("swaps and copies a converted value without floating-point residue", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const { element, getDoc } = await mount(<UnitTool />);
+    // 1 mL in µL is 1000.0000000000001 in binary floating point.
+    await act(() =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="Copy result"]')!
+        .click()
+    );
+    expect(writeText).toHaveBeenCalledWith("1000 µL");
+    await act(() => button(element, "Swap").click());
+    expect(getDoc().data.value).toBe("1000");
+    expect(getDoc().data.from).toBe("µL");
+    vi.unstubAllGlobals();
+  });
+  it("continues a calculation from an answer without floating-point residue", async () => {
+    const { element, getDoc } = await mount(<Equation calculator />, {
+      expression: "0.1+0.2",
+    });
+    await act(() => button(element, "=").click());
+    expect(getDoc().data.expression).toBe("0.3");
+    expect(getDoc().data.history).toEqual(["0.1+0.2 = 0.3"]);
+    // The on-screen keypad is the keyboard here; a phone must not raise its own.
+    expect(
+      element
+        .querySelector('[aria-label="Expression"]')
+        ?.getAttribute("inputmode")
+    ).toBe("none");
+  });
+  it("deletes at the caret from the equation keypad", async () => {
+    const { element, getDoc } = await mount(<Equation />, {
+      expression: "a+bc",
+    });
+    await act(() => button(element, "Math keypad").click());
+    const equation = element.querySelector<HTMLInputElement>(
+      '[aria-label="Equation"]'
+    )!;
+    // Place the caret between "b" and "c" the way a tap or arrow key would.
+    await act(() => {
+      equation.focus();
+      equation.setSelectionRange(3, 3);
+      equation.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
+    await act(() =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="Backspace"]')!
+        .click()
+    );
+    expect(getDoc().data.expression).toBe("a+c");
+  });
+  it("totals each mix component on its own", async () => {
+    const { element } = await mount(<MixTool />, {
+      count: 4,
+      excess: 0,
+      rows: [
+        { id: "1", name: "Buffer", amount: 2.5, unit: "µL", checked: false },
+        { id: "2", name: "Enzyme", amount: -1, unit: "µL", checked: false },
+      ],
+    });
+    const totals = [...element.querySelectorAll(".tool-mix-total output")].map(
+      (node) => node.textContent
+    );
+    // The unfinished row is reported; the finished one keeps its total.
+    expect(totals[0]).toBe("10 µL");
+    expect(totals[1]).toBe("— µL");
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(button(element, "CSV").disabled).toBe(true);
+  });
+  it("asks for missing dilution inputs instead of reporting an error", async () => {
+    const { element } = await mount(<DilutionTool />);
+    expect(element.querySelector("output")?.textContent).toContain("1 mL");
+    await input(field(element, "Target concentration"), "");
+    expect(element.querySelector('[role="alert"]')).toBeNull();
+    expect(element.querySelector('[role="status"]')?.textContent).toContain(
+      "to calculate"
+    );
+    expect(element.querySelector("output")).toBeNull();
+  });
+  it("shows a cell count only when it can be calculated and lets a chamber be removed", async () => {
+    const { element, getDoc } = await mount(<CellCounterTool />, {
+      rows: [
+        { live: 90, dead: 10 },
+        { live: 110, dead: 10 },
+      ],
+      factor: 2,
+      volume: 0.0001,
+    });
+    expect(element.querySelector("output")?.textContent).toContain(
+      "2,000,000 cells/mL"
+    );
+    await act(() =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="Remove chamber 2"]')!
+        .click()
+    );
+    expect(getDoc().data.rows).toEqual([{ live: 90, dead: 10 }]);
+    expect(
+      element.querySelector('[aria-label="Remove chamber 1"]')
+    ).toBeNull();
+    await input(field(element, "Dilution factor"), "0");
+    expect(element.querySelector("output")).toBeNull();
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
   });
   it("counts rapid taps without dropping increments and restores the last count with undo", async () => {
     const { element, getDoc } = await mount(<CounterTool />);

@@ -37,7 +37,7 @@ export function solveMolarity(
   if (!molarityTargets[basis]?.includes(target)) throw Error("Invalid amount");
   const required = molarityTargets[basis].filter((key) => key !== target);
   if (required.some((key) => !Number.isFinite(values[key]) || values[key] < 0))
-    throw Error("Invalid amount");
+    throw Error("Enter non-negative values");
   for (const key of required) {
     if ((key === "mw" || key === "volume") && values[key] <= 0)
       throw Error("Enter positive finite values");

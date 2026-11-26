@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { ToolDocument } from "./registry";
 import type { ToolRepository } from "./repository";
 import { exportBlobPartAsFile } from "../../utils/fileExport";
+import { plainNumber } from "./format";
 import { Check } from "lucide-react";
 export const ToolContext = createContext<{
   doc: ToolDocument;
@@ -222,6 +223,10 @@ const errorTranslations: Record<string, string> = {
   "Tangent undefined": "이 각도에서 탄젠트가 정의되지 않습니다.",
   "Result is not finite": "계산 결과가 유한한 수가 아닙니다.",
   "Enter positive finite values": "0보다 큰 유한한 값을 입력하세요.",
+  "Enter non-negative values": "0 이상의 값을 입력하세요.",
+  "Enter a positive rotor radius": "0보다 큰 로터 반지름(cm)을 입력하세요.",
+  "Enter a non-negative speed or force":
+    "0 이상의 회전수 또는 원심력을 입력하세요.",
   "Target exceeds stock concentration": "목표 농도가 원액 농도보다 높습니다.",
   "Invalid unit or value": "단위 또는 값을 확인하세요.",
   "Incompatible dimensions": "서로 변환할 수 없는 단위입니다.",
@@ -283,9 +288,13 @@ const errorTranslations: Record<string, string> = {
 export function ErrorMessage({ message }: { message: string }) {
   const t = useText();
   const raw = message.replace(/^Error: /, "");
+  // "Enter x" asks for an equation variable. Only a bare name is rewritten:
+  // any other English sentence starting with "Enter" needs its own entry
+  // above rather than a Korean suffix glued onto English words.
+  const variable = raw.match(/^Enter ([A-Za-z_]\w*)$/);
   const translated =
     errorTranslations[raw] ??
-    (raw.startsWith("Enter ") ? `${raw.slice(6)} 값을 입력하세요.` : raw);
+    (variable ? `${variable[1]} 값을 입력하세요.` : raw);
   return message ? (
     <p role="alert" className="tool-error">
       {t(translated, raw)}
@@ -298,6 +307,16 @@ export const format = (n: number | null | undefined) =>
     : new Intl.NumberFormat(undefined, { maximumSignificantDigits: 7 }).format(
         n
       );
+export { plainNumber };
+/** Copies text; false when the browser refuses (permissions, insecure page). */
+export async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 export function calculate<T>(fn: () => T): { value: T | null; error: string } {
   try {
     const value = fn();
@@ -321,7 +340,8 @@ export const csv = (rows: (string | number)[][]) =>
     .map((row) =>
       row
         .map((value) => {
-          let cell = String(value);
+          let cell =
+            typeof value === "number" ? plainNumber(value) : String(value);
           if (
             typeof value === "string" &&
             /^[=+\-@]/.test(cell.trimStart()) &&

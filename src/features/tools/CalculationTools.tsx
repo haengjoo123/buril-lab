@@ -27,15 +27,21 @@ export function DilutionTool() {
     factor: "2",
   });
   const update = (k: keyof typeof d, v: string) => set({ ...d, [k]: v });
-  const r = calculate(() =>
-    dilution(
-      Number(d.stock),
-      convertUnit(Number(d.target), d.targetUnit, d.stockUnit),
-      Number(d.volume),
-      Number(d.steps),
-      Number(d.factor)
-    )
+  // A cleared field is a value still to be entered, not a wrong one.
+  const incomplete = [d.stock, d.target, d.volume].some(
+    (value) => !String(value).trim()
   );
+  const r = incomplete
+    ? { value: null, error: "" }
+    : calculate(() =>
+        dilution(
+          Number(d.stock),
+          convertUnit(Number(d.target), d.targetUnit, d.stockUnit),
+          Number(d.volume),
+          Number(d.steps),
+          Number(d.factor)
+        )
+      );
   const concentrationUnits = Object.keys(units).filter((k) =>
     ["molar", "massConcentration"].includes(units[k].dimension)
   );
@@ -110,6 +116,14 @@ export function DilutionTool() {
           </div>
         </details>
         <ErrorMessage message={r.error} />
+        {incomplete && (
+          <p className="tool-muted" role="status">
+            {t(
+              "원액 농도, 목표 농도, 최종 부피를 입력하면 계산됩니다.",
+              "Enter the stock concentration, target concentration and final volume to calculate."
+            )}
+          </p>
+        )}
         {r.value && (
           <Result>
             {t("원액", "Stock")}: {format(r.value.stockVolume)} {d.volumeUnit}
@@ -196,15 +210,22 @@ export function MixTool({ medium = false }: { medium?: boolean }) {
       },
     ] as MixRow[],
   });
-  const r = calculate(() => {
+  const scale = medium ? d.targetVolume / d.baseVolume : d.count,
+    excess = medium ? 0 : d.excess;
+  // Settings that apply to every row are checked once. Each row is then
+  // totalled on its own, so one unfinished row does not blank the others.
+  const settings = calculate(() => {
     if (!medium && !Number.isInteger(d.count))
       throw Error("Reaction count must be an integer");
-    return mixAmounts(
-      d.rows,
-      medium ? d.targetVolume / d.baseVolume : d.count,
-      medium ? 0 : d.excess
-    );
+    return mixAmounts([], scale, excess);
   });
+  const totals = d.rows.map((row) =>
+    settings.value
+      ? calculate(() => mixAmounts([row], scale, excess)[0].total)
+      : { value: null, error: settings.error }
+  );
+  const error =
+    settings.error || totals.find((total) => total.error)?.error || "";
   const change = (id: string, patch: Partial<MixRow>) =>
     set({
       ...d,
@@ -275,7 +296,7 @@ export function MixTool({ medium = false }: { medium?: boolean }) {
               <div className="tool-mix-total">
                 <span>{t("전체량", "Total")}</span>
                 <output>
-                  {format(r.value?.[index]?.total)} {row.unit}
+                  {format(totals[index].value)} {row.unit}
                 </output>
               </div>
               <div className="tool-mix-actions">
@@ -304,7 +325,7 @@ export function MixTool({ medium = false }: { medium?: boolean }) {
             </div>
           ))}
         </div>
-        <ErrorMessage message={r.error} />
+        <ErrorMessage message={error} />
         <div className="tool-actions">
           <button
             onClick={() =>
@@ -326,7 +347,7 @@ export function MixTool({ medium = false }: { medium?: boolean }) {
             {t("성분 추가", "Add component")}
           </button>
           <button
-            disabled={!r.value}
+            disabled={!!error || d.rows.length === 0}
             onClick={() =>
               download(
                 csv([
@@ -335,9 +356,13 @@ export function MixTool({ medium = false }: { medium?: boolean }) {
                     t("전체량", "Total"),
                     t("단위", "Unit"),
                   ],
-                  ...r.value!.map((row) => [row.name, row.total, row.unit]),
+                  ...d.rows.map((row, index) => [
+                    row.name,
+                    totals[index].value ?? "",
+                    row.unit,
+                  ]),
                 ]),
-                "mix.csv",
+                medium ? "medium-buffer.csv" : "master-mix.csv",
                 "text/csv"
               )
             }
@@ -398,6 +423,16 @@ export function CellCounterTool() {
               }
             />
           ))}
+          {d.rows.length > 1 && (
+            <button
+              aria-label={`${t("구획 삭제", "Remove chamber")} ${i + 1}`}
+              onClick={() =>
+                set({ ...d, rows: d.rows.filter((_, j) => j !== i) })
+              }
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
       <button
@@ -406,10 +441,15 @@ export function CellCounterTool() {
         {t("구획 추가", "Add chamber")}
       </button>
       <ErrorMessage message={r.error} />
-      <Result>
-        {format(r.value?.concentration)} cells/mL{"\n"}
-        {t("생존율", "Viability")}: {format(r.value?.viability)}%
-      </Result>
+      {r.value && (
+        <Result>
+          {format(r.value.concentration)} cells/mL{"\n"}
+          {t("생존율", "Viability")}:{" "}
+          {r.value.viability == null
+            ? t("계수한 세포가 없습니다", "no cells counted")
+            : `${format(r.value.viability)}%`}
+        </Result>
+      )}
     </Panel>
   );
 }
