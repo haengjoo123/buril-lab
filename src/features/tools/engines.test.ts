@@ -3,7 +3,12 @@ import { evaluateExpression, parseExpression } from "./expression";
 import { convertUnit, convertCentrifuge } from "./units";
 import { dilution, molarity, seeding, growthHours, cellCount } from "./labMath";
 import { fitCalibration } from "./calibration";
-import { measure, colorFraction, colorCoverage } from "./geometry";
+import {
+  measure,
+  ladderPositions,
+  colorFraction,
+  colorCoverage,
+} from "./geometry";
 import { plainNumber } from "./format";
 import {
   exportICS,
@@ -253,6 +258,64 @@ describe("image geometry", () => {
         0
       )
     ).toBe(0.5);
+  });
+});
+describe("measurement and ladder geometry", () => {
+  it("places ladder bands by log size with the largest at the top", () => {
+    const [top, middle, bottom] = ladderPositions([10000, 1000, 100]);
+    expect(top).toBe(0);
+    expect(middle).toBeCloseTo(0.5, 10);
+    expect(bottom).toBe(1);
+    // Stored order does not matter, and an unreadable size keeps its slot.
+    expect(ladderPositions([100, 10000])).toEqual([1, 0]);
+    expect(ladderPositions([500])).toEqual([0.5]);
+    expect(ladderPositions([1000, null, 100])[1]).toBe(0.5);
+  });
+  it("reports no length or area for labels and colour matches", () => {
+    const points = [
+      { x: 0, y: 0 },
+      { x: 30, y: 40 },
+    ];
+    const shape = { id: "1", name: "n", color: "#000", points };
+    expect(measure({ ...shape, kind: "text" }, 2)).toEqual({});
+    expect(measure({ ...shape, kind: "color" }, 2)).toEqual({});
+    expect(measure({ ...shape, kind: "line" }, 2)).toEqual({ length: 100 });
+  });
+  it("writes a fitted line with a signed intercept", () => {
+    const line = (points: [number, number][], model: "linear" | "origin") =>
+      fitCalibration(
+        points.map(([x, y]) => ({ x, y })),
+        model
+      ).equation;
+    expect(
+      line(
+        [
+          [1, 1],
+          [2, 3],
+          [3, 5],
+        ],
+        "linear"
+      )
+    ).toBe("y = 2x − 1");
+    expect(
+      line(
+        [
+          [1, 3],
+          [2, 5],
+          [3, 7],
+        ],
+        "linear"
+      )
+    ).toBe("y = 2x + 1");
+    expect(
+      line(
+        [
+          [1, 2],
+          [2, 4],
+        ],
+        "origin"
+      )
+    ).toBe("y = 2x");
   });
 });
 describe("plain numbers for copy and export", () => {

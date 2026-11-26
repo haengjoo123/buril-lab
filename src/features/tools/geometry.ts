@@ -13,7 +13,33 @@ export type Shape = {
 export function distance(a: XY, b: XY) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
-export function measure(shape: Shape, scale: number) {
+/**
+ * Where each ladder band sits along a lane, from 0 (top) to 1 (bottom): the
+ * largest band at the top and the rest spaced by log size, as in the ladder
+ * tool's own diagram. It is a starting layout to drag onto the image, not a
+ * prediction of migration.
+ */
+export function ladderPositions(sizes: (number | null)[]): number[] {
+  const logs = sizes.map((size) =>
+    size != null && Number.isFinite(size) && size > 0 ? Math.log(size) : null
+  );
+  const known = logs.filter((value): value is number => value !== null);
+  const top = Math.max(...known),
+    bottom = Math.min(...known);
+  return logs.map((value, index) =>
+    value === null || top === bottom
+      ? sizes.length > 1
+        ? index / (sizes.length - 1)
+        : 0.5
+      : (top - value) / (top - bottom)
+  );
+}
+export function measure(
+  shape: Shape,
+  scale: number
+): { length?: number; width?: number; height?: number; area?: number } {
+  // A label and a colour match have no outline to measure.
+  if (shape.kind === "text" || shape.kind === "color") return {};
   const a = shape.points[0] ?? { x: 0, y: 0 },
     b = shape.points[1] ?? a,
     w = Math.abs(b.x - a.x) * scale,

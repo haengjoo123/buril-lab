@@ -11,7 +11,14 @@ import {
   ErrorMessage,
   CheckButton,
 } from "./ui";
-type Band = { size: number; label: string; color: string; highlight?: boolean };
+// `size` is null while its field is empty: an emptied field is a value still to
+// be typed, and storing 0 for it made the field impossible to clear.
+type Band = {
+  size: number | null;
+  label: string;
+  color: string;
+  highlight?: boolean;
+};
 export function LadderTool() {
   const t = useText(),
     [d, set] = useToolData({
@@ -25,8 +32,10 @@ export function LadderTool() {
     });
   const valid =
       d.bands.length > 0 &&
-      d.bands.every((b) => Number.isFinite(b.size) && b.size > 0),
-    sorted = [...d.bands].sort((a, b) => b.size - a.size),
+      d.bands.every(
+        (b) => b.size != null && Number.isFinite(b.size) && b.size > 0
+      ),
+    sorted = [...d.bands].sort((a, b) => (b.size ?? 0) - (a.size ?? 0)),
     max = Math.log10(sorted[0]?.size ?? 1),
     min = Math.log10(sorted.at(-1)?.size ?? 1);
   const update = (index: number, patch: Partial<Band>) =>
@@ -42,13 +51,23 @@ export function LadderTool() {
         <Select
           label={t("종류", "Type")}
           value={d.kind}
-          onChange={(kind) =>
+          onChange={(kind) => {
+            const unit =
+              kind === "Protein" ? "kDa" : kind === "RNA" ? "nt" : "bp";
+            // Sizes entered in kb are lengths in thousands: 1 kb is 1000 nt or
+            // bp, not 1. Protein sizes are a different quantity and are left
+            // for the user to replace.
+            const factor = d.unit === "kb" && unit !== "kDa" ? 1000 : 1;
             set({
               ...d,
               kind,
-              unit: kind === "Protein" ? "kDa" : kind === "RNA" ? "nt" : "bp",
-            })
-          }
+              unit,
+              bands: d.bands.map((b) => ({
+                ...b,
+                size: b.size == null ? null : b.size * factor,
+              })),
+            });
+          }}
           options={["DNA", "RNA", ["Protein", t("단백질", "Protein")]]}
         />
         <Select
@@ -64,7 +83,10 @@ export function LadderTool() {
             set({
               ...d,
               unit,
-              bands: d.bands.map((b) => ({ ...b, size: b.size * factor })),
+              bands: d.bands.map((b) => ({
+                ...b,
+                size: b.size == null ? null : b.size * factor,
+              })),
             });
           }}
           options={
@@ -131,9 +153,14 @@ export function LadderTool() {
                         aria-label={`${t("밴드 크기", "Band size")} ${
                           index + 1
                         }`}
-                        value={band.size}
+                        value={band.size ?? ""}
                         onChange={(e) =>
-                          update(index, { size: Number(e.target.value) })
+                          update(index, {
+                            size:
+                              e.target.value === ""
+                                ? null
+                                : Number(e.target.value),
+                          })
                         }
                       />
                     </td>
@@ -215,7 +242,7 @@ export function LadderTool() {
                       t("기준 밴드", "Reference band"),
                     ],
                     ...sorted.map((b) => [
-                      b.size,
+                      b.size ?? "",
                       b.label,
                       d.unit,
                       b.highlight ? 1 : 0,
@@ -242,7 +269,7 @@ export function LadderTool() {
                   35 +
                   (max === min
                     ? 170
-                    : ((max - Math.log10(band.size)) / (max - min)) * 340);
+                    : ((max - Math.log10(band.size ?? 1)) / (max - min)) * 340);
                 return (
                   <g key={index}>
                     <line

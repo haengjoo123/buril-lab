@@ -16,8 +16,10 @@ export default function CodonTool() {
   const normalized = query.trim().toUpperCase().replaceAll("T", "U");
   const matches = codons.filter(
     (c) =>
+      // Both languages are searchable whichever one the screen is in, as the
+      // amino acid names already are.
       `${c.codon} ${c.amino} ${
-        aminoAcids.find((a) => a[0] === c.amino)?.join(" ") ?? t("종결", "Stop")
+        aminoAcids.find((a) => a[0] === c.amino)?.join(" ") ?? "종결 Stop"
       }`
         .toLowerCase()
         .includes(query.toLowerCase().trim()) || c.codon.startsWith(normalized)

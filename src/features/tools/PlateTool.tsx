@@ -6,6 +6,7 @@ import {
   Panel,
   Field,
   Select,
+  ErrorMessage,
   download,
   csv,
   ColorField,
@@ -65,6 +66,12 @@ export default function PlateTool() {
     (_, i) =>
       `${String.fromCharCode(65 + Math.floor(i / cols))}${(i % cols) + 1}`
   );
+  // Labels on wells outside the current size are kept, not shown: switching to
+  // a smaller plate and back must not lose them. Say so, because the list and
+  // the exports below leave them out.
+  const hidden = Object.keys(d.wells).filter(
+    (name) => !names.includes(name)
+  ).length;
   const exportImage = async () => {
     try {
       const canvas = document.createElement("canvas");
@@ -100,7 +107,9 @@ export default function PlateTool() {
         );
       });
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r));
-      if (blob) await download(blob, "plate.png", "image/png");
+      if (!blob) throw Error("Could not create the image");
+      await download(blob, "plate.png", "image/png");
+      setError("");
     } catch (e) {
       setError(String(e));
     }
@@ -117,6 +126,14 @@ export default function PlateTool() {
             if (multi && selected.length > 1) loadSelection([selected[0]]);
           }}>{t("다중 선택", "Multi-select")} · {multi ? t("켜짐", "On") : t("꺼짐", "Off")}</button>
         </div>
+        {hidden > 0 && (
+          <p className="tool-muted" role="status">
+            {t(
+              `이 크기에 없는 웰 ${hidden}개의 내용은 보관 중이며, 목록과 CSV·PNG에는 포함되지 않습니다. 더 큰 플레이트를 선택하면 다시 나타납니다.`,
+              `${hidden} labelled ${hidden === 1 ? "well is" : "wells are"} outside this plate size. They are kept but left out of the list, CSV and PNG, and reappear on a larger plate.`
+            )}
+          </p>
+        )}
         <div className="tool-actions">
           <button onClick={() => { setMulti(true); loadSelection(names); }}>{t("전체 선택", "Select all")}</button>
           <button disabled={!selected.length} onClick={() => loadSelection([])}>{t("선택 해제", "Clear selection")}</button>
@@ -182,13 +199,19 @@ export default function PlateTool() {
           </tr>)}</tbody>
         </table></div> : <p className="tool-muted">{t("웰에 내용을 적용하면 이곳에 표시됩니다.", "Apply labels to wells to see them here.")}</p>}
       </Panel>
-      <p role="alert">{error}</p>
+      <ErrorMessage message={error} />
       <div className="tool-actions">
         <button
           onClick={() =>
             download(
               csv([
-                ["Well", "Sample", "Condition", "Replicate", "Color"],
+                [
+                  t("웰", "Well"),
+                  t("시료", "Sample"),
+                  t("조건 / 농도", "Condition / concentration"),
+                  t("반복", "Replicate"),
+                  t("색상", "Color"),
+                ],
                 ...names.map((n) => [
                   n,
                   d.wells[n]?.sample ?? "",

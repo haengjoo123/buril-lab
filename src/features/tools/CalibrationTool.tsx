@@ -128,6 +128,60 @@ export default function CalibrationTool() {
     : [];
   const axis = (label: string, unit: string) =>
     unit ? `${label} (${unit})` : label;
+  // One place decides what a sample's result is, so the screen, the CSV and
+  // the report cannot disagree about what could be calculated or extrapolated.
+  const sampleResult = (sample: { direction: string; input: string }) => {
+    const inverse = sample.direction === "inverse";
+    const hasInput = sample.input.trim() !== "";
+    const input = Number(sample.input);
+    const value =
+      f && hasInput && Number.isFinite(input)
+        ? inverse
+          ? f.inverse(input)
+          : f.predict(input)
+        : undefined;
+    const x = inverse ? value : input;
+    const invalid =
+      hasInput &&
+      (!Number.isFinite(input) ||
+        (value !== undefined && !Number.isFinite(value)));
+    const extrapolated = !!(
+      hasInput &&
+      x != null &&
+      Number.isFinite(x) &&
+      f &&
+      (x < f.min || x > f.max)
+    );
+    return { inverse, value, invalid, extrapolated };
+  };
+  const sampleHeaders = [
+    t("시료", "Sample"),
+    t("방향", "Direction"),
+    t("입력", "Input"),
+    t("결과", "Result"),
+    t("비고", "Note"),
+  ];
+  const sampleRows = () =>
+    d.samples.map((sample) => {
+      const { inverse, value, invalid, extrapolated } = sampleResult(sample);
+      return [
+        sample.name,
+        inverse ? "Y → X" : "X → Y",
+        sample.input,
+        value !== undefined && Number.isFinite(value) ? value : "",
+        invalid
+          ? t("계산 불가", "Cannot calculate")
+          : extrapolated
+          ? t("표준 범위 밖 (외삽)", "Outside standard range (extrapolation)")
+          : "",
+      ];
+    });
+  const modelName = {
+    linear: t("선형", "Linear"),
+    origin: t("원점 고정 선형", "Linear through origin"),
+    exponential: t("지수", "Exponential"),
+    hill: t("증가형 Hill", "Increasing Hill"),
+  }[d.model];
   const tick = (value: number) =>
     Math.abs(value) < 1e-12 ? "0" : String(Number(value.toPrecision(3)));
   const selectView = (next: View) => {
@@ -729,26 +783,8 @@ export default function CalibrationTool() {
               </span>
             </div>
             {d.samples.map((sample, i) => {
-              const inverse = sample.direction === "inverse";
-              const hasInput = sample.input.trim() !== "";
-              const input = Number(sample.input);
-              const value =
-                f && hasInput && Number.isFinite(input)
-                  ? inverse
-                    ? f.inverse(input)
-                    : f.predict(input)
-                  : undefined;
-              const x = inverse ? value : input;
-              const invalid =
-                hasInput &&
-                (!Number.isFinite(input) ||
-                  (value !== undefined && !Number.isFinite(value)));
-              const extrapolated =
-                hasInput &&
-                x != null &&
-                Number.isFinite(x) &&
-                f &&
-                (x < f.min || x > f.max);
+              const { inverse, value, invalid, extrapolated } =
+                sampleResult(sample);
               return (
                 <div className="tool-calibration-sample" key={i}>
                   <div className="tool-calibration-sample-heading">
@@ -875,8 +911,12 @@ export default function CalibrationTool() {
                 onClick={() =>
                   download(
                     csv([
-                      [d.xLabel, d.yLabel, "Excluded"],
-                      ...d.standards.map((p) => [p.x, p.y, String(p.excluded)]),
+                      [d.xLabel, d.yLabel, t("제외", "Excluded")],
+                      ...d.standards.map((p) => [
+                        p.x,
+                        p.y,
+                        p.excluded ? t("예", "Yes") : t("아니오", "No"),
+                      ]),
                     ]),
                     "calibration.csv",
                     "text/csv"
@@ -889,26 +929,7 @@ export default function CalibrationTool() {
                 disabled={!f}
                 onClick={() =>
                   download(
-                    csv([
-                      [
-                        t("시료", "Sample"),
-                        t("방향", "Direction"),
-                        t("입력", "Input"),
-                        t("결과", "Result"),
-                      ],
-                      ...d.samples.map((sample) => [
-                        sample.name,
-                        sample.direction,
-                        sample.input,
-                        sample.input.trim()
-                          ? String(
-                              sample.direction === "inverse"
-                                ? f!.inverse(Number(sample.input))
-                                : f!.predict(Number(sample.input))
-                            )
-                          : "",
-                      ]),
-                    ]),
+                    csv([sampleHeaders, ...sampleRows()]),
                     "calibration-samples.csv",
                     "text/csv"
                   )
@@ -926,13 +947,24 @@ export default function CalibrationTool() {
                     await report({
                       title: t("검량선 보고서", "Calibration report"),
                       lines: [
+                        `${t("모델", "Model")}: ${modelName}`,
                         f?.equation ?? "",
+                        ...(f && f.r2 !== null ? [`R²: ${format(f.r2)}`] : []),
                         `RMSE: ${format(f?.rmse)}`,
                         `${axis(d.xLabel, d.xUnit)} · ${axis(
                           d.yLabel,
                           d.yUnit
                         )}`,
                       ],
+                      sections: d.samples.some((sample) => sample.input.trim())
+                        ? [
+                            {
+                              title: t("시료 결과", "Sample results"),
+                              headers: sampleHeaders,
+                              rows: sampleRows(),
+                            },
+                          ]
+                        : [],
                       svg: positive.length ? plotRef.current : null,
                       headers: [d.xLabel, d.yLabel, t("제외", "Excluded")],
                       rows: d.standards.map((row) => [

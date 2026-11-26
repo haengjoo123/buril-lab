@@ -14,6 +14,7 @@ import {
   Select,
   ErrorMessage,
   format,
+  plainNumber,
   csv,
   download,
   report,
@@ -22,6 +23,7 @@ import {
 import {
   distance,
   measure,
+  ladderPositions,
   colorCoverage,
   type Shape,
   type XY,
@@ -161,6 +163,13 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
         : 0,
     unit = scale > 0 ? d.unit : "px",
     actualScale = scale > 0 ? scale : 1;
+  // The matched share of the whole image as an area. The table, the PDF and
+  // the CSV all use this one definition.
+  const colorArea = (shape: Shape) =>
+    (shape.areaFraction ?? shape.fraction ?? 0) *
+    d.width *
+    d.height *
+    actualScale ** 2;
   const crop = d.crop ?? { x: 0, y: 0, width: d.width, height: d.height },
     sw = d.rotation % 180 ? crop.height : crop.width,
     sh = d.rotation % 180 ? crop.width : crop.height;
@@ -597,15 +606,14 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
+              const temp = URL.createObjectURL(file);
               try {
-                const temp = URL.createObjectURL(file),
-                  img = new Image();
+                const img = new Image();
                 img.src = temp;
                 await img.decode();
                 if (img.width * img.height > 40e6)
                   throw Error("Maximum 40 megapixels");
                 const asset = await ctx.repo.putImage(ctx.doc.id, file);
-                URL.revokeObjectURL(temp);
                 commit({
                   ...d,
                   asset,
@@ -614,6 +622,9 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                   shapes: [],
                   crop: null,
                   rotation: 0,
+                  // A new image starts unmirrored, like it starts unrotated.
+                  flipX: false,
+                  flipY: false,
                   known: 0,
                   unitsPerPixel: 0,
                   reference: [
@@ -624,6 +635,8 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 setError("");
               } catch (e) {
                 setError(String(e));
+              } finally {
+                URL.revokeObjectURL(temp);
               }
             }}
           />
@@ -712,8 +725,10 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                       {
                         select: t("선택", "Select"),
                         scale: t("기준선", "Reference"),
-                        line: gel ? "Band" : t("선", "Line"),
-                        rectangle: gel ? "Lane" : t("사각형", "Rectangle"),
+                        line: gel ? t("밴드", "Band") : t("선", "Line"),
+                        rectangle: gel
+                          ? t("레인", "Lane")
+                          : t("사각형", "Rectangle"),
                         ellipse: t("타원", "Ellipse"),
                         freehand: t("자유형", "Freehand"),
                         color: t("색상", "Color"),
@@ -746,11 +761,17 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
               </button>
             </div>
             <div className="tool-actions">
-              <button onClick={() => setZoom(Math.max(0.25, zoom - 0.25))}>
+              <button
+                aria-label={t("축소", "Zoom out")}
+                onClick={() => setZoom(Math.max(0.25, zoom - 0.25))}
+              >
                 −
               </button>
               <span>{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom(Math.min(4, zoom + 0.25))}>
+              <button
+                aria-label={t("확대", "Zoom in")}
+                onClick={() => setZoom(Math.min(4, zoom + 0.25))}
+              >
                 +
               </button>
               <button
@@ -804,8 +825,8 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 ...(!gel
                   ? ([["scale", t("기준선", "Reference")]] as const)
                   : []),
-                ["line", gel ? "Band" : t("선", "Line")],
-                ["rectangle", gel ? "Lane" : t("사각형", "Rectangle")],
+                ["line", gel ? t("밴드", "Band") : t("선", "Line")],
+                ["rectangle", gel ? t("레인", "Lane") : t("사각형", "Rectangle")],
                 ...(!gel
                   ? ([
                       ["ellipse", t("타원", "Ellipse")],
@@ -1047,35 +1068,32 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
             onChange={(id) => {
               const ladder = ctx.documents.find((doc) => doc.id === id);
               const bands = ladder?.data.bands as
-                | { label: string; size: number }[]
+                | { label: string; size: number | null; highlight?: boolean }[]
                 | undefined;
-              if (bands)
+              if (bands) {
+                // Largest at the top, spaced by log size. Reference bands the
+                // ladder marks as emphasised are drawn longer and in red.
+                const positions = ladderPositions(bands.map((b) => b.size));
                 commit({
                   ...d,
                   shapes: [
                     ...d.shapes,
-                    ...bands.map((b, i) => ({
-                      id: crypto.randomUUID(),
-                      kind: "line" as const,
-                      name: `${b.label} ${ladder?.data.unit}`,
-                      color: "#dc2626",
-                      points: [
-                        {
-                          x: d.width * 0.1,
-                          y:
-                            d.height *
-                            (0.1 + (0.8 * i) / Math.max(1, bands.length - 1)),
-                        },
-                        {
-                          x: d.width * 0.2,
-                          y:
-                            d.height *
-                            (0.1 + (0.8 * i) / Math.max(1, bands.length - 1)),
-                        },
-                      ],
-                    })),
+                    ...bands.map((b, i) => {
+                      const y = d.height * (0.1 + 0.8 * positions[i]);
+                      return {
+                        id: crypto.randomUUID(),
+                        kind: "line" as const,
+                        name: `${b.label} ${ladder?.data.unit}`,
+                        color: b.highlight ? "#dc2626" : "#f97316",
+                        points: [
+                          { x: d.width * (b.highlight ? 0.08 : 0.1), y },
+                          { x: d.width * (b.highlight ? 0.22 : 0.2), y },
+                        ],
+                      };
+                    }),
                   ],
                 });
+              }
             }}
           />
         </Panel>
@@ -1111,12 +1129,7 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                         </td>
                         <td>
                           {s.kind === "color"
-                            ? `${format(
-                                (s.areaFraction ?? s.fraction ?? 0) *
-                                  d.width *
-                                  d.height *
-                                  actualScale ** 2
-                              )} ${unit}² · ${format(
+                            ? `${format(colorArea(s))} ${unit}² · ${format(
                                 (s.fraction ?? 0) * 100
                               )}% ≈`
                             : s.kind === "text"
@@ -1153,9 +1166,15 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                   await report({
                     title: ctx.doc.title,
                     lines: [
-                      actualScale > 0
-                        ? `${t("스케일", "Scale")}: ${actualScale} ${unit}/px`
-                        : "px",
+                      scale > 0
+                        ? `${t("스케일", "Scale")}: ${plainNumber(
+                            scale,
+                            7
+                          )} ${unit}/px`
+                        : t(
+                            "미보정: 결과는 픽셀 단위입니다.",
+                            "Uncalibrated: results are in pixels."
+                          ),
                       `${t("원본 이미지", "Source image")}: ${d.width} × ${
                         d.height
                       } px`,
@@ -1169,12 +1188,7 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                         shape.kind === "text"
                           ? shape.text ?? ""
                           : shape.kind === "color"
-                          ? `${format(
-                              (shape.areaFraction ?? 0) *
-                                d.width *
-                                d.height *
-                                actualScale ** 2
-                            )} ${unit}² ≈`
+                          ? `${format(colorArea(shape))} ${unit}² ≈`
                           : result.area != null
                           ? `${format(result.area)} ${unit}²`
                           : `${format(result.length)} ${unit}`,
@@ -1193,7 +1207,14 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
               onClick={() =>
                 download(
                   csv([
-                    ["Name", "Length", "Width", "Height", "Area", "Unit"],
+                    [
+                      t("이름", "Name"),
+                      t("길이", "Length"),
+                      t("너비", "Width"),
+                      t("높이", "Height"),
+                      t("면적", "Area"),
+                      t("단위", "Unit"),
+                    ],
                     ...d.shapes.map((s) => {
                       const r = measure(s, actualScale);
                       return [
@@ -1201,12 +1222,7 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                         r.length ?? "",
                         r.width ?? "",
                         r.height ?? "",
-                        s.kind === "color"
-                          ? (s.areaFraction ?? s.fraction ?? 0) *
-                            d.width *
-                            d.height *
-                            actualScale ** 2
-                          : r.area ?? "",
+                        s.kind === "color" ? colorArea(s) : r.area ?? "",
                         unit,
                       ];
                     }),

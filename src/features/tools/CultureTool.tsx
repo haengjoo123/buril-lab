@@ -31,6 +31,76 @@ type Passage = {
   notes: string;
   snapshot: unknown;
 };
+/**
+ * The seeding calculation saved with a passage record, as a table. A record
+ * that does not have the expected shape is shown as its raw data rather than
+ * hidden.
+ */
+function SeedingSnapshot({ snapshot }: { snapshot: unknown }) {
+  const t = useText();
+  const saved = snapshot as {
+    concentration?: unknown;
+    available?: unknown;
+    result?: { rows?: unknown; stockTotal?: unknown; mediumTotal?: unknown };
+  } | null;
+  const rows = Array.isArray(saved?.result?.rows)
+    ? (saved.result.rows as Record<string, unknown>[])
+    : null;
+  const number = (value: unknown) =>
+    typeof value === "number" ? format(value) : "—";
+  if (!rows)
+    return (
+      <pre
+        style={{
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          fontSize: 12,
+        }}
+      >
+        {JSON.stringify(snapshot, null, 2)}
+      </pre>
+    );
+  return (
+    <>
+      <p className="tool-muted">
+        {t("세포 농도", "Cell concentration")}: {number(saved?.concentration)}{" "}
+        cells/mL · {t("보유 현탁액", "Available suspension")}:{" "}
+        {number(saved?.available)} mL
+      </p>
+      <div className="tool-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{t("용기", "Vessel")}</th>
+              <th>{t("용기당 세포 수", "Cells per vessel")}</th>
+              <th>
+                {t("원액 / 배지 (용기당 mL)", "Stock / medium (mL per vessel)")}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index}>
+                <td>
+                  {String(row.name ?? "")} ×{number(row.count)}
+                </td>
+                <td>{number(row.cells)}</td>
+                <td>
+                  {number(row.stock)} / {number(row.medium)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="tool-muted">
+        {t("전체 필요 원액", "Total stock")}:{" "}
+        {number(saved?.result?.stockTotal)} mL · {t("전체 배지", "Total medium")}
+        : {number(saved?.result?.mediumTotal)} mL
+      </p>
+    </>
+  );
+}
 export default function CultureTool() {
   const [permissionError, setPermissionError] = useState("");
   const t = useText(),
@@ -118,7 +188,7 @@ export default function CultureTool() {
             label={
               d.profile.kind === "adherent"
                 ? t("현재 confluence (%)", "Current confluence (%)")
-                : "Current cells/mL"
+                : t("현재 농도 (cells/mL)", "Current cells/mL")
             }
             value={d.start}
             onChange={(v) => set({ ...d, start: Number(v) })}
@@ -127,7 +197,7 @@ export default function CultureTool() {
             label={
               d.profile.kind === "adherent"
                 ? t("목표 confluence (%)", "Target confluence (%)")
-                : "Target cells/mL"
+                : t("목표 농도 (cells/mL)", "Target cells/mL")
             }
             value={d.target}
             onChange={(v) => set({ ...d, target: Number(v) })}
@@ -175,10 +245,14 @@ export default function CultureTool() {
               (d.profile.kind === "adherent" ? 100 : d.profile.maxDensity)
           }
           onClick={async () => {
+            // The countdown below runs either way. Without permission it must
+            // not also claim that this device will be notified.
+            let allowed = true;
             try {
               await enableNotifications();
               setPermissionError("");
             } catch (e) {
+              allowed = false;
               setPermissionError(String(e));
             }
             if (d.timer) setDeviceEnabled(ctx.repo.owner, d.timer.id, false);
@@ -187,7 +261,7 @@ export default function CultureTool() {
               ...d,
               timer: { id, end: Date.now() + hours.value! * 3600000 },
             });
-            setDeviceEnabled(ctx.repo.owner, id, true);
+            setDeviceEnabled(ctx.repo.owner, id, allowed);
           }}
         >
           {t("예상 시점 타이머 시작", "Start target timer")}
@@ -286,9 +360,7 @@ export default function CultureTool() {
             {p.snapshot != null && (
               <details>
                 <summary>{t("저장된 분주 계산 보기", "View saved seeding calculation")}</summary>
-                <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 12 }}>
-                  {JSON.stringify(p.snapshot, null, 2)}
-                </pre>
+                <SeedingSnapshot snapshot={p.snapshot} />
               </details>
             )}
           </details>
@@ -409,24 +481,26 @@ export default function CultureTool() {
                 onChange={(mode) =>
                   vessel(v.id, { mode: mode as Vessel["mode"] })
                 }
-                options={
-                  d.profile.kind === "adherent"
-                    ? [
-                        "split",
-                        "cells/mL",
-                        "cells/vessel",
-                        "cells/cm2",
-                        "confluence",
-                      ]
-                    : ["split", "cells/mL", "cells/vessel"]
-                }
+                options={(
+                  [
+                    ["split", t("분할 비율 (1:N)", "Split ratio (1:N)")],
+                    ["cells/mL", "cells/mL"],
+                    ["cells/vessel", t("용기당 세포 수", "Cells per vessel")],
+                    ["cells/cm2", "cells/cm²"],
+                    ["confluence", "Confluence (%)"],
+                  ] as const
+                ).filter(
+                  ([mode]) =>
+                    d.profile.kind === "adherent" ||
+                    !["cells/cm2", "confluence"].includes(mode)
+                )}
               />
               <Field
                 label={
                   v.mode === "split"
-                    ? "1 : N"
+                    ? t("분할 비율 (1 : N)", "Split ratio (1 : N)")
                     : v.mode === "confluence"
-                    ? "Confluence %"
+                    ? t("목표 confluence (%)", "Target confluence (%)")
                     : t("목표값", "Target")
                 }
                 value={v.target}
@@ -487,14 +561,14 @@ export default function CultureTool() {
                 <thead>
                   <tr>
                     <th>{t("용기", "Vessel")}</th>
-                    <th>cells/vessel</th>
+                    <th>{t("용기당 세포 수", "Cells per vessel")}</th>
                     <th>
                       {t(
                         "원액 / 배지 (용기당 mL)",
                         "Stock / medium (mL per vessel)"
                       )}
                     </th>
-                    <th>Confluence</th>
+                    <th>{t("예상 confluence", "Expected confluence")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -508,7 +582,9 @@ export default function CultureTool() {
                         {format(v.stock)} / {format(v.medium)}
                       </td>
                       <td>
-                        {format(v.confluence)}%
+                        {v.confluence == null
+                          ? "—"
+                          : `${format(v.confluence)}%`}
                         <ErrorMessage message={v.warning} />
                       </td>
                     </tr>

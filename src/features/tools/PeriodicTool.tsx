@@ -1,7 +1,7 @@
 import { useRef, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, X } from "lucide-react";
 import periodic from "./data/periodic-table.json";
-import { elementNamesKo, elementLabels } from "./elementNames";
+import { elementNamesKo, elementLabels, elementUnits } from "./elementNames";
 import { Field, Select, useText } from "./ui";
 const families: Record<string, [string, string]> = {
   "Alkali metal": ["알칼리 금속", "#fecaca"],
@@ -197,7 +197,10 @@ export default function PeriodicTool() {
                     <dt>
                       {t(
                         elementLabels[label] ?? label,
-                        label.replace(/([a-z])([A-Z])/g, "$1 $2")
+                        // The Korean labels carry the unit; the English ones
+                        // are built from the column name and need it added.
+                        label.replace(/([a-z])([A-Z])/g, "$1 $2") +
+                          (elementUnits[label] ? ` (${elementUnits[label]})` : "")
                       )}
                     </dt>
                     <dd>

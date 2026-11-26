@@ -86,7 +86,12 @@ export function fitCalibration(points: Point[], model: Model): Fit {
       params = [a, b];
       predict = (x) => a * x + b;
       inverse = (y) => (a !== 0 ? (y - b) / a : NaN);
-      equation = `y = ${fmt(a)}x + ${fmt(b)}`;
+      // "y = 2x − 1", not "y = 2x + -1"; a line through the origin has no
+      // intercept to print.
+      equation =
+        model === "origin"
+          ? `y = ${fmt(a)}x`
+          : `y = ${fmt(a)}x ${b < 0 ? "−" : "+"} ${fmt(Math.abs(b))}`;
     }
   } else {
     if (

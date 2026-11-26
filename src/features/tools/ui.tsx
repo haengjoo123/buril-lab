@@ -283,6 +283,7 @@ const errorTranslations: Record<string, string> = {
     "ICS는 UTC 날짜·시각 형식을 지원합니다.",
   "Exactly two columns required": "X와 Y, 두 열을 입력하세요.",
   "PNG/JPEG, maximum 20 MB": "PNG/JPEG, 최대 20 MB 이미지를 선택하세요.",
+  "Could not create the image": "이미지를 만들지 못했습니다.",
   "Maximum 40 megapixels": "최대 4000만 화소 이미지를 선택하세요.",
 };
 export function ErrorMessage({ message }: { message: string }) {
@@ -359,6 +360,7 @@ export async function report({
   svg,
   headers,
   rows,
+  sections = [],
   name,
 }: {
   title: string;
@@ -366,6 +368,12 @@ export async function report({
   svg?: SVGSVGElement | null;
   headers: string[];
   rows: (string | number)[][];
+  /** Further titled tables after the main one. */
+  sections?: {
+    title: string;
+    headers: string[];
+    rows: (string | number)[][];
+  }[];
   name: string;
 }) {
   const element = document.createElement("section");
@@ -418,23 +426,37 @@ export async function report({
       URL.revokeObjectURL(source);
     }
   }
-  const table = document.createElement("table");
-  table.style.cssText =
-    "width:100%;border-collapse:collapse;margin-top:20px;font-size:13px";
-  for (const [index, row] of [headers, ...rows].entries()) {
-    const tr = document.createElement("tr");
-    tr.style.breakInside = "avoid";
-    for (const cell of row) {
-      const td = document.createElement(index === 0 ? "th" : "td");
-      td.textContent = String(cell);
-      td.style.cssText =
-        "text-align:left;padding:9px 8px;border-bottom:1px solid #cbd5e1;overflow-wrap:anywhere";
-      if (index === 0) td.style.background = "#f1f5f9";
-      tr.append(td);
+  const appendTable = (
+    tableHeaders: string[],
+    tableRows: (string | number)[][]
+  ) => {
+    const table = document.createElement("table");
+    table.style.cssText =
+      "width:100%;border-collapse:collapse;margin-top:20px;font-size:13px";
+    for (const [index, row] of [tableHeaders, ...tableRows].entries()) {
+      const tr = document.createElement("tr");
+      tr.style.breakInside = "avoid";
+      for (const cell of row) {
+        const td = document.createElement(index === 0 ? "th" : "td");
+        td.textContent =
+          typeof cell === "number" ? plainNumber(cell, 7) : String(cell);
+        td.style.cssText =
+          "text-align:left;padding:9px 8px;border-bottom:1px solid #cbd5e1;overflow-wrap:anywhere";
+        if (index === 0) td.style.background = "#f1f5f9";
+        tr.append(td);
+      }
+      table.append(tr);
     }
-    table.append(tr);
+    element.append(table);
+  };
+  appendTable(headers, rows);
+  for (const section of sections) {
+    const subheading = document.createElement("h2");
+    subheading.textContent = section.title;
+    subheading.style.cssText = "font-size:17px;margin:28px 0 0";
+    element.append(subheading);
+    appendTable(section.headers, section.rows);
   }
-  element.append(table);
   const { default: html2pdf } = await import("html2pdf.js");
   const blob = (await html2pdf()
     .set({

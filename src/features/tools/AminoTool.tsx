@@ -17,6 +17,12 @@ export default function AminoTool() {
     [selected, setSelected] = useState("");
   const chosen = aminoAcids.find((a) => a[0] === selected),
     info = chosen && properties.find((row) => row.name === chosen[2]);
+  // Names, codes and the side-chain class in both languages ("염기성" as well
+  // as "basic").
+  const matchesQuery = (a: (typeof aminoAcids)[number]) =>
+    `${a.join(" ")} ${families.find((row) => row[0] === a[4])?.join(" ") ?? ""}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase());
   return (
     <section>
       <div className="tool-library-filters">
@@ -91,9 +97,7 @@ export default function AminoTool() {
           .filter((row) => family === "all" || family === row[0])
           .map(([id, ko, en]) => {
             const list = aminoAcids.filter(
-              (a) =>
-                a[4] === id &&
-                a.join(" ").toLowerCase().includes(query.trim().toLowerCase())
+              (a) => a[4] === id && matchesQuery(a)
             );
             return list.length ? (
               <section className="tool-amino-group" key={id}>
@@ -138,9 +142,7 @@ export default function AminoTool() {
       )}
       {!chosen &&
         !aminoAcids.some(
-          (a) =>
-            (family === "all" || a[4] === family) &&
-            a.join(" ").toLowerCase().includes(query.trim().toLowerCase())
+          (a) => (family === "all" || a[4] === family) && matchesQuery(a)
         ) && (
           <p className="tool-empty">
             {t("검색 결과가 없습니다.", "No matching amino acids.")}
