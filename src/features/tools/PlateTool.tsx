@@ -686,7 +686,9 @@ export default function PlateTool() {
         <div className="tool-actions">
           <button type="button" onClick={() => { setMulti(true); select(names); }}>{t("전체 선택", "Select all")}</button>
           <button type="button" disabled={!selected.length} onClick={() => select([])}>{t("선택 해제", "Clear selection")}</button>
-          <span className="tool-muted" role="status">{selected.length} {t("개 선택", "selected")}</span>
+          <span className="tool-muted" role="status">
+            {t(`${selected.length}개 선택`, `${selected.length} selected`)}
+          </span>
           <span className="tool-plate-x-history">
             <button type="button" disabled={!history.past.length} title="Ctrl+Z" aria-keyshortcuts="Control+Z Meta+Z" onClick={undo}>
               <Undo2 size={16} aria-hidden="true" />{t("실행 취소", "Undo")}
