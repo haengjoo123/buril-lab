@@ -5,11 +5,24 @@ const cloud = vi.hoisted(() => ({
   docs: new Map<string, ToolDocument>(),
   owner: "u1",
   online: true,
+  // Tests hold these to keep a request in flight at a known point.
+  userGate: undefined as Promise<void> | undefined,
+  rpcGate: undefined as Promise<void> | undefined,
+  rpcWaiting: 0,
 }));
 vi.mock("../../services/supabaseClient", () => ({
   supabase: {
-    auth: { getUser: async () => ({ data: { user: { id: cloud.owner } } }) },
+    auth: {
+      getUser: async () => {
+        await cloud.userGate;
+        return { data: { user: { id: cloud.owner } } };
+      },
+    },
     rpc: async (_name: string, p: Record<string, unknown>) => {
+      if (cloud.rpcGate) {
+        cloud.rpcWaiting += 1;
+        await cloud.rpcGate;
+      }
       const id = String(p.p_id),
         old = cloud.docs.get(id);
       if ((old?.revision ?? 0) !== p.p_expected_revision)
@@ -43,11 +56,40 @@ vi.mock("../../services/supabaseClient", () => ({
     }),
   },
 }));
-import { ToolRepository, clearToolCache } from "./repository";
+import {
+  ToolRepository,
+  clearToolCache,
+  mergePreferences,
+} from "./repository";
+import { saveState } from "./status";
+const gate = () => {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => (release = resolve));
+  return { promise, release };
+};
+const serverDoc = (
+  id: string,
+  tool_id: ToolDocument["tool_id"],
+  data: Record<string, unknown>,
+  revision: number
+): ToolDocument => ({
+  id,
+  owner_id: "u1",
+  tool_id,
+  title: "Server copy",
+  data,
+  revision,
+  schema_version: 1,
+  engine_version: "1",
+  updated_at: new Date().toISOString(),
+});
 beforeEach(async () => {
   cloud.docs.clear();
   cloud.owner = "u1";
   cloud.online = true;
+  cloud.userGate = undefined;
+  cloud.rpcGate = undefined;
+  cloud.rpcWaiting = 0;
   vi.stubGlobal("navigator", {
     get onLine() {
       return cloud.online;
@@ -130,5 +172,196 @@ describe("offline private documents", () => {
     expect(reopened.items).toHaveLength(0);
     other.close();
     reopened.close();
+  });
+});
+describe("first sync on an empty cache", () => {
+  it("adopts the server workspace when the local copy was never edited", async () => {
+    cloud.docs.set(
+      "w1",
+      serverDoc("w1", "timer", { _workspace: true, clocks: [{ id: "c1" }] }, 3)
+    );
+    const hold = gate();
+    cloud.userGate = hold.promise;
+    const repo = new ToolRepository("u1");
+    const started = repo.init();
+    await vi.waitFor(() => expect(repo.ready).toBe(true));
+    expect(repo.hydrated).toBe(false);
+    // The shell opens the tool before the first pull has finished.
+    await repo.create("timer", "Timer", { _workspace: true }, { id: "w1" });
+    hold.release();
+    await started;
+    await repo.sync();
+    const item = repo.items.find((row) => row.doc.id === "w1")!;
+    expect(repo.hydrated).toBe(true);
+    expect(item.status).toBe("synced");
+    expect(item.remote).toBeUndefined();
+    expect(item.doc.data.clocks).toHaveLength(1);
+    expect(cloud.docs.get("w1")?.revision).toBe(3);
+    repo.close();
+  });
+  it("still reports a conflict when the local copy was edited before the first pull", async () => {
+    cloud.docs.set(
+      "w1",
+      serverDoc("w1", "timer", { _workspace: true, clocks: [{ id: "c1" }] }, 3)
+    );
+    const hold = gate();
+    cloud.userGate = hold.promise;
+    const repo = new ToolRepository("u1");
+    const started = repo.init();
+    await vi.waitFor(() => expect(repo.ready).toBe(true));
+    await repo.create("timer", "Timer", { _workspace: true }, { id: "w1" });
+    await repo.update("w1", {
+      data: { _workspace: true, clocks: [{ id: "local" }] },
+    });
+    hold.release();
+    await started;
+    await repo.sync();
+    const item = repo.items.find((row) => row.doc.id === "w1")!;
+    expect(item.status).toBe("conflict");
+    expect((item.doc.data.clocks as { id: string }[])[0].id).toBe("local");
+    expect((item.remote?.data.clocks as { id: string }[])[0].id).toBe("c1");
+    expect(cloud.docs.get("w1")?.revision).toBe(3);
+    repo.close();
+  });
+  it("marks the cache hydrated when the first pull cannot run", async () => {
+    cloud.online = false;
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    expect(repo.hydrated).toBe(true);
+    repo.close();
+  });
+});
+describe("preferences document", () => {
+  it("merges favorites from both sides instead of stopping on a conflict", async () => {
+    cloud.docs.set(
+      "p1",
+      serverDoc("p1", "notes", { _preferences: true, favorites: ["timer"] }, 2)
+    );
+    const hold = gate();
+    cloud.userGate = hold.promise;
+    const repo = new ToolRepository("u1");
+    const started = repo.init();
+    await vi.waitFor(() => expect(repo.ready).toBe(true));
+    // Created already holding the favorite the user just picked: an unedited
+    // preferences document is not an empty placeholder.
+    await repo.create(
+      "notes",
+      ".preferences",
+      { _preferences: true, favorites: ["dilution"] },
+      { id: "p1" }
+    );
+    hold.release();
+    await started;
+    await repo.sync();
+    const item = repo.items.find((row) => row.doc.id === "p1")!;
+    expect(item.status).toBe("synced");
+    expect(item.remote).toBeUndefined();
+    expect(cloud.docs.get("p1")?.data.favorites).toEqual(["timer", "dilution"]);
+    await repo.update("p1", {
+      data: { _preferences: true, favorites: ["timer", "dilution", "molarity"] },
+    });
+    await vi.waitFor(() =>
+      expect(cloud.docs.get("p1")?.data.favorites).toHaveLength(3)
+    );
+    repo.close();
+  });
+  it("recovers a preferences document stuck in a conflict", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    await repo.create(
+      "notes",
+      ".preferences",
+      { _preferences: true, favorites: ["dilution"] },
+      { id: "p1" }
+    );
+    await vi.waitFor(() => expect(cloud.docs.get("p1")?.revision).toBe(1));
+    // The state an earlier build left behind: both versions kept, sync halted.
+    const stuck = repo.items.find((row) => row.doc.id === "p1")!;
+    const remote = {
+      ...cloud.docs.get("p1")!,
+      revision: 2,
+      data: { _preferences: true, favorites: ["timer"] },
+    };
+    cloud.docs.set("p1", remote);
+    stuck.remote = remote;
+    stuck.dirty = true;
+    stuck.status = "conflict";
+    await repo.sync();
+    const item = repo.items.find((row) => row.doc.id === "p1")!;
+    expect(item.status).toBe("synced");
+    expect(item.remote).toBeUndefined();
+    expect(cloud.docs.get("p1")?.data.favorites).toEqual(["timer", "dilution"]);
+    repo.close();
+  });
+  it("keeps unknown keys from both sides", () => {
+    expect(
+      mergePreferences(
+        { _preferences: true, favorites: ["a", "b"], localOnly: 1 },
+        { _preferences: true, favorites: ["b", "c"], remoteOnly: 2 }
+      )
+    ).toEqual({
+      _preferences: true,
+      favorites: ["b", "c", "a"],
+      localOnly: 1,
+      remoteOnly: 2,
+    });
+  });
+});
+describe("save status", () => {
+  it("pushes an edit made while a save request is in flight", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const doc = await repo.create("notes", "Note", { body: "a" });
+    await vi.waitFor(() =>
+      expect(cloud.docs.get(doc.id)?.data.body).toBe("a")
+    );
+    await vi.waitFor(() =>
+      expect(repo.items.find((row) => row.doc.id === doc.id)?.status).toBe(
+        "synced"
+      )
+    );
+    const hold = gate();
+    cloud.rpcGate = hold.promise;
+    await repo.update(doc.id, { data: { body: "b" } });
+    await vi.waitFor(() => expect(cloud.rpcWaiting).toBe(1));
+    await repo.update(doc.id, { data: { body: "c" } });
+    cloud.rpcGate = undefined;
+    hold.release();
+    await vi.waitFor(
+      () => expect(cloud.docs.get(doc.id)?.data.body).toBe("c"),
+      { timeout: 4000 }
+    );
+    repo.close();
+  });
+  it("reports offline instead of an endless saving state", async () => {
+    cloud.online = false;
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const doc = await repo.create("notes", "Offline note", { body: "x" });
+    const find = () => repo.items.find((row) => row.doc.id === doc.id)!;
+    expect(repo.offline).toBe(true);
+    expect(saveState(find(), repo)).toBe("offline");
+    cloud.online = true;
+    await repo.sync();
+    expect(repo.offline).toBe(false);
+    expect(saveState(find(), repo)).toBe("saved");
+    repo.close();
+  });
+  it("names every state the shell can show", () => {
+    const base = { status: "synced" as const, dirty: false };
+    const repo = { error: "", offline: false };
+    expect(saveState({ ...base, draft: true }, repo)).toBe("draft");
+    expect(saveState(base, repo)).toBe("saved");
+    expect(saveState({ status: "local", dirty: true }, repo)).toBe("saving");
+    expect(
+      saveState({ status: "error", dirty: true }, { ...repo, error: "boom" })
+    ).toBe("retrying");
+    expect(saveState({ status: "conflict", dirty: true }, repo)).toBe(
+      "conflict"
+    );
+    expect(
+      saveState(base, { error: "Local storage failed", offline: false })
+    ).toBe("storage-error");
+    expect(saveState(undefined, { error: "", offline: true })).toBe("offline");
   });
 });

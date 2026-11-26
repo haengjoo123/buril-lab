@@ -17,6 +17,32 @@ type Local = {
   error?: string;
   draft?: boolean;
 };
+export type ToolRecord = Local;
+const isPreferences = (doc: ToolDocument) => doc.data._preferences === true;
+const strings = (value: unknown) =>
+  Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+/**
+ * Preferences are one hidden document per account, edited from every device.
+ * A revision conflict there has no screen to resolve it on, so both sides are
+ * combined: lists are unioned (server order first) and other keys keep the
+ * local value. Removing a favorite on one device can therefore be undone by a
+ * concurrent edit elsewhere, which is the cheaper mistake.
+ */
+export function mergePreferences(
+  local: Record<string, unknown>,
+  remote: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    ...remote,
+    ...local,
+    _preferences: true,
+    favorites: [
+      ...new Set([...strings(remote.favorites), ...strings(local.favorites)]),
+    ],
+  };
+}
 type Asset = {
   id: string;
   owner: string;
@@ -25,6 +51,8 @@ type Asset = {
   preview?: Blob;
   uploaded: boolean;
 };
+const HYDRATION_WAIT_MS = 8000;
+const FOLLOW_UP_SYNC_MS = 1000;
 const messageOf = (e: unknown) =>
   e && typeof e === "object" && "message" in e ? String(e.message) : String(e);
 const dbPromise = () =>
@@ -102,10 +130,22 @@ async function dbWrite<T extends { id: string }>(
 }
 export class ToolRepository {
   items: Local[] = [];
+  /** Local cache has been read; documents can be shown and edited. */
   ready = false;
+  /**
+   * The first pull has finished, or cannot run (offline, failed, timed out).
+   * Until then the cache may simply be missing documents the account already
+   * has, so nothing with a fixed id should be created.
+   */
+  hydrated = false;
+  /** The last sync attempt was skipped because the device is offline. */
+  offline = false;
   error = "";
   private listeners = new Set<() => void>();
   private syncing = false;
+  /** An edit asked for a sync while one was running. */
+  private resync = false;
+  private followUp?: ReturnType<typeof setTimeout>;
   private closed = false;
   private writes: Promise<unknown> = Promise.resolve();
   readonly owner: string;
@@ -145,12 +185,27 @@ export class ToolRepository {
       );
       this.ready = true;
       this.emit();
-      await this.sync();
+      // A stalled request must not keep fixed-id tools closed forever. If the
+      // pull is still pending after the wait, an untouched local placeholder
+      // is still replaced by the server copy when its first push conflicts.
+      const giveUp = setTimeout(() => this.markHydrated(), HYDRATION_WAIT_MS);
+      try {
+        await this.sync();
+      } finally {
+        clearTimeout(giveUp);
+        this.markHydrated();
+      }
     } catch (e) {
       this.ready = true;
+      this.hydrated = true;
       this.error = String(e);
       this.emit();
     }
+  }
+  private markHydrated() {
+    if (this.hydrated || this.closed) return;
+    this.hydrated = true;
+    this.emit();
   }
   async create(
     tool_id: ToolId,
@@ -227,58 +282,114 @@ export class ToolRepository {
     item.draft = false;
     await this.update(id, { title });
   }
+  /**
+   * Sends one dirty document. A revision conflict normally keeps both versions
+   * for the user to choose from, with two exceptions that need no choice: a
+   * local copy that was created and never edited, and the preferences
+   * document, which is merged and sent again.
+   */
+  private async push(id: string, attempt = 0): Promise<void> {
+    const item = this.items.find((i) => i.doc.id === id);
+    if (!item) return;
+    // A preferences conflict left by an earlier version of this code.
+    if (item.remote) this.mergeRemotePreferences(item, item.remote);
+    const generation = item.generation;
+    const { data, error } = await supabase.rpc("save_tool_document", {
+      p_id: item.doc.id,
+      p_tool_id: item.doc.tool_id,
+      p_title: item.doc.title,
+      p_data: item.doc.data,
+      p_engine_version: ENGINE_VERSION,
+      p_expected_revision: item.doc.revision,
+      p_deleted_at: item.doc.deleted_at ?? null,
+    });
+    if (this.closed) return;
+    const current = this.items.find((i) => i.doc.id === id);
+    if (!current) return;
+    if (!error) {
+      const remote = (Array.isArray(data) ? data[0] : data) as ToolDocument;
+      current.doc =
+        current.generation === generation
+          ? remote
+          : { ...current.doc, revision: remote.revision };
+      current.dirty = current.generation !== generation;
+      current.status = current.dirty ? "local" : "synced";
+      await this.persist(current);
+      return;
+    }
+    if (error.code !== "40001") {
+      current.status = "error";
+      current.error = error.message;
+      await this.persist(current);
+      return;
+    }
+    const r = await supabase
+      .from("tool_documents")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (this.closed) return;
+    const remote = r.data as ToolDocument | null;
+    if (!remote) {
+      current.status = "error";
+      current.error = error.message;
+    } else if (isPreferences(current.doc) && attempt < 2) {
+      // Checked first: a preferences document is created already holding the
+      // favorite the user just picked, so "never edited" does not mean empty.
+      this.mergeRemotePreferences(current, remote);
+      await this.persist(current);
+      return this.push(id, attempt + 1);
+    } else if (current.doc.revision === 0 && current.generation === 1) {
+      // Created here before the account's copy arrived and never touched:
+      // there is nothing local to lose, so the server copy simply replaces it.
+      current.doc = remote;
+      current.dirty = false;
+      current.remote = undefined;
+      current.status = "synced";
+    } else {
+      current.remote = remote;
+      current.status = "conflict";
+    }
+    await this.persist(current);
+  }
+  private mergeRemotePreferences(item: Local, remote: ToolDocument) {
+    item.doc = {
+      ...item.doc,
+      data: mergePreferences(item.doc.data, remote.data),
+      revision: remote.revision,
+    };
+    item.remote = undefined;
+    item.dirty = true;
+    item.status = "local";
+  }
   async sync() {
-    if (this.closed || this.syncing || !navigator.onLine) return;
+    if (this.closed) return;
+    if (!navigator.onLine) {
+      if (!this.offline) {
+        this.offline = true;
+        this.emit();
+      }
+      return;
+    }
+    if (this.syncing) {
+      // The running sync may already have sent this document; ask for one
+      // more pass so the newer edit does not wait for the periodic sync.
+      this.resync = true;
+      return;
+    }
     this.syncing = true;
+    this.resync = false;
+    this.offline = false;
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (this.closed || user?.id !== this.owner) return;
       for (const item of [...this.items]) {
-        if (!item.dirty || item.remote || item.draft) continue;
-        const generation = item.generation;
-        const { data, error } = await supabase.rpc("save_tool_document", {
-          p_id: item.doc.id,
-          p_tool_id: item.doc.tool_id,
-          p_title: item.doc.title,
-          p_data: item.doc.data,
-          p_engine_version: ENGINE_VERSION,
-          p_expected_revision: item.doc.revision,
-          p_deleted_at: item.doc.deleted_at ?? null,
-        });
+        if (!item.dirty || item.draft) continue;
+        if (item.remote && !isPreferences(item.doc)) continue;
+        await this.push(item.doc.id);
         if (this.closed) return;
-        const current = this.items.find((i) => i.doc.id === item.doc.id);
-        if (!current) continue;
-        if (error) {
-          if (error.code === "40001") {
-            const r = await supabase
-              .from("tool_documents")
-              .select("*")
-              .eq("id", item.doc.id)
-              .single();
-            if (r.data) {
-              current.remote = r.data as ToolDocument;
-              current.status = "conflict";
-            } else {
-              current.status = "error";
-              current.error = error.message;
-            }
-          } else {
-            current.status = "error";
-            current.error = error.message;
-          }
-          await this.persist(current);
-          continue;
-        }
-        const remote = (Array.isArray(data) ? data[0] : data) as ToolDocument;
-        current.doc =
-          current.generation === generation
-            ? remote
-            : { ...current.doc, revision: remote.revision };
-        current.dirty = current.generation !== generation;
-        current.status = current.dirty ? "local" : "synced";
-        await this.persist(current);
       }
       const { data, error } = await supabase
         .from("tool_documents")
@@ -331,7 +442,14 @@ export class ToolRepository {
       if (!this.closed) this.error = messageOf(e);
     } finally {
       this.syncing = false;
-      if (!this.closed) this.emit();
+      if (!this.closed) {
+        this.emit();
+        if (this.resync && !this.followUp)
+          this.followUp = setTimeout(() => {
+            this.followUp = undefined;
+            void this.sync();
+          }, FOLLOW_UP_SYNC_MS);
+      }
     }
   }
   async putImage(document: string, blob: Blob) {
@@ -391,6 +509,7 @@ export class ToolRepository {
   }
   close() {
     this.closed = true;
+    clearTimeout(this.followUp);
     this.listeners.clear();
   }
   async drain() {

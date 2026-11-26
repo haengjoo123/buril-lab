@@ -11,11 +11,13 @@ vi.mock("../../locales/i18n", () => ({
   default: { language: "ko", t: (key: string) => key },
 }));
 vi.mock("../../services/supabaseClient", () => ({ supabase: {} }));
-vi.mock("./repository", () => ({
-  toolWorkspaceId: () => "timer-workspace",
-  getToolRepository: () => ({
+const repo = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  return {
     owner: "owner",
     ready: true,
+    hydrated: true,
+    offline: false,
     error: "",
     items: [
       {
@@ -29,12 +31,20 @@ vi.mock("./repository", () => ({
           revision: 1,
         },
       },
-    ],
-    subscribe: () => () => {},
+    ] as unknown[],
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    emit: () => listeners.forEach((listener) => listener()),
     sync: vi.fn(),
     update: vi.fn(),
-    create: vi.fn(),
-  }),
+    create: vi.fn(async () => ({})),
+  };
+});
+vi.mock("./repository", () => ({
+  toolWorkspaceId: () => "timer-workspace",
+  getToolRepository: () => repo,
 }));
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -71,5 +81,40 @@ it("returns from a General tool to the selected General category", async () => {
   } finally {
     await act(() => root.unmount());
     host.remove();
+  }
+});
+it("waits for the first pull before creating a fixed-id workspace", async () => {
+  const cached = repo.items;
+  repo.items = [];
+  repo.hydrated = false;
+  repo.create.mockClear();
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter initialEntries={["/app/tools/timer"]}>
+          <ToolsWorkspace ownerId="owner" />
+        </MemoryRouter>
+      )
+    );
+    // The account may already hold this workspace; an empty local one created
+    // now would shadow it and surface as a conflict.
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("도구 여는 중");
+    repo.hydrated = true;
+    await act(async () => repo.emit());
+    expect(repo.create).toHaveBeenCalledWith(
+      "timer",
+      "타이머",
+      { _workspace: true },
+      { id: "timer-workspace" }
+    );
+  } finally {
+    await act(() => root.unmount());
+    host.remove();
+    repo.items = cached;
+    repo.hydrated = true;
   }
 });

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { tools, isToolId, type ToolCategory, type ToolId } from "./registry";
 import { getToolRepository, toolWorkspaceId } from "./repository";
+import { saveState } from "./status";
 import {
   ToolContext,
   useText,
@@ -153,7 +154,8 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
     [error, setError] = useState(""),
     [naming, setNaming] = useState(false),
     [name, setName] = useState(""),
-    [showStatus, setShowStatus] = useState(false);
+    [showStatus, setShowStatus] = useState(false),
+    [resolving, setResolving] = useState<"local" | "remote" | null>(null);
   const initializing = useRef(new Set<string>());
   useEffect(() => repo.subscribe(() => refresh((n) => n + 1)), [repo]);
   const parts = location.pathname.split("/").filter(Boolean),
@@ -223,6 +225,9 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
   useEffect(() => {
     if (
       !repo.ready ||
+      // A fixed-id workspace may already exist on the account. Creating an
+      // empty one before the first pull would shadow it and report a conflict.
+      (automatic && !repo.hydrated) ||
       !isToolId(id) ||
       readonly ||
       savedView ||
@@ -246,6 +251,7 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
   }, [
     repo,
     repo.ready,
+    repo.hydrated,
     id,
     readonly,
     savedView,
@@ -287,24 +293,67 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
       if (record.draft) await repo.saveDraft(record.doc.id, name.trim());
       else await repo.update(record.doc.id, { title: name.trim() });
       setNaming(false);
-      navigate(`/app/tools/${id}/${record.doc.id}`);
+      // Replace, not push: the entry being left is the tool's blank quick-use
+      // address, and going back to it would open a new empty draft as if the
+      // work just saved had been lost.
+      navigate(`/app/tools/${id}/${record.doc.id}`, { replace: true });
     } catch (e) {
       setError(String(e));
     }
   };
-  const storageFailed = repo.error === "Local storage failed";
-  const status =
-    record?.status === "conflict"
-      ? t("충돌 확인", "Review conflict")
-      : storageFailed
-      ? t("저장 오류", "Storage error")
-      : repo.error || record?.status === "error"
-      ? t("기기에 저장", "On this device")
-      : record?.draft
-      ? t("기기에 저장", "On this device")
-      : record?.status === "synced"
-      ? t("저장됨", "Saved")
-      : t("저장 중", "Saving");
+  const state = saveState(record, repo);
+  const [status, statusDetail] = {
+    draft: [
+      t("이 기기에만 보관", "On this device only"),
+      t(
+        "입력은 이 기기에 보관됩니다. 작업 저장을 선택하면 계정에 보관할 수 있습니다.",
+        "Inputs are kept on this device. Save work to keep a named copy in your account."
+      ),
+    ],
+    saving: [
+      t("저장 중", "Saving"),
+      t(
+        "계정에 저장하고 다른 기기와 동기화합니다.",
+        "Saved to your account and synchronized across devices."
+      ),
+    ],
+    saved: [
+      t("저장됨", "Saved"),
+      t(
+        "계정에 저장하고 다른 기기와 동기화합니다.",
+        "Saved to your account and synchronized across devices."
+      ),
+    ],
+    offline: [
+      t("오프라인 · 기기에 저장됨", "Offline · saved on device"),
+      t(
+        "오프라인입니다. 변경 내용은 이 기기에 저장되어 있으며 연결되면 계정에 동기화됩니다.",
+        "You are offline. Changes are saved on this device and sync to your account when you reconnect."
+      ),
+    ],
+    retrying: [
+      t("동기화 대기 중", "Waiting to sync"),
+      t(
+        "현재 서버와 연결되지 않아 기기에 저장하고 있습니다. 연결되면 저장한 작업이 동기화됩니다.",
+        "Working on this device while the server is unavailable. Saved work syncs when connected."
+      ),
+    ],
+    conflict: [
+      t("충돌 확인", "Review conflict"),
+      t(
+        "두 기기에서 수정되었습니다. 아래에서 유지할 버전을 선택하세요.",
+        "This work was edited on two devices. Choose which version to keep below."
+      ),
+    ],
+    "storage-error": [
+      t("저장 오류", "Storage error"),
+      t(
+        "기기 저장에 실패했습니다. 저장 공간을 확인하세요.",
+        "Device storage failed. Check available space."
+      ),
+    ],
+  }[state];
+  const showsStatus = !readonly && repo.ready && !!(record || repo.error);
   if (!toolsEnabled)
     return (
       <div className="tools-workspace">
@@ -331,42 +380,29 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
             {documentId && record ? record.doc.title : title}
             {savedView && ` · ${t("저장한 작업", "Saved work")}`}
           </h1>
-          {!readonly && repo.ready && (record || repo.error) && (
+          {showsStatus && (
             <button
               className="tool-save-status"
               onClick={() => setShowStatus(!showStatus)}
               aria-expanded={showStatus}
+              aria-controls="tool-save-status-detail"
             >
               {status}
             </button>
           )}
         </header>
+        {/* Announces a change of state (saved, offline, conflict), not every keystroke. */}
+        <p className="sr-only" role="status" aria-live="polite">
+          {showsStatus && state !== "saving" ? status : ""}
+        </p>
         {showStatus && (
-          <div className="tool-connection">
-            <p>
-              {storageFailed
-                ? t(
-                    "기기 저장에 실패했습니다. 저장 공간을 확인하세요.",
-                    "Device storage failed. Check available space."
-                  )
-                : repo.error
-                ? t(
-                    "현재 서버와 연결되지 않아 기기에 저장하고 있습니다. 연결되면 저장한 작업이 동기화됩니다.",
-                    "Working on this device while the server is unavailable. Saved work syncs when connected."
-                  )
-                : record?.draft
-                ? t(
-                    "입력은 이 기기에 보관됩니다. 작업 저장을 선택하면 계정에 보관할 수 있습니다.",
-                    "Inputs are kept on this device. Save work to keep a named copy in your account."
-                  )
-                : t(
-                    "계정에 저장하고 다른 기기와 동기화합니다.",
-                    "Saved to your account and synchronized across devices."
-                  )}
-            </p>
-            <button onClick={() => repo.sync()}>
-              {t("동기화 다시 시도", "Retry sync")}
-            </button>
+          <div className="tool-connection" id="tool-save-status-detail">
+            <p>{statusDetail}</p>
+            {state !== "draft" && state !== "storage-error" && (
+              <button onClick={() => repo.sync()}>
+                {t("동기화 다시 시도", "Retry sync")}
+              </button>
+            )}
           </div>
         )}
         <ErrorMessage message={error} />
@@ -636,16 +672,47 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
                       {t("양쪽 버전 내보내기", "Export both versions")}
                     </button>
                     <button
-                      onClick={() => repo.resolve(record.doc.id, "local")}
+                      aria-pressed={resolving === "local"}
+                      onClick={() => setResolving("local")}
                     >
                       {t("이 기기 버전 유지", "Keep local")}
                     </button>
                     <button
-                      onClick={() => repo.resolve(record.doc.id, "remote")}
+                      aria-pressed={resolving === "remote"}
+                      onClick={() => setResolving("remote")}
                     >
                       {t("서버 버전 유지", "Keep server")}
                     </button>
                   </div>
+                  {resolving && (
+                    <div className="tool-inline-confirm" role="alert">
+                      <span>
+                        {resolving === "local"
+                          ? t(
+                              "서버에 있는 버전이 이 기기의 내용으로 바뀝니다. 되돌릴 수 없습니다.",
+                              "The server version will be replaced with this device's content. This cannot be undone."
+                            )
+                          : t(
+                              "이 기기에서 수정한 내용이 사라지고 서버 버전으로 바뀝니다. 되돌릴 수 없습니다.",
+                              "Edits made on this device will be discarded and replaced with the server version. This cannot be undone."
+                            )}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const choice = resolving;
+                          setResolving(null);
+                          void repo.resolve(record.doc.id, choice);
+                        }}
+                      >
+                        {resolving === "local"
+                          ? t("이 기기 버전으로 바꾸기", "Replace with local")
+                          : t("서버 버전으로 바꾸기", "Replace with server")}
+                      </button>
+                      <button onClick={() => setResolving(null)}>
+                        {t("취소", "Cancel")}
+                      </button>
+                    </div>
+                  )}
                 </Panel>
               )}
               <ToolGuide id={id as ToolId} />
@@ -693,7 +760,10 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
                         await repo.update(record.doc.id, {
                           deleted_at: new Date().toISOString(),
                         });
-                        navigate(`/app/tools/${id}?view=saved`);
+                        // Back must not return to the document just trashed.
+                        navigate(`/app/tools/${id}?view=saved`, {
+                          replace: true,
+                        });
                       }}
                     >
                       {t("휴지통으로", "Move to trash")}
