@@ -14,7 +14,7 @@
 | 세포 배양        | [Gibco handbook](https://documents.thermofisher.com/TFS-Assets/BID/Handbooks/gibco-cell-culture-basics-handbook.pdf)                                                                                                                                                          | 세포주별 입력과 분주 실행을 구분하고 용기별 원액·배지량을 보여준다. 모델 예측과 실측을 구분한다.                                                                       |
 | 세포 계수        | [Thermo Fisher hemocytometer](https://www.thermofisher.com/sg/en/home/references/gibco-cell-culture-basics/cell-culture-protocols/counting-cells-in-a-hemacytometer.html)                                                                                                     | 생존/사멸 계수, 희석배수, 계수 부피를 명시하고 농도·생존율을 계산한다. 장비별 구획 부피 확인 안내를 둔다.                                                              |
 | 타이머           | [Motorola Clock](https://help.motorola.com/hc/8020/11/global/en-us/CGjcb0611131435.html)                                                                                                                                                                                      | 시·분·초와 빠른 시간 선택, 이름별 여러 타이머, 시작/정지/재개/초기화를 분리한다. 종료 절대시각으로 복원한다.                                                           |
-| 스톱워치         | [Apple Clock](https://support.apple.com/en-lamr/guide/clock-mac/apdwf3f9543b/mac)                                                                                                                                                                                             | 도구를 열면 바로 시작할 수 있다. 경과시간을 크게 표시하고 정지/재개·초기화를 구분한다. 랩 기능은 이번 명세 범위가 아니다.                                              |
+| 스톱워치         | [Apple Clock](https://support.apple.com/en-lamr/guide/clock-mac/apdwf3f9543b/mac)                                                                                                                                                                                             | 도구를 열면 바로 시작할 수 있다. 경과시간을 크게 표시하고 정지/재개·초기화를 구분한다. 랩(구간·누적)을 기록하고 복사·CSV로 내보낸다.                                              |
 | 알람             | [Google Clock alarms](https://support.google.com/clock/answer/2840926?hl=en)                                                                                                                                                                                                  | 날짜·시각, 누르기 쉬운 반복 요일, 활성 상태, 다음 발생 시각을 구분한다. 계정 정의와 기기별 알림 권한을 분리한다.                                                       |
 | 카운터           | [Tally Count](https://tallycount.app/), 사용자 Lab Laps 스크린샷                                                                                                                                                                                                              | 큰 영역으로 +1, 독립적인 −1, 단일/다중 카운터, 전체·항목 비율, 실행 취소, 집중 모드. 값을 자동 보존하며 초기화는 확인 후 실행한다.                                     |
 | 계산기           | [Windows Calculator](https://support.microsoft.com/en-gb/windows/apps/use-the-calculator-in-windows)                                                                                                                                                                          | 일반 숫자 키패드·큰 결과·과학 함수·RAD/DEG·재사용 가능한 계산 내역. 수식 프로젝트 작성 절차를 요구하지 않는다.                                                         |
@@ -27,6 +27,31 @@
 | 코돈             | [NCBI genetic codes](https://www.ncbi.nlm.nih.gov/Taxonomy/Utils/wprintgc.cgi#SG1)                                                                                                                                                                                            | RNA/DNA, 휠/표, 5′→3′ 순서, 코돈/아미노산 검색, 시작/종결 표시. 큰 휠을 확대하거나 문자 검색으로 조회할 수 있다. 표 1로 범위를 명시한다.                               |
 | 래더             | [NEB ladders](https://www.neb.com/en/products/markers-and-ladders/dna-markers-and-ladders)                                                                                                                                                                                    | DNA/RNA/단백질, 제조사·제품번호·공식 링크, 밴드 크기·강조·도식. 제품마다 다른 밴드 자료를 추정해서 배포하지 않는다. 로그 도식이 실제 이동 거리 예측이 아님을 표시한다. |
 | 주기율표         | [PubChem element pages](https://pubchem.ncbi.nlm.nih.gov/docs/periodic-table-element-pages)                                                                                                                                                                                   | 118개 원소의 위치·분류 색상, 원자번호 정확 검색, 확대, 원소별 물성 및 이전/다음 이동. 기본 표에서 읽기 어려운 정보는 상세에서 제공한다.                                |
+
+## 2026-11-27 개선 내용
+
+위 표는 2026-11-09 첫 구현의 판단 기록이다. 아래는 그 뒤 전수 조사로 고치고 더한 것이다. 계획과 결정은 프로젝트 메모리(`lab-tools-improvement-plan`)에, 시각화 대상 선정은 `docs/strategy/lab-tools-visualization-review-2026-11.md`에 있다.
+
+**공통**
+- 저장: 첫 내려받기 전 거짓 충돌, 로그아웃 시 미동기화 작업 유실, 오프라인에서의 "저장 중" 표시를 고쳤다. 쓰기는 묶어서 기록하고 전송한다. 도구 주소로 바로 들어올 때 빈 초안이 새로 생기던 문제를 고쳤다(도구당 초안 하나).
+- 탐색: 즐겨찾기 고정, 최근 사용, 동의어 검색, 아이콘. 저장한 작업 목록에서 이름 변경·복제·휴지통·영구 삭제.
+- 도구 간 전달(`handoff.ts`): 몰농도 → 희석, 플레이트 → 마스터 믹스·검량선, 세포 계수 → 세포 배양, 주기율표(화학식) → 몰농도. 값은 복사되는 스냅숏이다.
+- 시약 분자량 선택기(`ReagentLookup`)를 희석·몰농도·배지/버퍼·단위 변환이 함께 쓴다. 연구실 재고는 읽지 않는다.
+- 그림(`charts.tsx`): 분할 막대, 미터, 막대 목록, 선·점 그림, 농담 눈금, 옮김 도식. 색은 앱의 밝은·어두운 배경에서 색각 이상 구분을 검증한 고정 순서만 쓰고, 모든 그림에 값 라벨과 표가 딸린다.
+
+**계산 도구**
+- 희석: 구할 값 선택, 1 : N·X 배수, 몰농도↔질량농도, 제조 문장 복사, 연속 희석표(옮길 양·남는 양·합계)와 옮김 도식, 0.5 µL 미만 분주 경고와 중간 희석 제안.
+- 몰농도: 순도, kDa, 제조 문장, "이 용액을 희석". 단위를 바꿔도 친 숫자는 그대로 둔다.
+- 마스터 믹스·배지/버퍼: 원액→최종 농도 입력, 반응 부피까지 물로 채움, 반응별 개별 첨가, 제조 단계와 진행 표시, 구성 막대.
+- 단위 변환(단위 추가, 필요한 입력 안내), 계산기(ANS, 암시적 곱, `50 + 10 %` = 55), 사용자 수식(변수별 증감 단위·설명, 변수에 따른 결과 그림).
+
+**시간 도구와 알림**
+- 타이머(프리셋 편집, 초과 시간, 실행 취소, 진행 미터), 스톱워치(랩), 알람(다시 알림, 정렬, 지난 알람 정리), 카운터(항목 추가·삭제, 증감 단위, 직접 입력, 진동).
+- 알림은 순수 모듈(`notificationPlan.ts`)이 계획하고 입력이 바뀔 때만 다시 계산한다. 웹은 소리·브라우저 알림·여러 건 쌓기·놓친 알림·탭 중복 방지, 네이티브는 본문·누르면 이동·채널·차이만 재예약. iOS 64건 한도는 유효기한 알림과 나눠 쓴다(`reminders/deviceNotifications.ts`).
+
+**새 도구** (서버 `tool_id` 확장 migration `20261127090000_lab_tools_usage_and_purge.sql` 적용 전까지는 기기에만 보관한다)
+- 프라이머 · 올리고: nearest-neighbour Tm(SantaLucia 1998), GC%, 분자량, 재현탁 부피.
+- 핵산 정량: A260 → 농도·순도, 질량 ↔ 몰수·복제 수, 라이게이션 몰비.
 
 ## 검증과 공개 조건
 

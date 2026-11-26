@@ -365,12 +365,6 @@ export default function AlarmTool() {
         );
       })}
       <div className="tool-alarm-x-undo">{undoBar}</div>
-      <p className="tool-muted">
-        {t(
-          "웹 알림은 페이지가 열려 있을 때 제공됩니다.",
-          "Web alerts require the page to remain open."
-        )}
-      </p>
     </div>
   );
 }
