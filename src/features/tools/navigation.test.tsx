@@ -37,6 +37,7 @@ const repo = vi.hoisted(() => {
       return () => listeners.delete(listener);
     },
     emit: () => listeners.forEach((listener) => listener()),
+    localOnlyDocuments: () => ({ documents: [], drafts: [] }),
     sync: vi.fn(),
     update: vi.fn(),
     create: vi.fn(async () => ({})),

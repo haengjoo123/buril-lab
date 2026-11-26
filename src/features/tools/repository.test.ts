@@ -59,9 +59,12 @@ vi.mock("../../services/supabaseClient", () => ({
 import {
   ToolRepository,
   clearToolCache,
+  closeToolRepository,
+  getToolRepository,
   mergePreferences,
+  prepareToolSignOut,
 } from "./repository";
-import { saveState } from "./status";
+import { pendingWorkMessage, saveState } from "./status";
 const gate = () => {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => (release = resolve));
@@ -304,6 +307,73 @@ describe("preferences document", () => {
       favorites: ["b", "c", "a"],
       localOnly: 1,
       remoteOnly: 2,
+    });
+  });
+});
+describe("sign-out", () => {
+  const openRepository = async () => {
+    const repo = getToolRepository("u1");
+    await vi.waitFor(() => expect(repo.hydrated).toBe(true));
+    return repo;
+  };
+  it("sends unsynced work before the device cache is cleared", async () => {
+    cloud.online = false;
+    const repo = await openRepository();
+    const doc = await repo.create("notes", "Written offline", { body: "x" });
+    cloud.online = true;
+    const pending = await prepareToolSignOut("u1");
+    expect(cloud.docs.get(doc.id)?.data.body).toBe("x");
+    expect(pending.documents).toHaveLength(0);
+    expect(pendingWorkMessage(pending, true)).toBe("");
+    await closeToolRepository("u1");
+  });
+  it("reports what would be deleted when it cannot be sent", async () => {
+    cloud.online = false;
+    const repo = await openRepository();
+    await repo.create("notes", "Written offline", { body: "x" });
+    const project = await repo.create("master-mix", "Mix", {}, { draft: true });
+    await repo.update(project.id, { data: { count: 8 } });
+    // Scratch input of a tool that cannot save work, and tools merely opened.
+    const quick = await repo.create("dilution", "Dilution", {}, { draft: true });
+    await repo.update(quick.id, { data: { stock: "5" } });
+    await repo.create("plate-labelling", "Plate", {}, { draft: true });
+    await repo.create("timer", "Timer", { _workspace: true }, { id: "w1" });
+    await repo.create(
+      "notes",
+      ".preferences",
+      { _preferences: true, favorites: ["timer"] },
+      { id: "p1" }
+    );
+    const pending = await prepareToolSignOut("u1");
+    expect(pending.documents.map((doc) => doc.title)).toEqual([
+      "Written offline",
+    ]);
+    expect(pending.drafts.map((doc) => doc.title)).toEqual(["Mix"]);
+    const question = pendingWorkMessage(pending, true);
+    expect(question).toContain("동기화되지 않은 작업 1개");
+    expect(question).toContain("저장하지 않은 초안 1개");
+    expect(question).not.toContain("이미지");
+    expect(pendingWorkMessage(pending, false)).not.toMatch(/[가-힣]/);
+    await closeToolRepository("u1");
+  });
+  it("does not wait past the limit for a request that hangs", async () => {
+    const repo = await openRepository();
+    const hold = gate();
+    cloud.rpcGate = hold.promise;
+    await repo.create("notes", "Slow network", { body: "x" });
+    const started = Date.now();
+    const pending = await prepareToolSignOut("u1", 80);
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(pending.documents).toHaveLength(1);
+    cloud.rpcGate = undefined;
+    hold.release();
+    await closeToolRepository("u1");
+  });
+  it("has nothing to report for an account that never opened the tools", async () => {
+    expect(await prepareToolSignOut("u2")).toEqual({
+      documents: [],
+      drafts: [],
+      images: 0,
     });
   });
 });

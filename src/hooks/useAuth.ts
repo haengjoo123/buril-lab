@@ -113,7 +113,18 @@ export function useAuth(): UseAuthReturn {
     },[currentUserId]);
 
     const signOut = useCallback(async () => {
-        if (currentUserId) useInventoryHazardStore.getState().clearUser(currentUserId);
+        if (currentUserId) {
+            // Signing out clears this account's tool cache on the device. Send what
+            // the server lacks first, and ask before deleting what cannot be sent.
+            try {
+                const [{ prepareToolSignOut }, { pendingWorkMessage }, { default: i18n }] = await Promise.all([
+                    import('../features/tools/repository'), import('../features/tools/status'), import('../locales/i18n'),
+                ]);
+                const question = pendingWorkMessage(await prepareToolSignOut(currentUserId), i18n.language.startsWith('ko'));
+                if (question && !window.confirm(question)) return;
+            } catch { /* A failed check must not keep the user signed in. */ }
+            useInventoryHazardStore.getState().clearUser(currentUserId);
+        }
         try { if (currentUserId) {
             const [{ closeToolRepository }, { cancelToolNotifications }] = await Promise.all([
                 import('../features/tools/repository'), import('../features/tools/notifications'),

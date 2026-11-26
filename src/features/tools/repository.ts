@@ -4,6 +4,7 @@ export const toolWorkspaceId = (owner: string, tool: string) =>
   v5(`burillab:tools:${owner}:${tool}`, v5.URL);
 import {
   ENGINE_VERSION,
+  projectToolIds,
   type ToolDocument,
   type ToolId,
   type SaveStatus,
@@ -18,6 +19,16 @@ type Local = {
   draft?: boolean;
 };
 export type ToolRecord = Local;
+/** Work that exists only in this device's cache and would go with it. */
+export type PendingToolWork = {
+  /** Named or workspace documents with edits the server does not have. */
+  documents: ToolDocument[];
+  /** Edited quick-use drafts of tools whose work can be saved. */
+  drafts: ToolDocument[];
+  /** Images not uploaded yet. */
+  images: number;
+};
+const NO_PENDING_WORK: PendingToolWork = { documents: [], drafts: [], images: 0 };
 const isPreferences = (doc: ToolDocument) => doc.data._preferences === true;
 const strings = (value: unknown) =>
   Array.isArray(value)
@@ -143,6 +154,7 @@ export class ToolRepository {
   error = "";
   private listeners = new Set<() => void>();
   private syncing = false;
+  private inFlight?: Promise<void>;
   /** An edit asked for a sync while one was running. */
   private resync = false;
   private followUp?: ReturnType<typeof setTimeout>;
@@ -375,8 +387,12 @@ export class ToolRepository {
       // The running sync may already have sent this document; ask for one
       // more pass so the newer edit does not wait for the periodic sync.
       this.resync = true;
-      return;
+      return this.inFlight;
     }
+    this.inFlight = this.runSync();
+    return this.inFlight;
+  }
+  private async runSync() {
     this.syncing = true;
     this.resync = false;
     this.offline = false;
@@ -507,6 +523,71 @@ export class ToolRepository {
     }
     return generated ?? data;
   }
+  /**
+   * Documents that exist only on this device. Preferences and a workspace that
+   * was opened but never used are left out: losing them loses no work.
+   */
+  localOnlyDocuments(): Pick<PendingToolWork, "documents" | "drafts"> {
+    const documents = this.items
+      .filter(
+        (i) =>
+          !i.draft &&
+          (i.dirty || i.remote) &&
+          !isPreferences(i.doc) &&
+          !(
+            i.doc.data._workspace === true &&
+            i.doc.revision === 0 &&
+            i.generation === 1
+          )
+      )
+      .map((i) => i.doc);
+    const drafts = this.items
+      .filter(
+        (i) =>
+          i.draft &&
+          i.generation > 1 &&
+          !i.doc.deleted_at &&
+          projectToolIds.includes(i.doc.tool_id)
+      )
+      .map((i) => i.doc);
+    return { documents, drafts };
+  }
+  private async pendingImages() {
+    return (await dbRead<Asset>("assets")).filter(
+      (a) => a.owner === this.owner && !a.uploaded
+    );
+  }
+  async pendingWork(): Promise<PendingToolWork> {
+    return {
+      ...this.localOnlyDocuments(),
+      images: (await this.pendingImages()).length,
+    };
+  }
+  /**
+   * Gives unsent edits and images a last chance to reach the server, for at
+   * most `limitMs`. A pass can end having sent only the state from before the
+   * newest edit, hence the retries.
+   */
+  async settle(limitMs: number) {
+    const deadline = Date.now() + limitMs;
+    for (let pass = 0; pass < 3; pass++) {
+      const left = deadline - Date.now();
+      if (left <= 0 || this.closed || !navigator.onLine) return;
+      const unsent =
+        this.items.some((i) => i.dirty && !i.draft && !i.remote) ||
+        (await this.pendingImages()).some((a) => {
+          const parent = this.items.find((i) => i.doc.id === a.document);
+          return parent && !parent.draft;
+        });
+      if (!unsent) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        this.sync(),
+        new Promise<void>((resolve) => (timer = setTimeout(resolve, left))),
+      ]);
+      clearTimeout(timer);
+    }
+  }
   close() {
     this.closed = true;
     clearTimeout(this.followUp);
@@ -533,6 +614,21 @@ export function getToolRepository(owner: string) {
     void repo.init();
   }
   return repo;
+}
+/**
+ * Run before the device cache is cleared on sign-out. Tries once more to send
+ * what the server does not have, then reports what would still be deleted so
+ * the caller can ask first. Drafts are never uploaded here: they stay on the
+ * device until the user saves them as named work.
+ */
+export async function prepareToolSignOut(
+  owner: string,
+  limitMs = 3000
+): Promise<PendingToolWork> {
+  const repo = repositories.get(owner);
+  if (!repo?.ready) return NO_PENDING_WORK;
+  await repo.settle(limitMs);
+  return repo.pendingWork();
 }
 export async function closeToolRepository(owner: string) {
   const repo = repositories.get(owner);

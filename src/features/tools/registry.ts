@@ -188,6 +188,22 @@ export type ToolId = (typeof tools)[number][0];
 export type ToolCategory = (typeof tools)[number][1];
 export const isToolId = (s: string): s is ToolId =>
   tools.some((t) => t[0] === s);
+/**
+ * Tools whose quick-use draft can be kept as named work ("작업 저장"). Their
+ * drafts are work in progress; the other tools' drafts are scratch inputs.
+ */
+export const projectToolIds: readonly ToolId[] = [
+  "master-mix",
+  "medium-buffer",
+  "plate-labelling",
+  "gel-blot",
+  "image-measurer",
+  "cell-culture",
+  "custom-equation",
+  "calibration-curve",
+  "ladders",
+  "cell-counter",
+];
 export const ENGINE_VERSION = "1.0.0";
 export type SaveStatus =
   | "loading"

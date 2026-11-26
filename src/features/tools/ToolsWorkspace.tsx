@@ -17,7 +17,13 @@ import {
   Plus,
   Search,
 } from "lucide-react";
-import { tools, isToolId, type ToolCategory, type ToolId } from "./registry";
+import {
+  tools,
+  isToolId,
+  projectToolIds,
+  type ToolCategory,
+  type ToolId,
+} from "./registry";
 import { getToolRepository, toolWorkspaceId } from "./repository";
 import { saveState } from "./status";
 import {
@@ -210,18 +216,7 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
   const preference = repo.items.find((row) => row.doc.data._preferences),
     favorites = (preference?.doc.data.favorites ?? []) as string[];
   const title = tool ? t(tool[2], tool[3]) : t("실험 도구", "Lab tools");
-  const projectTool = [
-    "master-mix",
-    "medium-buffer",
-    "plate-labelling",
-    "gel-blot",
-    "image-measurer",
-    "cell-culture",
-    "custom-equation",
-    "calibration-curve",
-    "ladders",
-    "cell-counter",
-  ].includes(id);
+  const projectTool = (projectToolIds as readonly string[]).includes(id);
   useEffect(() => {
     if (
       !repo.ready ||
@@ -354,6 +349,12 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
     ],
   }[state];
   const showsStatus = !readonly && repo.ready && !!(record || repo.error);
+  // Sign-out clears the device cache, so the status panel offers a copy of
+  // whatever the account does not have yet.
+  const deviceOnly = showStatus ? repo.localOnlyDocuments() : null;
+  const localOnly = deviceOnly
+    ? [...deviceOnly.documents, ...deviceOnly.drafts]
+    : [];
   if (!toolsEnabled)
     return (
       <div className="tools-workspace">
@@ -401,6 +402,24 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
             {state !== "draft" && state !== "storage-error" && (
               <button onClick={() => repo.sync()}>
                 {t("동기화 다시 시도", "Retry sync")}
+              </button>
+            )}
+            {localOnly.length > 0 && (
+              <button
+                onClick={() =>
+                  download(
+                    JSON.stringify(localOnly, null, 2),
+                    `buril-tools-device-only-${new Date()
+                      .toISOString()
+                      .slice(0, 10)}.json`,
+                    "application/json"
+                  )
+                }
+              >
+                {t(
+                  `이 기기에만 있는 작업 내보내기 (${localOnly.length})`,
+                  `Export work only on this device (${localOnly.length})`
+                )}
               </button>
             )}
           </div>
