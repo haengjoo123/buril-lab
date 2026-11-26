@@ -78,6 +78,7 @@ export function useAgentMode(params: UseAgentModeParams): SearchAgentModeProps |
   const setText = useAgentStore((state) => state.setText);
   const submit = useAgentStore((state) => state.submit);
   const reset = useAgentStore((state) => state.reset);
+  const confirmProposal = useAgentStore((state) => state.confirmProposal);
 
   // The shell passes fresh closures on every render; handlers below read the latest ones.
   const latest = useRef(params);
@@ -182,8 +183,10 @@ export function useAgentMode(params: UseAgentModeParams): SearchAgentModeProps |
       onUiAction={handleUiAction}
       onExample={handleExample}
       onRetry={handleRetry}
+      onDismissProposal={reset}
+      onProposalConfirmed={confirmProposal}
     />
-  ), [handleExample, handleRetry, handleUiAction, status, turn]);
+  ), [confirmProposal, handleExample, handleRetry, handleUiAction, reset, status, turn]);
 
   if (!enabled) return undefined;
 

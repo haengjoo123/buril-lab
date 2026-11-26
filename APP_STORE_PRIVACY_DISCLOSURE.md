@@ -1,12 +1,14 @@
 # BurilLab 앱스토어 개인정보 수집 고지
 
-최종 갱신: 2026-11-06
+최종 갱신: 2026-11-27
 
 이 문서는 검색·최종 배치 분석 릴리스와 함께 App Store Connect 및 Google Play Console에 반영할 운영 체크리스트다. 실제 제출 검색만 수집하며 입력 중 키 입력은 수집하지 않는다.
 
 2026-11-06 갱신: 이미 서버에 저장 중이던 앱 이용 기록 3종(`onboarding_events`, `safety_compliance_events`, `commerce_intent_events`)을 고지에 추가했다. 이전 처리방침은 이를 "로컬 저장"으로 잘못 고지했다.
 
 2026-11-06 추가 갱신(연구실 관리 기록): 피드백에 보낸 화면과 연구실을 함께 저장하고, 연구실 관리 행위(멤버·센터 연결·폐액통 현장 설정)를 `audit_logs`에 남긴다. 아래 "피드백 맥락과 연구실 관리 기록" 절을 본다.
+
+2026-11-27 갱신(에이전트 모드): 검색창 에이전트 모드가 입력 문장을 OpenAI로 보내 해석하고, 요청마다 이용 기록 한 건을 `agent_query_events`에 남긴다. 기능은 플래그(`VITE_ENABLE_AGENT_MODE`, KV `agent_mode_config`) 뒤에 있고 기본값은 꺼짐이다. 아래 "에이전트 모드" 절을 본다.
 
 ## 공통 고지
 
@@ -52,6 +54,24 @@
   - 삭제: 회원 탈퇴 작업이 그 계정의 `user_id` 키와 행위자 식별자·이름을 지운다(기존 계정 삭제 스크럽). 연구실이 삭제돼도 감사 행은 FK가 없어 남지만 멤버가 없어 아무도 읽을 수 없다.
   - 스토어 분류: 기존 활동 기록(Other User Content / App activity)과 같은 범주의 앱 기능 기록. 광고·추적·외부 제공 없음.
 
+## 에이전트 모드 (로그인 사용자만, 기능이 켜진 경우만)
+
+- 입력 문장 처리: 문장(300자까지), 언어, 앱이 실행할 수 있는 기능 목록만 `POST /api/agent/query`를 거쳐 OpenAI로 보낸다. 연구실 재고·기록, 품목명, 메모는 보내지 않는다. 서버는 문장을 저장하거나 로그에 남기지 않고, OpenAI 요청은 응답 저장을 끈다(`store: false`, 안전 식별자는 HMAC 가명).
+  - 폐기·혼합 관련 표현이 감지된 문장(`src/features/agent/agentGuard.ts`의 고정 패턴)과 물질명·CAS 번호만 입력한 경우는 OpenAI로 보내지 않고 기기에서 정해진 규칙으로 처리한다. 서버도 같은 패턴으로 한 번 더 막는다. 패턴에 걸리지 않는 표현은 전송될 수 있으므로 처리방침에는 "감지된 문장"으로 적었다.
+  - 폐기 문구가 있는 문장에 이름과 양이 함께 적힌 성분이 있으면, 그 **성분 이름만** 일반 검색과 같은 물질 조회(`/api/chemicals/enrich`, `/api/chemicals/suggest`)로 보낸다. 문장 전체는 보내지 않고 AI도 쓰지 않는다. 찾은 성분은 사용자가 확인하면 이 기기의 폐액 배치 초안에 담긴다.
+  - 폐액통 수거 요청 문장은 서버로 보내지 않는다. 앱이 `POST /api/agent/mode`로 기능 스위치 값만 묻는다(요청 본문에 문장 없음).
+- 기록 제안: 에이전트가 남은 양·다 쓴 병·구매 요청·수거 요청을 제안할 때는 저장할 내용을 카드에 보여 주고 사용자가 확인해야 저장한다. 저장은 기존 화면과 같은 경로(같은 테이블·같은 RPC)로 하므로 새로 수집하는 항목은 없다.
+- 이용 기록(`agent_query_events`): 요청이 끝날 때 `record_agent_query_event_v1`로 한 건 저장한다. 사용자가 결과를 보기 전에 다른 요청으로 바꾸거나 지운 요청은 저장하지 않는다.
+  - 저장 항목: `user_id`, `lab_id`(기록 당시 선택한 연구실, 없으면 null), 요청 ID(무작위 UUID), 처리 경로(`planner`·`rule`), 요청 종류, 결과 상태와 사유 코드, 응답 시간(ms), 언어, `created_at`. 제안을 보여 주면 `proposed`, 사용자가 확인해 저장하면 `confirmed`가 별도 행으로 남는다. 어떤 품목에 무엇을 저장했는지는 이 표에 넣지 않는다.
+  - 입력 문장(`failed_text`): 결과 상태가 `unsupported`(지원하지 않는 요청) 또는 `no_match`(찾는 시약이 기록에 없음)일 때만 저장한다. 앱이 이메일·URL·전화번호·토큰 형태를 가리고(유효한 CAS 번호는 보존) 300자로 자르며, DB 함수와 CHECK 제약이 다른 결과 상태의 문장을 받지 않는다. 폐기 관련 문장은 결과 상태가 `disposal_card`라 저장되지 않는다.
+  - 조회 권한: RLS를 켜고 정책을 두지 않았다. 클라이언트 역할(anon·authenticated)에는 테이블 권한이 없어 본인을 포함해 앱에서는 조회할 수 없고, 서버 전용 역할만 읽는다. 같은 연구실 멤버도 볼 수 없다.
+  - 삭제: `user_id → auth.users ON DELETE CASCADE`(회원 탈퇴 시 삭제), `lab_id → labs ON DELETE SET NULL`. 별도 자동 보존 기간(TTL)은 없다.
+  - 한도: 계정당 하루 500건을 넘으면 더 저장하지 않는다.
+- 선택 여부: 에이전트 모드를 쓰지 않으면 수집되지 않는다. 쓰는 동안 이 기록만 끄는 설정은 없다.
+- 스토어 분류(제출 전 재검토):
+  - Apple: 입력 문장은 Search History(처리하지 못한 요청의 문장이 계정과 연결돼 저장됨. 목적 App Functionality, Analytics), 이용 기록은 Product Interaction(Analytics), 응답 시간은 Performance Data(Analytics). 모두 "Data Linked to You", 추적 아님.
+  - Google Play: App activity > In-app search history(입력 문장), App interactions(이용 기록), App info and performance > Diagnostics(응답 시간). 목적 App functionality, Analytics. 공유(Shared)하지 않음. OpenAI 전송은 서비스 처리자 위탁으로 고지한다.
+
 ## Apple App Store Connect
 
 Privacy Details에서 다음 데이터 유형과 목적을 실제 빌드 동작에 맞게 선언한다.
@@ -88,6 +108,7 @@ Privacy Details에서 다음 데이터 유형과 목적을 실제 빌드 동작�
 - [ ] 새 온보딩 이벤트의 `metadata`에 검색어 원문(`query`)이 없고 `query_length`만 있는지 확인
 - [ ] 회원 탈퇴 후 `onboarding_events`, `safety_compliance_events`, `commerce_intent_events`에 해당 `user_id` 행이 남지 않는지 확인
 - [ ] 피드백 `source_screen`·`lab_id`와 연구실 관리 기록(`lab_member`·`safety_center_link`·`waste_policy_override`, 멤버 기록은 관리자만 조회)을 처리방침 배포와 두 스토어 응답에 반영하고, 회원 탈퇴 뒤 피드백 `lab_id`와 감사 행의 `user_id`가 남지 않는지 확인
+- [ ] 에이전트 모드를 켜기 전에 처리방침(2026-11-27 갱신분) 배포와 두 스토어 응답 반영을 마치고, 회원 탈퇴 뒤 `agent_query_events`에 해당 `user_id` 행이 남지 않는지, 처리한 요청의 행에 `failed_text`가 없는지 확인
 - [x] AI 폐기 안내 열람 기록의 `metadata.cache_key`를 SHA-256 해시(`cache_key_sha256`)로 줄임. 처리방침 2절 문구도 함께 고침
 - [ ] 이전 버전 앱이 저장한 `metadata.cache_key`·`metadata.query` 행을 정리할지 결정(F1 2단계)
 - [ ] `OPS_ADMIN_EMAILS`와 별도 `OPS_ANALYTICS_EXPORT_EMAILS` 허용목록 설정

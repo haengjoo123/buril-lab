@@ -1,4 +1,5 @@
 import { loadChemicalRegulations } from '../../services/chemicalRegulationService'
+import { fetchChemicalSuggestionResult, type ChemicalFormChoice } from '../../services/chemicalSuggestionService'
 import { fetchRecentDailyInspections } from '../../services/dailyInspectionService'
 import { inventoryService, type InventoryItem } from '../../services/inventoryService'
 import { loadLabAdminOverview, type LabAdminOverviewResults } from '../../services/labAdminOverviewService'
@@ -10,7 +11,9 @@ import {
   type WasteContainer,
   type WasteContainerTotals,
 } from '../../services/wasteContainerService'
+import { searchChemical } from '../../services/searchService'
 import { fetchWasteLogs, type WasteLogRecord } from '../../services/wasteLogService'
+import type { Chemical } from '../../types'
 import type { ChemicalRegulationLookup } from '../../utils/chemicalRegulations'
 import { readLabAdminSnoozes, type LabAdminSnoozes } from '../admin/labAdminTasks'
 import {
@@ -39,6 +42,10 @@ export interface AgentDataSources {
   readAdminSnoozes: (labId: string) => LabAdminSnoozes
   loadContainers: () => Promise<{ containers: WasteContainer[]; totals: Record<string, WasteContainerTotals> }>
   loadWasteLogs: (createdAfter: string, createdBefore: string | null) => Promise<{ logs: WasteLogRecord[]; truncated: boolean }>
+  /** Substance identity and hazard data for one name or CAS number: the lookup the normal search uses. */
+  lookupChemical: (query: string) => Promise<Chemical | null>
+  /** Forms to choose from when a name fits several reagents; empty when it names one. */
+  loadFormChoices: (name: string) => Promise<ChemicalFormChoice[]>
 }
 
 export const agentDataSources: AgentDataSources = {
@@ -74,4 +81,6 @@ export const agentDataSources: AgentDataSources = {
     }
     return { logs, truncated: total > logs.length }
   },
+  lookupChemical: (query) => searchChemical(query),
+  loadFormChoices: async (name) => (await fetchChemicalSuggestionResult(name)).formChoices,
 }

@@ -15,8 +15,10 @@ import { OpsConsoleView } from '../../src/features/ops/OpsConsoleView';
 import { inventoryService, storageLocationService, type InventoryItem } from '../../src/services/inventoryService';
 import { cabinetService } from '../../src/services/cabinetService';
 import { agentService } from '../../src/services/agentService';
+import { agentEventService } from '../../src/services/agentEventService';
 import { useAgentMode, type AgentFeatureAvailability } from '../../src/features/agent/useAgentMode';
 import { agentDataSources } from '../../src/features/agent/agentDataSources';
+import { agentActions } from '../../src/features/agent/agentActions';
 import type { AgentPlan } from '../../src/features/agent/agentContract';
 import { labService } from '../../src/services/labService';
 import { safetyCenterService } from '../../src/services/safetyCenterService';
@@ -106,13 +108,23 @@ const agentItems: InventoryItem[] = [
     cas_number: null, remaining_percent: null },
 ];
 if (agentFixture) {
+  // As in the app, the lab the agent answers for is the selected lab and the waste draft's space.
+  useLabStore.setState({ currentLabId: labId, lastLabId: labId, myLabs: [membership], labsLoaded: true });
+  useWasteStore.getState().setScope('fixture-user', labId);
+  // The fixture has no database to record usage in.
+  agentEventService.record = async () => undefined;
   // Stands in for POST /api/agent/query: fixed plans for the sentences the layout tests type.
   agentService.requestPlan = async ({ text }) => {
     await new Promise(resolve => setTimeout(resolve, 150));
     if (text.includes('오류')) throw new Error('fixture planner failure');
     const named = () => ({ text: text.split(' ')[0], aliases: text.startsWith('아세톤') ? ['acetone'] : [], casNumber: null });
     let plan: AgentPlan = { kind: 'unsupported', reason: 'out_of_scope' };
-    if (text.includes('어디')) plan = { kind: 'item_lookup', item: named(), facet: 'location' };
+    const typedCount = (pattern: RegExp) => { const found = text.match(pattern); return found ? Number(found[1]) : null; };
+    if (text.includes('기록') && text.includes('다 썼')) plan = { kind: 'log_usage', item: named(), change: { kind: 'used_up' } };
+    else if (text.includes('기록')) plan = { kind: 'log_usage', item: named(), change: { kind: 'remaining', percent: typedCount(/(\d+)\s*%/) } };
+    else if (text.includes('입고')) plan = { kind: 'register_item', name: text.split(' ')[0], casNumber: null, quantity: typedCount(/(\d+)\s*병/), capacity: text.match(/\d+\s*(?:mL|L)\b/i)?.[0] ?? null };
+    else if (text.includes('구매 요청해')) plan = { kind: 'request_purchase', item: named(), quantity: typedCount(/(\d+)\s*병/) };
+    else if (text.includes('어디')) plan = { kind: 'item_lookup', item: named(), facet: 'location' };
     else if (text.includes('남')) plan = { kind: 'item_lookup', item: named(), facet: 'remaining' };
     else if (text.includes('임박')) plan = { kind: 'expiry_list', window: 'attention' };
     else if (/유효기한|만료/.test(text)) plan = { kind: 'expiry_list', window: 'expired' };
@@ -124,8 +136,34 @@ if (agentFixture) {
     else if (text.includes('할 일')) plan = { kind: 'admin_tasks' };
     else if (text.includes('관리자')) plan = { kind: 'open_screen', screen: 'admin' };
     else if (text.includes('재고')) plan = { kind: 'open_screen', screen: 'inventory' };
-    return { schemaVersion: 1, mode: 'read_only', plan, quotaRemaining: 99 };
+    return { schemaVersion: 1, mode: 'actions', plan, quotaRemaining: 99 };
   };
+  agentService.requestMode = async () => ({ schemaVersion: 1, mode: 'actions' });
+  // Confirmed proposals save nowhere here; "저장 실패" in the request makes the save fail once.
+  let failNextSave = false;
+  const saved = async () => {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    if (failNextSave) { failNextSave = false; throw new Error('fixture save failure'); }
+  };
+  const plan = agentService.requestPlan;
+  agentService.requestPlan = (request, signal) => { failNextSave = request.text.includes('저장 실패'); return plan(request, signal); };
+  agentActions.setRemaining = saved;
+  agentActions.recordUsedUp = saved;
+  agentActions.requestPurchase = saved;
+  agentActions.requestPickup = saved;
+  agentActions.loadLocations = async () => [];
+  // Stands in for the substance lookup the normal search uses.
+  const substances: Record<string, [string, string, string]> = {
+    '아세톤': ['아세톤 (Acetone)', '67-64-1', 'C3H6O'],
+    '메탄올': ['메탄올 (Methanol)', '67-56-1', 'CH4O'],
+    '염산 10%': ['염산 10% (Hydrochloric acid)', '7647-01-0', 'HCl'],
+  };
+  agentDataSources.lookupChemical = async (query) => {
+    await new Promise(resolve => setTimeout(resolve, 120));
+    const found = substances[query];
+    return found ? { id: found[1], name: found[0], casNumber: found[1], molecularFormula: found[2], properties: { isOrganic: found[2].startsWith('C'), isHalogenated: false } } : null;
+  };
+  agentDataSources.loadFormChoices = async (name) => (name === '염산' ? [{ name: '염산 35%', nameEn: 'Hydrochloric acid 35%' }, { name: '염산 10%', nameEn: 'Hydrochloric acid 10%' }] : []);
 }
 
 /** Every optional feature on, so each agent card can be laid out. */

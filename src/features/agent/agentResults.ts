@@ -1,8 +1,10 @@
+import type { ChemicalFormChoice } from '../../services/chemicalSuggestionService'
 import type { InventoryItem } from '../../services/inventoryService'
 import type { PurchaseRequest } from '../../services/purchaseRequestService'
 import type { WasteContainerStatus } from '../../services/wasteContainerService'
 import type { ExpiryStatus } from '../../utils/expiryStatus'
 import type { RegulationObligation } from '../../utils/regulationObligations'
+import type { AnalysisResult } from '../../types'
 import type { LabAdminTask } from '../admin/labAdminTasks'
 import type { CabinetLockGroup } from '../dailyInspection/labSafetySignals'
 import type { InventoryExpiryFilter } from '../inventory/inventoryExpiryFilter'
@@ -13,13 +15,15 @@ import type {
   AgentPlan,
   AgentPlannerScreen,
   AgentUnsupportedReason,
+  AgentUsageChange,
 } from './agentContract'
 import type { AgentWasteIntent, AgentWastePeriod } from './agentGuard'
+import type { ParsedWasteAmount } from './parseWasteComponents'
 
 /** Screens an agent result may open, including the waste screens reached by fixed rules. */
 export type AgentScreen = AgentPlannerScreen | 'logs' | 'cart'
 
-/** What the app can run: a plan from the server, or a waste records question decided by fixed rules. */
+/** What the app can run: a plan from the server, or a waste request decided by fixed rules. */
 export type AgentRunnablePlan = AgentPlan | AgentWasteIntent
 
 /** Things the app does in response to a result. Built by the app, never by a model. */
@@ -65,6 +69,23 @@ export interface AgentWasteStreamRow {
   volumeMl: number
   /** Records whose amount is unknown or recorded by mass, so they add no volume. */
   withoutVolumeCount: number
+}
+
+/** What looking up one typed component name came to. */
+export type AgentWasteComponentLookup =
+  /** `verifiedByCas` is true only when the person typed a CAS number and the substance carries it. */
+  | { status: 'found'; analysis: AnalysisResult; verifiedByCas: boolean }
+  /** The name fits several forms of a reagent; the person has to say which. */
+  | { status: 'choose_form'; choices: ChemicalFormChoice[] }
+  | { status: 'not_found' }
+  | { status: 'failed' }
+
+export interface AgentWasteComponentRow {
+  key: string
+  /** The name exactly as it was read from the sentence. */
+  typedName: string
+  amount: ParsedWasteAmount
+  lookup: AgentWasteComponentLookup
 }
 
 /**
@@ -155,6 +176,69 @@ export type AgentResult =
   | { type: 'disposal_redirect' }
   | { type: 'screen_unavailable'; screen: AgentScreen; reason: AgentScreenUnavailableReason }
   | { type: 'unsupported'; reason: AgentUnsupportedReason }
+  | AgentProposalResult
+
+/**
+ * Proposals to record something. Showing one saves nothing: the person picks
+ * the record, adjusts the values and confirms, and only then does the app call
+ * the same service the ordinary screens use. `labId` is the space the proposal
+ * was built in; confirming it anywhere else is refused.
+ */
+export type AgentProposalResult =
+  | {
+    type: 'usage_proposal'
+    query: string
+    change: AgentUsageChange
+    /** Every record in the best tier. With more than one, the person has to pick. */
+    items: InventoryItem[]
+    hiddenCount: number
+    aliasOnly: boolean
+    labId: string | null
+  }
+  | {
+    type: 'register_proposal'
+    /** Only what the person typed; the registration form asks for the rest. */
+    draft: { name: string; casNumber: string | null; quantity: number | null; capacity: string | null }
+    labId: string | null
+  }
+  | {
+    type: 'purchase_proposal'
+    itemName: string
+    quantity: number | null
+    /** Inventory records with that name, which the request can be linked to. */
+    matches: InventoryItem[]
+    labId: string
+  }
+  | {
+    type: 'pickup_proposal'
+    /** Containers with no pickup request yet. */
+    containers: AgentContainerRow[]
+    /** Containers already waiting for pickup. */
+    requestedCount: number
+    labId: string | null
+  }
+  | {
+    /**
+     * Components read from a sentence, to be put into the waste batch draft.
+     * The draft lives on this device; the review screen and its rule engine
+     * decide everything about disposal.
+     */
+    type: 'waste_batch_proposal'
+    components: AgentWasteComponentRow[]
+    labId: string | null
+  }
+
+export const AGENT_PROPOSAL_RESULT_TYPES = [
+  'usage_proposal',
+  'register_proposal',
+  'purchase_proposal',
+  'pickup_proposal',
+  'waste_batch_proposal',
+] as const
+
+export function isAgentProposalResult(result: AgentResult): result is AgentProposalResult {
+  return (AGENT_PROPOSAL_RESULT_TYPES as readonly string[]).includes(result.type)
+}
 
 /** Results drawn by the status cards: answers about the lab as a whole rather than one reagent. */
 export const AGENT_STATUS_RESULT_TYPES = [
@@ -173,6 +257,9 @@ export type AgentStatusResult = Extract<AgentResult, { type: (typeof AGENT_STATU
 export function isAgentStatusResult(result: AgentResult): result is AgentStatusResult {
   return (AGENT_STATUS_RESULT_TYPES as readonly string[]).includes(result.type)
 }
+
+/** Why a confirmed proposal was not saved. */
+export type AgentActionErrorKind = 'space_changed' | 'not_allowed' | 'failed'
 
 export type AgentErrorKind =
   | 'login_required'

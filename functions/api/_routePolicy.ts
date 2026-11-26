@@ -17,6 +17,7 @@ const POST_ROUTES = [
   '/api/admin/safety-centers/document-url',
   '/api/admin/safety-centers/list',
   '/api/admin/safety-centers/status',
+  '/api/agent/mode',
   '/api/agent/query',
   '/api/ai/classify',
   '/api/ai/disposal-guide',
@@ -87,7 +88,7 @@ export function getApiRequestBodyLimit(policy: ApiRoutePolicy): number {
   if (policy.id === '/api/internal/deletions/process') return 1
   if (policy.id === '/api/internal/decisions/evaluate') return 1024
   if (policy.id === '/api/cabinets/[id]/image') return 2 * 1024 * 1024
-  if (policy.id === '/api/cabinets/image-urls' || policy.id === '/api/agent/query') return 8 * 1024
+  if (policy.id === '/api/cabinets/image-urls' || policy.id.startsWith('/api/agent/')) return 8 * 1024
   if (policy.id === '/api/labs/join') return 8 * 1024
   if (policy.id === '/api/account/delete' || policy.id === '/api/labs/delete') return 2 * 1024
   if (/^\/api\/(?:ai|gemini)\/scan-label$/.test(policy.id)) return 12 * 1024 * 1024

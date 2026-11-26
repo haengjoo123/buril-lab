@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { agentEventService } from '../services/agentEventService'
 import { agentService } from '../services/agentService'
 import { InternalApiError } from '../services/internalApi'
 import {
@@ -7,6 +8,14 @@ import {
   type AgentLanguage,
 } from '../features/agent/agentContract'
 import { agentDataSources } from '../features/agent/agentDataSources'
+import {
+  buildAgentQueryEvent,
+  outcomeOfError,
+  outcomeOfResult,
+  outcomeOfUiAction,
+  type AgentEventOutcome,
+  type AgentEventRoute,
+} from '../features/agent/agentEvents'
 import { routeAgentInputLocally } from '../features/agent/agentGuard'
 import type {
   AgentErrorKind,
@@ -42,14 +51,48 @@ interface AgentStore {
   turn: AgentTurn | null
   setText: (text: string) => void
   submit: (options: AgentSubmitOptions, text?: string) => Promise<void>
+  /** The person confirmed the proposal on screen and it was saved. */
+  confirmProposal: () => void
   reset: () => void
+}
+
+/** What one request needs to be recorded once it ends. */
+interface TurnRecord {
+  id: number
+  requestId: string | null
+  startedAt: number
+  route: AgentEventRoute
+  text: string
+  language: AgentLanguage
+  labId: string | null
 }
 
 /** The server gives up on the model after 8 s plus one retry; this bounds the whole wait. */
 export const AGENT_PLAN_REQUEST_TIMEOUT_MS = 20_000
+/** Asking for the runtime switch involves no model, so it answers quickly or not at all. */
+export const AGENT_MODE_REQUEST_TIMEOUT_MS = 8_000
 
 let nextTurnId = 0
 let activeRequest: AbortController | null = null
+/** The request on screen, kept so a confirmed proposal can be recorded against it. */
+let shownTurn: TurnRecord | null = null
+
+/**
+ * Whether proposals to record something are switched on, for a request the
+ * app decided by fixed rules. Anything but a clear yes counts as no.
+ */
+async function actionsSwitchedOn(): Promise<boolean> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), AGENT_MODE_REQUEST_TIMEOUT_MS)
+  try {
+    const response = await agentService.requestMode(controller.signal)
+    return response.schemaVersion === AGENT_SCHEMA_VERSION && response.mode === 'actions'
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timeout)
+  }
+}
 
 function cancelActiveRequest() {
   activeRequest?.abort()
@@ -72,6 +115,30 @@ function errorKindOf(error: unknown): AgentErrorKind {
 export const useAgentStore = create<AgentStore>((set, get) => {
   const isCurrent = (id: number) => get().turn?.id === id
 
+  /**
+   * Records how a request ended. Only the request still on screen counts: one
+   * the person replaced or cleared never showed them its result.
+   */
+  const record = (
+    turn: TurnRecord,
+    kind: string,
+    { outcome, reason }: { outcome: AgentEventOutcome; reason: string | null },
+  ) => {
+    if (!turn.requestId || !isCurrent(turn.id)) return
+    // Nothing waits for this, and a failure to record must not reach the answer.
+    void agentEventService.record(buildAgentQueryEvent({
+      requestId: turn.requestId,
+      labId: turn.labId,
+      route: turn.route,
+      kind,
+      language: turn.language,
+      latencyMs: Date.now() - turn.startedAt,
+      text: turn.text,
+      outcome,
+      reason,
+    })).catch(() => undefined)
+  }
+
   const finish = (id: number, patch: Partial<AgentTurn>) => {
     const turn = get().turn
     if (!turn || turn.id !== id) return
@@ -85,12 +152,22 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     onUiAction(action)
   }
 
-  const run = async (id: number, plan: AgentRunnablePlan, options: AgentSubmitOptions) => {
-    if (!isCurrent(id)) return
+  const run = async (
+    turn: TurnRecord,
+    plan: AgentRunnablePlan,
+    options: AgentSubmitOptions,
+    allowActions = false,
+  ) => {
+    if (!isCurrent(turn.id)) return
     set({ status: 'running', turn: { ...get().turn!, plan } })
-    const outcome = await runAgentPlan(plan, { sources: agentDataSources, context: options.context })
-    if ('uiAction' in outcome) leave(id, outcome.uiAction, options.onUiAction)
-    else finish(id, { result: outcome.result })
+    const outcome = await runAgentPlan(plan, { sources: agentDataSources, context: options.context, allowActions })
+    if ('uiAction' in outcome) {
+      record(turn, plan.kind, outcomeOfUiAction(outcome.uiAction))
+      leave(turn.id, outcome.uiAction, options.onUiAction)
+    } else {
+      record(turn, plan.kind, outcomeOfResult(outcome.result))
+      finish(turn.id, { result: outcome.result })
+    }
   }
 
   return {
@@ -107,21 +184,35 @@ export const useAgentStore = create<AgentStore>((set, get) => {
 
       cancelActiveRequest()
       nextTurnId += 1
-      const id = nextTurnId
-      set({ text, status: 'planning', turn: { id, text, plan: null, result: null, error: null } })
+      const turn: TurnRecord = {
+        id: nextTurnId,
+        requestId: globalThis.crypto?.randomUUID?.() ?? null,
+        startedAt: Date.now(),
+        route: route.kind === 'planner' ? 'planner' : 'rule',
+        text,
+        language: options.language,
+        labId: options.context.labId,
+      }
+      shownTurn = turn
+      set({ text, status: 'planning', turn: { id: turn.id, text, plan: null, result: null, error: null } })
 
       try {
         if (route.kind === 'identifier') {
-          leave(id, { type: 'search_chemical', query: route.query }, options.onUiAction)
+          const action: AgentUiAction = { type: 'search_chemical', query: route.query }
+          record(turn, 'identifier', outcomeOfUiAction(action))
+          leave(turn.id, action, options.onUiAction)
           return
         }
         // Waste wording stays on this device: fixed rules decide, and no model sees it.
         if (route.kind === 'disposal') {
-          await run(id, { kind: 'redirect_disposal' }, options)
+          await run(turn, { kind: 'redirect_disposal' }, options)
           return
         }
         if (route.kind === 'waste') {
-          await run(id, route.intent, options)
+          // A pickup is a proposal to record something, so the runtime switch decides
+          // whether it is offered. Only the question is sent, never the sentence.
+          const allowActions = route.intent.kind === 'pickup_request' && await actionsSwitchedOn()
+          await run(turn, route.intent, options, allowActions)
           return
         }
 
@@ -129,6 +220,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
         activeRequest = controller
         const timeout = setTimeout(() => controller.abort(), AGENT_PLAN_REQUEST_TIMEOUT_MS)
         let plan: AgentRunnablePlan
+        let allowActions = false
         try {
           const response = await agentService.requestPlan({
             schemaVersion: AGENT_SCHEMA_VERSION,
@@ -138,18 +230,34 @@ export const useAgentStore = create<AgentStore>((set, get) => {
           }, controller.signal)
           if (response.schemaVersion !== AGENT_SCHEMA_VERSION) throw new AgentUpdateRequiredError()
           plan = response.plan
+          allowActions = response.mode === 'actions'
         } finally {
           clearTimeout(timeout)
           if (activeRequest === controller) activeRequest = null
         }
-        await run(id, plan, options)
+        await run(turn, plan, options, allowActions)
       } catch (error) {
-        finish(id, { error: errorKindOf(error) })
+        const kind = errorKindOf(error)
+        // The plan kind when the failure came after planning, e.g. while reading the records.
+        record(turn, get().turn?.plan?.kind ?? 'planner', outcomeOfError(kind))
+        finish(turn.id, { error: kind })
       }
+    },
+
+    confirmProposal: () => {
+      const kind = get().turn?.plan?.kind
+      if (!shownTurn || !kind || !isCurrent(shownTurn.id)) return
+      // Its own record under a new id: the proposal itself was already recorded once.
+      record(
+        { ...shownTurn, requestId: globalThis.crypto?.randomUUID?.() ?? null },
+        kind,
+        { outcome: 'confirmed', reason: null },
+      )
     },
 
     reset: () => {
       cancelActiveRequest()
+      shownTurn = null
       set({ text: '', status: 'idle', turn: null })
     },
   }

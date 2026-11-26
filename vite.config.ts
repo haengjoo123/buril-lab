@@ -21,6 +21,7 @@ import type { SafetyCenterAdminRow } from './functions/api/admin/safety-centers/
 import { parseSafetyCenterReview } from './functions/api/admin/safety-centers/status'
 import { createLocalLabJoinApi } from './scripts/ops5-local-join-api'
 import { onRequestPost as analyzeInventoryImport } from './functions/api/ai/inventory-import'
+import { createAgentModeHandler } from './functions/api/agent/mode'
 import { createAgentQueryHandler } from './functions/api/agent/query'
 import { pdfJsAssets } from './scripts/vite-pdfjs-assets'
 
@@ -79,21 +80,32 @@ const localAgentQueryHandler = createAgentQueryHandler({
   consumeDailyQuota: async () => ({ allowed: true, remaining: 999, retryAfterSeconds: 0 }),
 })
 
-const planLocalAgentQuery: LocalPagesPostHandler = async ({ request, env }) => {
+const localAgentModeHandler = createAgentModeHandler({
+  resolveConfig: async () => ({ mode: 'actions', dailyQuota: 1_000 }),
+})
+
+async function localAgentCaller(request: Request, env: Record<string, string>): Promise<Record<string, unknown>> {
   const authHeader = request.headers.get('Authorization')
   const { url, anonKey } = getSupabaseConfig(env)
-  let userId: string | null = null
-  if (authHeader?.startsWith('Bearer ') && url && anonKey) {
-    const userClient = createClient(url, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-    userId = (await userClient.auth.getUser()).data.user?.id ?? null
-  }
-  return localAgentQueryHandler({ request, env, data: userId ? { userId } : {} })
+  if (!authHeader?.startsWith('Bearer ') || !url || !anonKey) return {}
+  const userClient = createClient(url, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const userId = (await userClient.auth.getUser()).data.user?.id ?? null
+  return userId ? { userId } : {}
 }
 
+const planLocalAgentQuery: LocalPagesPostHandler = async ({ request, env }) => (
+  localAgentQueryHandler({ request, env, data: await localAgentCaller(request, env) })
+)
+
+const readLocalAgentMode: LocalPagesPostHandler = async ({ request, env }) => (
+  localAgentModeHandler({ request, env, data: await localAgentCaller(request, env) })
+)
+
 const localPagesPostHandlers: Record<string, LocalPagesPostHandler> = {
+  '/api/agent/mode': readLocalAgentMode,
   '/api/agent/query': planLocalAgentQuery,
   '/api/ai/inventory-import': analyzeInventoryImport,
   '/api/analytics/search-event': postSearchAnalyticsEvent,

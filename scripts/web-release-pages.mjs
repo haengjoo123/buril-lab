@@ -109,7 +109,7 @@ async function verify() {
       quality_run_id: env.QUALITY_RUN_ID, deployment_id: env.DEPLOYMENT_ID, deployment_url: env.DEPLOYMENT_URL,
       features: featureProfile(env) }))
   } else {
-    for (const path of ['/api/ai/classify', '/api/ai/scan-label', '/api/ai/disposal-guide', '/api/voice/query', '/api/agent/query']) {
+    for (const path of ['/api/ai/classify', '/api/ai/scan-label', '/api/ai/disposal-guide', '/api/voice/query', '/api/agent/query', '/api/agent/mode']) {
       const response = await fetch(`${selected.origin}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: '{}', redirect: 'manual', signal: AbortSignal.timeout(15_000) })
       await response.body?.cancel()

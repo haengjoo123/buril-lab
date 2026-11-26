@@ -5,6 +5,8 @@ import { runExpiryList } from './executors/expiryList'
 import { runItemLookup } from './executors/itemLookup'
 import { runAdminTasks, runCabinetLocks, runInspectionGaps, runPurchaseStatus } from './executors/labStatus'
 import { runLowStock } from './executors/lowStock'
+import { runPickupProposal, runPurchaseProposal, runUsageProposal } from './executors/proposals'
+import { runWasteBatchProposal } from './executors/wasteBatch'
 import { distinctCasNumbers, runRegulatedList } from './executors/regulatedList'
 import { runContainerStatus, runWasteSummary, wastePeriodRange } from './executors/wasteRecords'
 
@@ -27,6 +29,11 @@ export interface AgentPlanDependencies {
   context: AgentRuntimeContext
   /** Injected so date-based answers can be tested. */
   now?: number
+  /**
+   * Whether the runtime switch allows proposals to record something. The
+   * server says so with every plan; without it a write plan is not run.
+   */
+  allowActions?: boolean
 }
 
 /** The plan asked for something this person or this build cannot use. */
@@ -39,7 +46,7 @@ const CLOSED: AgentPlanOutcome = { result: { type: 'unsupported', reason: 'capab
  */
 export async function runAgentPlan(
   plan: AgentRunnablePlan,
-  { sources, context, now = Date.now() }: AgentPlanDependencies,
+  { sources, context, now = Date.now(), allowActions = false }: AgentPlanDependencies,
 ): Promise<AgentPlanOutcome> {
   const { labId } = context
   switch (plan.kind) {
@@ -96,6 +103,30 @@ export async function runAgentPlan(
       const inRange = end ? logs.filter((log) => new Date(log.created_at).getTime() < end.getTime()) : logs
       return { result: runWasteSummary(plan.period, inRange, truncated) }
     }
+    case 'log_usage':
+      if (!allowActions) return CLOSED
+      return { result: runUsageProposal(await sources.loadItems(), plan.item, plan.change, labId) }
+    case 'register_item':
+      if (!allowActions) return CLOSED
+      return {
+        result: {
+          type: 'register_proposal',
+          draft: { name: plan.name, casNumber: plan.casNumber, quantity: plan.quantity, capacity: plan.capacity },
+          labId,
+        },
+      }
+    case 'request_purchase':
+      if (!allowActions || !context.purchaseRequestsEnabled || !labId) return CLOSED
+      return { result: runPurchaseProposal(await sources.loadItems(), plan.item, plan.quantity, labId) }
+    case 'pickup_request': {
+      // Without the switch or the containers feature, the request gets the fixed card as before.
+      if (!allowActions || !context.wasteContainersEnabled) return { result: { type: 'disposal_redirect' } }
+      const { containers, totals } = await sources.loadContainers()
+      return { result: runPickupProposal(containers, totals, labId) }
+    }
+    case 'waste_batch':
+      // No switch: the draft stays on this device until the person finishes the review.
+      return { result: await runWasteBatchProposal(plan.components, sources, labId) }
     case 'handoff_search':
       return { uiAction: { type: 'search_chemical', query: plan.query } }
     case 'redirect_disposal':

@@ -8,7 +8,8 @@ const openAIEnv = {
   OPENAI_SAFETY_HMAC_SECRET: 'test-safety-secret-at-least-32-bytes',
 }
 const STATUS_CAPABILITIES = ['low_stock', 'regulated_list', 'cabinet_locks', 'inspection_gaps', 'purchase_status', 'admin_tasks']
-const ALL_CAPABILITIES = ['item_lookup', 'expiry_list', 'open_screen', ...STATUS_CAPABILITIES]
+const ACTION_CAPABILITIES = ['log_usage', 'register_item', 'request_purchase']
+const ALL_CAPABILITIES = ['item_lookup', 'expiry_list', 'open_screen', ...STATUS_CAPABILITIES, ...ACTION_CAPABILITIES]
 
 function openAIResponse(data: Record<string, unknown>) {
   return new Response(JSON.stringify({
@@ -36,6 +37,10 @@ function rawPlan(overrides: Record<string, unknown>) {
     facet: 'none',
     expiryWindow: 'none',
     screen: 'none',
+    usageKind: 'none',
+    remainingPercent: -1,
+    quantity: 0,
+    capacityText: '',
     confidence: 0.9,
     ...overrides,
   }
@@ -305,6 +310,130 @@ describe('agent query endpoint', () => {
     // The per-request schema rejects the value, so the plan fails instead of running.
     expect(response.status).toBe(502)
     await expect(response.json()).resolves.toMatchObject({ code: 'AGENT_PLAN_FAILED' })
+  })
+
+  describe('proposals to record something', () => {
+    const actions = { mode: 'actions', dailyQuota: 100 } as const
+
+    it('offers them to the model only while the runtime switch allows actions', async () => {
+      const readOnly = setup()
+      readOnly.fetchMock.mockResolvedValue(openAIResponse(rawPlan({ capability: 'out_of_scope' })))
+      await readOnly.ask('아세톤 30% 남았다고 기록해줘')
+      const sentReadOnly = sentToModel(readOnly.fetchMock)
+      for (const capability of ACTION_CAPABILITIES) expect(sentReadOnly).not.toContain(capability)
+      expect(sentReadOnly).toContain('including requests to change data,')
+
+      const withActions = setup(actions)
+      withActions.fetchMock.mockResolvedValue(openAIResponse(rawPlan({ capability: 'out_of_scope' })))
+      const response = await withActions.ask('아세톤 30% 남았다고 기록해줘')
+      const sentWithActions = sentToModel(withActions.fetchMock)
+      for (const capability of ACTION_CAPABILITIES) expect(sentWithActions).toContain(capability)
+      await expect(response.json()).resolves.toMatchObject({ mode: 'actions' })
+    })
+
+    it('rejects a write plan in read-only mode even if the model returns one', async () => {
+      const run = setup()
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'log_usage', itemText: '아세톤', usageKind: 'remaining', remainingPercent: 30,
+      })))
+      const response = await run.ask('아세톤 30% 남았다고 기록해줘')
+      expect(response.status).toBe(502)
+    })
+
+    it('does not offer one the app left out, such as a purchase request in the personal space', async () => {
+      const run = setup(actions)
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({ capability: 'out_of_scope' })))
+      await run.ask('에탄올 2병 구매 요청해줘', ['item_lookup', 'log_usage', 'register_item'])
+      expect(sentToModel(run.fetchMock)).not.toContain('request_purchase')
+    })
+
+    it('plans a remaining level with the percentage the person typed', async () => {
+      const run = setup(actions)
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'log_usage', itemText: '아세톤', itemAliases: ['acetone'], usageKind: 'remaining', remainingPercent: 30,
+      })))
+      await expect((await run.ask('아세톤 30% 남았다고 기록해줘')).json()).resolves.toMatchObject({
+        mode: 'actions',
+        plan: {
+          kind: 'log_usage',
+          item: { text: '아세톤', aliases: ['acetone'], casNumber: null },
+          change: { kind: 'remaining', percent: 30 },
+        },
+      })
+    })
+
+    it('leaves the percentage for the person to set when they did not type that number', async () => {
+      const run = setup(actions)
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'log_usage', itemText: '아세톤', usageKind: 'remaining', remainingPercent: 50,
+      })))
+      await expect((await run.ask('아세톤 절반 남았다고 기록해줘')).json()).resolves.toMatchObject({
+        plan: { kind: 'log_usage', change: { kind: 'remaining', percent: null } },
+      })
+
+      // 130 contains "30", but the person did not type 30.
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'log_usage', itemText: '시약 130', usageKind: 'remaining', remainingPercent: 30,
+      })))
+      await expect((await run.ask('시약 130 조금 남았다고 기록해줘')).json()).resolves.toMatchObject({
+        plan: { kind: 'log_usage', change: { kind: 'remaining', percent: null } },
+      })
+    })
+
+    it('plans a used-up bottle, and drops a usage plan that says neither', async () => {
+      const run = setup(actions)
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'log_usage', itemText: '에탄올', usageKind: 'used_up', remainingPercent: 0,
+      })))
+      const usedUp = await (await run.ask('에탄올 다 썼다고 기록해줘')).json() as { plan: unknown }
+      expect(usedUp.plan).toEqual({
+        kind: 'log_usage', item: { text: '에탄올', aliases: [], casNumber: null }, change: { kind: 'used_up' },
+      })
+
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({ capability: 'log_usage', itemText: '에탄올' })))
+      await expect((await run.ask('에탄올 기록해줘')).json()).resolves.toMatchObject({
+        plan: { kind: 'unsupported', reason: 'low_confidence' },
+      })
+    })
+
+    it('plans a registration with only what the person typed', async () => {
+      const run = setup(actions)
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'register_item', itemText: '아세톤', casNumber: '67-64-1', quantity: 2, capacityText: '500 mL',
+      })))
+      const typed = await (await run.ask('아세톤 500mL 2병 들어왔어 등록해줘')).json() as { plan: unknown }
+      // The CAS number was not typed, so it is not carried into the form.
+      expect(typed.plan).toEqual({ kind: 'register_item', name: '아세톤', casNumber: null, quantity: 2, capacity: '500 mL' })
+
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'register_item', itemText: '아세톤', quantity: 4, capacityText: '1 L',
+      })))
+      const invented = await (await run.ask('아세톤 들어왔어 등록해줘')).json() as { plan: unknown }
+      expect(invented.plan).toEqual({ kind: 'register_item', name: '아세톤', casNumber: null, quantity: null, capacity: null })
+    })
+
+    it('plans a purchase request for the named reagent', async () => {
+      const run = setup(actions)
+      run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+        capability: 'request_purchase', itemText: '에탄올', itemAliases: ['ethanol'], quantity: 2,
+      })))
+      const body = await (await run.ask('에탄올 2병 구매 요청해줘')).json() as { plan: unknown }
+      expect(body.plan).toEqual({
+        kind: 'request_purchase', item: { text: '에탄올', aliases: ['ethanol'], casNumber: null }, quantity: 2,
+      })
+    })
+
+    it('drops a write plan that names a reagent the person did not type', async () => {
+      const run = setup(actions)
+      for (const capability of ACTION_CAPABILITIES) {
+        run.fetchMock.mockResolvedValue(openAIResponse(rawPlan({
+          capability, itemText: 'Hydrofluoric acid', usageKind: 'used_up', quantity: 1,
+        })))
+        await expect((await run.ask('그 시약 어떻게 됐는지 알려줘')).json()).resolves.toMatchObject({
+          plan: { kind: 'unsupported', reason: 'low_confidence' },
+        })
+      }
+    })
   })
 
   it('treats a model refusal as out of scope', async () => {

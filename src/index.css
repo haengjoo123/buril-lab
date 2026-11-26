@@ -86,7 +86,7 @@
 }
 /* The search/agent switch sits above the composer pill and needs its own room. */
 .search-panes[data-mobile-search="true"][data-agent-switch="true"] {
-  padding-bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--spacing) * 37 + env(safe-area-inset-bottom, 0px));
 }
 .dark .search-panes[data-mobile-search="true"] { background: var(--color-slate-900); }
 .search-panes[data-mobile-search="true"] .search-notice,
@@ -208,13 +208,13 @@
 }
 /* Agent mode on desktop: one centred column under the composer, with no detail pane. */
 .search-panes[data-desktop-search="true"][data-search-state="agent"] { overflow-y: auto; }
-.search-panes[data-desktop-search="true"][data-search-state="agent"] .search-controls { padding-bottom: 24px; }
+.search-panes[data-desktop-search="true"][data-search-state="agent"] .search-controls { padding-bottom: calc(var(--spacing) * 6); }
 .search-panes[data-desktop-search="true"][data-search-state="agent"] .search-results-list {
   display: block;
   width: 100%;
-  max-width: 800px;
+  max-width: calc(var(--spacing) * 200);
   margin-inline: auto;
-  padding: 0 32px 48px;
+  padding: 0 calc(var(--spacing) * 8) calc(var(--spacing) * 12);
 }
 .search-panes[data-desktop-search="true"][data-search-state="agent"] > [data-pane="detail"] { display: none; }
 .search-panes[data-desktop-search="true"] .agent-intro-copy { display: none; }

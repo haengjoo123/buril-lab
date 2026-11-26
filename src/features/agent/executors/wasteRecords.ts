@@ -9,11 +9,11 @@ import type { AgentContainerRow, AgentResult, AgentWasteStreamRow } from '../age
  * Answers about waste records. These report what was recorded; they never say
  * how anything should be disposed of.
  */
-export function runContainerStatus(
+export function containerRows(
   containers: WasteContainer[],
   totals: Readonly<Record<string, WasteContainerTotals>>,
-): AgentResult {
-  const rows: AgentContainerRow[] = sortContainers(containers).map((container) => {
+): AgentContainerRow[] {
+  return sortContainers(containers).map((container) => {
     const total = totals[container.id]
     const totalMl = total?.totalMl ?? 0
     return {
@@ -28,7 +28,13 @@ export function runContainerStatus(
       pickupRequested: Boolean(container.pickupRequestedAt),
     }
   })
-  return { type: 'container_status', containers: rows }
+}
+
+export function runContainerStatus(
+  containers: WasteContainer[],
+  totals: Readonly<Record<string, WasteContainerTotals>>,
+): AgentResult {
+  return { type: 'container_status', containers: containerRows(containers, totals) }
 }
 
 /** Start (inclusive) and end (exclusive, or null for "until now") of a period, in local time. */

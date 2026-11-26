@@ -12,8 +12,8 @@ select is(
     where n.nspname = 'public'
       and c.relkind in ('r', 'p')
   ),
-  62::bigint,
-  'reviewed schema exposes exactly 62 public tables through AI reagent drafts'
+  63::bigint,
+  'reviewed schema exposes exactly 63 public tables through agent usage records'
 );
 
 select is(
@@ -120,7 +120,7 @@ select is(
       and c.relkind in ('r', 'p')
       and r.rolname = 'service_role'
   ),
-  62::bigint,
+  63::bigint,
   'service_role has an explicit GRANT on all public tables'
 );
 

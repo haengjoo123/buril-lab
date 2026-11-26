@@ -69,6 +69,8 @@ function sources(overrides: Partial<AgentDataSources> = {}): AgentDataSources {
     readAdminSnoozes: unexpected('readAdminSnoozes'),
     loadContainers: unexpected('loadContainers'),
     loadWasteLogs: unexpected('loadWasteLogs'),
+    lookupChemical: unexpected('lookupChemical'),
+    loadFormChoices: unexpected('loadFormChoices'),
     ...overrides,
   }
 }
@@ -78,8 +80,9 @@ async function resultOf(
   reads: Partial<AgentDataSources> = {},
   context: AgentRuntimeContext = adminInLab,
   now?: number,
+  allowActions = false,
 ): Promise<AgentResult> {
-  const outcome = await runAgentPlan(plan, { sources: sources(reads), context, now })
+  const outcome = await runAgentPlan(plan, { sources: sources(reads), context, now, allowActions })
   if (!('result' in outcome)) throw new Error('expected a result')
   return outcome.result
 }
@@ -408,5 +411,154 @@ describe('running an agent plan: waste records', () => {
     await expect(resultOf({ kind: 'waste_summary', period: 'this_month' }, { loadWasteLogs }, personalSpace, now))
       .resolves.toMatchObject({ type: 'waste_summary', logCount: 0, truncated: true })
     expect(loadWasteLogs).toHaveBeenCalledWith(new Date(2026, 10, 1).toISOString(), null)
+  })
+})
+
+describe('running an agent plan: proposals to record something', () => {
+  const acetone = { text: 'Acetone', aliases: [], casNumber: null }
+  const propose = (plan: AgentRunnablePlan, reads: Partial<AgentDataSources> = {}, context = adminInLab) => (
+    resultOf(plan, reads, context, undefined, true)
+  )
+
+  it('runs no write plan unless the runtime switch allows actions', async () => {
+    // No reads are supplied: a closed plan must not even look at the records.
+    await expect(resultOf({ kind: 'log_usage', item: acetone, change: { kind: 'used_up' } })).resolves.toEqual(CLOSED)
+    await expect(resultOf({ kind: 'register_item', name: 'Acetone', casNumber: null, quantity: 2, capacity: null })).resolves.toEqual(CLOSED)
+    await expect(resultOf({ kind: 'request_purchase', item: acetone, quantity: 2 })).resolves.toEqual(CLOSED)
+    await expect(resultOf({ kind: 'pickup_request' })).resolves.toEqual({ type: 'disposal_redirect' })
+  })
+
+  it('proposes a usage record for every bottle with that name and picks none of them', async () => {
+    const bottles = [item({ name: 'Acetone', remaining_percent: 60 }), item({ name: 'Acetone', brand: 'Sigma' })]
+    const result = await propose(
+      { kind: 'log_usage', item: acetone, change: { kind: 'remaining', percent: 30 } },
+      { loadItems: async () => [...bottles, item({ name: 'Ethanol' })] },
+    )
+    expect(result).toMatchObject({
+      type: 'usage_proposal', query: 'Acetone', change: { kind: 'remaining', percent: 30 },
+      hiddenCount: 0, aliasOnly: false, labId: LAB_ID,
+    })
+    expect(result.type === 'usage_proposal' && result.items.map((entry) => entry.id).sort()).toEqual(bottles.map((entry) => entry.id).sort())
+  })
+
+  it('says so when no record has that name instead of proposing anything', async () => {
+    await expect(propose(
+      { kind: 'log_usage', item: acetone, change: { kind: 'used_up' } },
+      { loadItems: async () => [item({ name: 'Ethanol' })] },
+    )).resolves.toEqual({ type: 'item_no_match', query: 'Acetone', inventoryIsEmpty: false })
+  })
+
+  it('proposes a registration from the typed details alone, without reading the records', async () => {
+    await expect(propose(
+      { kind: 'register_item', name: 'Acetone', casNumber: '67-64-1', quantity: 2, capacity: '500 mL' },
+      {},
+      personalSpace,
+    )).resolves.toEqual({
+      type: 'register_proposal',
+      draft: { name: 'Acetone', casNumber: '67-64-1', quantity: 2, capacity: '500 mL' },
+      labId: null,
+    })
+  })
+
+  it('proposes a purchase request only in a lab with purchase requests on', async () => {
+    const plan: AgentRunnablePlan = { kind: 'request_purchase', item: acetone, quantity: 2 }
+    await expect(propose(plan, {}, personalSpace)).resolves.toEqual(CLOSED)
+    await expect(propose(plan, {}, { ...adminInLab, purchaseRequestsEnabled: false })).resolves.toEqual(CLOSED)
+  })
+
+  it('offers to link a purchase request only to inventory rows that carry the typed name', async () => {
+    const row = item({ name: 'Acetone', brand: 'Sigma' })
+    const linkedBottle = item({ name: 'Acetone', _source: 'cabinet_item', linked_inventory_item_id: row.id })
+    const looseBottle = item({ name: 'Acetone', _source: 'cabinet_item', linked_inventory_item_id: null })
+    const result = await propose(
+      { kind: 'request_purchase', item: acetone, quantity: null },
+      { loadItems: async () => [linkedBottle, row, looseBottle] },
+    )
+    expect(result).toMatchObject({ type: 'purchase_proposal', itemName: 'Acetone', quantity: null, labId: LAB_ID })
+    // The linked bottle and its row are one inventory row; a bottle with no row cannot be linked.
+    expect(result.type === 'purchase_proposal' && result.matches).toHaveLength(1)
+
+    const aliasOnly = await propose(
+      { kind: 'request_purchase', item: { text: '아세톤', aliases: ['acetone'], casNumber: null }, quantity: 1 },
+      { loadItems: async () => [row] },
+    )
+    expect(aliasOnly).toMatchObject({ type: 'purchase_proposal', itemName: '아세톤', matches: [] })
+  })
+
+  it('proposes a pickup for containers that are not already waiting for one', async () => {
+    const container = (id: string, pickupRequestedAt: string | null): WasteContainer => ({
+      id, labId: LAB_ID, streamCode: 'ACID_AQUEOUS', label: `산 폐액-${id}`, location: null, capacityMl: 10_000,
+      status: 'active', startedAt: '2026-11-01T00:00:00Z', pickupRequestedAt,
+    } as WasteContainer)
+    const reads = {
+      loadContainers: async () => ({
+        containers: [container('1', null), container('2', '2026-11-20T00:00:00Z')],
+        totals: { 1: { depositCount: 2, totalMl: 4_000, hasUnknownAmounts: false } },
+      }),
+    }
+    const result = await propose({ kind: 'pickup_request' }, reads)
+    expect(result).toMatchObject({
+      type: 'pickup_proposal', requestedCount: 1, labId: LAB_ID,
+      containers: [{ id: '1', label: '산 폐액-1', fillPercent: 40, pickupRequested: false }],
+    })
+
+    // Without the containers feature the request still ends at the fixed card.
+    await expect(propose({ kind: 'pickup_request' }, {}, { ...adminInLab, wasteContainersEnabled: false }))
+      .resolves.toEqual({ type: 'disposal_redirect' })
+  })
+})
+
+describe('running an agent plan: a waste batch read from one sentence', () => {
+  const mL = (value: number) => ({ value, unit: 'mL', kind: 'volume' } as const)
+  const chemical = (name: string, casNumber: string) => ({
+    id: casNumber, name, casNumber, molecularFormula: 'C3H6O', properties: { isOrganic: true, isHalogenated: false },
+  })
+  const plan = (...names: string[]): AgentRunnablePlan => ({
+    kind: 'waste_batch', components: names.map((name) => ({ name, amount: mL(100) })),
+  })
+
+  it('looks each component up by name and adds nothing by itself', async () => {
+    const lookupChemical = vi.fn(async (query: string) => (query === '아세톤' ? chemical('Acetone', '67-64-1') : null))
+    // Offered without the runtime switch: the draft stays on the device.
+    const result = await resultOf(plan('아세톤', '없는물질'), { lookupChemical, loadFormChoices: async () => [] }, personalSpace)
+    expect(result).toMatchObject({
+      type: 'waste_batch_proposal',
+      labId: null,
+      components: [
+        { typedName: '아세톤', amount: mL(100), lookup: { status: 'found', verifiedByCas: false, analysis: { chemical: { casNumber: '67-64-1' } } } },
+        { typedName: '없는물질', lookup: { status: 'not_found' } },
+      ],
+    })
+    expect(lookupChemical.mock.calls.map(([query]) => query)).toEqual(['아세톤', '없는물질'])
+  })
+
+  it('asks which form when a name fits several, instead of taking one', async () => {
+    const lookupChemical = vi.fn()
+    const result = await resultOf(plan('염산'), {
+      lookupChemical,
+      loadFormChoices: async () => [{ name: '염산 35%' }, { name: '염산 10%' }],
+    })
+    expect(result).toMatchObject({ components: [{ lookup: { status: 'choose_form', choices: [{ name: '염산 35%' }, { name: '염산 10%' }] } }] })
+    expect(lookupChemical).not.toHaveBeenCalled()
+  })
+
+  it('confirms an identity only through a CAS number the person typed', async () => {
+    const result = await resultOf(plan('67-64-1'), {
+      lookupChemical: async () => chemical('Acetone', '67-64-1'),
+      // A CAS number names one substance, so no form question is asked.
+    })
+    expect(result).toMatchObject({ components: [{ lookup: { status: 'found', verifiedByCas: true } }] })
+  })
+
+  it('reports a failed lookup for that component only', async () => {
+    const result = await resultOf(plan('아세톤', '메탄올'), {
+      lookupChemical: async (query) => {
+        if (query === '메탄올') throw new Error('offline')
+        return chemical('Acetone', '67-64-1')
+      },
+      // A failed form lookup is not a reason to drop the component.
+      loadFormChoices: async () => { throw new Error('offline') },
+    })
+    expect(result).toMatchObject({ components: [{ lookup: { status: 'found' } }, { lookup: { status: 'failed' } }] })
   })
 })

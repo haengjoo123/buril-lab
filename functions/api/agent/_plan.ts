@@ -1,11 +1,15 @@
 import { z } from 'zod'
 import type { ResponseInput } from 'openai/resources/responses/responses'
 import {
+  AGENT_ACTION_CAPABILITY_IDS,
   AGENT_CAPABILITY_IDS,
+  AGENT_MAX_CAPACITY_TEXT_LENGTH,
   AGENT_MAX_ITEM_ALIASES,
   AGENT_MAX_ITEM_TEXT_LENGTH,
+  AGENT_MAX_QUANTITY,
   isAgentStatusCapabilityId,
   type AgentCapabilityId,
+  type AgentItemRef,
   type AgentMode,
   type AgentPlan,
 } from '../../../src/features/agent/agentContract'
@@ -18,8 +22,11 @@ export const AGENT_PLAN_MAX_RETRIES = 1
 /** Below this the plan is dropped and the person is asked to rephrase. */
 export const AGENT_PLAN_MIN_CONFIDENCE = 0.5
 
-/** Capabilities that change data. They are planned only in `actions` mode. */
-const WRITE_CAPABILITY_IDS: ReadonlySet<AgentCapabilityId> = new Set<AgentCapabilityId>()
+/**
+ * Capabilities that propose a change. They are planned only in `actions` mode,
+ * and even then the app saves nothing until the person confirms the proposal.
+ */
+const WRITE_CAPABILITY_IDS: ReadonlySet<AgentCapabilityId> = new Set<AgentCapabilityId>(AGENT_ACTION_CAPABILITY_IDS)
 
 /** What this request may be routed to: declared by the app, known here, allowed by the mode. */
 export function allowedCapabilities(declared: readonly string[], mode: AgentMode): AgentCapabilityId[] {
@@ -38,7 +45,13 @@ const CAPABILITY_RULES: Record<AgentCapabilityId, string> = {
   inspection_gaps: 'inspection_gaps: the person asks whether daily safety inspections (일상점검) were missed or done lately.',
   purchase_status: 'purchase_status: the person asks how purchase requests (구매 요청) stand. Opening the purchase screen is open_screen instead.',
   admin_tasks: 'admin_tasks: the person asks what the lab admin has to check or handle now, or for an overall status summary (할 일, 확인할 일, 현황 요약).',
+  log_usage: 'log_usage: the person reports how much of ONE named reagent is left now, or that a bottle of it is used up, and wants that recorded ("아세톤 30% 남았어", "에탄올 다 썼어"). Asking how much is left is item_lookup instead.',
+  register_item: 'register_item: the person says ONE named reagent arrived or was received and wants it added to their inventory (입고, 들어왔어, 받았어, 등록해줘).',
+  request_purchase: 'request_purchase: the person wants to ask the lab to buy ONE named reagent (구매 요청, 주문 요청, 사 달라고). Asking how purchase requests stand is purchase_status instead.',
 }
+
+/** Capabilities whose plan names one reagent in the person's own words. */
+const ITEM_NAMING_CAPABILITY_IDS: readonly AgentCapabilityId[] = ['item_lookup', 'log_usage', 'register_item', 'request_purchase']
 
 /** The model may only choose from what this request allows, plus the two exits. */
 export function buildPlanSchema(allowed: readonly AgentCapabilityId[]) {
@@ -50,6 +63,11 @@ export function buildPlanSchema(allowed: readonly AgentCapabilityId[]) {
     facet: z.enum(['location', 'expiry', 'remaining', 'none']),
     expiryWindow: z.enum(['expired', 'within_7d', 'within_30d', 'attention', 'none']),
     screen: z.enum(['inventory', 'cabinet', 'admin', 'inspection', 'purchases', 'none']),
+    usageKind: z.enum(['remaining', 'used_up', 'none']),
+    // -1 and 0 mean "not stated": structured output has no optional numbers.
+    remainingPercent: z.number().int().min(-1).max(100),
+    quantity: z.number().int().min(0).max(AGENT_MAX_QUANTITY),
+    capacityText: z.string().max(AGENT_MAX_CAPACITY_TEXT_LENGTH),
     confidence: z.number().min(0).max(1),
   })
 }
@@ -58,7 +76,8 @@ export type RawAgentPlan = z.infer<ReturnType<typeof buildPlanSchema>>
 
 /** Field rules name only the capabilities on offer, so the prompt never advertises a closed one. */
 function fieldRules(allowed: readonly AgentCapabilityId[]): string[] {
-  const namesAnItem = allowed.includes('item_lookup') ? 'item_lookup and substance_info' : 'substance_info'
+  const namesAnItem = [...ITEM_NAMING_CAPABILITY_IDS.filter((id) => allowed.includes(id)), 'substance_info'].join(', ')
+  const countsBottles = (['register_item', 'request_purchase'] as const).filter((id) => allowed.includes(id))
   return [
     `- itemText: for ${namesAnItem}, the reagent name copied character for character from the request, without the question words. Do not translate, correct or expand it. Otherwise "".`,
     `- itemAliases: up to ${AGENT_MAX_ITEM_ALIASES} other common names of that same reagent in Korean or English, for example "아세톤" -> ["acetone"]. Only names you are sure mean the same substance. Otherwise [].`,
@@ -72,6 +91,18 @@ function fieldRules(allowed: readonly AgentCapabilityId[]): string[] {
     allowed.includes('open_screen')
       ? '- screen: for open_screen, one of inventory (재고 목록), cabinet (시약장), admin (관리자 화면), inspection (일상점검), purchases (구매 요청). Otherwise "none".'
       : '- screen: always "none".',
+    allowed.includes('log_usage')
+      ? '- usageKind: for log_usage, "remaining" when the request states how much is left, "used_up" when it says the bottle is finished or empty. Otherwise "none".'
+      : '- usageKind: always "none".',
+    allowed.includes('log_usage')
+      ? '- remainingPercent: for log_usage with "remaining", the percentage left, 0 to 100, only when the request states it as a number. Otherwise -1.'
+      : '- remainingPercent: always -1.',
+    countsBottles.length > 0
+      ? `- quantity: for ${countsBottles.join(' and ')}, the number of bottles or packages the request states. Otherwise 0.`
+      : '- quantity: always 0.',
+    allowed.includes('register_item')
+      ? '- capacityText: for register_item, the package size copied from the request, for example "500 mL". Otherwise "".'
+      : '- capacityText: always "".',
     '- confidence: 0 to 1. Use a low value when the request is ambiguous or fits no capability well.',
   ]
 }
@@ -85,7 +116,9 @@ export function buildPlanInput(text: string, allowed: readonly AgentCapabilityId
     'Capabilities:',
     ...allowed.map((id) => `- ${CAPABILITY_RULES[id]}`),
     '- substance_info: the person wants general information about a chemical (hazards, GHS, MSDS or SDS, regulation, CAS number, formula) rather than about their own stock.',
-    '- out_of_scope: anything else, including requests to change data, requests about several different things at once, and anything the capabilities above cannot answer.',
+    allowed.some((id) => WRITE_CAPABILITY_IDS.has(id))
+      ? '- out_of_scope: anything else, including requests to change, move or delete data in any way not listed above, requests about several different things at once, and anything the capabilities above cannot answer.'
+      : '- out_of_scope: anything else, including requests to change data, requests about several different things at once, and anything the capabilities above cannot answer.',
     '',
     'Fields:',
     ...fieldRules(allowed),
@@ -129,6 +162,30 @@ function cleanAliases(raw: readonly string[], itemText: string): string[] {
 }
 
 /**
+ * A count or percentage is kept only when the person typed that number.
+ * The digits may still belong to something else in the sentence ("2-프로판올"),
+ * which is one reason the app shows the value for confirmation before saving.
+ */
+function typedInteger(raw: number, requestText: string, min: number, max: number): number | null {
+  if (!Number.isInteger(raw) || raw < min || raw > max) return null
+  return new RegExp(`(?<![\\d.])${raw}(?![\\d.])`).test(requestText.normalize('NFKC')) ? raw : null
+}
+
+/** A package size is kept only as the person typed it, and only when it carries a number. */
+function typedCapacity(raw: string, requestText: string): string | null {
+  const capacity = raw.normalize('NFKC').trim().slice(0, AGENT_MAX_CAPACITY_TEXT_LENGTH)
+  const compact = normalizeCompactToken(capacity)
+  if (!compact || !/\d/.test(compact) || !normalizeCompactToken(requestText).includes(compact)) return null
+  return capacity
+}
+
+function typedItemRef(raw: RawAgentPlan, requestText: string): AgentItemRef | null {
+  const text = verbatimItemText(raw.itemText, requestText)
+  if (!text) return null
+  return { text, aliases: cleanAliases(raw.itemAliases, text), casNumber: typedCasNumber(raw.casNumber, requestText) }
+}
+
+/**
  * Turns the model's fields into a plan the app will run. Anything the model
  * could not have taken from the request itself is dropped here.
  */
@@ -147,18 +204,40 @@ export function sanitizePlan(
   if (!context.allowed.includes(raw.capability)) return { kind: 'unsupported', reason: 'capability_disabled' }
 
   if (raw.capability === 'item_lookup') {
-    const text = verbatimItemText(raw.itemText, context.text)
-    if (!text) return LOW_CONFIDENCE
+    const item = typedItemRef(raw, context.text)
+    if (!item) return LOW_CONFIDENCE
+    // The answer card shows all three facts; the facet only picks the headline.
+    return { kind: 'item_lookup', item, facet: raw.facet === 'none' ? 'location' : raw.facet }
+  }
+
+  if (raw.capability === 'log_usage') {
+    const item = typedItemRef(raw, context.text)
+    if (!item || raw.usageKind === 'none') return LOW_CONFIDENCE
     return {
-      kind: 'item_lookup',
-      item: {
-        text,
-        aliases: cleanAliases(raw.itemAliases, text),
-        casNumber: typedCasNumber(raw.casNumber, context.text),
-      },
-      // The answer card shows all three facts; the facet only picks the headline.
-      facet: raw.facet === 'none' ? 'location' : raw.facet,
+      kind: 'log_usage',
+      item,
+      change: raw.usageKind === 'used_up'
+        ? { kind: 'used_up' }
+        : { kind: 'remaining', percent: typedInteger(raw.remainingPercent, context.text, 0, 100) },
     }
+  }
+
+  if (raw.capability === 'register_item') {
+    const name = verbatimItemText(raw.itemText, context.text)
+    if (!name) return LOW_CONFIDENCE
+    return {
+      kind: 'register_item',
+      name,
+      casNumber: typedCasNumber(raw.casNumber, context.text),
+      quantity: typedInteger(raw.quantity, context.text, 1, AGENT_MAX_QUANTITY),
+      capacity: typedCapacity(raw.capacityText, context.text),
+    }
+  }
+
+  if (raw.capability === 'request_purchase') {
+    const item = typedItemRef(raw, context.text)
+    if (!item) return LOW_CONFIDENCE
+    return { kind: 'request_purchase', item, quantity: typedInteger(raw.quantity, context.text, 1, AGENT_MAX_QUANTITY) }
   }
 
   if (raw.capability === 'expiry_list') {

@@ -155,8 +155,10 @@ describe('waste records questions', () => {
   it.each([
     '폐액통에 부어도 될까',
     '폐액통에 뭐 넣어도 돼?',
-    '폐액통 수거 요청해줘',
-    '폐액통 수거 신청',
+    '폐액통 수거 요청 어떻게 해?',
+    '폐액통에 부어서 수거 요청해줘',
+    '폐액 수거 요청해줘',
+    '폐액통 교체 신청',
     '폐기 방법 기록 알려줘',
     '아세톤 폐기 방법 알려줘',
     '폐액 어떻게 처리해?',
@@ -169,6 +171,35 @@ describe('waste records questions', () => {
   ])('leaves "%s" to the fixed disposal card', (text) => {
     expect(parseWasteIntent(text)).toBeNull()
     expect(routeAgentInputLocally(text)).toEqual({ kind: 'disposal' })
+  })
+
+  // A pickup is the one thing the app can propose to do; it is shown for confirmation, never sent.
+  it.each([
+    '폐액통 수거 요청해줘',
+    '폐액통 수거 신청',
+    '폐기통 수거 좀 불러줘',
+    'request a pickup for the waste container',
+    'schedule waste container collection',
+  ])('proposes a pickup for "%s"', (text) => {
+    expect(parseWasteIntent(text)).toEqual({ kind: 'pickup_request' })
+    expect(routeAgentInputLocally(text)).toEqual({ kind: 'waste', intent: { kind: 'pickup_request' } })
+  })
+
+  // Components written with amounts describe a batch; the review screen judges it.
+  it('reads a list of components with amounts as a batch to review, without any model', () => {
+    const mL = (value: number) => ({ value, unit: 'mL', kind: 'volume' })
+    expect(routeAgentInputLocally('아세톤 200mL랑 메탄올 100mL 섞은 폐액')).toEqual({
+      kind: 'waste',
+      intent: { kind: 'waste_batch', components: [{ name: '아세톤', amount: mL(200) }, { name: '메탄올', amount: mL(100) }] },
+    })
+    // Even a question about pouring ends at the review when it names what and how much.
+    expect(parseWasteIntent('폐액통에 아세톤 200mL 부어도 돼?')).toEqual({
+      kind: 'waste_batch', components: [{ name: '아세톤', amount: mL(200) }],
+    })
+    // A records question keeps its meaning even with an amount in it.
+    expect(parseWasteIntent('지난달 폐기 기록 중 아세톤 200mL 찾아줘')).toEqual({ kind: 'waste_summary', period: 'last_month' })
+    // Without waste wording the sentence is not a waste request at all.
+    expect(routeAgentInputLocally('아세톤 200mL랑 메탄올 100mL 있어?')).toEqual({ kind: 'planner' })
   })
 
   it('never treats text without waste wording as a waste question', () => {

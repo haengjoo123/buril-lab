@@ -29,6 +29,10 @@ export function declaredAgentCapabilities(context: AgentRuntimeContext): AgentCa
   if (context.dailyInspectionEnabled && inLab) capabilities.push('inspection_gaps')
   if (context.purchaseRequestsEnabled && inLab) capabilities.push('purchase_status')
   if (context.isAdmin && inLab) capabilities.push('admin_tasks')
+  // Proposals to record something. The server offers them to the planner only
+  // while the runtime switch allows actions, and the app checks that again.
+  capabilities.push('log_usage', 'register_item')
+  if (context.purchaseRequestsEnabled && inLab) capabilities.push('request_purchase')
   return capabilities
 }
 

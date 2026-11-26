@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
+import { AlertCircle, AlertTriangle, Info, type LucideIcon } from 'lucide-react';
 import { getCategoryDetails } from '../../utils/chemicalAnalyzer';
 import { isDisposalCategory } from '../../utils/disposalCategories';
 import { wasteStreamLabel } from '../../utils/wasteLabels';
@@ -7,20 +8,32 @@ import { describeLabAdminTask, formatMonthDay } from '../admin/labAdminTaskText'
 import type { LabAdminTaskSeverity } from '../admin/labAdminTasks';
 import type { CabinetLockGroup } from '../dailyInspection/labSafetySignals';
 import { formatVolumeMl } from '../wasteContainers/containerSummary';
-import { AgentCard, AgentGoButton, AgentNotice } from './AgentCardParts';
-import { AGENT_CHIP, AGENT_NOTE, AGENT_ROW } from './agentCardStyles';
+import { AgentCard, AgentGoButton, AgentNotice, AgentRowLink } from './AgentCardParts';
+import {
+  AGENT_BADGE,
+  AGENT_BODY,
+  AGENT_CHIP,
+  AGENT_FACT_LABEL,
+  AGENT_FOOTNOTE,
+  AGENT_NOTE,
+  AGENT_ROW,
+  AGENT_ROW_META,
+  AGENT_ROW_TITLE,
+  AGENT_SUB_HEADING,
+} from './agentCardStyles';
 import { AGENT_WASTE_LOG_LIMIT } from './agentDataSources';
 import type { AgentStatusResult, AgentUiAction, AgentWasteStreamRow } from './agentResults';
 
-const SEVERITY_DOT: Record<LabAdminTaskSeverity, string> = {
-  red: 'bg-red-500',
-  amber: 'bg-amber-500',
-  slate: 'bg-slate-400',
+/** How pressing a task is, as a shape and a spoken label as well as a colour. */
+const SEVERITY: Record<LabAdminTaskSeverity, { icon: LucideIcon; tone: string; labelKey: string }> = {
+  red: { icon: AlertCircle, tone: 'text-red-700 dark:text-red-400', labelKey: 'agent_admin_task_severity_red' },
+  amber: { icon: AlertTriangle, tone: 'text-amber-700 dark:text-amber-400', labelKey: 'agent_admin_task_severity_amber' },
+  slate: { icon: Info, tone: 'text-slate-500 dark:text-slate-400', labelKey: 'agent_admin_task_severity_slate' },
 };
 
-const ROW_TITLE = 'font-semibold text-slate-900 dark:text-slate-100';
-const ROW_META = 'mt-0.5 text-sm text-slate-600 dark:text-slate-400';
-const SUB_HEADING = 'mb-2 mt-4 text-sm font-medium text-slate-600 first:mt-0 dark:text-slate-400';
+const ROW_TITLE = AGENT_ROW_TITLE;
+const ROW_META = AGENT_ROW_META;
+const SUB_HEADING = AGENT_SUB_HEADING;
 
 /** A timestamp as the month and day the person's own clock shows, e.g. "11/24". */
 function localMonthDay(timestamp: string): string {
@@ -45,13 +58,12 @@ function LockGroups({ heading, groups, onUiAction }: {
       <h4 className={SUB_HEADING}>{heading}</h4>
       <ul>
         {groups.map((group) => (
-          <li key={group.cabinetId} className={`${AGENT_ROW} flex items-center justify-between gap-3`}>
-            <div className="min-w-0">
-              <p className={ROW_TITLE}>{group.cabinetName}</p>
-              <p className={ROW_META}>{t('agent_locks_reagent_count', { count: group.count })}</p>
-            </div>
-            <AgentGoButton
+          <li key={group.cabinetId} className={AGENT_ROW}>
+            <p className={ROW_TITLE}>{group.cabinetName}</p>
+            <p className={ROW_META}>{t('agent_locks_reagent_count', { count: group.count })}</p>
+            <AgentRowLink
               label={t('agent_open_cabinet')}
+              accessibleLabel={`${group.cabinetName} · ${t('agent_open_cabinet')}`}
               onClick={() => onUiAction({ type: 'open_cabinet', cabinetId: group.cabinetId, itemId: null, shelfId: null })}
             />
           </li>
@@ -98,9 +110,7 @@ export function AgentStatusCard({ result, onUiAction }: {
                   ].filter(Boolean).join(' · ')}
                 </p>
               </div>
-              <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold ${forecast.level === 'low'
-                ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+              <span className={`shrink-0 ${forecast.level === 'low' ? AGENT_BADGE.danger : AGENT_BADGE.warning}`}>
                 {t(`agent_low_stock_level_${forecast.level}`)}
               </span>
             </li>
@@ -140,15 +150,15 @@ export function AgentStatusCard({ result, onUiAction }: {
             <h4 className={SUB_HEADING}>{t('agent_regulated_obligations_title')}</h4>
             <ul className="flex flex-col gap-2">
               {result.obligations.map((obligation) => (
-                <li key={obligation.id} className="text-sm leading-6 text-slate-700 dark:text-slate-300">
+                <li key={obligation.id} className={AGENT_BODY}>
                   {language.startsWith('ko') ? obligation.text.ko : obligation.text.en}
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">{obligation.source.citation}</span>
+                  <span className={`block ${AGENT_FOOTNOTE}`}>{obligation.source.citation}</span>
                 </li>
               ))}
             </ul>
           </>
         )}
-        <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">{t('agent_regulated_basis')}</p>
+        <p className={`mt-4 ${AGENT_FOOTNOTE}`}>{t('agent_regulated_basis')}</p>
       </AgentCard>
     );
   }
@@ -188,11 +198,11 @@ export function AgentStatusCard({ result, onUiAction }: {
     if (count === 0) return <AgentNotice title={t('agent_purchase_none')} actions={openPurchases} />;
     return (
       <AgentCard title={t('agent_purchase_title', { count })} actions={openPurchases}>
-        <dl className="grid grid-cols-3 gap-1.5">
+        <dl className="grid grid-cols-3 gap-4">
           {(['requested', 'approved', 'ordered'] as const).map((status) => (
-            <div key={status} className="rounded-lg bg-slate-50 px-2.5 py-1.5 dark:bg-slate-900/50">
-              <dt className="text-2xs font-medium text-slate-500 dark:text-slate-400">{t(`agent_purchase_${status}`)}</dt>
-              <dd className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-slate-100">{result[status]}</dd>
+            <div key={status} className="min-w-0">
+              <dt className={AGENT_FACT_LABEL}>{t(`agent_purchase_${status}`)}</dt>
+              <dd className="mt-0.5 text-lg font-semibold leading-7 tabular-nums text-slate-900 dark:text-slate-100">{result[status]}</dd>
             </div>
           ))}
         </dl>
@@ -203,7 +213,7 @@ export function AgentStatusCard({ result, onUiAction }: {
               {result.waiting.map((request) => (
                 <li key={request.id} className={`${AGENT_ROW} flex items-center justify-between gap-3`}>
                   <span className={`min-w-0 ${ROW_TITLE}`}>{request.itemName}</span>
-                  <span className="shrink-0 text-sm text-slate-600 dark:text-slate-400">
+                  <span className="shrink-0 text-sm leading-6 text-slate-600 dark:text-slate-400">
                     {[t('agent_purchase_quantity', { count: request.quantity }), localMonthDay(request.createdAt)].filter(Boolean).join(' · ')}
                   </span>
                 </li>
@@ -228,13 +238,15 @@ export function AgentStatusCard({ result, onUiAction }: {
         <ul>
           {result.tasks.map((task) => {
             const text = describeLabAdminTask(task, t, language);
+            const severity = SEVERITY[task.severity];
+            const SeverityIcon = severity.icon;
             return (
-              <li key={task.key} className={`${AGENT_ROW} flex items-start gap-2.5`}>
-                <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${SEVERITY_DOT[task.severity]}`} aria-hidden="true" />
+              <li key={task.key} className={`${AGENT_ROW} flex items-start gap-2`}>
+                <SeverityIcon className={`mt-1 h-4 w-4 shrink-0 ${severity.tone}`} role="img" aria-label={t(severity.labelKey)} />
                 <div className="min-w-0">
                   <p className={ROW_TITLE}>{text.title}</p>
                   {text.meta && <p className={ROW_META}>{text.meta}</p>}
-                  {text.detail && <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{text.detail}</p>}
+                  {text.detail && <p className={ROW_META}>{text.detail}</p>}
                 </div>
               </li>
             );
@@ -262,14 +274,10 @@ export function AgentStatusCard({ result, onUiAction }: {
                 </p>
                 <p className="mt-1.5 flex flex-wrap gap-1.5">
                   <span className={AGENT_CHIP}>{t(`agent_container_${container.status}`)}</span>
-                  {container.pickupRequested && (
-                    <span className="inline-block rounded-md bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                      {t('agent_container_pickup')}
-                    </span>
-                  )}
+                  {container.pickupRequested && <span className={AGENT_BADGE.warning}>{t('agent_container_pickup')}</span>}
                 </p>
               </div>
-              <span className="shrink-0 text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <span className="shrink-0 text-end text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">
                 {container.fillPercent !== null
                   ? t('agent_container_fill', { percent: container.fillPercent, volume: formatVolumeMl(container.totalMl) })
                   : formatVolumeMl(container.totalMl)}
@@ -304,7 +312,7 @@ export function AgentStatusCard({ result, onUiAction }: {
                 ].filter(Boolean).join(' · ')}
               </p>
             </div>
-            <span className="shrink-0 text-sm font-semibold text-slate-900 dark:text-slate-100">{formatVolumeMl(row.volumeMl)}</span>
+            <span className="shrink-0 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{formatVolumeMl(row.volumeMl)}</span>
           </li>
         ))}
       </ul>

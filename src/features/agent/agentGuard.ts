@@ -1,4 +1,5 @@
 import { hasCasNumberFormat } from '../../utils/casNumber'
+import { parseWasteComponents, type ParsedWasteComponent } from './parseWasteComponents'
 
 /**
  * Fixed rules that decide where a typed request goes before any model call.
@@ -54,18 +55,29 @@ export function classifyAgentInput(input: string): AgentInputKind {
 export type AgentWastePeriod = 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'last_30d'
 
 /**
- * Questions about waste records that fixed rules can answer from the lab's own
+ * Requests about waste records that fixed rules can decide from the lab's own
  * data. They never tell anyone how to dispose of anything.
  */
 export type AgentWasteIntent =
   | { kind: 'container_status' }
   | { kind: 'waste_summary'; period: AgentWastePeriod }
+  /** Asking for a container to be collected. Shown as a proposal; nothing is sent until confirmed. */
+  | { kind: 'pickup_request' }
+  /**
+   * Components written with their amounts. They are looked up by name and
+   * offered for the waste batch review, where the rule engine does the judging.
+   */
+  | { kind: 'waste_batch'; components: ParsedWasteComponent[] }
 
 /**
- * Asking how to dispose of, mix or pour something, or asking for something to
- * be done. Such text gets the fixed disposal card, never a records answer.
+ * Asking how to dispose of, mix or pour something. Such text gets the fixed
+ * disposal card, never a records answer or a proposal.
  */
-const WASTE_GUIDANCE_PATTERN = /부어|붓|넣|투입|담아|버려|버리|버릴|버렸|섞|혼합|희석|묽게|중화|배수구|싱크|하수|쏟|흘려|어떻게|방법|해도|되나|될까|돼\?|요청\s?해|신청|\b(?:pour\w*|put|add|mix\w*|combine|dilut\w*|neutrali\w*|drain|sink|sewer|discard\w*|throw\w*|how\s+(?:do|to|should|can)|can\s+i|should\s+i)\b/i
+const WASTE_HANDLING_PATTERN = /부어|붓|넣|투입|담아|버려|버리|버릴|버렸|섞|혼합|희석|묽게|중화|배수구|싱크|하수|쏟|흘려|어떻게|방법|해도|되나|될까|돼\?|\b(?:pour\w*|put|add|mix\w*|combine|dilut\w*|neutrali\w*|drain|sink|sewer|discard\w*|throw\w*|how\s+(?:do|to|should|can)|can\s+i|should\s+i)\b/i
+/** Asking for something to be done. Only a pickup request is one the app can propose. */
+const WASTE_ACTION_REQUEST_PATTERN = /요청\s?해|신청/
+const WASTE_PICKUP_CUE = /수거|회수|픽업|\b(?:pick\s?-?up|collect(?:ion|ed)?)\b/i
+const WASTE_PICKUP_REQUEST_CUE = /요청|신청|불러|\b(?:request|schedule|arrange|call)\b/i
 const WASTE_RECORD_NOUN = /(?:폐기|폐액)\s?(?:기록|내역|이력|량|통계|요약)|\bwaste\s+(?:logs?|records?|history|summary|volume)\b/i
 const WASTE_CONTAINER_NOUN = /폐액통|폐기통|\bwaste\s+(?:containers?|bottles?|drums?)\b/i
 const WASTE_CONTAINER_STATUS_CUE = /현황|상태|얼마|찼|목록|리스트|보여|알려|몇|\b(?:status|how\s+full|list|show)\b/i
@@ -78,15 +90,28 @@ const WASTE_PERIOD_PATTERNS: ReadonlyArray<[RegExp, AgentWastePeriod]> = [
   [/지난\s?달|저번\s?달|전월|\blast\s+month\b/i, 'last_month'],
 ]
 
-/** A records question inside waste wording, or null when the text asks for guidance or an action. */
+/** What waste wording asks of the lab's records, or null when it asks for guidance or another action. */
 export function parseWasteIntent(input: string): AgentWasteIntent | null {
   const text = input.normalize('NFKC')
-  if (WASTE_GUIDANCE_PATTERN.test(text)) return null
+  // A list of components with amounts describes a batch, whatever else the sentence asks.
+  // It leads to the review screen, which is also where every disposal question ends up.
+  if (!WASTE_RECORD_NOUN.test(text)) {
+    const components = parseWasteComponents(text)
+    if (components.length > 0) return { kind: 'waste_batch', components }
+  }
+  if (WASTE_HANDLING_PATTERN.test(text)) return null
+  const namesContainer = WASTE_CONTAINER_NOUN.test(text)
+  // "수거 요청 현황" asks how requests stand; it is answered by the container list below.
+  if (namesContainer && WASTE_PICKUP_CUE.test(text) && WASTE_PICKUP_REQUEST_CUE.test(text)
+    && !WASTE_CONTAINER_STATUS_CUE.test(text)) {
+    return { kind: 'pickup_request' }
+  }
+  if (WASTE_ACTION_REQUEST_PATTERN.test(text)) return null
   if (WASTE_RECORD_NOUN.test(text)) {
     const period = WASTE_PERIOD_PATTERNS.find(([pattern]) => pattern.test(text))?.[1] ?? 'last_30d'
     return { kind: 'waste_summary', period }
   }
-  if (WASTE_CONTAINER_NOUN.test(text) && WASTE_CONTAINER_STATUS_CUE.test(text)) return { kind: 'container_status' }
+  if (namesContainer && WASTE_CONTAINER_STATUS_CUE.test(text)) return { kind: 'container_status' }
   return null
 }
 
@@ -94,7 +119,7 @@ export type AgentLocalRoute =
   | { kind: 'empty' }
   /** Waste wording that asks for guidance: answered by the fixed card, never by a model. */
   | { kind: 'disposal' }
-  /** Waste wording that asks about records: answered by fixed rules from the lab's data. */
+  /** Waste wording about records or a pickup: decided by fixed rules from the lab's data. */
   | { kind: 'waste'; intent: AgentWasteIntent }
   /** A plain name or CAS number: the normal search answers it better. */
   | { kind: 'identifier'; query: string }

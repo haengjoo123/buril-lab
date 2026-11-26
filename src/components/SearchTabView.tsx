@@ -717,7 +717,7 @@ export function SearchTabView({
               <Camera className="h-5 w-5 stroke-[2.2]" />
             </button>}
 
-            <div className={isAgentMode ? 'min-w-0 flex-1 pl-2' : 'min-w-0 flex-1'}>
+            <div className={isAgentMode ? 'min-w-0 flex-1 ps-2' : 'min-w-0 flex-1'}>
               <input
                 ref={searchInputRef}
                 type="text"
@@ -785,7 +785,7 @@ export function SearchTabView({
                 // Keep the input focused so the tap is not lost to the blur handler.
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => agent.onAskAgent(normalizedQuery)}
-                className="flex min-h-11 w-full shrink-0 items-center gap-3 border-b border-gray-100 px-4 py-3 text-left text-sm font-semibold text-blue-700 transition-colors last:border-0 hover:bg-blue-50 dark:border-slate-700/50 dark:text-blue-300 dark:hover:bg-slate-700/50"
+                className="flex min-h-11 w-full shrink-0 items-center gap-3 border-b border-gray-100 px-4 py-3 text-start text-sm font-semibold text-blue-700 transition-colors last:border-0 hover:bg-slate-900/5 motion-reduce:transition-none dark:border-slate-700/50 dark:text-blue-300 dark:hover:bg-white/10"
               >
                 <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{t('agent_suggest_switch')}</span>

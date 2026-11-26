@@ -101,7 +101,8 @@ test('cabinet editor draft and Canvas identity survive repeated resizing', async
       await expect.poll(async () => {
         const dock = await cameraControls.boundingBox();
         const switcher = await modes.boundingBox();
-        const canvas = await page.locator('canvas').boundingBox();
+        // The placement tray draws a small 3D preview per bottle; the cabinet scene is the first canvas.
+        const canvas = await page.locator('canvas').first().boundingBox();
         const tray = mode === 'cabinet_mode_place'
           ? await page.getByRole('button', { name: ko('cabinet_reagent_tray_hide'), exact: true }).locator('..').boundingBox()
           : null;
@@ -426,6 +427,137 @@ test('agent status and waste record cards fit a phone and answer waste records w
   const formBox = (await page.locator('form').boundingBox())!;
   const listBox = (await page.locator('.search-results-list').boundingBox())!;
   expect(listBox.y + listBox.height).toBeLessThanOrEqual(formBox.y);
+});
+
+test('agent proposals wait for a choice, save only when confirmed, and fit a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(`${fixture}?screen=search&agent=1&emptyCart=1&mode=agent`);
+  const input = page.locator('form input');
+  const ask = async (text: string) => {
+    await input.fill(text);
+    await input.press('Enter');
+  };
+  const proposal = page.locator('[data-agent-proposal]');
+
+  // Two bottles match, so none is picked and the button waits for the person.
+  await ask('아세톤 30% 남았다고 기록해줘');
+  const record = page.getByRole('button', { name: ko('agent_usage_confirm_remaining'), exact: true });
+  await expect(page.getByRole('heading', { name: ko('agent_usage_title_remaining'), exact: true })).toBeVisible();
+  await expect(record).toBeDisabled();
+  await expect(proposal).toContainText(ko('agent_proposal_choose_item_hint', { count: 2 }));
+  await page.getByRole('radio', { name: /Sigma-Aldrich/ }).check();
+  await expect(proposal).toContainText(ko('agent_usage_summary_remaining', { name: 'Acetone', percent: 30 }));
+  await expectNoHorizontalOverflow(page);
+  await record.click();
+  await expect(proposal).toHaveAttribute('data-agent-proposal', 'done');
+  await expect(proposal).toContainText(ko('agent_usage_done_remaining', { percent: 30 }));
+  await expect(record).toHaveCount(0);
+
+  // A failed save keeps the proposal and says so; trying again works.
+  await ask('에탄올 2병 구매 요청해줘 저장 실패');
+  const send = page.getByRole('button', { name: ko('agent_purchase_proposal_confirm'), exact: true });
+  await expect(proposal).toContainText(ko('agent_purchase_proposal_summary', { name: '에탄올', count: 2 }));
+  await send.click();
+  await expect(proposal.getByRole('alert')).toContainText(ko('agent_proposal_error_failed'));
+  await expectNoHorizontalOverflow(page);
+  await send.click();
+  await expect(proposal).toContainText(ko('agent_purchase_proposal_done'));
+
+  // A pickup request is decided by fixed rules; cancelling leaves nothing behind.
+  await ask('폐액통 수거 요청해줘');
+  await expect(page.getByRole('heading', { name: ko('agent_pickup_title'), exact: true })).toBeVisible();
+  await expect(proposal).toContainText(ko('agent_pickup_already_requested', { count: 1 }));
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole('button', { name: ko('agent_proposal_cancel'), exact: true }).click();
+  await expect(proposal).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: ko('agent_examples_label'), exact: true })).toBeVisible();
+
+  // Registration opens the ordinary form with what was typed; the form does the saving.
+  await ask('아세톤 500mL 2병 입고했어');
+  await page.getByRole('button', { name: ko('agent_register_open'), exact: true }).click();
+  await expect(page.getByRole('heading', { name: ko('inventory_modal_title_add'), exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').locator('input').first()).toHaveValue('아세톤');
+});
+
+test('a proposal can be confirmed with the keyboard alone, keeps the focus, and fits 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(`${fixture}?screen=search&agent=1&emptyCart=1&mode=agent`);
+  const input = page.locator('form input');
+  const proposal = page.locator('[data-agent-proposal]');
+  const status = proposal.getByRole('status');
+  await input.fill('아세톤 남은 양 기록해줘');
+  await input.press('Enter');
+  await expect(page.getByRole('heading', { name: ko('agent_usage_title_remaining'), exact: true })).toBeVisible();
+  // The live region is there before anything is said through it.
+  await expect(status).toHaveText('');
+  await expectNoHorizontalOverflow(page);
+
+  // Arrow keys move within each group of radios; Tab leaves it in one step.
+  const bottles = proposal.getByRole('group', { name: ko('agent_proposal_choose_item'), exact: true }).getByRole('radio');
+  const steps = proposal.getByRole('group', { name: ko('agent_usage_level_label'), exact: true }).getByRole('radio');
+  await bottles.first().focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(bottles.nth(1)).toBeChecked();
+  await page.keyboard.press('Tab');
+  await expect(steps.first()).toBeFocused();
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowRight');
+  await expect(steps.nth(1)).toBeChecked();
+  await expect(proposal).toContainText(ko('agent_usage_summary_remaining', { name: 'Acetone', percent: 30 }));
+
+  const record = page.getByRole('button', { name: ko('agent_usage_confirm_remaining'), exact: true });
+  await page.keyboard.press('Tab');
+  await expect(record).toBeFocused();
+  const sizeBefore = await record.boundingBox();
+  await page.keyboard.press('Enter');
+  // Busy, not disabled: same size, still focused, and a second press is ignored.
+  await expect(record).toHaveAttribute('aria-busy', 'true');
+  await expect(record).toBeFocused();
+  expect(await record.boundingBox()).toEqual(sizeBefore);
+  await page.keyboard.press('Enter');
+  await expect(proposal).toHaveAttribute('data-agent-proposal', 'done');
+  await expect(status).toHaveText(ko('agent_usage_done_remaining', { percent: 30 }));
+  // The buttons are gone and the outcome holds the focus.
+  await expect(proposal.locator(':focus')).toContainText(ko('agent_usage_done_remaining', { percent: 30 }));
+  await expectNoHorizontalOverflow(page);
+
+  // Cancelling hands the focus to the examples instead of dropping it.
+  await input.fill('에탄올 2병 구매 요청해줘');
+  await input.press('Enter');
+  await page.getByRole('button', { name: ko('agent_proposal_cancel'), exact: true }).click();
+  await expect(page.locator('[data-agent-result="idle"]')).toBeFocused();
+});
+
+test('a sentence of waste components becomes a batch proposal that opens the review when confirmed', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(`${fixture}?screen=search&agent=1&emptyCart=1&mode=agent`);
+  const input = page.locator('form input');
+  const proposal = page.locator('[data-agent-proposal]');
+  await input.fill('아세톤 200mL랑 메탄올 100mL, 염산 500mL, 미확인물 30mL 섞은 폐액');
+  await input.press('Enter');
+
+  await expect(page.getByRole('heading', { name: ko('agent_batch_title'), exact: true })).toBeVisible();
+  const add = page.getByRole('button', { name: ko('agent_batch_confirm'), exact: true });
+  await expect(proposal).toContainText(ko('agent_batch_typed', { name: '아세톤', amount: '200 mL' }));
+  await expect(proposal).toContainText(ko('agent_batch_not_found', { name: '미확인물' }));
+  await expect(proposal).toContainText(ko('agent_batch_summary', { count: 2 }));
+  // A name that fits several forms is a question, not a default.
+  await expect(page.getByRole('checkbox')).toHaveCount(2);
+  // Picking a form looks it up and replaces the question with the found component.
+  await page.getByRole('radio', { name: /염산 10%/ }).click();
+  await expect(page.getByRole('checkbox')).toHaveCount(3);
+  await expect(proposal).toContainText(ko('agent_batch_summary', { count: 3 }));
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole('checkbox', { name: /메탄올/ }).uncheck();
+  await expect(proposal).toContainText(ko('agent_batch_summary', { count: 2 }));
+  await add.click();
+  // The review screen opens with the two components; disposal is judged there.
+  const review = page.locator('.cart-panes');
+  await expect(review).toBeVisible();
+  await expect(review).toContainText('아세톤 (Acetone)');
+  await expect(review).toContainText('염산 10% (Hydrochloric acid)');
+  await expect(review).not.toContainText('메탄올 (Methanol)');
 });
 
 test('waste wizard and review use remaining space without duplicating the dialog', async ({ page }) => {
