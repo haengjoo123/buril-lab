@@ -7,10 +7,12 @@ import {
   VOICE_CANDIDATE_MAX_OUTPUT_TOKENS,
 } from '../voice/_reagentAliases'
 import { VOICE_INTENT_MAX_OUTPUT_TOKENS } from '../voice/query'
+import { AGENT_PLAN_MAX_OUTPUT_TOKENS } from '../agent/_plan'
 
 describe('task-specific OpenAI output budgets', () => {
   it('keeps every Responses task within its planned cap', () => {
     expect({
+      agentPlan: AGENT_PLAN_MAX_OUTPUT_TOKENS,
       label: LABEL_SCAN_MAX_OUTPUT_TOKENS,
       classification: CLASSIFICATION_MAX_OUTPUT_TOKENS,
       disposalGuide: DISPOSAL_GUIDE_MAX_OUTPUT_TOKENS,
@@ -18,6 +20,7 @@ describe('task-specific OpenAI output budgets', () => {
       voiceAlias: VOICE_ALIAS_MAX_OUTPUT_TOKENS,
       voiceCandidate: VOICE_CANDIDATE_MAX_OUTPUT_TOKENS,
     }).toEqual({
+      agentPlan: 500,
       label: 1_200,
       classification: 400,
       disposalGuide: 2_000,

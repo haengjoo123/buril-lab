@@ -68,6 +68,7 @@ const SENSITIVE_API_PATTERNS = [
   /^\/api\/cabinets\//,
   /^\/api\/labs\//,
   /^\/api\/admin\//,
+  /^\/api\/agent\//,
   /^\/api\/(?:ai|gemini)\//,
   /^\/api\/voice\//,
   /^\/api\/analytics\/(?:guest-delete|user-delete)\/?$/,
@@ -130,6 +131,12 @@ const LIMIT_CONFIGS = {
     ip: { count: 2, window: '1 m' },
     pattern: /^\/api\/admin\//,
   },
+  // Each request may cost one model call; a daily allowance is enforced in the handler as well.
+  AGENT: {
+    user: { count: 6, window: '1 m' },
+    ip: { count: 1, window: '1 m' },
+    pattern: /^\/api\/agent\//,
+  },
   VOICE: {
     user: { count: 30, window: '1 m' },
     ip: { count: 1, window: '1 m' },
@@ -187,6 +194,7 @@ const PROTECTED_API_PATTERNS = [
   /^\/api\/cabinets\//,
   /^\/api\/labs\//,
   /^\/api\/admin\//,
+  /^\/api\/agent\//,
   /^\/api\/ai\//,
   /^\/api\/gemini\//,
   /^\/api\/voice\//,
@@ -203,6 +211,7 @@ export function resolveRateLimitCategory(path: string): RateLimitCategory | null
   if (LIMIT_CONFIGS.CABINETS.pattern.test(path)) return 'CABINETS'
   if (LIMIT_CONFIGS.LABS.pattern.test(path)) return 'LABS'
   if (LIMIT_CONFIGS.ADMIN.pattern.test(path)) return 'ADMIN'
+  if (LIMIT_CONFIGS.AGENT.pattern.test(path)) return 'AGENT'
   if (LIMIT_CONFIGS.VOICE.pattern.test(path)) return 'VOICE'
   if (LIMIT_CONFIGS.AI.pattern.test(path)) return 'AI'
   if (LIMIT_CONFIGS.KOSHA.pattern.test(path)) return 'KOSHA'

@@ -21,6 +21,7 @@ import type { SafetyCenterAdminRow } from './functions/api/admin/safety-centers/
 import { parseSafetyCenterReview } from './functions/api/admin/safety-centers/status'
 import { createLocalLabJoinApi } from './scripts/ops5-local-join-api'
 import { onRequestPost as analyzeInventoryImport } from './functions/api/ai/inventory-import'
+import { createAgentQueryHandler } from './functions/api/agent/query'
 import { pdfJsAssets } from './scripts/vite-pdfjs-assets'
 
 const disabledAutomaticClientEnvPrefix = 'BURIL_AUTO_ENV_DISABLED_'
@@ -52,6 +53,7 @@ const explicitClientEnvNames = [
   'VITE_ENABLE_CABINET_LOCK_RULES',
   'VITE_ENABLE_INSPECTION_HINTS',
   'VITE_ENABLE_INSPECTION_PREP_EXPORT',
+  'VITE_ENABLE_AGENT_MODE',
 ] as const
 
 type AdminIdentity = {
@@ -69,7 +71,30 @@ type LocalPagesPostHandler = (context: {
   env: Record<string, string>
 }) => Promise<Response>
 
+// `npm run dev` has no Pages middleware, KV or Upstash. The local agent endpoint
+// therefore verifies the caller itself and uses fixed values for the runtime
+// switch and the daily allowance. It still needs the OpenAI secrets to plan.
+const localAgentQueryHandler = createAgentQueryHandler({
+  resolveConfig: async () => ({ mode: 'actions', dailyQuota: 1_000 }),
+  consumeDailyQuota: async () => ({ allowed: true, remaining: 999, retryAfterSeconds: 0 }),
+})
+
+const planLocalAgentQuery: LocalPagesPostHandler = async ({ request, env }) => {
+  const authHeader = request.headers.get('Authorization')
+  const { url, anonKey } = getSupabaseConfig(env)
+  let userId: string | null = null
+  if (authHeader?.startsWith('Bearer ') && url && anonKey) {
+    const userClient = createClient(url, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+    userId = (await userClient.auth.getUser()).data.user?.id ?? null
+  }
+  return localAgentQueryHandler({ request, env, data: userId ? { userId } : {} })
+}
+
 const localPagesPostHandlers: Record<string, LocalPagesPostHandler> = {
+  '/api/agent/query': planLocalAgentQuery,
   '/api/ai/inventory-import': analyzeInventoryImport,
   '/api/analytics/search-event': postSearchAnalyticsEvent,
   '/api/analytics/search-action': postSearchAnalyticsAction,
@@ -592,6 +617,7 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.VITE_ENABLE_CABINET_LOCK_RULES': JSON.stringify(explicitClientEnv.VITE_ENABLE_CABINET_LOCK_RULES),
     'import.meta.env.VITE_ENABLE_INSPECTION_HINTS': JSON.stringify(explicitClientEnv.VITE_ENABLE_INSPECTION_HINTS),
     'import.meta.env.VITE_ENABLE_INSPECTION_PREP_EXPORT': JSON.stringify(explicitClientEnv.VITE_ENABLE_INSPECTION_PREP_EXPORT),
+    'import.meta.env.VITE_ENABLE_AGENT_MODE': JSON.stringify(explicitClientEnv.VITE_ENABLE_AGENT_MODE),
   },
   resolve: {
     alias: {

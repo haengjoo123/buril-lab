@@ -82,6 +82,11 @@ export const isCabinetLockRulesEnabled = isExplicitlyEnabled(import.meta.env.VIT
 export const isInspectionHintsEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INSPECTION_HINTS)
 /** One workbook gathering inventory, inspections, cabinets and containers for an inspection (no database changes). */
 export const isInspectionPrepExportEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_INSPECTION_PREP_EXPORT)
+/**
+ * Agent mode in the main search bar. The server keeps it off as well until the
+ * `agent_mode_config` runtime value turns it on (docs/operations/agent-mode-rollout.md).
+ */
+export const isAgentModeEnabled = isExplicitlyEnabled(import.meta.env.VITE_ENABLE_AGENT_MODE)
 export const isChemicalEnrichmentEnabled = !isExplicitlyDisabled(
   import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT,
 )

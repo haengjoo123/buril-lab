@@ -22,6 +22,12 @@ describe('AI route middleware contract', () => {
     )
   })
 
+  it('requires sign-in for agent mode and meters it in its own bucket with a small body', () => {
+    expect(isProtectedApiPath('/api/agent/query')).toBe(true)
+    expect(resolveRateLimitCategory('/api/agent/query')).toBe('AGENT')
+    expect(getApiRequestBodyLimit(resolveApiRoutePolicy('/api/agent/query')!)).toBe(8 * 1024)
+  })
+
   it('does not retain a deleted Google Vision route category', () => {
     expect(resolveRateLimitCategory('/api/vision/ocr')).toBeNull()
     expect(isProtectedApiPath('/api/vision/ocr')).toBe(false)
@@ -187,7 +193,7 @@ describe('API response boundary', () => {
   })
 
   it.each([
-    '/api/admin/feedback/list', '/api/ai/classify', '/api/gemini/scan-label',
+    '/api/admin/feedback/list', '/api/ai/classify', '/api/gemini/scan-label', '/api/agent/query',
     '/api/voice/query', '/api/account/delete', '/api/analytics/guest-delete', '/api/labs/join', '/api/labs/delete',
   ])('fails closed on Redis failure for %s', async (path) => {
     const run = setup(path, 'POST', { Authorization: 'Bearer fixture-token' })
@@ -251,7 +257,7 @@ describe('API response boundary', () => {
   it.each([
     '/api/ai/scan-label', '/api/gemini/scan-label', '/api/voice/transcribe',
     '/api/voice/query', '/api/voice/speak', '/api/admin/analytics/export',
-    '/api/analytics/search-event', '/api/chemicals/enrich',
+    '/api/analytics/search-event', '/api/chemicals/enrich', '/api/agent/query',
   ])('rejects a declared oversized body for %s before its parser runs', async (path) => {
     const limit = getApiRequestBodyLimit(resolveApiRoutePolicy(path)!)
     const run = setup(path, 'POST', { Authorization: 'Bearer fixture-token' })

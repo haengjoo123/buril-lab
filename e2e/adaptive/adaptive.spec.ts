@@ -342,6 +342,92 @@ test('mobile drawer contains navigation and history while the composer stays bel
   await expectNoHorizontalOverflow(page);
 });
 
+test('agent mode is offered for a sentence and answers in one column without the detail pane', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${fixture}?screen=search&agent=1&emptyCart=1`);
+  const modes = page.getByRole('radiogroup', { name: ko('agent_mode_switch_label'), exact: true });
+  const searchMode = modes.getByRole('radio', { name: ko('agent_mode_search'), exact: true });
+  const agentMode = modes.getByRole('radio', { name: ko('agent_mode_agent'), exact: true });
+  const offer = page.getByRole('button', { name: ko('agent_suggest_switch'), exact: true });
+  const scan = page.getByRole('button', { name: ko('btn_scan'), exact: true });
+  await expect(searchMode).toBeChecked();
+  const input = page.locator('form input');
+  // A multi-word chemical name is not a sentence.
+  await input.fill('sodium chloride');
+  await expect(offer).toHaveCount(0);
+  await input.fill('아세톤 어디 있어?');
+  await expect(searchMode).toBeChecked();
+  await offer.click();
+  await expect(agentMode).toBeChecked();
+  await expect(page.locator('.search-panes')).toHaveAttribute('data-search-state', 'agent');
+  await expect(page.getByRole('heading', { name: ko('agent_item_matches_title', { query: '아세톤', count: 2 }), exact: true })).toBeVisible();
+  await expect(page.locator('[data-pane="detail"]')).toBeHidden();
+  await expect(scan).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+  // Waste wording is answered by the fixed card.
+  await input.fill('아세톤 어떻게 버려?');
+  await input.press('Enter');
+  await expect(page.getByRole('heading', { name: ko('agent_disposal_title'), exact: true })).toBeVisible();
+  await searchMode.click();
+  await expect(page.locator('.search-panes')).toHaveAttribute('data-search-state', 'start');
+  await expect(scan).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test('agent mode on a phone keeps its switch and composer below the results', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 850 });
+  await page.goto(`${fixture}?screen=search&agent=1&emptyCart=1&mode=agent`);
+  await expect(page.locator('.search-panes')).toHaveAttribute('data-search-state', 'agent');
+  await page.getByRole('button', { name: ko('agent_example_expired'), exact: true }).click();
+  await expect(page.getByRole('heading', { name: ko('agent_expiry_title_expired', { count: 2 }), exact: true })).toBeVisible();
+  await expect(page.getByText(ko('agent_expiry_undated', { count: 1 }), { exact: true })).toBeVisible();
+  for (const width of [320, 390, 599]) {
+    await page.setViewportSize({ width, height: 850 });
+    const formBox = (await page.locator('form').boundingBox())!;
+    const listBox = (await page.locator('.search-results-list').boundingBox())!;
+    expect(listBox.y + listBox.height).toBeLessThanOrEqual(formBox.y);
+    expect(formBox.y + formBox.height).toBeLessThanOrEqual(850);
+    await expectNoHorizontalOverflow(page);
+  }
+});
+
+test('agent status and waste record cards fit a phone and answer waste records without a planner call', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(`${fixture}?screen=search&agent=1&emptyCart=1&mode=agent`);
+  const input = page.locator('form input');
+  const ask = async (text: string) => {
+    await input.fill(text);
+    await input.press('Enter');
+  };
+
+  await ask('규제 대상 시약 알려줘');
+  await expect(page.getByRole('heading', { name: ko('agent_regulated_title', { count: 1 }), exact: true })).toBeVisible();
+  await expect(page.getByText(ko('agent_regulated_without_cas', { count: 1 }), { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: ko('agent_regulated_obligations_title'), exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await ask('이번 주 할 일 알려줘');
+  await expect(page.getByRole('heading', { name: ko('agent_admin_tasks_title', { count: 3 }), exact: true })).toBeVisible();
+  await expect(page.getByText(ko('agent_admin_tasks_failed'), { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  await ask('잠금 필요한 시약장 있어?');
+  await expect(page.getByRole('heading', { name: ko('agent_locks_title', { count: 2 }), exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  // Waste wording is answered from records by fixed rules: the planner stub would call it out of scope.
+  await ask('폐액통 현황 알려줘');
+  await expect(page.getByRole('heading', { name: ko('agent_containers_title', { count: 2 }), exact: true })).toBeVisible();
+  await expect(page.getByText(ko('agent_container_pickup'), { exact: true })).toBeVisible();
+  await ask('최근 폐기 내역 보여줘');
+  await expect(page.getByRole('heading', { name: ko('agent_waste_title', { period: ko('agent_waste_period_last_30d'), count: 3 }), exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+
+  const formBox = (await page.locator('form').boundingBox())!;
+  const listBox = (await page.locator('.search-results-list').boundingBox())!;
+  expect(listBox.y + listBox.height).toBeLessThanOrEqual(formBox.y);
+});
+
 test('waste wizard and review use remaining space without duplicating the dialog', async ({ page }) => {
   await page.setViewportSize({ width: 840, height: 850 });
   await page.goto(`${fixture}?screen=cart`);

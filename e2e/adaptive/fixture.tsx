@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, MemoryRouter } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter, useNavigate, useSearchParams } from 'react-router-dom';
 import '../../src/index.css';
 import '../../src/locales/i18n';
 import { AdaptiveViewportProvider } from '../../src/components/AdaptiveViewportProvider';
@@ -14,6 +14,10 @@ import { LabAdminView } from '../../src/features/admin/LabAdminView';
 import { OpsConsoleView } from '../../src/features/ops/OpsConsoleView';
 import { inventoryService, storageLocationService, type InventoryItem } from '../../src/services/inventoryService';
 import { cabinetService } from '../../src/services/cabinetService';
+import { agentService } from '../../src/services/agentService';
+import { useAgentMode, type AgentFeatureAvailability } from '../../src/features/agent/useAgentMode';
+import { agentDataSources } from '../../src/features/agent/agentDataSources';
+import type { AgentPlan } from '../../src/features/agent/agentContract';
 import { labService } from '../../src/services/labService';
 import { safetyCenterService } from '../../src/services/safetyCenterService';
 import { labAdminSourceLoaders } from '../../src/services/labAdminOverviewService';
@@ -36,6 +40,8 @@ const screen = params.get('screen') ?? 'inventory';
 const cartCount = params.get('emptyCart') === '1' ? 0 : 1;
 // ?quiet=1 (admin, ops): every source loads, but nothing needs handling.
 const quiet = params.get('quiet') === '1';
+// ?agent=1 (search): the search bar offers agent mode; add &mode=agent to start in it.
+const agentFixture = params.get('agent') === '1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (days: number) => new Date(Date.now() - days * DAY_MS).toISOString();
 const pad = (value: number) => String(value).padStart(2, '0');
@@ -86,8 +92,102 @@ const linkRequest: LabSafetyCenterLinkRequest = {
   link_scope: ['summary', 'risk_detail'], requested_at: daysAgo(1), responded_at: null,
 };
 
+// --- Agent mode (?screen=search&agent=1): records with and without location, amount and date ---
+const agentItems: InventoryItem[] = [
+  { ...item, id: '11111111-1111-4111-8111-000000000101', name: '아세톤 (Acetone)', storage_type: 'cabinet', cabinet_id: 'fixture-cabinet',
+    cabinet_name: '시약장 A', shelf_id: 'fixture-floor', shelf_level: 1, _source: 'cabinet_item', expiry_date: localDate(-34), remaining_percent: 40 },
+  { ...item, id: '11111111-1111-4111-8111-000000000102', name: 'Acetone', brand: 'Sigma-Aldrich', capacity: '2.5 L',
+    storage_location_name: '시약 냉장고', expiry_date: localDate(120), remaining_percent: null },
+  { ...item, id: '11111111-1111-4111-8111-000000000103', name: '질산', cas_number: '7697-37-2', storage_type: 'cabinet', cabinet_id: 'fixture-cabinet',
+    cabinet_name: '산 전용 시약장 (2층 복도 끝, 잠금 장치 있음)', shelf_level: 0, expiry_date: localDate(-3), remaining_percent: 15 },
+  { ...item, id: '11111111-1111-4111-8111-000000000104', name: '에탄올', cas_number: '64-17-5', storage_location_name: '인화성 캐비닛',
+    expiry_date: localDate(5), remaining_percent: 80 },
+  { ...item, id: '11111111-1111-4111-8111-000000000105', name: '2-(N-Morpholino)ethanesulfonic acid monohydrate, BioUltra, for molecular biology',
+    cas_number: null, remaining_percent: null },
+];
+if (agentFixture) {
+  // Stands in for POST /api/agent/query: fixed plans for the sentences the layout tests type.
+  agentService.requestPlan = async ({ text }) => {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    if (text.includes('오류')) throw new Error('fixture planner failure');
+    const named = () => ({ text: text.split(' ')[0], aliases: text.startsWith('아세톤') ? ['acetone'] : [], casNumber: null });
+    let plan: AgentPlan = { kind: 'unsupported', reason: 'out_of_scope' };
+    if (text.includes('어디')) plan = { kind: 'item_lookup', item: named(), facet: 'location' };
+    else if (text.includes('남')) plan = { kind: 'item_lookup', item: named(), facet: 'remaining' };
+    else if (text.includes('임박')) plan = { kind: 'expiry_list', window: 'attention' };
+    else if (/유효기한|만료/.test(text)) plan = { kind: 'expiry_list', window: 'expired' };
+    else if (text.includes('부족')) plan = { kind: 'low_stock' };
+    else if (text.includes('규제')) plan = { kind: 'regulated_list' };
+    else if (text.includes('잠금')) plan = { kind: 'cabinet_locks' };
+    else if (text.includes('점검')) plan = { kind: 'inspection_gaps' };
+    else if (text.includes('구매')) plan = { kind: 'purchase_status' };
+    else if (text.includes('할 일')) plan = { kind: 'admin_tasks' };
+    else if (text.includes('관리자')) plan = { kind: 'open_screen', screen: 'admin' };
+    else if (text.includes('재고')) plan = { kind: 'open_screen', screen: 'inventory' };
+    return { schemaVersion: 1, mode: 'read_only', plan, quotaRemaining: 99 };
+  };
+}
+
+/** Every optional feature on, so each agent card can be laid out. */
+const agentFeatures: AgentFeatureAvailability = {
+  dailyInspectionEnabled: true, purchaseRequestsEnabled: true, regulationBatchEnabled: true,
+  cabinetLockRulesEnabled: true, wasteContainersEnabled: true,
+};
+if (agentFixture) {
+  agentDataSources.loadUsageCounts = async () => new Map();
+  agentDataSources.loadRegulations = async () => new Map([
+    ['7697-37-2', { status: 'found' as const, record: { casNumber: '7697-37-2', nameKo: '질산', entries: [
+      { category: 'accident_preparedness' as const, typeName: '사고대비물질' },
+      { category: 'toxic' as const, typeName: '유독물질' },
+    ] } }],
+    ['67-64-1', { status: 'not_found' as const }],
+  ]);
+  agentDataSources.loadCabinetLocks = async () => ({
+    unlocked: [{ cabinetId: 'fixture-cabinet', cabinetName: '산 전용 시약장 (2층 복도 끝, 잠금 장치 있음)', count: 2 }],
+    unset: [{ cabinetId: 'fixture-cabinet-a', cabinetName: '시약장 A', count: 1 }],
+  });
+  agentDataSources.loadInspectionDates = async () => [{ inspectionDate: seoulDate(-1) }];
+  agentDataSources.loadPurchaseRequests = async () => ['requested', 'requested', 'approved', 'ordered'].map((status, index) => ({
+    id: `88888888-8888-4888-8888-00000000010${index}`, labId, itemName: ['에탄올 99.5%', 'Hexane, HPLC grade, 4 L', '아세톤', '질산'][index],
+    brand: null, productNumber: null, casNumber: null, quantity: index + 1, packageSize: null, note: null, sourceInventoryId: null,
+    status: status as 'requested' | 'approved' | 'ordered', requestedBy: null, requesterName: null, decidedBy: null, deciderName: null,
+    decidedAt: null, decisionNote: null, createdAt: daysAgo(index + 2), updatedAt: daysAgo(index + 2),
+  }));
+  agentDataSources.loadAdminOverview = async () => ({
+    purchaseRequests: { status: 'fulfilled' as const, value: [{ id: 'fixture-purchase', createdAt: daysAgo(5) }] },
+    inventory: { status: 'fulfilled' as const, value: { totalCount: agentItems.length, casMissingCount: 1,
+      datedItems: agentItems.filter(row => row.expiry_date) } },
+    dailyInspections: { status: 'fulfilled' as const, value: [{ inspectionDate: seoulDate(-1) }] },
+    members: { status: 'rejected' as const, reason: new Error('fixture failure') },
+  });
+  agentDataSources.readAdminSnoozes = () => ({});
+  agentDataSources.loadContainers = async () => ({
+    containers: [
+      { id: '99999999-9999-4999-8999-000000000101', labId, streamCode: 'ORGANIC_HALOGENATED' as const, label: '할로겐 유기 폐액-1',
+        location: '흄후드 2 옆', capacityMl: 20_000, status: 'active' as const, startedAt: daysAgo(20), pickupRequestedAt: null },
+      { id: '99999999-9999-4999-8999-000000000102', labId, streamCode: 'ACID_AQUEOUS' as const, label: '산성 수용액 폐액-2',
+        location: null, capacityMl: 10_000, status: 'sealed' as const, startedAt: daysAgo(40), pickupRequestedAt: daysAgo(1) },
+    ] as Awaited<ReturnType<typeof agentDataSources.loadContainers>>['containers'],
+    totals: {
+      '99999999-9999-4999-8999-000000000101': { depositCount: 6, totalMl: 8_400, hasUnknownAmounts: true },
+      '99999999-9999-4999-8999-000000000102': { depositCount: 9, totalMl: 9_600, hasUnknownAmounts: false },
+    },
+  });
+  agentDataSources.loadWasteLogs = async () => ({
+    truncated: false,
+    logs: [
+      { id: 'w1', created_at: daysAgo(3), chemicals: [], disposal_category: 'ORGANIC_HALOGEN', total_volume_ml: null, handler_name: null, memo: null,
+        schema_version: 2, stream_code: 'ORGANIC_HALOGENATED', normalized_amount_unit: 'mL', normalized_amount_value: 1_200 },
+      { id: 'w2', created_at: daysAgo(5), chemicals: [], disposal_category: 'ORGANIC_HALOGEN', total_volume_ml: null, handler_name: null, memo: null,
+        schema_version: 2, stream_code: 'ORGANIC_HALOGENATED', amount_is_unknown: true },
+      { id: 'w3', created_at: daysAgo(9), chemicals: [], disposal_category: 'ACID', total_volume_ml: 350, handler_name: null, memo: null, schema_version: 1 },
+    ] as unknown as Awaited<ReturnType<typeof agentDataSources.loadWasteLogs>>['logs'],
+  });
+}
+
 inventoryService.getItems = async () => {
   document.documentElement.dataset.inventoryLoads = String(Number(document.documentElement.dataset.inventoryLoads ?? 0) + 1);
+  if (agentFixture) return agentItems;
   if (screen === 'admin') return labItems;
   if (params.get('inventoryRows') === 'many') return Array.from({ length: 24 }, (_, index) => ({
     ...item,
@@ -320,6 +420,15 @@ export function Fixture() {
   const [recentSearches, setRecentSearches] = useState(params.get('recents') === '1'
     ? ['Acetone', '7664-93-9', '64-17-5', '557-21-1', '1185-53-1', '593-84-0'] : []);
   const selectSearchTerm = (term: string) => { setQuery(term); setLastQuery(term); setSearchResult(result); };
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Same wiring as App, with the planner answered by the stub above.
+  const agent = useAgentMode({
+    enabled: agentFixture, isSearchTab: tab === 'search', searchParams, navigate, isAuthenticated: true, navigateToLogin: noop,
+    language: 'ko', isAdmin: isAdmin || agentFixture, currentLabId: isAdmin || agentFixture ? labId : null, features: agentFeatures,
+    onSearchChemical: term => { navigate('/app'); selectSearchTerm(term); },
+    onOpenWasteBatch: () => setCartOpen(true),
+  });
   // Same wiring as App: the admin tab badge counts the overdue center request (1, or 0 with ?quiet=1).
   const adminAttentionCount = useLabAdminAttentionCount({ labId: isAdmin ? labId : null, isAdmin, activeTab: tab });
   useEffect(() => { document.documentElement.dataset.fixtureMounts = String(Number(document.documentElement.dataset.fixtureMounts ?? 0) + 1); }, []);
@@ -342,7 +451,7 @@ export function Fixture() {
           onQueryChange={setQuery} onSearchSubmit={event => { event?.preventDefault(); setLastQuery(query); setSearchResult(result); }}
           onReset={() => { setQuery(''); setLastQuery(''); setSearchResult(null); }} onSuggestionClick={selectSearchTerm} onOpenScanner={noop} onOpenVoiceAgent={params.get('voice') === '1' ? noop : undefined} onClearSearchHistory={() => setRecentSearches([])}
           onRemoveSearchHistory={term => setRecentSearches(terms => terms.filter(value => value !== term))} onCabinetResultClick={async () => {}} onBrandChange={noop} onSortChange={noop}
-          onClearFilters={noop} onToggleShowAllProducts={noop} onNavigateToCabinet={noop} onOpenCart={() => setCartOpen(true)} />}
+          onClearFilters={noop} onToggleShowAllProducts={noop} onNavigateToCabinet={noop} onOpenCart={() => setCartOpen(true)} agent={agent} />}
     </MainLayout>
     {cartOpen && <CartView onClose={() => setCartOpen(false)} onDisposed={noop} />}
   </>;

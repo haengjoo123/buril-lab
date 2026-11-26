@@ -14,7 +14,8 @@ import type { ScannerSelectionMeta } from './components/Scanner';
 
 import { CartView } from './components/CartView';
 import { WasteV2DisabledCartView } from './components/WasteV2DisabledCartView';
-import { isWasteV2Enabled, isLabToolsEnabled } from './config/featureFlags';
+import { isAgentModeEnabled, isWasteV2Enabled, isLabToolsEnabled } from './config/featureFlags';
+import { useAgentMode } from './features/agent/useAgentMode';
 import { useWasteChemicalEnrichment } from './hooks/useWasteChemicalEnrichment';
 import { AuthView } from './components/AuthView';
 import { ResetPasswordView } from './components/ResetPasswordView';
@@ -235,6 +236,27 @@ function App() {
     lastSearchQuery,
     navigate,
     isAuthenticated,
+  });
+  // Agent mode shares the search bar. It steps aside while a waste component is being picked,
+  // because that search feeds the open batch.
+  const agentSearchProps = useAgentMode({
+    enabled: isAgentModeEnabled && !isAddingWasteComponent,
+    isSearchTab: activeTab === 'search',
+    searchParams,
+    navigate,
+    isAuthenticated,
+    navigateToLogin,
+    language: i18n.language.startsWith('ko') ? 'ko' : 'en',
+    isAdmin,
+    currentLabId,
+    onSearchChemical: (searchQuery) => {
+      setScanSelection(null);
+      navigateWithFreshFilters(searchQuery, 'manual');
+    },
+    onOpenWasteBatch: () => {
+      setIsAddingWasteComponent(false);
+      setIsCartOpen(true);
+    },
   });
   // Red "확인할 일" count on the admin tab: cached per lab, never reloaded on a mere tab switch,
   // and only loaded inside the lab app (not on the gateway, legal or center pages).
@@ -1148,6 +1170,7 @@ function App() {
                 setIsCartOpen(true);
               }}
               onRequireAuth={!isAuthenticated ? () => navigateToLogin() : undefined}
+              agent={agentSearchProps}
               onOpenVoiceAgent={() => openVoiceAgentSheet({
                 screen: 'search',
                 language: i18n.language.startsWith('ko') ? 'ko' : 'en',
