@@ -231,6 +231,34 @@ describe("first sync on an empty cache", () => {
     expect(cloud.docs.get("w1")?.revision).toBe(3);
     repo.close();
   });
+  it("keeps a workspace that was created already holding work", async () => {
+    cloud.docs.set(
+      "w1",
+      serverDoc("w1", "timer", { _workspace: true, clocks: [{ id: "c1" }] }, 3)
+    );
+    const hold = gate();
+    cloud.userGate = hold.promise;
+    const repo = new ToolRepository("u1");
+    const started = repo.init();
+    await vi.waitFor(() => expect(repo.ready).toBe(true));
+    // A timer started from another tool before the first pull: never edited
+    // afterwards, but not empty either.
+    await repo.create(
+      "timer",
+      "Timer",
+      { _workspace: true, clocks: [{ id: "started-elsewhere" }] },
+      { id: "w1" }
+    );
+    hold.release();
+    await started;
+    await repo.sync();
+    const item = repo.items.find((row) => row.doc.id === "w1")!;
+    expect(item.status).toBe("conflict");
+    expect((item.doc.data.clocks as { id: string }[])[0].id).toBe(
+      "started-elsewhere"
+    );
+    repo.close();
+  });
   it("marks the cache hydrated when the first pull cannot run", async () => {
     cloud.online = false;
     const repo = new ToolRepository("u1");

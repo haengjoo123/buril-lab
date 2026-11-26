@@ -3143,3 +3143,36 @@
   width: auto !important;
   min-width: 132px;
 }
+
+/* ---- Shared pieces: copy, undo, values sent between tools ---- */
+.tool-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tool-undo,
+.tool-handoff {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 14px;
+}
+.tool-undo > span,
+.tool-handoff > span {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dark .tool-undo,
+.dark .tool-handoff {
+  border-color: #3b82f6;
+  background: #172b4d;
+  color: #dbeafe;
+}

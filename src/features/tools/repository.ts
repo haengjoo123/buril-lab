@@ -31,6 +31,15 @@ export type PendingToolWork = {
 };
 const NO_PENDING_WORK: PendingToolWork = { documents: [], drafts: [], images: 0 };
 const isPreferences = (doc: ToolDocument) => doc.data._preferences === true;
+/**
+ * A workspace the shell created on opening a tool and nothing has been put in.
+ * Not merely "never edited": a document can be created already holding work
+ * (a timer started from another tool), and that must not be thrown away.
+ */
+const isEmptyPlaceholder = (item: Local) =>
+  item.doc.revision === 0 &&
+  item.generation === 1 &&
+  Object.keys(item.doc.data).every((key) => key === "_workspace");
 const strings = (value: unknown) =>
   Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string")
@@ -457,8 +466,8 @@ export class ToolRepository {
       this.mergeRemotePreferences(current, remote);
       await this.persist(current);
       return this.push(id, attempt + 1);
-    } else if (current.doc.revision === 0 && current.generation === 1) {
-      // Created here before the account's copy arrived and never touched:
+    } else if (isEmptyPlaceholder(current)) {
+      // Created empty here before the account's copy arrived and never used:
       // there is nothing local to lose, so the server copy simply replaces it.
       current.doc = remote;
       current.dirty = false;
@@ -650,11 +659,7 @@ export class ToolRepository {
           !i.draft &&
           (i.dirty || i.remote) &&
           !isPreferences(i.doc) &&
-          !(
-            i.doc.data._workspace === true &&
-            i.doc.revision === 0 &&
-            i.generation === 1
-          )
+          !isEmptyPlaceholder(i)
       )
       .map((i) => i.doc);
     const drafts = this.items

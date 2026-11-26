@@ -37,3 +37,37 @@
 - 한국어/영어와 모바일·태블릿·데스크톱에서 같은 사용자 흐름을 제공한다. 기기별 네이티브 알림 코드는 연결하되 실기기 테스트는 사용자 요청에 따라 별도 수행하지 않는다.
 - SQL은 `supabase/migrations/20261109011725_personal_lab_tools.sql`과 `20261109011747_tool_images_account_deletion.sql`로 관리한다. Staging·운영에 적용 후 소유권·저장 충돌·이미지 접근 pgTAP 30개를 각 환경에서 통과했다. 기존 해시 고정 검증과 Quality·Staging 공개 절차를 유지하며, `VITE_ENABLE_LAB_TOOLS`를 두 환경에서 명시적으로 활성화한다.
 - 오프라인 초안은 문서 생성 없이 사용할 수 있도록 숨겨진 저장 상태로 관리한다. 개인 재사용 작업만 이름을 붙여 계정에 저장하며, 참조 자료는 문서를 만들지 않는다.
+
+## 구현 규칙 (2026-11-27 공통 기반 정리 이후)
+
+도구를 고치거나 추가할 때 따르는 규칙이다. 근거는 각 모듈의 주석에 있다.
+
+**구조**
+- 도구 하나에 파일 하나(`DilutionTool.tsx` 등, default export). 계산은 UI와 분리한 순수 모듈(`labMath.ts`, `molarity.ts`, `calibration.ts` 등)에 두고 독립 기준값으로 테스트한다.
+- 도구 메타(종류·이름·설명·검색 키워드)는 `registry.ts`, 아이콘은 `toolIcons.ts`, 화면 연결은 `ToolScreen.tsx`, 사용 방법은 `ToolGuide.tsx`. 도구 id는 서버 `tool_id` CHECK와 같아야 하며(`engines.test.ts`가 검사) 새 id는 migration이 먼저다.
+- 종류(`kind`): `reference`(문서 없음) / `workspace`(계정당 고정 id 문서 하나, 자동 동기화) / `project`(기기 초안 → "작업 저장"으로 이름 붙은 문서).
+
+**상태와 저장**
+- 문서 상태는 `useToolData(defaults)`로 읽고 쓴다. 화면은 즉시 바뀌고 기기 기록·서버 전송은 저장소가 묶어서 처리하므로 도구가 따로 지연시키지 않는다.
+- 저장 데이터는 하위 호환으로만 바꾼다(서버 `schema_version`은 1 고정이고 이미 배포된 앱이 같은 데이터를 읽는다). 필드를 추가하고, 옛 필드는 계속 읽는다. 숫자로 저장하던 필드는 문자열로 바꾸지 않고 빈 값만 `null`로 둔다.
+
+**숫자**
+- 새 입력은 `NumberField`(문자열 보관) 또는 `QuantityField`(값+단위). 이미 숫자로 저장하는 필드는 `StoredNumberField`(숫자 | null).
+- 계산은 `calculate(() => …)` 안에서 `need(값)`으로 읽는다. 빈칸은 오류가 아니라 `incomplete`이며, 화면은 오류 대신 무엇을 입력하면 되는지 안내한다.
+- 표시는 `format()`(유효숫자 7자리, 앱 언어 기준). 복사·CSV·입력란에 넣는 값은 `plainNumber()`. `csv()`는 숫자 셀을 알아서 정리한다.
+
+**공용 UI (`ui.tsx`)**
+- 복사: `CopyButton`(성공·실패 표시 포함). `navigator.clipboard`를 직접 부르지 않는다.
+- 삭제: 확인 대화상자 없이 바로 지우고 `useUndo()`로 되돌리기를 제공한다. 되돌릴 수 없는 동작만 `.tool-inline-confirm`으로 확인한다.
+- 빈 상태: `EmptyState`. 내보내기 파일명: `useExportName()`(`buril-<도구>-<제목>-YYYYMMDD-HHmm`). 고정 파일명은 휴대폰에서 이전 파일을 덮어쓴다.
+- 오류: 엔진은 영어 문구로 `Error`를 던지고 `ErrorMessage`가 번역한다. 새 문구는 `ui.tsx`의 `errorTranslations`에 추가한다.
+- 문자열은 `const t = useText()`의 `t(한국어, 영어)`. `screens.test.tsx`가 영어 화면에 한글이 남지 않는지 검사한다.
+
+**도구 간 연결**
+- 값 보내기: `ctx.sendTo?.(도구 id, { kind, value, unit, label, source })`. 받는 도구는 `<HandoffBanner accepts={[…]} onApply={…} />`를 값이 들어갈 자리에 둔다. 값은 복사되는 스냅숏이고 링크가 아니다(`handoff.ts`).
+- 분자량: `<ReagentLookup onApply={…} />`. 시약 검색만 사용하고 연구실 재고는 읽지 않는다. 최근 시약은 계정 환경설정에 있어 도구끼리 공유된다.
+- 타이머: `startTimer(repo, { name, durationMs })`(`timers.ts`).
+
+**확인**
+- `npx vitest run src/features/tools`, `npx tsc -b`, `npx eslint src/features/tools`.
+- 화면: 미리보기 `adaptive-fixture`에서 `…/e2e/adaptive/fixture.html?screen=tools&path=/app/tools/<도구 id>`. 로그인 없이 뜨며 서버 동기화는 일어나지 않는다.

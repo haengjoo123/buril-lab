@@ -1,5 +1,5 @@
 import { Component, Suspense, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { Tool, ToolDocument } from "./registry";
 import type { ToolRecord, ToolRepository } from "./repository";
 import {
@@ -13,6 +13,7 @@ import {
 import ToolGuide from "./ToolGuide";
 import ToolScreen from "./ToolScreen";
 import { duplicateData } from "./work";
+import { readHandoff } from "./handoff";
 
 class ToolBoundary extends Component<
   { children: ReactNode; fallback: (error: string) => ReactNode },
@@ -53,7 +54,11 @@ export default function ToolHost({
   catalog: string;
 }) {
   const t = useText(),
-    navigate = useNavigate();
+    navigate = useNavigate(),
+    location = useLocation();
+  // A value another tool sent with the navigation that opened this one.
+  const [handoffUsed, setHandoffUsed] = useState(false);
+  const handoff = handoffUsed ? null : readHandoff(location.state);
   const [naming, setNaming] = useState(false),
     [name, setName] = useState(""),
     [error, setError] = useState(""),
@@ -103,6 +108,11 @@ export default function ToolHost({
         },
         repo,
         documents,
+        draft: !!record?.draft,
+        handoff,
+        clearHandoff: () => setHandoffUsed(true),
+        sendTo: (target, value) =>
+          navigate(`/app/tools/${target}`, { state: { toolHandoff: value } }),
       }}
     >
       <ErrorMessage message={error} />

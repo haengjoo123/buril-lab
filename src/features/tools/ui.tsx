@@ -1,15 +1,31 @@
 /* eslint-disable react-refresh/only-export-components -- Shared tool form primitives and their typed document context. */
-import { createContext, useContext, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
-import type { ToolDocument } from "./registry";
+import { toolById, type ToolDocument, type ToolId } from "./registry";
 import type { ToolRepository } from "./repository";
+import type { Handoff, HandoffKind } from "./handoff";
 import { exportBlobPartAsFile } from "../../utils/fileExport";
-import { plainNumber } from "./format";
-import { Check } from "lucide-react";
+import i18n from "../../locales/i18n";
+import { exportFileName, parseNumber, plainNumber } from "./format";
+import { Check, Copy, X } from "lucide-react";
 export const ToolContext = createContext<{
   doc: ToolDocument;
   repo: ToolRepository;
   documents: ToolDocument[];
+  /** True while the tool is on its unnamed device draft. */
+  draft?: boolean;
+  /** A value another tool sent here that the user has not yet used. */
+  handoff?: Handoff | null;
+  clearHandoff?: () => void;
+  /** Opens another tool with a value for it. Absent outside the shell. */
+  sendTo?: (tool: ToolId, handoff: Handoff) => void;
 } | null>(null);
 export function useText() {
   const { i18n } = useTranslation();
@@ -224,6 +240,7 @@ const errorTranslations: Record<string, string> = {
   "Result is not finite": "계산 결과가 유한한 수가 아닙니다.",
   "Enter positive finite values": "0보다 큰 유한한 값을 입력하세요.",
   "Enter non-negative values": "0 이상의 값을 입력하세요.",
+  "Invalid number": "숫자를 입력하세요.",
   "Enter a positive rotor radius": "0보다 큰 로터 반지름(cm)을 입력하세요.",
   "Enter a non-negative speed or force":
     "0 이상의 회전수 또는 원심력을 입력하세요.",
@@ -302,12 +319,37 @@ export function ErrorMessage({ message }: { message: string }) {
     </p>
   ) : null;
 }
+/**
+ * A number for display: seven significant digits, grouped. It follows the
+ * app's language rather than the device's locale, so the same screen does not
+ * show "1.000,5" on one phone and "1,000.5" on another.
+ */
 export const format = (n: number | null | undefined) =>
   n == null || !Number.isFinite(n)
     ? "—"
-    : new Intl.NumberFormat(undefined, { maximumSignificantDigits: 7 }).format(
-        n
-      );
+    : new Intl.NumberFormat(
+        i18n.language?.startsWith("ko") ? "ko-KR" : "en-US",
+        { maximumSignificantDigits: 7 }
+      ).format(n);
+/**
+ * Thrown by `need` when a field is still empty. `calculate` reports it as
+ * `incomplete` instead of an error: an empty field is a value yet to be
+ * entered, and the screen should ask for it rather than complain.
+ */
+export class IncompleteInput extends Error {
+  constructor() {
+    super("Incomplete input");
+    this.name = "IncompleteInput";
+  }
+}
+/** A required field's value as a number. Empty is incomplete, not zero. */
+export function need(raw: string | number | null | undefined): number {
+  if (raw == null || (typeof raw === "string" && !raw.trim()))
+    throw new IncompleteInput();
+  const value = typeof raw === "number" ? raw : parseNumber(raw);
+  if (value == null || !Number.isFinite(value)) throw Error("Invalid number");
+  return value;
+}
 export { plainNumber };
 /** Copies text; false when the browser refuses (permissions, insecure page). */
 export async function copyText(text: string) {
@@ -318,14 +360,22 @@ export async function copyText(text: string) {
     return false;
   }
 }
-export function calculate<T>(fn: () => T): { value: T | null; error: string } {
+export function calculate<T>(
+  fn: () => T
+): { value: T | null; error: string; incomplete: boolean } {
   try {
     const value = fn();
     if (typeof value === "number" && !Number.isFinite(value))
       throw Error("Result is not finite");
-    return { value, error: "" };
+    return { value, error: "", incomplete: false };
   } catch (e) {
-    return { value: null, error: e instanceof Error ? e.message : String(e) };
+    if (e instanceof IncompleteInput)
+      return { value: null, error: "", incomplete: true };
+    return {
+      value: null,
+      error: e instanceof Error ? e.message : String(e),
+      incomplete: false,
+    };
   }
 }
 export async function download(
@@ -468,4 +518,301 @@ export async function report({
     .from(element)
     .outputPdf("blob")) as Blob;
   await download(blob, name, "application/pdf");
+}
+
+/**
+ * A number field that keeps what was typed. `type="number"` drops a trailing
+ * "." while typing, changes on mouse wheel, and cannot tell empty from zero;
+ * this one holds text, and the tool reads it with `need` or `parseNumber`.
+ */
+export function NumberField({
+  label,
+  value,
+  onChange,
+  negative = false,
+  disabled = false,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (text: string) => void;
+  /** Allow a minus sign. Phone decimal pads have none, so this asks for the full keyboard. */
+  negative?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <label className="tool-field">
+      <span>{label}</span>
+      <input
+        type="text"
+        inputMode={negative ? "text" : "decimal"}
+        autoComplete="off"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        aria-invalid={value.trim() !== "" && parseNumber(value) == null}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+/**
+ * The same field for documents that already store the value as a number. The
+ * document keeps a number, or `null` while the field is empty, so documents
+ * saved before stay valid; the text being typed ("1.", "0,5") lives here.
+ */
+export function StoredNumberField({
+  label,
+  value,
+  onChange,
+  negative = false,
+  disabled = false,
+}: {
+  label: string;
+  value: number | null | undefined;
+  onChange: (value: number | null) => void;
+  negative?: boolean;
+  disabled?: boolean;
+}) {
+  const [text, setText] = useState(() =>
+    value == null ? "" : plainNumber(value)
+  );
+  // Shows the typed text while it still means the stored value; a value that
+  // changed elsewhere (undo, sync, another field) replaces it.
+  const shown =
+    (value ?? null) === parseNumber(text)
+      ? text
+      : value == null
+      ? ""
+      : plainNumber(value);
+  return (
+    <label className="tool-field">
+      <span>{label}</span>
+      <input
+        type="text"
+        inputMode={negative ? "text" : "decimal"}
+        autoComplete="off"
+        value={shown}
+        disabled={disabled}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          if (!next.trim()) onChange(null);
+          else {
+            const parsed = parseNumber(next);
+            if (parsed != null) onChange(parsed);
+          }
+        }}
+      />
+    </label>
+  );
+}
+/** A value with its unit beside it. */
+export function QuantityField({
+  label,
+  value,
+  onChange,
+  unit,
+  units,
+  onUnit,
+  unitLabel,
+}: {
+  label: string;
+  value: string;
+  onChange: (text: string) => void;
+  unit: string;
+  units: readonly (string | readonly [string, string])[];
+  onUnit: (unit: string) => void;
+  unitLabel?: string;
+}) {
+  const t = useText();
+  return (
+    <div className="tool-quantity">
+      <NumberField label={label} value={value} onChange={onChange} />
+      <Select
+        label={unitLabel ?? t(`${label} 단위`, `${label} unit`)}
+        value={unit}
+        onChange={onUnit}
+        options={units}
+      />
+    </div>
+  );
+}
+/**
+ * Copies text and says so: the icon turns into a check for two seconds, and a
+ * refusal by the browser is reported next to the button.
+ */
+export function CopyButton({
+  text,
+  label,
+  children,
+}: {
+  text: string | (() => string);
+  /** Accessible name when the button shows only the icon. */
+  label?: string;
+  children?: ReactNode;
+}) {
+  const t = useText();
+  const [state, setState] = useState<"" | "done" | "failed">("");
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return (
+    <>
+      <button
+        type="button"
+        className="tool-copy"
+        aria-label={children ? undefined : label ?? t("복사", "Copy")}
+        onClick={async () => {
+          const copied = await copyText(
+            typeof text === "function" ? text() : text
+          );
+          setState(copied ? "done" : "failed");
+          clearTimeout(timer.current);
+          timer.current = setTimeout(() => setState(""), copied ? 2000 : 6000);
+        }}
+      >
+        {state === "done" ? (
+          <Check size={18} aria-hidden="true" />
+        ) : (
+          <Copy size={18} aria-hidden="true" />
+        )}
+        {children}
+      </button>
+      <span className="sr-only" role="status">
+        {state === "done" ? t("복사했습니다.", "Copied.") : ""}
+      </span>
+      {state === "failed" && (
+        <span className="tool-error" role="alert">
+          {t(
+            "복사하지 못했습니다. 내용을 직접 선택해 복사하세요.",
+            "Could not copy. Select the text and copy it."
+          )}
+        </span>
+      )}
+    </>
+  );
+}
+/** What a list or panel shows when it has nothing yet. */
+export function EmptyState({
+  icon,
+  title,
+  children,
+}: {
+  icon?: ReactNode;
+  title: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="tool-empty-state">
+      {icon}
+      <strong>{title}</strong>
+      {children}
+    </div>
+  );
+}
+/**
+ * Undo for a removal. The item is removed at once, with no confirmation
+ * dialog, and a bar offers to put it back for a few seconds:
+ *
+ *   const [undoBar, offerUndo] = useUndo();
+ *   offerUndo(t("타이머를 삭제했습니다.", "Timer deleted."), () => set(before));
+ *   return <>{undoBar}…</>;
+ */
+export function useUndo() {
+  const t = useText();
+  const [entry, setEntry] = useState<{
+    message: string;
+    restore: () => void;
+  } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const offer = (message: string, restore: () => void) => {
+    clearTimeout(timer.current);
+    setEntry({ message, restore });
+    timer.current = setTimeout(() => setEntry(null), 8000);
+  };
+  const bar = entry ? (
+    <div className="tool-undo" role="status">
+      <span>{entry.message}</span>
+      <button
+        onClick={() => {
+          clearTimeout(timer.current);
+          entry.restore();
+          setEntry(null);
+        }}
+      >
+        {t("실행 취소", "Undo")}
+      </button>
+      <button
+        aria-label={t("닫기", "Dismiss")}
+        onClick={() => {
+          clearTimeout(timer.current);
+          setEntry(null);
+        }}
+      >
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+  ) : null;
+  return [bar, offer] as const;
+}
+/**
+ * File names for this tool's exports, built from the tool, the saved work's
+ * name (when it has one) and the time: `name("csv")`, `name("png", "plot")`.
+ */
+export function useExportName() {
+  const ctx = useContext(ToolContext);
+  return (extension: string, part?: string) =>
+    exportFileName(
+      [ctx?.doc.tool_id ?? "tool", part].filter(Boolean).join("-"),
+      ctx && !ctx.draft && ctx.doc.data._workspace !== true
+        ? ctx.doc.title
+        : undefined,
+      extension
+    );
+}
+/**
+ * Offers a value another tool sent to this one. A tool renders it where the
+ * value would go and lists the kinds it can take; applying or dismissing
+ * removes the offer.
+ */
+export function HandoffBanner({
+  accepts,
+  onApply,
+}: {
+  accepts: readonly HandoffKind[];
+  onApply: (handoff: Handoff) => void;
+}) {
+  const t = useText(),
+    ctx = useContext(ToolContext);
+  const offer = ctx?.handoff;
+  if (!offer || !accepts.includes(offer.kind)) return null;
+  const source = toolById(offer.source);
+  return (
+    <div className="tool-handoff" role="status">
+      <span>
+        {source
+          ? t(`${source.ko}에서 가져온 값`, `From ${source.en}`)
+          : t("가져온 값", "Received value")}
+        {": "}
+        <strong>
+          {offer.label}
+          {offer.kind === "table"
+            ? ""
+            : ` ${format(offer.value)} ${offer.unit}`}
+        </strong>
+      </span>
+      <button
+        className="primary"
+        onClick={() => {
+          onApply(offer);
+          ctx.clearHandoff?.();
+        }}
+      >
+        {t("적용", "Apply")}
+      </button>
+      <button onClick={() => ctx.clearHandoff?.()}>{t("무시", "Dismiss")}</button>
+    </div>
+  );
 }

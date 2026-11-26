@@ -126,15 +126,9 @@ export default function ToolGuide({ id }: { id: ToolId }) {
     <details className="tool-guide">
       <summary>{t("사용 방법", "How to use")}</summary>
       <ol>
-        {(guide
-          ? t(guide[0].join("\n"), guide[1].join("\n")).split("\n")
-          : [
-              t(
-                "도구를 열고 바로 사용하세요. 입력은 기기에 보관되며, 다시 쓸 작업은 작업 저장으로 계정에 보관할 수 있습니다. 결과를 사용하기 전에 단위를 확인하세요.",
-                "Start using the tool immediately. Inputs are kept on this device; save reusable work to your account. Check units before using results."
-              ),
-            ]
-        ).map((step) => (
+        {t(guide[0].join("\n"), guide[1].join("\n"))
+          .split("\n")
+          .map((step) => (
           <li key={step}>{step}</li>
         ))}
       </ol>

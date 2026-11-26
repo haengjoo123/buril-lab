@@ -12,7 +12,7 @@ import {
   colorFraction,
   colorCoverage,
 } from "./geometry";
-import { plainNumber } from "./format";
+import { plainNumber, parseNumber, exportFileName } from "./format";
 import {
   exportICS,
   importICS,
@@ -472,5 +472,27 @@ describe("tool list search and recently used", () => {
       .map((m) => m[1])
       .sort();
     expect(tools.map((tool) => tool.id).sort()).toEqual(allowed);
+  });
+});
+describe("typed numbers and export names", () => {
+  it("reads a typed number, including a decimal comma, and rejects the rest", () => {
+    expect(parseNumber(" 12.5 ")).toBe(12.5);
+    expect(parseNumber("0,5")).toBe(0.5);
+    expect(parseNumber("-3")).toBe(-3);
+    expect(parseNumber("1e-3")).toBe(0.001);
+    expect(parseNumber("")).toBeNull();
+    expect(parseNumber("abc")).toBeNull();
+    // Grouping or decimal comma? Not guessed.
+    expect(parseNumber("1,000")).toBeNull();
+    expect(parseNumber("1,2,3")).toBeNull();
+  });
+  it("names exports by tool, saved title and minute", () => {
+    const at = new Date(2026, 10, 27, 9, 5);
+    expect(exportFileName("master-mix", undefined, "csv", at)).toBe(
+      "buril-master-mix-20261127-0905.csv"
+    );
+    expect(exportFileName("plate-labelling", " Run 3 / A:B ", "png", at)).toBe(
+      "buril-plate-labelling-Run-3-A-B-20261127-0905.png"
+    );
   });
 });

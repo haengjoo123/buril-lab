@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, vi } from "vitest";
-import { ToolContext, ErrorMessage, csv } from "./ui";
+import { ToolContext, ErrorMessage, csv, calculate, need } from "./ui";
 import { tools, type ToolDocument, type ToolId } from "./registry";
 import type { ToolRepository } from "./repository";
 import Equation from "./EquationTool";
@@ -151,6 +151,18 @@ describe("tool screen coverage", () => {
     expect(remainingTime(c, 35000)).toBe(30000);
     expect(remainingTime(c, 100000)).toBe(0);
     expect(elapsedTime(c, 35000)).toBe(31000);
+  });
+  it("treats an empty required field as incomplete rather than an error", () => {
+    const sum = (a: string, b: string) => calculate(() => need(a) + need(b));
+    expect(sum("1", "2")).toEqual({ value: 3, error: "", incomplete: false });
+    expect(sum("1", " ")).toEqual({ value: null, error: "", incomplete: true });
+    expect(sum("1", "x")).toEqual({
+      value: null,
+      error: "Invalid number",
+      incomplete: false,
+    });
+    // Zero is a value that was entered.
+    expect(sum("0", "0").value).toBe(0);
   });
   it("writes numeric CSV cells without floating-point residue", () => {
     expect(csv([["Total", 4.35 * 100, "µL"]])).toBe(
