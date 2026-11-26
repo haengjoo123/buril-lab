@@ -106,8 +106,28 @@ describe('voice query lab scope', () => {
     'Can I neutralize the acid?',
     'Pour it down the drain',
     'Put this into the waste bottle',
+    '아세톤 어떻게 버려?',
+    '이거 그냥 버릴까',
+    '다 쓴 건 버렸어',
+    '그냥 부어도 돼?',
+    '바닥에 쏟아졌어',
+    '폐수로 흘려도 돼?',
+    '폐유 어디에 모아?',
+    'Was it discarded?',
+    'I am disposing of the acid',
+    'Can it be poured out?',
+    'throw it out',
   ])('recognizes unsafe disposal wording without AI: %s', (text) => {
     expect(isDisposalSafetyQuery(text)).toBe(true)
+  })
+
+  it.each([
+    '아세톤 어디 있어?',
+    '에탄올 얼마나 남았어',
+    '유효기한 지난 시약 알려줘',
+    'where is acetone',
+  ])('lets ordinary inventory wording through: %s', (text) => {
+    expect(isDisposalSafetyQuery(text)).toBe(false)
   })
 
   it('redirects disposal wording before AI, Supabase, or inventory calls', async () => {
@@ -121,6 +141,34 @@ describe('voice query lab scope', () => {
         context: { labId: LAB_ID, language: 'ko' },
       }),
       env: {},
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      intent: 'disposal',
+      match: null,
+      uiAction: { type: 'open_waste_batch_review' },
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(createClientMock).not.toHaveBeenCalled()
+  })
+
+  // AI and Supabase are configured here, so only the wording rule can stop the calls.
+  it('redirects an inflected disposal verb before AI or Supabase calls', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await onRequestPost({
+      request: createRequest({
+        text: '아세톤 어떻게 버려?',
+        source: 'typed',
+        context: { labId: LAB_ID, language: 'ko' },
+      }),
+      env: {
+        ...openAIEnv,
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_ANON_KEY: 'anon-key',
+      },
     })
 
     expect(response.status).toBe(200)

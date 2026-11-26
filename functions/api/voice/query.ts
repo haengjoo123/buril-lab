@@ -120,6 +120,8 @@ const DISPOSAL_SAFETY_PATTERNS = [
   /용기.{0,16}(?:넣|투입|붓|부어|담)|(?:넣|투입|붓|부어|담).{0,16}용기/i,
   /\b(?:dispose|disposal|discard|trash|waste|throw(?:\s+\w+){0,4}\s+away|mix|mixing|combine|dilute|dilution|neutralize|neutralise|neutralization|neutralisation|drain|sink|sewer|pour|deposit)\b/i,
   /\b(?:put|add|transfer)\b.{0,32}\b(?:container|bottle|drum)\b|\b(?:container|bottle|drum)\b.{0,32}\b(?:put|add|transfer|pour)\b/i,
+  /버려|버릴|버렸|버림|부어도|부으면|쏟아|흘려|폐(?:수|유|산|용매|알칼리)/,
+  /\b(?:dispos(?:es|ed|ing)|discard(?:s|ed|ing)|dilut(?:es|ed|ing)|neutrali[sz](?:es|ed|ing)|pour(?:s|ed|ing)|throw(?:s|ing)?\s+(?:\w+\s+){0,4}out)\b/i,
 ]
 const INTENT_HINTS: Array<{ intent: VoiceAgentIntent; patterns: RegExp[] }> = [
   {
