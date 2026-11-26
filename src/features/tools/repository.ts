@@ -68,6 +68,13 @@ type Asset = {
 };
 const HYDRATION_WAIT_MS = 8000;
 const FOLLOW_UP_SYNC_MS = 1000;
+// Typing changes a document many times a second. The screen follows every
+// change at once; the device write and the server request wait for a pause,
+// with a ceiling so steady typing is still saved every few seconds.
+const PERSIST_DELAY_MS = 400;
+const PERSIST_MAX_WAIT_MS = 2000;
+const SYNC_DELAY_MS = 1500;
+const SYNC_MAX_WAIT_MS = 10000;
 const messageOf = (e: unknown) =>
   e && typeof e === "object" && "message" in e ? String(e.message) : String(e);
 const dbPromise = () =>
@@ -161,7 +168,19 @@ export class ToolRepository {
   private inFlight?: Promise<void>;
   /** An edit asked for a sync while one was running. */
   private resync = false;
+  private resyncPull = false;
   private followUp?: ReturnType<typeof setTimeout>;
+  /** Documents changed in memory and not yet written to the device. */
+  private unwritten = new Set<string>();
+  private pendingWrite?: {
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (reason: unknown) => void;
+    timer?: ReturnType<typeof setTimeout>;
+    since: number;
+  };
+  private syncTimer?: ReturnType<typeof setTimeout>;
+  private syncSince = 0;
   private closed = false;
   private writes: Promise<unknown> = Promise.resolve();
   readonly owner: string;
@@ -250,31 +269,100 @@ export class ToolRepository {
     if (this.closed) return item.doc;
     this.items.unshift(item);
     this.emit();
-    void this.sync();
+    if (!item.draft) void this.sync({ pull: false });
     return item.doc;
   }
+  /**
+   * Changes a document. Memory and subscribers see the change at once; the
+   * device write and the server request are batched across rapid edits (see
+   * the delays above). The returned promise settles once this change is on
+   * the device. Renaming and trashing are written and sent immediately, as is
+   * anything passed `immediate`.
+   */
   async update(
     id: string,
-    patch: Partial<Pick<ToolDocument, "title" | "data" | "deleted_at">>
+    patch: Partial<Pick<ToolDocument, "title" | "data" | "deleted_at">>,
+    options: { immediate?: boolean } = {}
   ) {
     if (this.closed) return;
     const current = this.items.find((i) => i.doc.id === id);
     if (!current) return;
+    const immediate =
+      options.immediate ?? ("title" in patch || "deleted_at" in patch);
     const item = {
       ...current,
       doc: { ...current.doc, ...patch, updated_at: new Date().toISOString() },
       dirty: !current.draft,
       generation: current.generation + 1,
-      status: (current.remote ? "conflict" : "saving") as SaveStatus,
+      status: (current.remote ? "conflict" : "local") as SaveStatus,
     };
     this.items = this.items.map((i) => (i.doc.id === id ? item : i));
     this.emit();
-    await this.persist(item);
-    if (item.status !== "conflict") {
-      item.status = "local";
-      this.emit();
-      void this.sync();
+    this.unwritten.add(id);
+    await this.scheduleWrite(immediate);
+    if (item.status !== "conflict" && !item.draft) this.requestSync(immediate);
+  }
+  private scheduleWrite(immediate: boolean): Promise<void> {
+    if (!this.pendingWrite) {
+      let resolve!: () => void, reject!: (reason: unknown) => void;
+      const promise = new Promise<void>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      // Most callers do not wait for the write; a failure is already shown
+      // through `error` and must not surface as an unhandled rejection too.
+      promise.catch(() => {});
+      this.pendingWrite = { promise, resolve, reject, since: Date.now() };
     }
+    const pending = this.pendingWrite;
+    clearTimeout(pending.timer);
+    if (immediate) void this.flush();
+    else
+      pending.timer = setTimeout(
+        () => void this.flush(),
+        Math.min(
+          PERSIST_DELAY_MS,
+          Math.max(0, pending.since + PERSIST_MAX_WAIT_MS - Date.now())
+        )
+      );
+    return pending.promise;
+  }
+  /**
+   * Writes every pending change to the device now. Called when the page is
+   * hidden or left, since a timer may never fire after that.
+   */
+  async flush() {
+    const pending = this.pendingWrite;
+    if (!pending) return;
+    this.pendingWrite = undefined;
+    clearTimeout(pending.timer);
+    const ids = [...this.unwritten];
+    this.unwritten.clear();
+    try {
+      for (const id of ids) {
+        const item = this.items.find((i) => i.doc.id === id);
+        if (item) await this.persist(item);
+      }
+      pending.resolve();
+    } catch (e) {
+      pending.reject(e);
+    }
+  }
+  /** Sends pending edits after a pause in editing. Edits only push. */
+  private requestSync(immediate: boolean) {
+    clearTimeout(this.syncTimer);
+    if (immediate) {
+      this.syncTimer = undefined;
+      this.syncSince = 0;
+      void this.sync({ pull: false });
+      return;
+    }
+    if (!this.syncSince) this.syncSince = Date.now();
+    this.syncTimer = setTimeout(() => {
+      this.syncTimer = undefined;
+      this.syncSince = 0;
+      void this.sync({ pull: false });
+    }, Math.min(SYNC_DELAY_MS, Math.max(0, this.syncSince + SYNC_MAX_WAIT_MS - Date.now())));
   }
   async resolve(id: string, choice: "local" | "remote") {
     const item = this.items.find((i) => i.doc.id === id);
@@ -392,7 +480,13 @@ export class ToolRepository {
     item.dirty = true;
     item.status = "local";
   }
-  async sync() {
+  /**
+   * Sends dirty documents and, unless `pull` is false, fetches the account's
+   * documents. Edits ask for a push only; the full exchange runs at start-up,
+   * on reconnect or focus, on the periodic timer and on request.
+   */
+  async sync(options: { pull?: boolean } = {}) {
+    const pull = options.pull ?? true;
     if (this.closed) return;
     if (!navigator.onLine) {
       if (!this.offline) {
@@ -405,14 +499,16 @@ export class ToolRepository {
       // The running sync may already have sent this document; ask for one
       // more pass so the newer edit does not wait for the periodic sync.
       this.resync = true;
+      this.resyncPull ||= pull;
       return this.inFlight;
     }
-    this.inFlight = this.runSync();
+    this.inFlight = this.runSync(pull);
     return this.inFlight;
   }
-  private async runSync() {
+  private async runSync(pull: boolean) {
     this.syncing = true;
     this.resync = false;
+    this.resyncPull = false;
     this.offline = false;
     try {
       const {
@@ -425,24 +521,26 @@ export class ToolRepository {
         await this.push(item.doc.id);
         if (this.closed) return;
       }
-      const { data, error } = await supabase
-        .from("tool_documents")
-        .select("*")
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      if (this.closed) return;
-      for (const doc of (data ?? []) as ToolDocument[]) {
-        const local = this.items.find((i) => i.doc.id === doc.id);
-        if (local?.dirty || local?.remote) continue;
-        const item: Local = {
-          doc,
-          dirty: false,
-          generation: local?.generation ?? 0,
-          status: "synced",
-        };
-        this.items = this.items.filter((i) => i.doc.id !== doc.id);
-        this.items.push(item);
-        await this.persist(item);
+      if (pull) {
+        const { data, error } = await supabase
+          .from("tool_documents")
+          .select("*")
+          .order("updated_at", { ascending: false });
+        if (error) throw error;
+        if (this.closed) return;
+        for (const doc of (data ?? []) as ToolDocument[]) {
+          const local = this.items.find((i) => i.doc.id === doc.id);
+          if (local?.dirty || local?.remote) continue;
+          const item: Local = {
+            doc,
+            dirty: false,
+            generation: local?.generation ?? 0,
+            status: "synced",
+          };
+          this.items = this.items.filter((i) => i.doc.id !== doc.id);
+          this.items.push(item);
+          await this.persist(item);
+        }
       }
       for (const asset of await dbRead<Asset>("assets")) {
         if (asset.owner !== this.owner || asset.uploaded || this.closed)
@@ -481,7 +579,7 @@ export class ToolRepository {
         if (this.resync && !this.followUp)
           this.followUp = setTimeout(() => {
             this.followUp = undefined;
-            void this.sync();
+            void this.sync({ pull: this.resyncPull });
           }, FOLLOW_UP_SYNC_MS);
       }
     }
@@ -609,6 +707,11 @@ export class ToolRepository {
   close() {
     this.closed = true;
     clearTimeout(this.followUp);
+    clearTimeout(this.syncTimer);
+    clearTimeout(this.pendingWrite?.timer);
+    // Nothing more is written once closed; let anyone awaiting a write go.
+    this.pendingWrite?.resolve();
+    this.pendingWrite = undefined;
     this.listeners.clear();
   }
   async drain() {

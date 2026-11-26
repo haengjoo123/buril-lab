@@ -9,6 +9,8 @@ const cloud = vi.hoisted(() => ({
   userGate: undefined as Promise<void> | undefined,
   rpcGate: undefined as Promise<void> | undefined,
   rpcWaiting: 0,
+  rpcCalls: 0,
+  pulls: 0,
 }));
 vi.mock("../../services/supabaseClient", () => ({
   supabase: {
@@ -19,6 +21,7 @@ vi.mock("../../services/supabaseClient", () => ({
       },
     },
     rpc: async (_name: string, p: Record<string, unknown>) => {
+      cloud.rpcCalls += 1;
       if (cloud.rpcGate) {
         cloud.rpcWaiting += 1;
         await cloud.rpcGate;
@@ -44,7 +47,7 @@ vi.mock("../../services/supabaseClient", () => ({
     from: () => ({
       select: () => ({
         order: async () => ({
-          data: [...cloud.docs.values()].filter(
+          data: [...((cloud.pulls += 1), cloud.docs.values())].filter(
             (d) => d.owner_id === cloud.owner
           ),
           error: null,
@@ -93,6 +96,8 @@ beforeEach(async () => {
   cloud.userGate = undefined;
   cloud.rpcGate = undefined;
   cloud.rpcWaiting = 0;
+  cloud.rpcCalls = 0;
+  cloud.pulls = 0;
   vi.stubGlobal("navigator", {
     get onLine() {
       return cloud.online;
@@ -375,6 +380,77 @@ describe("sign-out", () => {
     });
   });
 });
+describe("batched writes", () => {
+  it("sends a burst of edits as one request and without re-fetching everything", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const doc = await repo.create("notes", "Note", { body: "" });
+    await vi.waitFor(() => expect(cloud.docs.has(doc.id)).toBe(true));
+    await vi.waitFor(() =>
+      expect(repo.items.find((row) => row.doc.id === doc.id)?.status).toBe(
+        "synced"
+      )
+    );
+    const sent = cloud.rpcCalls,
+      pulled = cloud.pulls;
+    for (const body of ["h", "he", "hel", "hell", "hello"])
+      void repo.update(doc.id, { data: { body } });
+    // Subscribers see each edit at once, before anything is written or sent.
+    expect(repo.items.find((row) => row.doc.id === doc.id)?.doc.data.body).toBe(
+      "hello"
+    );
+    await vi.waitFor(
+      () => expect(cloud.docs.get(doc.id)?.data.body).toBe("hello"),
+      { timeout: 4000 }
+    );
+    expect(cloud.rpcCalls - sent).toBe(1);
+    expect(cloud.pulls).toBe(pulled);
+    await repo.sync();
+    expect(cloud.pulls).toBe(pulled + 1);
+    repo.close();
+  });
+  it("writes pending edits to the device at once when asked", async () => {
+    cloud.online = false;
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const doc = await repo.create("notes", "Note", { body: "" });
+    const pending = repo.update(doc.id, { data: { body: "typed" } });
+    await repo.flush();
+    const other = new ToolRepository("u1");
+    await other.init();
+    expect(other.items.find((row) => row.doc.id === doc.id)?.doc.data.body).toBe(
+      "typed"
+    );
+    await pending;
+    other.close();
+    repo.close();
+  });
+  it("sends a rename without waiting for a pause", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const doc = await repo.create("notes", "Old name", {});
+    await vi.waitFor(() => expect(cloud.docs.has(doc.id)).toBe(true));
+    await repo.update(doc.id, { title: "New name" });
+    await vi.waitFor(() =>
+      expect(cloud.docs.get(doc.id)?.title).toBe("New name")
+    );
+    repo.close();
+  });
+  it("drops a device draft without touching the server", async () => {
+    const repo = new ToolRepository("u1");
+    await repo.init();
+    const draft = await repo.create("calculator", "Calc", {}, { draft: true });
+    const saved = await repo.create("notes", "Keep", {});
+    await repo.discard(draft.id);
+    await repo.discard(saved.id);
+    expect(repo.items.map((row) => row.doc.id)).toEqual([saved.id]);
+    const reopened = new ToolRepository("u1");
+    await reopened.init();
+    expect(reopened.items.map((row) => row.doc.title)).toEqual(["Keep"]);
+    reopened.close();
+    repo.close();
+  });
+});
 describe("save status", () => {
   it("pushes an edit made while a save request is in flight", async () => {
     const repo = new ToolRepository("u1");
@@ -390,9 +466,9 @@ describe("save status", () => {
     );
     const hold = gate();
     cloud.rpcGate = hold.promise;
-    await repo.update(doc.id, { data: { body: "b" } });
+    await repo.update(doc.id, { data: { body: "b" } }, { immediate: true });
     await vi.waitFor(() => expect(cloud.rpcWaiting).toBe(1));
-    await repo.update(doc.id, { data: { body: "c" } });
+    await repo.update(doc.id, { data: { body: "c" } }, { immediate: true });
     cloud.rpcGate = undefined;
     hold.release();
     await vi.waitFor(

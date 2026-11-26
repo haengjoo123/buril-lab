@@ -229,7 +229,9 @@ export default function ToolsWorkspace({ ownerId }: { ownerId: string }) {
       });
     }
     visited.current = page;
-  }, [page]);
+    // Leaving a tool writes its last edits without waiting for the pause.
+    return () => void repo.flush();
+  }, [page, repo]);
   useEffect(() => {
     if (
       !repo.ready ||

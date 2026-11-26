@@ -38,6 +38,8 @@ const repo = vi.hoisted(() => {
     },
     emit: () => listeners.forEach((listener) => listener()),
     localOnlyDocuments: () => ({ documents: [], drafts: [] }),
+    flush: vi.fn(async () => {}),
+    discard: vi.fn(async () => {}),
     sync: vi.fn(),
     update: vi.fn(),
     create: vi.fn(async () => ({})),

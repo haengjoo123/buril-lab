@@ -145,6 +145,14 @@ export default function ToolsRuntime({ ownerId }: { ownerId: string }) {
       timer = setInterval(tick, 1000),
       syncTimer = setInterval(() => void repo.sync(), 30000);
     const sync = () => void repo.sync();
+    // A hidden or closing page may never run another timer: write what is
+    // still waiting for a pause in typing now.
+    const flush = () => {
+      if (document.visibilityState === "hidden") void repo.flush();
+    };
+    const leave = () => void repo.flush();
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", leave);
     window.addEventListener("online", sync);
     window.addEventListener("focus", sync);
     window.addEventListener("buril:tool-notifications", tick);
@@ -153,6 +161,8 @@ export default function ToolsRuntime({ ownerId }: { ownerId: string }) {
       unsubscribe();
       clearInterval(timer);
       clearInterval(syncTimer);
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", leave);
       window.removeEventListener("online", sync);
       window.removeEventListener("focus", sync);
       window.removeEventListener("buril:tool-notifications", tick);
