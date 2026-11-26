@@ -1,14 +1,38 @@
 /* eslint-disable react-refresh/only-export-components -- Shared tool form primitives and their typed document context. */
-import { createContext, useContext, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
-import type { ToolDocument } from "./registry";
+import { toolById, type ToolDocument, type ToolId } from "./registry";
 import type { ToolRepository } from "./repository";
+import type { Handoff, HandoffKind } from "./handoff";
 import { exportBlobPartAsFile } from "../../utils/fileExport";
-import { Check } from "lucide-react";
+import i18n from "../../locales/i18n";
+import {
+  exportFileName,
+  IncompleteInput,
+  need,
+  parseNumber,
+  plainNumber,
+  tsv,
+} from "./format";
+import { Check, Copy, X } from "lucide-react";
 export const ToolContext = createContext<{
   doc: ToolDocument;
   repo: ToolRepository;
   documents: ToolDocument[];
+  /** True while the tool is on its unnamed device draft. */
+  draft?: boolean;
+  /** A value another tool sent here that the user has not yet used. */
+  handoff?: Handoff | null;
+  clearHandoff?: () => void;
+  /** Opens another tool with a value for it. Absent outside the shell. */
+  sendTo?: (tool: ToolId, handoff: Handoff) => void;
 } | null>(null);
 export function useText() {
   const { i18n } = useTranslation();
@@ -131,16 +155,20 @@ export function CheckButton({
   checked,
   onChange,
   children,
+  label,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
-  children: ReactNode;
+  children?: ReactNode;
+  /** Accessible name when the visible text does not say what is checked. */
+  label?: string;
 }) {
   return (
     <button
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-label={label}
       className={`tool-check-button ${checked ? "checked" : ""}`}
       onClick={() => onChange(!checked)}
     >
@@ -222,15 +250,31 @@ const errorTranslations: Record<string, string> = {
   "Tangent undefined": "이 각도에서 탄젠트가 정의되지 않습니다.",
   "Result is not finite": "계산 결과가 유한한 수가 아닙니다.",
   "Enter positive finite values": "0보다 큰 유한한 값을 입력하세요.",
+  "Enter non-negative values": "0 이상의 값을 입력하세요.",
+  "Invalid number": "숫자를 입력하세요.",
+  "Enter a positive rotor radius": "0보다 큰 로터 반지름(cm)을 입력하세요.",
+  "Enter a non-negative speed or force":
+    "0 이상의 회전수 또는 원심력을 입력하세요.",
   "Target exceeds stock concentration": "목표 농도가 원액 농도보다 높습니다.",
+  "Stock volume exceeds final volume": "원액 부피가 최종 부피보다 큽니다.",
+  "Dilution factor must be at least 1": "희석배수는 1 이상으로 입력하세요.",
+  "Purity must be between 0 and 100":
+    "순도는 0보다 크고 100 이하인 값으로 입력하세요.",
   "Invalid unit or value": "단위 또는 값을 확인하세요.",
   "Incompatible dimensions": "서로 변환할 수 없는 단위입니다.",
   "Molecular weight required": "양수 분자량을 입력하세요.",
   "Density (g/mL) required": "양수 밀도(g/mL)를 입력하세요.",
   "Below absolute zero": "절대영도보다 낮은 온도입니다.",
   "Invalid counts": "세포 수는 0 이상의 정수로 입력하세요.",
+  "Count must be a whole number from 0 to 9,999,999":
+    "0 이상 9,999,999 이하의 정수를 입력하세요.",
   "Invalid amount": "조성과 수량을 확인하세요.",
   "Reaction count must be an integer": "반응 수는 1 이상의 정수로 입력하세요.",
+  "Overage must be zero or more": "여유량은 0 이상으로 입력하세요.",
+  "Final concentration exceeds the stock":
+    "최종 농도가 원액 농도보다 높습니다.",
+  "Components exceed the reaction volume":
+    "성분 부피의 합이 반응 부피보다 큽니다.",
   "Concentration must be positive": "농도는 0보다 커야 합니다.",
   "Invalid concentration or volume": "농도와 부피를 확인하세요.",
   "Vessel count must be an integer": "용기 수는 정수여야 합니다.",
@@ -260,15 +304,35 @@ const errorTranslations: Record<string, string> = {
   "Standards do not describe an increasing Hill curve":
     "증가형 Hill에 맞는 표준값이 아닙니다. 표준값과 모델을 확인하세요.",
   "Unidentifiable Hill fit": "Hill 매개변수를 결정할 수 없습니다.",
+  "Standards do not describe a decreasing Hill curve":
+    "감소형 Hill에 맞는 표준값이 아닙니다. 표준값과 모델을 확인하세요.",
+  "Unknown fit model":
+    "이 버전이 지원하지 않는 적합 모델입니다. 앱을 최신 버전으로 업데이트하세요.",
+  "Sample rows need a value, or a name and a value":
+    "시료는 한 줄에 Y값 하나, 또는 이름과 Y값 두 열로 입력하세요.",
   "Target must exceed starting density":
     "목표 밀도는 현재 밀도보다 높아야 합니다.",
   "Negative medium volume": "필요 원액이 최종 배양 부피를 초과합니다.",
   "Above 100% confluence": "예상 confluence가 100%를 초과합니다.",
   "Above maximum density": "예상 밀도가 최대 밀도를 초과합니다.",
+  "Confluence cannot exceed 100%": "Confluence는 100%를 넘을 수 없습니다.",
+  "Density cannot exceed the maximum density":
+    "목표 농도가 세포주 설정의 최대 밀도보다 높습니다.",
+  "Passage number must be a whole number from 0 to 9999":
+    "계대 번호는 0 이상 9999 이하의 정수로 입력하세요.",
+  "Enter a valid date and time": "날짜와 시각을 확인하세요.",
   "Notification permission denied": "알림 권한이 허용되지 않았습니다.",
   "Enable exact alarms in system settings":
     "시스템 설정에서 정확한 알람을 허용하세요.",
   "Local storage failed": "기기 저장에 실패했습니다. 저장 공간을 확인하세요.",
+  "Enter a sequence": "서열을 입력하세요.",
+  "Sequence may contain only A, C, G and T":
+    "서열에는 A, C, G, T만 쓸 수 있습니다.",
+  "Sequence needs at least 2 bases": "서열은 2염기 이상이어야 합니다.",
+  "Length must be a whole number": "길이는 정수로 입력하세요.",
+  "Permanent delete is not available yet":
+    "영구 삭제를 아직 사용할 수 없습니다. 잠시 후 다시 시도하세요.",
+  "Connect to delete permanently": "영구 삭제는 온라인 상태에서 할 수 있습니다.",
   "Unsupported recurrence rule":
     "지원하지 않는 반복 규칙입니다. 일·주·월 반복과 종료일을 지원합니다.",
   "Unsupported timezone or all-day ICS format":
@@ -277,35 +341,77 @@ const errorTranslations: Record<string, string> = {
   "Only UTC date-time ICS values are supported":
     "ICS는 UTC 날짜·시각 형식을 지원합니다.",
   "Exactly two columns required": "X와 Y, 두 열을 입력하세요.",
+  "Unknown element symbol":
+    "알 수 없는 원소 기호입니다. 대소문자를 확인하세요.",
+  "Unbalanced brackets in formula": "괄호의 짝이 맞지 않습니다.",
+  "Unexpected character in formula": "화학식에 쓸 수 없는 문자가 있습니다.",
+  "Incomplete formula": "화학식이 완성되지 않았습니다.",
+  "Formula count must be greater than zero": "개수는 0보다 커야 합니다.",
   "PNG/JPEG, maximum 20 MB": "PNG/JPEG, 최대 20 MB 이미지를 선택하세요.",
+  "Could not create the image": "이미지를 만들지 못했습니다.",
   "Maximum 40 megapixels": "최대 4000만 화소 이미지를 선택하세요.",
+  "Replicates must be a whole number of 1 or more":
+    "반복 수는 1 이상의 정수로 입력하세요.",
+  "Start number must be a whole number of 0 or more":
+    "시작 번호는 0 이상의 정수로 입력하세요.",
 };
 export function ErrorMessage({ message }: { message: string }) {
   const t = useText();
   const raw = message.replace(/^Error: /, "");
+  // "Enter x" asks for an equation variable. Only a bare name is rewritten:
+  // any other English sentence starting with "Enter" needs its own entry
+  // above rather than a Korean suffix glued onto English words.
+  const variable = raw.match(/^Enter ([\p{L}_][\p{L}\p{N}_]*)$/u);
   const translated =
     errorTranslations[raw] ??
-    (raw.startsWith("Enter ") ? `${raw.slice(6)} 값을 입력하세요.` : raw);
+    (variable ? `${variable[1]} 값을 입력하세요.` : raw);
   return message ? (
     <p role="alert" className="tool-error">
       {t(translated, raw)}
     </p>
   ) : null;
 }
+/**
+ * A number for display: seven significant digits, grouped. It follows the
+ * app's language rather than the device's locale, so the same screen does not
+ * show "1.000,5" on one phone and "1,000.5" on another.
+ */
 export const format = (n: number | null | undefined) =>
   n == null || !Number.isFinite(n)
     ? "—"
-    : new Intl.NumberFormat(undefined, { maximumSignificantDigits: 7 }).format(
-        n
-      );
-export function calculate<T>(fn: () => T): { value: T | null; error: string } {
+    : new Intl.NumberFormat(
+        i18n.language?.startsWith("ko") ? "ko-KR" : "en-US",
+        { maximumSignificantDigits: 7 }
+      ).format(n);
+// `need`, `IncompleteInput` and `tsv` live in format.ts so calculation engines
+// can use them without importing UI code.
+export { need, IncompleteInput, tsv };
+export { plainNumber };
+/** Copies text; false when the browser refuses (permissions, insecure page). */
+export async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+export function calculate<T>(
+  fn: () => T
+): { value: T | null; error: string; incomplete: boolean } {
   try {
     const value = fn();
     if (typeof value === "number" && !Number.isFinite(value))
       throw Error("Result is not finite");
-    return { value, error: "" };
+    return { value, error: "", incomplete: false };
   } catch (e) {
-    return { value: null, error: e instanceof Error ? e.message : String(e) };
+    if (e instanceof IncompleteInput)
+      return { value: null, error: "", incomplete: true };
+    return {
+      value: null,
+      error: e instanceof Error ? e.message : String(e),
+      incomplete: false,
+    };
   }
 }
 export async function download(
@@ -321,7 +427,8 @@ export const csv = (rows: (string | number)[][]) =>
     .map((row) =>
       row
         .map((value) => {
-          let cell = String(value);
+          let cell =
+            typeof value === "number" ? plainNumber(value) : String(value);
           if (
             typeof value === "string" &&
             /^[=+\-@]/.test(cell.trimStart()) &&
@@ -339,6 +446,7 @@ export async function report({
   svg,
   headers,
   rows,
+  sections = [],
   name,
 }: {
   title: string;
@@ -346,6 +454,12 @@ export async function report({
   svg?: SVGSVGElement | null;
   headers: string[];
   rows: (string | number)[][];
+  /** Further titled tables after the main one. */
+  sections?: {
+    title: string;
+    headers: string[];
+    rows: (string | number)[][];
+  }[];
   name: string;
 }) {
   const element = document.createElement("section");
@@ -398,23 +512,37 @@ export async function report({
       URL.revokeObjectURL(source);
     }
   }
-  const table = document.createElement("table");
-  table.style.cssText =
-    "width:100%;border-collapse:collapse;margin-top:20px;font-size:13px";
-  for (const [index, row] of [headers, ...rows].entries()) {
-    const tr = document.createElement("tr");
-    tr.style.breakInside = "avoid";
-    for (const cell of row) {
-      const td = document.createElement(index === 0 ? "th" : "td");
-      td.textContent = String(cell);
-      td.style.cssText =
-        "text-align:left;padding:9px 8px;border-bottom:1px solid #cbd5e1;overflow-wrap:anywhere";
-      if (index === 0) td.style.background = "#f1f5f9";
-      tr.append(td);
+  const appendTable = (
+    tableHeaders: string[],
+    tableRows: (string | number)[][]
+  ) => {
+    const table = document.createElement("table");
+    table.style.cssText =
+      "width:100%;border-collapse:collapse;margin-top:20px;font-size:13px";
+    for (const [index, row] of [tableHeaders, ...tableRows].entries()) {
+      const tr = document.createElement("tr");
+      tr.style.breakInside = "avoid";
+      for (const cell of row) {
+        const td = document.createElement(index === 0 ? "th" : "td");
+        td.textContent =
+          typeof cell === "number" ? plainNumber(cell, 7) : String(cell);
+        td.style.cssText =
+          "text-align:left;padding:9px 8px;border-bottom:1px solid #cbd5e1;overflow-wrap:anywhere";
+        if (index === 0) td.style.background = "#f1f5f9";
+        tr.append(td);
+      }
+      table.append(tr);
     }
-    table.append(tr);
+    element.append(table);
+  };
+  appendTable(headers, rows);
+  for (const section of sections) {
+    const subheading = document.createElement("h2");
+    subheading.textContent = section.title;
+    subheading.style.cssText = "font-size:17px;margin:28px 0 0";
+    element.append(subheading);
+    appendTable(section.headers, section.rows);
   }
-  element.append(table);
   const { default: html2pdf } = await import("html2pdf.js");
   const blob = (await html2pdf()
     .set({
@@ -426,4 +554,307 @@ export async function report({
     .from(element)
     .outputPdf("blob")) as Blob;
   await download(blob, name, "application/pdf");
+}
+
+/**
+ * A number field that keeps what was typed. `type="number"` drops a trailing
+ * "." while typing, changes on mouse wheel, and cannot tell empty from zero;
+ * this one holds text, and the tool reads it with `need` or `parseNumber`.
+ */
+export function NumberField({
+  label,
+  value,
+  onChange,
+  negative = false,
+  disabled = false,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (text: string) => void;
+  /** Allow a minus sign. Phone decimal pads have none, so this asks for the full keyboard. */
+  negative?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <label className="tool-field">
+      <span>{label}</span>
+      <input
+        type="text"
+        inputMode={negative ? "text" : "decimal"}
+        autoComplete="off"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        aria-invalid={value.trim() !== "" && parseNumber(value) == null}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+/**
+ * The same field for documents that already store the value as a number. The
+ * document keeps a number, or `null` while the field is empty, so documents
+ * saved before stay valid; the text being typed ("1.", "0,5") lives here.
+ */
+export function StoredNumberField({
+  label,
+  value,
+  onChange,
+  negative = false,
+  disabled = false,
+}: {
+  label: string;
+  value: number | null | undefined;
+  onChange: (value: number | null) => void;
+  negative?: boolean;
+  disabled?: boolean;
+}) {
+  const [text, setText] = useState(() =>
+    value == null ? "" : plainNumber(value)
+  );
+  // Shows the typed text while it still means the stored value; a value that
+  // changed elsewhere (undo, sync, another field) replaces it.
+  const shown =
+    (value ?? null) === parseNumber(text)
+      ? text
+      : value == null
+      ? ""
+      : plainNumber(value);
+  return (
+    <label className="tool-field">
+      <span>{label}</span>
+      <input
+        type="text"
+        inputMode={negative ? "text" : "decimal"}
+        autoComplete="off"
+        value={shown}
+        disabled={disabled}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          if (!next.trim()) onChange(null);
+          else {
+            const parsed = parseNumber(next);
+            if (parsed != null) onChange(parsed);
+          }
+        }}
+      />
+    </label>
+  );
+}
+/** A value with its unit beside it. */
+export function QuantityField({
+  label,
+  value,
+  onChange,
+  unit,
+  units,
+  onUnit,
+  unitLabel,
+}: {
+  label: string;
+  value: string;
+  onChange: (text: string) => void;
+  unit: string;
+  units: readonly (string | readonly [string, string])[];
+  onUnit: (unit: string) => void;
+  unitLabel?: string;
+}) {
+  const t = useText();
+  return (
+    <div className="tool-quantity">
+      <NumberField label={label} value={value} onChange={onChange} />
+      <Select
+        label={unitLabel ?? t(`${label} 단위`, `${label} unit`)}
+        value={unit}
+        onChange={onUnit}
+        options={units}
+      />
+    </div>
+  );
+}
+/**
+ * Copies text and says so: the icon turns into a check for two seconds, and a
+ * refusal by the browser is reported next to the button.
+ */
+export function CopyButton({
+  text,
+  label,
+  children,
+  disabled = false,
+  className = "",
+}: {
+  text: string | (() => string);
+  /** Accessible name when the button shows only the icon. */
+  label?: string;
+  children?: ReactNode;
+  /** Nothing to copy yet. The button stays in place so the layout does not jump. */
+  disabled?: boolean;
+  className?: string;
+}) {
+  const t = useText();
+  const [state, setState] = useState<"" | "done" | "failed">("");
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return (
+    <>
+      <button
+        type="button"
+        className={`tool-copy ${className}`.trim()}
+        disabled={disabled}
+        aria-label={children ? undefined : label ?? t("복사", "Copy")}
+        onClick={async () => {
+          const copied = await copyText(
+            typeof text === "function" ? text() : text
+          );
+          setState(copied ? "done" : "failed");
+          clearTimeout(timer.current);
+          timer.current = setTimeout(() => setState(""), copied ? 2000 : 6000);
+        }}
+      >
+        {state === "done" ? (
+          <Check size={18} aria-hidden="true" />
+        ) : (
+          <Copy size={18} aria-hidden="true" />
+        )}
+        {children}
+      </button>
+      <span className="sr-only" role="status">
+        {state === "done" ? t("복사했습니다.", "Copied.") : ""}
+      </span>
+      {state === "failed" && (
+        <span className="tool-error" role="alert">
+          {t(
+            "복사하지 못했습니다. 내용을 직접 선택해 복사하세요.",
+            "Could not copy. Select the text and copy it."
+          )}
+        </span>
+      )}
+    </>
+  );
+}
+/** What a list or panel shows when it has nothing yet. */
+export function EmptyState({
+  icon,
+  title,
+  children,
+}: {
+  icon?: ReactNode;
+  title: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="tool-empty-state">
+      {icon}
+      <strong>{title}</strong>
+      {children}
+    </div>
+  );
+}
+/**
+ * Undo for a removal. The item is removed at once, with no confirmation
+ * dialog, and a bar offers to put it back for a few seconds:
+ *
+ *   const [undoBar, offerUndo] = useUndo();
+ *   offerUndo(t("타이머를 삭제했습니다.", "Timer deleted."), () => set(before));
+ *   return <>{undoBar}…</>;
+ */
+export function useUndo() {
+  const t = useText();
+  const [entry, setEntry] = useState<{
+    message: string;
+    restore: () => void;
+  } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const offer = (message: string, restore: () => void) => {
+    clearTimeout(timer.current);
+    setEntry({ message, restore });
+    timer.current = setTimeout(() => setEntry(null), 8000);
+  };
+  const bar = entry ? (
+    <div className="tool-undo" role="status">
+      <span>{entry.message}</span>
+      <button
+        onClick={() => {
+          clearTimeout(timer.current);
+          entry.restore();
+          setEntry(null);
+        }}
+      >
+        {t("실행 취소", "Undo")}
+      </button>
+      <button
+        aria-label={t("닫기", "Dismiss")}
+        onClick={() => {
+          clearTimeout(timer.current);
+          setEntry(null);
+        }}
+      >
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+  ) : null;
+  return [bar, offer] as const;
+}
+/**
+ * File names for this tool's exports, built from the tool, the saved work's
+ * name (when it has one) and the time: `name("csv")`, `name("png", "plot")`.
+ */
+export function useExportName() {
+  const ctx = useContext(ToolContext);
+  return (extension: string, part?: string) =>
+    exportFileName(
+      [ctx?.doc.tool_id ?? "tool", part].filter(Boolean).join("-"),
+      ctx && !ctx.draft && ctx.doc.data._workspace !== true
+        ? ctx.doc.title
+        : undefined,
+      extension
+    );
+}
+/**
+ * Offers a value another tool sent to this one. A tool renders it where the
+ * value would go and lists the kinds it can take; applying or dismissing
+ * removes the offer.
+ */
+export function HandoffBanner({
+  accepts,
+  onApply,
+}: {
+  accepts: readonly HandoffKind[];
+  onApply: (handoff: Handoff) => void;
+}) {
+  const t = useText(),
+    ctx = useContext(ToolContext);
+  const offer = ctx?.handoff;
+  if (!offer || !accepts.includes(offer.kind)) return null;
+  const source = toolById(offer.source);
+  return (
+    <div className="tool-handoff" role="status">
+      <span>
+        {source
+          ? t(`${source.ko}에서 가져온 값`, `From ${source.en}`)
+          : t("가져온 값", "Received value")}
+        {": "}
+        <strong>
+          {offer.label}
+          {offer.kind === "table"
+            ? ""
+            : ` ${format(offer.value)} ${offer.unit}`}
+        </strong>
+      </span>
+      <button
+        className="primary"
+        onClick={() => {
+          onApply(offer);
+          ctx.clearHandoff?.();
+        }}
+      >
+        {t("적용", "Apply")}
+      </button>
+      <button onClick={() => ctx.clearHandoff?.()}>{t("무시", "Dismiss")}</button>
+    </div>
+  );
 }

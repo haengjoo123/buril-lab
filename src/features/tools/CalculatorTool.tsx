@@ -1,56 +1,160 @@
 import { useRef, useState } from "react";
-import { Copy, Delete } from "lucide-react";
-import { evaluateExpression } from "./expression";
-import { useText, useToolData, ErrorMessage, calculate, format } from "./ui";
+import { Delete } from "lucide-react";
+import {
+  CalculationError,
+  evaluateExpression,
+  insertIntoExpression,
+} from "./expression";
+import {
+  useText,
+  useToolData,
+  useUndo,
+  ErrorMessage,
+  CopyButton,
+  calculate,
+  format,
+  plainNumber,
+} from "./ui";
+
+// "(" and ")" are on the main keypad. `log` is the base-10 logarithm in the
+// engine (the same as `log10`), so its key says so.
+const scientificKeys = [
+  "sqrt(",
+  "sin(",
+  "cos(",
+  "tan(",
+  "ln(",
+  "log(",
+  "exp(",
+  "abs(",
+  "pi",
+  "e",
+  "^",
+];
+const mainKeys = [
+  "AC",
+  "(",
+  ")",
+  "⌫",
+  "7",
+  "8",
+  "9",
+  "÷",
+  "4",
+  "5",
+  "6",
+  "×",
+  "1",
+  "2",
+  "3",
+  "−",
+  "0",
+  ".",
+  "%",
+  "+",
+];
+const lines = (stored: unknown): string[] =>
+  Array.isArray(stored)
+    ? stored.filter((line) => typeof line === "string")
+    : [];
 export default function CalculatorTool() {
   const t = useText(),
     [d, set] = useToolData({
       expression: "",
       angle: "RAD" as "RAD" | "DEG",
       history: [] as string[],
+      /** The last answer "=" produced, as plain text, for the ANS key. */
+      ans: "",
+      /** Whether the scientific keys are shown. */
+      scientific: false,
     }),
-    [scientific, setScientific] = useState(false),
-    [copyError, setCopyError] = useState("");
+    [historyOpen, setHistoryOpen] = useState(false),
+    [undoBar, offerUndo] = useUndo();
+  // The caret starts after an expression kept from last time, so the first
+  // key press continues it instead of landing in front of it.
   const input = useRef<HTMLInputElement>(null),
-    cursor = useRef({ start: 0, end: 0 });
-  const result = calculate(() =>
-      d.expression ? evaluateExpression(d.expression, {}, d.angle) : null
-    ),
+    cursor = useRef({ start: d.expression.length, end: d.expression.length });
+  const history = lines(d.history);
+  // History saved before the answer was stored still has it after " = ".
+  const ans = d.ans || history[0]?.split(" = ")[1] || "";
+  const result = calculate(() => {
+      if (!d.expression.trim()) return null;
+      try {
+        return evaluateExpression(d.expression, {}, d.angle, {
+          percent: "of-left",
+        });
+      } catch (error) {
+        // Letters that are neither a function nor a constant: the calculator
+        // has no variables to ask for.
+        if (error instanceof CalculationError && error.code === "missing")
+          throw new CalculationError("syntax", "Incomplete or invalid equation");
+        throw error;
+      }
+    }),
     shown = result.value ? format(result.value.result) : "0";
-  const insert = (text: string) => {
-    const { start, end } = cursor.current,
-      next = d.expression.slice(0, start) + text + d.expression.slice(end);
-    set({ ...d, expression: next });
-    cursor.current = { start: start + text.length, end: start + text.length };
+  const write = (expression: string, caret: number) => {
+    set((old) => ({ ...old, expression }));
+    cursor.current = { start: caret, end: caret };
     requestAnimationFrame(() => {
       input.current?.focus();
-      input.current?.setSelectionRange(
-        cursor.current.start,
-        cursor.current.end
-      );
+      input.current?.setSelectionRange(caret, caret);
     });
+  };
+  const insert = (text: string) => {
+    const next = insertIntoExpression(
+      d.expression,
+      cursor.current.start,
+      cursor.current.end,
+      text
+    );
+    write(next.expression, next.caret);
+  };
+  const clear = () => {
+    set((old) => ({ ...old, expression: "" }));
+    cursor.current = { start: 0, end: 0 };
   };
   const equals = () => {
     if (!result.value) return;
-    set({
-      ...d,
-      expression: String(result.value.result),
-      history: [`${d.expression} = ${result.value.result}`, ...d.history].slice(
-        0,
-        100
-      ),
-    });
-    cursor.current = {
-      start: String(result.value.result).length,
-      end: String(result.value.result).length,
-    };
+    // The answer becomes the next expression, so it is written without
+    // floating-point residue (0.1 + 0.2 continues from 0.3).
+    const answer = plainNumber(result.value.result),
+      entry = `${d.expression} = ${answer}`;
+    set((old) => ({
+      ...old,
+      expression: answer,
+      ans: answer,
+      // Synced with the account, so kept short. "=" on a bare answer adds
+      // nothing new.
+      history:
+        d.expression.trim() === answer
+          ? old.history
+          : [entry, ...lines(old.history)].slice(0, 30),
+    }));
+    cursor.current = { start: answer.length, end: answer.length };
+  };
+  const insertAnswer = () => {
+    const { start, end } = cursor.current;
+    // Next to a digit or a name the answer goes in brackets and multiplies,
+    // as on a pocket calculator: "5" then ANS is 5(0.3), not 50.3. A negative
+    // answer is bracketed too, so "2^" then ANS reads 2^(-5).
+    const touching =
+      /[\p{L}\p{Nd}_.]$/u.test(d.expression.slice(0, start)) ||
+      /^[\p{L}\p{Nd}_.]/u.test(d.expression.slice(end));
+    insert(touching || ans.startsWith("-") ? `(${ans})` : ans);
+  };
+  const clearHistory = () => {
+    const before = history;
+    set((old) => ({ ...old, history: [] }));
+    offerUndo(t("계산 내역을 지웠습니다.", "History cleared."), () =>
+      set((old) => ({ ...old, history: before }))
+    );
   };
   return (
     <section className="tool-calculator">
       <div className="tool-calculator-mode">
         <button
-          aria-pressed={scientific}
-          onClick={() => setScientific(!scientific)}
+          aria-pressed={!!d.scientific}
+          onClick={() => set((old) => ({ ...old, scientific: !old.scientific }))}
         >
           {t("과학 함수", "Scientific")}
         </button>
@@ -60,13 +164,13 @@ export default function CalculatorTool() {
         >
           <button
             aria-pressed={d.angle === "RAD"}
-            onClick={() => set({ ...d, angle: "RAD" })}
+            onClick={() => set((old) => ({ ...old, angle: "RAD" }))}
           >
             RAD
           </button>
           <button
             aria-pressed={d.angle === "DEG"}
-            onClick={() => set({ ...d, angle: "DEG" })}
+            onClick={() => set((old) => ({ ...old, angle: "DEG" }))}
           >
             DEG
           </button>
@@ -76,6 +180,12 @@ export default function CalculatorTool() {
         <span>{t("계산식", "Expression")}</span>
         <input
           ref={input}
+          // Every keypad press refocuses this field to place the caret; without
+          // this a phone would raise its own keyboard over the keypad each
+          // time. It only hides the on-screen keyboard: a hardware keyboard
+          // still types here, with Enter for "=" and Escape for "AC".
+          inputMode="none"
+          autoComplete="off"
           aria-label={t("계산식", "Expression")}
           className="tool-calculator-input"
           value={d.expression}
@@ -86,83 +196,61 @@ export default function CalculatorTool() {
               end: event.currentTarget.selectionEnd ?? 0,
             };
           }}
-          onChange={(event) => set({ ...d, expression: event.target.value })}
+          onChange={(event) => {
+            const expression = event.target.value;
+            set((old) => ({ ...old, expression }));
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
               equals();
+            } else if (event.key === "Escape" && d.expression) {
+              event.preventDefault();
+              clear();
             }
           }}
         />
       </label>
-      <div className="tool-calculator-output">
+      <div className="tool-calculator-output tool-calc-x-output">
         <output>{shown}</output>
-        <button
-          aria-label={t("결과 복사", "Copy result")}
-          disabled={!result.value}
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(String(result.value!.result));
-              setCopyError("");
-            } catch {
-              setCopyError(
-                t(
-                  "복사할 수 없습니다. 결과를 선택해 복사하세요.",
-                  "Could not copy. Select the result to copy it."
-                )
-              );
-            }
-          }}
-        >
-          <Copy size={18} />
-        </button>
+        {result.value ? (
+          <CopyButton
+            label={t("결과 복사", "Copy result")}
+            text={plainNumber(result.value.result)}
+          />
+        ) : (
+          // Keeps the number where it is while there is nothing to copy.
+          <span className="tool-calc-x-nocopy" aria-hidden="true" />
+        )}
       </div>
-      <ErrorMessage message={result.error || copyError} />
-      {scientific && (
+      <ErrorMessage message={result.error} />
+      {d.scientific && (
         <div className="tool-calculator-functions">
-          {[
-            "sqrt(",
-            "sin(",
-            "cos(",
-            "tan(",
-            "ln(",
-            "log10(",
-            "exp(",
-            "pi",
-            "e",
-            "^",
-            "(",
-            ")",
-          ].map((key) => (
-            <button key={key} onClick={() => insert(key)}>
-              {key.endsWith("(") ? key.slice(0, -1) : key === "pi" ? "π" : key}
+          {scientificKeys.map((key) => (
+            <button
+              key={key}
+              aria-label={
+                key === "log("
+                  ? t("상용로그 (밑 10)", "Logarithm, base 10")
+                  : key === "abs("
+                  ? t("절댓값", "Absolute value")
+                  : undefined
+              }
+              onClick={() => insert(key)}
+            >
+              {key === "log("
+                ? "log₁₀"
+                : key === "pi"
+                ? "π"
+                : key.endsWith("(")
+                ? key.slice(0, -1)
+                : key}
             </button>
           ))}
         </div>
       )}
       <div className="tool-calculator-keys">
-        {[
-          "AC",
-          "(",
-          ")",
-          "⌫",
-          "7",
-          "8",
-          "9",
-          "÷",
-          "4",
-          "5",
-          "6",
-          "×",
-          "1",
-          "2",
-          "3",
-          "−",
-          "0",
-          ".",
-          "%",
-          "+",
-        ].map((key) => (
+        {mainKeys.map((key) => (
           <button
             key={key}
             aria-label={
@@ -174,18 +262,11 @@ export default function CalculatorTool() {
             }
             className={["÷", "×", "−", "+"].includes(key) ? "operator" : ""}
             onClick={() => {
-              if (key === "AC") {
-                set({ ...d, expression: "" });
-                cursor.current = { start: 0, end: 0 };
-              } else if (key === "⌫") {
+              if (key === "AC") clear();
+              else if (key === "⌫") {
                 const { start, end } = cursor.current,
                   pos = start === end ? Math.max(0, start - 1) : start;
-                set({
-                  ...d,
-                  expression:
-                    d.expression.slice(0, pos) + d.expression.slice(end),
-                });
-                cursor.current = { start: pos, end: pos };
+                write(d.expression.slice(0, pos) + d.expression.slice(end), pos);
               } else
                 insert(
                   ({ "÷": "/", "×": "*", "−": "-" } as Record<string, string>)[
@@ -194,28 +275,44 @@ export default function CalculatorTool() {
                 );
             }}
           >
-            {key === "⌫" ? <Delete size={21} /> : key}
+            {key === "⌫" ? <Delete size={21} aria-hidden="true" /> : key}
           </button>
         ))}
         <button
-          className="primary tool-calculator-equals"
+          aria-label={t("이전 답 넣기", "Insert previous answer")}
+          disabled={!ans}
+          onClick={insertAnswer}
+        >
+          ANS
+        </button>
+        <button
+          className="primary tool-calc-x-equals"
           onClick={equals}
           disabled={!result.value}
         >
           =
         </button>
       </div>
-      {d.history.length > 0 && (
-        <details className="tool-guide">
+      {history.length > 0 && (
+        <details
+          className="tool-guide"
+          open={historyOpen}
+          onToggle={(event) => setHistoryOpen(event.currentTarget.open)}
+        >
           <summary>
-            {t("계산 내역", "History")} ({d.history.length})
+            {t("계산 내역", "History")} ({history.length})
           </summary>
-          {d.history.map((line, index) => (
-            <div className="tool-history-row" key={index}>
+          <div className="tool-actions">
+            <button onClick={clearHistory}>
+              {t("내역 지우기", "Clear history")}
+            </button>
+          </div>
+          {history.map((line, index) => (
+            <div className="tool-history-row tool-calc-x-history" key={index}>
               <button
                 onClick={() => {
                   const expression = line.split(" = ")[0];
-                  set({ ...d, expression });
+                  set((old) => ({ ...old, expression }));
                   cursor.current = {
                     start: expression.length,
                     end: expression.length,
@@ -224,16 +321,15 @@ export default function CalculatorTool() {
               >
                 {line}
               </button>
-              <button
-                aria-label={t("내역 복사", "Copy history entry")}
-                onClick={() => navigator.clipboard.writeText(line)}
-              >
-                <Copy size={16} />
-              </button>
+              <CopyButton
+                label={t("내역 복사", "Copy history entry")}
+                text={line}
+              />
             </div>
           ))}
         </details>
       )}
+      {undoBar}
     </section>
   );
 }

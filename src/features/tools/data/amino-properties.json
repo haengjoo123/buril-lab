@@ -6,7 +6,13 @@
     "mw": 89.09,
     "smiles": "C[C@@H](C(=O)O)N",
     "image": "/tool-structures/alanine.png",
-    "viewBox": "72 80 156 114"
+    "viewBox": "72 80 156 114",
+    "residueMass": 71.0788,
+    "pKaCarboxyl": 2.34,
+    "pKaAmino": 9.69,
+    "pKaSideChain": null,
+    "pI": 6.01,
+    "hydropathy": 1.8
   },
   {
     "name": "Arginine",
@@ -15,7 +21,13 @@
     "mw": 174.2,
     "smiles": "C(C[C@@H](C(=O)O)N)CN=C(N)N",
     "image": "/tool-structures/arginine.png",
-    "viewBox": "43 21 214 256"
+    "viewBox": "43 21 214 256",
+    "residueMass": 156.1875,
+    "pKaCarboxyl": 2.17,
+    "pKaAmino": 9.04,
+    "pKaSideChain": 12.48,
+    "pI": 10.76,
+    "hydropathy": -4.5
   },
   {
     "name": "Asparagine",
@@ -24,7 +36,13 @@
     "mw": 132.12,
     "smiles": "C([C@@H](C(=O)O)N)C(=O)N",
     "image": "/tool-structures/asparagine.png",
-    "viewBox": "43 85 214 128"
+    "viewBox": "43 85 214 128",
+    "residueMass": 114.1038,
+    "pKaCarboxyl": 2.02,
+    "pKaAmino": 8.8,
+    "pKaSideChain": null,
+    "pI": 5.41,
+    "hydropathy": -3.5
   },
   {
     "name": "Aspartic acid",
@@ -33,7 +51,13 @@
     "mw": 133.1,
     "smiles": "C([C@@H](C(=O)O)N)C(=O)O",
     "image": "/tool-structures/aspartic-acid.png",
-    "viewBox": "43 85 214 128"
+    "viewBox": "43 85 214 128",
+    "residueMass": 115.0886,
+    "pKaCarboxyl": 1.88,
+    "pKaAmino": 9.6,
+    "pKaSideChain": 3.65,
+    "pI": 2.77,
+    "hydropathy": -3.5
   },
   {
     "name": "Cysteine",
@@ -42,7 +66,13 @@
     "mw": 121.16,
     "smiles": "C([C@@H](C(=O)O)N)S",
     "image": "/tool-structures/cysteine.png",
-    "viewBox": "72 71 156 156"
+    "viewBox": "72 71 156 156",
+    "residueMass": 103.1388,
+    "pKaCarboxyl": 1.96,
+    "pKaAmino": 10.28,
+    "pKaSideChain": 8.18,
+    "pI": 5.07,
+    "hydropathy": 2.5
   },
   {
     "name": "Glutamic acid",
@@ -51,7 +81,13 @@
     "mw": 147.13,
     "smiles": "C(CC(=O)O)[C@@H](C(=O)O)N",
     "image": "/tool-structures/glutamic-acid.png",
-    "viewBox": "66 46 167 206"
+    "viewBox": "66 46 167 206",
+    "residueMass": 129.1155,
+    "pKaCarboxyl": 2.19,
+    "pKaAmino": 9.67,
+    "pKaSideChain": 4.25,
+    "pI": 3.22,
+    "hydropathy": -3.5
   },
   {
     "name": "Glutamine",
@@ -60,7 +96,13 @@
     "mw": 146.14,
     "smiles": "C(CC(=O)N)[C@@H](C(=O)O)N",
     "image": "/tool-structures/glutamine.png",
-    "viewBox": "58 46 184 206"
+    "viewBox": "58 46 184 206",
+    "residueMass": 128.1307,
+    "pKaCarboxyl": 2.17,
+    "pKaAmino": 9.13,
+    "pKaSideChain": null,
+    "pI": 5.65,
+    "hydropathy": -3.5
   },
   {
     "name": "Glycine",
@@ -69,7 +111,13 @@
     "mw": 75.07,
     "smiles": "C(C(=O)O)N",
     "image": "/tool-structures/glycine.png",
-    "viewBox": "72 115 156 84"
+    "viewBox": "72 115 156 84",
+    "residueMass": 57.0519,
+    "pKaCarboxyl": 2.34,
+    "pKaAmino": 9.6,
+    "pKaSideChain": null,
+    "pI": 5.97,
+    "hydropathy": -0.4
   },
   {
     "name": "Histidine",
@@ -78,7 +126,13 @@
     "mw": 155.15,
     "smiles": "C1=C(NC=N1)C[C@@H](C(=O)O)N",
     "image": "/tool-structures/histidine.png",
-    "viewBox": "30 82 217 134"
+    "viewBox": "30 82 217 134",
+    "residueMass": 137.1411,
+    "pKaCarboxyl": 1.82,
+    "pKaAmino": 9.17,
+    "pKaSideChain": 6,
+    "pI": 7.59,
+    "hydropathy": -3.2
   },
   {
     "name": "Isoleucine",
@@ -87,7 +141,13 @@
     "mw": 131.17,
     "smiles": "CC[C@H](C)[C@@H](C(=O)O)N",
     "image": "/tool-structures/isoleucine.png",
-    "viewBox": "43 95 193 128"
+    "viewBox": "43 95 193 128",
+    "residueMass": 113.1594,
+    "pKaCarboxyl": 2.36,
+    "pKaAmino": 9.6,
+    "pKaSideChain": null,
+    "pI": 6.02,
+    "hydropathy": 4.5
   },
   {
     "name": "Leucine",
@@ -96,7 +156,13 @@
     "mw": 131.17,
     "smiles": "CC(C)C[C@@H](C(=O)O)N",
     "image": "/tool-structures/leucine.png",
-    "viewBox": "80 55 162 165"
+    "viewBox": "80 55 162 165",
+    "residueMass": 113.1594,
+    "pKaCarboxyl": 2.36,
+    "pKaAmino": 9.6,
+    "pKaSideChain": null,
+    "pI": 5.98,
+    "hydropathy": 3.8
   },
   {
     "name": "Lysine",
@@ -105,7 +171,13 @@
     "mw": 146.19,
     "smiles": "C(CCN)C[C@@H](C(=O)O)N",
     "image": "/tool-structures/lysine.png",
-    "viewBox": "59 35 184 228"
+    "viewBox": "59 35 184 228",
+    "residueMass": 128.1741,
+    "pKaCarboxyl": 2.18,
+    "pKaAmino": 8.95,
+    "pKaSideChain": 10.53,
+    "pI": 9.74,
+    "hydropathy": -3.9
   },
   {
     "name": "Methionine",
@@ -114,7 +186,13 @@
     "mw": 149.21,
     "smiles": "CSCC[C@@H](C(=O)O)N",
     "image": "/tool-structures/methionine.png",
-    "viewBox": "80 48 162 181"
+    "viewBox": "80 48 162 181",
+    "residueMass": 131.1926,
+    "pKaCarboxyl": 2.28,
+    "pKaAmino": 9.21,
+    "pKaSideChain": null,
+    "pI": 5.74,
+    "hydropathy": 1.9
   },
   {
     "name": "Phenylalanine",
@@ -123,7 +201,13 @@
     "mw": 165.19,
     "smiles": "C1=CC=C(C=C1)C[C@@H](C(=O)O)N",
     "image": "/tool-structures/phenylalanine.png",
-    "viewBox": "94 27 134 220"
+    "viewBox": "94 27 134 220",
+    "residueMass": 147.1766,
+    "pKaCarboxyl": 1.83,
+    "pKaAmino": 9.13,
+    "pKaSideChain": null,
+    "pI": 5.48,
+    "hydropathy": 2.8
   },
   {
     "name": "Proline",
@@ -132,7 +216,13 @@
     "mw": 115.13,
     "smiles": "C1C[C@H](NC1)C(=O)O",
     "image": "/tool-structures/proline.png",
-    "viewBox": "82 111 159 103"
+    "viewBox": "82 111 159 103",
+    "residueMass": 97.1167,
+    "pKaCarboxyl": 1.99,
+    "pKaAmino": 10.6,
+    "pKaSideChain": null,
+    "pI": 6.3,
+    "hydropathy": -1.6
   },
   {
     "name": "Serine",
@@ -141,7 +231,13 @@
     "mw": 105.09,
     "smiles": "C([C@@H](C(=O)O)N)O",
     "image": "/tool-structures/serine.png",
-    "viewBox": "72 71 156 156"
+    "viewBox": "72 71 156 156",
+    "residueMass": 87.0782,
+    "pKaCarboxyl": 2.21,
+    "pKaAmino": 9.15,
+    "pKaSideChain": null,
+    "pI": 5.68,
+    "hydropathy": -0.8
   },
   {
     "name": "Threonine",
@@ -150,7 +246,13 @@
     "mw": 119.12,
     "smiles": "C[C@H]([C@@H](C(=O)O)N)O",
     "image": "/tool-structures/threonine.png",
-    "viewBox": "58 95 184 128"
+    "viewBox": "58 95 184 128",
+    "residueMass": 101.1051,
+    "pKaCarboxyl": 2.09,
+    "pKaAmino": 9.1,
+    "pKaSideChain": null,
+    "pI": 5.6,
+    "hydropathy": -0.7
   },
   {
     "name": "Tryptophan",
@@ -159,7 +261,13 @@
     "mw": 204.22,
     "smiles": "C1=CC=C2C(=C1)C(=CN2)C[C@@H](C(=O)O)N",
     "image": "/tool-structures/tryptophan.png",
-    "viewBox": "56 43 210 205"
+    "viewBox": "56 43 210 205",
+    "residueMass": 186.2132,
+    "pKaCarboxyl": 2.83,
+    "pKaAmino": 9.39,
+    "pKaSideChain": null,
+    "pI": 5.89,
+    "hydropathy": -0.9
   },
   {
     "name": "Tyrosine",
@@ -168,7 +276,13 @@
     "mw": 181.19,
     "smiles": "C1=CC(=CC=C1C[C@@H](C(=O)O)N)O",
     "image": "/tool-structures/tyrosine.png",
-    "viewBox": "94 16 134 266"
+    "viewBox": "94 16 134 266",
+    "residueMass": 163.176,
+    "pKaCarboxyl": 2.2,
+    "pKaAmino": 9.11,
+    "pKaSideChain": 10.07,
+    "pI": 5.66,
+    "hydropathy": -1.3
   },
   {
     "name": "Valine",
@@ -177,6 +291,12 @@
     "mw": 117.15,
     "smiles": "CC(C)[C@@H](C(=O)O)N",
     "image": "/tool-structures/valine.png",
-    "viewBox": "58 95 163 128"
+    "viewBox": "58 95 163 128",
+    "residueMass": 99.1326,
+    "pKaCarboxyl": 2.32,
+    "pKaAmino": 9.62,
+    "pKaSideChain": null,
+    "pI": 5.96,
+    "hydropathy": 4.2
   }
 ]

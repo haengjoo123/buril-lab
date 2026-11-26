@@ -29,8 +29,9 @@ export const EXPECTED_LEGACY_TESTS = [
   'waste_disposal_v2_verification.sql',
 ]
 export const EXPECTED_HISTORICAL_PERMISSION_TEST_SHA256 = 'f341d11116a688e1b1879edd7db7c533590748ff228542d172516a178def99f2'
-export const EXPECTED_PERMISSION_TEST_SHA256 = '831b845d4e0a127d628558fa9162aadc01420988044d11b05e5130dbd2832073'
+export const EXPECTED_PERMISSION_TEST_SHA256 = '183778965d5bf82442ef638d4558d1b3352c959b7fc9f4c6ecb793a17b5d33e3'
 export const EXPECTED_INCREMENTAL_MIGRATIONS = Object.freeze({
+  '20261127090000_lab_tools_usage_and_purge.sql': 'ee7a19b9efcadb0614fefd1a8e8244ccd1204ad140cf4ae4eeca64d72bce31c7',
   '20261116100000_cabinet_locked.sql': '44e305697f112c01f019393ef0a076fc3a5c4fb0758361d413416bf63f3f7ab4',
   '20261116090000_regulation_source_cache.sql': '37aea6d0bfba877c617c146be2a9d40891d74994e1118448cd6710f6bd206e13',
   '20261115120000_ai_incompatibility_review_candidates.sql': '52cc01d0f35bca3cf71cbdb38b69af1ee177d9804d752643d5cf425289a72106',

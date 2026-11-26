@@ -1,0 +1,114 @@
+/* Tool alerts shown over the whole app (ToolsRuntime) and the per-device
+   switch. Loaded for every signed-in user, so only what those two need lives
+   here; everything else about the tools is in tools.css. */
+.tool-notifications {
+  position: fixed;
+  z-index: 90;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+/* Phones keep their navigation along the bottom edge. */
+body:has([data-navigation="bottom"]) .tool-notifications {
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - 112px);
+}
+.tool-notification,
+.tool-notifications-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #1d4ed8;
+  color: #fff;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 0.28);
+}
+.tool-notification.missed {
+  background: #334155;
+}
+.tool-notification.failed {
+  background: #b91c1c;
+}
+.tool-notifications-more {
+  justify-content: space-between;
+  padding: 8px 8px 8px 16px;
+  background: #0f172a;
+}
+.tool-notification-text {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.tool-notification-text strong {
+  font-weight: 650;
+}
+.tool-notification-tag {
+  justify-self: start;
+  padding: 0 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+.tool-notification-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.tool-notifications a,
+.tool-notifications button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 12px;
+  border: 1px solid #fff;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tool-notifications a:hover,
+.tool-notifications button:hover {
+  background: rgb(255 255 255 / 0.16);
+}
+.tool-notifications :focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .tool-notifications a,
+  .tool-notifications button {
+    min-height: 44px;
+  }
+}
+
+/* "Notify on this device": the notes under the switch. A tool may put the
+   switch in a row of other switches; a note takes a line of its own there. */
+.tool-device-note {
+  flex-basis: 100%;
+  margin: 0 0 8px;
+}
+.tool-device-warning {
+  color: #b45309;
+}
+.dark .tool-device-warning {
+  color: #fbbf24;
+}
+.tool-device-warning button {
+  margin-left: 8px;
+}

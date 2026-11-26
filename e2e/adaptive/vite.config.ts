@@ -46,5 +46,6 @@ export default defineConfig({
     'import.meta.env.VITE_ENABLE_CHEMICAL_ENRICHMENT': JSON.stringify('false'),
     'import.meta.env.VITE_ENABLE_SEARCH_ANALYTICS': JSON.stringify('false'),
     'import.meta.env.VITE_ENABLE_WASTE_V2': JSON.stringify('true'),
+    'import.meta.env.VITE_ENABLE_LAB_TOOLS': JSON.stringify('true'),
   },
 });
