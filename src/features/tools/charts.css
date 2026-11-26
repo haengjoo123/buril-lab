@@ -283,12 +283,14 @@
   border-radius: 0 4px 4px 0;
   background: var(--chart-1);
 }
-.tool-chart-bar-track[data-muted] > i {
-  background: var(--chart-other);
-}
 .tool-chart-bar-track[data-negative] > i {
   border-radius: 4px 0 0 4px;
   background: var(--chart-negative);
+}
+/* A row that recedes stays grey on either side of zero; the side still tells
+   the sign. */
+.tool-chart-bar-track[data-muted] > i {
+  background: var(--chart-other);
 }
 .tool-chart-bar-track > b {
   position: absolute;
@@ -302,13 +304,16 @@
   border-radius: 4px;
 }
 @media (max-width: 480px) {
-  /* The bar drops under the name where the row is narrow. */
+  /* Where the row is narrow each bar drops under its own name, with the
+     figure beside the name: the bar takes a full row and dense packing lets
+     the figure fill the cell left beside the name above it. */
   .tool-chart-bars {
     grid-template-columns: minmax(0, 1fr) max-content;
+    grid-auto-flow: row dense;
   }
   .tool-chart-bars > .tool-chart-bar-track {
     grid-column: 1 / -1;
-    order: 1;
+    margin-bottom: 8px;
   }
   .tool-chart-bars[data-rows] {
     row-gap: 4px;
@@ -343,6 +348,12 @@
   fill: var(--chart-ink);
   font-size: 12px;
   font-weight: 600;
+  /* A halo in the surface colour keeps a label readable where it crosses a
+     line or a rule. */
+  paint-order: stroke;
+  stroke: var(--chart-surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 .tool-chart-grid {
   stroke: var(--chart-grid);

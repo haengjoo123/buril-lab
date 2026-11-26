@@ -336,6 +336,8 @@ export function Plot({
   marks = [],
   yDomain,
   xDomain,
+  yTicks: givenYTicks,
+  xTicks: givenXTicks,
   zeroBased = false,
 }: {
   series: Series[];
@@ -350,6 +352,13 @@ export function Plot({
   marks?: { x: number; y: number; label: string; slot?: Slot }[];
   yDomain?: [number, number];
   xDomain?: [number, number];
+  /**
+   * Tick positions to use instead of round ones: for an axis that plots a
+   * transformed value (a logarithm), where round positions are not round
+   * values. They must enclose the data.
+   */
+  yTicks?: number[];
+  xTicks?: number[];
   /** Start the y axis at zero (magnitudes); off for values far from zero. */
   zeroBased?: boolean;
 }) {
@@ -370,23 +379,34 @@ export function Plot({
       ...rules.filter((r) => r.axis === "y").map((r) => r.at),
       ...(zeroBased ? [0] : []),
     ];
-  const yTicks = niceTicks(
-      yDomain?.[0] ?? Math.min(...ys),
-      yDomain?.[1] ?? Math.max(...ys)
-    ),
-    xTicks = niceTicks(
-      xDomain?.[0] ?? Math.min(...xs),
-      xDomain?.[1] ?? Math.max(...xs),
-      width < 420 ? 4 : 6
-    );
+  const yTicks =
+      givenYTicks && givenYTicks.length >= 2
+        ? givenYTicks
+        : niceTicks(
+            yDomain?.[0] ?? Math.min(...ys),
+            yDomain?.[1] ?? Math.max(...ys)
+          ),
+    xTicks =
+      givenXTicks && givenXTicks.length >= 2
+        ? givenXTicks
+        : niceTicks(
+            xDomain?.[0] ?? Math.min(...xs),
+            xDomain?.[1] ?? Math.max(...xs),
+            width < 420 ? 4 : 6
+          );
   const x0 = xDomain?.[0] ?? Math.min(...xs, xTicks[0]),
     x1 = xDomain?.[1] ?? Math.max(...xs, xTicks[xTicks.length - 1]),
-    y0 = yTicks[0],
-    y1 = yTicks[yTicks.length - 1];
+    // Round ticks enclose the data by construction; given ones might not.
+    explicit = !!givenYTicks && givenYTicks.length >= 2,
+    y0 = explicit ? Math.min(yTicks[0], ...ys) : yTicks[0],
+    y1 = explicit
+      ? Math.max(yTicks[yTicks.length - 1], ...ys)
+      : yTicks[yTicks.length - 1];
   const margin = {
       left: 12 + Math.max(...yTicks.map((tick) => yText(tick).length)) * 6.5,
       right: 16,
-      top: 14,
+      // The y title sits above the plot, clear of the top tick's figure.
+      top: yTitle ? 28 : 14,
       bottom: xTitle ? 42 : 26,
     },
     px = scale(x0, x1, margin.left, width - margin.right),
@@ -406,7 +426,15 @@ export function Plot({
                 points.map((p) => p.x),
                 stops[hover]
               );
-            return at < 0 ? null : { s, index, point: points[at] };
+            return at < 0
+              ? null
+              : {
+                  s,
+                  index,
+                  point: points[at],
+                  // Replicates share an x: all of them are read out.
+                  same: points.filter((p) => p.x === points[at].x),
+                };
           })
           .filter((row): row is NonNullable<typeof row> => !!row);
   const slotOf = (s: { slot?: Slot }, index: number) =>
@@ -448,7 +476,9 @@ export function Plot({
         {yTicks.map((tick) => (
           <g key={`y-${tick}`}>
             <line
-              className={tick === y0 ? "tool-chart-baseline" : "tool-chart-grid"}
+              className={
+                tick === yTicks[0] ? "tool-chart-baseline" : "tool-chart-grid"
+              }
               x1={margin.left}
               x2={width - margin.right}
               y1={py(tick)}
@@ -587,15 +617,17 @@ export function Plot({
             y2={height - margin.bottom}
           />
         )}
-        {readout?.map(({ s, index, point }) => (
-          <circle
-            key={`hover-${s.name}`}
-            className={`tool-chart-dot tool-chart-fill-${slotOf(s, index)}`}
-            cx={px(point.x)}
-            cy={py(point.y)}
-            r={5}
-          />
-        ))}
+        {readout?.map(({ s, index, same }) =>
+          same.map((point, order) => (
+            <circle
+              key={`hover-${s.name}-${order}`}
+              className={`tool-chart-dot tool-chart-fill-${slotOf(s, index)}`}
+              cx={px(point.x)}
+              cy={py(point.y)}
+              r={5}
+            />
+          ))
+        )}
         {marks.map((mark, index) => {
           const cx = px(mark.x),
             cy = py(mark.y),
@@ -633,10 +665,16 @@ export function Plot({
             {xTitle ? `${xTitle} ` : ""}
             {xText(stops[hover])}
           </em>
-          {readout.map(({ s, index, point }) => (
+          {readout.map(({ s, index, same }) => (
             <span key={s.name}>
               <i className={`tool-chart-fill-${slotOf(s, index)}`} />
-              <b>{yText(point.y)}</b>
+              <b>
+                {same
+                  .slice(0, 6)
+                  .map((point) => yText(point.y))
+                  .join(", ")}
+                {same.length > 6 && " …"}
+              </b>
               {series.length > 1 && s.name}
             </span>
           ))}

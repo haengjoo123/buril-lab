@@ -24,6 +24,32 @@ export function niceTicks(min: number, max: number, target = 5): number[] {
     ticks.push(Number((first + i * step).toPrecision(12)));
   return ticks;
 }
+/**
+ * Tick values for a logarithmic axis covering [min, max] (both positive):
+ * 1, 2 and 5 × 10ⁿ, thinned to whole decades when there would be more than
+ * `limit`. The first and last tick enclose the data. Values are in the data's
+ * own units; the caller places them at their logarithm.
+ */
+export function logTicks(min: number, max: number, limit = 8): number[] {
+  if (!(min > 0) || !(max > 0) || !Number.isFinite(min) || !Number.isFinite(max))
+    return [];
+  if (min > max) [min, max] = [max, min];
+  const from = Math.floor(Math.log10(min)),
+    to = Math.ceil(Math.log10(max));
+  const within = (steps: number[]) => {
+    const all: number[] = [];
+    for (let power = from; power <= to; power++)
+      for (const step of steps)
+        all.push(Number((step * 10 ** power).toPrecision(12)));
+    // Keep the last tick at or below the minimum and the first at or above
+    // the maximum, and everything between.
+    const low = all.filter((tick) => tick <= min).pop() ?? all[0],
+      high = all.find((tick) => tick >= max) ?? all[all.length - 1];
+    return all.filter((tick) => tick >= low && tick <= high);
+  };
+  const fine = within([1, 2, 5]);
+  return fine.length <= limit ? fine : within([1]);
+}
 /** Maps a value in [d0, d1] to [r0, r1]; a flat domain maps to the middle. */
 export function scale(d0: number, d1: number, r0: number, r1: number) {
   return (value: number) =>
@@ -70,7 +96,9 @@ export function heatStep(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return null;
   if (max === min) return Math.floor(HEAT_STEPS / 2);
   const t = Math.min(1, Math.max(0, (value - min) / (max - min)));
-  return Math.min(HEAT_STEPS - 1, Math.floor(t * HEAT_STEPS));
+  // An evenly spaced series lands exactly on step boundaries; the nudge keeps
+  // floating-point residue (1.9999999999999998) from dropping it a step.
+  return Math.min(HEAT_STEPS - 1, Math.floor(t * HEAT_STEPS + 1e-9));
 }
 /** Index of the point whose x is nearest to `x`. */
 export function nearestIndex(xs: readonly number[], x: number) {

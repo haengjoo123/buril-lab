@@ -304,11 +304,23 @@ const errorTranslations: Record<string, string> = {
   "Standards do not describe an increasing Hill curve":
     "증가형 Hill에 맞는 표준값이 아닙니다. 표준값과 모델을 확인하세요.",
   "Unidentifiable Hill fit": "Hill 매개변수를 결정할 수 없습니다.",
+  "Standards do not describe a decreasing Hill curve":
+    "감소형 Hill에 맞는 표준값이 아닙니다. 표준값과 모델을 확인하세요.",
+  "Unknown fit model":
+    "이 버전이 지원하지 않는 적합 모델입니다. 앱을 최신 버전으로 업데이트하세요.",
+  "Sample rows need a value, or a name and a value":
+    "시료는 한 줄에 Y값 하나, 또는 이름과 Y값 두 열로 입력하세요.",
   "Target must exceed starting density":
     "목표 밀도는 현재 밀도보다 높아야 합니다.",
   "Negative medium volume": "필요 원액이 최종 배양 부피를 초과합니다.",
   "Above 100% confluence": "예상 confluence가 100%를 초과합니다.",
   "Above maximum density": "예상 밀도가 최대 밀도를 초과합니다.",
+  "Confluence cannot exceed 100%": "Confluence는 100%를 넘을 수 없습니다.",
+  "Density cannot exceed the maximum density":
+    "목표 농도가 세포주 설정의 최대 밀도보다 높습니다.",
+  "Passage number must be a whole number from 0 to 9999":
+    "계대 번호는 0 이상 9999 이하의 정수로 입력하세요.",
+  "Enter a valid date and time": "날짜와 시각을 확인하세요.",
   "Notification permission denied": "알림 권한이 허용되지 않았습니다.",
   "Enable exact alarms in system settings":
     "시스템 설정에서 정확한 알람을 허용하세요.",
@@ -329,9 +341,19 @@ const errorTranslations: Record<string, string> = {
   "Only UTC date-time ICS values are supported":
     "ICS는 UTC 날짜·시각 형식을 지원합니다.",
   "Exactly two columns required": "X와 Y, 두 열을 입력하세요.",
+  "Unknown element symbol":
+    "알 수 없는 원소 기호입니다. 대소문자를 확인하세요.",
+  "Unbalanced brackets in formula": "괄호의 짝이 맞지 않습니다.",
+  "Unexpected character in formula": "화학식에 쓸 수 없는 문자가 있습니다.",
+  "Incomplete formula": "화학식이 완성되지 않았습니다.",
+  "Formula count must be greater than zero": "개수는 0보다 커야 합니다.",
   "PNG/JPEG, maximum 20 MB": "PNG/JPEG, 최대 20 MB 이미지를 선택하세요.",
   "Could not create the image": "이미지를 만들지 못했습니다.",
   "Maximum 40 megapixels": "최대 4000만 화소 이미지를 선택하세요.",
+  "Replicates must be a whole number of 1 or more":
+    "반복 수는 1 이상의 정수로 입력하세요.",
+  "Start number must be a whole number of 0 or more":
+    "시작 번호는 0 이상의 정수로 입력하세요.",
 };
 export function ErrorMessage({ message }: { message: string }) {
   const t = useText();

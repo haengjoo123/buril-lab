@@ -253,6 +253,55 @@ describe("tool notification plan", () => {
     expect(atStart.map((item) => [item.at, item.body])).toEqual([
       [start, "일정 시작"],
     ]);
+    // A whole-day event starts at its first midnight. It may remind after
+    // that ("09:00 on the day" is a lead of −540 minutes), and the alert says
+    // which day it is instead of counting down to midnight.
+    const midnight = +new Date("2026-11-12T00:00:00+09:00");
+    const wholeDay = (reminderMinutes: number, from: number) =>
+      planToolNotifications(
+        [
+          doc("calendar", {
+            events: [
+              {
+                ...event,
+                allDay: true,
+                start: new Date(midnight).toISOString(),
+                end: new Date(midnight + DAY).toISOString(),
+                reminderMinutes,
+              },
+            ],
+          }),
+        ],
+        enabled,
+        from,
+        labels,
+        "Asia/Seoul"
+      ).map((item) => [item.at, item.body]);
+    expect(wholeDay(-540, midnight - DAY)).toEqual([
+      [midnight + 9 * HOUR, "오늘 종일 일정"],
+    ]);
+    // Still ahead at 08:00 on the day, although the event has begun.
+    expect(wholeDay(-540, midnight + 8 * HOUR)).toEqual([
+      [midnight + 9 * HOUR, "오늘 종일 일정"],
+    ]);
+    expect(wholeDay(-540, midnight + 9 * HOUR)).toEqual([]);
+    expect(wholeDay(0, midnight - DAY)).toEqual([[midnight, "오늘 종일 일정"]]);
+    expect(wholeDay(360, midnight - DAY)).toEqual([
+      [midnight - 6 * HOUR, "내일 종일 일정"],
+    ]);
+    expect(wholeDay(2340, midnight - 3 * DAY)).toEqual([
+      [midnight - 39 * HOUR, "2일 뒤 종일 일정"],
+    ]);
+    // A timed event never reminds after its start, whatever was stored.
+    expect(
+      planToolNotifications(
+        [doc("calendar", { events: [{ ...event, reminderMinutes: -30 }] })],
+        enabled,
+        start - DAY,
+        labels,
+        "Asia/Seoul"
+      ).map((item) => item.at)
+    ).toEqual([start]);
     // An event that ends before it starts is the editor's to report.
     expect(
       planToolNotifications(
@@ -353,6 +402,22 @@ describe("tool notification plan", () => {
         labels
       )[0].path
     ).toBe("/app/tools/cell-culture");
+    // The alert is named after the cell line the timer was started for,
+    // then the culture's own name, before the saved work's title.
+    const titled = (data: Record<string, unknown>) =>
+      planToolNotifications(
+        [doc("cell-culture", data, { id: "hela", title: "Passage log" })],
+        new Set(["t"]),
+        local(10, 12),
+        labels
+      )[0].title;
+    expect(
+      titled({ name: "HEK293", timer: { id: "t", end, name: "HeLa" } })
+    ).toBe("HeLa");
+    expect(titled({ name: "HEK293", timer: { id: "t", end } })).toBe("HEK293");
+    expect(titled({ name: "  ", timer: { id: "t", end, name: "" } })).toBe(
+      "Passage log"
+    );
     // No timer set, or one that is not switched on for this device.
     expect(
       planToolNotifications(

@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   foldParts,
   heatStep,
+  logTicks,
   nearestIndex,
   niceTicks,
   scale,
@@ -28,6 +29,17 @@ describe("chart scales", () => {
     // A single value still gets an axis around it.
     expect(niceTicks(5, 5)).toEqual([2, 3, 4, 5, 6, 7, 8]);
     expect(niceTicks(0, 0)).toEqual([-1, -0.5, 0, 0.5, 1]);
+  });
+  it("chooses 1-2-5 ticks for a log axis and thins a wide range to decades", () => {
+    // 100–1000 bp: every 1-2-5 value from the data's lowest to its highest.
+    expect(logTicks(100, 1000)).toEqual([100, 200, 500, 1000]);
+    // The ticks enclose values that are not round themselves.
+    expect(logTicks(223, 800)).toEqual([200, 500, 1000]);
+    expect(logTicks(0.15, 0.9)).toEqual([0.1, 0.2, 0.5, 1]);
+    // Six decades would be nineteen 1-2-5 ticks: decades only.
+    expect(logTicks(1, 1e6)).toEqual([1, 10, 100, 1e3, 1e4, 1e5, 1e6]);
+    expect(logTicks(0, 10)).toEqual([]);
+    expect(logTicks(-1, 10)).toEqual([]);
   });
   it("maps values linearly and centres a flat domain", () => {
     const px = scale(0, 10, 100, 300);
@@ -70,6 +82,11 @@ describe("chart scales", () => {
     expect(heatStep(999, 0, 70)).toBe(6);
     expect(heatStep(4, 4, 4)).toBe(3);
     expect(heatStep(NaN, 0, 1)).toBeNull();
+    // Eight evenly spaced values over seven steps: each boundary value goes
+    // up a step, whatever residue the division leaves.
+    expect(
+      Array.from({ length: 8 }, (_, i) => heatStep(0.1 + i * 0.3, 0.1, 2.2))
+    ).toEqual([0, 1, 2, 3, 4, 5, 6, 6]);
   });
   it("finds the nearest stop", () => {
     expect(nearestIndex([0, 10, 20], 14)).toBe(1);

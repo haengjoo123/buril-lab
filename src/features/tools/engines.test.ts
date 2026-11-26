@@ -187,7 +187,8 @@ describe("calibration models", () => {
         ],
         "linear"
       )
-    ).toThrow("Duplicate");
+      // Two measurements of one x are replicates now, but still one x.
+    ).toThrow("At least 2 distinct");
     expect(() =>
       fitCalibration(
         [

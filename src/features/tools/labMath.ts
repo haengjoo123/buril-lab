@@ -77,10 +77,9 @@ export function seeding(
   vessels: Vessel[]
 ) {
   positive(concentration, availableVolume);
-  positive(
-    profile.doublingHours,
-    profile.kind === "adherent" ? profile.density : profile.maxDensity
-  );
+  // The doubling time plays no part in seeding, so an empty one does not
+  // stop it; only the density this culture type uses is required.
+  positive(profile.kind === "adherent" ? profile.density : profile.maxDensity);
   let stockTotal = 0;
   const rows = vessels.map((v) => {
     positive(v.volume, v.count, v.target);
@@ -161,9 +160,18 @@ export function cellCount(
     throw Error("Invalid counts");
   const l = live.reduce((s, n) => s + n, 0),
     d = dead.reduce((s, n) => s + n, 0);
+  // Cells per mL of the undiluted suspension: the mean count of one square,
+  // over the volume above that square, times the dilution.
+  const perMl = (count: number) =>
+    (count / live.length / volumeMl) * dilutionFactor;
   return {
-    concentration: (l / live.length / volumeMl) * dilutionFactor,
+    /** Viable (live) cells per mL. */
+    concentration: perMl(l),
     viability: l + d ? (100 * l) / (l + d) : null,
     total: l + d,
+    live: l,
+    dead: d,
+    deadConcentration: perMl(d),
+    totalConcentration: perMl(l + d),
   };
 }

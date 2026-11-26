@@ -71,7 +71,7 @@ export const tools = [
     en: "Plate Labelling",
     descKo: "시료와 실험 조건 배치",
     descEn: "Samples and conditions",
-    keywords: ["96", "384", "웰", "well", "플레이트 맵", "plate map", "배치"],
+    keywords: ["96", "384", "웰", "well", "플레이트 맵", "plate map", "배치", "plate layout", "희석 계열", "serial dilution", "표준", "standard", "블랭크", "blank", "반복", "replicate"],
   },
   {
     id: "gel-blot",
@@ -81,7 +81,19 @@ export const tools = [
     en: "Gel / Blot",
     descKo: "Lane, band, ladder 주석",
     descEn: "Lane, band and ladder annotation",
-    keywords: ["전기영동", "웨스턴", "western", "밴드", "레인", "electrophoresis"],
+    keywords: [
+      "전기영동",
+      "웨스턴",
+      "western",
+      "밴드",
+      "레인",
+      "electrophoresis",
+      "밴드 크기",
+      "크기 추정",
+      "band size",
+      "bp",
+      "kDa",
+    ],
   },
   {
     id: "image-measurer",
@@ -91,7 +103,20 @@ export const tools = [
     en: "Image Measurer",
     descKo: "스케일과 길이 · 면적",
     descEn: "Calibrated length and area",
-    keywords: ["길이", "면적", "스케일 바", "scale bar", "현미경", "microscope"],
+    keywords: [
+      "길이",
+      "면적",
+      "스케일 바",
+      "scale bar",
+      "현미경",
+      "microscope",
+      "각도",
+      "angle",
+      "점 계수",
+      "개수 세기",
+      "count",
+      "표준편차",
+    ],
   },
   {
     id: "cell-culture",
@@ -101,7 +126,7 @@ export const tools = [
     en: "Cell Culture",
     descKo: "분주 · 성장 예측 · 계대 기록",
     descEn: "Seeding, growth and passages",
-    keywords: ["계대", "passage", "seeding", "confluence", "배가", "doubling", "split"],
+    keywords: ["계대", "passage", "seeding", "confluence", "배가", "doubling", "split", "성장 곡선", "growth curve", "배양 용기", "플라스크", "flask", "T75"],
   },
   {
     id: "cell-counter",
@@ -111,7 +136,7 @@ export const tools = [
     en: "Cell Counter",
     descKo: "수동 계수와 생존율",
     descEn: "Manual counts and viability",
-    keywords: ["혈구계", "혈구계산판", "hemocytometer", "Neubauer", "트리판", "trypan", "생존율", "viability"],
+    keywords: ["혈구계", "혈구계산판", "계수판", "hemocytometer", "Neubauer", "Bürker", "Fuchs-Rosenthal", "트리판", "trypan", "생존율", "viability", "세포 수", "cell count"],
   },
   // The two tools below are newer than the server's first list of tool ids.
   // They are `quick` (device-only, nothing sent) until the migration that adds
@@ -214,7 +239,7 @@ export const tools = [
     en: "Calibration Curve",
     descKo: "선형 · 지수 · Hill",
     descEn: "Linear, exponential and Hill",
-    keywords: ["표준곡선", "검정곡선", "standard curve", "회귀", "regression", "BCA", "Bradford", "ELISA"],
+    keywords: ["표준곡선", "검정곡선", "standard curve", "회귀", "regression", "BCA", "Bradford", "ELISA", "4PL", "IC50", "EC50", "잔차", "residual", "반복 측정", "replicate", "외삽"],
   },
   {
     id: "notes",
@@ -224,7 +249,7 @@ export const tools = [
     en: "Notes",
     descKo: "실험 메모와 문서 연결",
     descEn: "Notes and document links",
-    keywords: ["메모", "memo", "기록", "태그", "tag"],
+    keywords: ["메모", "memo", "기록", "태그", "tag", "실험 노트", "notebook"],
   },
   {
     id: "calendar",
@@ -234,7 +259,7 @@ export const tools = [
     en: "Calendar",
     descKo: "반복 일정과 ICS",
     descEn: "Recurring events and ICS",
-    keywords: ["일정", "schedule", "예약", "달력"],
+    keywords: ["일정", "schedule", "예약", "달력", "종일", "all-day", "반복", "iCal", "ics"],
   },
   {
     id: "amino-acids",
@@ -244,7 +269,7 @@ export const tools = [
     en: "Amino Acids",
     descKo: "표준 아미노산 참고 자료",
     descEn: "Standard amino acids",
-    keywords: ["pKa", "pI", "잔기", "residue", "단백질", "protein"],
+    keywords: ["pKa", "pI", "등전점", "잔기", "residue", "소수성", "hydropathy", "단백질", "protein"],
   },
   {
     id: "codons",
@@ -254,7 +279,7 @@ export const tools = [
     en: "Codon Wheel / Table",
     descKo: "표준 유전암호",
     descEn: "Standard genetic code",
-    keywords: ["유전암호", "genetic code", "번역", "translation", "DNA", "RNA", "서열"],
+    keywords: ["유전암호", "genetic code", "번역", "translation", "읽기틀", "reading frame", "역상보", "reverse complement", "DNA", "RNA", "서열"],
   },
   {
     id: "ladders",
@@ -264,7 +289,7 @@ export const tools = [
     en: "Ladders",
     descKo: "사용자 정의 band 자료",
     descEn: "Custom band references",
-    keywords: ["마커", "marker", "size standard", "bp", "kDa", "밴드"],
+    keywords: ["마커", "marker", "size standard", "bp", "kb", "kDa", "밴드", "사이즈 마커", "DNA ladder", "protein ladder"],
   },
   {
     id: "periodic-table",
@@ -274,7 +299,7 @@ export const tools = [
     en: "Periodic Table",
     descKo: "원소 검색과 기본 정보",
     descEn: "Elements and properties",
-    keywords: ["원소", "element", "원자량", "atomic mass", "화학식"],
+    keywords: ["원소", "element", "원자량", "atomic mass", "화학식", "formula", "분자량", "molecular weight", "전기음성도"],
   },
 ] as const satisfies readonly ToolMeta[];
 export type ToolId = (typeof tools)[number]["id"];

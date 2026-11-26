@@ -314,7 +314,7 @@ export default function TimerTool({
         const timer =
           row.doc.tool_id === "cell-culture" && !row.doc.deleted_at
             ? (row.doc.data.timer as
-                | { id?: unknown; end?: unknown }
+                | { id?: unknown; end?: unknown; name?: unknown }
                 | null
                 | undefined)
             : null;
@@ -329,9 +329,15 @@ export default function TimerTool({
             id: timer.id,
             // The draft's own title was written in whichever language was in
             // use when it was first opened.
-            name: row.draft
-              ? t(culture?.ko ?? "세포 배양", culture?.en ?? "Cell Culture")
-              : row.doc.title,
+            // The cell line it was started for, then the culture's name.
+            name:
+              [timer.name, row.doc.data.name].find(
+                (name): name is string =>
+                  typeof name === "string" && !!name.trim()
+              ) ??
+              (row.draft
+                ? t(culture?.ko ?? "세포 배양", culture?.en ?? "Cell Culture")
+                : row.doc.title),
             color: "#0d9488",
             duration: 0,
             remaining: 0,

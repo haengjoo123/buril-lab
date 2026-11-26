@@ -10,6 +10,26 @@ https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/L-Alanine/property/Molec
 https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/5950/PNG?record_type=2d&image_size=large
 L forms except achiral glycine. Depictions are not pH-specific protonation predictions.
 
+Amino-acid pKa (alpha-COOH, alpha-NH3+, side chain) and pI of the free amino acids:
+OpenStax, Organic Chemistry (J. McMurry), Table 26.1 "The 20 Common Amino Acids in Proteins",
+read 2026-11-27. Values are as printed in that table; for isoleucine and tryptophan the printed
+pI is not the mean of the two printed pKa values.
+https://openstax.org/books/organic-chemistry/pages/26-1-structures-of-amino-acids
+The book is published under the Creative Commons Attribution-NonCommercial-ShareAlike License.
+Only the numeric values are taken, with this attribution; no text or figure is reproduced.
+
+Amino-acid residue masses (average mass; the free amino acid less H2O):
+Expasy FindMod, "Mass values used", section 2 "Amino acids", read 2026-11-27.
+https://web.expasy.org/findmod/findmod_masses.html
+
+Amino-acid hydropathy index: Kyte J., Doolittle R.F., J. Mol. Biol. 157:105-132 (1982),
+as listed by Expasy ProtScale ("Hydropathicity"), read 2026-11-27.
+https://web.expasy.org/protscale/pscale/Hphob.Doolittle.html
+
+Periodic table group and period numbers are derived from the atomic number (18-column layout);
+they are not PubChem columns. The lanthanides and actinides are shown without a group number.
+Molecular weights of formulas are sums of the PubChem atomic weights above.
+
 timezones.json: generated with @touch4it/ical-timezones 1.9.0 (ISC).
 Source: https://github.com/touch4it/ical-timezones
 Regenerate: node scripts/generate-tool-timezones.mjs

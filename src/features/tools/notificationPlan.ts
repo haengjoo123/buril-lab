@@ -36,6 +36,11 @@ export interface PlanLabels {
   culture: string;
   /** A calendar reminder `minutes` before the event starts (0: at the start). */
   event: (minutes: number) => string;
+  /**
+   * A whole-day event's reminder, `minutes` before its first midnight;
+   * negative when it reminds during the day itself.
+   */
+  allDay: (minutes: number) => string;
 }
 
 /** A stored document as the repository holds it; only what the plan reads. */
@@ -78,6 +83,15 @@ export function planLabels(t: (ko: string, en: string) => string): PlanLabels {
       return whole > 0
         ? t(`일정 ${lead(whole)} 전`, `Event in ${lead(whole)}`)
         : t("일정 시작", "Event starting");
+    },
+    // A whole day has no start worth counting down to: say which day it is.
+    allDay: (minutes) => {
+      const days = Math.ceil(Math.round(minutes) / 1440);
+      return days <= 0
+        ? t("오늘 종일 일정", "All-day event today")
+        : days === 1
+        ? t("내일 종일 일정", "All-day event tomorrow")
+        : t(`${days}일 뒤 종일 일정`, `All-day event in ${days} days`);
     },
   };
 }
@@ -128,7 +142,11 @@ export function planToolNotifications(
         });
       }
     else if (doc.tool_id === "cell-culture") {
-      const timer = data.timer as { id?: unknown; end?: unknown } | null;
+      const timer = data.timer as {
+        id?: unknown;
+        end?: unknown;
+        name?: unknown;
+      } | null;
       if (
         timer &&
         typeof timer.id === "string" &&
@@ -138,7 +156,12 @@ export function planToolNotifications(
         add({
           key: `${timer.id}:${timer.end}`,
           source: timer.id,
-          title: named(doc.title, labels.culture),
+          // The cell line the timer was started for, then the culture's
+          // name, then the saved work's title.
+          title: named(
+            timer.name,
+            named(data.name, named(doc.title, labels.culture))
+          ),
           body: labels.culture,
           at: timer.end,
           tool: "cell-culture",
@@ -203,10 +226,16 @@ export function planToolNotifications(
           !(+new Date(event.end) > +new Date(event.start))
         )
           continue;
-        const minutes =
-          Number.isFinite(event.reminderMinutes) && event.reminderMinutes > 0
-            ? event.reminderMinutes
-            : 0;
+        // A whole-day event starts at midnight, so its reminder may come
+        // after the start: "09:00 on the day" is nine hours past it.
+        const minutes = !Number.isFinite(event.reminderMinutes)
+          ? 0
+          : event.allDay
+          ? Math.max(-1439, event.reminderMinutes)
+          : Math.max(0, event.reminderMinutes);
+        const text = event.allDay
+          ? labels.allDay(minutes)
+          : labels.event(minutes);
         const lead = Math.round(minutes * MINUTE);
         // The system can take over a series only when every later ring at the
         // same local time is one of its occurrences.
@@ -238,8 +267,8 @@ export function planToolNotifications(
             add({
               key: `${event.id}:${at}`,
               source: event.id,
-              title: named(event.title, labels.event(minutes)),
-              body: labels.event(minutes),
+              title: named(event.title, text),
+              body: text,
               at,
               tool: "calendar",
               path: "/app/tools/calendar",

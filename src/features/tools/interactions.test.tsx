@@ -337,12 +337,12 @@ describe("tool input workflows", () => {
     );
     await act(() =>
       element
-        .querySelector<HTMLButtonElement>('[aria-label="Remove chamber 2"]')!
+        .querySelector<HTMLButtonElement>('[aria-label="Remove square 2"]')!
         .click()
     );
     expect(getDoc().data.rows).toEqual([{ live: 90, dead: 10 }]);
     expect(
-      element.querySelector('[aria-label="Remove chamber 1"]')
+      element.querySelector('[aria-label="Remove square 1"]')
     ).toBeNull();
     await input(field(element, "Dilution factor"), "0");
     expect(element.querySelector("output")).toBeNull();
@@ -398,7 +398,7 @@ describe("tool input workflows", () => {
     await act(() => element.querySelector<HTMLButtonElement>('[aria-label="A1"]')!.click());
     await act(() => element.querySelector<HTMLButtonElement>('[aria-label="A2"]')!.click());
     await input(field(element, "Sample"), "Control");
-    await input(field(element, "Condition / concentration"), "Vehicle");
+    await input(field(element, "Condition"), "Vehicle");
     await act(() => button(element, "Apply to selected wells").click());
     const wells = getDoc().data.wells as Record<
       string,
@@ -423,14 +423,14 @@ describe("tool input workflows", () => {
     expect(field(element, "Sample").value).toBe("Drug X");
     await clickLabel("Copy content");
     await clickLabel("A2");
-    expect(element.querySelectorAll('.tool-plate [aria-pressed="true"]')).toHaveLength(1);
+    expect(element.querySelectorAll('.tool-plate [aria-selected="true"]')).toHaveLength(1);
     expect(field(element, "Sample").value).toBe("");
     await clickLabel("Paste");
     expect((getDoc().data.wells as Record<string, unknown>).A2).toBeUndefined();
     await act(() => button(element, "Apply to selected wells").click());
     expect((getDoc().data.wells as Record<string, unknown>).A2).toEqual(saved);
     await clickLabel("Select row B");
-    expect(element.querySelectorAll('.tool-plate [aria-pressed="true"]')).toHaveLength(6);
+    expect(element.querySelectorAll('.tool-plate [aria-selected="true"]')).toHaveLength(6);
     expect(element.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
   });
 
