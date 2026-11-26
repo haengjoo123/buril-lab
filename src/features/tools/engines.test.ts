@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
+import { tools } from "./registry";
+import { searchTools, touchRecent, mergeRecent } from "./catalog";
 import { evaluateExpression, parseExpression } from "./expression";
 import { convertUnit, convertCentrifuge } from "./units";
 import { dilution, molarity, seeding, growthHours, cellCount } from "./labMath";
@@ -421,5 +424,53 @@ describe("calendar interoperability", () => {
       "2026-11-01T14:00:00.000Z",
       "2026-11-02T14:00:00.000Z",
     ]);
+  });
+});
+describe("tool list search and recently used", () => {
+  const names = (query: string) => searchTools(query, tools).map((t) => t.id);
+  it("finds tools by keyword and abbreviation in either language", () => {
+    expect(names("RCF")).toEqual(["unit-converter"]);
+    expect(names("원심")).toEqual(["unit-converter"]);
+    expect(names("c1v1")).toEqual(["dilution"]);
+    expect(names("표준곡선")).toEqual(["calibration-curve"]);
+    expect(names("hemocytometer")).toEqual(["cell-counter"]);
+    expect(names("없는도구")).toEqual([]);
+    expect(names("  ")).toHaveLength(tools.length);
+  });
+  it("ranks a name match above a keyword or description match and ignores spaces", () => {
+    // "희석" names the dilution tool; other tools only mention it.
+    expect(names("희석")[0]).toBe("dilution");
+    expect(names("단위변환")).toEqual(["unit-converter"]);
+    expect(names("cell")[0]).toBe("cell-culture");
+  });
+  it("keeps the recently used list short, newest first, one entry per tool", () => {
+    const list = touchRecent(
+      touchRecent(touchRecent([], "timer", 1), "dilution", 2),
+      "timer",
+      3
+    );
+    expect(list).toEqual([
+      { id: "timer", at: 3 },
+      { id: "dilution", at: 2 },
+    ]);
+    expect(
+      mergeRecent(list, [
+        { id: "dilution", at: 9 },
+        { id: "notes", at: 1 },
+      ]).map((entry) => entry.id)
+    ).toEqual(["dilution", "timer", "notes"]);
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `t${i}`, at: i }));
+    expect(touchRecent(many, "x", 99)).toHaveLength(8);
+    expect(mergeRecent(undefined, "junk")).toEqual([]);
+  });
+  it("keeps every tool id the server accepts, and no other", () => {
+    const sql = readFileSync(
+      "supabase/migrations/20261109011725_personal_lab_tools.sql",
+      "utf8"
+    );
+    const allowed = [...sql.match(/tool_id in \(([^)]+)\)/)![1].matchAll(/'([^']+)'/g)]
+      .map((m) => m[1])
+      .sort();
+    expect(tools.map((tool) => tool.id).sort()).toEqual(allowed);
   });
 });

@@ -46,7 +46,8 @@ export default function CalculatorTool() {
     set({
       ...d,
       expression: answer,
-      history: [`${d.expression} = ${answer}`, ...d.history].slice(0, 100),
+      // Synced with the account, so kept short.
+      history: [`${d.expression} = ${answer}`, ...d.history].slice(0, 30),
     });
     cursor.current = { start: answer.length, end: answer.length };
   };

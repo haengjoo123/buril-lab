@@ -333,9 +333,7 @@ describe("sign-out", () => {
     await repo.create("notes", "Written offline", { body: "x" });
     const project = await repo.create("master-mix", "Mix", {}, { draft: true });
     await repo.update(project.id, { data: { count: 8 } });
-    // Scratch input of a tool that cannot save work, and tools merely opened.
-    const quick = await repo.create("dilution", "Dilution", {}, { draft: true });
-    await repo.update(quick.id, { data: { stock: "5" } });
+    // Tools that were merely opened have nothing to lose.
     await repo.create("plate-labelling", "Plate", {}, { draft: true });
     await repo.create("timer", "Timer", { _workspace: true }, { id: "w1" });
     await repo.create(

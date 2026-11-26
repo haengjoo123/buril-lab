@@ -1,6 +1,3 @@
-export { default as AminoTool } from "./AminoTool";
-export { default as CodonTool } from "./CodonTool";
-export { default as PeriodicTool } from "./PeriodicTool";
 import {
   useText,
   useToolData,
@@ -19,7 +16,7 @@ type Band = {
   color: string;
   highlight?: boolean;
 };
-export function LadderTool() {
+export default function LadderTool() {
   const t = useText(),
     [d, set] = useToolData({
       kind: "DNA",

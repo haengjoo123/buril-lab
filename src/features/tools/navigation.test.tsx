@@ -72,7 +72,7 @@ it("returns from a General tool to the selected General category", async () => {
       host
         .querySelector<HTMLAnchorElement>('a[href="/app/tools/timer"]')!
         .click();
-      await import("./TimeTools");
+      await import("./TimerTool");
     });
     const back = host.querySelector<HTMLAnchorElement>('a[aria-label="뒤로"]')!;
     expect(back.getAttribute("href")).toBe("/app/tools?category=General");

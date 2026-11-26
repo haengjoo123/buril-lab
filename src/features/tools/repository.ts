@@ -1,5 +1,6 @@
 import { supabase } from "../../services/supabaseClient";
 import { v5 } from "uuid";
+import { mergeRecent } from "./catalog";
 export const toolWorkspaceId = (owner: string, tool: string) =>
   v5(`burillab:tools:${owner}:${tool}`, v5.URL);
 import {
@@ -45,7 +46,7 @@ export function mergePreferences(
   local: Record<string, unknown>,
   remote: Record<string, unknown>
 ): Record<string, unknown> {
-  return {
+  const merged: Record<string, unknown> = {
     ...remote,
     ...local,
     _preferences: true,
@@ -53,6 +54,9 @@ export function mergePreferences(
       ...new Set([...strings(remote.favorites), ...strings(local.favorites)]),
     ],
   };
+  if ("recent" in local || "recent" in remote)
+    merged.recent = mergeRecent(local.recent, remote.recent);
+  return merged;
 }
 type Asset = {
   id: string;
@@ -287,6 +291,20 @@ export class ToolRepository {
     await this.persist(item);
     this.emit();
     void this.sync();
+  }
+  /**
+   * Removes a device-only draft for good. Only drafts: anything the server
+   * knows about is trashed through `update`, never dropped locally.
+   */
+  async discard(id: string) {
+    const item = this.items.find((row) => row.doc.id === id);
+    if (!item?.draft || this.closed) return;
+    this.items = this.items.filter((row) => row.doc.id !== id);
+    this.writes = this.writes
+      .catch(() => {})
+      .then(() => (this.closed ? undefined : dbWrite("documents", id)));
+    await this.writes;
+    this.emit();
   }
   async saveDraft(id: string, title: string) {
     const item = this.items.find((row) => row.doc.id === id);

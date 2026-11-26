@@ -5,7 +5,9 @@ import {
   type CultureProfile,
   type Vessel,
 } from "./labMath";
-import { DeviceToggle, clockText, useNow } from "./TimeTools";
+import DeviceToggle from "./DeviceToggle";
+import { clockText } from "./clock";
+import { useNow } from "./useNow";
 import { setDeviceEnabled } from "./notifications";
 import { enableNotifications } from "./notifications";
 import { useState } from "react";

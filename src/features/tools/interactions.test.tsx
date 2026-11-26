@@ -9,10 +9,12 @@ import Equation from "./EquationTool";
 import Plate from "./PlateTool";
 import UnitTool from "./UnitTool";
 import CounterTool from "./CounterTool";
-import { TimerTool } from "./TimeTools";
+import TimerTool from "./TimerTool";
 import CalibrationTool from "./CalibrationTool";
 import MolarityTool from "./MolarityTool";
-import { DilutionTool, MixTool, CellCounterTool } from "./CalculationTools";
+import DilutionTool from "./DilutionTool";
+import MixTool from "./MixTool";
+import CellCounterTool from "./CellCounterTool";
 import { searchChemical } from "../../services/searchService";
 vi.mock("../../services/searchService", () => ({ searchChemical: vi.fn() }));
 vi.mock("react-i18next", () => ({

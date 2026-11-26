@@ -1,7 +1,8 @@
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, vi } from "vitest";
 import { ToolContext, ErrorMessage, csv } from "./ui";
-import { tools, type ToolDocument } from "./registry";
+import { tools, type ToolDocument, type ToolId } from "./registry";
 import type { ToolRepository } from "./repository";
 import Equation from "./EquationTool";
 import Calibration from "./CalibrationTool";
@@ -9,25 +10,26 @@ import Culture from "./CultureTool";
 import ImageEditor from "./ImageTool";
 import Calendar from "./CalendarTool";
 import Plate from "./PlateTool";
+import DilutionTool from "./DilutionTool";
+import MolarityTool from "./MolarityTool";
+import MixTool from "./MixTool";
+import UnitTool from "./UnitTool";
+import CounterTool from "./CounterTool";
+import CellCounterTool from "./CellCounterTool";
+import AminoTool from "./AminoTool";
+import CodonTool from "./CodonTool";
+import PeriodicTool from "./PeriodicTool";
+import LadderTool from "./LadderTool";
+import TimerTool from "./TimerTool";
+import AlarmTool from "./AlarmTool";
+import NotesTool from "./NotesTool";
 import {
-  DilutionTool,
-  MolarityTool,
-  MixTool,
-  UnitTool,
-  CounterTool,
-  CellCounterTool,
-} from "./CalculationTools";
-import { AminoTool, CodonTool, PeriodicTool, LadderTool } from "./LibraryTools";
-import {
-  TimerTool,
-  AlarmTool,
-  NotesTool,
   elapsedTime,
   remainingTime,
   toggleClock,
   nextAlarm,
   type Clock,
-} from "./TimeTools";
+} from "./clock";
 import { codons, aminoAcids } from "./library";
 import { elementNamesKo } from "./elementNames";
 const locale = vi.hoisted(() => ({ language: "ko" }));
@@ -39,36 +41,38 @@ vi.mock("../../locales/i18n", () => ({
   default: { language: "ko", t: (s: string) => s },
 }));
 describe("tool screen coverage", () => {
-  const screens = [
-    <DilutionTool />,
-    <MolarityTool />,
-    <MixTool />,
-    <MixTool medium />,
-    <Plate />,
-    <ImageEditor gel />,
-    <ImageEditor />,
-    <Culture />,
-    <CellCounterTool />,
-    <TimerTool />,
-    <TimerTool stopwatch />,
-    <AlarmTool />,
-    <CounterTool />,
-    <Equation calculator />,
-    <UnitTool />,
-    <Equation />,
-    <Calibration />,
-    <NotesTool />,
-    <Calendar />,
-    <AminoTool />,
-    <CodonTool />,
-    <LadderTool />,
-    <PeriodicTool />,
-  ];
+  // Keyed by tool id, so adding or reordering tools in the registry cannot
+  // silently pair a tool with another tool's screen.
+  const screens: Record<ToolId, ReactElement> = {
+    dilution: <DilutionTool />,
+    molarity: <MolarityTool />,
+    "master-mix": <MixTool />,
+    "medium-buffer": <MixTool medium />,
+    "plate-labelling": <Plate />,
+    "gel-blot": <ImageEditor gel />,
+    "image-measurer": <ImageEditor />,
+    "cell-culture": <Culture />,
+    "cell-counter": <CellCounterTool />,
+    timer: <TimerTool />,
+    stopwatch: <TimerTool stopwatch />,
+    alarm: <AlarmTool />,
+    counter: <CounterTool />,
+    calculator: <Equation calculator />,
+    "unit-converter": <UnitTool />,
+    "custom-equation": <Equation />,
+    "calibration-curve": <Calibration />,
+    notes: <NotesTool />,
+    calendar: <Calendar />,
+    "amino-acids": <AminoTool />,
+    codons: <CodonTool />,
+    ladders: <LadderTool />,
+    "periodic-table": <PeriodicTool />,
+  };
   it.each(
     ["ko", "en"].flatMap((language) =>
-      tools.map((tool, i) => [tool[0], i, language] as const)
+      tools.map((tool) => [tool.id, language] as const)
     )
-  )("renders functional controls for %s (%s, %s)", (id, i, language) => {
+  )("renders functional controls for %s (%s)", (id, language) => {
     locale.language = language;
     const doc: ToolDocument = {
       id: "doc",
@@ -117,7 +121,7 @@ describe("tool screen coverage", () => {
     } as unknown as ToolRepository;
     const html = renderToStaticMarkup(
       <ToolContext.Provider value={{ doc, repo, documents: [] }}>
-        {screens[i]}
+        {screens[id]}
       </ToolContext.Provider>
     );
     expect(html.length).toBeGreaterThan(200);

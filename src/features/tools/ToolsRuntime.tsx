@@ -4,7 +4,7 @@ import { getToolRepository } from "./repository";
 import { deviceEnabled, scheduleToolNotifications } from "./notifications";
 import type { ToolNotification } from "./notifications";
 import type { Weekday } from "@capacitor/local-notifications";
-import { nextAlarm, type Alarm, type Clock } from "./TimeTools";
+import { nextAlarm, type Alarm, type Clock } from "./clock";
 import { occurrences, type CalendarEvent } from "./calendar";
 import { useText } from "./ui";
 import "./tools.css";

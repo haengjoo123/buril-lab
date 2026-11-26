@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, MemoryRouter, useLocation } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import '../../src/index.css';
 import '../../src/locales/i18n';
 import { AdaptiveViewportProvider } from '../../src/components/AdaptiveViewportProvider';
@@ -311,14 +311,13 @@ useFridgeStore.setState({
 
 // --- Lab tools (?screen=tools&path=/app/tools/timer) ----------------------------------------------
 // No session exists here, so the tool repository never reaches a server: documents live in this
-// browser profile's IndexedDB only. The key matches App so route changes remount the same way.
+// browser profile's IndexedDB only. Mounted as in App: one workspace per user, across tool routes.
 const ToolsWorkspace = lazy(() => import('../../src/features/tools/ToolsWorkspace'));
 const ToolsRuntime = lazy(() => import('../../src/features/tools/ToolsRuntime'));
 function ToolsScreen() {
-  const { pathname } = useLocation();
   return <Suspense fallback={null}>
     <ToolsRuntime ownerId="fixture-user" />
-    <ToolsWorkspace key={`fixture-user:${pathname}`} ownerId="fixture-user" />
+    <ToolsWorkspace key="fixture-user" ownerId="fixture-user" />
   </Suspense>;
 }
 
