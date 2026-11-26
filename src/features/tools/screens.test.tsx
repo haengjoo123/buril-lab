@@ -24,6 +24,7 @@ import {
   NotesTool,
   elapsedTime,
   remainingTime,
+  toggleClock,
   nextAlarm,
   type Clock,
 } from "./TimeTools";
@@ -146,6 +147,41 @@ describe("tool screen coverage", () => {
     expect(remainingTime(c, 35000)).toBe(30000);
     expect(remainingTime(c, 100000)).toBe(0);
     expect(elapsedTime(c, 35000)).toBe(31000);
+  });
+  it("restarts a finished countdown from its full duration, not the paused remainder", () => {
+    const idle: Clock = {
+      id: "1",
+      name: "Timer",
+      color: "#000",
+      duration: 300000,
+      remaining: 300000,
+      end: null,
+      running: false,
+      elapsed: 0,
+      started: null,
+    };
+    const press = (clock: Clock, at: number, stopwatch = false): Clock => ({
+      ...clock,
+      ...toggleClock(clock, at, stopwatch),
+    });
+    const paused = press(press(idle, 0), 180000);
+    expect(paused.running).toBe(false);
+    expect(paused.remaining).toBe(120000);
+    const resumed = press(paused, 200000);
+    expect(resumed.end).toBe(320000);
+    // It ran out at 320 s; the button now reads "Restart".
+    const restarted = press(resumed, 400000);
+    expect(restarted.running).toBe(true);
+    expect(restarted.end).toBe(700000);
+    expect(restarted.remaining).toBe(300000);
+    // A stopwatch has no duration to run out of: the same press pauses it.
+    const watch = press(
+      press({ ...idle, duration: 0, remaining: 0 }, 1000, true),
+      6000,
+      true
+    );
+    expect(watch.running).toBe(false);
+    expect(watch.elapsed).toBe(5000);
   });
   it("reschedules weekday alarms after the current occurrence", () => {
     const at = new Date(2026, 10, 9, 10, 0);

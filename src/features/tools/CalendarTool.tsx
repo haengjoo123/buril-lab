@@ -13,8 +13,109 @@ import {
   occurrences,
   exportICS,
   importICS,
+  mergeImported,
+  shiftAnchor,
 } from "./calendar";
 import { DeviceToggle, localDateInput } from "./TimeTools";
+const validTimezone = (timezone: string) => {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: timezone });
+    return timezone.trim() !== "";
+  } catch {
+    return false;
+  }
+};
+/**
+ * "Asia/Seoul" is only valid once it is complete, so the text being typed is
+ * kept here and the event is updated when it names a real timezone. Leaving the
+ * field with an invalid name restores the saved one.
+ */
+function TimezoneField({
+  label,
+  invalid,
+  timezone,
+  onCommit,
+}: {
+  label: string;
+  invalid: string;
+  timezone: string;
+  onCommit: (timezone: string) => void;
+}) {
+  const [text, setText] = useState(timezone);
+  const zones =
+    typeof Intl.supportedValuesOf === "function"
+      ? Intl.supportedValuesOf("timeZone")
+      : [];
+  return (
+    <label className="tool-field">
+      <span>{label}</span>
+      <input
+        type="text"
+        list="tool-calendar-timezones"
+        autoCapitalize="none"
+        spellCheck={false}
+        value={text}
+        aria-invalid={!validTimezone(text)}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (validTimezone(e.target.value)) onCommit(e.target.value);
+        }}
+        onBlur={() => {
+          if (!validTimezone(text)) setText(timezone);
+        }}
+      />
+      <datalist id="tool-calendar-timezones">
+        {zones.map((zone) => (
+          <option key={zone} value={zone} />
+        ))}
+      </datalist>
+      {!validTimezone(text) && (
+        <small className="tool-error" role="alert">
+          {invalid}
+        </small>
+      )}
+    </label>
+  );
+}
+/**
+ * A date-time field reports a change for every part typed, so excluding on
+ * change added one exclusion per keystroke. The value is collected here and
+ * added once, on request.
+ */
+function ExceptionField({
+  label,
+  add,
+  onAdd,
+}: {
+  label: string;
+  add: string;
+  onAdd: (at: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const at = value ? new Date(value) : null;
+  return (
+    <div className="tool-actions">
+      <label className="tool-field">
+        <span>{label}</span>
+        <input
+          type="datetime-local"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </label>
+      <button
+        disabled={!at || Number.isNaN(+at)}
+        onClick={() => {
+          if (!at || Number.isNaN(+at)) return;
+          onAdd(at.toISOString());
+          setValue("");
+        }}
+      >
+        {add}
+      </button>
+    </div>
+  );
+}
 export default function CalendarTool() {
   const t = useText();
   const [d, set] = useToolData<{ events: CalendarEvent[] }>({ events: [] });
@@ -50,12 +151,12 @@ export default function CalendarTool() {
             })}
           </h2>
           <button
-            onClick={() => {
-              const date = new Date(anchor);
-              if (view === "week") date.setDate(date.getDate() - 7);
-              else date.setMonth(date.getMonth() - 1);
-              setAnchor(date);
-            }}
+            aria-label={
+              view === "week"
+                ? t("이전 주", "Previous week")
+                : t("이전 달", "Previous month")
+            }
+            onClick={() => setAnchor(shiftAnchor(anchor, view, -1))}
           >
             ‹
           </button>
@@ -63,12 +164,12 @@ export default function CalendarTool() {
             {t("오늘", "Today")}
           </button>
           <button
-            onClick={() => {
-              const date = new Date(anchor);
-              if (view === "week") date.setDate(date.getDate() + 7);
-              else date.setMonth(date.getMonth() + 1);
-              setAnchor(date);
-            }}
+            aria-label={
+              view === "week"
+                ? t("다음 주", "Next week")
+                : t("다음 달", "Next month")
+            }
+            onClick={() => setAnchor(shiftAnchor(anchor, view, 1))}
           >
             ›
           </button>
@@ -185,14 +286,21 @@ export default function CalendarTool() {
               type="file"
               accept=".ics,text/calendar"
               onChange={async (e) => {
-                const file = e.target.files?.[0];
+                const input = e.target,
+                  file = input.files?.[0];
                 if (!file) return;
                 try {
                   const events = importICS(await file.text());
-                  set({ ...d, events: [...d.events, ...events] });
+                  set((old) => ({
+                    ...old,
+                    events: mergeImported(old.events, events),
+                  }));
                   setError("");
                 } catch (e) {
                   setError(String(e));
+                } finally {
+                  // Otherwise choosing the same file again fires no change.
+                  input.value = "";
                 }
               }}
             />
@@ -225,24 +333,15 @@ export default function CalendarTool() {
                 if (end) update({ end: new Date(end).toISOString() });
               }}
             />
-            <Field
-              type="text"
+            <TimezoneField
+              key={event.id}
               label={t("반복 기준 시간대 (IANA)", "Recurrence timezone (IANA)")}
-              value={event.timezone}
-              onChange={(timezone) => {
-                try {
-                  new Intl.DateTimeFormat("en", { timeZone: timezone });
-                  update({ timezone });
-                  setError("");
-                } catch {
-                  setError(
-                    t(
-                      "올바른 IANA 시간대를 입력하세요.",
-                      "Enter a valid IANA timezone."
-                    )
-                  );
-                }
-              }}
+              invalid={t(
+                "올바른 IANA 시간대를 입력하세요. 예: Asia/Seoul",
+                "Enter a valid IANA timezone, for example Asia/Seoul."
+              )}
+              timezone={event.timezone}
+              onCommit={(timezone) => update({ timezone })}
             />
             <Select
               label={t("반복", "Repeat")}
@@ -282,32 +381,22 @@ export default function CalendarTool() {
             />
           )}
           <DeviceToggle id={event.id} />
-          <label className="tool-field">
-            <span>
-              {t(
-                "제외할 발생 시각 (현재 기기 시간대)",
-                "Occurrence to exclude (device timezone)"
-              )}
-            </span>
-            <input
-              type="datetime-local"
-              onChange={(e) => {
-                if (e.target.value)
-                  update({
-                    exceptions: [
-                      ...new Set([
-                        ...event.exceptions,
-                        new Date(e.target.value).toISOString(),
-                      ]),
-                    ],
-                  });
-              }}
-            />
-          </label>
+          <ExceptionField
+            key={event.id}
+            label={t(
+              "제외할 발생 시각 (현재 기기 시간대)",
+              "Occurrence to exclude (device timezone)"
+            )}
+            add={t("제외 추가", "Add exclusion")}
+            onAdd={(at) =>
+              update({ exceptions: [...new Set([...event.exceptions, at])] })
+            }
+          />
           {event.exceptions.map((ex) => (
             <div key={ex}>
               {new Date(ex).toLocaleString(t("ko-KR", "en-US"))}{" "}
               <button
+                aria-label={t("제외 취소", "Remove exclusion")}
                 onClick={() =>
                   update({
                     exceptions: event.exceptions.filter((v) => v !== ex),

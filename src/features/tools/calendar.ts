@@ -1,3 +1,30 @@
+import { v5 } from "uuid";
+/**
+ * Moves the calendar by one week, or by one month for the month and list
+ * views. Months are stepped from the 1st: stepping from the 31st overflows
+ * into the month after next (31 January + 1 month is 3 March).
+ */
+export function shiftAnchor(anchor: Date, view: string, direction: 1 | -1) {
+  const date = new Date(anchor);
+  if (view === "week") date.setDate(date.getDate() + 7 * direction);
+  else {
+    date.setDate(1);
+    date.setMonth(date.getMonth() + direction);
+  }
+  return date;
+}
+/**
+ * A stable id for an imported event, so importing the same file again updates
+ * the events it brought in before instead of adding copies. Our own exports
+ * carry the event id in the UID; any other UID maps to the same id each time.
+ */
+function importedEventId(uid: string | undefined) {
+  if (!uid) return crypto.randomUUID();
+  const own = uid.match(
+    /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@burillab$/i
+  );
+  return own ? own[1].toLowerCase() : v5(`burillab:ics:${uid}`, v5.URL);
+}
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -144,7 +171,7 @@ export function importICS(text: string): CalendarEvent[] {
       end = parseDate(b.value, b.zone);
     if (new Date(end) <= new Date(start)) throw Error("Invalid event dates");
     events.push({
-      id: crypto.randomUUID(),
+      id: importedEventId(props.UID?.trim()),
       title: (props.SUMMARY ?? "Event")
         .replace(/\\n/g, "\n")
         .replace(/\\([,;\\])/g, "$1"),
@@ -160,6 +187,24 @@ export function importICS(text: string): CalendarEvent[] {
     });
   }
   return events;
+}
+/**
+ * Adds imported events to a calendar. An event that is already there (same id)
+ * is replaced in place and keeps its reminder lead time, which ICS does not
+ * carry.
+ */
+export function mergeImported(
+  current: CalendarEvent[],
+  imported: CalendarEvent[]
+): CalendarEvent[] {
+  const incoming = new Map(imported.map((event) => [event.id, event]));
+  const merged = current.map((event) => {
+    const next = incoming.get(event.id);
+    if (!next) return event;
+    incoming.delete(event.id);
+    return { ...next, reminderMinutes: event.reminderMinutes };
+  });
+  return [...merged, ...incoming.values()];
 }
 export function occurrences(
   event: CalendarEvent,

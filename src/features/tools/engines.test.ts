@@ -7,6 +7,8 @@ import { measure, colorFraction, colorCoverage } from "./geometry";
 import {
   exportICS,
   importICS,
+  mergeImported,
+  shiftAnchor,
   occurrences,
   type CalendarEvent,
 } from "./calendar";
@@ -280,6 +282,45 @@ describe("calendar interoperability", () => {
     expect(() =>
       importICS(ics.replace("FREQ=WEEKLY", "FREQ=WEEKLY;BYDAY=MO"))
     ).toThrow("Unsupported recurrence");
+  });
+  it("steps one month at a time from the last day of a month", () => {
+    expect(shiftAnchor(new Date(2026, 0, 31), "month", 1).getMonth()).toBe(1);
+    expect(shiftAnchor(new Date(2026, 2, 31), "month", -1).getMonth()).toBe(1);
+    expect(shiftAnchor(new Date(2026, 0, 31), "list", 1).getMonth()).toBe(1);
+    expect(shiftAnchor(new Date(2026, 11, 31), "month", 1).getFullYear()).toBe(
+      2027
+    );
+    const week = shiftAnchor(new Date(2026, 0, 31), "week", 1);
+    expect([week.getMonth(), week.getDate()]).toEqual([1, 7]);
+  });
+  it("updates events imported before instead of adding copies", async () => {
+    const own = {
+      ...event,
+      id: "0b0f5a52-3d3c-4d8e-9a58-0c2f1f7b9a11",
+      reminderMinutes: 15,
+    };
+    const ics = await exportICS([own]);
+    expect(importICS(ics)[0].id).toBe(own.id);
+    const merged = mergeImported(
+      [own],
+      importICS(ics.replace("SUMMARY:", "SUMMARY:Moved "))
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].title.startsWith("Moved ")).toBe(true);
+    // ICS carries no reminder lead time; the one set here survives.
+    expect(merged[0].reminderMinutes).toBe(15);
+    const foreign = ics.replace(
+      `UID:${own.id}@burillab`,
+      "UID:abc-123@example.org"
+    );
+    const [first] = importICS(foreign),
+      [again] = importICS(foreign);
+    expect(first.id).toBe(again.id);
+    expect(first.id).not.toBe(own.id);
+    expect(mergeImported([own], [first])).toHaveLength(2);
+    expect(mergeImported(mergeImported([own], [first]), [again])).toHaveLength(
+      2
+    );
   });
   it("keeps local meeting time across DST", () => {
     const e = {

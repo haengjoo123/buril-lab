@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- Time widgets share clock and notification primitives. */
 import { useContext, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ToolContext,
   Field,
@@ -30,6 +31,29 @@ export const elapsedTime = (clock: Clock, now: number) =>
   clock.elapsed + (clock.running && clock.started ? now - clock.started : 0);
 export const remainingTime = (clock: Clock, now: number) =>
   clock.running && clock.end ? Math.max(0, clock.end - now) : clock.remaining;
+/**
+ * What the start/pause button does to a clock. A countdown that has run out
+ * starts over from its full duration: `remaining` still holds whatever was
+ * left at the last resume, which is not what "restart" means.
+ */
+export function toggleClock(
+  clock: Clock,
+  now: number,
+  stopwatch: boolean
+): Partial<Clock> {
+  if (clock.running && (stopwatch || remainingTime(clock, now) > 0))
+    return {
+      running: false,
+      remaining: remainingTime(clock, now),
+      elapsed: elapsedTime(clock, now),
+      started: null,
+      end: null,
+    };
+  const from = clock.running
+    ? clock.duration
+    : clock.remaining || clock.duration;
+  return { running: true, started: now, end: now + from, remaining: from };
+}
 export function useNow() {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -253,24 +277,7 @@ export function TimerTool({ stopwatch = false }: { stopwatch?: boolean }) {
                     setPermissionError(String(e));
                   }
                 }
-                const time = Date.now();
-                update(
-                  c.id,
-                  c.running && (stopwatch || remainingTime(c, time) > 0)
-                    ? {
-                        running: false,
-                        remaining: remainingTime(c, time),
-                        elapsed: elapsedTime(c, time),
-                        started: null,
-                        end: null,
-                      }
-                    : {
-                        running: true,
-                        started: time,
-                        end: time + (c.remaining || c.duration),
-                        remaining: c.remaining || c.duration,
-                      }
-                );
+                update(c.id, toggleClock(c, Date.now(), stopwatch));
               }}
             >
               {!stopwatch && c.running && remainingTime(c, now) === 0
@@ -360,6 +367,10 @@ export function AlarmTool() {
             setPermissionError(String(e));
           }
           const id = crypto.randomUUID();
+          // On the minute: the field below shows no seconds, so an alarm left
+          // at its default must not ring partway through that minute.
+          const at = new Date(Date.now() + 3600000);
+          at.setSeconds(0, 0);
           set({
             ...d,
             alarms: [
@@ -367,7 +378,7 @@ export function AlarmTool() {
               {
                 id,
                 name: t("알람", "Alarm"),
-                at: new Date(Date.now() + 3600000).toISOString(),
+                at: at.toISOString(),
                 weekdays: [],
                 active: true,
               },
@@ -434,8 +445,15 @@ export function AlarmTool() {
           <DeviceToggle id={a.id} />
           <p className="tool-muted">
             {nextAlarm(a, now)
-              ? new Date(nextAlarm(a, now)!).toLocaleString(t("ko-KR", "en-US"))
-              : "—"}
+              ? `${t("다음 알림", "Next")}: ${new Date(
+                  nextAlarm(a, now)!
+                ).toLocaleString(t("ko-KR", "en-US"))}`
+              : !a.active
+              ? t("꺼져 있습니다.", "Turned off.")
+              : t(
+                  "지난 알람입니다. 시각을 바꾸거나 반복 요일을 고르면 다시 울립니다.",
+                  "This alarm has passed. Change the time or pick repeat days to use it again."
+                )}
           </p>
           <button
             onClick={() => {
@@ -455,6 +473,40 @@ export function AlarmTool() {
         )}
       </p>
     </>
+  );
+}
+/**
+ * A stored title may not be empty, but the field must be: selecting the text
+ * and typing a new title passes through "". The text being typed is kept here
+ * and only non-empty titles are saved; leaving the field empty restores the
+ * saved one.
+ */
+function NoteTitleField({
+  label,
+  title,
+  onCommit,
+}: {
+  label: string;
+  title: string;
+  onCommit: (title: string) => void;
+}) {
+  const [text, setText] = useState(title);
+  return (
+    <label className="tool-field">
+      <span>{label}</span>
+      <input
+        type="text"
+        maxLength={200}
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (e.target.value.trim()) onCommit(e.target.value.slice(0, 200));
+        }}
+        onBlur={() => {
+          if (!text.trim()) setText(title);
+        }}
+      />
+    </label>
   );
 }
 export function NotesTool() {
@@ -549,14 +601,11 @@ export function NotesTool() {
             <button className="tool-note-back" onClick={() => setActiveId("")}>
               {t("메모 목록", "Back to notes")}
             </button>
-            <Field
-              type="text"
+            <NoteTitleField
+              key={note.id}
               label={t("제목", "Title")}
-              value={note.title}
-              onChange={(title) => {
-                if (title.trim())
-                  void ctx.repo.update(note.id, { title: title.slice(0, 200) });
-              }}
+              title={note.title}
+              onCommit={(title) => void ctx.repo.update(note.id, { title })}
             />
             <Field
               type="text"
@@ -594,7 +643,10 @@ export function NotesTool() {
               return (
                 <div className="tool-actions" key={id}>
                   {doc ? (
-                    <a href={`/app/tools/${doc.tool_id}/${id}`}>{doc.title}</a>
+                    // A router link: a plain href reloads the whole app.
+                    <Link to={`/app/tools/${doc.tool_id}/${id}`}>
+                      {doc.title}
+                    </Link>
                   ) : (
                     <span>{t("삭제된 작업", "Deleted work")}</span>
                   )}
