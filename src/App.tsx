@@ -998,7 +998,7 @@ function App() {
       >
         <Suspense fallback={<TabContentFallback />}>
           {activeTab === 'tools' && user?.id && isLabToolsEnabled ? (
-            <ToolsWorkspace key={`${user.id}:${location.pathname}`} ownerId={user.id}/>
+            <ToolsWorkspace key={user.id} ownerId={user.id}/>
           ) : activeTab === 'cabinet' ? (
             <div className="h-full">
               {activeCabinetId ? (

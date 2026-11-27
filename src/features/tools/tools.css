@@ -274,20 +274,6 @@
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
 }
-.tool-notification {
-  position: fixed;
-  z-index: 90;
-  bottom: 24px;
-  right: 24px;
-  max-width: calc(100vw - 48px);
-  background: #1d4ed8;
-  color: white;
-  padding: 20px;
-  border-radius: 12px;
-}
-.tool-notification button {
-  margin-left: 12px;
-}
 .tools-workspace label:has(> input[type="checkbox"]) {
   display: inline-flex;
   align-items: center;
@@ -382,12 +368,6 @@
 }
 .tool-equation-layout .tool-result {
   font-size: 2.5rem;
-}
-.tool-notification button {
-  color: inherit;
-  border: 1px solid white;
-  padding: 4px 12px;
-  border-radius: 5px;
 }
 .tools-workspace a:not(.tool-button) {
   color: #2563eb;
@@ -513,9 +493,6 @@
 }
 .tool-image-stage {
   position: relative;
-}
-.tool-notification .tool-error {
-  color: white;
 }
 
 .tool-row-controls {
@@ -2968,3 +2945,2366 @@
 .tools-workspace .plate-editor .tool-actions { margin: 12px 0 0; gap: 8px; }
 .plate-editor-status:empty { display: none; }
 .plate-editor-status:not(:empty) { margin: 10px 0 0; font-size: 13px; }
+
+/* ---- Tool list: icons, favorites and recently used, empty states ---- */
+.tool-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.dark .tool-card-icon {
+  background: #172b4d;
+  color: #93c5fd;
+}
+.tool-quick {
+  margin: 0 0 16px;
+}
+.tool-quick h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--tool-muted, #64748b);
+}
+.tool-quick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tool-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 999px;
+  background: var(--tool-panel, #fff);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.tool-quick-chip:hover {
+  border-color: #60a5fa;
+}
+.tool-quick-chip > svg {
+  flex-shrink: 0;
+  color: #2563eb;
+}
+.dark .tool-quick-chip > svg {
+  color: #93c5fd;
+}
+.tool-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--tool-muted, #64748b);
+}
+.tool-empty-state strong {
+  font-size: 1rem;
+  color: var(--tool-fg, #0f172a);
+}
+.tool-empty-state p {
+  max-width: 420px;
+  margin: 0;
+  font-size: 0.875rem;
+}
+.tool-empty-state code {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 599px) {
+  /* The whole list body scrolls above the search dock, shortcuts included. */
+  .tools-catalog-page .tool-catalog-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 3px 3px calc(88px + env(safe-area-inset-bottom, 0px));
+    margin: -3px;
+    scroll-padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+  .tools-catalog-page .tool-catalog-body .tool-catalog {
+    flex: none;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+  }
+  /* One row that scrolls sideways keeps the tool grid in view. */
+  .tools-catalog-page .tool-quick-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+}
+
+/* ---- Saved work ---- */
+.tool-saved-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tool-saved-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--tool-panel, #fff);
+}
+.tool-saved-row > a,
+.tool-saved-row > span {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.tool-saved-row > a > strong,
+.tool-saved-row > span > strong {
+  overflow-wrap: anywhere;
+}
+.tool-saved-row > a > span {
+  font-size: 12px;
+  color: var(--tool-muted, #64748b);
+}
+.tool-saved-row > form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+}
+.tool-saved-row > form > input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.tool-saved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tool-saved-actions > button {
+  font-size: 13px;
+}
+.tool-recent-work {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.tool-recent-work > span {
+  color: var(--tool-muted, #64748b);
+}
+.tools-workspace .tool-toolbar > select {
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: 132px;
+}
+
+/* ---- Shared pieces: copy, undo, values sent between tools ---- */
+.tool-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tool-undo,
+.tool-handoff {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 14px;
+}
+.tool-undo > span,
+.tool-handoff > span {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dark .tool-undo,
+.dark .tool-handoff {
+  border-color: #3b82f6;
+  background: #172b4d;
+  color: #dbeafe;
+}
+
+/* ---- Primer / oligo ---- */
+.tool-primer-sequence {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+output.tool-primer-sequence {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--tool-panel, #fff);
+  user-select: all;
+}
+
+/* ---- Counter: typed values, step, item list, keyboard hint (tool-counter-x-*) ---- */
+.tool-counter-x-area:focus {
+  outline: none;
+}
+.tool-counter-focus .tool-counter-x-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tools-workspace .tool-counter-x-edit {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff80;
+  border: 0;
+}
+.dark .tools-workspace .tool-counter-x-edit {
+  background: #0f172a65;
+}
+.tool-counter-x-entry {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 380px;
+  min-height: 260px;
+  margin: 0 auto;
+  padding: 20px;
+}
+.tool-counting-grid.single .tool-counter-x-entry {
+  min-height: 380px;
+}
+.tool-counter-x-entry .tool-actions > button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tool-counter-x-entry p {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.tool-counter-x-keys {
+  display: none;
+}
+.tool-counter-x-keys kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--tool-border, #cbd5e1);
+  border-radius: 4px;
+  font: inherit;
+  font-weight: 600;
+}
+/* A mouse or trackpad as the main pointer stands in for "has a keyboard". */
+@media (hover: hover) and (pointer: fine) {
+  .tool-counter-x-keys {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 16px;
+    margin: 14px 0 0;
+    font-size: 12px;
+    color: var(--tool-muted, #64748b);
+  }
+  .tool-counter-x-selected {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+}
+.tool-counter-x-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
+}
+.tool-counter-x-step .tool-field {
+  flex: 0 1 170px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.tool-counter-x-step .tool-actions {
+  margin: 0;
+}
+.tool-counter-x-step button[aria-pressed="true"] {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-weight: 650;
+}
+.dark .tool-counter-x-step button[aria-pressed="true"] {
+  background: #1b3152;
+  border-color: #42658c;
+  color: #bfdbfe;
+}
+.tool-counter-x-first,
+.tool-counter-x-items {
+  order: -1;
+}
+.tool-counter-x-items {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.tool-counter-x-items > span {
+  flex: 1 1 56px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 9px 5px;
+  color: #172238;
+  line-height: 1.3;
+}
+.tool-counter-x-items b {
+  font-size: 20px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.tool-counter-x-items small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.tool-counter-x-total b {
+  color: var(--tool-fg, #0f172a);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 600px) {
+  .tool-counter-x-entry {
+    min-height: 230px;
+    padding: 14px 10px;
+  }
+  .tool-counting-grid.single .tool-counter-x-entry {
+    min-height: 340px;
+  }
+  .tool-counter-x-items b {
+    font-size: 18px;
+  }
+}
+
+/* ---- Timer, stopwatch and alarm (tool-timer-x-*, tool-alarm-x-*) ---- */
+.tool-timer-x-root,
+.tool-alarm-x-root {
+  max-width: 720px;
+}
+.tool-timer-x-chip {
+  display: inline-flex;
+  gap: 2px;
+}
+.tool-timer-x-chip > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tools-workspace .tool-timer-x-chip > button + button {
+  min-width: 44px;
+  padding: 7px 10px;
+}
+.tools-workspace .tool-timer-x-add {
+  width: 100%;
+  min-height: 48px;
+  font-weight: 650;
+}
+.tool-timer-x-card[data-state="finished"] {
+  padding-left: 14px;
+  border-left: 4px solid #dc2626;
+}
+.tool-timer-x-card[data-state="finished"] .tool-clock {
+  color: #dc2626;
+}
+.dark .tool-timer-x-card[data-state="finished"] {
+  border-left-color: #f87171;
+}
+.dark .tool-timer-x-card[data-state="finished"] .tool-clock {
+  color: #fca5a5;
+}
+.tool-timer-x-centis {
+  font-size: 40%;
+}
+.tool-timer-x-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 28px;
+  margin: 2px 0 12px;
+  color: var(--tool-muted, #64748b);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.tool-timer-x-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.dark .tool-timer-x-badge {
+  background: #7f1d1d;
+  color: #fee2e2;
+}
+.tool-timer-x-controls {
+  gap: 10px;
+}
+/* Pressed with gloves on: the start/pause control is the largest target. */
+.tools-workspace .tool-timer-x-main {
+  flex: 1 1 160px;
+  max-width: 340px;
+  min-height: 64px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.tools-workspace .tool-timer-x-side {
+  min-width: 84px;
+  min-height: 64px;
+}
+.tools-workspace .tool-timer-x-device > label,
+.tools-workspace .tool-alarm-x-toggles > label {
+  min-height: 44px;
+}
+.tool-timer-x-device input[type="checkbox"],
+.tool-alarm-x-toggles input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+.tool-timer-x-laps {
+  margin-top: 14px;
+}
+.tool-timer-x-laps h3 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.tool-timer-x-lap-table {
+  max-height: 336px;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+}
+.tool-timer-x-settings {
+  margin-top: 4px;
+}
+.tool-timer-x-settings > summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 11px 0;
+  cursor: pointer;
+  color: #2563eb;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.dark .tool-timer-x-settings > summary {
+  color: #93c5fd;
+}
+.tool-timer-x-settings > .tool-grid {
+  padding-top: 8px;
+}
+.tools-workspace .tool-alarm-x-add {
+  min-width: 140px;
+  min-height: 48px;
+  font-weight: 650;
+}
+.tool-alarm-x-card {
+  scroll-margin: 16px;
+}
+.tool-alarm-x-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
+}
+.tool-alarm-x-snooze {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 10px 0;
+  padding: 10px 14px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 14px;
+}
+.tool-alarm-x-snooze > span {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.dark .tool-alarm-x-snooze {
+  border-color: #b45309;
+  background: #3b2a0f;
+  color: #fde68a;
+}
+/* The undo offer stays in view while the list above it is scrolled. */
+.tool-timer-x-undo,
+.tool-alarm-x-undo {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+}
+.tool-timer-x-undo > .tool-undo,
+.tool-alarm-x-undo > .tool-undo {
+  margin: 12px 0 0;
+  box-shadow: 0 6px 20px rgb(15 23 42 / 0.18);
+}
+
+/* ---- Master mix and medium/buffer (MixTool): rows, fill row, totals, steps ---- */
+.tool-mix-x-load {
+  max-width: 420px;
+}
+/* The rows lay themselves out by the width they are given, not the window's:
+   the same panel is narrow on a phone and beside a sidebar. */
+.tool-mix-x-rows {
+  margin: 18px 0 14px;
+  container: tool-mix-x / inline-size;
+}
+.tool-mix-x-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.3fr) minmax(0, 2.4fr) minmax(0, 0.9fr)
+    auto;
+  gap: 12px 16px;
+  align-items: start;
+  padding: 16px 0;
+  border-top: 1px solid var(--tool-border, #e2e8f0);
+}
+.tool-mix-x-row:last-child {
+  border-bottom: 1px solid var(--tool-border, #e2e8f0);
+}
+.tool-mix-x-row .tool-field {
+  min-width: 0;
+  margin: 0;
+}
+.tool-mix-x-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 8px;
+  /* A label that wraps must not push its input out of line with the others. */
+  align-items: end;
+  min-width: 0;
+}
+.tool-mix-x-values.ratio {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 92px;
+}
+.tool-mix-x-values.extra {
+  grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr);
+}
+.tool-mix-x-row .tool-mix-total {
+  grid-column: auto;
+  min-width: 0;
+}
+.tool-mix-x-row .tool-mix-total output {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.tool-mix-x-note {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tool-muted, #64748b);
+}
+.tool-mix-x-row.done .tool-mix-total output {
+  color: #16a34a;
+}
+.dark .tool-mix-x-row.done .tool-mix-total output {
+  color: #4ade80;
+}
+.tool-mix-x-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  /* Level with the inputs, below the field labels. */
+  margin-top: 28px;
+}
+.tools-workspace .tool-mix-x-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 7px;
+}
+.tool-mix-x-options {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.tool-mix-x-options > details {
+  flex: 1 1 100%;
+  margin-top: 0;
+}
+.tool-mix-x-row > .tool-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.tool-mix-x-fill-name {
+  grid-column: 1 / 3;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+@container tool-mix-x (max-width: 760px) {
+  .tool-mix-x-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .tool-mix-x-row > .tool-field,
+  .tool-mix-x-values,
+  .tool-mix-x-fill-name {
+    grid-column: 1 / -1;
+  }
+  .tool-mix-x-row .tool-mix-total {
+    grid-column: 1;
+  }
+  .tool-mix-x-actions {
+    grid-column: 2;
+    align-self: end;
+    margin-top: 0;
+  }
+}
+.tool-mix-x-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 12px 18px;
+  margin: 16px 0 8px;
+}
+.tool-mix-x-summary > div {
+  min-width: 0;
+}
+.tool-mix-x-summary dt {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tool-muted, #64748b);
+}
+.tool-mix-x-summary dd {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tool-mix-x-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.tool-mix-x-steps > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+.tools-workspace .tool-mix-x-steps textarea {
+  min-height: 44px;
+  line-height: 1.5;
+  resize: vertical;
+  field-sizing: content;
+}
+.tool-mix-x-steps > li.done textarea {
+  color: var(--tool-muted, #64748b);
+  text-decoration: line-through;
+}
+/* The undo offer stays in view while the rows above it are scrolled. */
+.tool-mix-x-undo {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+}
+.tool-mix-x-undo > .tool-undo {
+  margin: 12px 0 0;
+  box-shadow: 0 6px 20px rgb(15 23 42 / 0.18);
+}
+
+/* ---- Unit converter: copy, hint, other units, recent conversions ---- */
+.tool-unit-x-answer {
+  flex-wrap: wrap;
+}
+.tool-unit-x-answer > output {
+  flex: 1;
+  min-width: 0;
+}
+.tool-unit-x-answer > .tool-copy {
+  min-width: 44px;
+  justify-content: center;
+}
+.tool-unit-x-answer > .tool-error {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 13px;
+}
+.tool-unit-result .tool-unit-x-hint {
+  margin-top: 8px;
+  font-size: 15px;
+  color: inherit;
+}
+.tool-unit-x-all,
+.tool-unit-x-recent {
+  margin: 20px 0;
+}
+.tool-unit-x-all > h2,
+.tool-unit-x-recent > h2 {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tool-muted, #64748b);
+}
+.tool-unit-x-all > dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+  gap: 0 24px;
+  margin: 0;
+}
+.tool-unit-x-all > dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--tool-border, #e2e8f0);
+  font-size: 14px;
+}
+.tool-unit-x-all dt {
+  flex-shrink: 0;
+  color: var(--tool-muted, #64748b);
+}
+.tool-unit-x-all dd {
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tool-unit-x-all > p {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.tool-unit-x-recent > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tool-unit-x-recent button {
+  max-width: 100%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Calculator: copy, ANS beside "=", history rows ---- */
+.tool-calc-x-output {
+  flex-wrap: wrap;
+}
+.tool-calc-x-output > output {
+  min-width: 0;
+}
+.tool-calc-x-output > .tool-copy,
+.tool-calc-x-nocopy {
+  flex-shrink: 0;
+  min-width: 44px;
+  justify-content: center;
+}
+.tool-calc-x-output > .tool-error {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 13px;
+  text-align: right;
+}
+.tool-calc-x-equals {
+  grid-column: span 3;
+}
+.tool-calc-x-history {
+  flex-wrap: wrap;
+}
+.tool-calc-x-history > .tool-copy {
+  flex-shrink: 0;
+  justify-content: center;
+}
+.tool-calc-x-history > .tool-error {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 13px;
+  text-align: right;
+}
+
+/* ---- Custom equation: variable keys, per-variable label and step ---- */
+.tool-eq-x-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0;
+}
+.tool-eq-x-keys > button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.tool-eq-x-variable {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--tool-border, #e2e8f0);
+}
+.tool-eq-x-variable:last-child {
+  border-bottom: 0;
+}
+.tool-eq-x-options > summary {
+  padding: 12px 0;
+  font-size: 13px;
+  color: var(--tool-muted, #64748b);
+  cursor: pointer;
+}
+
+/* ---- Dilution and molarity: choices, instruction sentence, warnings ---- */
+.tool-dilution-choice + .tool-dilution-choice {
+  margin-top: 14px;
+}
+.tool-dilution-inputs .tool-quantity {
+  grid-template-columns: minmax(0, 1fr) 124px;
+}
+/* A unit label that wrapped would push its select below the number beside it. */
+.tool-dilution-inputs .tool-quantity > .tool-field > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tool-dilution-fold > .tool-muted,
+.tool-dilution-mw > .tool-muted {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.tool-dilution-mw {
+  max-width: 420px;
+  margin-top: 8px;
+}
+.tool-dilution-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 24px;
+}
+.tool-dilution-result > .tool-result {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.tool-dilution-result > .tool-result > strong {
+  color: #1d4ed8;
+}
+.dark .tool-dilution-result > .tool-result > strong {
+  color: #93c5fd;
+}
+.tool-dilution-result > .tool-result-unit {
+  flex: 0 0 160px;
+  margin-top: 0;
+}
+.tool-dilution-sentence,
+.tool-molarity-sentence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--tool-panel, #fff);
+  font-size: 14px;
+}
+.tool-dilution-sentence {
+  margin: 4px 0 14px;
+}
+.tool-molarity-sentence {
+  margin-top: 16px;
+}
+.tool-dilution-sentence > p,
+.tool-molarity-sentence > p {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tool-dilution-sentence > .tool-error,
+.tool-molarity-sentence > .tool-error,
+.tool-molarity-heading > .tool-error {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 13px;
+}
+.tool-dilution-warning {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.dark .tool-dilution-warning {
+  border-color: #b45309;
+  background: #3b2a10;
+  color: #fde68a;
+}
+.tool-dilution-totals {
+  margin: 12px 0 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.tools-workspace .tool-molarity-quantity input.tool-molarity-number {
+  border-radius: 7px 0 0 7px;
+  border-right: 0;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+/* Room for the copy button whether or not there is a result to copy. */
+.tool-molarity-heading {
+  flex-wrap: wrap;
+  min-height: 44px;
+}
+.tool-molarity-note {
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 800px) {
+  .tools-workspace .tool-molarity input.tool-molarity-number {
+    font-size: 16px;
+  }
+}
+/* Counter: hint and error text inside a pastel tile (tool-counter-x-*) */
+.tool-counter-x-entry .tool-muted {
+  color: inherit;
+  opacity: 0.8;
+}
+.tool-counter-x-entry .tool-error {
+  color: #991b1b;
+  font-weight: 600;
+}
+.dark .tool-counter-x-entry .tool-error {
+  color: #fca5a5;
+}
+.tool-primer-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+.tool-primer-strip > span {
+  margin: 0 4px;
+  font-size: 11px;
+  color: var(--chart-muted, #6f6d68);
+}
+.tool-primer-strip > i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 24px;
+  border-radius: 4px;
+  background: var(--chart-grid, #e1e0d9);
+  color: var(--chart-ink, #0b0b0b);
+  font-style: normal;
+  font-weight: 600;
+}
+.tool-primer-strip > i[data-gc] {
+  background: var(--chart-1, #2a78d6);
+  color: #fff;
+}
+.tool-primer-strip > i[data-end] {
+  box-shadow: 0 3px 0 var(--chart-ink, #0b0b0b);
+  margin-bottom: 3px;
+}
+/* The link to the document that owns a timer listed from another tool. */
+.tools-workspace .tool-timer-x-card .tool-button {
+  display: inline-flex;
+  align-items: center;
+}
+.tool-eq-x-keys > button,
+.tool-eq-x-variable .tool-actions > button {
+  min-width: 44px;
+}
+.tools-workspace .tool-eq-x-variable label:has(> input[type="checkbox"]) {
+  min-height: 44px;
+  margin-block: 0;
+}
+/* Notes under the alarm's switches take a row of their own. */
+.tool-alarm-x-toggles > p {
+  flex: 1 1 100%;
+}
+.tool-timer-x-card .tool-timer-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* ---- Gel / blot and image measurer (ImageTool.tsx) ---- */
+/* The lane count beside the hint that says what dragging will do. */
+.tool-image-x-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
+  margin: 10px 0;
+}
+.tool-image-x-hint > .tool-field {
+  flex: 0 1 180px;
+}
+.tool-image-x-hint > p {
+  flex: 1 1 220px;
+  margin: 0;
+}
+/* Statistics and their bars under the measurement table. */
+.tool-image-x-stats {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--tool-border, #cbd5e1);
+}
+.tool-image-x-stats h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.tool-image-x-stats .tool-chart {
+  margin-top: 18px;
+}
+.tool-image-x-stats td,
+.tool-image-x-stats th {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 480px) {
+  .tool-image-x-hint > .tool-field {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---- Calibration curve: replicates, pasted samples, extrapolation, plate rows (tool-calibration-x-*) ---- */
+/* The undo offer stays in view while the rows above it are scrolled. */
+.tool-calibration-x-undo {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+}
+.tool-calibration-x-undo > .tool-undo {
+  margin: 12px 0 0;
+  box-shadow: 0 6px 20px rgb(15 23 42 / 0.18);
+}
+/* A row that came from a plate shows its well under the row number. */
+.tool-calibration-x-labelled .calibration-row-number {
+  width: 46px;
+}
+.tool-calibration-x-well {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--tool-text, #0f172a);
+}
+.dark .tool-calibration-x-well {
+  color: #e2e8f0;
+}
+.tool-calibration-x-replicates {
+  margin: 6px 0 14px;
+}
+.tool-calibration-x-replicates > p:first-child {
+  margin: 0 0 2px;
+  font-size: 13px;
+}
+.tools-workspace .tool-calibration-x-replicates th,
+.tools-workspace .tool-calibration-x-replicates td {
+  padding: 6px 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tool-calibration-x-replicates th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tool-muted, #64748b);
+}
+.tool-calibration-x-replicates > .tool-muted {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+/* A pasted figure that reads two ways: the two readings are the buttons. */
+.tool-calibration-x-ask {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.tool-calibration-x-ask > .tool-actions {
+  margin-bottom: 0;
+}
+.tools-workspace .tool-calibration-x-ask button {
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+.dark .tool-calibration-x-ask {
+  border-color: #a16207;
+  background: #3b2a0f;
+  color: #fde68a;
+}
+.tool-calibration-x-results {
+  margin-top: 18px;
+}
+.tools-workspace .tool-calibration-x-results th,
+.tools-workspace .tool-calibration-x-results td {
+  padding: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.tool-calibration-x-results td:first-child {
+  overflow-wrap: anywhere;
+}
+.tool-calibration-x-flag {
+  color: #a16207;
+  font-weight: 600;
+}
+.dark .tool-calibration-x-flag {
+  color: #fcd34d;
+}
+/* A sample beyond the standards is a hollow diamond; hollow means the
+   plot's own background, which is dark on the dark theme. */
+.dark .tool-calibration-x-hollow {
+  fill: #172238;
+}
+
+/* ---- Cell counter and cell culture (tool-cells-*) ---- */
+.tool-cells-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+/* A field on a row of its own: full width on a phone, not page-wide on a desk. */
+.tool-cells-narrow {
+  max-width: 640px;
+}
+.tool-cells-warning {
+  margin: 10px 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+  overflow-wrap: anywhere;
+}
+.dark .tool-cells-warning {
+  border-color: #b45309;
+  background: #3b2a10;
+  color: #fde68a;
+}
+/* Tap counting. Every target is at least 64px high, for a gloved finger. */
+.tool-cells-tap {
+  padding: 16px 0 20px;
+  border-bottom: 1px solid var(--tool-border, #e2e8f0);
+}
+.tool-cells-tap-head,
+.tool-cells-tiles {
+  /* Wide enough to hit, not so wide that the two counts drift apart. */
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+.tool-cells-tap-head {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.tool-cells-tap-head > strong {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tools-workspace .tool-cells-tap-head > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 0;
+  touch-action: manipulation;
+}
+.tool-cells-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.tool-cells-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.tools-workspace .tool-cells-hit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 168px;
+  padding: 16px 10px;
+  border-radius: 16px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.tools-workspace .tool-cells-hit:active,
+.tools-workspace .tool-cells-minus:active:not(:disabled) {
+  background: var(--tool-bg, #f1f5f9);
+}
+.tool-cells-hit-name {
+  display: inline-flex;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+.tool-cells-hit > strong {
+  max-width: 100%;
+  font-size: clamp(44px, 12vw, 72px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.tool-cells-hit-hint {
+  font-size: 12px;
+  color: var(--tool-muted, #64748b);
+}
+.tools-workspace .tool-cells-minus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 64px;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
+}
+.tool-cells-tap-actions {
+  justify-content: center;
+  margin: 14px 0 0;
+}
+.tools-workspace .tool-cells-tap-actions > button {
+  min-height: 64px;
+  padding-inline: 18px;
+}
+.tool-cells-keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--tool-muted, #64748b);
+}
+.tool-cells-keys kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--tool-border, #cbd5e1);
+  border-radius: 5px;
+  font: inherit;
+  font-weight: 600;
+}
+@media (hover: none) {
+  /* No keyboard to speak of on a phone at the bench. */
+  .tool-cells-keys {
+    display: none;
+  }
+}
+/* Focus mode: the tap panel alone, over the whole screen. */
+.tool-cells-focus {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px
+    calc(16px + env(safe-area-inset-bottom, 0px));
+  border: 0;
+  overflow: auto;
+  background: var(--tool-bg, #f8fafc);
+  color: var(--tool-fg, #0f172a);
+}
+.tool-cells-focus .tool-cells-tap-head,
+.tool-cells-focus .tool-cells-tiles {
+  max-width: 1200px;
+}
+.tool-cells-focus .tool-cells-tiles {
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 250px;
+}
+.tool-cells-focus .tool-cells-hit {
+  flex: 1;
+}
+.tool-cells-focus .tool-cells-hit > strong {
+  font-size: clamp(64px, 18vw, 150px);
+}
+/* Typed counts: square number, live, dead, remove. */
+.tool-cells-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) 44px;
+  align-items: end;
+  gap: 8px;
+}
+.tool-cells-row > .tool-field {
+  min-width: 0;
+  margin-bottom: 10px;
+}
+.tools-workspace .tool-cells-row-pick,
+.tools-workspace .tool-cells-row-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  margin-bottom: 10px;
+  padding: 0;
+}
+.tools-workspace .tool-cells-row-pick {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.tools-workspace .tool-cells-row-pick[aria-pressed="true"] {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.dark .tools-workspace .tool-cells-row-pick[aria-pressed="true"] {
+  background: #1b3152;
+  border-color: #42658c;
+  color: #bfdbfe;
+}
+.tool-cells-result-label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--tool-muted, #64748b);
+}
+.tool-cells-result-label + .tool-result {
+  padding: 2px 0 12px;
+}
+.tool-cells-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 10px 20px;
+  margin: 0 0 20px;
+}
+.tool-cells-figures > div {
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--tool-border, #e2e8f0);
+}
+.tool-cells-figures dt {
+  font-size: 12px;
+  color: var(--tool-muted, #64748b);
+}
+.tool-cells-figures dd {
+  margin: 2px 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+/* Cell culture: the calendar confirmation, the timer's name, a record being edited. */
+.tool-cells-added {
+  margin: 8px 0;
+  padding: 10px 14px;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.dark .tool-cells-added {
+  border-color: #285c42;
+  background: #143126;
+  color: #bbf7d0;
+}
+.tool-cells-timer-name {
+  margin: 12px 0 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.tool-cells-edit {
+  margin-top: 12px;
+}
+@media (max-width: 420px) {
+  .tools-workspace .tool-cells-hit {
+    min-height: 148px;
+  }
+  .tool-cells-row {
+    gap: 6px;
+  }
+}
+
+/* ---- Plate labelling: range selection, roles, concentration view, series fills (tool-plate-x-*) ---- */
+.tool-plate-x-row {
+  display: grid;
+  grid-template-columns: 32px repeat(
+      var(--tool-plate-x-cols, 12),
+      minmax(44px, 1fr)
+    );
+  gap: 4px;
+}
+/* A header cell wraps its button; the button fills the cell so its letter
+   stays level with the middle of the wells. */
+.tool-plate-x-head {
+  display: flex;
+  min-width: 0;
+}
+/* Dragging across wells selects them; it must not select their text. */
+.tool-plate-x-grid {
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* With multi-select on, a finger dragged over the wells selects a range
+   instead of scrolling. The row and column headers still scroll the plate. */
+.tool-plate-x-grid[data-multi] .tool-plate-x-well {
+  touch-action: none;
+}
+/* The selection ring keeps a hairline of the panel between itself and the
+   well, so it shows on a dark blue concentration shade as well as on white. */
+.tool-plate-x-well[aria-selected="true"] {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 1px var(--tool-panel, #ffffff), 0 0 0 4px #2563eb;
+}
+.dark .tool-plate-x-well[aria-selected="true"] {
+  box-shadow: 0 0 0 1px var(--tool-panel, #172238), 0 0 0 4px #93c5fd;
+}
+/* Keyboard focus is an ink ring outside the blue selection ring, so a focused
+   well and a selected well are told apart. */
+.tools-workspace .tool-plate-x-grid button:focus-visible {
+  position: relative;
+  z-index: 2;
+  outline: 3px solid var(--tool-fg, #0f172a);
+  outline-offset: 4px;
+}
+/* A well with a role prints its mark on a third line, so its label gets one. */
+.tool-plate-x-well[data-role] .plate-well-label {
+  -webkit-line-clamp: 1;
+}
+.tool-plate-x-code {
+  display: block;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+}
+.tools-workspace .tool-plate-x-key {
+  margin: 8px 0 0;
+}
+.tools-workspace .tool-plate-x-note {
+  margin: 0 0 8px;
+}
+.tool-plate-x-scale {
+  margin-top: 12px;
+}
+.tool-plate-x-scale > .tool-chart {
+  flex-wrap: wrap;
+  margin: 0;
+}
+.tool-plate-x-unit {
+  flex: 0 1 150px;
+}
+.tool-plate-x-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tools-workspace .tool-plate-x-seg > button[aria-pressed="true"] {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 650;
+}
+.dark .tools-workspace .tool-plate-x-seg > button[aria-pressed="true"] {
+  border-color: #60a5fa;
+  background: #1e3a5f;
+  color: #dbeafe;
+}
+.tool-plate-x-history {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.tool-plate-x-history > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.tool-plate-x-fieldset {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.tool-plate-x-fieldset > legend {
+  margin-bottom: 5px;
+  padding: 0;
+  font-size: 13px;
+}
+.tool-plate-x-conc {
+  grid-column: 1 / -1;
+  max-width: 220px;
+}
+.tool-plate-x-apply {
+  margin-top: 14px;
+}
+.tools-workspace .tool-plate-x-apply > .tool-muted {
+  margin: 6px 0 0;
+}
+.tool-plate-x-fill {
+  margin-top: 16px;
+  padding-top: 6px;
+  border-top: 1px solid var(--tool-border, #e2e8f0);
+}
+.tool-plate-x-fill > summary {
+  padding: 11px 0;
+  font-weight: 650;
+  cursor: pointer;
+}
+.tool-plate-x-fill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px 28px;
+  margin-top: 14px;
+}
+.tools-workspace .tool-plate-x-fill-grid h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+.tools-workspace .tool-plate-x-fill-grid .tool-muted {
+  margin: 0 0 10px;
+}
+/* What the fill is about to write. */
+.tools-workspace .tool-plate-x-preview {
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tool-plate-x-undo > .tool-undo {
+  margin: 12px 0 0;
+}
+@media (max-width: 480px) {
+  /* Undo and redo take a row of their own under the selection buttons. */
+  .tool-plate-x-history {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+}
+
+/* ---- Ladder: band rows, pasted lists, product link (tool-ladder-x-*) ---- */
+.tool-ladder-x-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+.tool-ladder-x-source > span {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tool-ladder-x-source > a {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-height: 32px;
+  overflow-wrap: anywhere;
+}
+.tool-ladder-x-source small {
+  color: var(--tool-muted, #64748b);
+  font-size: 12px;
+}
+.tool-ladder-x-bands {
+  display: grid;
+  gap: 8px;
+  container: tool-ladder-x / inline-size;
+}
+/* Narrow by default: size and label on one line, colour, emphasis and delete
+   on the next. The list sits beside the diagram, so its own width decides. */
+.tool-ladder-x-head,
+.tool-ladder-x-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
+}
+.tool-ladder-x-head {
+  color: var(--tool-muted, #64748b);
+  font-size: 13px;
+}
+.tool-ladder-x-head > :nth-child(n + 3) {
+  display: none;
+}
+.tool-ladder-x-head > :nth-child(2),
+.tool-ladder-x-band > :nth-child(2) {
+  grid-column: 2 / -1;
+}
+.tool-ladder-x-band {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--tool-border, #e2e8f0);
+}
+@container tool-ladder-x (min-width: 560px) {
+  .tool-ladder-x-head,
+  .tool-ladder-x-band {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 112px 124px 44px;
+  }
+  .tool-ladder-x-head > :nth-child(n + 3) {
+    display: block;
+  }
+  .tool-ladder-x-head > :nth-child(2),
+  .tool-ladder-x-band > :nth-child(2) {
+    grid-column: auto;
+  }
+  .tool-ladder-x-band {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+}
+.tool-ladder-x-band .tool-field {
+  min-width: 0;
+  margin: 0;
+}
+/* Every field keeps its name for screen readers; on screen the column heading names it. */
+.tool-ladder-x-band .tool-field > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.tools-workspace .tool-ladder-x-band > button {
+  justify-content: center;
+}
+.tools-workspace .tool-ladder-x-band > button:last-child {
+  min-width: 44px;
+  padding: 0;
+}
+.tool-ladder-x-paste {
+  margin: 14px 0 0;
+  padding: 14px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 10px;
+}
+.tools-workspace .tool-ladder-x-paste textarea {
+  min-height: 96px;
+  font-variant-numeric: tabular-nums;
+}
+.tool-ladder-x-parsed {
+  margin: 10px 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.tool-ladder-x-parsed > p {
+  margin: 4px 0;
+}
+.tool-ladder-x-skipped {
+  color: #b45309;
+}
+.dark .tool-ladder-x-skipped {
+  color: #fcd34d;
+}
+
+/* ---- Notes: tag chips, tag filter, linked work (tool-notes-x-*) ---- */
+.tool-notes-x-tagbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid var(--tool-border, #cbd5e1);
+  border-radius: 7px;
+  background: var(--tool-panel, #fff);
+}
+.tool-notes-x-tagbox:focus-within {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+/* As specific as the workspace's own rule for text inputs, which it follows. */
+.tools-workspace
+  .tool-notes-x-tagbox
+  input:not([type="checkbox"]):not([type="color"]) {
+  flex: 1 1 130px;
+  width: auto;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+.tool-notes-x-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 0 2px 0 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.tools-workspace .tool-notes-x-chip > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+}
+.dark .tool-notes-x-chip {
+  border-color: #1d4ed8;
+  background: #172b4d;
+  color: #dbeafe;
+}
+.tool-notes-x-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.tools-workspace .tool-notes-x-filter > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.tool-notes-x-filter small {
+  color: var(--tool-muted, #64748b);
+  font-size: 11px;
+}
+.tools-workspace .tool-notes-x-filter > button[aria-pressed="true"] {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+.tool-notes-x-filter > button[aria-pressed="true"] small {
+  color: inherit;
+}
+.tool-note-item .tool-notes-x-itemtags {
+  display: block;
+  margin-top: 6px;
+  color: #2563eb;
+  font-size: 12px;
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+.dark .tool-note-item .tool-notes-x-itemtags {
+  color: #93c5fd;
+}
+.tool-notes-x-firstline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: -4px 0 12px;
+}
+.tool-notes-x-firstline > span {
+  flex: 1 1 140px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-notes-x-links {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.tool-notes-x-links > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 10px;
+}
+.tool-notes-x-links > li > svg {
+  flex-shrink: 0;
+  color: #2563eb;
+}
+.dark .tool-notes-x-links > li > svg {
+  color: #93c5fd;
+}
+.tool-notes-x-linktool {
+  flex-shrink: 0;
+  color: var(--tool-muted, #64748b);
+  font-size: 12px;
+}
+.tool-notes-x-links > li > a,
+.tool-notes-x-links > li > .tool-muted {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tools-workspace .tool-notes-x-links > li > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* ---- Calendar: day cells, whole-day and multi-day events, import result (tool-calendar-x-*) ---- */
+.tool-calendar-x-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* Today is marked by a thicker border and a label, not by colour alone. */
+.tool-calendar-x-today {
+  padding: 4px;
+  border: 2px solid #2563eb;
+}
+.dark .tool-calendar-x-today {
+  border-color: #60a5fa;
+}
+.tool-calendar-x-outside {
+  background: #f1f5f9;
+}
+.dark .tool-calendar-x-outside {
+  background: #0b1323;
+}
+.tool-day .tool-calendar-x-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: flex-start;
+  gap: 2px 5px;
+  width: auto;
+  min-height: 24px;
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font-size: inherit;
+  font-weight: 650;
+  text-align: left;
+}
+/* The whole cell, wherever no event lies, adds an event on that day. */
+.tool-calendar-x-date::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.tool-calendar-x-weekday {
+  color: var(--tool-muted, #64748b);
+  font-size: 11px;
+  font-weight: 400;
+}
+.tool-calendar-x-date > small {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.tool-calendar-x-outside .tool-calendar-x-date {
+  color: var(--tool-muted, #64748b);
+  font-weight: 400;
+}
+.tool-calendar-x-outside .tool-calendar-x-event {
+  opacity: 0.75;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tool-calendar-x-day:hover {
+    border-color: #60a5fa;
+  }
+}
+.tool-day .tool-calendar-x-event {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  margin-top: 3px;
+  padding: 2px 5px;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  overflow: hidden;
+}
+.tool-calendar-x-event > span,
+.tool-calendar-x-event > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-calendar-x-event > small {
+  color: var(--tool-muted, #64748b);
+  font-size: 10px;
+}
+.tool-day .tool-calendar-x-event.is-whole {
+  border-color: #93c5fd;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+.tool-calendar-x-event.is-whole > small {
+  color: inherit;
+  opacity: 0.8;
+}
+.dark .tool-day .tool-calendar-x-event.is-whole {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+  color: #dbeafe;
+}
+/* An event that goes on from the day before, or into the next, has no end on that side. */
+.tool-day .tool-calendar-x-event.is-before {
+  border-left-style: dashed;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.tool-day .tool-calendar-x-event.is-after {
+  border-right-style: dashed;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.tool-day .tool-calendar-x-event[aria-pressed="true"],
+.tools-workspace .tool-calendar-x-row[aria-pressed="true"] {
+  border-color: #2563eb;
+  box-shadow: inset 0 0 0 1px #2563eb;
+}
+.tool-calendar-x-hint {
+  margin: 8px 0 0;
+}
+.tool-calendar-x-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+.tools-workspace .tool-calendar-x-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+}
+.tool-calendar-x-row > span {
+  color: var(--tool-muted, #64748b);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.tool-calendar-x-row > strong {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tool-calendar-x-report {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 10px;
+  font-size: 14px;
+}
+.tool-calendar-x-report > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tool-calendar-x-report > div > strong {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.tools-workspace .tool-calendar-x-report > div > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+.tool-calendar-x-report > ul {
+  max-height: 240px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  overflow: auto;
+  list-style: disc;
+}
+.tool-calendar-x-report li {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .tool-calendar-x-day {
+    padding: 3px;
+  }
+  .tool-calendar-x-today {
+    padding: 2px;
+  }
+  .tool-day .tool-calendar-x-event {
+    padding: 2px 3px;
+    font-size: 10px;
+  }
+  .tool-calendar-x-event > small {
+    font-size: 9px;
+  }
+}
+/* ---- Library: amino acids, codons, periodic table (tool-lib-x-*) ---- */
+.tool-lib-x-switch button[aria-pressed="true"] {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.dark .tool-lib-x-switch button[aria-pressed="true"] {
+  background: #1b3152;
+  border-color: #42658c;
+  color: #bfdbfe;
+}
+.tools-workspace .tool-lib-x-link {
+  display: inline-flex;
+  align-items: center;
+}
+/* PubChem depictions are dark lines on a light ground. On the dark theme the
+   picture is inverted and its hues turned back, so the ground goes dark while
+   oxygen stays red and nitrogen blue. */
+.dark .tool-lib-x-structure {
+  filter: invert(0.9) hue-rotate(180deg);
+}
+.tool-lib-x-sources {
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.tool-lib-x-source-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  list-style: disc;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.tool-lib-x-codons {
+  margin: 24px 0;
+}
+.tool-lib-x-codons h3,
+.tool-lib-x-translate h3 {
+  margin: 18px 0 8px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.tool-lib-x-codons ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.tool-lib-x-codons li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--tool-border, #cbd5e1);
+  border-radius: 7px;
+  background: var(--tool-panel, #fff);
+}
+.tool-lib-x-codons code,
+.tool-lib-x-sequence,
+.tools-workspace .tool-lib-x-formula input,
+.tool-lib-x-formula code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+.tool-lib-x-codons em {
+  font-size: 11px;
+  font-style: normal;
+  color: #15803d;
+}
+.dark .tool-lib-x-codons em {
+  color: #86efac;
+}
+.tool-lib-x-chart {
+  margin: 24px 0;
+}
+.tool-lib-x-chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 14px;
+}
+.tool-lib-x-chart-controls > .tool-field {
+  flex: 1 1 160px;
+  max-width: 260px;
+  margin-bottom: 0;
+}
+.tool-lib-x-match {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--tool-muted, #64748b);
+}
+/* Shown where a mouse or trackpad is the main pointer, which stands in for
+   "has a keyboard". */
+.tool-lib-x-keys {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tool-lib-x-keys {
+    display: block;
+    margin: 8px 0 0;
+    font-size: 12px;
+  }
+}
+/* The wheel draws its own focus ring, on top of the sectors. */
+.tool-lib-x-wheel [role="button"] {
+  outline: none;
+}
+.dark .tool-lib-x-wheel-focus {
+  stroke: #f8fafc;
+}
+.dark .tool-lib-x-sector {
+  stroke: #0f172a;
+}
+.dark .tool-lib-x-sector[data-tone="U"] {
+  fill: #1e3a8a;
+}
+.dark .tool-lib-x-sector[data-tone="C"] {
+  fill: #713f12;
+}
+.dark .tool-lib-x-sector[data-tone="A"] {
+  fill: #831843;
+}
+.dark .tool-lib-x-sector[data-tone="G"] {
+  fill: #14532d;
+}
+.dark .tool-lib-x-sector[data-tone="start"] {
+  fill: #15803d;
+}
+.dark .tool-lib-x-sector[data-tone="stop"] {
+  fill: #b91c1c;
+}
+.dark .tool-lib-x-sector-text {
+  fill: #f8fafc;
+}
+.tool-lib-x-translate {
+  margin: 16px 0 24px;
+}
+.tool-lib-x-sequence {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.tool-lib-x-frame {
+  margin: 0 0 12px;
+  padding: 6px 12px 12px;
+  border: 1px solid var(--tool-border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--tool-panel, #fff);
+}
+.tool-lib-x-frame > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 44px;
+}
+.tool-lib-x-frame > div > strong {
+  min-width: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.tool-lib-x-frame > div > span:not(.sr-only):not(.tool-error) {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--tool-muted, #64748b);
+}
+.tool-lib-x-frame > div > .tool-error {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 13px;
+}
+.tool-lib-x-frame > output {
+  display: block;
+  max-height: 200px;
+  overflow: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.tool-lib-x-formula {
+  margin: 16px 0 20px;
+}
+.tool-lib-x-formula > .tool-field {
+  max-width: 520px;
+}
+.tool-lib-x-formula code {
+  padding: 1px 6px;
+  border: 1px solid var(--tool-border, #cbd5e1);
+  border-radius: 4px;
+}
+.tool-lib-x-weight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.tool-lib-x-weight > .tool-result {
+  padding: 6px 0;
+}
+.tool-lib-x-weight > .tool-error {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 13px;
+}
+.tools-workspace .tool-lib-x-formula td,
+.tools-workspace .tool-lib-x-formula thead th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tool-lib-x-formula table {
+  max-width: 620px;
+}
+.tool-lib-x-formula tbody small {
+  margin-left: 4px;
+  font-weight: 400;
+  color: var(--tool-muted, #64748b);
+}
+/* Periodic table: the search, both selects and the zoom button share a row.
+   On a phone the selects and the button sit side by side under the search. */
+.tool-library-filters.tool-lib-x-filters > .tool-field:nth-child(3) {
+  flex: 0 1 220px;
+}
+.tool-lib-x-filters > .tool-icon-button {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+@media (max-width: 600px) {
+  .tool-library-filters.tool-lib-x-filters > .tool-field:nth-child(n + 2) {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+  }
+  .tool-lib-x-filters > .tool-icon-button {
+    margin-bottom: 10px;
+  }
+}
+/* The scale of the shading, shown while a property colours the cells. */
+.tool-lib-x-tone > .tool-chart-scale {
+  flex-wrap: wrap;
+  margin: 0 0 4px;
+}
+.tool-lib-x-tone > p {
+  margin: 0;
+  font-size: 12px;
+}
+/* The table with its axes: a narrow column of period numbers before the 18
+   groups, and a row of group numbers above them. */
+.tools-workspace .tool-periodic.tool-lib-x-grid {
+  grid-template-columns: 16px repeat(18, minmax(34px, 1fr));
+  min-width: 700px;
+}
+.tools-workspace .tool-periodic.tool-lib-x-grid.expanded {
+  min-width: 1520px;
+}
+.tool-lib-x-row {
+  display: contents;
+}
+.tool-lib-x-axis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--tool-muted, #64748b);
+}
+/* A ring of the page colour and one of the text colour, so the chosen element
+   stands out from any fill and the focus outline stays free. */
+.tool-periodic .tool-lib-x-cell[aria-selected="true"] {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--tool-bg, #f8fafc), 0 0 0 4px var(--tool-fg, #0f172a);
+}
+.tools-workspace .tool-periodic .tool-lib-x-cell[class*="tool-chart-heat-"],
+.dark .tools-workspace .tool-periodic .tool-lib-x-cell[class*="tool-chart-heat-"] {
+  border-color: transparent;
+}
+/* No value for the property the table is shaded by. */
+.tools-workspace .tool-periodic .tool-lib-x-blank,
+.dark .tools-workspace .tool-periodic .tool-lib-x-blank {
+  border: 1px dashed var(--tool-border, #cbd5e1);
+  background: transparent;
+  color: var(--tool-muted, #64748b);
+}

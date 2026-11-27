@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
  * against the full schema.
  */
 const migration = readFileSync(
-    new URL('../../../supabase/migrations/20261127090000_agent_query_events.sql', import.meta.url),
+    new URL('../../../supabase/migrations/20261127080000_agent_query_events.sql', import.meta.url),
     'utf8',
 );
 

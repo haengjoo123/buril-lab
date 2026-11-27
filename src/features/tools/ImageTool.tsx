@@ -14,18 +14,26 @@ import {
   Select,
   ErrorMessage,
   format,
+  plainNumber,
   csv,
   download,
   report,
   ColorField,
+  StoredNumberField,
+  useExportName,
 } from "./ui";
 import {
   distance,
   measure,
+  ladderPositions,
   colorCoverage,
+  summarize,
   type Shape,
+  type View,
   type XY,
 } from "./geometry";
+import { readGel, roundEstimate, splitRegion, type GelBand } from "./gel";
+import { GelSizes, MeasureStats, type MeasureGroup } from "./imageParts";
 type ImageData = {
   asset: string;
   width: number;
@@ -43,10 +51,55 @@ type ImageData = {
   bar: number;
   tolerance: number;
   rgb: string;
+  // The fields below were added later and are absent from older documents.
+  /** Gel: the unit ladder band sizes are in ("bp", "kDa" …). */
+  sizeUnit?: string;
+  /** Gel: false hides the estimated sizes drawn beside the bands. */
+  sizeLabels?: boolean;
 };
+type Drag = { start: XY; original: Shape | null; handle: number | null };
+// A freehand outline and a group of counted points stop growing here, so one
+// long session cannot swell the document without limit.
+const MAX_POINTS = 2000;
+const MAX_LANES = 60;
+const DRAFT_COLOR = "#f97316";
+const moved = (
+  { original, handle, start }: Drag & { original: Shape },
+  to: XY
+): Shape => ({
+  ...original,
+  points: original.points.map((p, i) =>
+    handle !== null
+      ? i === handle
+        ? to
+        : p
+      : { x: p.x + to.x - start.x, y: p.y + to.y - start.y }
+  ),
+});
+/** The small arc between the arms of an angle, as an SVG path. */
+function anglePath(points: XY[]) {
+  const [first, vertex, last] = points;
+  if (!first || !vertex || !last) return "";
+  const armA = distance(first, vertex),
+    armB = distance(last, vertex);
+  if (!armA || !armB) return "";
+  const r = Math.min(armA, armB) * 0.3,
+    at = (end: XY, arm: number) =>
+      `${vertex.x + ((end.x - vertex.x) / arm) * r},${
+        vertex.y + ((end.y - vertex.y) / arm) * r
+      }`,
+    cross =
+      (first.x - vertex.x) * (last.y - vertex.y) -
+      (first.y - vertex.y) * (last.x - vertex.x);
+  return `M${at(first, armA)} A${r},${r} 0 0 ${cross > 0 ? 1 : 0} ${at(
+    last,
+    armB
+  )}`;
+}
 export default function ImageTool({ gel = false }: { gel?: boolean }) {
   const ctx = useContext(ToolContext)!,
-    t = useText();
+    t = useText(),
+    exportName = useExportName();
   const [d, set] = useToolData<ImageData>({
     asset: "",
     width: 1000,
@@ -75,15 +128,19 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
     [draft, setDraft] = useState<XY[]>([]),
     [zoom, setZoom] = useState(1),
     [history, setHistory] = useState<ImageData[]>([]),
-    [redo, setRedo] = useState<ImageData[]>([]);
+    [redo, setRedo] = useState<ImageData[]>([]),
+    // The shape being moved or reshaped, so it follows the pointer.
+    [moving, setMoving] = useState<(Drag & { original: Shape }) | null>(null),
+    // Corners of an angle placed so far; the third one completes it.
+    [corners, setCorners] = useState<XY[]>([]),
+    [laneCount, setLaneCount] = useState<number | null>(10);
   const svgRef = useRef<SVGSVGElement>(null),
     groupRef = useRef<SVGGElement>(null),
-    drag = useRef<{
-      start: XY;
-      original: Shape | null;
-      handle: number | null;
-    } | null>(null),
-    imageRef = useRef<HTMLImageElement | null>(null);
+    drag = useRef<Drag | null>(null),
+    imageRef = useRef<HTMLImageElement | null>(null),
+    // What the last history entry was for: typing in one field adds to that
+    // entry instead of making a new one for every character.
+    group = useRef("");
   useEffect(() => {
     let alive = true;
     if (!d.asset) return;
@@ -128,31 +185,68 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
       if (originalUrl) URL.revokeObjectURL(originalUrl);
     };
   }, [d.asset, ctx.repo]);
-  const commit = (next: ImageData) => {
-    setHistory((h) => [...h, d].slice(-50));
+  /**
+   * Applies a change and records the state before it for undo. Consecutive
+   * changes that give the same `entry` (typing a name, a length) share one
+   * history entry until another action or leaving the field ends the run.
+   */
+  const commit = (next: ImageData, entry = "") => {
+    if (!entry || entry !== group.current)
+      setHistory((h) => [...h, d].slice(-50));
+    group.current = entry;
     setRedo([]);
     set(next);
   };
+  const undo = () => {
+    if (!history.length) return;
+    group.current = "";
+    setRedo([...redo, d]);
+    set(history[history.length - 1]);
+    setHistory(history.slice(0, -1));
+  };
+  const redoStep = () => {
+    if (!redo.length) return;
+    group.current = "";
+    setHistory([...history, d]);
+    set(redo[redo.length - 1]);
+    setRedo(redo.slice(0, -1));
+  };
+  const cancelDrawing = () => {
+    drag.current = null;
+    setMoving(null);
+    setDraft([]);
+    setCorners([]);
+  };
+  const pickTool = (next: string) => {
+    cancelDrawing();
+    setTool(next);
+  };
+  // Subscribed again after every render, so the handler always sees the
+  // current document and history.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)
+      const target = e.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      if (e.key === "Escape") {
+        if (drag.current || corners.length) cancelDrawing();
+        return;
+      }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const letter = e.key.toLowerCase();
+      if (letter === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (
+        (letter === "z" && e.shiftKey) ||
+        (letter === "y" && e.ctrlKey && !e.metaKey && !e.shiftKey)
       ) {
-        if (e.key === "z") {
-          e.preventDefault();
-          setHistory((h) => {
-            if (!h.length) return h;
-            setRedo((r) => [...r, d]);
-            set(h[h.length - 1]);
-            return h.slice(0, -1);
-          });
-        }
+        e.preventDefault();
+        redoStep();
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [d, set]);
+  });
   const scale =
       d.calibration === "pixel"
         ? d.unitsPerPixel
@@ -161,6 +255,13 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
         : 0,
     unit = scale > 0 ? d.unit : "px",
     actualScale = scale > 0 ? scale : 1;
+  // The matched share of the whole image as an area. The table, the PDF and
+  // the CSV all use this one definition.
+  const colorArea = (shape: Shape) =>
+    (shape.areaFraction ?? shape.fraction ?? 0) *
+    d.width *
+    d.height *
+    actualScale ** 2;
   const crop = d.crop ?? { x: 0, y: 0, width: d.width, height: d.height },
     sw = d.rotation % 180 ? crop.height : crop.width,
     sh = d.rotation % 180 ? crop.width : crop.height;
@@ -169,6 +270,66 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
   }) scale(${d.flipX ? -1 : 1} ${d.flipY ? -1 : 1}) translate(${
     -crop.width / 2 - crop.x
   } ${-crop.height / 2 - crop.y})`;
+  // The whole picture as displayed, for lanes that run left to right on screen.
+  const fullView: View = {
+    rotation: d.rotation,
+    flipX: d.flipX,
+    flipY: d.flipY,
+    crop: { x: 0, y: 0, width: d.width, height: d.height },
+  };
+  const names: Record<string, string> = {
+    select: t("선택", "Select"),
+    scale: t("기준선", "Reference"),
+    line: gel ? t("밴드", "Band") : t("선", "Line"),
+    rectangle: gel ? t("레인", "Lane") : t("사각형", "Rectangle"),
+    lanes: t("레인 나누기", "Split lanes"),
+    ellipse: t("타원", "Ellipse"),
+    freehand: t("자유형", "Freehand"),
+    angle: t("각도", "Angle"),
+    count: t("점 계수", "Count points"),
+    color: t("색상", "Color"),
+    text: t("텍스트", "Text"),
+    crop: t("자르기", "Crop"),
+  };
+  const toolKeys = gel
+    ? ["select", "line", "rectangle", "lanes", "text", "crop"]
+    : [
+        "select",
+        "scale",
+        "line",
+        "rectangle",
+        "ellipse",
+        "freehand",
+        "angle",
+        "count",
+        "color",
+        "text",
+        "crop",
+      ];
+  const nextName = (kind: string) =>
+    `${names[kind] ?? kind} ${d.shapes.length + 1}`;
+  const laneTotal =
+    laneCount != null &&
+    Number.isInteger(laneCount) &&
+    laneCount >= 1 &&
+    laneCount <= MAX_LANES
+      ? laneCount
+      : 0;
+  const laneShapes = (regions: [XY, XY][], color: string): Shape[] =>
+    regions.map((points, index) => ({
+      id: crypto.randomUUID(),
+      kind: "rectangle",
+      name: String(index + 1),
+      color,
+      points,
+    }));
+  const angleText = (angle: number) =>
+    `${format(Math.round(angle * 10) / 10)}°`;
+  const countText = (count: number) =>
+    t(
+      `${format(count)}개`,
+      count === 1 ? "1 point" : `${format(count)} points`
+    );
   const point = (event: PointerEvent<SVGSVGElement>): XY => {
     const matrix = groupRef.current?.getScreenCTM();
     if (!matrix) return { x: 0, y: 0 };
@@ -211,7 +372,14 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
     setSelected(shape.id);
   };
   const down = (event: PointerEvent<SVGSVGElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // Capture keeps a drag alive when the pointer leaves the picture. A
+    // pointer the browser no longer tracks cannot be captured; the drag then
+    // simply ends at the edge.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Not capturable.
+    }
     const p = point(event),
       target = event.target as SVGElement,
       id = target.getAttribute("data-shape"),
@@ -220,28 +388,37 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
       addColor(p);
       return;
     }
-    if (tool === "select" && id) {
-      setSelected(id);
-      drag.current = {
+    if (tool === "select") {
+      const original = id ? d.shapes.find((s) => s.id === id) : undefined;
+      setSelected(original ? original.id : "");
+      if (!original) return;
+      const active = {
         start: p,
-        original: d.shapes.find((s) => s.id === id) ?? null,
+        original,
         handle: handle === null ? null : Number(handle),
       };
+      drag.current = active;
+      setMoving(active);
       setDraft([p]);
       return;
     }
-    if (tool === "select") {
-      setSelected("");
-      return;
-    }
     drag.current = { start: p, original: null, handle: null };
-    setDraft([p]);
+    setDraft(tool === "angle" ? [...corners, p] : [p]);
   };
   const move = (event: PointerEvent<SVGSVGElement>) => {
-    if (!drag.current) return;
+    if (!drag.current) {
+      // Between clicks, the next arm of an angle follows the mouse.
+      if (tool === "angle" && corners.length)
+        setDraft([...corners, point(event)]);
+      return;
+    }
     const p = point(event);
     if (tool === "freehand")
-      setDraft((points) => (points.length < 2000 ? [...points, p] : points));
+      setDraft((points) =>
+        points.length < MAX_POINTS ? [...points, p] : points
+      );
+    else if (tool === "angle") setDraft([...corners, p]);
+    else if (tool === "count") setDraft([p]);
     else setDraft([drag.current.start, p]);
   };
   const up = (event: PointerEvent<SVGSVGElement>) => {
@@ -250,28 +427,20 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
     const end = point(event),
       points = tool === "freehand" ? [...draft, end] : [active.start, end];
     drag.current = null;
+    setMoving(null);
     setDraft([]);
-    if (tool === "select" && active.original) {
-      const original = active.original,
-        dx = end.x - active.start.x,
-        dy = end.y - active.start.y;
-      commit({
-        ...d,
-        shapes: d.shapes.map((s) =>
-          s.id === original.id
-            ? {
-                ...s,
-                points: original.points.map((p, i) =>
-                  active.handle !== null
-                    ? i === active.handle
-                      ? end
-                      : p
-                    : { x: p.x + dx, y: p.y + dy }
-                ),
-              }
-            : s
-        ),
-      });
+    if (tool === "select") {
+      const original = active.original;
+      // A click that selects without moving is not a change to undo.
+      if (original && distance(active.start, end) > 0)
+        commit({
+          ...d,
+          shapes: d.shapes.map((s) =>
+            s.id === original.id
+              ? { ...s, points: moved({ ...active, original }, end).points }
+              : s
+          ),
+        });
       return;
     }
     if (tool === "scale") {
@@ -295,22 +464,80 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
       setTool("select");
       return;
     }
+    if (tool === "lanes") {
+      const regions =
+        Math.abs(end.x - active.start.x) > 1 &&
+        Math.abs(end.y - active.start.y) > 1
+          ? splitRegion(active.start, end, laneTotal, fullView)
+          : [];
+      if (regions.length) {
+        commit({
+          ...d,
+          shapes: [...d.shapes, ...laneShapes(regions, "#dc2626")],
+        });
+        setTool("select");
+      }
+      return;
+    }
+    if (tool === "angle") {
+      const last = corners[corners.length - 1];
+      // A corner on top of the one before it would leave an arm with no
+      // length; the click is ignored.
+      if (last && distance(last, end) < 1) return;
+      const placed = [...corners, end];
+      if (placed.length < 3) {
+        setCorners(placed);
+        return;
+      }
+      setCorners([]);
+      const shape: Shape = {
+        id: crypto.randomUUID(),
+        kind: "angle",
+        name: nextName("angle"),
+        color: "#2563eb",
+        points: placed,
+      };
+      commit({ ...d, shapes: [...d.shapes, shape] });
+      setSelected(shape.id);
+      setTool("select");
+      return;
+    }
+    if (tool === "count") {
+      // A counted point needs no sub-pixel position; a tenth keeps a long
+      // count small.
+      const spot = {
+          x: Math.round(end.x * 10) / 10,
+          y: Math.round(end.y * 10) / 10,
+        },
+        current = d.shapes.find(
+          (s) => s.id === selected && s.kind === "count"
+        );
+      if (current) {
+        if (current.points.length < MAX_POINTS)
+          commit({
+            ...d,
+            shapes: d.shapes.map((s) =>
+              s.id === current.id ? { ...s, points: [...s.points, spot] } : s
+            ),
+          });
+        return;
+      }
+      const shape: Shape = {
+        id: crypto.randomUUID(),
+        kind: "count",
+        name: nextName("count"),
+        color: "#2563eb",
+        points: [spot],
+      };
+      commit({ ...d, shapes: [...d.shapes, shape] });
+      setSelected(shape.id);
+      return;
+    }
     if (distance(active.start, end) < 1 && tool !== "text") return;
     const shape: Shape = {
       id: crypto.randomUUID(),
-      kind: (tool === "text" ? "text" : tool) as Shape["kind"],
-      name: `${t(
-        (
-          {
-            line: "선",
-            rectangle: "사각형",
-            ellipse: "타원",
-            freehand: "자유형",
-            text: "텍스트",
-          } as Record<string, string>
-        )[tool] ?? tool,
-        tool
-      )} ${d.shapes.length + 1}`,
+      kind: tool as Shape["kind"],
+      name: nextName(tool),
       color: gel ? "#dc2626" : "#2563eb",
       points,
       text: tool === "text" ? t("라벨", "Label") : undefined,
@@ -319,7 +546,89 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
     setSelected(shape.id);
     setTool("select");
   };
-  const shapeElement = (s: Shape, draftShape = false) => {
+  // While a shape is dragged it is drawn where it would land, and everything
+  // derived from the shapes (labels, sizes, statistics) follows it.
+  const live =
+      moving && draft.length > 1 ? moved(moving, draft[draft.length - 1]) : null,
+    shown = live
+      ? d.shapes.map((s) => (s.id === live.id ? live : s))
+      : d.shapes;
+  const countTarget = shown.find(
+    (s) => s.id === selected && s.kind === "count"
+  );
+  // What the gesture in progress would create, drawn dashed until released.
+  const preview = ((): Shape[] => {
+    const base = { id: "draft", name: "", color: DRAFT_COLOR };
+    if (tool === "select" || tool === "color") return [];
+    if (tool === "angle") {
+      const points = draft.length ? draft : corners;
+      return points.length ? [{ ...base, kind: "angle", points }] : [];
+    }
+    if (tool === "count")
+      return draft.length ? [{ ...base, kind: "count", points: draft }] : [];
+    if (draft.length < 2) return [];
+    if (tool === "lanes")
+      return splitRegion(draft[0], draft[1], laneTotal, fullView).map(
+        (points, index) => ({
+          ...base,
+          id: `draft-${index}`,
+          kind: "rectangle",
+          name: String(index + 1),
+          points,
+        })
+      );
+    if (tool === "text")
+      return [
+        {
+          ...base,
+          kind: "text",
+          name: nextName("text"),
+          text: t("라벨", "Label"),
+          points: draft,
+        },
+      ];
+    return [
+      {
+        ...base,
+        kind:
+          tool === "scale"
+            ? "line"
+            : tool === "crop"
+            ? "rectangle"
+            : (tool as Shape["kind"]),
+        points: draft,
+      },
+    ];
+  })();
+  const reading = gel ? readGel(shown, d) : null,
+    // A band still being drawn already shows the size it would get.
+    labelBands = new Map(
+      (preview.length && gel
+        ? readGel([...shown, ...preview], d)
+        : reading
+      )?.bands.map((band) => [band.id, band])
+    ),
+    bandOf = (shape: Shape) => reading?.bands.find((b) => b.id === shape.id),
+    laneName = (id: string) =>
+      reading?.lanes.find((lane) => lane.id === id)?.name ?? "",
+    sizeUnit = d.sizeUnit ?? "bp";
+  /** A band's size as shown everywhere: known as entered, estimated with "≈". */
+  const sizeText = (band: GelBand | undefined) =>
+    !band
+      ? ""
+      : band.known !== null
+      ? `${format(band.known)} ${sizeUnit}`
+      : band.estimate?.ok
+      ? `≈ ${format(
+          roundEstimate(band.estimate.size, band.estimate.extrapolated)
+        )} ${sizeUnit}`
+      : "";
+  const dot = Math.max(3, d.width / 160),
+    font = Math.max(12, d.width / 55);
+  const shapeElement = (
+    s: Shape,
+    { draftShape = false, offset = 0 } = {}
+  ) => {
     const a = s.points[0],
       b = s.points[1] ?? a;
     if (!a) return null;
@@ -327,12 +636,18 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
       "data-shape": draftShape ? undefined : s.id,
       stroke: s.color,
       strokeWidth: Math.max(1, d.width / 500),
+      strokeDasharray: draftShape ? "6 4" : undefined,
       fill: "none",
       vectorEffect: "non-scaling-stroke" as const,
     };
-    const info = measure(s, actualScale);
+    const info = measure(s, actualScale),
+      band = labelBands.get(s.id);
     const label = gel
-      ? s.name
+      ? `${s.name}${
+          d.sizeLabels !== false && band?.estimate?.ok
+            ? ` ${sizeText(band)}`
+            : ""
+        }`.trim()
       : s.kind === "line"
       ? `${format(info.length)} ${unit}`
       : s.kind === "color"
@@ -344,9 +659,20 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
         )} ${unit}²`
       : s.kind === "text"
       ? s.text
+      : s.kind === "angle"
+      ? info.angle == null
+        ? ""
+        : angleText(info.angle)
+      : s.kind === "count"
+      ? draftShape
+        ? ""
+        : `${s.name}: ${s.points.length}`
       : `${format(info.area)} ${unit}²`;
+    // An angle is labelled at its vertex, everything else at its first point.
+    const anchor = s.kind === "angle" ? b : a,
+      arc = s.kind === "angle" ? anglePath(s.points) : "";
     return (
-      <g key={s.id}>
+      <g key={s.id} data-preview={draftShape ? "" : undefined}>
         {s.kind === "line" ? (
           <line {...props} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />
         ) : s.kind === "rectangle" ? (
@@ -370,16 +696,55 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
             {...props}
             points={s.points.map((p) => `${p.x},${p.y}`).join(" ")}
           />
+        ) : s.kind === "angle" ? (
+          <>
+            <polyline
+              {...props}
+              points={s.points.map((p) => `${p.x},${p.y}`).join(" ")}
+            />
+            {arc && <path {...props} d={arc} />}
+            {/* Corners placed so far, visible before there is a line. */}
+            {draftShape &&
+              s.points.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r={dot / 2} fill={s.color} />
+              ))}
+          </>
+        ) : s.kind === "count" ? (
+          s.points.map((p, i) => (
+            <g key={i}>
+              <circle
+                data-shape={props["data-shape"]}
+                cx={p.x}
+                cy={p.y}
+                r={dot}
+                fill={s.color}
+                stroke="#ffffff"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+              <text
+                data-shape={props["data-shape"]}
+                x={p.x + dot * 1.5}
+                y={p.y + dot}
+                fill={s.color}
+                fontSize={font * 0.8}
+              >
+                {i + 1 + offset}
+              </text>
+            </g>
+          ))
         ) : null}
-        <text
-          data-shape={s.id}
-          x={a.x}
-          y={a.y - 8}
-          fill={s.color}
-          fontSize={Math.max(12, d.width / 55)}
-        >
-          {label}
-        </text>
+        {label && (
+          <text
+            data-shape={props["data-shape"]}
+            x={anchor.x}
+            y={anchor.y - 8 - (s.kind === "count" ? dot : 0)}
+            fill={s.color}
+            fontSize={font}
+          >
+            {label}
+          </text>
+        )}
         {selected === s.id &&
           !draftShape &&
           s.kind !== "color" &&
@@ -398,16 +763,21 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
       </g>
     );
   };
-  const selectedShape = d.shapes.find((s) => s.id === selected),
+  const selectedShape = shown.find((s) => s.id === selected),
     selectedMeasure = selectedShape
       ? measure(selectedShape, actualScale)
       : null;
-  const editShape = (patch: Partial<Shape>) =>
-    commit({
-      ...d,
-      shapes: d.shapes.map((s) => (s.id === selected ? { ...s, ...patch } : s)),
-    });
-  const updateColor = (color: string, tolerance: number) => {
+  const editShape = (patch: Partial<Shape>, entry = "") =>
+    commit(
+      {
+        ...d,
+        shapes: d.shapes.map((s) =>
+          s.id === selected ? { ...s, ...patch } : s
+        ),
+      },
+      entry && `${entry}:${selected}`
+    );
+  const updateColor = (color: string, tolerance: number, entry = "") => {
     const image = imageRef.current;
     if (!image || !selectedShape) return;
     const ratio = Math.min(1, 512 / Math.max(d.width, d.height)),
@@ -424,8 +794,143 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
         rgb,
         tolerance
       );
-    editShape({ color, tolerance, ...coverage });
+    editShape({ color, tolerance, ...coverage }, entry);
   };
+  const splitSelected = () => {
+    if (!selectedShape || selectedShape.points.length < 2) return;
+    const regions = splitRegion(
+      selectedShape.points[0],
+      selectedShape.points[1],
+      laneTotal,
+      fullView
+    );
+    if (!regions.length) return;
+    commit({
+      ...d,
+      shapes: d.shapes.flatMap((s) =>
+        s.id === selectedShape.id ? laneShapes(regions, s.color) : [s]
+      ),
+    });
+    setSelected("");
+  };
+  /** What a shape measures, for the table and the PDF. */
+  const resultText = (shape: Shape, perimeter = false) => {
+    const result = measure(shape, actualScale);
+    return shape.kind === "text"
+      ? shape.text ?? ""
+      : shape.kind === "angle"
+      ? result.angle == null
+        ? "—"
+        : angleText(result.angle)
+      : shape.kind === "count"
+      ? countText(result.count ?? 0)
+      : shape.kind === "freehand" && perimeter
+      ? `${format(result.area)} ${unit}² · ${t("둘레", "Perimeter")} ${format(
+          result.length
+        )} ${unit}`
+      : result.area != null
+      ? `${format(result.area)} ${unit}²`
+      : `${format(result.length)} ${unit}`;
+  };
+  /** A gel shape's place in the reading: what it is, its lane and its size. */
+  const gelCells = (shape: Shape) => {
+    const band = bandOf(shape),
+      extrapolated = !!band?.estimate?.ok && band.estimate.extrapolated;
+    return {
+      type:
+        shape.kind === "line"
+          ? band && band.known !== null
+            ? t("래더 밴드", "Ladder band")
+            : t("밴드", "Band")
+          : names[shape.kind] ?? shape.kind,
+      lane: band ? laneName(band.lane) : "",
+      size: band
+        ? `${sizeText(band)}${
+            extrapolated ? ` · ${t("외삽", "extrapolated")}` : ""
+          }`
+        : "",
+    };
+  };
+  /**
+   * The gel's annotations as export rows: bands lane by lane from the left and
+   * down each lane, then the lanes without bands and the remaining notes.
+   * Pixel lengths and areas are left out; they say nothing about a gel.
+   */
+  const gelRows = () => {
+    if (!reading) return [];
+    const order = new Map(reading.lanes.map((lane, index) => [lane.id, index])),
+      rank = (band: GelBand) => order.get(band.lane) ?? reading.lanes.length,
+      used = new Set(reading.bands.map((band) => band.lane));
+    return [
+      ...[...reading.bands]
+        .sort(
+          (m, n) =>
+            rank(m) - rank(n) || m.left - n.left || m.position - n.position
+        )
+        .map((band) => ({
+          lane: laneName(band.lane),
+          name: band.name,
+          type:
+            band.known !== null
+              ? t("래더 밴드", "Ladder band")
+              : t("밴드", "Band"),
+          position: Math.round(band.position * 10) / 10,
+          size:
+            band.known ??
+            (band.estimate?.ok
+              ? roundEstimate(band.estimate.size, band.estimate.extrapolated)
+              : null),
+          source:
+            band.known !== null
+              ? t("래더", "Ladder")
+              : band.estimate?.ok
+              ? t("추정", "Estimated")
+              : "",
+          extrapolated: band.estimate?.ok ? band.estimate.extrapolated : null,
+        })),
+      ...d.shapes
+        .filter(
+          (shape) =>
+            shape.kind !== "line" &&
+            !(shape.kind === "rectangle" && used.has(shape.id))
+        )
+        .map((shape) => ({
+          lane: shape.kind === "rectangle" ? shape.name : "",
+          name: shape.kind === "rectangle" ? "" : shape.name,
+          type: names[shape.kind] ?? shape.kind,
+          position: null,
+          size: null,
+          source: "",
+          extrapolated: null,
+        })),
+    ];
+  };
+  const groups: MeasureGroup[] = gel
+    ? []
+    : (
+        [
+          ["line", t("선 길이", "Line length"), "length", ` ${unit}`],
+          ["rectangle", t("사각형 면적", "Rectangle area"), "area", ` ${unit}²`],
+          ["ellipse", t("타원 면적", "Ellipse area"), "area", ` ${unit}²`],
+          ["freehand", t("자유형 면적", "Freehand area"), "area", ` ${unit}²`],
+          ["angle", t("각도", "Angle"), "angle", "°"],
+          ["count", t("점 계수", "Point count"), "count", ""],
+        ] as const
+      )
+        .map(([kind, label, quantity, suffix]) => ({
+          key: kind,
+          label,
+          text: (value: number) => `${format(value)}${suffix}`,
+          total: kind === "count",
+          values: shown
+            .filter((shape) => shape.kind === kind)
+            .map((shape) => ({
+              name: shape.name,
+              value: measure(shape, actualScale)[quantity] ?? NaN,
+            }))
+            .filter((entry) => Number.isFinite(entry.value)),
+        }))
+        .filter((entry) => entry.values.length > 0);
   const exportPNG = async () => {
     try {
       const svg = svgRef.current;
@@ -441,7 +946,9 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
         });
         clone.querySelector("image")?.setAttribute("href", data);
       }
-      clone.querySelectorAll("[data-handle]").forEach((el) => el.remove());
+      clone
+        .querySelectorAll("[data-handle], [data-preview]")
+        .forEach((el) => el.remove());
       const blob = new Blob([new XMLSerializer().serializeToString(clone)], {
           type: "image/svg+xml",
         }),
@@ -458,7 +965,7 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
         g.fillRect(0, 0, sw, sh);
         g.drawImage(img, 0, 0, sw, sh);
         const out = await new Promise<Blob | null>((r) => c.toBlob(r));
-        if (out) await download(out, "measurement.png", "image/png");
+        if (out) await download(out, exportName("png"), "image/png");
       } finally {
         URL.revokeObjectURL(u);
       }
@@ -466,8 +973,162 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
       setError(String(e));
     }
   };
+  const exportPDF = async () => {
+    try {
+      // The statistics shown under the table, for kinds measured twice or more.
+      const stats = groups.flatMap((entry) => {
+        const summary = summarize(entry.values.map((value) => value.value));
+        return summary && summary.sd !== null
+          ? [
+              [
+                entry.label,
+                summary.n,
+                entry.text(Number(summary.mean.toPrecision(4))),
+                entry.text(Number(summary.sd.toPrecision(4))),
+              ],
+            ]
+          : [];
+      });
+      await report({
+        title: ctx.doc.title,
+        lines: gel
+          ? [
+              `${t("원본 이미지", "Source image")}: ${d.width} × ${
+                d.height
+              } px`,
+              t(
+                "≈ 표시는 이웃한 래더 밴드 사이를 log 크기로 직선 보간한 추정값이며, 외삽은 래더 범위 밖의 값입니다.",
+                "≈ marks an estimate read along a straight line in log size between neighbouring ladder bands; extrapolated values lie outside the ladder."
+              ),
+            ]
+          : [
+              scale > 0
+                ? `${t("스케일", "Scale")}: ${plainNumber(
+                    scale,
+                    7
+                  )} ${unit}/px`
+                : t(
+                    "미보정: 결과는 픽셀 단위입니다.",
+                    "Uncalibrated: results are in pixels."
+                  ),
+              `${t("원본 이미지", "Source image")}: ${d.width} × ${
+                d.height
+              } px`,
+            ],
+        svg: svgRef.current,
+        headers: gel
+          ? [
+              t("레인", "Lane"),
+              t("이름", "Name"),
+              t("구분", "Type"),
+              t("크기", "Size"),
+            ]
+          : [t("이름", "Name"), t("결과", "Result")],
+        rows: gel
+          ? gelRows().map((row) => [
+              row.lane,
+              row.name,
+              row.type,
+              row.size === null
+                ? ""
+                : `${row.extrapolated === null ? "" : "≈ "}${format(
+                    row.size
+                  )} ${sizeUnit}${
+                    row.extrapolated ? ` (${t("외삽", "extrapolated")})` : ""
+                  }`,
+            ])
+          : d.shapes.map((shape) => [
+              shape.name,
+              shape.kind === "color"
+                ? `${format(colorArea(shape))} ${unit}² ≈`
+                : resultText(shape),
+            ]),
+        sections: stats.length
+          ? [
+              {
+                title: t("측정 통계", "Measurement statistics"),
+                headers: [
+                  t("종류", "Kind"),
+                  t("개수", "Count"),
+                  t("평균", "Mean"),
+                  t("표준편차 (n−1)", "SD (n−1)"),
+                ],
+                rows: stats,
+              },
+            ]
+          : [],
+        name: exportName("pdf"),
+      });
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  const exportCSV = () =>
+    download(
+      csv(
+        gel
+          ? [
+              [
+                t("레인", "Lane"),
+                t("이름", "Name"),
+                t("구분", "Type"),
+                t("이동 거리 (px)", "Migration distance (px)"),
+                t("크기", "Size"),
+                t("단위", "Unit"),
+                t("크기 출처", "Size source"),
+                t("외삽", "Extrapolated"),
+              ],
+              ...gelRows().map((row) => [
+                row.lane,
+                row.name,
+                row.type,
+                row.position ?? "",
+                row.size ?? "",
+                row.size === null ? "" : sizeUnit,
+                row.source,
+                row.extrapolated === null
+                  ? ""
+                  : row.extrapolated
+                  ? t("예", "Yes")
+                  : t("아니오", "No"),
+              ]),
+            ]
+          : [
+              [
+                t("이름", "Name"),
+                t("길이", "Length"),
+                t("너비", "Width"),
+                t("높이", "Height"),
+                t("면적", "Area"),
+                t("단위", "Unit"),
+                t("각도 (°)", "Angle (°)"),
+                t("점 개수", "Points"),
+              ],
+              ...d.shapes.map((s) => {
+                const r = measure(s, actualScale);
+                return [
+                  s.name,
+                  r.length ?? "",
+                  r.width ?? "",
+                  r.height ?? "",
+                  s.kind === "color" ? colorArea(s) : r.area ?? "",
+                  unit,
+                  r.angle ?? "",
+                  r.count ?? "",
+                ];
+              }),
+            ]
+      ),
+      exportName("csv"),
+      "text/csv"
+    );
   return (
-    <div>
+    // Leaving a field ends its run of edits: the next one is undone on its own.
+    <div
+      onBlur={() => {
+        group.current = "";
+      }}
+    >
       <Panel>
         {!d.asset && (
           <div className="tool-actions">
@@ -573,6 +1234,10 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                   known: 0,
                   unitsPerPixel: 0,
                   bar: 0,
+                  // Ladder sizes come along with the bands, so their unit does too.
+                  ...(gel && source.sizeUnit
+                    ? { sizeUnit: source.sizeUnit }
+                    : {}),
                 });
                 setError(
                   t(
@@ -597,15 +1262,14 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
+              const temp = URL.createObjectURL(file);
               try {
-                const temp = URL.createObjectURL(file),
-                  img = new Image();
+                const img = new Image();
                 img.src = temp;
                 await img.decode();
                 if (img.width * img.height > 40e6)
                   throw Error("Maximum 40 megapixels");
                 const asset = await ctx.repo.putImage(ctx.doc.id, file);
-                URL.revokeObjectURL(temp);
                 commit({
                   ...d,
                   asset,
@@ -614,6 +1278,9 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                   shapes: [],
                   crop: null,
                   rotation: 0,
+                  // A new image starts unmirrored, like it starts unrotated.
+                  flipX: false,
+                  flipY: false,
                   known: 0,
                   unitsPerPixel: 0,
                   reference: [
@@ -624,6 +1291,8 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 setError("");
               } catch (e) {
                 setError(String(e));
+              } finally {
+                URL.revokeObjectURL(temp);
               }
             }}
           />
@@ -657,24 +1326,27 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                     d.calibration === "reference" ? d.known : d.unitsPerPixel
                   }
                   onChange={(v) =>
-                    commit({
-                      ...d,
-                      [d.calibration === "reference"
-                        ? "known"
-                        : "unitsPerPixel"]: Number(v),
-                    })
+                    commit(
+                      {
+                        ...d,
+                        [d.calibration === "reference"
+                          ? "known"
+                          : "unitsPerPixel"]: Number(v),
+                      },
+                      `scale:${d.calibration}`
+                    )
                   }
                 />
                 <Select
                   label={t("단위", "Unit")}
                   value={d.unit}
                   onChange={(unit) => commit({ ...d, unit })}
-                  options={["m", "cm", "mm", "µm"]}
+                  options={["m", "cm", "mm", "µm", "nm"]}
                 />
                 <Field
                   label={t("스케일 바 길이", "Scale bar length")}
                   value={d.bar}
-                  onChange={(v) => commit({ ...d, bar: Number(v) })}
+                  onChange={(v) => commit({ ...d, bar: Number(v) }, "bar")}
                 />
               </div>
             )}
@@ -687,70 +1359,43 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
               </p>
             )}
             <div className="tool-actions">
-              {(gel
-                ? ["select", "line", "rectangle", "text", "crop"]
-                : [
-                    "select",
-                    "scale",
-                    "line",
-                    "rectangle",
-                    "ellipse",
-                    "freehand",
-                    "color",
-                    "text",
-                    "crop",
-                  ]
-              ).map((k) => (
+              {toolKeys.map((k) => (
                 <button
                   key={k}
                   className={tool === k ? "primary" : ""}
                   aria-pressed={tool === k}
-                  onClick={() => setTool(k)}
+                  onClick={() => pickTool(k)}
                 >
-                  {
-                    (
-                      {
-                        select: t("선택", "Select"),
-                        scale: t("기준선", "Reference"),
-                        line: gel ? "Band" : t("선", "Line"),
-                        rectangle: gel ? "Lane" : t("사각형", "Rectangle"),
-                        ellipse: t("타원", "Ellipse"),
-                        freehand: t("자유형", "Freehand"),
-                        color: t("색상", "Color"),
-                        text: t("텍스트", "Text"),
-                        crop: t("자르기", "Crop"),
-                      } as Record<string, string>
-                    )[k]
-                  }
+                  {names[k]}
                 </button>
               ))}
               <button
                 disabled={!history.length}
-                onClick={() => {
-                  setRedo([...redo, d]);
-                  set(history[history.length - 1]);
-                  setHistory(history.slice(0, -1));
-                }}
+                aria-keyshortcuts="Control+Z Meta+Z"
+                onClick={undo}
               >
                 {t("실행 취소", "Undo")}
               </button>
               <button
                 disabled={!redo.length}
-                onClick={() => {
-                  setHistory([...history, d]);
-                  set(redo[redo.length - 1]);
-                  setRedo(redo.slice(0, -1));
-                }}
+                aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
+                onClick={redoStep}
               >
                 {t("다시 실행", "Redo")}
               </button>
             </div>
             <div className="tool-actions">
-              <button onClick={() => setZoom(Math.max(0.25, zoom - 0.25))}>
+              <button
+                aria-label={t("축소", "Zoom out")}
+                onClick={() => setZoom(Math.max(0.25, zoom - 0.25))}
+              >
                 −
               </button>
               <span>{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom(Math.min(4, zoom + 0.25))}>
+              <button
+                aria-label={t("확대", "Zoom in")}
+                onClick={() => setZoom(Math.min(4, zoom + 0.25))}
+              >
                 +
               </button>
               <button
@@ -778,12 +1423,64 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 )}
                 value={d.tolerance}
                 onChange={(v) =>
-                  commit({
-                    ...d,
-                    tolerance: Math.max(0, Math.min(100, Number(v))),
-                  })
+                  commit(
+                    {
+                      ...d,
+                      tolerance: Math.max(0, Math.min(100, Number(v))),
+                    },
+                    "tolerance"
+                  )
                 }
               />
+            )}
+            {tool === "lanes" && (
+              <div className="tool-image-x-hint">
+                <StoredNumberField
+                  label={t("레인 수", "Number of lanes")}
+                  value={laneCount}
+                  onChange={setLaneCount}
+                />
+                <p className="tool-muted" role="status">
+                  {laneTotal
+                    ? t(
+                        `레인 전체를 감싸도록 이미지 위를 끌면 같은 폭의 레인 ${laneTotal}개가 왼쪽부터 1번으로 만들어집니다.`,
+                        `Drag across all the lanes on the image to make ${laneTotal} lanes of equal width, numbered from 1 at the left.`
+                      )
+                    : t(
+                        `레인 수를 1에서 ${MAX_LANES} 사이의 정수로 입력하세요.`,
+                        `Enter a whole number of lanes from 1 to ${MAX_LANES}.`
+                      )}
+                </p>
+              </div>
+            )}
+            {tool === "angle" && (
+              <p className="tool-muted" role="status">
+                {t(
+                  `한쪽 끝, 꼭짓점, 다른 쪽 끝 순서로 세 점을 누르세요. (${corners.length}/3)`,
+                  `Click three points: one end, the vertex, then the other end. (${corners.length}/3)`
+                )}
+              </p>
+            )}
+            {tool === "count" && (
+              <div className="tool-image-x-hint">
+                <p className="tool-muted" role="status">
+                  {countTarget
+                    ? t(
+                        `셀 대상을 하나씩 누르세요. "${countTarget.name}"에 더해집니다: ${countTarget.points.length}개`,
+                        `Click each object to count it. Adding to "${countTarget.name}": ${countTarget.points.length}`
+                      )
+                    : t(
+                        "셀 대상을 하나씩 누르세요. 누를 때마다 번호가 붙은 점이 생깁니다.",
+                        "Click each object to count it. Every click leaves a numbered point."
+                      )}
+                </p>
+                {countTarget && (
+                  // A second kind of object is counted in a group of its own.
+                  <button onClick={() => setSelected("")}>
+                    {t("새 그룹으로 세기", "Start a new group")}
+                  </button>
+                )}
+              </div>
             )}
           </>
         )}
@@ -798,24 +1495,16 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
             <Select
               label={t("그리기 도구", "Drawing tool")}
               value={tool}
-              onChange={setTool}
-              options={[
-                ["select", t("선택 / 이동", "Select / Move")],
-                ...(!gel
-                  ? ([["scale", t("기준선", "Reference")]] as const)
-                  : []),
-                ["line", gel ? "Band" : t("선", "Line")],
-                ["rectangle", gel ? "Lane" : t("사각형", "Rectangle")],
-                ...(!gel
-                  ? ([
-                      ["ellipse", t("타원", "Ellipse")],
-                      ["freehand", t("자유형", "Freehand")],
-                      ["color", t("색상", "Color")],
-                    ] as const)
-                  : []),
-                ["text", t("텍스트", "Text")],
-                ["crop", t("자르기", "Crop")],
-              ]}
+              onChange={pickTool}
+              options={toolKeys.map(
+                (k) =>
+                  [
+                    k,
+                    k === "select"
+                      ? t("선택 / 이동", "Select / Move")
+                      : names[k],
+                  ] as const
+              )}
             />
             <button
               aria-label={t("이미지 축소", "Zoom out")}
@@ -846,14 +1535,22 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
               onPointerUp={up}
               onPointerCancel={() => {
                 drag.current = null;
+                setMoving(null);
                 setDraft([]);
               }}
+              onPointerLeave={() => {
+                // The arm that followed the mouse stops at the last corner.
+                if (!drag.current) setDraft([]);
+              }}
+              // A drag is a gesture on the picture, never the browser's own
+              // image drag.
+              onDragStart={(event) => event.preventDefault()}
               role="img"
               aria-label={t("측정 이미지 편집기", "Measurement image editor")}
             >
               <g ref={groupRef} transform={transform}>
                 <image href={url} width={d.width} height={d.height} />
-                {d.shapes.map((s) => shapeElement(s))}
+                {shown.map((s) => shapeElement(s))}
                 {tool === "scale" && d.reference.length === 2 && (
                   <>
                     <line
@@ -874,19 +1571,12 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                     </text>
                   </>
                 )}
-                {draft.length > 1 &&
-                  shapeElement(
-                    {
-                      id: "draft",
-                      kind: (["scale", "crop", "select"].includes(tool)
-                        ? "line"
-                        : tool) as Shape["kind"],
-                      name: "",
-                      color: "#f97316",
-                      points: draft,
-                    },
-                    true
-                  )}
+                {preview.map((s) =>
+                  shapeElement(s, {
+                    draftShape: true,
+                    offset: countTarget?.points.length ?? 0,
+                  })
+                )}
               </g>
               {d.bar > 0 && scale > 0 && d.bar / scale < sw * 0.9 && (
                 <g>
@@ -927,7 +1617,7 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
               type="text"
               label={t("이름", "Name")}
               value={selectedShape.name}
-              onChange={(name) => editShape({ name })}
+              onChange={(name) => editShape({ name }, "name")}
             />
             <ColorField
               label={t("색상", "Color")}
@@ -958,7 +1648,8 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 onChange={(value) =>
                   updateColor(
                     selectedShape.color,
-                    Math.max(0, Math.min(100, Number(value)))
+                    Math.max(0, Math.min(100, Number(value))),
+                    "tolerance"
                   )
                 }
               />
@@ -972,24 +1663,37 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                     b = selectedShape.points[1],
                     length = distance(a, b);
                   if (length > 0)
-                    editShape({
-                      points: [
-                        a,
-                        {
-                          x:
-                            a.x +
-                            ((b.x - a.x) * Number(value)) /
-                              actualScale /
-                              length,
-                          y:
-                            a.y +
-                            ((b.y - a.y) * Number(value)) /
-                              actualScale /
-                              length,
-                        },
-                      ],
-                    });
+                    editShape(
+                      {
+                        points: [
+                          a,
+                          {
+                            x:
+                              a.x +
+                              ((b.x - a.x) * Number(value)) /
+                                actualScale /
+                                length,
+                            y:
+                              a.y +
+                              ((b.y - a.y) * Number(value)) /
+                                actualScale /
+                                length,
+                          },
+                        ],
+                      },
+                      "length"
+                    );
                 }}
+              />
+            )}
+            {gel && selectedShape.kind === "line" && (
+              <StoredNumberField
+                label={t(
+                  `래더 밴드 크기 (${sizeUnit})`,
+                  `Ladder band size (${sizeUnit})`
+                )}
+                value={selectedShape.size ?? null}
+                onChange={(size) => editShape({ size }, "size")}
               />
             )}
             {selectedShape.kind === "text" && (
@@ -997,11 +1701,11 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 type="text"
                 label={t("텍스트", "Text")}
                 value={selectedShape.text ?? ""}
-                onChange={(text) => editShape({ text })}
+                onChange={(text) => editShape({ text }, "text")}
               />
             )}{" "}
             {selectedShape.points.length === 2 &&
-              selectedShape.kind !== "line" &&
+              !["line", "angle", "count"].includes(selectedShape.kind) &&
               (["width", "height"] as const).map((key, i) => (
                 <Field
                   key={key}
@@ -1015,22 +1719,90 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                     if (i === 0)
                       b.x = a.x + Math.max(0, Number(v)) / actualScale;
                     else b.y = a.y + Math.max(0, Number(v)) / actualScale;
-                    editShape({ points: [a, b] });
+                    editShape({ points: [a, b] }, key);
                   }}
                 />
               ))}
+            {gel && selectedShape.kind === "rectangle" && (
+              <StoredNumberField
+                label={t("나눌 레인 수", "Lanes to split into")}
+                value={laneCount}
+                onChange={setLaneCount}
+              />
+            )}
           </div>
-          <button
-            onClick={() => {
-              commit({
-                ...d,
-                shapes: d.shapes.filter((s) => s.id !== selected),
-              });
-              setSelected("");
-            }}
-          >
-            {t("측정 삭제", "Delete measurement")}
-          </button>
+          {gel && selectedShape.kind === "line" && (
+            <p className="tool-muted">
+              {selectedShape.size != null && selectedShape.size > 0
+                ? t(
+                    "크기를 입력한 밴드는 래더 밴드로, 다른 밴드의 크기를 추정하는 기준이 됩니다.",
+                    "A band with a size is a ladder band: the reference other bands are estimated from."
+                  )
+                : `${t(
+                    "래더 밴드라면 알려진 크기를 입력하세요. 비워 두면 시료 밴드로 보고 크기를 추정합니다.",
+                    "For a ladder band, enter its known size. Left empty, the band is a sample band and its size is estimated."
+                  )}${
+                    sizeText(bandOf(selectedShape))
+                      ? ` ${t("추정 크기", "Estimated size")}: ${
+                          gelCells(selectedShape).size
+                        }`
+                      : ""
+                  }`}
+            </p>
+          )}
+          {selectedShape.kind === "angle" && (
+            <p className="tool-muted">
+              {t("각도", "Angle")}: {resultText(selectedShape)}
+              {" · "}
+              {t(
+                "가운데 조절점이 꼭짓점입니다.",
+                "The middle handle is the vertex."
+              )}
+            </p>
+          )}
+          {selectedShape.kind === "count" && (
+            <p className="tool-muted">
+              {t("점 개수", "Points")}: {resultText(selectedShape)}
+              {selectedShape.points.length >= MAX_POINTS &&
+                ` · ${t(
+                  `한 그룹에는 ${format(MAX_POINTS)}개까지 셀 수 있습니다.`,
+                  `One group holds up to ${format(MAX_POINTS)} points.`
+                )}`}
+            </p>
+          )}
+          <div className="tool-actions">
+            {gel && selectedShape.kind === "rectangle" && (
+              <button disabled={!laneTotal} onClick={splitSelected}>
+                {t("레인으로 균등 분할", "Split into equal lanes")}
+              </button>
+            )}
+            {selectedShape.kind === "count" && (
+              <>
+                <button onClick={() => pickTool("count")}>
+                  {t("이어서 세기", "Keep counting")}
+                </button>
+                <button
+                  disabled={selectedShape.points.length < 2}
+                  onClick={() =>
+                    editShape({ points: selectedShape.points.slice(0, -1) })
+                  }
+                >
+                  {t("마지막 점 지우기", "Remove last point")}
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => {
+                commit({
+                  ...d,
+                  shapes: d.shapes.filter((s) => s.id !== selected),
+                });
+                setSelected("");
+              }}
+            >
+              {t("측정 삭제", "Delete measurement")}
+            </button>
+          </div>
         </Panel>
       )}
       {gel && url && (
@@ -1046,37 +1818,66 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
             ]}
             onChange={(id) => {
               const ladder = ctx.documents.find((doc) => doc.id === id);
+              // Only the fields used here are read; a ladder saved by a newer
+              // build may carry more.
               const bands = ladder?.data.bands as
-                | { label: string; size: number }[]
+                | { label?: string; size?: number | null; highlight?: boolean }[]
                 | undefined;
-              if (bands)
+              if (Array.isArray(bands)) {
+                const ladderUnit =
+                    typeof ladder?.data.unit === "string"
+                      ? ladder.data.unit
+                      : "",
+                  known = (size: unknown): size is number =>
+                    typeof size === "number" &&
+                    Number.isFinite(size) &&
+                    size > 0;
+                // Largest at the top, spaced by log size. Reference bands the
+                // ladder marks as emphasised are drawn longer and in red.
+                const positions = ladderPositions(
+                  bands.map((b) => (known(b.size) ? b.size : null))
+                );
                 commit({
                   ...d,
+                  ...(ladderUnit ? { sizeUnit: ladderUnit } : {}),
                   shapes: [
                     ...d.shapes,
-                    ...bands.map((b, i) => ({
-                      id: crypto.randomUUID(),
-                      kind: "line" as const,
-                      name: `${b.label} ${ladder?.data.unit}`,
-                      color: "#dc2626",
-                      points: [
-                        {
-                          x: d.width * 0.1,
-                          y:
-                            d.height *
-                            (0.1 + (0.8 * i) / Math.max(1, bands.length - 1)),
-                        },
-                        {
-                          x: d.width * 0.2,
-                          y:
-                            d.height *
-                            (0.1 + (0.8 * i) / Math.max(1, bands.length - 1)),
-                        },
-                      ],
-                    })),
+                    ...bands.map((b, i) => {
+                      const y = d.height * (0.1 + 0.8 * positions[i]);
+                      return {
+                        id: crypto.randomUUID(),
+                        kind: "line" as const,
+                        name: `${b.label ?? b.size ?? ""} ${ladderUnit}`.trim(),
+                        color: b.highlight ? "#dc2626" : "#f97316",
+                        points: [
+                          { x: d.width * (b.highlight ? 0.08 : 0.1), y },
+                          { x: d.width * (b.highlight ? 0.22 : 0.2), y },
+                        ],
+                        // The known size is what other bands are read against.
+                        ...(known(b.size) ? { size: b.size } : {}),
+                      };
+                    }),
                   ],
                 });
+              }
             }}
+          />
+          <p className="tool-muted">
+            {t(
+              "불러온 밴드를 이미지의 실제 래더 밴드 위로 하나씩 옮기세요. 처음 배치는 로그 간격의 출발점일 뿐입니다.",
+              "Move each loaded band onto the real ladder band in the image. The first layout is only a log-spaced starting point."
+            )}
+          </p>
+        </Panel>
+      )}
+      {gel && url && reading && (
+        <Panel title={t("밴드 크기 추정", "Band size estimate")}>
+          <GelSizes
+            reading={reading}
+            unit={sizeUnit}
+            onUnit={(next) => commit({ ...d, sizeUnit: next })}
+            labels={d.sizeLabels !== false}
+            onLabels={(sizeLabels) => commit({ ...d, sizeLabels })}
           />
         </Panel>
       )}
@@ -1088,20 +1889,28 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 <thead>
                   <tr>
                     <th>{t("이름", "Name")}</th>
-                    <th>{t("결과", "Result")}</th>
+                    {gel ? (
+                      <>
+                        <th>{t("구분", "Type")}</th>
+                        <th>{t("레인", "Lane")}</th>
+                        <th>{t("크기", "Size")}</th>
+                      </>
+                    ) : (
+                      <th>{t("결과", "Result")}</th>
+                    )}
                     <th>{t("표시", "Visibility")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {d.shapes.map((s) => {
-                    const result = measure(s, actualScale),
-                      visible = s.points.some(
+                  {shown.map((s) => {
+                    const visible = s.points.some(
                         (p) =>
                           p.x >= crop.x &&
                           p.x <= crop.x + crop.width &&
                           p.y >= crop.y &&
                           p.y <= crop.y + crop.height
-                      );
+                      ),
+                      cells = gel ? gelCells(s) : null;
                     return (
                       <tr key={s.id}>
                         <td>
@@ -1109,27 +1918,21 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                             {s.name}
                           </button>
                         </td>
-                        <td>
-                          {s.kind === "color"
-                            ? `${format(
-                                (s.areaFraction ?? s.fraction ?? 0) *
-                                  d.width *
-                                  d.height *
-                                  actualScale ** 2
-                              )} ${unit}² · ${format(
-                                (s.fraction ?? 0) * 100
-                              )}% ≈`
-                            : s.kind === "text"
-                            ? s.text
-                            : s.kind === "freehand"
-                            ? `${format(result.area)} ${unit}² · ${t(
-                                "둘레",
-                                "Perimeter"
-                              )} ${format(result.length)} ${unit}`
-                            : result.area != null
-                            ? `${format(result.area)} ${unit}²`
-                            : `${format(result.length)} ${unit}`}
-                        </td>
+                        {cells ? (
+                          <>
+                            <td>{cells.type}</td>
+                            <td>{cells.lane || "—"}</td>
+                            <td>{cells.size || "—"}</td>
+                          </>
+                        ) : (
+                          <td>
+                            {s.kind === "color"
+                              ? `${format(colorArea(s))} ${unit}² · ${format(
+                                  (s.fraction ?? 0) * 100
+                                )}% ≈`
+                              : resultText(s, true)}
+                          </td>
+                        )}
                         <td>
                           {visible
                             ? t("표시됨", "Visible")
@@ -1141,83 +1944,16 @@ export default function ImageTool({ gel = false }: { gel?: boolean }) {
                 </tbody>
               </table>
             </div>
+            <MeasureStats groups={groups} />
           </Panel>
           <div className="tool-actions">
             <button disabled={!url} onClick={exportPNG}>
               PNG
             </button>
-            <button
-              disabled={!url}
-              onClick={async () => {
-                try {
-                  await report({
-                    title: ctx.doc.title,
-                    lines: [
-                      actualScale > 0
-                        ? `${t("스케일", "Scale")}: ${actualScale} ${unit}/px`
-                        : "px",
-                      `${t("원본 이미지", "Source image")}: ${d.width} × ${
-                        d.height
-                      } px`,
-                    ],
-                    svg: svgRef.current,
-                    headers: [t("이름", "Name"), t("결과", "Result")],
-                    rows: d.shapes.map((shape) => {
-                      const result = measure(shape, actualScale);
-                      return [
-                        shape.name,
-                        shape.kind === "text"
-                          ? shape.text ?? ""
-                          : shape.kind === "color"
-                          ? `${format(
-                              (shape.areaFraction ?? 0) *
-                                d.width *
-                                d.height *
-                                actualScale ** 2
-                            )} ${unit}² ≈`
-                          : result.area != null
-                          ? `${format(result.area)} ${unit}²`
-                          : `${format(result.length)} ${unit}`,
-                      ];
-                    }),
-                    name: "image-measurement.pdf",
-                  });
-                } catch (e) {
-                  setError(String(e));
-                }
-              }}
-            >
+            <button disabled={!url} onClick={exportPDF}>
               PDF
             </button>
-            <button
-              onClick={() =>
-                download(
-                  csv([
-                    ["Name", "Length", "Width", "Height", "Area", "Unit"],
-                    ...d.shapes.map((s) => {
-                      const r = measure(s, actualScale);
-                      return [
-                        s.name,
-                        r.length ?? "",
-                        r.width ?? "",
-                        r.height ?? "",
-                        s.kind === "color"
-                          ? (s.areaFraction ?? s.fraction ?? 0) *
-                            d.width *
-                            d.height *
-                            actualScale ** 2
-                          : r.area ?? "",
-                        unit,
-                      ];
-                    }),
-                  ]),
-                  "measurements.csv",
-                  "text/csv"
-                )
-              }
-            >
-              CSV
-            </button>
+            <button onClick={exportCSV}>CSV</button>
           </div>
         </>
       )}

@@ -1,12 +1,30 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
+import { tools } from "./registry";
+import { searchTools, touchRecent, mergeRecent } from "./catalog";
 import { evaluateExpression, parseExpression } from "./expression";
 import { convertUnit, convertCentrifuge } from "./units";
-import { dilution, molarity, seeding, growthHours, cellCount } from "./labMath";
+import { dilution, seeding, growthHours, cellCount } from "./labMath";
 import { fitCalibration } from "./calibration";
-import { measure, colorFraction, colorCoverage } from "./geometry";
+import {
+  measure,
+  ladderPositions,
+  colorFraction,
+  colorCoverage,
+} from "./geometry";
+import {
+  plainNumber,
+  parseNumber,
+  exportFileName,
+  need,
+  IncompleteInput,
+  tsv,
+} from "./format";
 import {
   exportICS,
   importICS,
+  mergeImported,
+  shiftAnchor,
   occurrences,
   type CalendarEvent,
 } from "./calendar";
@@ -74,8 +92,7 @@ describe("laboratory calculations", () => {
     expect(() => convertUnit(1, "M", "g/L")).toThrow();
     expect(() => convertUnit(-300, "°C", "K")).toThrow();
   });
-  it("computes molarity and hemocytometer results", () => {
-    expect(molarity(58.44, 58.44, 1)).toBe(1);
+  it("computes hemocytometer results", () => {
     expect(cellCount([100, 100], [0, 0], 2, 0.0001)).toMatchObject({
       concentration: 2000000,
       viability: 100,
@@ -170,7 +187,8 @@ describe("calibration models", () => {
         ],
         "linear"
       )
-    ).toThrow("Duplicate");
+      // Two measurements of one x are replicates now, but still one x.
+    ).toThrow("At least 2 distinct");
     expect(() =>
       fitCalibration(
         [
@@ -252,6 +270,81 @@ describe("image geometry", () => {
     ).toBe(0.5);
   });
 });
+describe("measurement and ladder geometry", () => {
+  it("places ladder bands by log size with the largest at the top", () => {
+    const [top, middle, bottom] = ladderPositions([10000, 1000, 100]);
+    expect(top).toBe(0);
+    expect(middle).toBeCloseTo(0.5, 10);
+    expect(bottom).toBe(1);
+    // Stored order does not matter, and an unreadable size keeps its slot.
+    expect(ladderPositions([100, 10000])).toEqual([1, 0]);
+    expect(ladderPositions([500])).toEqual([0.5]);
+    expect(ladderPositions([1000, null, 100])[1]).toBe(0.5);
+  });
+  it("reports no length or area for labels and colour matches", () => {
+    const points = [
+      { x: 0, y: 0 },
+      { x: 30, y: 40 },
+    ];
+    const shape = { id: "1", name: "n", color: "#000", points };
+    expect(measure({ ...shape, kind: "text" }, 2)).toEqual({});
+    expect(measure({ ...shape, kind: "color" }, 2)).toEqual({});
+    expect(measure({ ...shape, kind: "line" }, 2)).toEqual({ length: 100 });
+  });
+  it("writes a fitted line with a signed intercept", () => {
+    const line = (points: [number, number][], model: "linear" | "origin") =>
+      fitCalibration(
+        points.map(([x, y]) => ({ x, y })),
+        model
+      ).equation;
+    expect(
+      line(
+        [
+          [1, 1],
+          [2, 3],
+          [3, 5],
+        ],
+        "linear"
+      )
+    ).toBe("y = 2x − 1");
+    expect(
+      line(
+        [
+          [1, 3],
+          [2, 5],
+          [3, 7],
+        ],
+        "linear"
+      )
+    ).toBe("y = 2x + 1");
+    expect(
+      line(
+        [
+          [1, 2],
+          [2, 4],
+        ],
+        "origin"
+      )
+    ).toBe("y = 2x");
+  });
+});
+describe("plain numbers for copy and export", () => {
+  it("drops binary floating-point residue and grouping", () => {
+    expect(plainNumber(convertUnit(1, "mL", "µL"))).toBe("1000");
+    expect(plainNumber(0.1 + 0.2)).toBe("0.3");
+    expect(plainNumber(1234567.5)).toBe("1234567.5");
+    expect(plainNumber(1e-9)).toBe("1e-9");
+    expect(plainNumber(NaN)).toBe("NaN");
+  });
+  it("names the value a centrifuge conversion is missing", () => {
+    expect(() => convertCentrifuge(1000, "RPM", 0)).toThrow(
+      "Enter a positive rotor radius"
+    );
+    expect(() => convertCentrifuge(-1, "RPM", 8)).toThrow(
+      "Enter a non-negative speed or force"
+    );
+  });
+});
 describe("calendar interoperability", () => {
   const event: CalendarEvent = {
     id: "1",
@@ -281,6 +374,45 @@ describe("calendar interoperability", () => {
       importICS(ics.replace("FREQ=WEEKLY", "FREQ=WEEKLY;BYDAY=MO"))
     ).toThrow("Unsupported recurrence");
   });
+  it("steps one month at a time from the last day of a month", () => {
+    expect(shiftAnchor(new Date(2026, 0, 31), "month", 1).getMonth()).toBe(1);
+    expect(shiftAnchor(new Date(2026, 2, 31), "month", -1).getMonth()).toBe(1);
+    expect(shiftAnchor(new Date(2026, 0, 31), "list", 1).getMonth()).toBe(1);
+    expect(shiftAnchor(new Date(2026, 11, 31), "month", 1).getFullYear()).toBe(
+      2027
+    );
+    const week = shiftAnchor(new Date(2026, 0, 31), "week", 1);
+    expect([week.getMonth(), week.getDate()]).toEqual([1, 7]);
+  });
+  it("updates events imported before instead of adding copies", async () => {
+    const own = {
+      ...event,
+      id: "0b0f5a52-3d3c-4d8e-9a58-0c2f1f7b9a11",
+      reminderMinutes: 15,
+    };
+    const ics = await exportICS([own]);
+    expect(importICS(ics)[0].id).toBe(own.id);
+    const merged = mergeImported(
+      [own],
+      importICS(ics.replace("SUMMARY:", "SUMMARY:Moved "))
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].title.startsWith("Moved ")).toBe(true);
+    // ICS carries no reminder lead time; the one set here survives.
+    expect(merged[0].reminderMinutes).toBe(15);
+    const foreign = ics.replace(
+      `UID:${own.id}@burillab`,
+      "UID:abc-123@example.org"
+    );
+    const [first] = importICS(foreign),
+      [again] = importICS(foreign);
+    expect(first.id).toBe(again.id);
+    expect(first.id).not.toBe(own.id);
+    expect(mergeImported([own], [first])).toHaveLength(2);
+    expect(mergeImported(mergeImported([own], [first]), [again])).toHaveLength(
+      2
+    );
+  });
   it("keeps local meeting time across DST", () => {
     const e = {
       ...event,
@@ -299,5 +431,99 @@ describe("calendar interoperability", () => {
       "2026-11-01T14:00:00.000Z",
       "2026-11-02T14:00:00.000Z",
     ]);
+  });
+});
+describe("tool list search and recently used", () => {
+  const names = (query: string) => searchTools(query, tools).map((t) => t.id);
+  it("finds tools by keyword and abbreviation in either language", () => {
+    expect(names("RCF")).toEqual(["unit-converter"]);
+    expect(names("원심")).toEqual(["unit-converter"]);
+    expect(names("c1v1")).toEqual(["dilution"]);
+    expect(names("표준곡선")).toEqual(["calibration-curve"]);
+    expect(names("hemocytometer")).toEqual(["cell-counter"]);
+    expect(names("없는도구")).toEqual([]);
+    expect(names("  ")).toHaveLength(tools.length);
+  });
+  it("ranks a name match above a keyword or description match and ignores spaces", () => {
+    // "희석" names the dilution tool; other tools only mention it.
+    expect(names("희석")[0]).toBe("dilution");
+    expect(names("단위변환")).toEqual(["unit-converter"]);
+    expect(names("cell")[0]).toBe("cell-culture");
+  });
+  it("keeps the recently used list short, newest first, one entry per tool", () => {
+    const list = touchRecent(
+      touchRecent(touchRecent([], "timer", 1), "dilution", 2),
+      "timer",
+      3
+    );
+    expect(list).toEqual([
+      { id: "timer", at: 3 },
+      { id: "dilution", at: 2 },
+    ]);
+    expect(
+      mergeRecent(list, [
+        { id: "dilution", at: 9 },
+        { id: "notes", at: 1 },
+      ]).map((entry) => entry.id)
+    ).toEqual(["dilution", "timer", "notes"]);
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `t${i}`, at: i }));
+    expect(touchRecent(many, "x", 99)).toHaveLength(8);
+    expect(mergeRecent(undefined, "junk")).toEqual([]);
+  });
+  it("syncs only tool ids the server accepts", () => {
+    const allowedIn = (file: string) =>
+      [
+        ...readFileSync(`supabase/migrations/${file}`, "utf8")
+          .match(/tool_id in \(([^)]+)\)/)![1]
+          .matchAll(/'([^']+)'/g),
+      ].map((m) => m[1]);
+    // The newest migration lists exactly the tools in the registry.
+    expect(tools.map((tool) => tool.id).sort()).toEqual(
+      allowedIn("20261127090000_lab_tools_usage_and_purge.sql").sort()
+    );
+    // A tool the first, already-applied list does not have must not send
+    // documents yet: it stays device-only until the newer migration is live.
+    const deployed = allowedIn("20261109011725_personal_lab_tools.sql");
+    for (const tool of tools)
+      if (!deployed.includes(tool.id)) expect(tool.kind, tool.id).toBe("quick");
+  });
+});
+describe("typed numbers and export names", () => {
+  it("reads a typed number, including a decimal comma, and rejects the rest", () => {
+    expect(parseNumber(" 12.5 ")).toBe(12.5);
+    expect(parseNumber("0,5")).toBe(0.5);
+    expect(parseNumber("-3")).toBe(-3);
+    expect(parseNumber("1e-3")).toBe(0.001);
+    expect(parseNumber("")).toBeNull();
+    expect(parseNumber("abc")).toBeNull();
+    // Grouping or decimal comma? Not guessed.
+    expect(parseNumber("1,000")).toBeNull();
+    expect(parseNumber("1,2,3")).toBeNull();
+  });
+  it("names exports by tool, saved title and minute", () => {
+    const at = new Date(2026, 10, 27, 9, 5);
+    expect(exportFileName("master-mix", undefined, "csv", at)).toBe(
+      "buril-master-mix-20261127-0905.csv"
+    );
+    expect(exportFileName("plate-labelling", " Run 3 / A:B ", "png", at)).toBe(
+      "buril-plate-labelling-Run-3-A-B-20261127-0905.png"
+    );
+  });
+});
+describe("values shared with engines and spreadsheets", () => {
+  it("reads a required value and tells empty from wrong", () => {
+    expect(need("2.5")).toBe(2.5);
+    expect(need(0)).toBe(0);
+    expect(() => need("")).toThrow(IncompleteInput);
+    expect(() => need(null)).toThrow(IncompleteInput);
+    expect(() => need("abc")).toThrow("Invalid number");
+  });
+  it("writes rows as tab-separated text without breaking cells", () => {
+    expect(
+      tsv([
+        ["Name", "Total"],
+        ["Buffer" + "\t" + "A", 4.35 * 100],
+      ])
+    ).toBe("Name\tTotal\nBuffer A\t435");
   });
 });

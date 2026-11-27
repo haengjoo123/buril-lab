@@ -4,7 +4,7 @@
 
 플래그: `VITE_ENABLE_AGENT_MODE` (기본 꺼짐)
 런타임 스위치: 환경별 `BURILLAB_RUNTIME_CONFIG` KV의 **별도 키** `agent_mode_config` (없으면 꺼짐)
-DB: 3단계 `supabase/migrations/20261127090000_agent_query_events.sql` (테이블 `agent_query_events`, 함수 `record_agent_query_event_v1`). 1·2단계는 변경 없음
+DB: 3단계 `supabase/migrations/20261127080000_agent_query_events.sql` (테이블 `agent_query_events`, 함수 `record_agent_query_event_v1`). 1·2단계는 변경 없음
 
 ## 기능
 
@@ -137,7 +137,7 @@ order by created_at desc limit 200;
 ## 켜는 순서
 
 1. 개인정보처리방침(2026-11-27 갱신분: 에이전트 모드에 입력한 문장의 AI 전송, 이용 기록, 처리하지 못한 요청의 문장 저장)이 기능보다 먼저 또는 함께 배포돼야 한다. 문구는 이 저장소에 들어 있다. `APP_STORE_PRIVACY_DISCLOSURE.md`의 "에이전트 모드" 절에 따라 두 스토어 응답도 고친다.
-2. migration `20261127090000_agent_query_events.sql`을 Staging과 운영 DB에 연달아 적용한다(두 환경의 이력이 어긋나면 배포 검사가 막는다). 적용하지 않아도 에이전트는 동작하지만 기록이 남지 않는다.
+2. migration `20261127080000_agent_query_events.sql`을 Staging과 운영 DB에 연달아 적용한다(두 환경의 이력이 어긋나면 배포 검사가 막는다). 적용하지 않아도 에이전트는 동작하지만 기록이 남지 않는다.
    - 적용 뒤 Hosted Security Advisor를 실행한다: `npm run security:supabase-advisors:hosted -- --environment staging`. 이 migration만으로 2건이 늘어야 한다(적용 전 기준은 86건): `rls_enabled_no_policy` INFO 1건(`agent_query_events`), `authenticated_security_definer_function_executable` WARN 1건(`record_agent_query_event_v1`). 그 밖의 항목이 늘었으면 멈추고 원인을 확인한다. 검토 뒤 `supabase/security-advisors/*.json`과 `EXPECTED_COUNTS`를 실제 관측값으로 갱신한다(2026-11-27에 88건으로 갱신, 아래 기록).
    - `supabase/tests/baseline_permissions.sql`의 public 테이블 수는 63개(service_role 63, authenticated 41, anon 24)로 고쳤다.
    - 기준 파일은 한 환경만 고칠 수 없다. 정적 검사(`npm run security:supabase-advisors`, quality CI)가 운영 기준과 Staging 기준이 같은지 확인하고, Staging 배포(`deploy-staging.yml`)와 웹 릴리스(`web-release.yml`)는 Hosted 검사를 통과해야 진행한다. 그래서 두 환경에 모두 적용한 뒤 두 파일을 함께 고친다.

@@ -6,12 +6,16 @@ import { ToolContext } from "./ui";
 import type { ToolDocument } from "./registry";
 import type { ToolRepository } from "./repository";
 import Equation from "./EquationTool";
+import CalculatorTool from "./CalculatorTool";
 import Plate from "./PlateTool";
 import UnitTool from "./UnitTool";
 import CounterTool from "./CounterTool";
-import { TimerTool } from "./TimeTools";
+import TimerTool from "./TimerTool";
 import CalibrationTool from "./CalibrationTool";
 import MolarityTool from "./MolarityTool";
+import DilutionTool from "./DilutionTool";
+import MixTool from "./MixTool";
+import CellCounterTool from "./CellCounterTool";
 import { searchChemical } from "../../services/searchService";
 vi.mock("../../services/searchService", () => ({ searchChemical: vi.fn() }));
 vi.mock("react-i18next", () => ({
@@ -157,7 +161,7 @@ describe("tool input workflows", () => {
         .value
     ).toBe("3");
   });
-  it("prepares a 10 mM solution, preserves quantities on unit changes and supports mole-based calculations", async () => {
+  it("prepares a 10 mM solution, keeps typed numbers on unit changes and supports mole-based calculations", async () => {
     const { element } = await mount(<MolarityTool />);
     const select = async (label: string, value: string) =>
       act(() => {
@@ -168,12 +172,17 @@ describe("tool input workflows", () => {
         control.dispatchEvent(new Event("change", { bubbles: true }));
       });
     await act(() => button(element, "Mass").click());
-    await input(field(element, "Molarity"), "0.01");
-    await input(field(element, "Final volume"), "0.1");
+    await input(field(element, "Molarity"), "10");
+    await input(field(element, "Final volume"), "100");
+    // 10 M × 58.44 g/mol × 100 L while the units are still M and L.
+    expect(element.querySelector("output")?.textContent).toBe("58,440");
+    // A unit change never rewrites the number; the result follows the unit.
     await select("Molarity unit", "mM");
     expect(field(element, "Molarity").value).toBe("10");
     await select("Final volume unit", "mL");
     expect(field(element, "Final volume").value).toBe("100");
+    // 0.01 M × 58.44 g/mol × 0.1 L = 0.05844 g.
+    expect(element.querySelector("output")?.textContent).toBe("0.05844");
     await select("Result unit", "mg");
     expect(element.querySelector("output")?.textContent).toBe("58.44");
     await act(() => button(element, "From moles").click());
@@ -185,7 +194,7 @@ describe("tool input workflows", () => {
     await input(field(element, "Amount"), "0");
     expect(element.querySelector("output")?.textContent).toBe("0");
   });
-  it("previews a matched reagent before applying its molecular weight and reuses it from recent reagents", async () => {
+  it("previews a matched reagent before applying its molecular weight and unlinks it when the weight is edited", async () => {
     vi.mocked(searchChemical).mockResolvedValueOnce({
       id: "water",
       name: "Water",
@@ -207,18 +216,17 @@ describe("tool input workflows", () => {
     expect(
       element.querySelector(".tool-molarity-found")?.textContent
     ).toContain("7732-18-5");
-    expect(getDoc().data.mw).toBe("58.44");
+    // Finding a reagent changes nothing until it is applied. (The search
+    // text is no longer kept in the document, so the field is what to check.)
+    expect(field(element, "Molecular weight").value).toBe("58.44");
     await act(() => button(element, "Use this molecular weight").click());
     expect(getDoc().data.mw).toBe("18.015");
-    expect(getDoc().data.recentReagents).toHaveLength(1);
+    expect(getDoc().data.reagent).toMatchObject({ name: "Water" });
+    // Recent reagents belong to the account now (ReagentLookup), not to this
+    // document; molarity.interactions.test.tsx covers reusing one.
+    expect(getDoc().data.recentReagents).toBeUndefined();
     await input(field(element, "Molecular weight"), "20");
     expect(getDoc().data.reagent).toBeNull();
-    await act(() =>
-      element
-        .querySelector<HTMLButtonElement>(".tool-molarity-recents button")!
-        .click()
-    );
-    expect(getDoc().data.mw).toBe("18.015");
   });
   it("filters conversion units and asks for molecular weight only when needed", async () => {
     const { element } = await mount(<UnitTool />);
@@ -235,6 +243,110 @@ describe("tool input workflows", () => {
     expect(element.querySelector("output")?.textContent).toContain("180");
     await act(() => button(element, "Swap").click());
     expect(element.querySelector("output")?.textContent).toContain("1");
+  });
+  it("swaps and copies a converted value without floating-point residue", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const { element, getDoc } = await mount(<UnitTool />);
+    // 1 mL in µL is 1000.0000000000001 in binary floating point.
+    await act(() =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="Copy result"]')!
+        .click()
+    );
+    expect(writeText).toHaveBeenCalledWith("1000 µL");
+    await act(() => button(element, "Swap").click());
+    expect(getDoc().data.value).toBe("1000");
+    expect(getDoc().data.from).toBe("µL");
+    vi.unstubAllGlobals();
+  });
+  it("continues a calculation from an answer without floating-point residue", async () => {
+    const { element, getDoc } = await mount(<CalculatorTool />, {
+      expression: "0.1+0.2",
+    });
+    await act(() => button(element, "=").click());
+    expect(getDoc().data.expression).toBe("0.3");
+    expect(getDoc().data.history).toEqual(["0.1+0.2 = 0.3"]);
+    // The on-screen keypad is the keyboard here; a phone must not raise its own.
+    expect(
+      element
+        .querySelector('[aria-label="Expression"]')
+        ?.getAttribute("inputmode")
+    ).toBe("none");
+  });
+  it("deletes at the caret from the equation keypad", async () => {
+    const { element, getDoc } = await mount(<Equation />, {
+      expression: "a+bc",
+    });
+    await act(() => button(element, "Math keypad").click());
+    const equation = element.querySelector<HTMLInputElement>(
+      '[aria-label="Equation"]'
+    )!;
+    // Place the caret between "b" and "c" the way a tap or arrow key would.
+    await act(() => {
+      equation.focus();
+      equation.setSelectionRange(3, 3);
+      equation.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
+    await act(() =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="Backspace"]')!
+        .click()
+    );
+    expect(getDoc().data.expression).toBe("a+c");
+  });
+  it("totals each mix component on its own", async () => {
+    const { element } = await mount(<MixTool />, {
+      count: 4,
+      excess: 0,
+      rows: [
+        { id: "1", name: "Buffer", amount: 2.5, unit: "µL", checked: false },
+        { id: "2", name: "Enzyme", amount: -1, unit: "µL", checked: false },
+      ],
+    });
+    const totals = [...element.querySelectorAll(".tool-mix-total output")].map(
+      (node) => node.textContent
+    );
+    // The unfinished row is reported; the finished one keeps its total.
+    expect(totals[0]).toBe("10 µL");
+    expect(totals[1]).toBe("— µL");
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
+    expect(button(element, "CSV").disabled).toBe(true);
+  });
+  it("asks for missing dilution inputs instead of reporting an error", async () => {
+    const { element } = await mount(<DilutionTool />);
+    expect(element.querySelector("output")?.textContent).toContain("1 mL");
+    await input(field(element, "Target concentration"), "");
+    expect(element.querySelector('[role="alert"]')).toBeNull();
+    expect(element.querySelector('[role="status"]')?.textContent).toContain(
+      "to calculate"
+    );
+    expect(element.querySelector("output")).toBeNull();
+  });
+  it("shows a cell count only when it can be calculated and lets a chamber be removed", async () => {
+    const { element, getDoc } = await mount(<CellCounterTool />, {
+      rows: [
+        { live: 90, dead: 10 },
+        { live: 110, dead: 10 },
+      ],
+      factor: 2,
+      volume: 0.0001,
+    });
+    expect(element.querySelector("output")?.textContent).toContain(
+      "2,000,000 cells/mL"
+    );
+    await act(() =>
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="Remove square 2"]')!
+        .click()
+    );
+    expect(getDoc().data.rows).toEqual([{ live: 90, dead: 10 }]);
+    expect(
+      element.querySelector('[aria-label="Remove square 1"]')
+    ).toBeNull();
+    await input(field(element, "Dilution factor"), "0");
+    expect(element.querySelector("output")).toBeNull();
+    expect(element.querySelector('[role="alert"]')).not.toBeNull();
   });
   it("counts rapid taps without dropping increments and restores the last count with undo", async () => {
     const { element, getDoc } = await mount(<CounterTool />);
@@ -286,7 +398,7 @@ describe("tool input workflows", () => {
     await act(() => element.querySelector<HTMLButtonElement>('[aria-label="A1"]')!.click());
     await act(() => element.querySelector<HTMLButtonElement>('[aria-label="A2"]')!.click());
     await input(field(element, "Sample"), "Control");
-    await input(field(element, "Condition / concentration"), "Vehicle");
+    await input(field(element, "Condition"), "Vehicle");
     await act(() => button(element, "Apply to selected wells").click());
     const wells = getDoc().data.wells as Record<
       string,
@@ -311,14 +423,14 @@ describe("tool input workflows", () => {
     expect(field(element, "Sample").value).toBe("Drug X");
     await clickLabel("Copy content");
     await clickLabel("A2");
-    expect(element.querySelectorAll('.tool-plate [aria-pressed="true"]')).toHaveLength(1);
+    expect(element.querySelectorAll('.tool-plate [aria-selected="true"]')).toHaveLength(1);
     expect(field(element, "Sample").value).toBe("");
     await clickLabel("Paste");
     expect((getDoc().data.wells as Record<string, unknown>).A2).toBeUndefined();
     await act(() => button(element, "Apply to selected wells").click());
     expect((getDoc().data.wells as Record<string, unknown>).A2).toEqual(saved);
     await clickLabel("Select row B");
-    expect(element.querySelectorAll('.tool-plate [aria-pressed="true"]')).toHaveLength(6);
+    expect(element.querySelectorAll('.tool-plate [aria-selected="true"]')).toHaveLength(6);
     expect(element.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
   });
 

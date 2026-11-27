@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, MemoryRouter, useNavigate, useSearchParams } from 'react-router-dom';
 import '../../src/index.css';
@@ -447,6 +447,18 @@ useFridgeStore.setState({
   }],
 }] });
 
+// --- Lab tools (?screen=tools&path=/app/tools/timer) ----------------------------------------------
+// No session exists here, so the tool repository never reaches a server: documents live in this
+// browser profile's IndexedDB only. Mounted as in App: one workspace per user, across tool routes.
+const ToolsWorkspace = lazy(() => import('../../src/features/tools/ToolsWorkspace'));
+const ToolsRuntime = lazy(() => import('../../src/features/tools/ToolsRuntime'));
+function ToolsScreen() {
+  return <Suspense fallback={null}>
+    <ToolsRuntime ownerId="fixture-user" />
+    <ToolsWorkspace key="fixture-user" ownerId="fixture-user" />
+  </Suspense>;
+}
+
 export function Fixture() {
   const isAdmin = screen === 'admin';
   const [tab, setTab] = useState<AppTab>(screen === 'cart' ? 'search' : screen as AppTab);
@@ -479,6 +491,7 @@ export function Fixture() {
         : tab === 'cabinet' ? <FridgeView cabinetId="" />
         : tab === 'logs' ? <WasteLogView />
         : tab === 'admin' ? <LabAdminView onStartWasteBatch={async () => {}} />
+        : tab === 'tools' ? <ToolsScreen />
         : <SearchTabView cartCount={cartCount} query={query} lastSearchQuery={lastQuery} result={searchResult}
           isLoading={params.get('loading') === '1'} isAiAnalyzing={false}
           error={hasSearchError ? '외부 화학 자료 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해 주세요.' : null}
@@ -500,4 +513,7 @@ createRoot(document.getElementById('root')!).render(screen === 'ops'
   ? <MemoryRouter initialEntries={['/ops']}><AdaptiveViewportProvider>
     <OpsConsoleView userEmail="operator@example.invalid" onSignOut={noop} onExitToApp={noop} />
   </AdaptiveViewportProvider></MemoryRouter>
+  // Tools read the tool and document from the path, which the fixture page's own URL cannot carry.
+  : screen === 'tools'
+  ? <MemoryRouter initialEntries={[params.get('path') ?? '/app/tools']}><AdaptiveViewportProvider><Fixture /></AdaptiveViewportProvider></MemoryRouter>
   : <BrowserRouter><AdaptiveViewportProvider><Fixture /></AdaptiveViewportProvider></BrowserRouter>);
