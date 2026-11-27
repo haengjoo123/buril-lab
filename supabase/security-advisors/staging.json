@@ -2,7 +2,7 @@
   "schema_version": 1,
   "environment": "staging",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 88,
+  "expected_count": 90,
   "observed_on": "2026-11-27",
   "entries": [
     {
@@ -1072,6 +1072,32 @@
       "target_gate": "관문 2 함수별 권한 검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_purge_tool_document_p_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "purge_tool_document",
+        "identity_arguments": "p_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "purge_tool_document: authenticated callers are intentionally allowed through this RPC. It deletes one tool document only when it belongs to the caller (auth.uid()) and is already in the trash, and raises otherwise; attachment rows follow by foreign key. Fixed empty search_path; anon and service_role execution are revoked. Hosted behaviour checks on staging cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-27",
+      "expires_on": "2026-12-31",
+      "target_gate": "lab tools RPC permission recheck"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_record_agent_query_event_v1_p_request_id uuid, p_route text, p_kind text, p_outcome text, p_language text, p_lab_id uuid, p_reason text, p_latency_ms integer, p_failed_text text",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -1200,6 +1226,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_tool_usage_p_tool_id text, p_event text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_tool_usage",
+        "identity_arguments": "p_tool_id text, p_event text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "record_tool_usage: authenticated callers are intentionally allowed through this RPC. It only adds one to the caller's own open or save count for a tool and day (auth.uid()); the event must be open or save and the tool id must match a short lowercase pattern; nothing typed into a tool is stored. Fixed empty search_path; anon and service_role execution are revoked, and browser roles can only read their own rows of tool_usage_daily through its owner policy. Hosted behaviour checks on staging cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-27",
+      "expires_on": "2026-12-31",
+      "target_gate": "lab tools RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_record_waste_deposit_to_container_v1_p_request_id uuid, p_batch jsonb, p_lab_id uuid, p_container_id uuid",
