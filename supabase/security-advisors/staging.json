@@ -2,8 +2,8 @@
   "schema_version": 1,
   "environment": "staging",
   "advisor_cli_version": "2.115.0",
-  "expected_count": 86,
-  "observed_on": "2026-11-13",
+  "expected_count": 90,
+  "observed_on": "2026-11-27",
   "entries": [
     {
       "cache_key": "authenticated_security_definer_function_executable_public_activate_waste_policy_v2_p_policy_version_id uuid",
@@ -1072,6 +1072,58 @@
       "target_gate": "관문 2 함수별 권한 검토"
     },
     {
+      "cache_key": "authenticated_security_definer_function_executable_public_purge_tool_document_p_id uuid",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "purge_tool_document",
+        "identity_arguments": "p_id uuid",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "purge_tool_document: authenticated callers are intentionally allowed through this RPC. It deletes one tool document only when it belongs to the caller (auth.uid()) and is already in the trash, and raises otherwise; attachment rows follow by foreign key. Fixed empty search_path; anon and service_role execution are revoked. Hosted behaviour checks on staging cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-27",
+      "expires_on": "2026-12-31",
+      "target_gate": "lab tools RPC permission recheck"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_agent_query_event_v1_p_request_id uuid, p_route text, p_kind text, p_outcome text, p_language text, p_lab_id uuid, p_reason text, p_latency_ms integer, p_failed_text text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_agent_query_event_v1",
+        "identity_arguments": "p_request_id uuid, p_route text, p_kind text, p_outcome text, p_language text, p_lab_id uuid, p_reason text, p_latency_ms integer, p_failed_text text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": true
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "record_agent_query_event_v1: authenticated callers are intentionally allowed through this RPC. It writes one row for the caller only (auth.uid()); a lab id requires membership; route, kind, outcome, reason, language and latency are checked against fixed lists and ranges; the typed sentence is kept only for unsupported or no_match outcomes and cut to 300 characters; a repeated request id changes nothing and writes beyond 500 a day are dropped. Fixed empty search_path; anon execution and direct client access to the table remain denied. Hosted behaviour checks on staging cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-27",
+      "expires_on": "2026-12-31",
+      "target_gate": "agent usage record RPC permission recheck"
+    },
+    {
       "cache_key": "authenticated_security_definer_function_executable_public_record_cabinet_activity_v2_p_cabinet_id uuid, p_action_type text, p_item_name text, p_reason text, p_memo text, p_request_id uuid",
       "rule": "authenticated_security_definer_function_executable",
       "level": "WARN",
@@ -1174,6 +1226,32 @@
       "reviewed_at": "2026-08-24",
       "expires_on": "2026-12-31",
       "target_gate": "관문 2 함수별 권한 검토"
+    },
+    {
+      "cache_key": "authenticated_security_definer_function_executable_public_record_tool_usage_p_tool_id text, p_event text",
+      "rule": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "object": {
+        "kind": "function",
+        "schema": "public",
+        "name": "record_tool_usage",
+        "identity_arguments": "p_tool_id text, p_event text",
+        "language": "plpgsql",
+        "security_definer": true
+      },
+      "evidence": {
+        "kind": "function_execute",
+        "anon_execute": false,
+        "authenticated_execute": true,
+        "service_role_execute": false
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "disposition": "temporary_open",
+      "reason": "record_tool_usage: authenticated callers are intentionally allowed through this RPC. It only adds one to the caller's own open or save count for a tool and day (auth.uid()); the event must be open or save and the tool id must match a short lowercase pattern; nothing typed into a tool is stored. Fixed empty search_path; anon and service_role execution are revoked, and browser roles can only read their own rows of tool_usage_daily through its owner policy. Hosted behaviour checks on staging cover the boundary. Keep open until the next RPC permission recheck.",
+      "reviewed_by_role": "release_security_review",
+      "reviewed_at": "2026-11-27",
+      "expires_on": "2026-12-31",
+      "target_gate": "lab tools RPC permission recheck"
     },
     {
       "cache_key": "authenticated_security_definer_function_executable_public_record_waste_deposit_to_container_v1_p_request_id uuid, p_batch jsonb, p_lab_id uuid, p_container_id uuid",
@@ -2245,6 +2323,53 @@
       "reason": "private.operator_role_assignments_v1은 브라우저 역할에 스키마 사용권과 직접 DML이 없고 service_role도 직접 DML 권한 없이 검토된 SECURITY DEFINER 서버 경로로만 접근하므로 정책 0건을 의도된 기본 거부로 수용한다.",
       "reviewed_by_role": "internal_security_owner",
       "reviewed_at": "2026-09-05",
+      "expires_on": null,
+      "target_gate": null
+    },
+    {
+      "cache_key": "rls_enabled_no_policy_public_agent_query_events",
+      "rule": "rls_enabled_no_policy",
+      "level": "INFO",
+      "object": {
+        "kind": "table",
+        "schema": "public",
+        "name": "agent_query_events"
+      },
+      "evidence": {
+        "kind": "table_access",
+        "rls_enabled": true,
+        "rls_forced": false,
+        "policy_count": 0,
+        "anon": {
+          "schema_usage": true,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "authenticated": {
+          "schema_usage": true,
+          "bypass_rls": false,
+          "select": false,
+          "insert": false,
+          "update": false,
+          "delete": false
+        },
+        "service_role": {
+          "schema_usage": true,
+          "bypass_rls": true,
+          "select": true,
+          "insert": true,
+          "update": true,
+          "delete": true
+        }
+      },
+      "remediation_url": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "disposition": "accepted_design",
+      "reason": "public.agent_query_events은 브라우저 역할의 직접 조회와 DML을 모두 거부하고 service_role만 CRUD할 수 있으며, 클라이언트는 record_agent_query_event_v1 RPC로만 기록함을 카탈로그로 확인해 정책 0건을 의도된 기본 거부로 수용한다.",
+      "reviewed_by_role": "internal_security_owner",
+      "reviewed_at": "2026-11-27",
       "expires_on": null,
       "target_gate": null
     },

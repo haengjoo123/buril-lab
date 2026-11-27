@@ -3,13 +3,16 @@ import { AdaptivePaneLayout } from './AdaptivePaneLayout';
 import logo from '../assets/burillab_app_icon.png';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, ChevronRight, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight, RotateCcw } from 'lucide-react';
+import { Search, Camera, Loader2, AlertCircle, ChevronDown, ChevronUp, ChevronRight, Box, Mic, ArrowUp, X, ShoppingBag, ClipboardList, ArrowRight, RotateCcw, Sparkles } from 'lucide-react';
 import { ResultCard } from './ResultCard';
+import { SegmentedControl } from './SegmentedControl';
+import { shouldSuggestAgentMode } from '../features/agent/agentGuard';
+import type { SearchAgentModeProps, SearchBarMode } from '../features/agent/searchAgentMode';
 import { MediaProductCard } from './MediaProductCard';
 import { MediaProductFilter } from './MediaProductFilter';
 import { InventoryRegistrationModal } from './InventoryRegistrationModal';
 import { OnboardingGuideCard } from './onboarding/OnboardingGuideCard';
-import type { AnalysisResult, CartItem, DisposalCategory } from '../types';
+import type { AnalysisResult, CartItem } from '../types';
 import type { CabinetSearchResult } from '../services/cabinetService';
 import type { MediaProduct, SortOption } from '../services/mediaProductService';
 import { useOnboardingStore } from '../store/useOnboardingStore';
@@ -17,6 +20,8 @@ import { useLabStore } from '../store/useLabStore';
 import { fetchWasteLogs, type WasteLogRecord } from '../services/wasteLogService';
 import { getCategoryDetails } from '../utils/chemicalAnalyzer';
 import { wasteStreamLabel } from '../utils/wasteLabels';
+import { getWasteLogVolumeMl } from '../utils/wasteLogVolume';
+import { isDisposalCategory } from '../utils/disposalCategories';
 import type { SearchErrorKind } from '../hooks/useSearchFlow';
 import type { ChemicalFormChoice } from '../services/chemicalSuggestionService';
 import type { ScannerSelectionMeta } from './Scanner';
@@ -37,33 +42,6 @@ const getWasteLogChemicalName = (item: WasteLogChemicalEntry | null | undefined)
   }
 
   return null;
-};
-
-const DISPOSAL_CATEGORY_VALUES = new Set<string>([
-  'ACID',
-  'ALKALI',
-  'NEUTRAL',
-  'ORGANIC_HALOGEN',
-  'ORGANIC_NON_HALOGEN',
-  'HEAVY_METAL',
-  'CYANIDE',
-  'REACTIVE',
-  'SOLID_WASTE',
-  'SPECIAL_HAZARD',
-  'UNKNOWN',
-]);
-
-/** Volume a log contributes to the "today" summary; mass-only or unknown amounts are skipped. */
-const getWasteLogVolumeMl = (log: WasteLogRecord): number => {
-  if (log.voided_at) return 0;
-  if (log.schema_version === 2) {
-    if (log.amount_is_unknown) return 0;
-    if (log.normalized_amount_unit === 'mL' && typeof log.normalized_amount_value === 'number') {
-      return log.normalized_amount_value;
-    }
-    if (log.normalized_amount_unit) return 0;
-  }
-  return typeof log.total_volume_ml === 'number' ? log.total_volume_ml : 0;
 };
 
 interface TodayWasteSummary {
@@ -144,6 +122,8 @@ interface SearchTabViewProps {
   /** Re-tap of the active search tab / "type it in" from the scanner; a value present at mount is ignored. */
   inputFocusRequestKey?: number;
   onReturnToWasteBatch?: () => void;
+  /** Agent mode for the search bar. Absent when the feature is off, which leaves this screen unchanged. */
+  agent?: SearchAgentModeProps;
 }
 
 export function SearchTabView({
@@ -198,6 +178,7 @@ export function SearchTabView({
   searchFocusRequestKey = 0,
   inputFocusRequestKey = 0,
   onReturnToWasteBatch,
+  agent,
 }: SearchTabViewProps) {
   const { t, i18n } = useTranslation();
   // fetchWasteLogs scopes by the current lab, so the home log summary must refetch on a switch.
@@ -222,18 +203,27 @@ export function SearchTabView({
   const markGuideSeen = useOnboardingStore((state) => state.markGuideSeen);
   const hasOtherResults = mediaProducts.length > 0 || cabinetResults.length > 0;
   const hasSearchResults = Boolean(result) || hasOtherResults;
-  const desktopSearchState = hasSearchResults || isLoading ? 'results' : 'start';
+  // Agent mode reuses the same input; its text and results live outside the search flow.
+  const isAgentMode = agent?.mode === 'agent';
+  const inputValue = isAgentMode ? agent.text : query;
+  const isInputBusy = isAgentMode ? agent.isBusy : isLoading;
+  const desktopSearchState = isAgentMode ? 'agent' : hasSearchResults || isLoading ? 'results' : 'start';
   const showChemicalNotFoundNotice = !isLoading && !result && hasOtherResults && !!lastSearchQuery;
   const normalizedQuery = query.trim();
   // Choices fetched for an earlier keystroke must not gate the current query.
   const activeFormChoices = formChoicesQuery && formChoicesQuery === normalizedQuery ? formChoices : [];
+  const isNotFound = Boolean(error) && errorKind === 'not_found';
   const shouldShowAutocomplete =
+    !isAgentMode &&
     normalizedQuery.length >= 2 &&
     normalizedQuery !== lastSearchQuery &&
     (suggestions.length > 0 || activeFormChoices.length > 0 || isSuggestionsLoading);
-  const shouldShowRecentDropdown = isSearchFocused && !normalizedQuery && recentSearches.length > 0;
-  const isSearchDropdownOpen = shouldShowAutocomplete || shouldShowRecentDropdown;
-  const isNotFound = Boolean(error) && errorKind === 'not_found';
+  const shouldShowRecentDropdown = !isAgentMode && isSearchFocused && !normalizedQuery && recentSearches.length > 0;
+  // A typed sentence is not a chemical name: offer agent mode, but never switch on its own.
+  const showAgentSuggestion = Boolean(agent) && !isAgentMode
+    && (normalizedQuery !== lastSearchQuery || isNotFound)
+    && shouldSuggestAgentMode(normalizedQuery);
+  const isSearchDropdownOpen = shouldShowAutocomplete || shouldShowRecentDropdown || showAgentSuggestion;
   // A miss is a normal outcome (neutral styling); only real failures get the red treatment.
   const showErrorOutline = Boolean(error) && !isNotFound;
   const notFoundSuggestions = useMemo(() => {
@@ -242,7 +232,7 @@ export function SearchTabView({
     return suggestions.filter((suggestion) => suggestion.trim().toLowerCase() !== searched);
   }, [isNotFound, lastSearchQuery, normalizedQuery, suggestions]);
   // Only the hero for first-time users; anyone with history sees their recents instead.
-  const showHero = !lastSearchQuery && !isLoading && !isSearchFocused && recentSearches.length === 0;
+  const showHero = !isAgentMode && !lastSearchQuery && !isLoading && !isSearchFocused && recentSearches.length === 0;
   const visibleCartItems = useMemo(() => cartItems.slice(0, 3), [cartItems]);
   const hiddenCartCount = Math.max(0, cartItems.length - visibleCartItems.length);
 
@@ -250,7 +240,7 @@ export function SearchTabView({
   // instead of flashing back to the list and then to the new result.
   const isResultPaneOpen = Boolean(result) && closedResultQuery !== lastSearchQuery;
   const [holdDetailPane, setHoldDetailPane] = useState(false);
-  const shouldShowDetailPane = isResultPaneOpen || (isLoading && holdDetailPane);
+  const shouldShowDetailPane = !isAgentMode && (isResultPaneOpen || (isLoading && holdDetailPane));
   if (shouldShowDetailPane !== holdDetailPane) {
     setHoldDetailPane(shouldShowDetailPane);
   }
@@ -309,7 +299,15 @@ export function SearchTabView({
     }, 120);
   }, [setSearchFocus]);
 
+  const submitAgentRequest = isAgentMode ? agent.onSubmit : null;
   const handleFormSubmit = useCallback((event?: FormEvent) => {
+    if (submitAgentRequest) {
+      event?.preventDefault();
+      searchInputRef.current?.blur();
+      setSearchFocus(false);
+      submitAgentRequest();
+      return;
+    }
     // A name that fits several reagents is never searched as-is: the person picks the form first.
     if (activeFormChoices.length > 0) {
       event?.preventDefault();
@@ -319,7 +317,7 @@ export function SearchTabView({
     setSearchFocus(false);
     setClosedResultQuery(null);
     onSearchSubmit(event);
-  }, [activeFormChoices.length, onSearchSubmit, setSearchFocus]);
+  }, [activeFormChoices.length, onSearchSubmit, setSearchFocus, submitAgentRequest]);
 
   const handleSuggestionSelect = useCallback((term: string) => {
     searchInputRef.current?.blur();
@@ -510,8 +508,8 @@ export function SearchTabView({
 
   const getWasteLogCategoryLabel = (log: WasteLogRecord): string => {
     if (log.stream_code) return wasteStreamLabel(log.stream_code, i18n.language);
-    if (DISPOSAL_CATEGORY_VALUES.has(log.disposal_category)) {
-      return t(getCategoryDetails(log.disposal_category as DisposalCategory).label);
+    if (isDisposalCategory(log.disposal_category)) {
+      return t(getCategoryDetails(log.disposal_category).label);
     }
     return log.disposal_category;
   };
@@ -603,9 +601,10 @@ export function SearchTabView({
     >
       <AdaptivePaneLayout onActivePaneChange={pane => (pane === 'primary' ? closeDetailPane() : setClosedResultQuery(null))} layout={layout} activePane={shouldShowDetailPane ? 'detail' : 'primary'}
         onBack={closeDetailPane} className="search-panes flex h-full flex-col"
-        data-desktop-search={isDesktopSearch} data-mobile-search={isMobileSearch} data-search-state={desktopSearchState}>
+        data-desktop-search={isDesktopSearch} data-mobile-search={isMobileSearch} data-search-state={desktopSearchState}
+        data-agent-switch={agent ? true : undefined}>
 
-        {isMobileSearch && !lastSearchQuery && !isLoading && !error && !wasteComponentSearchMode && <section className="search-mobile-welcome">
+        {isMobileSearch && !isAgentMode && !lastSearchQuery && !isLoading && !error && !wasteComponentSearchMode && <section className="search-mobile-welcome">
           <img src={logo} alt="" className="h-12 w-12" />
           <h2>{t('search_mobile_title')}</h2>
           <p>{t('search_mobile_description')}</p>
@@ -643,10 +642,10 @@ export function SearchTabView({
 
       <section className={isDesktopSearch ? 'search-desktop-heading' : 'hidden wide:block'}>
         <h2 className={isDesktopSearch ? 'text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-100' : 'text-4xl font-bold tracking-tight text-slate-950 dark:text-slate-100'}>
-          {t(isDesktopSearch ? 'search_desktop_title' : 'tab_search')}
+          {t(isAgentMode ? 'agent_heading_title' : isDesktopSearch ? 'search_desktop_title' : 'tab_search')}
         </h2>
         <p className="mt-3 text-base text-slate-600 dark:text-slate-400">
-          {t(isDesktopSearch ? 'search_desktop_description' : 'app_desc')}
+          {t(isAgentMode ? 'agent_heading_desc' : isDesktopSearch ? 'search_desktop_description' : 'app_desc')}
         </p>
       </section>
 
@@ -680,6 +679,20 @@ export function SearchTabView({
         data-onboarding-target="search-box"
         className={`search-composer relative group z-20 ${!isDesktopSearch && !isMobileSearch && isSearchFocused ? 'sticky top-3 wide:relative wide:top-auto' : ''}`}
       >
+        {agent && (
+          <SegmentedControl<SearchBarMode>
+            value={agent.mode}
+            onChange={agent.onModeChange}
+            ariaLabel={t('agent_mode_switch_label')}
+            semantics="radio"
+            size="sm"
+            className="search-mode-switch mb-2"
+            options={[
+              { value: 'search', label: t('agent_mode_search'), icon: <Search className="h-3.5 w-3.5" /> },
+              { value: 'agent', label: t('agent_mode_agent'), icon: <Sparkles className="h-3.5 w-3.5" /> },
+            ]}
+          />
+        )}
         <div
           className={`search-composer-surface ${isDesktopSearch
             ? 'rounded-[24px] border bg-slate-50/80 px-3 py-2 transition-colors group-focus-within:border-blue-300 group-focus-within:bg-white group-focus-within:ring-2 group-focus-within:ring-blue-100 dark:bg-slate-900/70 dark:group-focus-within:bg-slate-900 dark:group-focus-within:ring-blue-950'
@@ -693,7 +706,8 @@ export function SearchTabView({
               ? 'wide:border-red-200 wide:bg-red-50 dark:wide:border-red-900/60 dark:wide:bg-red-950/30'
               : 'wide:border-slate-200 wide:bg-slate-50/80 wide:ring-1 wide:ring-white wide:group-focus-within:border-blue-300 wide:group-focus-within:bg-white wide:group-focus-within:ring-blue-100 dark:wide:border-slate-700/70 dark:wide:bg-slate-900/70 dark:wide:ring-slate-700/50 dark:wide:group-focus-within:border-blue-500/60 dark:wide:group-focus-within:bg-slate-900 dark:wide:group-focus-within:ring-blue-500/20'
           }`}>
-            <button
+            {/* The label scanner feeds the normal search, so agent mode gives its space to the text. */}
+            {!isAgentMode && <button
               type="button"
               onClick={onOpenScanner}
               aria-label={t('btn_scan')}
@@ -701,28 +715,28 @@ export function SearchTabView({
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-300 wide:h-12 wide:w-12"
             >
               <Camera className="h-5 w-5 stroke-[2.2]" />
-            </button>
+            </button>}
 
-            <div className="min-w-0 flex-1">
+            <div className={isAgentMode ? 'min-w-0 flex-1 ps-2' : 'min-w-0 flex-1'}>
               <input
                 ref={searchInputRef}
                 type="text"
-                value={query}
-                onChange={(e) => onQueryChange(e.target.value)}
+                value={inputValue}
+                onChange={(e) => (isAgentMode ? agent.onTextChange(e.target.value) : onQueryChange(e.target.value))}
                 onFocus={handleInputFocus}
                 onBlur={handleInputBlur}
                 data-onboarding-target="search-input"
               className={isDesktopSearch ? 'block h-14 w-full bg-transparent text-lg font-medium text-slate-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500 dark:[color-scheme:dark]' : 'block h-10 w-full bg-transparent text-base font-medium leading-5 text-gray-900 placeholder:text-slate-400 caret-blue-600 focus:outline-none dark:text-gray-100 dark:placeholder:text-slate-500 dark:caret-blue-300 dark:[color-scheme:dark] wide:h-14 wide:text-lg wide:text-slate-900 wide:placeholder:text-slate-400 dark:wide:text-slate-100 dark:wide:placeholder:text-slate-500'}
-              placeholder={t('search_placeholder')}
-              aria-label={t('search_placeholder')}
-              disabled={isLoading}
+              placeholder={t(isAgentMode ? 'agent_placeholder' : 'search_placeholder')}
+              aria-label={t(isAgentMode ? 'agent_placeholder' : 'search_placeholder')}
+              disabled={isInputBusy}
             />
             </div>
 
-            {!isLoading && (query.trim() || hasSearchResults) && (
+            {!isInputBusy && (isAgentMode ? (agent.text.trim() || agent.hasTurn) : (query.trim() || hasSearchResults)) && (
               <button
                 type="button"
-                onClick={onReset}
+                onClick={isAgentMode ? agent.onReset : onReset}
                 aria-label={t('search_reset')}
                 className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-200 wide:hover:bg-slate-200/70 wide:hover:text-slate-700"
               >
@@ -731,14 +745,16 @@ export function SearchTabView({
               </button>
             )}
             <div className="flex shrink-0 items-center gap-1">
-              {(query.trim() || (isDesktopSearch && isLoading)) && (
+              {(inputValue.trim() || (isDesktopSearch && isInputBusy)) && (
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isInputBusy}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-950/30 transition-all duration-300 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60 wide:h-12 wide:w-12"
-                  aria-label={t('lab_mgmt_search_btn')}
+                  aria-label={t(isAgentMode ? 'agent_submit' : 'lab_mgmt_search_btn')}
                 >
-                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5 stroke-[2.4]" />}
+                  {isInputBusy
+                    ? <Loader2 className="h-5 w-5 animate-spin" />
+                    : isAgentMode ? <ArrowUp className="h-5 w-5 stroke-[2.4]" /> : <Search className="h-5 w-5 stroke-[2.4]" />}
                 </button>
               )}
               {onOpenVoiceAgent && (
@@ -758,12 +774,24 @@ export function SearchTabView({
         </div>
 
         {/* Autocomplete Dropdown */}
-        {shouldShowAutocomplete && (
+        {(shouldShowAutocomplete || showAgentSuggestion) && (
           <div
             className={`search-suggestions absolute top-full left-0 right-0 mt-3 flex flex-col bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-slate-900/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 ${isSearchFocused ? '' : 'max-h-60'}`}
             style={isSearchFocused ? { maxHeight: `${autocompleteMaxHeight}px` } : undefined}
           >
-            {activeFormChoices.length > 0 && (
+            {showAgentSuggestion && agent && (
+              <button
+                type="button"
+                // Keep the input focused so the tap is not lost to the blur handler.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => agent.onAskAgent(normalizedQuery)}
+                className="flex min-h-11 w-full shrink-0 items-center gap-3 border-b border-gray-100 px-4 py-3 text-start text-sm font-semibold text-blue-700 transition-colors last:border-0 hover:bg-slate-900/5 motion-reduce:transition-none dark:border-slate-700/50 dark:text-blue-300 dark:hover:bg-white/10"
+              >
+                <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{t('agent_suggest_switch')}</span>
+              </button>
+            )}
+            {shouldShowAutocomplete && activeFormChoices.length > 0 && (
               <section aria-labelledby="search-form-choice-title" className="shrink-0 border-b border-gray-100 px-4 py-3 dark:border-slate-700/50">
                 <h3 id="search-form-choice-title" className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('search_form_choice_title')}</h3>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('search_form_choice_hint')}</p>
@@ -783,7 +811,7 @@ export function SearchTabView({
                 </ul>
               </section>
             )}
-            {activeFormChoices.length > 0 && suggestions.length === 0 ? null : isSuggestionsLoading && suggestions.length === 0 ? (
+            {!shouldShowAutocomplete || (activeFormChoices.length > 0 && suggestions.length === 0) ? null : isSuggestionsLoading && suggestions.length === 0 ? (
               <div className="p-4 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 {t('search_loading_suggestions')}
@@ -854,14 +882,14 @@ export function SearchTabView({
         </section>
       )}
 
-      {isAiAnalyzing && (
+      {!isAgentMode && isAiAnalyzing && (
         <div role="status" className="search-message flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
           <span className="font-medium">{t('app_ai_analyzing')}</span>
         </div>
       )}
 
-      {error && isNotFound ? (
+      {isAgentMode ? null : error && isNotFound ? (
         <div className="search-message text-sm text-slate-600 dark:text-slate-400">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -907,7 +935,7 @@ export function SearchTabView({
       {isDesktopSearch && desktopSearchState === 'results' && (
         <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-300">{t('search_desktop_results_title')}</h3>
       )}
-      {(result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
+      {isAgentMode ? agent.resultView : (result || mediaProducts.length > 0 || cabinetResults.length > 0) ? (
         <div className="flex flex-col gap-4">
           {showChemicalNotFoundNotice && (
             <div className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400">
@@ -1222,7 +1250,7 @@ export function SearchTabView({
         </aside>}
         </div>
         <section ref={detailPaneRef} data-pane="detail" className="min-h-0 overflow-y-auto p-4">
-          {result ? (
+          {isAgentMode ? null : result ? (
             <ResultCard
               key={resultIdentity ?? undefined}
               result={result}

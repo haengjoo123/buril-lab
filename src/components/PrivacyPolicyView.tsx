@@ -36,7 +36,7 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({ onBack }) 
                         {isKorean ? '개인정보처리방침' : 'Privacy Policy'}
                     </h1>
                     <p className="text-sm text-slate-400">
-                        {isKorean ? '최종 수정일: 2026년 11월 6일' : 'Last updated: November 6, 2026'}
+                        {isKorean ? '최종 수정일: 2026년 11월 27일' : 'Last updated: November 27, 2026'}
                     </p>
                 </div>
 
@@ -148,6 +148,8 @@ const KoreanPolicy: React.FC = () => (
                     ['결과 열람·선택, 10분 내 재검색, 스캔 수정, 배치 추가 행동', '혼동 원인과 검색→배치 전환 분석, 검색 별칭 개선 후보 생성'],
                     ['AI 분석 요청 내용, 스캔한 라벨 이미지', '라벨 인식과 사용자가 요청한 AI 분석 기능 제공'],
                     ['음성 질문 오디오와 전사 결과', '음성 비서 기능 제공. 음성 기능이 활성화된 경우에만 처리'],
+                    ['에이전트 모드에 입력한 문장', '문장을 요청 종류와 조건으로 해석해 기능 제공. 에이전트 모드가 활성화된 경우에만 처리하며, 폐기·혼합 관련 표현이 감지된 문장은 AI로 보내지 않고 기기에서 정해진 규칙으로 처리(그 문장에 적힌 성분 이름만 일반 검색과 같은 물질 정보 조회에 사용)'],
+                    ['에이전트 모드 이용 기록: 처리 경로(AI 해석·정해진 규칙), 요청 종류, 결과 상태와 사유, 응답 시간, 언어. 찾는 시약이 기록에 없거나 지원하지 않는 요청처럼 에이전트가 처리하지 못한 요청은 입력한 문장도 저장(이메일·URL·전화번호·토큰 형태를 가리고 300자까지)', '에이전트 모드 개선을 위한 내부 집계. 처리한 요청의 문장은 저장하지 않음'],
                     ['피드백 내용, 선택 입력한 연락처, 사용자 에이전트, 보낸 화면, 연구실 공간에서 보낸 경우 그 연구실', '버그 제보와 개선 요청 처리'],
                     ['언어, 화면 테마, 안전 안내 확인 여부 등 기기 저장 설정', '기기 내 사용 환경 유지(이 기기의 브라우저·앱 저장소에 보관)'],
                     ['온보딩 진행 기록: 안내 단계, 표시·완료·건너뜀·다시 보기 여부, 화면, 웹·앱 구분, 폐액 배치에 담은 시약 수·완료한 단계 수·앱 언어, 온보딩 검색 단계의 검색어 글자 수(검색어 원문은 저장하지 않음)', '기기를 바꿔도 온보딩 진행 상태 유지, 온보딩 개선을 위한 내부 집계'],
@@ -162,10 +164,10 @@ const KoreanPolicy: React.FC = () => (
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>사용자 인증, 계정 유지, 연구실 접근 권한 확인</li>
                 <li>시약 검색, 재고 관리, 시약장 사진 업로드, 폐기 기록 관리</li>
-                <li>AI 라벨 인식, OCR, 음성 비서 등 사용자가 요청한 기능 제공</li>
+                <li>AI 라벨 인식, OCR, 음성 비서, 에이전트 모드 등 사용자가 요청한 기능 제공</li>
                 <li>제출 검색의 수요·혼동 원인, 검색→최종 배치 전환, 배치 데이터 완성도 분석</li>
                 <li>검색 별칭·자동완성·스캔 교정, 교육 우선순위와 안전규칙 검토 후보 개선</li>
-                <li>온보딩 단계별 완료·건너뜀, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도 기록의 내부 집계를 통한 온보딩·안전 안내·서비스 개선</li>
+                <li>온보딩 단계별 완료·건너뜀, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도, 에이전트 모드 이용 기록의 내부 집계를 통한 온보딩·안전 안내·서비스 개선</li>
                 <li>보안, 오류 분석, 분석 수집 오류율 감시, API 남용 방지, 서비스 품질 개선</li>
             </ul>
         </Section>
@@ -185,6 +187,7 @@ const KoreanPolicy: React.FC = () => (
                 <li>온보딩 진행, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도 기록은 로그인한 상태에서만 서버(Supabase)에 저장합니다. 게스트로 사용할 때는 저장하지 않습니다.</li>
                 <li>각 기록에는 계정, 기록 당시 선택한 연구실(있는 경우), 기록 시각이 함께 저장됩니다.</li>
                 <li>다른 사용자는 온보딩 진행 기록을 볼 수 없습니다. 연구실에 연결된 보관 경고 무시·AI 폐기 안내 열람·구매 의도 기록은 같은 연구실 멤버도 볼 수 있으며, 연구실을 나가도 기록의 연구실 연결은 그대로 남습니다.</li>
+                <li>에이전트 모드는 로그인해야 쓸 수 있으며, 이용 기록은 요청이 끝날 때 한 건씩 저장합니다. 다른 사용자와 같은 연구실 멤버는 이 기록을 볼 수 없습니다. 입력한 문장은 에이전트가 처리하지 못한 요청에 한해 저장하고, 처리한 요청은 문장 없이 요청 종류와 결과 상태만 남깁니다. 에이전트가 기록을 제안한 경우에는 제안을 보여 준 사실과 사용자가 확인해 저장한 사실을 각각 남기며, 저장된 내용 자체는 이 기록에 넣지 않습니다.</li>
                 <li>이전 버전의 앱은 온보딩 검색 단계의 검색어 원문도 함께 저장했습니다. 그때 저장된 기록에는 원문이 남아 있을 수 있으며, 회원 탈퇴 시 함께 삭제됩니다.</li>
                 <li>이전 버전의 앱은 AI 폐기 안내 열람 기록에 안내 요청 내용(폐액 배치의 농도·부피·pH·혼합 상태, 적용된 연구실 폐액 규정의 보관 위치·담당 연락처 등)도 함께 저장했습니다. 그때 저장된 기록에는 이 내용이 남아 있을 수 있으며, 회원 탈퇴 시 함께 삭제됩니다.</li>
                 <li>이 기록은 위 표에 적은 목적에만 사용합니다. 외부에 제공하거나 판매하지 않으며, 광고나 다른 앱·웹사이트 추적에 사용하지 않습니다.</li>
@@ -199,7 +202,7 @@ const KoreanPolicy: React.FC = () => (
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>Supabase: 인증, 데이터베이스, 파일 저장소</li>
                 <li>Cloudflare Pages Functions: 서버 API 실행과 요청 처리</li>
-                <li>OpenAI API: 라벨 이미지 분석, 구조화된 분류·폐기 안내, 음성 전사 및 음성 응답 생성. 구조화된 Responses 요청은 응답 저장을 비활성화하며, 안전 식별자는 서버에서 HMAC으로 가명 처리합니다.</li>
+                <li>OpenAI API: 라벨 이미지 분석, 구조화된 분류·폐기 안내, 음성 전사 및 음성 응답 생성, 에이전트 모드에 입력한 문장의 해석(연구실 재고·기록은 보내지 않음). 구조화된 Responses 요청은 응답 저장을 비활성화하며, 안전 식별자는 서버에서 HMAC으로 가명 처리합니다.</li>
                 <li>Upstash Redis: API 요청 제한과 남용 방지</li>
             </ul>
         </Section>
@@ -207,7 +210,7 @@ const KoreanPolicy: React.FC = () => (
         <Section title="7. 보관 및 삭제">
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>계정 정보와 연구실 데이터는 계정 또는 연구실이 유지되는 동안 보관됩니다.</li>
-                <li>온보딩 진행, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도 기록은 별도 자동 삭제 기간 없이 계정이 유지되는 동안 보관하며, 회원 탈퇴 시 모두 삭제합니다. 연구실이 삭제되면 연구실 연결만 지우고 기록은 계정에 남습니다.</li>
+                <li>온보딩 진행, 보관 경고 무시, AI 폐기 안내 열람, 구매 의도, 에이전트 모드 이용 기록은 별도 자동 삭제 기간 없이 계정이 유지되는 동안 보관하며, 회원 탈퇴 시 모두 삭제합니다. 연구실이 삭제되면 연구실 연결만 지우고 기록은 계정에 남습니다.</li>
                 <li>게스트 원문 검색 이벤트와 행동은 수집 후 90일에 자동 삭제되며, 이 브라우저의 삭제 토큰으로 그 전에 직접 삭제할 수 있습니다.</li>
                 <li>로그인 사용자의 원문 검색 분석은 계정 유지 중 보관합니다. 최근 검색 기록 삭제 또는 회원 탈퇴 시 연결된 원문·가명 이벤트·행동을 함께 삭제합니다.</li>
                 <li>삭제된 검색 이벤트를 참조한 최종 배치 구성품은 배치 기록을 유지하되 검색 연결만 제거합니다.</li>
@@ -279,6 +282,8 @@ const EnglishPolicy: React.FC = () => (
                     ['Result open/selection, search reformulation within 10 minutes, scan correction, and add-to-batch actions', 'Confusion causes, search-to-batch conversion, and search-alias improvement candidates'],
                     ['AI request content and scanned label images', 'Label recognition, OCR, and user-requested AI analysis features'],
                     ['Voice question audio and transcription results', 'Voice assistant features, only when voice features are enabled'],
+                    ['Sentences typed in agent mode', 'Interpreting the sentence into a request type and its conditions to provide the feature. Processed only when agent mode is enabled; a sentence in which disposal or mixing wording is detected is not sent to AI and is handled on the device by fixed rules (only the component names written in it are used for the same substance lookup as the normal search)'],
+                    ['Agent mode usage records: how the request was handled (AI interpretation or fixed rules), request type, result status and reason, response time, and language. For requests the agent could not handle, such as a reagent that is not in the records or an unsupported request, the typed sentence is stored as well (email, URL, phone-number, and token patterns masked, up to 300 characters)', 'Internal aggregates to improve agent mode. The sentence of a handled request is not stored'],
                     ['Feedback message, optional contact, user agent, the screen it was sent from, and the lab when sent from a lab space', 'Bug reports and improvement requests'],
                     ['Language, theme, safety-notice acknowledgement, and other settings stored on the device', 'Keeping user preferences on the device (kept in this device’s browser or app storage)'],
                     ['Onboarding progress records: guide step, whether it was shown, completed, skipped, or replayed, screen, web or app, number of reagents in the waste batch, number of completed steps, app language, and the character count of the onboarding search (the search text itself is not stored)', 'Keeping onboarding progress across devices and internal aggregates to improve onboarding'],
@@ -293,10 +298,10 @@ const EnglishPolicy: React.FC = () => (
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>Authenticate users and manage lab access permissions</li>
                 <li>Provide reagent search, inventory management, cabinet photo upload, and disposal records</li>
-                <li>Process user-requested AI label recognition, OCR, and voice assistant features</li>
+                <li>Process user-requested AI label recognition, OCR, voice assistant, and agent mode features</li>
                 <li>Analyze submitted-query demand, confusion causes, search-to-final-batch conversion, and batch data completeness</li>
                 <li>Improve aliases, autocomplete, scan correction, training priorities, and human-reviewed safety candidates</li>
-                <li>Improve onboarding, safety guidance, and the service through internal aggregates of onboarding completion and skips, ignored storage warnings, AI disposal guide views, and purchase intent records</li>
+                <li>Improve onboarding, safety guidance, and the service through internal aggregates of onboarding completion and skips, ignored storage warnings, AI disposal guide views, purchase intent, and agent mode usage records</li>
                 <li>Improve service quality, monitor analytics ingestion errors, protect security, and prevent API abuse</li>
             </ul>
         </Section>
@@ -316,6 +321,7 @@ const EnglishPolicy: React.FC = () => (
                 <li>Onboarding progress, ignored storage warning, AI disposal guide view, and purchase intent records are stored on the server (Supabase) only while you are signed in. They are not stored when you use the app as a guest.</li>
                 <li>Each record is stored with your account, the lab selected at the time (if any), and the time of the record.</li>
                 <li>Other users cannot view your onboarding progress records. Ignored storage warning, AI disposal guide view, and purchase intent records linked to a lab can also be viewed by members of that lab, and the lab link stays on these records even after you leave the lab.</li>
+                <li>Agent mode requires signing in, and one usage record is stored when each request ends. Other users, including members of the same lab, cannot view these records. The typed sentence is stored only for requests the agent could not handle; a handled request leaves only its request type and result status, without the sentence. When the agent proposes recording something, the fact that the proposal was shown and the fact that you confirmed it are each recorded; what was saved is not put in these records.</li>
                 <li>Earlier versions of the app also stored the raw text of the onboarding search. Records saved then may still contain that text, and they are deleted when the account is deleted.</li>
                 <li>Earlier versions of the app also stored the guide request (waste batch concentrations, volumes, pH, and mixing state, plus the storage location, contact, and other details of the lab waste policy applied) in AI disposal guide view records. Records saved then may still contain these details, and they are deleted when the account is deleted.</li>
                 <li>These records are used only for the purposes listed in the table above. They are not provided to third parties or sold, and are not used for advertising or for tracking you across other apps or websites.</li>
@@ -330,7 +336,7 @@ const EnglishPolicy: React.FC = () => (
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>Supabase: authentication, database, and file storage</li>
                 <li>Cloudflare Pages Functions: server API execution and request handling</li>
-                <li>OpenAI API: label-image analysis, structured classification and disposal guidance, speech transcription, and spoken responses. Structured Responses requests disable response storage and pseudonymize safety identifiers server-side with HMAC.</li>
+                <li>OpenAI API: label-image analysis, structured classification and disposal guidance, speech transcription, spoken responses, and interpreting sentences typed in agent mode (lab inventory and records are not sent). Structured Responses requests disable response storage and pseudonymize safety identifiers server-side with HMAC.</li>
                 <li>Upstash Redis: API rate limiting and abuse prevention</li>
             </ul>
         </Section>
@@ -338,7 +344,7 @@ const EnglishPolicy: React.FC = () => (
         <Section title="7. Retention and Deletion">
             <ul className="list-disc pl-5 text-slate-400 space-y-2 text-[15px]">
                 <li>Account and lab data are retained while the account or lab remains active.</li>
-                <li>Onboarding progress, ignored storage warning, AI disposal guide view, and purchase intent records have no separate automatic deletion period. They are retained while the account is active and are all deleted when the account is deleted. If a lab is deleted, only the lab link is removed and the records stay with the account.</li>
+                <li>Onboarding progress, ignored storage warning, AI disposal guide view, purchase intent, and agent mode usage records have no separate automatic deletion period. They are retained while the account is active and are all deleted when the account is deleted. If a lab is deleted, only the lab link is removed and the records stay with the account.</li>
                 <li>Raw guest search events and actions are automatically deleted after 90 days and can be deleted earlier with the deletion token held by this browser.</li>
                 <li>Authenticated raw search analytics are retained while the account is active. Deleting recent-search history or the account also deletes linked raw and pseudonymous events and actions.</li>
                 <li>If a deleted search event was linked to a final batch component, the batch remains but the search link is removed.</li>

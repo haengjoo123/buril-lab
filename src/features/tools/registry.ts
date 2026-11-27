@@ -138,13 +138,12 @@ export const tools = [
     descEn: "Manual counts and viability",
     keywords: ["혈구계", "혈구계산판", "계수판", "hemocytometer", "Neubauer", "Bürker", "Fuchs-Rosenthal", "트리판", "trypan", "생존율", "viability", "세포 수", "cell count"],
   },
-  // The two tools below are newer than the server's first list of tool ids.
-  // They are `quick` (device-only, nothing sent) until the migration that adds
-  // their ids has been applied; then they can become `project`.
+  // The two tools below were added by 20261127090000_lab_tools_usage_and_purge,
+  // applied to Staging and Production on 2026-11-27, so their work can be saved.
   {
     id: "primer",
     category: "Lab",
-    kind: "quick",
+    kind: "project",
     ko: "프라이머 · 올리고",
     en: "Primer / Oligo",
     descKo: "Tm · GC · 분자량 · 원액",
@@ -154,7 +153,7 @@ export const tools = [
   {
     id: "nucleic-acid",
     category: "Lab",
-    kind: "quick",
+    kind: "project",
     ko: "핵산 정량",
     en: "Nucleic Acid",
     descKo: "A260 농도 · 몰 환산 · 라이게이션",

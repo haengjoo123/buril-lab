@@ -93,12 +93,11 @@ Hosted MCP가 생성한 두 신규 migration marker만 CLI 파일의 버전으�
 증거 검증을 통과한 동일 후보만 운영으로 승격합니다. 긴급 비공개 전환은 기능 플래그를
 끄는 새 웹 배포로 처리하며 개인 문서·이미지 테이블을 삭제하지 않습니다.
 
-## 실험 도구 사용 집계·영구 삭제 (2026-11-27, 미적용)
+## 실험 도구 사용 집계·영구 삭제 (2026-11-27, Staging·운영 적용)
 
 - `20261127090000_lab_tools_usage_and_purge.sql`: 도구 id 두 개(`primer`, `nucleic-acid`) 허용,
   계정·도구·날짜별 열기/저장 횟수(`tool_usage_daily`, `record_tool_usage`), 휴지통 작업의
   영구 삭제(`purge_tool_document`).
 
 앱은 이 파일이 적용되지 않은 DB에서도 동작합니다. 적용 순서와 확인 방법은
-`docs/operations/lab-tools-usage-purge-rollout.md`에 있습니다. 작성 시점에 Staging·운영 모두
-적용하지 않았습니다.
+`docs/operations/lab-tools-usage-purge-rollout.md`에 있습니다. 2026-11-27 Staging(이력 `20261127144847`)과 운영(이력 `20261127150000`)에 적용했습니다.

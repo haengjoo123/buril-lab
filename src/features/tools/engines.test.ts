@@ -481,9 +481,10 @@ describe("tool list search and recently used", () => {
     expect(tools.map((tool) => tool.id).sort()).toEqual(
       allowedIn("20261127090000_lab_tools_usage_and_purge.sql").sort()
     );
-    // A tool the first, already-applied list does not have must not send
-    // documents yet: it stays device-only until the newer migration is live.
-    const deployed = allowedIn("20261109011725_personal_lab_tools.sql");
+    // A tool the newest list applied to Staging and Production does not have must
+    // not send documents yet: it stays device-only until a migration adding it is live.
+    // 20261127090000 was applied to both on 2026-11-27.
+    const deployed = allowedIn("20261127090000_lab_tools_usage_and_purge.sql");
     for (const tool of tools)
       if (!deployed.includes(tool.id)) expect(tool.kind, tool.id).toBe("quick");
   });

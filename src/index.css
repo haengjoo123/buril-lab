@@ -84,6 +84,10 @@
   padding: 0 0 calc(96px + env(safe-area-inset-bottom, 0px));
   background: var(--color-white);
 }
+/* The search/agent switch sits above the composer pill and needs its own room. */
+.search-panes[data-mobile-search="true"][data-agent-switch="true"] {
+  padding-bottom: calc(var(--spacing) * 37 + env(safe-area-inset-bottom, 0px));
+}
 .dark .search-panes[data-mobile-search="true"] { background: var(--color-slate-900); }
 .search-panes[data-mobile-search="true"] .search-notice,
 .search-panes[data-mobile-search="true"] .search-message {
@@ -202,6 +206,21 @@
   grid-row: 2;
   padding: 0 0 24px;
 }
+/* Agent mode on desktop: one centred column under the composer, with no detail pane. */
+.search-panes[data-desktop-search="true"][data-search-state="agent"] { overflow-y: auto; }
+.search-panes[data-desktop-search="true"][data-search-state="agent"] .search-controls { padding-bottom: calc(var(--spacing) * 6); }
+.search-panes[data-desktop-search="true"][data-search-state="agent"] .search-results-list {
+  display: block;
+  width: 100%;
+  max-width: calc(var(--spacing) * 200);
+  margin-inline: auto;
+  padding: 0 calc(var(--spacing) * 8) calc(var(--spacing) * 12);
+}
+.search-panes[data-desktop-search="true"][data-search-state="agent"] > [data-pane="detail"] { display: none; }
+.search-panes[data-desktop-search="true"] .agent-intro-copy { display: none; }
+/* Two-pane tablets: agent results have no detail view, so the list takes the full width. */
+.search-panes[data-search-state="agent"][data-adaptive-wide="true"][data-hinge="false"] { grid-template-columns: minmax(0, 1fr); }
+.search-panes[data-search-state="agent"][data-adaptive-wide="true"][data-hinge="false"] > [data-pane="detail"] { display: none; }
 .adaptive-panes input, .adaptive-panes textarea, .adaptive-panes select { max-width: 100%; scroll-margin-block: 80px; }
 .adaptive-overlay { left: var(--overlay-left, 0px) !important; top: var(--overlay-top, 0px) !important; right: auto !important; bottom: auto !important; width: var(--overlay-width, 100vw) !important; height: var(--overlay-height, 100dvh) !important; }
 .adaptive-overlay > :not(.absolute) { max-height: 100%; min-height: 0; }
