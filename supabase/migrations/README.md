@@ -101,4 +101,3 @@ Hosted MCP가 생성한 두 신규 migration marker만 CLI 파일의 버전으�
 
 앱은 이 파일이 적용되지 않은 DB에서도 동작합니다. 적용 순서와 확인 방법은
 `docs/operations/lab-tools-usage-purge-rollout.md`에 있습니다. 2026-11-27 Staging(이력 `20261127144847`)과 운영(이력 `20261127150000`)에 적용했습니다.
-
